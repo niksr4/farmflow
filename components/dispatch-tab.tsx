@@ -1,0 +1,865 @@
+"use client"
+
+import { useState, useEffect, useCallback, useMemo } from "react"
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
+import { Textarea } from "@/components/ui/textarea"
+import { Calendar } from "@/components/ui/calendar"
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { CalendarIcon, Loader2, Save, Trash2, Download, Package, Truck, Pencil } from "lucide-react"
+import { format } from "date-fns"
+import { cn } from "@/lib/utils"
+import { useToast } from "@/hooks/use-toast"
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
+import { getCurrentFiscalYear, getAvailableFiscalYears, getFiscalYearDateRange, type FiscalYear } from "@/lib/fiscal-year-utils"
+import { DEFAULT_COFFEE_VARIETIES } from "@/lib/crop-config"
+import { useAuth } from "@/hooks/use-auth"
+import { useTenantSettings } from "@/hooks/use-tenant-settings"
+import { formatDateOnly } from "@/lib/date-utils"
+import { formatNumber } from "@/lib/format"
+
+interface DispatchRecord {
+  id?: number
+  dispatch_date: string
+  location_id?: string | null
+  location_name?: string | null
+  location_code?: string | null
+  estate?: string | null
+  lot_id?: string | null
+  coffee_type: string
+  bag_type: string
+  bags_dispatched: number
+  kgs_received?: number | null
+  price_per_bag?: number
+  buyer_name?: string
+  notes: string | null
+  created_by: string
+}
+
+interface DispatchSummaryRow {
+  coffee_type: string
+  bag_type: string
+  bags_dispatched: number
+  kgs_received: number
+}
+
+interface LocationOption {
+  id: string
+  name: string
+  code: string
+}
+
+interface BagTotals {
+  arabica_dry_parchment_bags: number
+  arabica_dry_cherry_bags: number
+  robusta_dry_parchment_bags: number
+  robusta_dry_cherry_bags: number
+}
+
+const COFFEE_TYPES = DEFAULT_COFFEE_VARIETIES
+const BAG_TYPES = ["Dry Parchment", "Dry Cherry"]
+const normalizeBagTypeKey = (value: string) => {
+  const normalized = value.toLowerCase().trim()
+  if (normalized.includes("cherry")) return "dry_cherry"
+  return "dry_parchment"
+}
+const formatBagTypeLabel = (value: string) => (normalizeBagTypeKey(value) === "dry_cherry" ? "Dry Cherry" : "Dry Parchment")
+
+export default function DispatchTab() {
+  const { user } = useAuth()
+  const { settings } = useTenantSettings()
+  const bagWeightKg = Number(settings.bagWeightKg) || 50
+  const canDelete = user?.role === "admin" || user?.role === "owner"
+  const [selectedFiscalYear, setSelectedFiscalYear] = useState<FiscalYear>(getCurrentFiscalYear())
+  const availableFiscalYears = getAvailableFiscalYears()
+  
+  const [locations, setLocations] = useState<LocationOption[]>([])
+  const [date, setDate] = useState<Date>(new Date())
+  const [selectedLocationId, setSelectedLocationId] = useState<string>("")
+  const [lotId, setLotId] = useState<string>("")
+  const [coffeeType, setCoffeeType] = useState<string>("Arabica")
+  const [bagType, setBagType] = useState<string>("Dry Parchment")
+  const [bagsDispatched, setBagsDispatched] = useState<string>("")
+  const [kgsReceived, setKgsReceived] = useState<string>("")
+  const [notes, setNotes] = useState<string>("")
+  
+  const [bagTotals, setBagTotals] = useState<BagTotals>({
+    arabica_dry_parchment_bags: 0,
+    arabica_dry_cherry_bags: 0,
+    robusta_dry_parchment_bags: 0,
+    robusta_dry_cherry_bags: 0,
+  })
+  const [dispatchRecords, setDispatchRecords] = useState<DispatchRecord[]>([])
+  const [dispatchSummary, setDispatchSummary] = useState<DispatchSummaryRow[]>([])
+  const [dispatchTotalCount, setDispatchTotalCount] = useState(0)
+  const [dispatchPage, setDispatchPage] = useState(0)
+  const [dispatchHasMore, setDispatchHasMore] = useState(false)
+  const [editingRecord, setEditingRecord] = useState<DispatchRecord | null>(null)
+  const [isLoading, setIsLoading] = useState(false)
+  const [isLoadingMore, setIsLoadingMore] = useState(false)
+  const [isSaving, setIsSaving] = useState(false)
+  const { toast } = useToast()
+  const dispatchPageSize = 25
+
+  const selectedLocation = useMemo(
+    () => locations.find((loc) => loc.id === selectedLocationId) || null,
+    [locations, selectedLocationId],
+  )
+
+  const loadLocations = useCallback(async () => {
+    try {
+      const response = await fetch("/api/locations")
+      const data = await response.json()
+      if (!response.ok || !data.success) {
+        return
+      }
+      const loaded = Array.isArray(data.locations) ? data.locations : []
+      setLocations(loaded)
+      if (!selectedLocationId && loaded.length > 0) {
+        setSelectedLocationId(loaded[0].id)
+      }
+    } catch (error) {
+      console.error("Error loading locations:", error)
+    }
+  }, [selectedLocationId])
+
+  const resolveLocationIdFromLabel = useCallback(
+    (label?: string | null) => {
+      const value = String(label || "").trim()
+      if (!value) return ""
+      const normalized = value.toLowerCase()
+      const token = normalized.split(" ")[0] || normalized
+      const match = locations.find((loc) => {
+        const name = String(loc.name || "").toLowerCase()
+        const code = String(loc.code || "").toLowerCase()
+        return name === normalized || code === normalized || name === token || code === token
+      })
+      return match?.id || ""
+    },
+    [locations],
+  )
+
+  const getLocationLabel = useCallback(
+    (record: DispatchRecord) => {
+      if (record.location_id) {
+        const match = locations.find((loc) => loc.id === record.location_id)
+        if (match) return match.name || match.code
+      }
+      const fallback = record.location_name || record.location_code || record.estate
+      if (fallback) return fallback
+      return "Unknown"
+    },
+    [locations],
+  )
+
+  const dispatchedTotals = useMemo(() => {
+    const totals = {
+      arabica_dry_parchment: 0,
+      arabica_dry_cherry: 0,
+      robusta_dry_parchment: 0,
+      robusta_dry_cherry: 0,
+    }
+
+    if (dispatchSummary.length > 0) {
+      dispatchSummary.forEach((row) => {
+        const coffeeKey = String(row.coffee_type || "").toLowerCase()
+        const bagKey = normalizeBagTypeKey(String(row.bag_type || ""))
+        const key = `${coffeeKey}_${bagKey}` as keyof typeof totals
+        if (totals[key] !== undefined) {
+          totals[key] += Number(row.bags_dispatched) || 0
+        }
+      })
+      return totals
+    }
+
+    dispatchRecords.forEach((record) => {
+      const bagKey = normalizeBagTypeKey(record.bag_type)
+      const key = `${record.coffee_type.toLowerCase()}_${bagKey}` as keyof typeof totals
+      if (totals[key] !== undefined) {
+        totals[key] += Number(record.bags_dispatched)
+      }
+    })
+
+    return totals
+  }, [dispatchRecords, dispatchSummary])
+
+  // Fetch bag totals from processing data across all locations
+  const fetchBagTotals = useCallback(async () => {
+    try {
+      const { startDate, endDate } = getFiscalYearDateRange(selectedFiscalYear)
+      const response = await fetch(
+        `/api/processing-records?summary=bagTotals&fiscalYearStart=${startDate}&fiscalYearEnd=${endDate}`,
+        
+      )
+      const data = await response.json()
+
+      if (!data.success || !Array.isArray(data.totals)) {
+        return
+      }
+
+      let arabicaDryParchment = 0
+      let arabicaDryCherry = 0
+      let robustaDryParchment = 0
+      let robustaDryCherry = 0
+
+      for (const record of data.totals) {
+        const type = String(record.coffee_type || "").toLowerCase()
+        if (type === "arabica") {
+          arabicaDryParchment += Number(record.dry_p_bags) || 0
+          arabicaDryCherry += Number(record.dry_cherry_bags) || 0
+        } else if (type === "robusta") {
+          robustaDryParchment += Number(record.dry_p_bags) || 0
+          robustaDryCherry += Number(record.dry_cherry_bags) || 0
+        }
+      }
+
+      setBagTotals({
+        arabica_dry_parchment_bags: Number(arabicaDryParchment.toFixed(2)),
+        arabica_dry_cherry_bags: Number(arabicaDryCherry.toFixed(2)),
+        robusta_dry_parchment_bags: Number(robustaDryParchment.toFixed(2)),
+        robusta_dry_cherry_bags: Number(robustaDryCherry.toFixed(2)),
+      })
+    } catch (error) {
+      console.error("Error fetching bag totals:", error)
+    }
+  }, [selectedFiscalYear])
+
+  // Fetch dispatch records
+  const fetchDispatchRecords = useCallback(async (pageIndex = 0, append = false) => {
+    if (append) {
+      setIsLoadingMore(true)
+    } else {
+      setIsLoading(true)
+    }
+    try {
+      const { startDate, endDate } = getFiscalYearDateRange(selectedFiscalYear)
+      const params = new URLSearchParams({
+        startDate,
+        endDate,
+        limit: dispatchPageSize.toString(),
+        offset: String(pageIndex * dispatchPageSize),
+      })
+      const response = await fetch(`/api/dispatch?${params.toString()}`)
+      const data = await response.json()
+
+      if (data.success) {
+        const nextRecords = Array.isArray(data.records) ? data.records : []
+        const nextTotalCount = Number(data.totalCount) || 0
+        setDispatchRecords((prev) => (append ? [...prev, ...nextRecords] : nextRecords))
+        setDispatchSummary(Array.isArray(data.totalsByType) ? data.totalsByType : [])
+        setDispatchTotalCount(nextTotalCount)
+        const resolvedCount = append ? pageIndex * dispatchPageSize + nextRecords.length : nextRecords.length
+        setDispatchHasMore(nextTotalCount ? resolvedCount < nextTotalCount : nextRecords.length === dispatchPageSize)
+        setDispatchPage(pageIndex)
+      } else {
+        console.error("Error fetching dispatch records:", data.error)
+      }
+    } catch (error) {
+      console.error("Error fetching dispatch records:", error)
+    } finally {
+      if (append) {
+        setIsLoadingMore(false)
+      } else {
+        setIsLoading(false)
+      }
+    }
+  }, [dispatchPageSize, selectedFiscalYear])
+
+  useEffect(() => {
+    loadLocations()
+    fetchBagTotals()
+    fetchDispatchRecords(0, false)
+  }, [fetchBagTotals, fetchDispatchRecords, loadLocations])
+
+  const handleSave = async () => {
+    if (!selectedLocationId) {
+      toast({
+        title: "Location required",
+        description: "Select a location before recording a dispatch.",
+        variant: "destructive",
+      })
+      return
+    }
+    if (!bagsDispatched || Number(bagsDispatched) <= 0) {
+      toast({
+        title: "Error",
+        description: "Please enter a valid number of bags",
+        variant: "destructive",
+      })
+      return
+    }
+
+    // Check if we have enough bags available from processing
+    const balance = getBalanceForSelection()
+    if (Number(bagsDispatched) > balance) {
+      toast({
+        title: "Insufficient Inventory",
+        description: `Only ${formatNumber(balance)} ${coffeeType} ${bagType} bags available from processing. You are trying to dispatch ${bagsDispatched} bags.`,
+        variant: "destructive",
+      })
+      return
+    }
+
+    setIsSaving(true)
+    try {
+      const locationLabel = selectedLocation?.name || selectedLocation?.code || ""
+      const method = editingRecord ? "PUT" : "POST"
+      const response = await fetch("/api/dispatch", {
+        method,
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          id: editingRecord?.id,
+          dispatch_date: format(date, "yyyy-MM-dd"),
+          locationId: selectedLocationId,
+          estate: locationLabel || null,
+          lot_id: lotId || null,
+          coffee_type: coffeeType,
+          bag_type: bagType,
+          bags_dispatched: Number(bagsDispatched),
+          kgs_received: kgsReceived ? Number(kgsReceived) : null,
+          notes: notes || null,
+          created_by: "dispatch",
+        }),
+      })
+
+      const data = await response.json()
+
+      if (data.success) {
+        toast({
+          title: "Success",
+          description: editingRecord ? "Dispatch record updated successfully" : "Dispatch record saved successfully",
+        })
+        // Reset form
+        resetForm()
+        // Refresh records
+        fetchDispatchRecords(0, false)
+      } else {
+        toast({
+          title: "Error",
+          description: data.error || "Failed to save dispatch record",
+          variant: "destructive",
+        })
+      }
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Failed to save dispatch record",
+        variant: "destructive",
+      })
+    } finally {
+      setIsSaving(false)
+    }
+  }
+
+  const resetForm = () => {
+    setBagsDispatched("")
+    setKgsReceived("")
+    setNotes("")
+    setEditingRecord(null)
+    setLotId("")
+  }
+
+  const handleEdit = (record: DispatchRecord) => {
+    setEditingRecord(record)
+    setDate(new Date(record.dispatch_date))
+    const resolvedLocationId =
+      record.location_id || resolveLocationIdFromLabel(record.location_name || record.location_code || record.estate)
+    if (resolvedLocationId) {
+      setSelectedLocationId(resolvedLocationId)
+    }
+    setLotId(record.lot_id ? String(record.lot_id) : "")
+    setCoffeeType(record.coffee_type)
+    setBagType(formatBagTypeLabel(record.bag_type))
+    setBagsDispatched(record.bags_dispatched.toString())
+    setKgsReceived(record.kgs_received ? record.kgs_received.toString() : "")
+    setNotes(record.notes || "")
+  }
+
+  const handleDelete = async (id: number) => {
+    if (!confirm("Are you sure you want to delete this record?")) return
+
+    try {
+      const response = await fetch(`/api/dispatch?id=${id}`, {
+        method: "DELETE",
+              })
+
+      const data = await response.json()
+
+      if (data.success) {
+        toast({
+          title: "Success",
+          description: "Record deleted successfully",
+        })
+        fetchDispatchRecords(0, false)
+      } else {
+        toast({
+          title: "Error",
+          description: data.error || "Failed to delete record",
+          variant: "destructive",
+        })
+      }
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Failed to delete record",
+        variant: "destructive",
+      })
+    }
+  }
+
+  const loadMoreDispatchRecords = async () => {
+    if (isLoadingMore || isLoading || !dispatchHasMore) {
+      return
+    }
+    await fetchDispatchRecords(dispatchPage + 1, true)
+  }
+
+  const exportToCSV = () => {
+    const runExport = async () => {
+      const { startDate, endDate } = getFiscalYearDateRange(selectedFiscalYear)
+      const response = await fetch(`/api/dispatch?startDate=${startDate}&endDate=${endDate}&all=true`, {
+              })
+      const data = await response.json()
+
+      if (!data.success || !Array.isArray(data.records)) {
+        throw new Error(data.error || "Failed to load dispatch records for export")
+      }
+
+      const headers = [
+        "Date",
+        "Location",
+        "Lot ID",
+        "Coffee Type",
+        "Bag Type",
+        "Bags Dispatched",
+        "KGs Received",
+        "Notes",
+      ]
+      const rows = data.records.map((record: DispatchRecord) => [
+        format(new Date(record.dispatch_date), "yyyy-MM-dd"),
+        getLocationLabel(record),
+        record.lot_id || "",
+        record.coffee_type,
+        formatBagTypeLabel(record.bag_type),
+        record.bags_dispatched.toString(),
+        record.kgs_received ? Number(record.kgs_received).toFixed(2) : "",
+        record.notes || "",
+      ])
+
+      const csvContent = [headers.join(","), ...rows.map((row: string[]) => row.map((cell) => `"${cell}"`).join(","))].join(
+        "\n",
+      )
+
+      const blob = new Blob([csvContent], { type: "text/csv" })
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement("a")
+      a.href = url
+      a.download = `dispatch_records_${selectedFiscalYear.label.replace("/", "-")}.csv`
+      a.click()
+      URL.revokeObjectURL(url)
+    }
+
+    runExport().catch((error) => {
+      console.error("Error exporting dispatch records:", error)
+      toast({
+        title: "Error",
+        description: "Failed to export dispatch records",
+        variant: "destructive",
+      })
+    })
+  }
+
+  // Calculate balance
+  const balanceArabicaDryParchment = bagTotals.arabica_dry_parchment_bags - dispatchedTotals.arabica_dry_parchment
+  const balanceArabicaDryCherry = bagTotals.arabica_dry_cherry_bags - dispatchedTotals.arabica_dry_cherry
+  const balanceRobustaDryParchment = bagTotals.robusta_dry_parchment_bags - dispatchedTotals.robusta_dry_parchment
+  const balanceRobustaDryCherry = bagTotals.robusta_dry_cherry_bags - dispatchedTotals.robusta_dry_cherry
+
+  // Get current selected balance
+  const getBalanceForSelection = () => {
+    if (coffeeType === "Arabica" && bagType === "Dry Parchment") return balanceArabicaDryParchment
+    if (coffeeType === "Arabica" && bagType === "Dry Cherry") return balanceArabicaDryCherry
+    if (coffeeType === "Robusta" && bagType === "Dry Parchment") return balanceRobustaDryParchment
+    if (coffeeType === "Robusta" && bagType === "Dry Cherry") return balanceRobustaDryCherry
+    return 0
+  }
+  const currentBalance = getBalanceForSelection()
+  const resolvedCountLabel =
+    dispatchTotalCount > dispatchRecords.length
+      ? `Showing ${dispatchRecords.length} of ${dispatchTotalCount}`
+      : `${dispatchRecords.length} record(s)`
+
+  return (
+    <div className="space-y-6">
+      {/* Fiscal Year Selector */}
+      <div className="flex items-center justify-between">
+        <h2 className="text-xl font-semibold">Coffee Bag Dispatch</h2>
+        <div className="flex items-center gap-2">
+          <Label htmlFor="fiscal-year" className="text-sm text-muted-foreground">
+            Fiscal Year:
+          </Label>
+          <Select
+            value={selectedFiscalYear.label}
+            onValueChange={(value) => {
+              const fy = availableFiscalYears.find((y) => y.label === value)
+              if (fy) setSelectedFiscalYear(fy)
+            }}
+          >
+            <SelectTrigger className="w-[120px]">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {availableFiscalYears.map((fy) => (
+                <SelectItem key={fy.label} value={fy.label}>
+                  FY {fy.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+      </div>
+
+      {/* Summary Cards */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+        {/* Arabica Dry Parchment */}
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium text-muted-foreground">Arabica Dry Parchment Bags</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{formatNumber(bagTotals.arabica_dry_parchment_bags)}</div>
+            <div className="text-sm text-muted-foreground mt-1">
+              Dispatched: {formatNumber(dispatchedTotals.arabica_dry_parchment)}
+            </div>
+            <div
+              className={cn(
+                "text-sm font-medium mt-1",
+                balanceArabicaDryParchment < 0 ? "text-red-600" : "text-green-600",
+              )}
+            >
+              Balance: {formatNumber(balanceArabicaDryParchment)}
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Arabica Dry Cherry */}
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium text-muted-foreground">Arabica Dry Cherry Bags</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{formatNumber(bagTotals.arabica_dry_cherry_bags)}</div>
+            <div className="text-sm text-muted-foreground mt-1">
+              Dispatched: {formatNumber(dispatchedTotals.arabica_dry_cherry)}
+            </div>
+            <div className={cn("text-sm font-medium mt-1", balanceArabicaDryCherry < 0 ? "text-red-600" : "text-green-600")}>
+              Balance: {formatNumber(balanceArabicaDryCherry)}
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Robusta Dry Parchment */}
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium text-muted-foreground">Robusta Dry Parchment Bags</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{formatNumber(bagTotals.robusta_dry_parchment_bags)}</div>
+            <div className="text-sm text-muted-foreground mt-1">
+              Dispatched: {formatNumber(dispatchedTotals.robusta_dry_parchment)}
+            </div>
+            <div
+              className={cn(
+                "text-sm font-medium mt-1",
+                balanceRobustaDryParchment < 0 ? "text-red-600" : "text-green-600",
+              )}
+            >
+              Balance: {formatNumber(balanceRobustaDryParchment)}
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Robusta Dry Cherry */}
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium text-muted-foreground">Robusta Dry Cherry Bags</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{formatNumber(bagTotals.robusta_dry_cherry_bags)}</div>
+            <div className="text-sm text-muted-foreground mt-1">
+              Dispatched: {formatNumber(dispatchedTotals.robusta_dry_cherry)}
+            </div>
+            <div className={cn("text-sm font-medium mt-1", balanceRobustaDryCherry < 0 ? "text-red-600" : "text-green-600")}>
+              Balance: {formatNumber(balanceRobustaDryCherry)}
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Add Dispatch Form */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Truck className="h-5 w-5" />
+            {editingRecord ? "Edit Dispatch" : "Record Dispatch"}
+          </CardTitle>
+          <CardDescription>
+            {editingRecord ? "Update the dispatch record" : "Record coffee bags sent out from the location"}
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+            {/* Date */}
+            <div className="space-y-2">
+              <Label>Date</Label>
+              <Popover>
+                <PopoverTrigger asChild>
+                  <Button
+                    variant="outline"
+                    className={cn("w-full justify-start text-left font-normal bg-transparent", !date && "text-muted-foreground")}
+                  >
+                    <CalendarIcon className="mr-2 h-4 w-4" />
+                    {date ? formatDateOnly(date) : <span>Pick a date</span>}
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-auto p-0">
+                  <Calendar mode="single" selected={date} onSelect={(d) => d && setDate(d)} initialFocus />
+                </PopoverContent>
+              </Popover>
+            </div>
+
+            {/* Location */}
+            <div className="space-y-2">
+              <Label>Location</Label>
+              <Select value={selectedLocationId} onValueChange={setSelectedLocationId} disabled={!locations.length}>
+                <SelectTrigger>
+                  <SelectValue placeholder={locations.length ? "Select location" : "Add a location first"} />
+                </SelectTrigger>
+                <SelectContent>
+                  {locations.map((loc) => (
+                    <SelectItem key={loc.id} value={loc.id}>
+                      {loc.name || loc.code}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            {/* Lot ID */}
+            <div className="space-y-2">
+              <Label>Lot ID</Label>
+              <Input
+                placeholder="e.g. LOT-2026-001"
+                value={lotId}
+                onChange={(e) => setLotId(e.target.value)}
+              />
+            </div>
+
+            {/* Coffee Type */}
+            <div className="space-y-2">
+              <Label>Coffee Type</Label>
+              <Select value={coffeeType} onValueChange={setCoffeeType}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {COFFEE_TYPES.map((ct) => (
+                    <SelectItem key={ct} value={ct}>
+                      {ct}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            {/* Bag Type */}
+            <div className="space-y-2">
+              <Label>Bag Type</Label>
+              <Select value={bagType} onValueChange={setBagType}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {BAG_TYPES.map((bt) => (
+                    <SelectItem key={bt} value={bt}>
+                      {bt}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <p className={cn(
+                "text-xs",
+                currentBalance > 0 ? "text-green-600" : "text-red-600"
+              )}>
+                Available: {formatNumber(currentBalance)} bags
+              </p>
+            </div>
+
+            {/* Bags Dispatched */}
+            <div className="space-y-2">
+              <Label>Bags Dispatched</Label>
+              <Input
+                type="number"
+                step="0.01"
+                placeholder="Enter number of bags"
+                value={bagsDispatched}
+                onChange={(e) => setBagsDispatched(e.target.value)}
+                max={currentBalance}
+              />
+              {bagsDispatched && Number(bagsDispatched) > currentBalance && (
+                <p className="text-xs text-red-600">
+                  Exceeds available inventory from processing!
+                </p>
+              )}
+            </div>
+
+            {/* KGs Received */}
+            <div className="space-y-2">
+              <Label>KGs Received (Optional)</Label>
+              <Input
+                type="number"
+                step="0.01"
+                placeholder="Enter KGs received"
+                value={kgsReceived}
+                onChange={(e) => setKgsReceived(e.target.value)}
+              />
+              {kgsReceived && (
+                <p className="text-xs text-muted-foreground">
+                  {formatNumber(Number(kgsReceived) / bagWeightKg || 0)} bags received
+                </p>
+              )}
+            </div>
+
+            {/* Notes */}
+            <div className="space-y-2 md:col-span-2">
+              <Label>Notes (Optional)</Label>
+              <Textarea
+                placeholder="Add any notes..."
+                value={notes}
+                onChange={(e) => setNotes(e.target.value)}
+                className="min-h-[60px]"
+              />
+            </div>
+          </div>
+
+          <div className="mt-4 flex justify-end gap-2">
+            {editingRecord && (
+              <Button variant="outline" onClick={resetForm}>
+                Cancel
+              </Button>
+            )}
+            <Button onClick={handleSave} disabled={isSaving} className="bg-green-700 hover:bg-green-800">
+              {isSaving ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Saving...
+                </>
+              ) : (
+                <>
+                  <Save className="mr-2 h-4 w-4" />
+                  {editingRecord ? "Update Dispatch" : "Save Dispatch"}
+                </>
+              )}
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Dispatch Records Table */}
+      <Card>
+        <CardHeader>
+          <div className="flex items-center justify-between">
+            <div>
+              <CardTitle className="flex items-center gap-2">
+                <Package className="h-5 w-5" />
+                Dispatch Records
+              </CardTitle>
+              <CardDescription>History of all dispatched bags · {resolvedCountLabel}</CardDescription>
+            </div>
+            <Button variant="outline" size="sm" onClick={exportToCSV} className="bg-transparent">
+              <Download className="mr-2 h-4 w-4" />
+              Export CSV
+            </Button>
+          </div>
+        </CardHeader>
+        <CardContent>
+          {isLoading ? (
+            <div className="flex items-center justify-center py-8">
+              <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+            </div>
+          ) : dispatchRecords.length === 0 ? (
+            <div className="text-center py-8 text-muted-foreground">No dispatch records found</div>
+          ) : (
+            <div className="space-y-4">
+              <div className="overflow-x-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow className="bg-muted/50">
+                      <TableHead className="sticky top-0 bg-muted/60">Date</TableHead>
+                      <TableHead className="sticky top-0 bg-muted/60">Location</TableHead>
+                      <TableHead className="sticky top-0 bg-muted/60">Lot ID</TableHead>
+                      <TableHead className="sticky top-0 bg-muted/60">Coffee Type</TableHead>
+                      <TableHead className="sticky top-0 bg-muted/60">Bag Type</TableHead>
+                      <TableHead className="text-right sticky top-0 bg-muted/60">Bags</TableHead>
+                      <TableHead className="text-right sticky top-0 bg-muted/60">KGs Received</TableHead>
+                      <TableHead className="sticky top-0 bg-muted/60">Notes</TableHead>
+                      <TableHead className="text-right sticky top-0 bg-muted/60">Actions</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {dispatchRecords.map((record, index) => (
+                      <TableRow key={record.id} className={index % 2 === 0 ? "bg-white" : "bg-muted/20"}>
+                        <TableCell>{formatDateOnly(record.dispatch_date)}</TableCell>
+                        <TableCell>{getLocationLabel(record)}</TableCell>
+                        <TableCell>{record.lot_id || "-"}</TableCell>
+                        <TableCell>{record.coffee_type}</TableCell>
+                        <TableCell>{formatBagTypeLabel(record.bag_type)}</TableCell>
+                        <TableCell className="text-right">{formatNumber(Number(record.bags_dispatched) || 0)}</TableCell>
+                        <TableCell className="text-right">
+                          {record.kgs_received ? formatNumber(Number(record.kgs_received) || 0) : "-"}
+                        </TableCell>
+                        <TableCell className="max-w-[200px] truncate">{record.notes || "-"}</TableCell>
+                        <TableCell className="text-right">
+                          <div className="flex items-center justify-end gap-1">
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => handleEdit(record)}
+                              className="text-blue-600 hover:text-blue-700"
+                            >
+                              <Pencil className="h-4 w-4" />
+                            </Button>
+                            {canDelete && (
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => handleDelete(record.id!)}
+                                className="text-red-600 hover:text-red-700"
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </Button>
+                            )}
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+              {dispatchHasMore && (
+                <div className="flex justify-center pt-4">
+                  <Button variant="outline" size="sm" onClick={loadMoreDispatchRecords} disabled={isLoadingMore}>
+                    {isLoadingMore ? "Loading..." : "Load more"}
+                  </Button>
+                </div>
+              )}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+    </div>
+  )
+}
