@@ -1,16 +1,13 @@
 import { type NextRequest, NextResponse } from "next/server"
-import { neon } from "@neondatabase/serverless"
-import { requireModuleAccess, isModuleAccessError } from "@/lib/module-access"
-import { normalizeTenantContext, runTenantQuery } from "@/lib/tenant-db"
-
-const sql = neon(process.env.DATABASE_URL || "")
+import { sql } from "@/lib/server/db"
+import { requireModuleAccess, isModuleAccessError } from "@/lib/server/module-access"
+import { normalizeTenantContext, runTenantQuery } from "@/lib/server/tenant-db"
+import { canDeleteModule, canWriteModule } from "@/lib/permissions"
+import { logAuditEvent } from "@/lib/server/audit-log"
 
 export async function GET(request: NextRequest) {
   try {
     const sessionUser = await requireModuleAccess("rainfall")
-    if (!["admin", "owner"].includes(sessionUser.role)) {
-      return NextResponse.json({ success: false, error: "Admin role required" }, { status: 403 })
-    }
     const tenantContext = normalizeTenantContext(sessionUser.tenantId, sessionUser.role)
     const records = await runTenantQuery(
       sql,
@@ -34,6 +31,9 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     const sessionUser = await requireModuleAccess("rainfall")
+    if (!canWriteModule(sessionUser.role, "rainfall")) {
+      return NextResponse.json({ success: false, error: "Insufficient role" }, { status: 403 })
+    }
     const tenantContext = normalizeTenantContext(sessionUser.tenantId, sessionUser.role)
     const { record_date, inches, cents, notes, user_id } = await request.json()
 
@@ -51,6 +51,13 @@ export async function POST(request: NextRequest) {
       `,
     )
 
+    await logAuditEvent(sql, sessionUser, {
+      action: "create",
+      entityType: "rainfall_records",
+      entityId: result?.[0]?.id,
+      after: result?.[0] ?? null,
+    })
+
     return NextResponse.json({ success: true, record: result[0] })
   } catch (error: any) {
     console.error("[v0] Error saving rainfall record:", error)
@@ -66,8 +73,8 @@ export async function DELETE(request: NextRequest) {
     const { searchParams } = new URL(request.url)
     const id = searchParams.get("id")
     const sessionUser = await requireModuleAccess("rainfall")
-    if (!["admin", "owner"].includes(sessionUser.role)) {
-      return NextResponse.json({ success: false, error: "Admin role required" }, { status: 403 })
+    if (!canDeleteModule(sessionUser.role, "rainfall")) {
+      return NextResponse.json({ success: false, error: "Insufficient role" }, { status: 403 })
     }
     const tenantContext = normalizeTenantContext(sessionUser.tenantId, sessionUser.role)
 
@@ -75,11 +82,30 @@ export async function DELETE(request: NextRequest) {
       return NextResponse.json({ success: false, error: "ID is required" }, { status: 400 })
     }
 
+    const existing = await runTenantQuery(
+      sql,
+      tenantContext,
+      sql`
+        SELECT *
+        FROM rainfall_records
+        WHERE id = ${id}
+          AND tenant_id = ${tenantContext.tenantId}
+        LIMIT 1
+      `,
+    )
+
     await runTenantQuery(
       sql,
       tenantContext,
       sql`DELETE FROM rainfall_records WHERE id = ${id} AND tenant_id = ${tenantContext.tenantId}`,
     )
+
+    await logAuditEvent(sql, sessionUser, {
+      action: "delete",
+      entityType: "rainfall_records",
+      entityId: existing?.[0]?.id ?? id,
+      before: existing?.[0] ?? null,
+    })
 
     return NextResponse.json({ success: true })
   } catch (error: any) {

@@ -1,7 +1,9 @@
 import { NextResponse } from "next/server"
-import { sql } from "@/lib/neon"
-import { requireSessionUser } from "@/lib/auth-server"
-import { normalizeTenantContext, runTenantQuery } from "@/lib/tenant-db"
+import { sql } from "@/lib/server/db"
+import { requireSessionUser } from "@/lib/server/auth"
+import { normalizeTenantContext, runTenantQuery } from "@/lib/server/tenant-db"
+import { requireAdminRole } from "@/lib/permissions"
+import { logAuditEvent } from "@/lib/server/audit-log"
 
 function normalizeCode(value: string) {
   return value.trim().toUpperCase().replace(/\s+/g, "-")
@@ -36,8 +38,10 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
   try {
     const sessionUser = await requireSessionUser()
-    if (sessionUser.role === "user") {
-      return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 403 })
+    try {
+      requireAdminRole(sessionUser.role)
+    } catch {
+      return NextResponse.json({ success: false, error: "Insufficient role" }, { status: 403 })
     }
 
     const body = await request.json()
@@ -66,6 +70,13 @@ export async function POST(request: Request) {
       return NextResponse.json({ success: false, error: "Location code already exists" }, { status: 409 })
     }
 
+    await logAuditEvent(sql, sessionUser, {
+      action: "create",
+      entityType: "locations",
+      entityId: result?.[0]?.id,
+      after: result?.[0] ?? null,
+    })
+
     return NextResponse.json({ success: true, location: result[0] })
   } catch (error: any) {
     console.error("Error creating location:", error)
@@ -76,8 +87,10 @@ export async function POST(request: Request) {
 export async function PATCH(request: Request) {
   try {
     const sessionUser = await requireSessionUser()
-    if (sessionUser.role === "user") {
-      return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 403 })
+    try {
+      requireAdminRole(sessionUser.role)
+    } catch {
+      return NextResponse.json({ success: false, error: "Insufficient role" }, { status: 403 })
     }
 
     const body = await request.json()
@@ -138,6 +151,14 @@ export async function PATCH(request: Request) {
         RETURNING id, name, code
       `,
     )
+
+    await logAuditEvent(sql, sessionUser, {
+      action: "update",
+      entityType: "locations",
+      entityId: result?.[0]?.id ?? id,
+      before: existing?.[0] ?? null,
+      after: result?.[0] ?? null,
+    })
 
     return NextResponse.json({ success: true, location: result[0] })
   } catch (error: any) {

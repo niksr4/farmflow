@@ -18,8 +18,8 @@ import { getCurrentFiscalYear, getAvailableFiscalYears, getFiscalYearDateRange, 
 import { DEFAULT_COFFEE_VARIETIES } from "@/lib/crop-config"
 import { useAuth } from "@/hooks/use-auth"
 import { useTenantSettings } from "@/hooks/use-tenant-settings"
-import { buildTenantHeaders } from "@/lib/tenant"
 import { formatDateOnly } from "@/lib/date-utils"
+import { formatCurrency, formatNumber } from "@/lib/format"
 
 interface SalesRecord {
   id?: number
@@ -74,7 +74,6 @@ const formatBagTypeLabel = (value: string | null | undefined) =>
 export default function SalesTab() {
   const { user } = useAuth()
   const { settings } = useTenantSettings()
-  const tenantHeaders = useMemo(() => buildTenantHeaders(user?.tenantId), [user?.tenantId])
   const [selectedFiscalYear, setSelectedFiscalYear] = useState<FiscalYear>(getCurrentFiscalYear())
   const availableFiscalYears = getAvailableFiscalYears()
   const bagWeightKg = Number(settings.bagWeightKg) || 50
@@ -119,9 +118,8 @@ export default function SalesTab() {
   )
 
   const loadLocations = useCallback(async () => {
-    if (!tenantHeaders) return
     try {
-      const response = await fetch("/api/locations", { headers: tenantHeaders })
+      const response = await fetch("/api/locations")
       const data = await response.json()
       if (!response.ok || !data.success) {
         return
@@ -134,7 +132,7 @@ export default function SalesTab() {
     } catch (error) {
       console.error("Error loading locations:", error)
     }
-  }, [selectedLocationId, tenantHeaders])
+  }, [selectedLocationId])
 
   const resolveLocationIdFromLabel = useCallback(
     (label?: string | null) => {
@@ -166,9 +164,8 @@ export default function SalesTab() {
   )
 
   const loadBuyerSuggestions = useCallback(async () => {
-    if (!tenantHeaders) return
     try {
-      const response = await fetch("/api/sales?buyers=true", { headers: tenantHeaders })
+      const response = await fetch("/api/sales?buyers=true")
       const data = await response.json()
       if (!response.ok || !data.success) return
       const buyers = Array.isArray(data.buyers) ? data.buyers : []
@@ -176,7 +173,7 @@ export default function SalesTab() {
     } catch (error) {
       console.error("Error loading buyers:", error)
     }
-  }, [tenantHeaders])
+  }, [])
 
   const calculateTotals = useCallback(() => {
     const totals = {
@@ -210,7 +207,7 @@ export default function SalesTab() {
         limit: salesPageSize.toString(),
         offset: String(pageIndex * salesPageSize),
       })
-      const response = await fetch(`/api/sales?${params.toString()}`, { headers: tenantHeaders })
+      const response = await fetch(`/api/sales?${params.toString()}`)
       const data = await response.json()
       
       if (data.success) {
@@ -238,14 +235,13 @@ export default function SalesTab() {
         setIsLoading(false)
       }
     }
-  }, [salesPageSize, selectedFiscalYear, tenantHeaders])
+  }, [salesPageSize, selectedFiscalYear])
 
   const fetchDispatchSummary = useCallback(async () => {
     try {
       const { startDate, endDate } = getFiscalYearDateRange(selectedFiscalYear)
       const response = await fetch(`/api/dispatch?startDate=${startDate}&endDate=${endDate}&summaryOnly=true`, {
-        headers: tenantHeaders,
-      })
+              })
       const data = await response.json()
 
       if (data.success) {
@@ -254,7 +250,7 @@ export default function SalesTab() {
     } catch (error) {
       console.error("Error fetching dispatch records:", error)
     }
-  }, [selectedFiscalYear, tenantHeaders])
+  }, [selectedFiscalYear])
 
   useEffect(() => {
     loadLocations()
@@ -335,7 +331,7 @@ export default function SalesTab() {
       const method = editingRecord ? "PUT" : "POST"
       const response = await fetch("/api/sales", {
         method,
-        headers: { "Content-Type": "application/json", ...tenantHeaders },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           id: editingRecord?.id,
           sale_date: format(date, "yyyy-MM-dd"),
@@ -424,8 +420,7 @@ export default function SalesTab() {
     try {
       const response = await fetch(`/api/sales?id=${id}`, {
         method: "DELETE",
-        headers: tenantHeaders,
-      })
+              })
 
       const data = await response.json()
 
@@ -455,8 +450,7 @@ export default function SalesTab() {
     const runExport = async () => {
       const { startDate, endDate } = getFiscalYearDateRange(selectedFiscalYear)
       const response = await fetch(`/api/sales?startDate=${startDate}&endDate=${endDate}&all=true`, {
-        headers: tenantHeaders,
-      })
+              })
       const data = await response.json()
 
       if (!data.success || !Array.isArray(data.records)) {
@@ -643,18 +637,18 @@ export default function SalesTab() {
                 <div className="text-sm font-semibold">{type}</div>
                 <div className="rounded-md border p-3 space-y-1">
                   <div className="text-xs text-muted-foreground">Cherry</div>
-                  <div className="text-lg font-semibold">{totals.cherry.kgs.toFixed(2)} KGs</div>
-                  <div className="text-xs text-muted-foreground">{totals.cherry.bags.toFixed(2)} Bags</div>
+                  <div className="text-lg font-semibold">{formatNumber(totals.cherry.kgs)} KGs</div>
+                  <div className="text-xs text-muted-foreground">{formatNumber(totals.cherry.bags)} Bags</div>
                 </div>
                 <div className="rounded-md border p-3 space-y-1">
                   <div className="text-xs text-muted-foreground">Parchment</div>
-                  <div className="text-lg font-semibold">{totals.parchment.kgs.toFixed(2)} KGs</div>
-                  <div className="text-xs text-muted-foreground">{totals.parchment.bags.toFixed(2)} Bags</div>
+                  <div className="text-lg font-semibold">{formatNumber(totals.parchment.kgs)} KGs</div>
+                  <div className="text-xs text-muted-foreground">{formatNumber(totals.parchment.bags)} Bags</div>
                 </div>
                 <div className="rounded-md border p-3 space-y-1">
                   <div className="text-xs text-muted-foreground">Total {type}</div>
-                  <div className="text-lg font-semibold">{totals.total.kgs.toFixed(2)} KGs</div>
-                  <div className="text-xs text-muted-foreground">{totals.total.bags.toFixed(2)} Bags</div>
+                  <div className="text-lg font-semibold">{formatNumber(totals.total.kgs)} KGs</div>
+                  <div className="text-xs text-muted-foreground">{formatNumber(totals.total.bags)} Bags</div>
                 </div>
               </div>
             )
@@ -663,18 +657,18 @@ export default function SalesTab() {
             <div className="text-sm font-semibold">Summary</div>
             <div className="rounded-md border p-3 space-y-1">
               <div className="text-xs text-muted-foreground">Total Received</div>
-              <div className="text-lg font-semibold">{totalReceived.toFixed(2)} KGs</div>
-              <div className="text-xs text-muted-foreground">{totalReceivedBags.toFixed(2)} Bags</div>
+              <div className="text-lg font-semibold">{formatNumber(totalReceived)} KGs</div>
+              <div className="text-xs text-muted-foreground">{formatNumber(totalReceivedBags)} Bags</div>
             </div>
             <div className="rounded-md border p-3 space-y-1">
               <div className="text-xs text-muted-foreground">Total Sold</div>
-              <div className="text-lg font-semibold">{totalSold.toFixed(2)} KGs</div>
-              <div className="text-xs text-muted-foreground">{totalSoldBags.toFixed(2)} Bags</div>
+              <div className="text-lg font-semibold">{formatNumber(totalSold)} KGs</div>
+              <div className="text-xs text-muted-foreground">{formatNumber(totalSoldBags)} Bags</div>
             </div>
             <div className="rounded-md border p-3 space-y-1">
               <div className="text-xs text-muted-foreground">Total Available</div>
-              <div className="text-lg font-semibold">{totalAvailable.toFixed(2)} KGs</div>
-              <div className="text-xs text-muted-foreground">{totalAvailableBags.toFixed(2)} Bags</div>
+              <div className="text-lg font-semibold">{formatNumber(totalAvailable)} KGs</div>
+              <div className="text-xs text-muted-foreground">{formatNumber(totalAvailableBags)} Bags</div>
             </div>
           </div>
         </CardContent>
@@ -688,12 +682,12 @@ export default function SalesTab() {
             <CardTitle className="text-sm font-medium text-muted-foreground">Total Revenue</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-green-600">₹{totals.totalRevenue.toLocaleString()}</div>
+            <div className="text-2xl font-bold text-green-600">{formatCurrency(totals.totalRevenue, 0)}</div>
             <div className="text-sm text-muted-foreground mt-1">
               {resolvedSalesCount} sales recorded
             </div>
             <div className="text-sm font-medium mt-1 text-blue-600">
-              Avg Price/Bag: ₹{avgPricePerBag.toFixed(2)}
+              Avg Price/Bag: {formatCurrency(avgPricePerBag)}
             </div>
           </CardContent>
         </Card>
@@ -704,9 +698,9 @@ export default function SalesTab() {
             <CardTitle className="text-sm font-medium text-muted-foreground">Total Bags Sold</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{totals.totalBagsSold.toFixed(2)}</div>
+            <div className="text-2xl font-bold">{formatNumber(totals.totalBagsSold)}</div>
             <div className="text-sm text-muted-foreground mt-1">
-              KGs Sold: {totals.totalKgsSold.toFixed(2)}
+              KGs Sold: {formatNumber(totals.totalKgsSold)}
             </div>
           </CardContent>
         </Card>
@@ -717,9 +711,9 @@ export default function SalesTab() {
             <CardTitle className="text-sm font-medium text-muted-foreground">Total KGs Sold</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{totals.totalKgsSold.toFixed(2)}</div>
+            <div className="text-2xl font-bold">{formatNumber(totals.totalKgsSold)}</div>
             <div className="text-sm text-muted-foreground mt-1">
-              Bags Sold: {totals.totalBagsSold.toFixed(2)}
+              Bags Sold: {formatNumber(totals.totalBagsSold)}
             </div>
           </CardContent>
         </Card>
@@ -730,7 +724,7 @@ export default function SalesTab() {
             <CardTitle className="text-sm font-medium text-muted-foreground">Avg Price per Bag</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-blue-600">₹{avgPricePerBag.toFixed(2)}</div>
+            <div className="text-2xl font-bold text-blue-600">{formatCurrency(avgPricePerBag)}</div>
             <div className="text-sm text-muted-foreground mt-1">
               Revenue / Bags Sold
             </div>
@@ -982,26 +976,26 @@ export default function SalesTab() {
               <div className="overflow-x-auto">
                 <Table>
                   <TableHeader>
-                    <TableRow>
-                      <TableHead>Date</TableHead>
-                      <TableHead>B&L Batch No</TableHead>
-                      <TableHead>Lot ID</TableHead>
-                      <TableHead>Location</TableHead>
-                      <TableHead>Coffee Type</TableHead>
-                      <TableHead>Bag Type</TableHead>
-                      <TableHead>Buyer</TableHead>
-                      <TableHead className="text-right">Bags Sold</TableHead>
-                      <TableHead className="text-right">KGs Sold</TableHead>
-                      <TableHead className="text-right">Price/Bag</TableHead>
-                      <TableHead className="text-right">Revenue</TableHead>
-                      <TableHead>Bank Account</TableHead>
-                      <TableHead>Notes</TableHead>
-                      <TableHead className="text-right">Actions</TableHead>
+                    <TableRow className="bg-muted/50">
+                      <TableHead className="sticky top-0 bg-muted/60">Date</TableHead>
+                      <TableHead className="sticky top-0 bg-muted/60">B&L Batch No</TableHead>
+                      <TableHead className="sticky top-0 bg-muted/60">Lot ID</TableHead>
+                      <TableHead className="sticky top-0 bg-muted/60">Location</TableHead>
+                      <TableHead className="sticky top-0 bg-muted/60">Coffee Type</TableHead>
+                      <TableHead className="sticky top-0 bg-muted/60">Bag Type</TableHead>
+                      <TableHead className="sticky top-0 bg-muted/60">Buyer</TableHead>
+                      <TableHead className="text-right sticky top-0 bg-muted/60">Bags Sold</TableHead>
+                      <TableHead className="text-right sticky top-0 bg-muted/60">KGs Sold</TableHead>
+                      <TableHead className="text-right sticky top-0 bg-muted/60">Price/Bag</TableHead>
+                      <TableHead className="text-right sticky top-0 bg-muted/60">Revenue</TableHead>
+                      <TableHead className="sticky top-0 bg-muted/60">Bank Account</TableHead>
+                      <TableHead className="sticky top-0 bg-muted/60">Notes</TableHead>
+                      <TableHead className="text-right sticky top-0 bg-muted/60">Actions</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {salesRecords.map((record) => (
-                      <TableRow key={record.id}>
+                    {salesRecords.map((record, index) => (
+                      <TableRow key={record.id} className={index % 2 === 0 ? "bg-white" : "bg-muted/20"}>
                         <TableCell>{formatDateOnly(record.sale_date)}</TableCell>
                         <TableCell>{record.batch_no || "-"}</TableCell>
                         <TableCell>{record.lot_id || "-"}</TableCell>
@@ -1009,13 +1003,15 @@ export default function SalesTab() {
                         <TableCell>{record.coffee_type || "-"}</TableCell>
                         <TableCell>{formatBagTypeLabel(record.bag_type)}</TableCell>
                         <TableCell>{record.buyer_name || "-"}</TableCell>
-                        <TableCell className="text-right">{Number(record.bags_sold).toFixed(2)}</TableCell>
+                        <TableCell className="text-right">{formatNumber(Number(record.bags_sold) || 0)}</TableCell>
                         <TableCell className="text-right">
-                          {(typeof record.kgs === "number" ? record.kgs : Number(record.bags_sold) * bagWeightKg).toFixed(2)}
+                          {formatNumber(
+                            typeof record.kgs === "number" ? record.kgs : Number(record.bags_sold) * bagWeightKg,
+                          )}
                         </TableCell>
-                        <TableCell className="text-right">₹{Number(record.price_per_bag).toFixed(2)}</TableCell>
+                        <TableCell className="text-right">{formatCurrency(Number(record.price_per_bag) || 0)}</TableCell>
                         <TableCell className="text-right font-medium text-green-600">
-                          ₹{Number(record.revenue).toLocaleString()}
+                          {formatCurrency(Number(record.revenue) || 0, 0)}
                         </TableCell>
                         <TableCell>{record.bank_account || "-"}</TableCell>
                         <TableCell className="max-w-[200px] truncate">{record.notes || "-"}</TableCell>

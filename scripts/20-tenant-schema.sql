@@ -1,4 +1,4 @@
--- Tenant + user schema baseline for Farm Flow
+-- Tenant + user schema baseline for FarmFlow
 -- Safe to run multiple times.
 
 CREATE EXTENSION IF NOT EXISTS pgcrypto;

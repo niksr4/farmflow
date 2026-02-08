@@ -5,7 +5,6 @@ import {
   Check,
   Download,
   List,
-  Clock,
   LogOut,
   Edit,
   Trash2,
@@ -16,9 +15,11 @@ import {
   SortDesc,
   History,
   Brain,
+  Loader2,
   TrendingUp,
   BarChart3,
   AlertTriangle,
+  CheckCircle2,
   CloudRain,
   Newspaper,
   Truck,
@@ -59,16 +60,30 @@ import SalesTab from "@/components/sales-tab"
 import NewsTab from "@/components/news-tab"
 import WeatherTab from "@/components/weather-tab"
 import SeasonDashboard from "@/components/season-dashboard"
+import CuringTab from "@/components/curing-tab"
+import QualityGradingTab from "@/components/quality-grading-tab"
 import { PepperTab } from "./pepper-tab"
+import OnboardingChecklist, { type OnboardingStep } from "@/components/onboarding-checklist"
 import Link from "next/link"
 import { formatDateForDisplay, generateTimestamp, isWithinLast24Hours } from "@/lib/date-utils"
-import { cn } from "@/lib/utils"
+import { formatCurrency, formatNumber } from "@/lib/format"
+import { getModuleDefaultEnabled } from "@/lib/modules"
 import type { InventoryItem, Transaction } from "@/lib/inventory-types"
 import { toast } from "@/components/ui/use-toast"
 
 // API endpoints (adjust if your routes are different)
 const API_TRANSACTIONS = "/api/transactions-neon"
 const API_INVENTORY = "/api/inventory-neon"
+
+const LOCATION_ALL = "all"
+const LOCATION_UNASSIGNED = "unassigned"
+const UNASSIGNED_LABEL = "Unassigned (legacy)"
+
+interface LocationOption {
+  id: string
+  name: string
+  code?: string | null
+}
 
 function parseCustomDateString(dateString: string | undefined | null): Date | null {
   if (!dateString || typeof dateString !== "string") return null
@@ -117,6 +132,7 @@ const createDefaultTransaction = (): Transaction => {
     price: 0,
     total_cost: 0,
     unit: "kg",
+    location_id: null,
     id: undefined as any, // optional
   } as Transaction
 }
@@ -135,6 +151,10 @@ export default function InventorySystem() {
   const [laborDeployments, setLaborDeployments] = useState<any[]>([])
   const [itemValues, setItemValues] = useState<Record<string, any>>({})
   const [summary, setSummary] = useState({ total_inventory_value: 0, total_items: 0, total_quantity: 0 })
+  const [locations, setLocations] = useState<LocationOption[]>([])
+  const [selectedLocationId, setSelectedLocationId] = useState<string>(LOCATION_ALL)
+  const [transactionLocationId, setTransactionLocationId] = useState<string>(LOCATION_UNASSIGNED)
+  const [inventoryEditLocationId, setInventoryEditLocationId] = useState<string>(LOCATION_UNASSIGNED)
   const [loading, setLoading] = useState(false)
   const [isSyncing, setIsSyncing] = useState(false)
   const [syncError, setSyncError] = useState<string | null>(null)
@@ -165,6 +185,12 @@ export default function InventorySystem() {
   const [isAnalyzing, setIsAnalyzing] = useState(false)
   const [analysisError, setAnalysisError] = useState("")
   const [aiAnalysis, setAiAnalysis] = useState<string | null>(null)
+  const [exceptionsSummary, setExceptionsSummary] = useState<{ count: number; highlights: string[] }>({
+    count: 0,
+    highlights: [],
+  })
+  const [exceptionsLoading, setExceptionsLoading] = useState(false)
+  const [exceptionsError, setExceptionsError] = useState<string | null>(null)
   const [onboardingStatus, setOnboardingStatus] = useState({
     locations: false,
     inventory: false,
@@ -188,24 +214,13 @@ export default function InventorySystem() {
   const isTenantLoading = status === "loading"
   const router = useRouter()
   const searchParams = useSearchParams()
-  const tenantFetch = useCallback(
-    (input: RequestInfo | URL, init?: RequestInit) => {
-      if (!tenantId) {
-        return Promise.reject(new Error("Tenant not selected"))
-      }
-      const headers = new Headers(init?.headers || {})
-      headers.set("x-tenant-id", tenantId)
-      return fetch(input, { ...init, headers })
-    },
-    [tenantId],
-  )
   const isModuleEnabled = useCallback(
     (moduleId: string) => {
       if (isOwner) {
         return true
       }
       if (!enabledModules) {
-        return true
+        return getModuleDefaultEnabled(moduleId)
       }
       return enabledModules.includes(moduleId)
     },
@@ -228,7 +243,7 @@ export default function InventorySystem() {
     }
     setIsModulesLoading(true)
     try {
-      const response = await tenantFetch("/api/tenant-modules", { cache: "no-store" })
+      const response = await fetch("/api/tenant-modules", { cache: "no-store" })
       const data = await response.json()
       if (!response.ok || !data.success) {
         throw new Error(data.error || "Failed to load tenant modules")
@@ -244,11 +259,43 @@ export default function InventorySystem() {
     } finally {
       setIsModulesLoading(false)
     }
-  }, [isOwner, tenantFetch, tenantId])
+  }, [isOwner, tenantId])
 
   useEffect(() => {
     loadTenantModules()
   }, [loadTenantModules])
+
+  const loadLocations = useCallback(async () => {
+    if (!tenantId) return
+    try {
+      const response = await fetch("/api/locations")
+      const data = await response.json()
+      const loaded = Array.isArray(data.locations) ? data.locations : []
+      setLocations(loaded)
+    } catch (error) {
+      console.error("Failed to load locations:", error)
+    }
+  }, [tenantId])
+
+  useEffect(() => {
+    loadLocations()
+  }, [loadLocations])
+
+  useEffect(() => {
+    if (selectedLocationId !== LOCATION_ALL) {
+      setTransactionLocationId(selectedLocationId)
+    }
+  }, [selectedLocationId])
+
+  useEffect(() => {
+    if (
+      transactionLocationId !== LOCATION_UNASSIGNED &&
+      transactionLocationId !== LOCATION_ALL &&
+      !locations.find((loc) => loc.id === transactionLocationId)
+    ) {
+      setTransactionLocationId(LOCATION_UNASSIGNED)
+    }
+  }, [locations, transactionLocationId])
 
   // load initial data
   const refreshData = useCallback(async (force = false) => {
@@ -258,13 +305,14 @@ export default function InventorySystem() {
     try {
       setLoading(true)
       setSyncError(null)
-      const inventoryUrl = API_INVENTORY
-      const transactionsUrl = `${API_TRANSACTIONS}?limit=100`
+      const locationQuery = selectedLocationId !== LOCATION_ALL ? `?locationId=${encodeURIComponent(selectedLocationId)}` : ""
+      const inventoryUrl = `${API_INVENTORY}${locationQuery}`
+      const transactionsUrl = `${API_TRANSACTIONS}?limit=100${selectedLocationId !== LOCATION_ALL ? `&locationId=${encodeURIComponent(selectedLocationId)}` : ""}`
       const shouldFetchTransactions = isOwner || !enabledModules || enabledModules.includes("transactions")
       // fetch inventory and transactions in parallel
       const [invRes, txRes] = await Promise.all([
-        tenantFetch(inventoryUrl),
-        shouldFetchTransactions ? tenantFetch(transactionsUrl) : Promise.resolve(null),
+        fetch(inventoryUrl),
+        shouldFetchTransactions ? fetch(transactionsUrl) : Promise.resolve(null),
       ])
 
       if (!invRes.ok) {
@@ -295,7 +343,7 @@ export default function InventorySystem() {
       setSyncError(error.message || "Unexpected error during sync")
       console.error("refreshData error:", error)
     }
-  }, [enabledModules, isOwner, tenantFetch, tenantId])
+  }, [enabledModules, isOwner, selectedLocationId, tenantId])
 
   useEffect(() => {
     if (!tenantId) return
@@ -310,10 +358,11 @@ export default function InventorySystem() {
     setOnboardingError(null)
     try {
       const results = await Promise.allSettled([
-        tenantFetch("/api/locations"),
-        tenantFetch("/api/processing-records?limit=1&offset=0"),
-        tenantFetch("/api/dispatch?limit=1&offset=0"),
-        tenantFetch("/api/sales?limit=1&offset=0"),
+        fetch("/api/locations"),
+        fetch("/api/inventory-neon"),
+        fetch("/api/processing-records?limit=1&offset=0"),
+        fetch("/api/dispatch?limit=1&offset=0"),
+        fetch("/api/sales?limit=1&offset=0"),
       ])
 
       const parseJson = async (result: PromiseSettledResult<Response>) => {
@@ -332,15 +381,19 @@ export default function InventorySystem() {
       }
 
       const locationsData = await parseJson(results[0])
-      const processingData = await parseJson(results[1])
-      const dispatchData = await parseJson(results[2])
-      const salesData = await parseJson(results[3])
+      const inventoryData = await parseJson(results[1])
+      const processingData = await parseJson(results[2])
+      const dispatchData = await parseJson(results[3])
+      const salesData = await parseJson(results[4])
 
       const hasLocations = Array.isArray(locationsData?.locations) && locationsData.locations.length > 0
       const processingCount = Number(processingData?.totalCount) || (Array.isArray(processingData?.records) ? processingData.records.length : 0)
       const dispatchCount = Number(dispatchData?.totalCount) || (Array.isArray(dispatchData?.records) ? dispatchData.records.length : 0)
       const salesCount = Number(salesData?.totalCount) || (Array.isArray(salesData?.records) ? salesData.records.length : 0)
-      const hasInventory = summary.total_items > 0 || inventory.length > 0
+      const hasInventory =
+        Number(inventoryData?.summary?.total_items) > 0 ||
+        (Array.isArray(inventoryData?.inventory) && inventoryData.inventory.length > 0) ||
+        (Array.isArray(inventoryData?.items) && inventoryData.items.length > 0)
 
       setOnboardingStatus({
         locations: hasLocations,
@@ -361,7 +414,7 @@ export default function InventorySystem() {
     } finally {
       setIsOnboardingLoading(false)
     }
-  }, [tenantFetch, tenantId, isOwner, summary.total_items, inventory.length])
+  }, [tenantId, isOwner])
 
   useEffect(() => {
     if (!tenantId || isOwner) return
@@ -380,7 +433,7 @@ export default function InventorySystem() {
 
     setIsCreatingLocation(true)
     try {
-      const response = await tenantFetch("/api/locations", {
+      const response = await fetch("/api/locations", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -399,6 +452,7 @@ export default function InventorySystem() {
       })
       setNewLocationName("")
       setNewLocationCode("")
+      loadLocations()
       loadOnboardingStatus()
     } catch (error: any) {
       toast({
@@ -426,6 +480,29 @@ export default function InventorySystem() {
     setTransactionSortOrder((prev) => (prev === "desc" ? "asc" : "desc"))
   }
 
+  const locationMap = useMemo(() => {
+    return new Map(locations.map((loc) => [loc.id, loc]))
+  }, [locations])
+
+  const resolveLocationLabel = useCallback(
+    (locationId?: string | null, fallback?: string) => {
+      if (!locationId) return UNASSIGNED_LABEL
+      const location = locationMap.get(locationId)
+      if (location) {
+        return location.name || location.code || "Unknown"
+      }
+      if (fallback) return fallback
+      return "Unknown"
+    },
+    [locationMap],
+  )
+
+  const selectedLocationLabel = useMemo(() => {
+    if (selectedLocationId === LOCATION_ALL) return "All locations"
+    if (selectedLocationId === LOCATION_UNASSIGNED) return UNASSIGNED_LABEL
+    return resolveLocationLabel(selectedLocationId)
+  }, [selectedLocationId, resolveLocationLabel])
+
   // computed lists
   const activeItemTypesForDropdown = Array.from(new Set(inventory.filter((i) => i.quantity > 0).map((i) => i.name))).sort()
   const allItemTypesForDropdown = Array.from(new Set([...inventory.map((i) => i.name), ...transactions.map((t) => t.item_type)])).sort().filter(Boolean)
@@ -450,7 +527,8 @@ export default function InventorySystem() {
       const notesMatch = t.notes ? t.notes.toLowerCase().includes(searchLower) : false
       const userMatch = t.user_id ? t.user_id.toLowerCase().includes(searchLower) : false
       const typeMatch = t.transaction_type ? t.transaction_type.toLowerCase().includes(searchLower) : false
-      return itemMatch || notesMatch || userMatch || typeMatch
+      const locationMatch = resolveLocationLabel(t.location_id, t.location_name || t.location_code).toLowerCase().includes(searchLower)
+      return itemMatch || notesMatch || userMatch || typeMatch || locationMatch
     })
     .sort((a, b) => {
       try {
@@ -492,6 +570,9 @@ export default function InventorySystem() {
       price: safeGet(Number(transaction?.price), 0),
       total_cost: safeGet(Number(transaction?.total_cost), 0),
       unit: safeGet(transaction?.unit, "kg"),
+      location_id: transaction?.location_id ?? null,
+      location_name: transaction?.location_name ?? undefined,
+      location_code: transaction?.location_code ?? undefined,
       id: transaction?.id,
     } as Transaction
   }
@@ -522,11 +603,16 @@ export default function InventorySystem() {
       return
     }
 
+    const locationValue =
+      transactionLocationId && transactionLocationId !== LOCATION_UNASSIGNED && transactionLocationId !== LOCATION_ALL
+        ? transactionLocationId
+        : null
+
     try {
-      const res = await tenantFetch(API_TRANSACTIONS, {
+      const res = await fetch(API_TRANSACTIONS, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(tx),
+        body: JSON.stringify({ ...tx, location_id: locationValue }),
       })
       const json = await res.json()
       if (!res.ok || !json.success) {
@@ -576,10 +662,10 @@ export default function InventorySystem() {
 
     setIsSavingTransactionEdit(true)
     try {
-      const res = await tenantFetch("/api/transactions-neon/update", {
+      const res = await fetch("/api/transactions-neon/update", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(tx),
+        body: JSON.stringify({ ...tx, location_id: tx.location_id ?? null }),
       })
       const json = await res.json()
       if (!res.ok || !json.success) {
@@ -605,7 +691,7 @@ export default function InventorySystem() {
   const handleDeleteTransaction = async () => {
     if (!transactionToDelete) return
     try {
-      const res = await tenantFetch(`${API_TRANSACTIONS}/${transactionToDelete}`, { method: "DELETE" })
+      const res = await fetch(`${API_TRANSACTIONS}/${transactionToDelete}`, { method: "DELETE" })
       const json = await res.json()
       if (!res.ok || !json.success) throw new Error(json.message || "Delete failed")
       toast({ title: "Transaction deleted", description: "Transaction removed.", variant: "default" })
@@ -619,12 +705,27 @@ export default function InventorySystem() {
   }
 
   const handleOpenInventoryEdit = (item: InventoryItem) => {
+    if (selectedLocationId === LOCATION_ALL) {
+      toast({
+        title: "Select a location",
+        description: "Choose a specific location before adjusting inventory quantities.",
+        variant: "destructive",
+      })
+      return
+    }
     setEditingInventoryItem(item)
     setInventoryEditForm({
       name: item.name || "",
       unit: item.unit || "kg",
       quantity: Number(item.quantity ?? 0).toString(),
     })
+    const defaultLocation =
+      selectedLocationId !== LOCATION_ALL
+        ? selectedLocationId
+        : transactionLocationId !== LOCATION_ALL
+          ? transactionLocationId
+          : LOCATION_UNASSIGNED
+    setInventoryEditLocationId(defaultLocation)
     setIsInventoryEditDialogOpen(true)
   }
 
@@ -649,7 +750,7 @@ export default function InventorySystem() {
     setIsSavingInventoryEdit(true)
     try {
       if (nextName !== originalName || nextUnit !== originalUnit) {
-        const res = await tenantFetch(API_INVENTORY, {
+        const res = await fetch(API_INVENTORY, {
           method: "PUT",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
@@ -664,9 +765,14 @@ export default function InventorySystem() {
         }
       }
 
+      const adjustmentLocationId =
+        inventoryEditLocationId !== LOCATION_UNASSIGNED && inventoryEditLocationId !== LOCATION_ALL
+          ? inventoryEditLocationId
+          : null
+
       const delta = Number((nextQty - originalQty).toFixed(4))
       if (Math.abs(delta) > 0.0001) {
-        const res = await tenantFetch(API_TRANSACTIONS, {
+        const res = await fetch(API_TRANSACTIONS, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
@@ -676,6 +782,7 @@ export default function InventorySystem() {
             notes: `Inventory adjustment (${originalQty} -> ${nextQty} ${nextUnit})`,
             user_id: user?.username || "system",
             price: 0,
+            location_id: adjustmentLocationId,
           }),
         })
         const json = await res.json()
@@ -697,7 +804,16 @@ export default function InventorySystem() {
 
   const handleDeleteInventoryItem = async (itemToDelete: InventoryItem) => {
     if (!tenantId) return
+    if (selectedLocationId === LOCATION_ALL) {
+      toast({
+        title: "Select a location",
+        description: "Choose a specific location before deleting inventory.",
+        variant: "destructive",
+      })
+      return
+    }
     if (!confirm(`Delete "${itemToDelete.name}"? This will log a deplete transaction and hide the item.`)) return
+    const deleteLocationId = selectedLocationId !== LOCATION_ALL ? selectedLocationId : null
     const tx = {
       item_type: itemToDelete.name,
       quantity: itemToDelete.quantity,
@@ -705,9 +821,10 @@ export default function InventorySystem() {
       notes: `Item "${itemToDelete.name}" permanently deleted from inventory.`,
       user_id: user?.username || "system",
       price: 0,
+      location_id: deleteLocationId,
     }
     try {
-      const res = await tenantFetch("/api/transactions-neon", {
+      const res = await fetch("/api/transactions-neon", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(tx),
@@ -744,9 +861,10 @@ export default function InventorySystem() {
   }
 
   const exportToCSV = () => {
-    const headers = ["Date", "Item Type", "Quantity", "Unit Price", "Total Cost", "Transaction Type", "Notes", "User"]
+    const headers = ["Date", "Location", "Item Type", "Quantity", "Unit Price", "Total Cost", "Transaction Type", "Notes", "User"]
     const rows = filteredTransactions.map((t) => [
       t.transaction_date ?? "",
+      resolveLocationLabel(t.location_id, t.location_name || t.location_code),
       t.item_type ?? "",
       `${t.quantity} ${t.unit ?? ""}`,
       t.price !== undefined ? `₹${Number(t.price).toFixed(2)}` : "-",
@@ -771,7 +889,7 @@ export default function InventorySystem() {
     setAnalysisError("")
     try {
       const payload = { inventory, transactions: transactions.slice(0, 50), laborDeployments: laborDeployments.slice(0, 50) }
-      const res = await tenantFetch("/api/ai-analysis", {
+      const res = await fetch("/api/ai-analysis", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
@@ -793,6 +911,8 @@ export default function InventorySystem() {
   const canShowProcessing = isModuleEnabled("processing")
   const canShowDispatch = isModuleEnabled("dispatch")
   const canShowSales = isModuleEnabled("sales")
+  const canShowCuring = isModuleEnabled("curing")
+  const canShowQuality = isModuleEnabled("quality")
   const canShowRainfall = isModuleEnabled("rainfall")
   const canShowPepper = isModuleEnabled("pepper")
   const canShowAiAnalysis = isModuleEnabled("ai-analysis")
@@ -807,6 +927,8 @@ export default function InventorySystem() {
     if (canShowProcessing) tabs.push("processing")
     if (canShowDispatch) tabs.push("dispatch")
     if (canShowSales) tabs.push("sales")
+    if (canShowCuring) tabs.push("curing")
+    if (canShowQuality) tabs.push("quality")
     if (canShowSeason) tabs.push("season")
     if (canShowRainfall) tabs.push("rainfall")
     if (canShowPepper) tabs.push("pepper")
@@ -822,12 +944,54 @@ export default function InventorySystem() {
     canShowNews,
     canShowPepper,
     canShowProcessing,
+    canShowCuring,
+    canShowQuality,
     canShowRainfall,
     canShowSales,
     canShowSeason,
     canShowWeather,
     showTransactionHistory,
   ])
+
+  useEffect(() => {
+    if (!canShowSeason) return
+    let isActive = true
+    const loadExceptions = async () => {
+      setExceptionsLoading(true)
+      setExceptionsError(null)
+      try {
+        const response = await fetch("/api/exception-alerts")
+        const data = await response.json()
+        if (!response.ok || !data.success) {
+          throw new Error(data.error || "Failed to load exceptions")
+        }
+        const alerts = Array.isArray(data.alerts) ? data.alerts : []
+        const severityRank: Record<string, number> = { high: 3, medium: 2, low: 1 }
+        const highlights = [...alerts]
+          .sort((a: any, b: any) => (severityRank[b.severity] || 0) - (severityRank[a.severity] || 0))
+          .slice(0, 3)
+          .map((alert: any) => {
+            const context = [alert.location, alert.coffeeType].filter(Boolean).join(" • ")
+            return context ? `${context}: ${alert.title}` : alert.title
+          })
+        if (!isActive) return
+        setExceptionsSummary({ count: alerts.length, highlights })
+      } catch (error: any) {
+        if (!isActive) return
+        setExceptionsError(error.message || "Failed to load exceptions")
+      } finally {
+        if (isActive) {
+          setExceptionsLoading(false)
+        }
+      }
+    }
+
+    loadExceptions()
+    return () => {
+      isActive = false
+    }
+  }, [canShowSeason])
+
   const tabParam = searchParams.get("tab")
   useEffect(() => {
     if (isOwner || isModulesLoading) {
@@ -877,14 +1041,14 @@ export default function InventorySystem() {
   const onboardingCompletedCount = Object.values(onboardingStatus).filter(Boolean).length
   const onboardingTotalCount = Object.keys(onboardingStatus).length
   const showOnboarding = !isOnboardingLoading && onboardingCompletedCount === 0
-  const onboardingSteps = [
+  const onboardingSteps: OnboardingStep[] = [
     {
       key: "locations",
       title: "Add estate locations",
       description: "Set up your coffee processing locations (HF A, MV, etc.).",
       done: onboardingStatus.locations,
       actionLabel: "Go to Processing",
-      action: () => setActiveTab("processing"),
+      onAction: () => setActiveTab("processing"),
     },
     {
       key: "inventory",
@@ -892,7 +1056,7 @@ export default function InventorySystem() {
       description: "Create your first inventory item and restock quantity.",
       done: onboardingStatus.inventory,
       actionLabel: "Go to Inventory",
-      action: () => setActiveTab("inventory"),
+      onAction: () => setActiveTab("inventory"),
     },
     {
       key: "processing",
@@ -900,7 +1064,7 @@ export default function InventorySystem() {
       description: "Log today's coffee processing (parchment/cherry).",
       done: onboardingStatus.processing,
       actionLabel: "Open Processing",
-      action: () => setActiveTab("processing"),
+      onAction: () => setActiveTab("processing"),
     },
     {
       key: "dispatch",
@@ -908,7 +1072,7 @@ export default function InventorySystem() {
       description: "Send bags out and optionally note KGs received.",
       done: onboardingStatus.dispatch,
       actionLabel: "Open Dispatch",
-      action: () => setActiveTab("dispatch"),
+      onAction: () => setActiveTab("dispatch"),
     },
     {
       key: "sales",
@@ -916,7 +1080,7 @@ export default function InventorySystem() {
       description: "Capture bags sold and pricing for revenue tracking.",
       done: onboardingStatus.sales,
       actionLabel: "Open Sales",
-      action: () => setActiveTab("sales"),
+      onAction: () => setActiveTab("sales"),
     },
   ]
 
@@ -926,8 +1090,8 @@ export default function InventorySystem() {
         <header className="flex flex-col lg:flex-row justify-between items-start lg:items-center mb-8 gap-4">
           <div className="space-y-1">
             <div className="flex flex-wrap items-baseline gap-3">
-              <h1 className="text-2xl font-medium text-green-700">Honey Farm Inventory System</h1>
-              <span className="text-[11px] uppercase tracking-[0.35em] text-emerald-700/70">Farm Flow</span>
+              <h1 className="text-2xl font-medium text-green-700">FarmFlow</h1>
+              <span className="text-[11px] uppercase tracking-[0.35em] text-emerald-700/70">Inventory System</span>
             </div>
             <p className="text-sm text-muted-foreground">
               {tenantSettings.estateName ? `Estate: ${tenantSettings.estateName}` : "Estate: add a name in Settings"}
@@ -1104,6 +1268,18 @@ export default function InventorySystem() {
                   Sales
                 </TabsTrigger>
               )}
+              {canShowCuring && (
+                <TabsTrigger value="curing">
+                  <Factory className="h-4 w-4 mr-2" />
+                  Curing
+                </TabsTrigger>
+              )}
+              {canShowQuality && (
+                <TabsTrigger value="quality">
+                  <CheckCircle2 className="h-4 w-4 mr-2" />
+                  Quality
+                </TabsTrigger>
+              )}
               {canShowRainfall && (
                 <TabsTrigger value="rainfall">
                   <CloudRain className="h-4 w-4 mr-2" />
@@ -1139,107 +1315,62 @@ export default function InventorySystem() {
           {canShowInventory && (
             <TabsContent value="inventory" className="space-y-8">
             {showOnboarding && (
-              <Card className="border-2 border-emerald-100 bg-emerald-50/40">
-                <CardHeader className="space-y-3">
-                  <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                    <div>
-                      <CardTitle>Estate Setup Checklist</CardTitle>
-                      <CardDescription>Complete these steps to unlock the full coffee workflow.</CardDescription>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <Badge className="bg-emerald-100 text-emerald-700 border-emerald-200">
-                        {onboardingCompletedCount}/{onboardingTotalCount} complete
-                      </Badge>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={loadOnboardingStatus}
-                        disabled={isOnboardingLoading}
-                        className="bg-transparent"
-                      >
-                        {isOnboardingLoading ? "Refreshing..." : "Refresh"}
-                      </Button>
-                    </div>
+              <OnboardingChecklist
+                isVisible={showOnboarding}
+                isLoading={isOnboardingLoading}
+                error={onboardingError}
+                completedCount={onboardingCompletedCount}
+                totalCount={onboardingTotalCount}
+                steps={onboardingSteps}
+                canCreateLocation={isAdmin}
+                locationName={newLocationName}
+                locationCode={newLocationCode}
+                onLocationNameChange={setNewLocationName}
+                onLocationCodeChange={setNewLocationCode}
+                onCreateLocation={handleCreateLocation}
+                isCreatingLocation={isCreatingLocation}
+                onRefresh={loadOnboardingStatus}
+              />
+            )}
+            {canShowSeason && (
+              <Card className="border-amber-100 bg-amber-50/40">
+                <CardHeader className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                  <div>
+                    <CardTitle className="flex items-center gap-2 text-amber-700">
+                      <AlertTriangle className="h-5 w-5" />
+                      Exceptions snapshot
+                    </CardTitle>
+                    <CardDescription>
+                      Rolling 7-day alerts for float rate spikes, yield drops, and inventory mismatches.
+                    </CardDescription>
                   </div>
-                  {onboardingError && <p className="text-xs text-red-600">{onboardingError}</p>}
+                  <Button variant="outline" size="sm" onClick={() => setActiveTab("season")}>
+                    Open Season View
+                  </Button>
                 </CardHeader>
-                <CardContent className="space-y-4">
-                  <div className="grid gap-3">
-                    {onboardingSteps.map((step) => (
-                      <div
-                        key={step.key}
-                        className="flex flex-col gap-3 rounded-lg border bg-white/80 p-3 sm:flex-row sm:items-center sm:justify-between"
-                      >
-                        <div className="flex items-start gap-3">
-                          <div
-                            className={cn(
-                              "mt-0.5 flex h-8 w-8 items-center justify-center rounded-full border",
-                              step.done
-                                ? "border-emerald-200 bg-emerald-100 text-emerald-700"
-                                : "border-gray-200 bg-white text-gray-500",
-                            )}
-                          >
-                            {step.done ? <Check className="h-4 w-4" /> : <Clock className="h-4 w-4" />}
-                          </div>
-                          <div>
-                            <p className="text-sm font-medium">{step.title}</p>
-                            <p className="text-xs text-muted-foreground">{step.description}</p>
-                          </div>
-                        </div>
-                        {!step.done && (
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={step.action}
-                            className="bg-transparent"
-                          >
-                            {step.actionLabel}
-                          </Button>
-                        )}
+                <CardContent>
+                  {exceptionsLoading ? (
+                    <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      Loading exception alerts...
+                    </div>
+                  ) : exceptionsError ? (
+                    <div className="text-sm text-rose-600">{exceptionsError}</div>
+                  ) : exceptionsSummary.count === 0 ? (
+                    <div className="flex items-center gap-2 text-sm text-emerald-700">
+                      <CheckCircle2 className="h-4 w-4" />
+                      No exceptions detected this week.
+                    </div>
+                  ) : (
+                    <div className="space-y-2 text-sm text-slate-700">
+                      <div className="font-medium text-amber-800">
+                        ⚠️ {exceptionsSummary.count} exception{exceptionsSummary.count === 1 ? "" : "s"} flagged
                       </div>
-                    ))}
-                  </div>
-
-                  {!onboardingStatus.locations && isAdmin && (
-                    <div className="rounded-lg border bg-white/80 p-4 space-y-3">
-                      <div>
-                        <p className="text-sm font-medium">Add your first location</p>
-                        <p className="text-xs text-muted-foreground">
-                          Locations unlock processing, dispatch, and sales records.
-                        </p>
-                      </div>
-                      <div className="grid gap-3 md:grid-cols-[2fr_1fr_auto]">
-                        <div className="space-y-2">
-                          <Label htmlFor="onboarding-location-name">Location name</Label>
-                          <Input
-                            id="onboarding-location-name"
-                            placeholder="HF A, MV, etc."
-                            value={newLocationName}
-                            onChange={(event) => setNewLocationName(event.target.value)}
-                          />
-                        </div>
-                        <div className="space-y-2">
-                          <Label htmlFor="onboarding-location-code">Location code (optional)</Label>
-                          <Input
-                            id="onboarding-location-code"
-                            placeholder="HF-A"
-                            value={newLocationCode}
-                            onChange={(event) => setNewLocationCode(event.target.value)}
-                          />
-                        </div>
-                        <div className="flex items-end">
-                          <Button
-                            onClick={handleCreateLocation}
-                            disabled={isCreatingLocation}
-                            className="w-full bg-green-700 hover:bg-green-800"
-                          >
-                            {isCreatingLocation ? "Adding..." : "Add Location"}
-                          </Button>
-                        </div>
-                      </div>
-                      <p className="text-xs text-muted-foreground">
-                        Keep names consistent with estate signage so reports stay clean.
-                      </p>
+                      <ul className="list-disc pl-5">
+                        {exceptionsSummary.highlights.map((item) => (
+                          <li key={item}>{item}</li>
+                        ))}
+                      </ul>
                     </div>
                   )}
                 </CardContent>
@@ -1275,6 +1406,26 @@ export default function InventorySystem() {
                         ))}
                       </SelectContent>
                     </Select>
+                  </div>
+
+                  <div className="mb-5">
+                    <label className="block text-gray-700 mb-2">Location</label>
+                    <Select value={transactionLocationId} onValueChange={setTransactionLocationId}>
+                      <SelectTrigger className="w-full border-gray-300 h-12">
+                        <SelectValue placeholder={locations.length ? "Select location" : "No locations yet"} />
+                      </SelectTrigger>
+                      <SelectContent className="max-h-[40vh] overflow-y-auto">
+                        <SelectItem value={LOCATION_UNASSIGNED}>{UNASSIGNED_LABEL}</SelectItem>
+                        {locations.map((loc) => (
+                          <SelectItem key={loc.id} value={loc.id}>
+                            {loc.name || loc.code || "Unnamed location"}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Tag transactions to a location for accurate inventory usage.
+                    </p>
                   </div>
 
                   <div className="mb-5">
@@ -1336,9 +1487,12 @@ export default function InventorySystem() {
               {/* Inventory list */}
               <div className="bg-white rounded-lg shadow-sm border border-gray-100 p-6">
                 <div className="flex justify-between items-center mb-5">
-                  <h2 className="text-lg font-medium text-green-700 flex items-center">
-                    <List className="mr-2 h-5 w-5" /> Current Inventory Levels
-                  </h2>
+                  <div>
+                    <h2 className="text-lg font-medium text-green-700 flex items-center">
+                      <List className="mr-2 h-5 w-5" /> Current Inventory Levels
+                    </h2>
+                    <p className="text-xs text-muted-foreground">Totals for {selectedLocationLabel}.</p>
+                  </div>
                   <div className="flex gap-2">
                     <Button size="sm" variant="outline" onClick={exportInventoryToCSV} className="h-10 bg-transparent">
                       <Download className="mr-2 h-4 w-4" /> Export
@@ -1354,6 +1508,20 @@ export default function InventorySystem() {
                     <Search className="absolute left-3 top-3 h-4 w-4 text-gray-400" />
                     <Input placeholder="Search inventory..." value={inventorySearchTerm} onChange={(e) => setInventorySearchTerm(e.target.value)} className="pl-10 h-10" />
                   </div>
+                  <Select value={selectedLocationId} onValueChange={setSelectedLocationId}>
+                    <SelectTrigger className="w-full sm:w-48 h-10 border-gray-300">
+                      <SelectValue placeholder="All locations" />
+                    </SelectTrigger>
+                    <SelectContent className="max-h-[40vh] overflow-y-auto">
+                      <SelectItem value={LOCATION_ALL}>All locations</SelectItem>
+                      <SelectItem value={LOCATION_UNASSIGNED}>{UNASSIGNED_LABEL}</SelectItem>
+                      {locations.map((loc) => (
+                        <SelectItem key={loc.id} value={loc.id}>
+                          {loc.name || loc.code || "Unnamed location"}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                   <Button variant="outline" size="sm" onClick={toggleInventorySort} className="flex items-center gap-1 h-10 whitespace-nowrap bg-transparent">
                     {inventorySortOrder === "asc" ? (<><SortAsc className="h-4 w-4 mr-1" /> Sort A-Z</>) : inventorySortOrder === "desc" ? (<><SortDesc className="h-4 w-4 mr-1" /> Sort Z-A</>) : (<><SortAsc className="h-4 w-4 mr-1" /> Sort</>)}
                   </Button>
@@ -1369,10 +1537,15 @@ export default function InventorySystem() {
                         <div key={`${item.name}-${index}`} className="flex justify-between items-center py-4 border-b last:border-0 px-2 hover:bg-gray-50 rounded">
                           <div className="font-medium text-base">{item.name}</div>
                           <div className="flex items-center gap-3">
-                            <div className="text-right">
-                              <div className="text-base">{item.quantity} {item.unit}</div>
-                              <div className="text-sm text-gray-600">₹{itemValue.toFixed(2)} {avgPrice > 0 && `(avg: ₹${avgPrice.toFixed(2)}/${item.unit || "unit"})`}</div>
+                          <div className="text-right">
+                            <div className="text-base">
+                              {formatNumber(Number(item.quantity) || 0)} {item.unit}
                             </div>
+                            <div className="text-sm text-gray-600">
+                              {formatCurrency(itemValue)}
+                              {avgPrice > 0 && ` (avg: ${formatCurrency(avgPrice)}/${item.unit || "unit"})`}
+                            </div>
+                          </div>
                             {canManageData && (
                               <>
                                 <Button size="sm" variant="ghost" onClick={() => handleOpenInventoryEdit(item)} className="text-amber-600 p-2 h-auto"><Edit className="h-4 w-4" /></Button>
@@ -1418,6 +1591,20 @@ export default function InventorySystem() {
                         {allItemTypesForDropdown.map((type) => <SelectItem key={type} value={type}>{type}</SelectItem>)}
                       </SelectContent>
                     </Select>
+                    <Select value={selectedLocationId} onValueChange={setSelectedLocationId}>
+                      <SelectTrigger className="w-full sm:w-48 h-10 border-gray-300">
+                        <SelectValue placeholder="All locations" />
+                      </SelectTrigger>
+                      <SelectContent className="max-h-[40vh] overflow-y-auto">
+                        <SelectItem value={LOCATION_ALL}>All locations</SelectItem>
+                        <SelectItem value={LOCATION_UNASSIGNED}>{UNASSIGNED_LABEL}</SelectItem>
+                        {locations.map((loc) => (
+                          <SelectItem key={loc.id} value={loc.id}>
+                            {loc.name || loc.code || "Unnamed location"}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
                   </div>
 
                   <Button variant="outline" size="sm" onClick={toggleTransactionSort} className="flex items-center gap-1 h-10 whitespace-nowrap bg-transparent">
@@ -1428,17 +1615,24 @@ export default function InventorySystem() {
                 <div className="border rounded-md overflow-x-auto">
                   <table className="min-w-full">
                     <thead>
-                      <tr className="bg-gray-50 text-sm font-medium text-gray-500 border-b">
+                      <tr className="bg-gray-50/80 text-sm font-medium text-gray-500 border-b sticky top-0 backdrop-blur">
                         <th className="py-4 px-4 text-left">DATE</th>
+                        <th className="py-4 px-4 text-left">LOCATION</th>
                         <th className="py-4 px-4 text-left">ITEM TYPE</th>
                         <th className="py-4 px-4 text-left">QUANTITY</th>
                         <th className="py-4 px-4 text-left">TRANSACTION</th>
-                        {!isMobile && (<><th className="py-4 px-4 text-left">PRICE</th><th className="py-4 px-4 text-left">NOTES</th><th className="py-4 px-4 text-left">USER</th></>)}
+                        {!isMobile && (
+                          <>
+                            <th className="py-4 px-4 text-left">PRICE</th>
+                            <th className="py-4 px-4 text-left">NOTES</th>
+                            <th className="py-4 px-4 text-left">USER</th>
+                          </>
+                        )}
                         <th className="py-4 px-4 text-left">ACTIONS</th>
                       </tr>
                     </thead>
                     <tbody>
-                      {currentTransactions.map((transaction) => {
+                      {currentTransactions.map((transaction, index) => {
                         const typeValue = String(transaction.transaction_type ?? "").toLowerCase()
                         const isDepleting = typeValue.includes("deplet")
                         const isRestocking = typeValue.includes("restock")
@@ -1450,15 +1644,21 @@ export default function InventorySystem() {
                             : "bg-blue-100 text-blue-700 border-blue-200"
 
                         return (
-                        <tr key={transaction.id ?? `${transaction.item_type}-${transaction.transaction_date}`} className="border-b last:border-0 hover:bg-gray-50">
+                        <tr
+                          key={transaction.id ?? `${transaction.item_type}-${transaction.transaction_date}`}
+                          className={`border-b last:border-0 hover:bg-gray-50 ${index % 2 === 0 ? "bg-white" : "bg-gray-50/50"}`}
+                        >
                           <td className="py-4 px-4">{formatDate(transaction.transaction_date)}</td>
+                          <td className="py-4 px-4">{resolveLocationLabel(transaction.location_id, transaction.location_name || transaction.location_code)}</td>
                           <td className="py-4 px-4">{transaction.item_type}</td>
-                          <td className="py-4 px-4">{transaction.quantity} {transaction.unit}</td>
+                          <td className="py-4 px-4">
+                            {formatNumber(Number(transaction.quantity) || 0)} {transaction.unit}
+                          </td>
                           <td className="py-4 px-4">
                             <Badge variant="outline" className={typeClass}>{typeLabel}</Badge>
                           </td>
                           {!isMobile && (<>
-                            <td className="py-4 px-4">{transaction.price ? `₹${Number(transaction.price).toFixed(2)}` : "-"}</td>
+                            <td className="py-4 px-4">{transaction.price ? formatCurrency(Number(transaction.price) || 0) : "-"}</td>
                             <td className="py-4 px-4 max-w-xs truncate" title={transaction.notes}>{transaction.notes}</td>
                             <td className="py-4 px-4">{transaction.user_id}</td>
                           </>)}
@@ -1510,6 +1710,16 @@ export default function InventorySystem() {
           {canShowSales && (
             <TabsContent value="sales" className="space-y-6">
               <SalesTab />
+            </TabsContent>
+          )}
+          {canShowCuring && (
+            <TabsContent value="curing" className="space-y-6">
+              <CuringTab />
+            </TabsContent>
+          )}
+          {canShowQuality && (
+            <TabsContent value="quality" className="space-y-6">
+              <QualityGradingTab />
             </TabsContent>
           )}
           {canShowSeason && (
@@ -1617,6 +1827,27 @@ export default function InventorySystem() {
                     </Select>
                   </div>
                 </div>
+                <div className="space-y-2">
+                  <Label htmlFor="edit-transaction-location">Location</Label>
+                  <Select
+                    value={editingTransaction.location_id ?? LOCATION_UNASSIGNED}
+                    onValueChange={(value) =>
+                      handleEditTransactionChange("location_id", value === LOCATION_UNASSIGNED ? null : value)
+                    }
+                  >
+                    <SelectTrigger id="edit-transaction-location" className="w-full">
+                      <SelectValue placeholder="Select location" />
+                    </SelectTrigger>
+                    <SelectContent className="max-h-[40vh] overflow-y-auto">
+                      <SelectItem value={LOCATION_UNASSIGNED}>{UNASSIGNED_LABEL}</SelectItem>
+                      {locations.map((loc) => (
+                        <SelectItem key={loc.id} value={loc.id}>
+                          {loc.name || loc.code || "Unnamed location"}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
                 <div className="grid gap-4 sm:grid-cols-2">
                   <div className="space-y-2">
                     <Label htmlFor="edit-transaction-qty">Quantity</Label>
@@ -1638,7 +1869,7 @@ export default function InventorySystem() {
                   </div>
                 </div>
                 <div className="text-sm text-muted-foreground">
-                  Total Cost: ₹{Number(editingTransaction.total_cost || 0).toFixed(2)}
+                  Total Cost: {formatCurrency(Number(editingTransaction.total_cost || 0))}
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="edit-transaction-notes">Notes</Label>
@@ -1713,6 +1944,25 @@ export default function InventorySystem() {
                       }
                     />
                   </div>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="edit-item-location">Adjustment Location</Label>
+                  <Select value={inventoryEditLocationId} onValueChange={setInventoryEditLocationId}>
+                    <SelectTrigger id="edit-item-location" className="w-full">
+                      <SelectValue placeholder="Select location" />
+                    </SelectTrigger>
+                    <SelectContent className="max-h-[40vh] overflow-y-auto">
+                      <SelectItem value={LOCATION_UNASSIGNED}>{UNASSIGNED_LABEL}</SelectItem>
+                      {locations.map((loc) => (
+                        <SelectItem key={loc.id} value={loc.id}>
+                          {loc.name || loc.code || "Unnamed location"}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <p className="text-xs text-muted-foreground">
+                    Inventory adjustments are recorded against this location.
+                  </p>
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="edit-item-qty">Quantity</Label>

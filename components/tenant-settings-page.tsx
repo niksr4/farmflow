@@ -1,6 +1,7 @@
 "use client"
 
-import { useEffect, useMemo, useState } from "react"
+import { useCallback, useEffect, useState } from "react"
+import Link from "next/link"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -10,7 +11,6 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { useToast } from "@/hooks/use-toast"
 import { useAuth } from "@/hooks/use-auth"
 import { AlertThresholds, useTenantSettings } from "@/hooks/use-tenant-settings"
-import { buildAuthHeaders } from "@/lib/tenant"
 import { MODULES } from "@/lib/modules"
 import { formatDateForDisplay, formatDateOnly } from "@/lib/date-utils"
 
@@ -76,7 +76,6 @@ export default function TenantSettingsPage() {
   const { toast } = useToast()
   const { settings, updateSettings, loading: settingsLoading } = useTenantSettings()
   const tenantId = user?.tenantId || ""
-  const authHeaders = useMemo(() => buildAuthHeaders(user?.tenantId, user?.role), [user?.tenantId, user?.role])
 
   const [estateNameInput, setEstateNameInput] = useState("")
   const [isSavingEstateName, setIsSavingEstateName] = useState(false)
@@ -124,10 +123,10 @@ export default function TenantSettingsPage() {
     }
   }, [settings.alertThresholds])
 
-  const loadUsers = async () => {
+  const loadUsers = useCallback(async () => {
     if (!tenantId) return
     try {
-      const response = await fetch(`/api/admin/users?tenantId=${tenantId}`, { headers: authHeaders })
+      const response = await fetch(`/api/admin/users?tenantId=${tenantId}`)
       const data = await response.json()
       if (!response.ok || !data.success) {
         throw new Error(data.error || "Failed to load users")
@@ -141,12 +140,12 @@ export default function TenantSettingsPage() {
     } catch (error: any) {
       toast({ title: "Error", description: error.message || "Failed to load users", variant: "destructive" })
     }
-  }
+  }, [tenantId, toast])
 
-  const loadModules = async () => {
+  const loadModules = useCallback(async () => {
     if (!tenantId) return
     try {
-      const response = await fetch(`/api/admin/tenant-modules?tenantId=${tenantId}`, { headers: authHeaders })
+      const response = await fetch(`/api/admin/tenant-modules?tenantId=${tenantId}`)
       const data = await response.json()
       if (!response.ok || !data.success) {
         throw new Error(data.error || "Failed to load tenant modules")
@@ -155,34 +154,36 @@ export default function TenantSettingsPage() {
     } catch (error: any) {
       toast({ title: "Error", description: error.message || "Failed to load tenant modules", variant: "destructive" })
     }
-  }
+  }, [tenantId, toast])
 
-  const loadUserModules = async (userId: string) => {
+  const loadUserModules = useCallback(async (userId: string) => {
     if (!userId) {
-      setUserModulePermissions(MODULES.map((module) => ({ ...module, enabled: true })))
+      setUserModulePermissions(MODULES.map((module) => ({ ...module, enabled: module.defaultEnabled !== false })))
       setUserModuleSource("default")
       return
     }
 
     setIsUserModulesLoading(true)
     try {
-      const response = await fetch(`/api/admin/user-modules?userId=${userId}`, { headers: authHeaders })
+      const response = await fetch(`/api/admin/user-modules?userId=${userId}`)
       const data = await response.json()
       if (!response.ok || !data.success) {
         throw new Error(data.error || "Failed to load user modules")
       }
-      setUserModulePermissions(data.modules || MODULES.map((module) => ({ ...module, enabled: true })))
+      setUserModulePermissions(
+        data.modules || MODULES.map((module) => ({ ...module, enabled: module.defaultEnabled !== false })),
+      )
       setUserModuleSource(data.source || "default")
     } catch (error: any) {
       toast({ title: "Error", description: error.message || "Failed to load user modules", variant: "destructive" })
-      setUserModulePermissions(MODULES.map((module) => ({ ...module, enabled: true })))
+      setUserModulePermissions(MODULES.map((module) => ({ ...module, enabled: module.defaultEnabled !== false })))
       setUserModuleSource("default")
     } finally {
       setIsUserModulesLoading(false)
     }
-  }
+  }, [toast])
 
-  const loadAuditLogs = async () => {
+  const loadAuditLogs = useCallback(async () => {
     if (!tenantId) return
     setIsAuditLoading(true)
     try {
@@ -190,7 +191,7 @@ export default function TenantSettingsPage() {
       if (auditEntityType && auditEntityType !== "all") {
         params.set("entityType", auditEntityType)
       }
-      const response = await fetch(`/api/admin/audit-logs?${params.toString()}`, { headers: authHeaders })
+      const response = await fetch(`/api/admin/audit-logs?${params.toString()}`)
       const data = await response.json()
       if (!response.ok || !data.success) {
         throw new Error(data.error || "Failed to load audit logs")
@@ -204,12 +205,12 @@ export default function TenantSettingsPage() {
     } finally {
       setIsAuditLoading(false)
     }
-  }
+  }, [auditEntityType, tenantId, toast])
 
-  const loadLocations = async () => {
+  const loadLocations = useCallback(async () => {
     if (!tenantId) return
     try {
-      const response = await fetch("/api/locations", { headers: authHeaders })
+      const response = await fetch("/api/locations")
       const data = await response.json()
       if (!response.ok || !data.success) {
         throw new Error(data.error || "Failed to load locations")
@@ -218,7 +219,7 @@ export default function TenantSettingsPage() {
     } catch (error: any) {
       toast({ title: "Error", description: error.message || "Failed to load locations", variant: "destructive" })
     }
-  }
+  }, [tenantId, toast])
 
   useEffect(() => {
     if (!tenantId) return
@@ -226,13 +227,13 @@ export default function TenantSettingsPage() {
     loadModules()
     loadAuditLogs()
     loadLocations()
-  }, [tenantId])
+  }, [tenantId, loadAuditLogs, loadLocations, loadModules, loadUsers])
 
   useEffect(() => {
     if (tenantId) {
       loadAuditLogs()
     }
-  }, [auditEntityType, tenantId])
+  }, [auditEntityType, tenantId, loadAuditLogs])
 
   useEffect(() => {
     if (!users.length) {
@@ -249,9 +250,9 @@ export default function TenantSettingsPage() {
       loadUserModules(selectedUserId)
       return
     }
-    setUserModulePermissions(MODULES.map((module) => ({ ...module, enabled: true })))
+    setUserModulePermissions(MODULES.map((module) => ({ ...module, enabled: module.defaultEnabled !== false })))
     setUserModuleSource("default")
-  }, [selectedUserId])
+  }, [selectedUserId, loadUserModules])
 
   const handleCreateUser = async () => {
     if (!tenantId) {
@@ -266,7 +267,7 @@ export default function TenantSettingsPage() {
     try {
       const response = await fetch("/api/admin/users", {
         method: "POST",
-        headers: { "Content-Type": "application/json", ...authHeaders },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           username: newUsername.trim(),
           password: newPassword,
@@ -302,7 +303,7 @@ export default function TenantSettingsPage() {
     try {
       const response = await fetch("/api/admin/users", {
         method: "PATCH",
-        headers: { "Content-Type": "application/json", ...authHeaders },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ userId: user.id, role: nextRole }),
       })
       const data = await response.json()
@@ -327,7 +328,7 @@ export default function TenantSettingsPage() {
     try {
       const response = await fetch(`/api/admin/users?userId=${user.id}`, {
         method: "DELETE",
-        headers: authHeaders,
+        
       })
       const data = await response.json()
       if (!response.ok || !data.success) {
@@ -360,7 +361,7 @@ export default function TenantSettingsPage() {
     try {
       const response = await fetch("/api/admin/tenant-modules", {
         method: "PUT",
-        headers: { "Content-Type": "application/json", ...authHeaders },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ tenantId, modules: modulePermissions }),
       })
       const data = await response.json()
@@ -381,7 +382,7 @@ export default function TenantSettingsPage() {
     try {
       const response = await fetch("/api/admin/user-modules", {
         method: "PUT",
-        headers: { "Content-Type": "application/json", ...authHeaders },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ userId: selectedUserId, modules: userModulePermissions }),
       })
       const data = await response.json()
@@ -402,7 +403,7 @@ export default function TenantSettingsPage() {
     try {
       const response = await fetch(`/api/admin/user-modules?userId=${selectedUserId}`, {
         method: "DELETE",
-        headers: authHeaders,
+        
       })
       const data = await response.json()
       if (!response.ok || !data.success) {
@@ -425,7 +426,7 @@ export default function TenantSettingsPage() {
     try {
       const response = await fetch("/api/locations", {
         method: "POST",
-        headers: { "Content-Type": "application/json", ...authHeaders },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           name: newLocationName.trim(),
           code: newLocationCode.trim() || undefined,
@@ -469,7 +470,7 @@ export default function TenantSettingsPage() {
     try {
       const response = await fetch("/api/locations", {
         method: "PATCH",
-        headers: { "Content-Type": "application/json", ...authHeaders },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           id: editingLocationId,
           name: editingLocationName.trim(),
@@ -550,7 +551,7 @@ export default function TenantSettingsPage() {
         <CardHeader>
           <CardTitle className="flex items-baseline gap-3">
             Tenant Settings
-            <span className="text-xs uppercase tracking-[0.3em] text-muted-foreground">Farm Flow</span>
+            <span className="text-xs uppercase tracking-[0.3em] text-muted-foreground">FarmFlow</span>
           </CardTitle>
           <CardDescription>Manage users, access, locations, and audits for this estate.</CardDescription>
         </CardHeader>
@@ -563,7 +564,7 @@ export default function TenantSettingsPage() {
         <CardHeader>
           <CardTitle>Estate Identity</CardTitle>
           <CardDescription>
-            Set the estate name shown in the dashboard. The system name remains “Honey Farm Inventory System.”
+            Set the estate name shown in the dashboard. The system name remains “FarmFlow.”
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-3">
@@ -572,7 +573,7 @@ export default function TenantSettingsPage() {
               <Label htmlFor="estate-name">Estate name</Label>
               <Input
                 id="estate-name"
-                placeholder="Honey Farm Estate"
+                placeholder="Estate Name"
                 value={estateNameInput}
                 onChange={(event) => setEstateNameInput(event.target.value)}
               />
@@ -586,6 +587,21 @@ export default function TenantSettingsPage() {
           ) : (
             <p className="text-xs text-muted-foreground">No estate name saved yet.</p>
           )}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Data Import</CardTitle>
+          <CardDescription>Upload CSVs to onboard a new tenant faster.</CardDescription>
+        </CardHeader>
+        <CardContent className="flex flex-col gap-3 text-sm text-muted-foreground">
+          <p>Import processing, dispatch, sales, pepper, rainfall, inventory, and accounts data.</p>
+          <div>
+            <Button asChild>
+              <Link href="/settings/import">Open Data Import</Link>
+            </Button>
+          </div>
         </CardContent>
       </Card>
 

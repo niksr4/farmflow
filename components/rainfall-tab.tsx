@@ -10,8 +10,8 @@ import { toast } from "@/components/ui/use-toast"
 import { CalendarIcon, CloudRain, Trash2, Download } from "lucide-react"
 import { format } from "date-fns"
 import { useAuth } from "@/hooks/use-auth"
-import { buildTenantHeaders } from "@/lib/tenant"
 import { formatDateOnly } from "@/lib/date-utils"
+import { formatNumber } from "@/lib/format"
 
 type RainfallRecord = {
   id: number
@@ -28,7 +28,6 @@ type RainfallTabProps = {
 
 export default function RainfallTab({ username }: RainfallTabProps) {
   const { user } = useAuth()
-  const tenantHeaders = buildTenantHeaders(user?.tenantId)
   const canDelete = user?.role === "admin" || user?.role === "owner"
   const [records, setRecords] = useState<RainfallRecord[]>([])
   const [selectedDate, setSelectedDate] = useState<Date>(new Date())
@@ -39,7 +38,7 @@ export default function RainfallTab({ username }: RainfallTabProps) {
 
   const fetchRecords = async () => {
     try {
-      const response = await fetch("/api/rainfall", { headers: tenantHeaders })
+      const response = await fetch("/api/rainfall")
       const data = await response.json()
       if (data.success) {
         setRecords(data.records || [])
@@ -70,7 +69,7 @@ export default function RainfallTab({ username }: RainfallTabProps) {
     try {
       const response = await fetch("/api/rainfall", {
         method: "POST",
-        headers: { "Content-Type": "application/json", ...tenantHeaders },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           record_date: format(selectedDate, "yyyy-MM-dd"),
           inches: inchesNum,
@@ -112,7 +111,7 @@ export default function RainfallTab({ username }: RainfallTabProps) {
     if (!window.confirm("Are you sure you want to delete this record?")) return
 
     try {
-      const response = await fetch(`/api/rainfall?id=${id}`, { method: "DELETE", headers: tenantHeaders })
+      const response = await fetch(`/api/rainfall?id=${id}`, { method: "DELETE",  })
       const data = await response.json()
       if (data.success) {
         toast({ title: "Record deleted", description: "Rainfall record has been deleted" })
@@ -247,7 +246,7 @@ export default function RainfallTab({ username }: RainfallTabProps) {
               return (
                 <div key={month} className="text-center">
                   <div className="text-xs font-medium text-gray-600">{month}</div>
-                  <div className="text-sm font-semibold">{total.toFixed(2)}</div>
+                  <div className="text-sm font-semibold">{formatNumber(total)}</div>
                 </div>
               )
             })}
@@ -255,7 +254,7 @@ export default function RainfallTab({ username }: RainfallTabProps) {
           <div className="border-t pt-4">
             <div className="flex justify-between items-center">
               <span className="font-medium text-lg">Annual Total:</span>
-              <span className="font-bold text-xl text-blue-600">{annualTotal.toFixed(2)} inches</span>
+              <span className="font-bold text-xl text-blue-600">{formatNumber(annualTotal)} inches</span>
             </div>
           </div>
         </CardContent>
@@ -330,8 +329,8 @@ export default function RainfallTab({ username }: RainfallTabProps) {
                 <div key={record.id} className="flex items-center justify-between p-3 border rounded-lg">
                   <div className="flex-1">
                     <div className="font-medium">{formatDateOnly(record.record_date)}</div>
-                    <div className="text-sm text-gray-600">
-                      {record.inches}.{String(record.cents).padStart(2, "0")} inches
+                  <div className="text-sm text-gray-600">
+                    {formatNumber(record.inches + record.cents / 100)} inches
                       {record.notes && <span className="ml-2 text-gray-500">• {record.notes}</span>}
                     </div>
                   </div>

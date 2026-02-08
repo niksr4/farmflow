@@ -16,7 +16,6 @@ import { ChartContainer, ChartTooltip, ChartTooltipContent, type ChartConfig } f
 import type { InventoryItem, Transaction } from "@/lib/inventory-types"
 import { getFiscalYearDateRange, getCurrentFiscalYear } from "@/lib/fiscal-year-utils"
 import { useAuth } from "@/hooks/use-auth"
-import { buildTenantHeaders } from "@/lib/tenant"
 import { formatDateForDisplay, formatDateOnly } from "@/lib/date-utils"
 
 interface AiAnalysisChartsProps {
@@ -73,7 +72,6 @@ const parseTransactionDate = (dateString: string): Date | null => {
 
 export default function AiAnalysisCharts({ inventory, transactions }: AiAnalysisChartsProps) {
   const { user } = useAuth()
-  const tenantHeaders = React.useMemo(() => buildTenantHeaders(user?.tenantId), [user?.tenantId])
   const [laborData, setLaborData] = React.useState<LaborRecord[]>([])
   const [processingData, setProcessingData] = React.useState<Record<string, ProcessingRecord[]>>({})
   const [fallbackTransactions, setFallbackTransactions] = React.useState<ChartTransaction[]>([])
@@ -86,11 +84,11 @@ export default function AiAnalysisCharts({ inventory, transactions }: AiAnalysis
       const { startDate, endDate } = getFiscalYearDateRange(fiscalYear)
 
       try {
-        const response = await fetch(`/api/ai-charts-data?fiscalYearStart=${startDate}&fiscalYearEnd=${endDate}`, {
-          headers: tenantHeaders,
-        })
+        const response = await fetch(
+          `/api/ai-charts-data?fiscalYearStart=${startDate}&fiscalYearEnd=${endDate}`,
+        )
         const data = await response.json()
-        
+
         if (data.success) {
           if (data.laborData) {
             setLaborData(data.laborData)
@@ -105,7 +103,7 @@ export default function AiAnalysisCharts({ inventory, transactions }: AiAnalysis
     }
 
     fetchData()
-  }, [user?.tenantId, tenantHeaders])
+  }, [user?.tenantId])
 
   React.useEffect(() => {
     const fetchFallbackTransactions = async () => {
@@ -113,7 +111,7 @@ export default function AiAnalysisCharts({ inventory, transactions }: AiAnalysis
       if (transactions.length > 0) return
 
       try {
-        const response = await fetch("/api/transactions-neon?limit=500", { headers: tenantHeaders })
+        const response = await fetch("/api/transactions-neon?limit=500")
         const data = await response.json()
         if (data.success && Array.isArray(data.transactions)) {
           const mapped: ChartTransaction[] = data.transactions.map((t: any) => {
@@ -146,7 +144,7 @@ export default function AiAnalysisCharts({ inventory, transactions }: AiAnalysis
     }
 
     fetchFallbackTransactions()
-  }, [user?.tenantId, tenantHeaders, transactions.length])
+  }, [user?.tenantId, transactions.length])
 
   const chartTransactions = React.useMemo<ChartTransaction[]>(() => {
     const source = transactions.length > 0 ? transactions : fallbackTransactions

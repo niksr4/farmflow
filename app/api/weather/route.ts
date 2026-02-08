@@ -1,5 +1,5 @@
 import { type NextRequest, NextResponse } from "next/server"
-import { requireModuleAccess, isModuleAccessError } from "@/lib/module-access"
+import { requireModuleAccess, isModuleAccessError } from "@/lib/server/module-access"
 import { buildRateLimitHeaders, checkRateLimit } from "@/lib/rate-limit"
 
 // The location is hardcoded to Kodagu as requested.

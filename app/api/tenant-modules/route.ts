@@ -1,8 +1,8 @@
 import { NextResponse } from "next/server"
-import { sql } from "@/lib/neon"
-import { requireSessionUser } from "@/lib/auth-server"
-import { MODULE_IDS } from "@/lib/modules"
-import { normalizeTenantContext, runTenantQuery } from "@/lib/tenant-db"
+import { sql } from "@/lib/server/db"
+import { requireSessionUser } from "@/lib/server/auth"
+import { resolveEnabledModules } from "@/lib/modules"
+import { normalizeTenantContext, runTenantQuery } from "@/lib/server/tenant-db"
 
 export async function GET(request: Request) {
   try {
@@ -27,6 +27,18 @@ export async function GET(request: Request) {
     )
     const userId = userRows?.[0]?.id
 
+    const tenantRows = await runTenantQuery(
+      sql,
+      tenantContext,
+      sql`
+        SELECT module, enabled
+        FROM tenant_modules
+        WHERE tenant_id = ${tenantId}
+      `,
+    )
+
+    const tenantEnabled = tenantRows?.length ? resolveEnabledModules(tenantRows) : resolveEnabledModules()
+
     if (userId) {
       const userModules = await runTenantQuery(
         sql,
@@ -38,32 +50,13 @@ export async function GET(request: Request) {
         `,
       )
       if (userModules?.length) {
-        const enabled = userModules.filter((row: any) => row.enabled).map((row: any) => String(row.module))
-        const missing = MODULE_IDS.filter((moduleId) =>
-          !userModules.some((row: any) => String(row.module) === moduleId),
-        )
-        return NextResponse.json({ success: true, modules: [...enabled, ...missing] })
+        const userEnabled = resolveEnabledModules(userModules)
+        const effective = tenantEnabled.filter((moduleId) => userEnabled.includes(moduleId))
+        return NextResponse.json({ success: true, modules: effective })
       }
     }
 
-    const rows = await runTenantQuery(
-      sql,
-      tenantContext,
-      sql`
-        SELECT module, enabled
-        FROM tenant_modules
-        WHERE tenant_id = ${tenantId}
-      `,
-    )
-
-    if (!rows || rows.length === 0) {
-      return NextResponse.json({ success: true, modules: MODULE_IDS })
-    }
-
-    const enabled = rows.filter((row: any) => row.enabled).map((row: any) => String(row.module))
-    const missing = MODULE_IDS.filter((moduleId) => !rows.some((row: any) => String(row.module) === moduleId))
-
-    return NextResponse.json({ success: true, modules: [...enabled, ...missing] })
+    return NextResponse.json({ success: true, modules: tenantEnabled })
   } catch (error: any) {
     console.error("Error loading tenant modules:", error)
     return NextResponse.json({ success: false, error: error.message || "Failed to load modules" }, { status: 500 })

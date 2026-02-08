@@ -1,8 +1,8 @@
 import { NextResponse } from "next/server"
-import { sql } from "@/lib/neon"
+import { sql } from "@/lib/server/db"
 import { getFiscalYearDateRange, getCurrentFiscalYear } from "@/lib/fiscal-year-utils"
-import { requireModuleAccess, isModuleAccessError } from "@/lib/module-access"
-import { normalizeTenantContext, runTenantQuery } from "@/lib/tenant-db"
+import { requireModuleAccess, isModuleAccessError } from "@/lib/server/module-access"
+import { normalizeTenantContext, runTenantQuery } from "@/lib/server/tenant-db"
 
 export async function GET(request: Request) {
   try {

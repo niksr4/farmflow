@@ -1,7 +1,7 @@
-import { sql } from "@/lib/neon"
+import { sql } from "@/lib/server/db"
 import { getFiscalYearDateRange, getCurrentFiscalYear } from "@/lib/fiscal-year-utils"
-import { requireModuleAccess, isModuleAccessError } from "@/lib/module-access"
-import { normalizeTenantContext, runTenantQuery } from "@/lib/tenant-db"
+import { requireModuleAccess, isModuleAccessError } from "@/lib/server/module-access"
+import { normalizeTenantContext, runTenantQuery } from "@/lib/server/tenant-db"
 import { buildRateLimitHeaders, checkRateLimit } from "@/lib/rate-limit"
 
 type TenantContext = ReturnType<typeof normalizeTenantContext>
@@ -67,7 +67,7 @@ export async function POST(req: Request) {
           },
           {
             role: "user",
-            content: `Analyze the following data from the Farm Flow operations system and provide actionable insights.
+            content: `Analyze the following data from the FarmFlow operations system and provide actionable insights.
 
 ${dataSummary}
 

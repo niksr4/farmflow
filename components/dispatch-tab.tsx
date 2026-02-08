@@ -18,8 +18,8 @@ import { getCurrentFiscalYear, getAvailableFiscalYears, getFiscalYearDateRange, 
 import { DEFAULT_COFFEE_VARIETIES } from "@/lib/crop-config"
 import { useAuth } from "@/hooks/use-auth"
 import { useTenantSettings } from "@/hooks/use-tenant-settings"
-import { buildTenantHeaders } from "@/lib/tenant"
 import { formatDateOnly } from "@/lib/date-utils"
+import { formatNumber } from "@/lib/format"
 
 interface DispatchRecord {
   id?: number
@@ -71,7 +71,6 @@ const formatBagTypeLabel = (value: string) => (normalizeBagTypeKey(value) === "d
 export default function DispatchTab() {
   const { user } = useAuth()
   const { settings } = useTenantSettings()
-  const tenantHeaders = useMemo(() => buildTenantHeaders(user?.tenantId), [user?.tenantId])
   const bagWeightKg = Number(settings.bagWeightKg) || 50
   const canDelete = user?.role === "admin" || user?.role === "owner"
   const [selectedFiscalYear, setSelectedFiscalYear] = useState<FiscalYear>(getCurrentFiscalYear())
@@ -111,9 +110,8 @@ export default function DispatchTab() {
   )
 
   const loadLocations = useCallback(async () => {
-    if (!tenantHeaders) return
     try {
-      const response = await fetch("/api/locations", { headers: tenantHeaders })
+      const response = await fetch("/api/locations")
       const data = await response.json()
       if (!response.ok || !data.success) {
         return
@@ -126,7 +124,7 @@ export default function DispatchTab() {
     } catch (error) {
       console.error("Error loading locations:", error)
     }
-  }, [selectedLocationId, tenantHeaders])
+  }, [selectedLocationId])
 
   const resolveLocationIdFromLabel = useCallback(
     (label?: string | null) => {
@@ -194,7 +192,7 @@ export default function DispatchTab() {
       const { startDate, endDate } = getFiscalYearDateRange(selectedFiscalYear)
       const response = await fetch(
         `/api/processing-records?summary=bagTotals&fiscalYearStart=${startDate}&fiscalYearEnd=${endDate}`,
-        { headers: tenantHeaders },
+        
       )
       const data = await response.json()
 
@@ -227,7 +225,7 @@ export default function DispatchTab() {
     } catch (error) {
       console.error("Error fetching bag totals:", error)
     }
-  }, [selectedFiscalYear, tenantHeaders])
+  }, [selectedFiscalYear])
 
   // Fetch dispatch records
   const fetchDispatchRecords = useCallback(async (pageIndex = 0, append = false) => {
@@ -244,7 +242,7 @@ export default function DispatchTab() {
         limit: dispatchPageSize.toString(),
         offset: String(pageIndex * dispatchPageSize),
       })
-      const response = await fetch(`/api/dispatch?${params.toString()}`, { headers: tenantHeaders })
+      const response = await fetch(`/api/dispatch?${params.toString()}`)
       const data = await response.json()
 
       if (data.success) {
@@ -268,7 +266,7 @@ export default function DispatchTab() {
         setIsLoading(false)
       }
     }
-  }, [dispatchPageSize, selectedFiscalYear, tenantHeaders])
+  }, [dispatchPageSize, selectedFiscalYear])
 
   useEffect(() => {
     loadLocations()
@@ -299,7 +297,7 @@ export default function DispatchTab() {
     if (Number(bagsDispatched) > balance) {
       toast({
         title: "Insufficient Inventory",
-        description: `Only ${balance.toFixed(2)} ${coffeeType} ${bagType} bags available from processing. You are trying to dispatch ${bagsDispatched} bags.`,
+        description: `Only ${formatNumber(balance)} ${coffeeType} ${bagType} bags available from processing. You are trying to dispatch ${bagsDispatched} bags.`,
         variant: "destructive",
       })
       return
@@ -311,7 +309,7 @@ export default function DispatchTab() {
       const method = editingRecord ? "PUT" : "POST"
       const response = await fetch("/api/dispatch", {
         method,
-        headers: { "Content-Type": "application/json", ...tenantHeaders },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           id: editingRecord?.id,
           dispatch_date: format(date, "yyyy-MM-dd"),
@@ -386,8 +384,7 @@ export default function DispatchTab() {
     try {
       const response = await fetch(`/api/dispatch?id=${id}`, {
         method: "DELETE",
-        headers: tenantHeaders,
-      })
+              })
 
       const data = await response.json()
 
@@ -424,8 +421,7 @@ export default function DispatchTab() {
     const runExport = async () => {
       const { startDate, endDate } = getFiscalYearDateRange(selectedFiscalYear)
       const response = await fetch(`/api/dispatch?startDate=${startDate}&endDate=${endDate}&all=true`, {
-        headers: tenantHeaders,
-      })
+              })
       const data = await response.json()
 
       if (!data.success || !Array.isArray(data.records)) {
@@ -534,9 +530,9 @@ export default function DispatchTab() {
             <CardTitle className="text-sm font-medium text-muted-foreground">Arabica Dry Parchment Bags</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{bagTotals.arabica_dry_parchment_bags.toFixed(2)}</div>
+            <div className="text-2xl font-bold">{formatNumber(bagTotals.arabica_dry_parchment_bags)}</div>
             <div className="text-sm text-muted-foreground mt-1">
-              Dispatched: {dispatchedTotals.arabica_dry_parchment.toFixed(2)}
+              Dispatched: {formatNumber(dispatchedTotals.arabica_dry_parchment)}
             </div>
             <div
               className={cn(
@@ -544,7 +540,7 @@ export default function DispatchTab() {
                 balanceArabicaDryParchment < 0 ? "text-red-600" : "text-green-600",
               )}
             >
-              Balance: {balanceArabicaDryParchment.toFixed(2)}
+              Balance: {formatNumber(balanceArabicaDryParchment)}
             </div>
           </CardContent>
         </Card>
@@ -555,12 +551,12 @@ export default function DispatchTab() {
             <CardTitle className="text-sm font-medium text-muted-foreground">Arabica Dry Cherry Bags</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{bagTotals.arabica_dry_cherry_bags.toFixed(2)}</div>
+            <div className="text-2xl font-bold">{formatNumber(bagTotals.arabica_dry_cherry_bags)}</div>
             <div className="text-sm text-muted-foreground mt-1">
-              Dispatched: {dispatchedTotals.arabica_dry_cherry.toFixed(2)}
+              Dispatched: {formatNumber(dispatchedTotals.arabica_dry_cherry)}
             </div>
             <div className={cn("text-sm font-medium mt-1", balanceArabicaDryCherry < 0 ? "text-red-600" : "text-green-600")}>
-              Balance: {balanceArabicaDryCherry.toFixed(2)}
+              Balance: {formatNumber(balanceArabicaDryCherry)}
             </div>
           </CardContent>
         </Card>
@@ -571,9 +567,9 @@ export default function DispatchTab() {
             <CardTitle className="text-sm font-medium text-muted-foreground">Robusta Dry Parchment Bags</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{bagTotals.robusta_dry_parchment_bags.toFixed(2)}</div>
+            <div className="text-2xl font-bold">{formatNumber(bagTotals.robusta_dry_parchment_bags)}</div>
             <div className="text-sm text-muted-foreground mt-1">
-              Dispatched: {dispatchedTotals.robusta_dry_parchment.toFixed(2)}
+              Dispatched: {formatNumber(dispatchedTotals.robusta_dry_parchment)}
             </div>
             <div
               className={cn(
@@ -581,7 +577,7 @@ export default function DispatchTab() {
                 balanceRobustaDryParchment < 0 ? "text-red-600" : "text-green-600",
               )}
             >
-              Balance: {balanceRobustaDryParchment.toFixed(2)}
+              Balance: {formatNumber(balanceRobustaDryParchment)}
             </div>
           </CardContent>
         </Card>
@@ -592,12 +588,12 @@ export default function DispatchTab() {
             <CardTitle className="text-sm font-medium text-muted-foreground">Robusta Dry Cherry Bags</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{bagTotals.robusta_dry_cherry_bags.toFixed(2)}</div>
+            <div className="text-2xl font-bold">{formatNumber(bagTotals.robusta_dry_cherry_bags)}</div>
             <div className="text-sm text-muted-foreground mt-1">
-              Dispatched: {dispatchedTotals.robusta_dry_cherry.toFixed(2)}
+              Dispatched: {formatNumber(dispatchedTotals.robusta_dry_cherry)}
             </div>
             <div className={cn("text-sm font-medium mt-1", balanceRobustaDryCherry < 0 ? "text-red-600" : "text-green-600")}>
-              Balance: {balanceRobustaDryCherry.toFixed(2)}
+              Balance: {formatNumber(balanceRobustaDryCherry)}
             </div>
           </CardContent>
         </Card>
@@ -698,7 +694,7 @@ export default function DispatchTab() {
                 "text-xs",
                 currentBalance > 0 ? "text-green-600" : "text-red-600"
               )}>
-                Available: {currentBalance.toFixed(2)} bags
+                Available: {formatNumber(currentBalance)} bags
               </p>
             </div>
 
@@ -732,7 +728,7 @@ export default function DispatchTab() {
               />
               {kgsReceived && (
                 <p className="text-xs text-muted-foreground">
-                  {(Number(kgsReceived) / bagWeightKg || 0).toFixed(2)} bags received
+                  {formatNumber(Number(kgsReceived) / bagWeightKg || 0)} bags received
                 </p>
               )}
             </div>
@@ -801,29 +797,29 @@ export default function DispatchTab() {
               <div className="overflow-x-auto">
                 <Table>
                   <TableHeader>
-                    <TableRow>
-                      <TableHead>Date</TableHead>
-                      <TableHead>Location</TableHead>
-                      <TableHead>Lot ID</TableHead>
-                      <TableHead>Coffee Type</TableHead>
-                      <TableHead>Bag Type</TableHead>
-                      <TableHead className="text-right">Bags</TableHead>
-                      <TableHead className="text-right">KGs Received</TableHead>
-                      <TableHead>Notes</TableHead>
-                      <TableHead className="text-right">Actions</TableHead>
+                    <TableRow className="bg-muted/50">
+                      <TableHead className="sticky top-0 bg-muted/60">Date</TableHead>
+                      <TableHead className="sticky top-0 bg-muted/60">Location</TableHead>
+                      <TableHead className="sticky top-0 bg-muted/60">Lot ID</TableHead>
+                      <TableHead className="sticky top-0 bg-muted/60">Coffee Type</TableHead>
+                      <TableHead className="sticky top-0 bg-muted/60">Bag Type</TableHead>
+                      <TableHead className="text-right sticky top-0 bg-muted/60">Bags</TableHead>
+                      <TableHead className="text-right sticky top-0 bg-muted/60">KGs Received</TableHead>
+                      <TableHead className="sticky top-0 bg-muted/60">Notes</TableHead>
+                      <TableHead className="text-right sticky top-0 bg-muted/60">Actions</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {dispatchRecords.map((record) => (
-                      <TableRow key={record.id}>
+                    {dispatchRecords.map((record, index) => (
+                      <TableRow key={record.id} className={index % 2 === 0 ? "bg-white" : "bg-muted/20"}>
                         <TableCell>{formatDateOnly(record.dispatch_date)}</TableCell>
                         <TableCell>{getLocationLabel(record)}</TableCell>
                         <TableCell>{record.lot_id || "-"}</TableCell>
                         <TableCell>{record.coffee_type}</TableCell>
                         <TableCell>{formatBagTypeLabel(record.bag_type)}</TableCell>
-                        <TableCell className="text-right">{Number(record.bags_dispatched).toFixed(2)}</TableCell>
+                        <TableCell className="text-right">{formatNumber(Number(record.bags_dispatched) || 0)}</TableCell>
                         <TableCell className="text-right">
-                          {record.kgs_received ? Number(record.kgs_received).toFixed(2) : "-"}
+                          {record.kgs_received ? formatNumber(Number(record.kgs_received) || 0) : "-"}
                         </TableCell>
                         <TableCell className="max-w-[200px] truncate">{record.notes || "-"}</TableCell>
                         <TableCell className="text-right">

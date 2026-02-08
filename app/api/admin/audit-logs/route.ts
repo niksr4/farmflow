@@ -1,8 +1,8 @@
 import { NextResponse } from "next/server"
-import { sql } from "@/lib/neon"
-import { requireSessionUser } from "@/lib/auth-server"
+import { sql } from "@/lib/server/db"
+import { requireSessionUser } from "@/lib/server/auth"
 import { requireAdminRole } from "@/lib/tenant"
-import { normalizeTenantContext, runTenantQueries } from "@/lib/tenant-db"
+import { normalizeTenantContext, runTenantQueries } from "@/lib/server/tenant-db"
 
 const isMissingRelation = (error: unknown, relation: string) => {
   const message = String((error as Error)?.message || error)

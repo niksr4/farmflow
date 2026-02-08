@@ -1,7 +1,9 @@
 import { NextResponse } from "next/server"
-import { sql } from "@/lib/neon"
-import { requireSessionUser } from "@/lib/auth-server"
-import { normalizeTenantContext, runTenantQuery } from "@/lib/tenant-db"
+import { sql } from "@/lib/server/db"
+import { requireSessionUser } from "@/lib/server/auth"
+import { normalizeTenantContext, runTenantQuery } from "@/lib/server/tenant-db"
+import { requireAdminRole } from "@/lib/permissions"
+import { logAuditEvent } from "@/lib/server/audit-log"
 
 const DEFAULT_BAG_WEIGHT_KG = 50
 const MIN_BAG_WEIGHT_KG = 40
@@ -115,7 +117,9 @@ export async function PUT(request: Request) {
     }
 
     const sessionUser = await requireSessionUser()
-    if (sessionUser.role !== "admin" && sessionUser.role !== "owner") {
+    try {
+      requireAdminRole(sessionUser.role)
+    } catch {
       return NextResponse.json({ success: false, error: "Admin role required" }, { status: 403 })
     }
 
@@ -139,6 +143,17 @@ export async function PUT(request: Request) {
     if (estateNameInput !== null && !estateNameInput) {
       return NextResponse.json({ success: false, error: "estateName cannot be empty" }, { status: 400 })
     }
+
+    const beforeRows = await runTenantQuery(
+      sql,
+      tenantContext,
+      sql`
+        SELECT bag_weight_kg, name, alert_thresholds
+        FROM tenants
+        WHERE id = ${tenantContext.tenantId}
+        LIMIT 1
+      `,
+    )
 
     const rows = await runTenantQuery(
       sql,
@@ -173,6 +188,15 @@ export async function PUT(request: Request) {
     if (parsedThresholds?.targets && typeof parsedThresholds.targets === "object") {
       alertThresholds.targets = { ...DEFAULT_ALERT_THRESHOLDS.targets, ...parsedThresholds.targets }
     }
+
+    await logAuditEvent(sql, sessionUser, {
+      action: "update",
+      entityType: "tenants",
+      entityId: tenantContext.tenantId,
+      before: beforeRows?.[0] ?? null,
+      after: rows?.[0] ?? null,
+    })
+
     return NextResponse.json({ success: true, settings: { bagWeightKg: updated, estateName, alertThresholds } })
   } catch (error: any) {
     console.error("Error updating tenant settings:", error)

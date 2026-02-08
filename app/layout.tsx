@@ -9,7 +9,7 @@ import BrandWatermark from "@/components/brand-watermark"
 const inter = Inter({ subsets: ["latin"], display: "swap" })
 
 export const metadata: Metadata = {
-  title: "Farm Flow",
+  title: "FarmFlow",
   description: "Traceability and operations for coffee, tea, cocoa, and specialty crops.",
   generator: "v0.dev",
 }

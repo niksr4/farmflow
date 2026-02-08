@@ -1,7 +1,9 @@
-import { sql } from "@/lib/neon"
-import { MODULE_IDS } from "@/lib/modules"
-import { normalizeTenantContext, runTenantQuery } from "@/lib/tenant-db"
-import { requireSessionUser, type SessionUser } from "@/lib/auth-server"
+import "server-only"
+
+import { sql } from "@/lib/server/db"
+import { MODULE_IDS, resolveEnabledModules } from "@/lib/modules"
+import { normalizeTenantContext, runTenantQuery } from "@/lib/server/tenant-db"
+import { requireSessionUser, type SessionUser } from "@/lib/server/auth"
 
 export class ModuleAccessError extends Error {
   constructor(message = "Module access disabled") {
@@ -43,6 +45,17 @@ export async function getEnabledModules(sessionUser?: SessionUser): Promise<stri
   )
   const userId = userRows?.[0]?.id
 
+  const tenantModules = await runTenantQuery(
+    sql,
+    tenantContext,
+    sql`
+      SELECT module, enabled
+      FROM tenant_modules
+      WHERE tenant_id = ${user.tenantId}
+    `,
+  )
+  const tenantEnabled = tenantModules?.length ? resolveEnabledModules(tenantModules) : resolveEnabledModules()
+
   if (userId) {
     try {
       const userModules = await runTenantQuery(
@@ -55,11 +68,8 @@ export async function getEnabledModules(sessionUser?: SessionUser): Promise<stri
         `,
       )
       if (userModules?.length) {
-        const enabled = userModules.filter((row: any) => row.enabled).map((row: any) => String(row.module))
-        const missing = MODULE_IDS.filter((moduleId) =>
-          !userModules.some((row: any) => String(row.module) === moduleId),
-        )
-        return [...enabled, ...missing]
+        const userEnabled = resolveEnabledModules(userModules)
+        return tenantEnabled.filter((moduleId) => userEnabled.includes(moduleId))
       }
     } catch (error) {
       if (!isMissingRelation(error, "user_modules")) {
@@ -68,25 +78,7 @@ export async function getEnabledModules(sessionUser?: SessionUser): Promise<stri
     }
   }
 
-  const tenantModules = await runTenantQuery(
-    sql,
-    tenantContext,
-    sql`
-      SELECT module, enabled
-      FROM tenant_modules
-      WHERE tenant_id = ${user.tenantId}
-    `,
-  )
-
-  if (!tenantModules?.length) {
-    return MODULE_IDS
-  }
-
-  const enabled = tenantModules.filter((row: any) => row.enabled).map((row: any) => String(row.module))
-  const missing = MODULE_IDS.filter((moduleId) =>
-    !tenantModules.some((row: any) => String(row.module) === moduleId),
-  )
-  return [...enabled, ...missing]
+  return tenantEnabled
 }
 
 export async function requireModuleAccess(moduleId: string, sessionUser?: SessionUser): Promise<SessionUser> {

@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server"
-import { requireModuleAccess, isModuleAccessError } from "@/lib/module-access"
+import { requireModuleAccess, isModuleAccessError } from "@/lib/server/module-access"
 import { buildRateLimitHeaders, checkRateLimit } from "@/lib/rate-limit"
 
 const POSITIVE_KEYWORDS = ["surge", "rally", "rise", "rises", "up", "higher", "gain", "jump", "spike", "record"]

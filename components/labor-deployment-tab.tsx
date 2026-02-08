@@ -2,7 +2,7 @@
 
 import type React from "react"
 
-import { useState, useEffect, useRef } from "react"
+import { useState, useEffect, useRef, useCallback } from "react"
 import { useLaborData } from "@/hooks/use-labor-data"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -13,8 +13,8 @@ import { PlusCircle, Trash2, Edit2, Save, X, ChevronDown, ChevronUp } from "luci
 import { Textarea } from "@/components/ui/textarea"
 import { Badge } from "@/components/ui/badge"
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
-import { useAuth } from "@/hooks/use-auth"
-import { buildTenantHeaders } from "@/lib/tenant"
+import { formatDateOnly } from "@/lib/date-utils"
+import { formatCurrency, formatNumber } from "@/lib/format"
 
 interface ActivityCode {
   code: string
@@ -33,8 +33,6 @@ interface FormData {
 }
 
 export default function LaborDeploymentTab({ locationId }: { locationId?: string }) {
-  const { user } = useAuth()
-  const tenantHeaders = buildTenantHeaders(user?.tenantId)
   const {
     deployments,
     loading,
@@ -65,15 +63,10 @@ export default function LaborDeploymentTab({ locationId }: { locationId?: string
 
   const formRef = useRef<HTMLDivElement>(null)
 
-  useEffect(() => {
-    fetchActivities()
-  }, [locationId])
-
-  const fetchActivities = async () => {
+  const fetchActivities = useCallback(async () => {
     try {
       const response = await fetch(
         locationId ? `/api/get-activity?locationId=${locationId}` : "/api/get-activity",
-        { headers: tenantHeaders },
       )
       const data = await response.json()
       if (data.success && data.activities) {
@@ -82,7 +75,11 @@ export default function LaborDeploymentTab({ locationId }: { locationId?: string
     } catch (error) {
       console.error("Error fetching activities:", error)
     }
-  }
+  }, [locationId])
+
+  useEffect(() => {
+    fetchActivities()
+  }, [fetchActivities])
 
   // Autofill reference when code changes
   const handleCodeChange = (code: string) => {
@@ -193,14 +190,6 @@ export default function LaborDeploymentTab({ locationId }: { locationId?: string
     })
   }
 
-  const formatDate = (dateString: string) => {
-    const date = new Date(dateString)
-    const day = date.getDate().toString().padStart(2, "0")
-    const month = (date.getMonth() + 1).toString().padStart(2, "0")
-    const year = date.getFullYear()
-    return `${day}/${month}/${year}`
-  }
-
   const computedTotalCost = deployments.reduce((sum, d) => sum + d.totalCost, 0)
   const totalDeploymentCost = totalCost || computedTotalCost
   const resolvedTotalCount = totalCount || deployments.length
@@ -216,9 +205,7 @@ export default function LaborDeploymentTab({ locationId }: { locationId?: string
             </div>
             <div className="text-left sm:text-right">
               <p className="text-sm font-medium text-muted-foreground">Total Labor Cost</p>
-              <p className="text-xl sm:text-2xl font-bold">
-                ₹{totalDeploymentCost.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-              </p>
+              <p className="text-xl sm:text-2xl font-bold">{formatCurrency(totalDeploymentCost)}</p>
               {resolvedTotalCount > deployments.length && (
                 <p className="text-xs text-muted-foreground mt-1">
                   Showing {deployments.length} of {resolvedTotalCount}
@@ -323,11 +310,7 @@ export default function LaborDeploymentTab({ locationId }: { locationId?: string
                   </div>
                 </div>
                 <p className="text-sm text-muted-foreground mt-2">
-                  Subtotal: ₹
-                  {(formData.hfLaborers * formData.hfCostPerLaborer).toLocaleString("en-IN", {
-                    minimumFractionDigits: 2,
-                    maximumFractionDigits: 2,
-                  })}
+                  Subtotal: {formatCurrency(formData.hfLaborers * formData.hfCostPerLaborer)}
                 </p>
               </div>
 
@@ -371,11 +354,7 @@ export default function LaborDeploymentTab({ locationId }: { locationId?: string
                   </div>
                 </div>
                 <p className="text-sm text-muted-foreground mt-2">
-                  Subtotal: ₹
-                  {(formData.outsideLaborers * formData.outsideCostPerLaborer).toLocaleString("en-IN", {
-                    minimumFractionDigits: 2,
-                    maximumFractionDigits: 2,
-                  })}
+                  Subtotal: {formatCurrency(formData.outsideLaborers * formData.outsideCostPerLaborer)}
                 </p>
               </div>
 
@@ -394,13 +373,7 @@ export default function LaborDeploymentTab({ locationId }: { locationId?: string
               </div>
 
               <div className="border-t pt-4">
-                <p className="text-lg font-semibold">
-                  Total Cost: ₹
-                  {calculateTotal().toLocaleString("en-IN", {
-                    minimumFractionDigits: 2,
-                    maximumFractionDigits: 2,
-                  })}
-                </p>
+                <p className="text-lg font-semibold">Total Cost: {formatCurrency(calculateTotal())}</p>
               </div>
 
               <div className="flex flex-col sm:flex-row gap-2">
@@ -442,16 +415,10 @@ export default function LaborDeploymentTab({ locationId }: { locationId?: string
                               <Badge variant="outline" className="font-mono text-xs">
                                 {deployment.code}
                               </Badge>
-                              <span className="text-xs text-muted-foreground">{formatDate(deployment.date)}</span>
+                              <span className="text-xs text-muted-foreground">{formatDateOnly(deployment.date)}</span>
                             </div>
                             <p className="font-medium text-sm line-clamp-1">{deployment.reference}</p>
-                            <p className="text-lg font-bold text-green-700 mt-1">
-                              ₹
-                              {deployment.totalCost.toLocaleString("en-IN", {
-                                minimumFractionDigits: 2,
-                                maximumFractionDigits: 2,
-                              })}
-                            </p>
+                            <p className="text-lg font-bold text-green-700 mt-1">{formatCurrency(deployment.totalCost)}</p>
                           </div>
                           {isExpanded ? (
                             <ChevronUp className="h-5 w-5 text-muted-foreground" />
@@ -464,14 +431,14 @@ export default function LaborDeploymentTab({ locationId }: { locationId?: string
                       <CollapsibleContent className="pt-3 space-y-2">
                         {hfEntry && hfEntry.laborCount > 0 && (
                           <div className="text-sm">
-                            <span className="font-medium">HF Labor:</span> {hfEntry.laborCount} @ ₹
-                            {hfEntry.costPerLabor.toFixed(2)}
+                            <span className="font-medium">HF Labor:</span> {formatNumber(hfEntry.laborCount)} @{" "}
+                            {formatCurrency(hfEntry.costPerLabor)}
                           </div>
                         )}
                         {outsideEntry && outsideEntry.laborCount > 0 && (
                           <div className="text-sm">
-                            <span className="font-medium">Outside Labor:</span> {outsideEntry.laborCount} @ ₹
-                            {outsideEntry.costPerLabor.toFixed(2)}
+                            <span className="font-medium">Outside Labor:</span> {formatNumber(outsideEntry.laborCount)} @{" "}
+                            {formatCurrency(outsideEntry.costPerLabor)}
                           </div>
                         )}
                         {deployment.notes && (
@@ -507,38 +474,36 @@ export default function LaborDeploymentTab({ locationId }: { locationId?: string
             <div className="hidden sm:block overflow-x-auto">
               <Table>
                 <TableHeader>
-                  <TableRow>
-                    <TableHead>Date</TableHead>
-                    <TableHead>Code</TableHead>
-                    <TableHead>Reference</TableHead>
-                    <TableHead>HF Laborers</TableHead>
-                    <TableHead>Outside Laborers</TableHead>
-                    <TableHead className="text-right">Total Cost</TableHead>
-                    <TableHead className="w-[100px]">Actions</TableHead>
+                  <TableRow className="bg-muted/50">
+                    <TableHead className="sticky top-0 bg-muted/60">Date</TableHead>
+                    <TableHead className="sticky top-0 bg-muted/60">Code</TableHead>
+                    <TableHead className="sticky top-0 bg-muted/60">Reference</TableHead>
+                    <TableHead className="sticky top-0 bg-muted/60">HF Laborers</TableHead>
+                    <TableHead className="sticky top-0 bg-muted/60">Outside Laborers</TableHead>
+                    <TableHead className="text-right sticky top-0 bg-muted/60">Total Cost</TableHead>
+                    <TableHead className="w-[100px] sticky top-0 bg-muted/60">Actions</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {deployments.map((deployment) => {
+                  {deployments.map((deployment, index) => {
                     const hfEntry = deployment.laborEntries[0]
                     const outsideEntry = deployment.laborEntries[1]
                     return (
-                      <TableRow key={deployment.id}>
-                        <TableCell>{formatDate(deployment.date)}</TableCell>
+                      <TableRow key={deployment.id} className={index % 2 === 0 ? "bg-white" : "bg-muted/20"}>
+                        <TableCell>{formatDateOnly(deployment.date)}</TableCell>
                         <TableCell className="font-medium">{deployment.code}</TableCell>
                         <TableCell>{deployment.reference}</TableCell>
                         <TableCell>
-                          {hfEntry ? `${hfEntry.laborCount} @ ₹${hfEntry.costPerLabor.toFixed(2)}` : "-"}
+                          {hfEntry
+                            ? `${formatNumber(hfEntry.laborCount)} @ ${formatCurrency(hfEntry.costPerLabor)}`
+                            : "-"}
                         </TableCell>
                         <TableCell>
-                          {outsideEntry ? `${outsideEntry.laborCount} @ ₹${outsideEntry.costPerLabor.toFixed(2)}` : "-"}
+                          {outsideEntry
+                            ? `${formatNumber(outsideEntry.laborCount)} @ ${formatCurrency(outsideEntry.costPerLabor)}`
+                            : "-"}
                         </TableCell>
-                        <TableCell className="text-right font-semibold">
-                          ₹
-                          {deployment.totalCost.toLocaleString("en-IN", {
-                            minimumFractionDigits: 2,
-                            maximumFractionDigits: 2,
-                          })}
-                        </TableCell>
+                        <TableCell className="text-right font-semibold">{formatCurrency(deployment.totalCost)}</TableCell>
                         <TableCell>
                           <div className="flex gap-2">
                             <Button variant="ghost" size="icon" onClick={() => startEdit(deployment)}>
@@ -575,7 +540,7 @@ export default function LaborDeploymentTab({ locationId }: { locationId?: string
       ) : (
         <Card>
           <CardContent className="text-center py-8 text-muted-foreground">
-            No labor deployments recorded yet. Click "Add Labor Deployment" to get started.
+            No labor deployments recorded yet. Click &quot;Add Labor Deployment&quot; to get started.
           </CardContent>
         </Card>
       )}

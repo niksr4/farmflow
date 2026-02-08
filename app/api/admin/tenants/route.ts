@@ -1,9 +1,10 @@
 import { NextResponse } from "next/server"
-import { sql } from "@/lib/neon"
+import { sql } from "@/lib/server/db"
 import { requireOwnerRole } from "@/lib/tenant"
-import { requireSessionUser } from "@/lib/auth-server"
-import { MODULE_IDS } from "@/lib/modules"
-import { normalizeTenantContext, runTenantQuery } from "@/lib/tenant-db"
+import { requireSessionUser } from "@/lib/server/auth"
+import { MODULES } from "@/lib/modules"
+import { normalizeTenantContext, runTenantQuery } from "@/lib/server/tenant-db"
+import { logAuditEvent } from "@/lib/server/audit-log"
 
 export async function GET(request: Request) {
   try {
@@ -59,18 +60,25 @@ export async function POST(request: Request) {
 
     const tenantId = result[0]?.id
     if (tenantId) {
-      for (const module of MODULE_IDS) {
+      for (const moduleEntry of MODULES) {
         await runTenantQuery(
           sql,
           adminContext,
           sql`
             INSERT INTO tenant_modules (tenant_id, module, enabled)
-            VALUES (${tenantId}, ${module}, true)
+            VALUES (${tenantId}, ${moduleEntry.id}, ${moduleEntry.defaultEnabled !== false})
             ON CONFLICT (tenant_id, module) DO NOTHING
           `,
         )
       }
     }
+
+    await logAuditEvent(sql, sessionUser, {
+      action: "create",
+      entityType: "tenants",
+      entityId: result?.[0]?.id,
+      after: result?.[0] ?? null,
+    })
 
     return NextResponse.json({ success: true, tenant: result[0] })
   } catch (error: any) {

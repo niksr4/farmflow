@@ -1,9 +1,10 @@
 import { NextResponse } from "next/server"
-import { sql } from "@/lib/neon"
+import { sql } from "@/lib/server/db"
 import { requireAdminRole } from "@/lib/tenant"
-import { requireSessionUser } from "@/lib/auth-server"
-import { MODULES, MODULE_IDS } from "@/lib/modules"
-import { normalizeTenantContext, runTenantQueries, runTenantQuery } from "@/lib/tenant-db"
+import { requireSessionUser } from "@/lib/server/auth"
+import { MODULES, MODULE_IDS, resolveEnabledModules, resolveModuleStates } from "@/lib/modules"
+import { normalizeTenantContext, runTenantQueries, runTenantQuery } from "@/lib/server/tenant-db"
+import { logAuditEvent } from "@/lib/server/audit-log"
 
 type ModuleState = { id: string; label: string; enabled: boolean }
 
@@ -56,17 +57,12 @@ export async function GET(request: Request) {
       return NextResponse.json({ success: false, error: "Forbidden" }, { status: 403 })
     }
 
+    const tenantEnabled = tenantModules?.length ? resolveEnabledModules(tenantModules) : resolveEnabledModules()
     const source = userModules?.length ? "user" : tenantModules?.length ? "tenant" : "default"
-    const byModule = new Map(
-      (source === "user" ? userModules : source === "tenant" ? tenantModules : []).map((row: any) => [
-        String(row.module),
-        Boolean(row.enabled),
-      ]),
-    )
-
-    const modules: ModuleState[] = MODULES.map((module) => ({
+    const sourceRows = source === "user" ? userModules : source === "tenant" ? tenantModules : []
+    const modules: ModuleState[] = resolveModuleStates(sourceRows).map((module) => ({
       ...module,
-      enabled: byModule.get(module.id) ?? true,
+      enabled: tenantEnabled.includes(module.id) && module.enabled,
     }))
 
     return NextResponse.json({ success: true, modules, source })
@@ -116,19 +112,49 @@ export async function PUT(request: Request) {
       return NextResponse.json({ success: false, error: "Forbidden" }, { status: 403 })
     }
 
-    for (const module of MODULE_IDS) {
-      const enabled = Boolean(modules.find((m: any) => m.id === module)?.enabled)
+    const tenantModules = await runTenantQuery(
+      sql,
+      normalizeTenantContext(tenantId, sessionUser.role),
+      sql`
+        SELECT module, enabled
+        FROM tenant_modules
+        WHERE tenant_id = ${tenantId}
+      `,
+    )
+    const tenantEnabled = tenantModules?.length ? resolveEnabledModules(tenantModules) : resolveEnabledModules()
+
+    const beforeModules = await runTenantQuery(
+      sql,
+      normalizeTenantContext(tenantId, sessionUser.role),
+      sql`
+        SELECT module, enabled
+        FROM user_modules
+        WHERE user_id = ${userId}
+      `,
+    )
+
+    for (const moduleId of MODULE_IDS) {
+      const requested = Boolean(modules.find((m: any) => m.id === moduleId)?.enabled)
+      const enabled = tenantEnabled.includes(moduleId) && requested
       await runTenantQuery(
         sql,
         normalizeTenantContext(tenantId, sessionUser.role),
         sql`
           INSERT INTO user_modules (user_id, tenant_id, module, enabled)
-          VALUES (${userId}, ${tenantId}, ${module}, ${enabled})
+          VALUES (${userId}, ${tenantId}, ${moduleId}, ${enabled})
           ON CONFLICT (user_id, module)
           DO UPDATE SET enabled = ${enabled}
         `,
       )
     }
+
+    await logAuditEvent(sql, sessionUser, {
+      action: "update",
+      entityType: "user_modules",
+      entityId: userId,
+      before: beforeModules ?? null,
+      after: modules,
+    })
 
     return NextResponse.json({ success: true })
   } catch (error: any) {
@@ -176,6 +202,16 @@ export async function DELETE(request: Request) {
       return NextResponse.json({ success: false, error: "Forbidden" }, { status: 403 })
     }
 
+    const beforeModules = await runTenantQuery(
+      sql,
+      normalizeTenantContext(tenantId, sessionUser.role),
+      sql`
+        SELECT module, enabled
+        FROM user_modules
+        WHERE user_id = ${userId}
+      `,
+    )
+
     await runTenantQuery(
       sql,
       normalizeTenantContext(tenantId, sessionUser.role),
@@ -184,6 +220,13 @@ export async function DELETE(request: Request) {
         WHERE user_id = ${userId}
       `,
     )
+
+    await logAuditEvent(sql, sessionUser, {
+      action: "delete",
+      entityType: "user_modules",
+      entityId: userId,
+      before: beforeModules ?? null,
+    })
 
     return NextResponse.json({ success: true })
   } catch (error: any) {

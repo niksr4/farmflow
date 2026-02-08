@@ -159,10 +159,11 @@ Run these scripts (in order) on the target database:
 7. `28-audit-logs.sql` (audit trail table)
 8. `21-tenant-constraints.sql`
 9. `24-location-aware-inventory-accounts.sql` (optional, if you want inventory + accounts per location)
-10. `29-backfill-tenant-ids.sql` (set tenant_id on legacy rows before enabling RLS)
-11. `22-enable-rls.sql` (enable row-level security after data is in place)
-12. `30-lock-legacy-tables.sql` (optional, prevent writes to deprecated legacy tables)
-13. `31-drop-legacy-tables.sql` (optional, permanently remove legacy tables after verification)
+10. `39-inventory-location-indexes.sql` (optional, enables location-aware inventory without backfilling legacy rows)
+11. `29-backfill-tenant-ids.sql` (set tenant_id on legacy rows before enabling RLS)
+12. `22-enable-rls.sql` (enable row-level security after data is in place)
+13. `30-lock-legacy-tables.sql` (optional, prevent writes to deprecated legacy tables)
+14. `31-drop-legacy-tables.sql` (optional, permanently remove legacy tables after verification)
 
 New tables:
 - `locations`

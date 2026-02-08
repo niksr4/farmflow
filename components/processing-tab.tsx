@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useCallback, useEffect, useState } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -18,8 +18,8 @@ import { getCurrentFiscalYear, getAvailableFiscalYears, type FiscalYear } from "
 import { DEFAULT_COFFEE_VARIETIES } from "@/lib/crop-config"
 import { useAuth } from "@/hooks/use-auth"
 import { useTenantSettings } from "@/hooks/use-tenant-settings"
-import { buildTenantHeaders } from "@/lib/tenant"
 import { formatDateOnly } from "@/lib/date-utils"
+import { formatNumber } from "@/lib/format"
 
 interface ProcessingRecord {
   id?: number
@@ -101,6 +101,7 @@ interface DashboardData {
   dryPBagsToDate: number
   dryCherryBagsToDate: number
   isTotal?: boolean
+  isGrandTotal?: boolean
 }
 
 interface LocationOption {
@@ -114,7 +115,6 @@ const COFFEE_TYPES = DEFAULT_COFFEE_VARIETIES
 export default function ProcessingTab() {
   const { user } = useAuth()
   const { settings } = useTenantSettings()
-  const tenantHeaders = buildTenantHeaders(user?.tenantId)
   const bagWeightKg = Number(settings.bagWeightKg) || 50
   const canDelete = user?.role === "admin" || user?.role === "owner"
   const [selectedFiscalYear, setSelectedFiscalYear] = useState<FiscalYear>(getCurrentFiscalYear())
@@ -142,59 +142,24 @@ export default function ProcessingTab() {
 
   const selectedLocation = locations.find((loc) => loc.id === selectedLocationId) || null
 
-  const loadLocations = async () => {
+  const loadLocations = useCallback(async () => {
     try {
-      const response = await fetch("/api/locations", { headers: tenantHeaders })
+      const response = await fetch("/api/locations")
       const data = await response.json()
       if (!response.ok || !data.success) {
         throw new Error(data.error || "Failed to load locations")
       }
       const loaded = data.locations || []
       setLocations(loaded)
-      if (!selectedLocationId && loaded.length > 0) {
-        setSelectedLocationId(loaded[0].id)
+      if (loaded.length > 0) {
+        setSelectedLocationId((prev) => prev || loaded[0].id)
       }
     } catch (error: any) {
       toast({ title: "Error", description: error.message || "Failed to load locations", variant: "destructive" })
     }
-  }
+  }, [toast])
 
-  useEffect(() => {
-    loadLocations()
-  }, [])
-
-  useEffect(() => {
-    loadDashboardData()
-  }, [selectedFiscalYear])
-
-  useEffect(() => {
-    if (selectedLocationId) {
-      console.log("Location changed to:", selectedLocationId)
-      loadRecentRecords(0, false)
-    }
-  }, [selectedLocationId, coffeeType, selectedFiscalYear])
-
-  useEffect(() => {
-    if (selectedLocationId) {
-      console.log("Date or location changed, loading record for date:", format(date, "yyyy-MM-dd"))
-      loadRecordForDate(date)
-    }
-  }, [date, selectedLocationId, coffeeType])
-
-  useEffect(() => {
-    autoCalculateFields()
-  }, [
-    record.crop_today,
-    record.ripe_today,
-    record.green_today,
-    record.float_today,
-    record.wet_parchment,
-    record.dry_parch,
-    record.dry_cherry,
-    previousRecord,
-  ])
-
-  const autoCalculateFields = () => {
+  const autoCalculateFields = useCallback(() => {
     setRecord((prev) => {
       const updated = { ...prev }
 
@@ -275,9 +240,9 @@ export default function ProcessingTab() {
 
       return updated
     })
-  }
+  }, [bagWeightKg, previousRecord])
 
-  const loadRecentRecords = async (pageIndex = 0, append = false) => {
+  const loadRecentRecords = useCallback(async (pageIndex = 0, append = false) => {
     if (!selectedLocationId) {
       return
     }
@@ -299,7 +264,7 @@ export default function ProcessingTab() {
       const url = `/api/processing-records?${params.toString()}`
       console.log("Fetching from URL:", url)
 
-      const response = await fetch(url, { headers: tenantHeaders })
+      const response = await fetch(url)
       const responseText = await response.text()
       let data: any = null
       try {
@@ -366,9 +331,16 @@ export default function ProcessingTab() {
         setIsLoadingRecords(false)
       }
     }
-  }
+  }, [
+    coffeeType,
+    recordsPageSize,
+    selectedFiscalYear.endDate,
+    selectedFiscalYear.startDate,
+    selectedLocationId,
+    toast,
+  ])
 
-  const loadRecordForDate = async (selectedDate: Date) => {
+  const loadRecordForDate = useCallback(async (selectedDate: Date) => {
     if (!selectedLocationId) {
       return
     }
@@ -381,7 +353,6 @@ export default function ProcessingTab() {
         `/api/processing-records?date=${dateStr}&locationId=${selectedLocationId}&coffeeType=${encodeURIComponent(
           coffeeType,
         )}`,
-        { headers: tenantHeaders },
       )
       const data = await response.json()
 
@@ -415,7 +386,6 @@ export default function ProcessingTab() {
         `/api/processing-records?beforeDate=${dateStr}&locationId=${selectedLocationId}&coffeeType=${encodeURIComponent(
           coffeeType,
         )}`,
-        { headers: tenantHeaders },
       )
       const previousData = await previousResponse.json()
 
@@ -455,15 +425,14 @@ export default function ProcessingTab() {
     } finally {
       setIsLoading(false)
     }
-  }
+  }, [coffeeType, selectedLocationId, toast])
 
-  const loadDashboardData = async () => {
+  const loadDashboardData = useCallback(async () => {
     setIsLoadingDashboard(true)
     try {
       const { startDate, endDate } = selectedFiscalYear
       const response = await fetch(
         `/api/processing-records?summary=dashboard&fiscalYearStart=${startDate}&fiscalYearEnd=${endDate}`,
-        { headers: tenantHeaders },
       )
       const data = await response.json()
 
@@ -490,7 +459,7 @@ export default function ProcessingTab() {
         }
       })
 
-      const sumRows = (rows: DashboardData[], label: string, coffeeType: string): DashboardData => ({
+      const sumRows = (rows: DashboardData[], label: string, coffeeType: string, isGrandTotal = false): DashboardData => ({
         location: label,
         coffeeType,
         cropToDate: rows.reduce((acc, row) => acc + row.cropToDate, 0),
@@ -503,6 +472,7 @@ export default function ProcessingTab() {
         dryPBagsToDate: rows.reduce((acc, row) => acc + row.dryPBagsToDate, 0),
         dryCherryBagsToDate: rows.reduce((acc, row) => acc + row.dryCherryBagsToDate, 0),
         isTotal: true,
+        isGrandTotal,
       })
 
       const typeGroups = results.reduce<Record<string, DashboardData[]>>((acc, row) => {
@@ -518,7 +488,7 @@ export default function ProcessingTab() {
         if (typeGroups.robusta) totals.push(sumRows(typeGroups.robusta, "Total Robusta", "Robusta"))
       }
       if (results.length > 0) {
-        totals.push(sumRows(results, "Total All", "All"))
+        totals.push(sumRows(results, "Total All (All Types)", "All", true))
       }
 
       setDashboardData(results.length > 0 ? [...results, ...totals] : results)
@@ -532,7 +502,43 @@ export default function ProcessingTab() {
     } finally {
       setIsLoadingDashboard(false)
     }
-  }
+  }, [selectedFiscalYear, toast])
+
+  useEffect(() => {
+    loadLocations()
+  }, [loadLocations])
+
+  useEffect(() => {
+    loadDashboardData()
+  }, [loadDashboardData])
+
+  useEffect(() => {
+    if (selectedLocationId) {
+      console.log("Location changed to:", selectedLocationId)
+      loadRecentRecords(0, false)
+    }
+  }, [selectedLocationId, loadRecentRecords])
+
+  useEffect(() => {
+    if (selectedLocationId) {
+      console.log("Date or location changed, loading record for date:", format(date, "yyyy-MM-dd"))
+      loadRecordForDate(date)
+    }
+  }, [date, selectedLocationId, loadRecordForDate])
+
+  useEffect(() => {
+    autoCalculateFields()
+  }, [
+    record.crop_today,
+    record.ripe_today,
+    record.green_today,
+    record.float_today,
+    record.wet_parchment,
+    record.dry_parch,
+    record.dry_cherry,
+    previousRecord,
+    autoCalculateFields,
+  ])
 
   const handleSave = async () => {
     if (!selectedLocationId) {
@@ -547,7 +553,7 @@ export default function ProcessingTab() {
     try {
       const response = await fetch("/api/processing-records", {
         method: "POST",
-        headers: { "Content-Type": "application/json", ...tenantHeaders },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ ...record, locationId: selectedLocationId, coffeeType }),
       })
 
@@ -590,7 +596,6 @@ export default function ProcessingTab() {
         )}`,
         {
           method: "DELETE",
-          headers: tenantHeaders,
         },
       )
 
@@ -637,7 +642,6 @@ export default function ProcessingTab() {
         `/api/processing-records?locationId=${selectedLocationId}&coffeeType=${encodeURIComponent(
           coffeeType,
         )}&all=true`,
-        { headers: tenantHeaders },
       )
       const data = await response.json()
 
@@ -835,7 +839,10 @@ export default function ProcessingTab() {
       <Card>
         <CardHeader>
           <CardTitle>Processing Dashboard - All Locations</CardTitle>
-          <CardDescription>Cumulative "To Date" values for all processing locations</CardDescription>
+          <CardDescription>
+            Cumulative &quot;To Date&quot; values for all processing locations. Compare KPIs in Season View
+            against the &quot;Total All (All Types)&quot; row.
+          </CardDescription>
         </CardHeader>
         <CardContent>
           {isLoadingDashboard ? (
@@ -847,37 +854,39 @@ export default function ProcessingTab() {
             <div className="overflow-x-auto">
               <Table>
                 <TableHeader>
-                  <TableRow>
-                    <TableHead className="font-semibold">Location</TableHead>
-                    <TableHead className="text-right">Crop To Date (kg)</TableHead>
-                    <TableHead className="text-right">Ripe To Date (kg)</TableHead>
-                    <TableHead className="text-right">Green To Date (kg)</TableHead>
-                    <TableHead className="text-right">Float To Date (kg)</TableHead>
-                    <TableHead className="text-right">WP To Date (kg)</TableHead>
-                    <TableHead className="text-right">Dry Parchment To Date (kg)</TableHead>
-                    <TableHead className="text-right">Dry Cherry To Date (kg)</TableHead>
-                    <TableHead className="text-right">Dry Parchment Bags To Date</TableHead>
-                    <TableHead className="text-right">Dry Cherry Bags To Date</TableHead>
+                  <TableRow className="bg-muted/50">
+                    <TableHead className="font-semibold sticky top-0 bg-muted/60">Location</TableHead>
+                    <TableHead className="text-right sticky top-0 bg-muted/60">Crop To Date (kg)</TableHead>
+                    <TableHead className="text-right sticky top-0 bg-muted/60">Ripe To Date (kg)</TableHead>
+                    <TableHead className="text-right sticky top-0 bg-muted/60">Green To Date (kg)</TableHead>
+                    <TableHead className="text-right sticky top-0 bg-muted/60">Float To Date (kg)</TableHead>
+                    <TableHead className="text-right sticky top-0 bg-muted/60">WP To Date (kg)</TableHead>
+                    <TableHead className="text-right sticky top-0 bg-muted/60">Dry Parchment To Date (kg)</TableHead>
+                    <TableHead className="text-right sticky top-0 bg-muted/60">Dry Cherry To Date (kg)</TableHead>
+                    <TableHead className="text-right sticky top-0 bg-muted/60">Dry Parchment Bags To Date</TableHead>
+                    <TableHead className="text-right sticky top-0 bg-muted/60">Dry Cherry Bags To Date</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {dashboardData.map((data) => (
+                  {dashboardData.map((data, index) => (
                     <TableRow
                       key={data.location}
-                      className={
-                        data.isTotal ? "border-t-2 border-gray-400 font-semibold bg-gray-50" : ""
-                      }
+                      className={cn(
+                        index % 2 === 0 ? "bg-white" : "bg-muted/20",
+                        data.isGrandTotal && "border-t-2 border-emerald-200 font-semibold bg-emerald-50",
+                        data.isTotal && "border-t-2 border-muted font-semibold bg-muted/40",
+                      )}
                     >
                       <TableCell className="font-medium">{data.location}</TableCell>
-                      <TableCell className="text-right">{data.cropToDate.toFixed(2)}</TableCell>
-                      <TableCell className="text-right">{data.ripeToDate.toFixed(2)}</TableCell>
-                      <TableCell className="text-right">{data.greenToDate.toFixed(2)}</TableCell>
-                      <TableCell className="text-right">{data.floatToDate.toFixed(2)}</TableCell>
-                      <TableCell className="text-right">{data.wetParchmentToDate.toFixed(2)}</TableCell>
-                      <TableCell className="text-right">{data.dryPToDate.toFixed(2)}</TableCell>
-                      <TableCell className="text-right">{data.dryCherryToDate.toFixed(2)}</TableCell>
-                      <TableCell className="text-right">{data.dryPBagsToDate.toFixed(2)}</TableCell>
-                      <TableCell className="text-right">{data.dryCherryBagsToDate.toFixed(2)}</TableCell>
+                      <TableCell className="text-right">{formatNumber(data.cropToDate)}</TableCell>
+                      <TableCell className="text-right">{formatNumber(data.ripeToDate)}</TableCell>
+                      <TableCell className="text-right">{formatNumber(data.greenToDate)}</TableCell>
+                      <TableCell className="text-right">{formatNumber(data.floatToDate)}</TableCell>
+                      <TableCell className="text-right">{formatNumber(data.wetParchmentToDate)}</TableCell>
+                      <TableCell className="text-right">{formatNumber(data.dryPToDate)}</TableCell>
+                      <TableCell className="text-right">{formatNumber(data.dryCherryToDate)}</TableCell>
+                      <TableCell className="text-right">{formatNumber(data.dryPBagsToDate)}</TableCell>
+                      <TableCell className="text-right">{formatNumber(data.dryCherryBagsToDate)}</TableCell>
                     </TableRow>
                   ))}
                 </TableBody>
@@ -1353,13 +1362,11 @@ export default function ProcessingTab() {
                     </>
                   )}
                 </Button>
-                {record.process_date && (
-                  {canDelete && (
-                    <Button variant="destructive" onClick={handleDelete}>
-                      <Trash2 className="mr-2 h-4 w-4" />
-                      Delete
-                    </Button>
-                  )}
+                {record.process_date && canDelete && (
+                  <Button variant="destructive" onClick={handleDelete}>
+                    <Trash2 className="mr-2 h-4 w-4" />
+                    Delete
+                  </Button>
                 )}
               </div>
             </>

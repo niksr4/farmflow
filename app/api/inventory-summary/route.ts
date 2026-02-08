@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server"
-import { inventorySql } from "@/lib/neon-connections"
-import { requireModuleAccess, isModuleAccessError } from "@/lib/module-access"
-import { normalizeTenantContext, runTenantQuery } from "@/lib/tenant-db"
+import { inventorySql } from "@/lib/server/db"
+import { requireModuleAccess, isModuleAccessError } from "@/lib/server/module-access"
+import { normalizeTenantContext, runTenantQuery } from "@/lib/server/tenant-db"
 
 export async function GET() {
   try {

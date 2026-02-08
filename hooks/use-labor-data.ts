@@ -1,8 +1,7 @@
 "use client"
 
-import { useState, useEffect, useCallback, useMemo } from "react"
+import { useState, useEffect, useCallback } from "react"
 import { useAuth } from "@/hooks/use-auth"
-import { buildTenantHeaders } from "@/lib/tenant"
 
 export interface LaborEntry {
   laborCount: number
@@ -27,7 +26,6 @@ type LaborDataOptions = {
 
 export function useLaborData(locationId?: string, options: LaborDataOptions = {}) {
   const { user, status } = useAuth()
-  const tenantHeaders = useMemo(() => buildTenantHeaders(user?.tenantId), [user?.tenantId])
   const [deployments, setDeployments] = useState<LaborDeployment[]>([])
   const [loading, setLoading] = useState(true)
   const [loadingMore, setLoadingMore] = useState(false)
@@ -40,101 +38,100 @@ export function useLaborData(locationId?: string, options: LaborDataOptions = {}
 
   const fetchDeployments = useCallback(
     async (pageIndex = 0, append = false) => {
-    if (status === "loading") {
-      return
-    }
-    if (!user?.tenantId) {
-      setLoading(false)
-      setHasMore(false)
-      setTotalCount(0)
-      setTotalCost(0)
-      return
-    }
-    try {
-      if (append) {
-        setLoadingMore(true)
-      } else {
-        setLoading(true)
+      if (status === "loading") {
+        return
       }
-      setError(null)
-      console.log("📡 Fetching labor deployments...")
+      if (!user?.tenantId) {
+        setLoading(false)
+        setHasMore(false)
+        setTotalCount(0)
+        setTotalCost(0)
+        return
+      }
+      try {
+        if (append) {
+          setLoadingMore(true)
+        } else {
+          setLoading(true)
+        }
+        setError(null)
+        console.log("📡 Fetching labor deployments...")
 
       const query = new URLSearchParams()
       query.set("limit", pageSize.toString())
       query.set("offset", String(pageIndex * pageSize))
-      if (locationId) {
-        query.set("locationId", locationId)
-      }
+        if (locationId) {
+          query.set("locationId", locationId)
+        }
 
-      const response = await fetch(`/api/labor-neon?${query.toString()}`, {
-        method: "GET",
-        cache: "no-store",
-        headers: tenantHeaders,
-      })
-
-      const responseText = await response.text()
-      let data: any = null
-      try {
-        data = responseText ? JSON.parse(responseText) : null
-      } catch {
-        data = null
-      }
-
-      if (!response.ok) {
-        console.error("❌ Labor API error:", response.status, responseText)
-        setError(responseText || `Failed to load deployments (${response.status})`)
-        setDeployments([])
-        setHasMore(false)
-        return
-      }
-
-      console.log("📦 Received labor data:", data)
-
-      if (data.success && Array.isArray(data.deployments)) {
-        console.log(`✅ Loaded ${data.deployments.length} labor deployments`)
-        const nextTotalCount = Number(data.totalCount) || 0
-        const nextTotalCost = Number(data.totalCost) || 0
-        setTotalCount(nextTotalCount)
-        setTotalCost(nextTotalCost)
-        setDeployments((prev) => {
-          const nextDeployments = append ? [...prev, ...data.deployments] : data.deployments
-          const canPaginate = pageSize > 0
-          const hasNextPage = canPaginate
-            ? nextTotalCount
-              ? nextDeployments.length < nextTotalCount
-              : data.deployments.length === pageSize
-            : false
-          setHasMore(hasNextPage)
-          return nextDeployments
+        const response = await fetch(`/api/labor-neon?${query.toString()}`, {
+          method: "GET",
+          cache: "no-store",
         })
-        setPage(pageIndex)
-        setError(null)
-      } else if (data.success && Array.isArray(data.transactions)) {
-        // Handle case where API returns transactions instead of deployments
-        console.log(`✅ Loaded ${data.transactions.length} labor transactions`)
-        setDeployments(data.transactions)
-        setHasMore(false)
-        setError(null)
-      } else {
-        console.error("❌ Invalid response format:", data)
-        setError(data.message || "Failed to load deployments")
+
+        const responseText = await response.text()
+        let data: any = null
+        try {
+          data = responseText ? JSON.parse(responseText) : null
+        } catch {
+          data = null
+        }
+
+        if (!response.ok) {
+          console.error("❌ Labor API error:", response.status, responseText)
+          setError(responseText || `Failed to load deployments (${response.status})`)
+          setDeployments([])
+          setHasMore(false)
+          return
+        }
+
+        console.log("📦 Received labor data:", data)
+
+        if (data.success && Array.isArray(data.deployments)) {
+          console.log(`✅ Loaded ${data.deployments.length} labor deployments`)
+          const nextTotalCount = Number(data.totalCount) || 0
+          const nextTotalCost = Number(data.totalCost) || 0
+          setTotalCount(nextTotalCount)
+          setTotalCost(nextTotalCost)
+          setDeployments((prev) => {
+            const nextDeployments = append ? [...prev, ...data.deployments] : data.deployments
+            const canPaginate = pageSize > 0
+            const hasNextPage = canPaginate
+              ? nextTotalCount
+                ? nextDeployments.length < nextTotalCount
+                : data.deployments.length === pageSize
+              : false
+            setHasMore(hasNextPage)
+            return nextDeployments
+          })
+          setPage(pageIndex)
+          setError(null)
+        } else if (data.success && Array.isArray(data.transactions)) {
+          // Handle case where API returns transactions instead of deployments
+          console.log(`✅ Loaded ${data.transactions.length} labor transactions`)
+          setDeployments(data.transactions)
+          setHasMore(false)
+          setError(null)
+        } else {
+          console.error("❌ Invalid response format:", data)
+          setError(data.message || "Failed to load deployments")
+          setDeployments([])
+          setHasMore(false)
+        }
+      } catch (err: any) {
+        console.error("❌ Error fetching labor deployments:", err)
+        setError(err.message || "Failed to fetch deployments")
         setDeployments([])
         setHasMore(false)
+      } finally {
+        if (append) {
+          setLoadingMore(false)
+        } else {
+          setLoading(false)
+        }
       }
-    } catch (err: any) {
-      console.error("❌ Error fetching labor deployments:", err)
-      setError(err.message || "Failed to fetch deployments")
-      setDeployments([])
-      setHasMore(false)
-    } finally {
-      if (append) {
-        setLoadingMore(false)
-      } else {
-        setLoading(false)
-      }
-    }
     },
-    [locationId, pageSize, status, tenantHeaders, user?.tenantId],
+    [locationId, pageSize, status, user?.tenantId],
   )
 
   useEffect(() => {
@@ -154,7 +151,7 @@ export function useLaborData(locationId?: string, options: LaborDataOptions = {}
 
       const response = await fetch("/api/labor-neon", {
         method: "POST",
-        headers: { "Content-Type": "application/json", ...tenantHeaders },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ ...deployment, locationId }),
       })
 
@@ -186,7 +183,7 @@ export function useLaborData(locationId?: string, options: LaborDataOptions = {}
 
       const response = await fetch("/api/labor-neon", {
         method: "PUT",
-        headers: { "Content-Type": "application/json", ...tenantHeaders },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ id, ...deployment, locationId }),
       })
 
@@ -217,8 +214,7 @@ export function useLaborData(locationId?: string, options: LaborDataOptions = {}
         `/api/labor-neon?id=${id}${locationId ? `&locationId=${locationId}` : ""}`,
         {
           method: "DELETE",
-          headers: tenantHeaders,
-        },
+                  },
       )
 
       const data = await response.json()

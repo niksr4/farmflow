@@ -1,8 +1,8 @@
 "use client"
 
-import { useCallback, useEffect, useMemo, useState } from "react"
+import { useCallback, useEffect, useState } from "react"
 import { useAuth } from "@/hooks/use-auth"
-import { buildTenantHeaders } from "@/lib/tenant"
+import { apiRequest } from "@/lib/api-client"
 
 export type TenantSettings = {
   bagWeightKg: number
@@ -47,7 +47,6 @@ const DEFAULT_ALERT_THRESHOLDS: AlertThresholds = {
 
 export function useTenantSettings() {
   const { user } = useAuth()
-  const tenantHeaders = useMemo(() => buildTenantHeaders(user?.tenantId), [user?.tenantId])
   const [settings, setSettings] = useState<TenantSettings>({
     bagWeightKg: DEFAULT_BAG_WEIGHT_KG,
     estateName: "",
@@ -61,11 +60,7 @@ export function useTenantSettings() {
     setLoading(true)
     setError(null)
     try {
-      const response = await fetch("/api/tenant-settings", { headers: tenantHeaders })
-      const data = await response.json()
-      if (!response.ok || !data.success) {
-        throw new Error(data.error || "Failed to load tenant settings")
-      }
+      const data = await apiRequest<{ success: boolean; settings: TenantSettings }>("/api/tenant-settings")
       const bagWeightKg = Number(data.settings?.bagWeightKg) || DEFAULT_BAG_WEIGHT_KG
       const estateName = typeof data.settings?.estateName === "string" ? data.settings.estateName : ""
       const alertThresholds =
@@ -85,7 +80,7 @@ export function useTenantSettings() {
     } finally {
       setLoading(false)
     }
-  }, [tenantHeaders, user?.tenantId])
+  }, [user?.tenantId])
 
   useEffect(() => {
     loadSettings()
@@ -114,15 +109,10 @@ export function useTenantSettings() {
         ...(estateName !== undefined ? { estateName } : {}),
         ...(alertThresholds ? { alertThresholds } : {}),
       }
-      const response = await fetch("/api/tenant-settings", {
+      const data = await apiRequest<{ success: boolean; settings: TenantSettings }>("/api/tenant-settings", {
         method: "PUT",
-        headers: { "Content-Type": "application/json", ...tenantHeaders },
         body: JSON.stringify(payload),
       })
-      const data = await response.json()
-      if (!response.ok || !data.success) {
-        throw new Error(data.error || "Failed to update tenant settings")
-      }
       const updatedBagWeightKg = Number(data.settings?.bagWeightKg) || payload.bagWeightKg
       const updatedEstateName =
         typeof data.settings?.estateName === "string" ? data.settings.estateName : settings.estateName
@@ -143,7 +133,7 @@ export function useTenantSettings() {
       })
       return { bagWeightKg: updatedBagWeightKg, estateName: updatedEstateName, alertThresholds: updatedAlertThresholds }
     },
-    [settings.bagWeightKg, settings.estateName, settings.alertThresholds, tenantHeaders, user?.tenantId],
+    [settings.bagWeightKg, settings.estateName, settings.alertThresholds, user?.tenantId],
   )
 
   return {

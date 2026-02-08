@@ -2,7 +2,7 @@ import { NextResponse } from "next/server"
 import type { NextRequest } from "next/server"
 import { getToken } from "next-auth/jwt"
 
-export async function middleware(request: NextRequest) {
+export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl
 
   if (pathname.startsWith("/api/auth")) {
@@ -24,17 +24,7 @@ export async function middleware(request: NextRequest) {
     return NextResponse.redirect(url)
   }
 
-  const headers = new Headers(request.headers)
-  if (token.tenantId) {
-    headers.set("x-tenant-id", String(token.tenantId))
-  }
-  if (token.role) {
-    headers.set("x-user-role", String(token.role))
-  }
-
-  return NextResponse.next({
-    request: { headers },
-  })
+  return NextResponse.next()
 }
 
 export const config = {

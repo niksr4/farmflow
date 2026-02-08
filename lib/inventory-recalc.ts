@@ -1,20 +1,25 @@
+import "server-only"
+
 import type { NeonQueryFunction } from "@neondatabase/serverless"
-import { runTenantQuery } from "@/lib/tenant-db"
+import { runTenantQuery } from "@/lib/server/tenant-db"
 
 type TenantContext = {
   tenantId: string
   role: string
 }
 
+type LocationScope = string | null
+
 const isRestockType = (value: string) => {
   const normalized = value.toLowerCase()
   return normalized === "restock" || normalized === "restocking"
 }
 
-export async function recalculateInventoryForItem(
+async function recalculateInventoryForLocation(
   sql: NeonQueryFunction<boolean, boolean>,
   tenantContext: TenantContext,
   itemType: string,
+  locationId: LocationScope,
 ) {
   const transactions = await runTenantQuery(
     sql,
@@ -24,6 +29,7 @@ export async function recalculateInventoryForItem(
       FROM transaction_history
       WHERE item_type = ${itemType}
         AND tenant_id = ${tenantContext.tenantId}
+        AND location_id IS NOT DISTINCT FROM ${locationId}
       ORDER BY transaction_date ASC, id ASC
     `,
   )
@@ -57,25 +63,43 @@ export async function recalculateInventoryForItem(
       FROM current_inventory
       WHERE item_type = ${itemType}
         AND tenant_id = ${tenantContext.tenantId}
+        AND location_id IS NOT DISTINCT FROM ${locationId}
       LIMIT 1
     `,
   )
   const unit = unitRow?.[0]?.unit ? String(unitRow[0].unit) : "kg"
 
-  await runTenantQuery(
-    sql,
-    tenantContext,
-    sql`
-      INSERT INTO current_inventory (item_type, quantity, unit, avg_price, total_cost, tenant_id)
-      VALUES (${itemType}, ${runningQty}, ${unit}, ${avgPrice}, ${runningCost}, ${tenantContext.tenantId})
-      ON CONFLICT (item_type, tenant_id)
-      DO UPDATE SET
-        quantity = ${runningQty},
-        unit = ${unit},
-        avg_price = ${avgPrice},
-        total_cost = ${runningCost}
-    `,
-  )
+  if (locationId) {
+    await runTenantQuery(
+      sql,
+      tenantContext,
+      sql`
+        INSERT INTO current_inventory (item_type, quantity, unit, avg_price, total_cost, tenant_id, location_id)
+        VALUES (${itemType}, ${runningQty}, ${unit}, ${avgPrice}, ${runningCost}, ${tenantContext.tenantId}, ${locationId})
+        ON CONFLICT (item_type, tenant_id, location_id)
+        DO UPDATE SET
+          quantity = ${runningQty},
+          unit = ${unit},
+          avg_price = ${avgPrice},
+          total_cost = ${runningCost}
+      `,
+    )
+  } else {
+    await runTenantQuery(
+      sql,
+      tenantContext,
+      sql`
+        INSERT INTO current_inventory (item_type, quantity, unit, avg_price, total_cost, tenant_id, location_id)
+        VALUES (${itemType}, ${runningQty}, ${unit}, ${avgPrice}, ${runningCost}, ${tenantContext.tenantId}, NULL)
+        ON CONFLICT (item_type, tenant_id) WHERE location_id IS NULL
+        DO UPDATE SET
+          quantity = ${runningQty},
+          unit = ${unit},
+          avg_price = ${avgPrice},
+          total_cost = ${runningCost}
+      `,
+    )
+  }
 
   return {
     quantity: runningQty,
@@ -83,4 +107,35 @@ export async function recalculateInventoryForItem(
     avg_price: avgPrice,
     unit,
   }
+}
+
+export async function recalculateInventoryForItem(
+  sql: NeonQueryFunction<boolean, boolean>,
+  tenantContext: TenantContext,
+  itemType: string,
+  locationId?: LocationScope,
+) {
+  if (locationId === undefined) {
+    const locations = await runTenantQuery(
+      sql,
+      tenantContext,
+      sql`
+        SELECT DISTINCT location_id
+        FROM transaction_history
+        WHERE item_type = ${itemType}
+          AND tenant_id = ${tenantContext.tenantId}
+      `,
+    )
+    if (!locations || locations.length === 0) {
+      return recalculateInventoryForLocation(sql, tenantContext, itemType, null)
+    }
+    const results = []
+    for (const row of locations) {
+      const loc = row.location_id ? String(row.location_id) : null
+      results.push(await recalculateInventoryForLocation(sql, tenantContext, itemType, loc))
+    }
+    return results
+  }
+
+  return recalculateInventoryForLocation(sql, tenantContext, itemType, locationId ?? null)
 }

@@ -78,7 +78,7 @@ export default function LoginPage() {
         <div className="w-full max-w-md">
           <div className="bg-white/85 dark:bg-slate-900/75 rounded-2xl border border-white/50 dark:border-white/10 shadow-2xl backdrop-blur-md p-6 sm:p-8">
             <div className="text-center mb-6">
-              <h1 className="text-2xl font-bold text-green-700">Farm Flow</h1>
+              <h1 className="text-2xl font-bold text-green-700">FarmFlow</h1>
               <p className="text-gray-600 mt-2">Sign in to access your estate operations workspace</p>
             </div>
 

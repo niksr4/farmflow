@@ -1,6 +1,7 @@
 import { TrendingUp, Package, Scale, Activity } from "lucide-react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import type { InventoryItem, Transaction } from "@/lib/inventory-types"
+import { formatCurrency, formatNumber } from "@/lib/format"
 
 interface InventoryValueSummaryProps {
   inventory: InventoryItem[]
@@ -74,7 +75,7 @@ export default function InventoryValueSummary({ inventory, transactions, summary
     return acc
   }, {})
   const totalsByUnitLabel = Object.entries(totalsByUnit)
-    .map(([unit, qty]) => `${qty.toFixed(1)} ${unit}`)
+    .map(([unit, qty]) => `${formatNumber(qty, 1)} ${unit}`)
     .join(" · ")
 
   return (
@@ -85,7 +86,7 @@ export default function InventoryValueSummary({ inventory, transactions, summary
           <TrendingUp className="h-4 w-4 text-muted-foreground" />
         </CardHeader>
         <CardContent>
-          <div className="text-2xl font-bold">₹{summary.total_inventory_value.toFixed(2)}</div>
+          <div className="text-2xl font-bold">{formatCurrency(summary.total_inventory_value)}</div>
           <p className="text-xs text-muted-foreground">Based on weighted average cost</p>
         </CardContent>
       </Card>

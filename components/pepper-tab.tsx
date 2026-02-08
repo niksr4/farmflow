@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useCallback, useEffect, useState } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -15,9 +15,8 @@ import { CalendarIcon, Download, Loader2, Save, Leaf } from "lucide-react"
 import { format } from "date-fns"
 import { cn } from "@/lib/utils"
 import { getCurrentFiscalYear, getAvailableFiscalYears, type FiscalYear } from "@/lib/fiscal-year-utils"
-import { useAuth } from "@/hooks/use-auth"
-import { buildTenantHeaders } from "@/lib/tenant"
 import { formatDateOnly } from "@/lib/date-utils"
+import { formatNumber } from "@/lib/format"
 
 interface LocationOption {
   id: string
@@ -37,16 +36,21 @@ interface PepperRecord {
   recorded_by: string
   created_at: string
   updated_at: string
+  location_id?: string | null
+  location_name?: string | null
+  location_code?: string | null
 }
 
+const LOCATION_ALL = "all"
+const LOCATION_UNASSIGNED = "unassigned"
+const UNASSIGNED_LABEL = "Unassigned (legacy)"
+
 export function PepperTab() {
-  const { user } = useAuth()
-  const tenantHeaders = buildTenantHeaders(user?.tenantId)
   const [selectedFiscalYear, setSelectedFiscalYear] = useState<FiscalYear>(getCurrentFiscalYear())
   const availableFiscalYears = getAvailableFiscalYears()
 
   const [locations, setLocations] = useState<LocationOption[]>([])
-  const [selectedLocationId, setSelectedLocationId] = useState("")
+  const [selectedLocationId, setSelectedLocationId] = useState(LOCATION_ALL)
   const [selectedDate, setSelectedDate] = useState<Date>(new Date())
   const [kgPicked, setKgPicked] = useState("")
   const [greenPepper, setGreenPepper] = useState("")
@@ -57,21 +61,20 @@ export function PepperTab() {
   const [saving, setSaving] = useState(false)
   const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null)
   const selectedLocation = locations.find((loc) => loc.id === selectedLocationId) || null
+  const showLocationColumn = selectedLocationId === LOCATION_ALL || selectedLocationId === LOCATION_UNASSIGNED
 
-  const loadLocations = async () => {
+  const loadLocations = useCallback(async () => {
     try {
-      const response = await fetch("/api/locations", { headers: tenantHeaders })
+      const response = await fetch("/api/locations")
       const data = await response.json()
       if (data.success) {
         setLocations(data.locations || [])
-        if (!selectedLocationId && data.locations?.length) {
-          setSelectedLocationId(data.locations[0].id)
-        }
+        setSelectedLocationId((prev) => prev || LOCATION_ALL)
       }
     } catch (error) {
       console.error("Error fetching locations:", error)
     }
-  }
+  }, [])
 
   // Calculate percentages
   const greenPepperPercent =
@@ -82,13 +85,16 @@ export function PepperTab() {
       : "0.00"
 
   // Fetch recent records
-  const fetchRecentRecords = async () => {
+  const fetchRecentRecords = useCallback(async () => {
     if (!selectedLocationId) return
     setLoading(true)
     try {
+      const locationParam =
+        selectedLocationId === LOCATION_ALL
+          ? ""
+          : `&locationId=${encodeURIComponent(selectedLocationId)}`
       const response = await fetch(
-        `/api/pepper-records?locationId=${selectedLocationId}&fiscalYearStart=${selectedFiscalYear.startDate}&fiscalYearEnd=${selectedFiscalYear.endDate}`,
-        { headers: tenantHeaders },
+        `/api/pepper-records?fiscalYearStart=${selectedFiscalYear.startDate}&fiscalYearEnd=${selectedFiscalYear.endDate}${locationParam}`,
       )
       const data = await response.json()
 
@@ -100,16 +106,22 @@ export function PepperTab() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [selectedFiscalYear.endDate, selectedFiscalYear.startDate, selectedLocationId])
 
   // Fetch record for selected date
-  const fetchRecordForDate = async (date: Date) => {
+  const fetchRecordForDate = useCallback(async (date: Date) => {
     if (!selectedLocationId) return
+    if (selectedLocationId === LOCATION_ALL || selectedLocationId === LOCATION_UNASSIGNED) {
+      setKgPicked("")
+      setGreenPepper("")
+      setDryPepper("")
+      setNotes("")
+      return
+    }
     try {
       const dateStr = format(date, "yyyy-MM-dd")
       const response = await fetch(
         `/api/pepper-records?locationId=${selectedLocationId}&date=${dateStr}`,
-        { headers: tenantHeaders },
       )
       const data = await response.json()
 
@@ -129,29 +141,25 @@ export function PepperTab() {
     } catch (error) {
       console.error("Error fetching record:", error)
     }
-  }
+  }, [selectedLocationId])
 
   // Load recent records when location changes
   useEffect(() => {
     loadLocations()
-  }, [])
+  }, [loadLocations])
 
   useEffect(() => {
     fetchRecentRecords()
-  }, [selectedLocationId])
+  }, [fetchRecentRecords])
 
   // Load record when date changes
   useEffect(() => {
     fetchRecordForDate(selectedDate)
-  }, [selectedDate, selectedLocationId])
-
-  useEffect(() => {
-    fetchRecentRecords()
-  }, [selectedFiscalYear])
+  }, [selectedDate, fetchRecordForDate])
 
   const handleSave = async () => {
-    if (!selectedLocationId) {
-      setMessage({ type: "error", text: "Estate location not set yet" })
+    if (!selectedLocationId || selectedLocationId === LOCATION_ALL || selectedLocationId === LOCATION_UNASSIGNED) {
+      setMessage({ type: "error", text: "Select a specific location to save a record" })
       return
     }
     if (!kgPicked || !greenPepper || !dryPepper) {
@@ -165,7 +173,7 @@ export function PepperTab() {
     try {
       const response = await fetch("/api/pepper-records", {
         method: "POST",
-        headers: { "Content-Type": "application/json", ...tenantHeaders },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           locationId: selectedLocationId,
           process_date: format(selectedDate, "yyyy-MM-dd"),
@@ -197,16 +205,26 @@ export function PepperTab() {
   const handleExportCSV = () => {
     if (recentRecords.length === 0) return
 
-    const headers = ["Date", "KG Picked", "Green Pepper", "Green %", "Dry Pepper", "Dry %", "Notes"]
-    const rows = recentRecords.map((record) => [
-      format(new Date(record.process_date), "yyyy-MM-dd"),
-      record.kg_picked,
-      record.green_pepper,
-      record.green_pepper_percent,
-      record.dry_pepper,
-      record.dry_pepper_percent,
-      record.notes || "",
-    ])
+    const headers = showLocationColumn
+      ? ["Location", "Date", "KG Picked", "Green Pepper", "Green %", "Dry Pepper", "Dry %", "Notes"]
+      : ["Date", "KG Picked", "Green Pepper", "Green %", "Dry Pepper", "Dry %", "Notes"]
+    const rows = recentRecords.map((record) => {
+      const row = [
+        format(new Date(record.process_date), "yyyy-MM-dd"),
+        record.kg_picked,
+        record.green_pepper,
+        record.green_pepper_percent,
+        record.dry_pepper,
+        record.dry_pepper_percent,
+        record.notes || "",
+      ]
+      if (showLocationColumn) {
+        const locationLabel =
+          record.location_name || record.location_code || (record.location_id ? "Unknown" : UNASSIGNED_LABEL)
+        return [locationLabel, ...row]
+      }
+      return row
+    })
 
     const csvContent = [headers, ...rows].map((row) => row.map((cell) => `"${cell}"`).join(",")).join("\n")
 
@@ -223,6 +241,9 @@ export function PepperTab() {
   }
 
   const loadRecord = (record: PepperRecord) => {
+    if (record.location_id && (selectedLocationId === LOCATION_ALL || selectedLocationId === LOCATION_UNASSIGNED)) {
+      setSelectedLocationId(record.location_id)
+    }
     setSelectedDate(new Date(record.process_date))
     setKgPicked(record.kg_picked.toString())
     setGreenPepper(record.green_pepper.toString())
@@ -309,6 +330,8 @@ export function PepperTab() {
                   <SelectValue placeholder={locations.length ? "Select location" : "No locations"} />
                 </SelectTrigger>
                 <SelectContent>
+                  <SelectItem value={LOCATION_ALL}>All locations</SelectItem>
+                  <SelectItem value={LOCATION_UNASSIGNED}>{UNASSIGNED_LABEL}</SelectItem>
                   {locations.map((loc) => (
                     <SelectItem key={loc.id} value={loc.id}>
                       {loc.name || loc.code}
@@ -321,6 +344,12 @@ export function PepperTab() {
               )}
             </div>
           </div>
+
+          {(selectedLocationId === LOCATION_ALL || selectedLocationId === LOCATION_UNASSIGNED) && (
+            <Alert>
+              <AlertDescription>Select a specific location to add or edit a record.</AlertDescription>
+            </Alert>
+          )}
 
           {/* Input Fields */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -429,29 +458,37 @@ export function PepperTab() {
             <div className="rounded-md border overflow-x-auto">
               <Table>
                 <TableHeader>
-                  <TableRow>
-                    <TableHead>Date</TableHead>
-                    <TableHead className="text-right">KG Picked</TableHead>
-                    <TableHead className="text-right">Green Pepper</TableHead>
-                    <TableHead className="text-right">Green %</TableHead>
-                    <TableHead className="text-right">Dry Pepper</TableHead>
-                    <TableHead className="text-right">Dry %</TableHead>
-                    <TableHead>Notes</TableHead>
+                  <TableRow className="bg-muted/50">
+                    {showLocationColumn && <TableHead className="sticky top-0 bg-muted/60">Location</TableHead>}
+                    <TableHead className="sticky top-0 bg-muted/60">Date</TableHead>
+                    <TableHead className="text-right sticky top-0 bg-muted/60">KG Picked</TableHead>
+                    <TableHead className="text-right sticky top-0 bg-muted/60">Green Pepper</TableHead>
+                    <TableHead className="text-right sticky top-0 bg-muted/60">Green %</TableHead>
+                    <TableHead className="text-right sticky top-0 bg-muted/60">Dry Pepper</TableHead>
+                    <TableHead className="text-right sticky top-0 bg-muted/60">Dry %</TableHead>
+                    <TableHead className="sticky top-0 bg-muted/60">Notes</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {recentRecords.map((record) => (
+                  {recentRecords.map((record, index) => (
                     <TableRow
                       key={record.id}
-                      className="cursor-pointer hover:bg-muted/50"
+                      className={`cursor-pointer hover:bg-muted/50 ${index % 2 === 0 ? "bg-white" : "bg-muted/20"}`}
                       onClick={() => loadRecord(record)}
                     >
+                      {showLocationColumn && (
+                        <TableCell>
+                          {record.location_name ||
+                            record.location_code ||
+                            (record.location_id ? "Unknown" : UNASSIGNED_LABEL)}
+                        </TableCell>
+                      )}
                       <TableCell>{formatDateOnly(record.process_date)}</TableCell>
-                      <TableCell className="text-right">{record.kg_picked.toFixed(2)}</TableCell>
-                      <TableCell className="text-right">{record.green_pepper.toFixed(2)}</TableCell>
-                      <TableCell className="text-right">{record.green_pepper_percent.toFixed(2)}%</TableCell>
-                      <TableCell className="text-right">{record.dry_pepper.toFixed(2)}</TableCell>
-                      <TableCell className="text-right">{record.dry_pepper_percent.toFixed(2)}%</TableCell>
+                      <TableCell className="text-right">{formatNumber(record.kg_picked)}</TableCell>
+                      <TableCell className="text-right">{formatNumber(record.green_pepper)}</TableCell>
+                      <TableCell className="text-right">{formatNumber(record.green_pepper_percent)}%</TableCell>
+                      <TableCell className="text-right">{formatNumber(record.dry_pepper)}</TableCell>
+                      <TableCell className="text-right">{formatNumber(record.dry_pepper_percent)}%</TableCell>
                       <TableCell className="max-w-xs truncate">{record.notes || "-"}</TableCell>
                     </TableRow>
                   ))}

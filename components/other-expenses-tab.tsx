@@ -2,7 +2,7 @@
 
 import type React from "react"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useCallback } from "react"
 import { useConsumablesData } from "@/hooks/use-consumables-data"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -13,8 +13,8 @@ import { PlusCircle, Trash2, Edit2, Save, X, ChevronDown, ChevronUp } from "luci
 import { Textarea } from "@/components/ui/textarea"
 import { Badge } from "@/components/ui/badge"
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
-import { useAuth } from "@/hooks/use-auth"
-import { buildTenantHeaders } from "@/lib/tenant"
+import { formatDateOnly } from "@/lib/date-utils"
+import { formatCurrency } from "@/lib/format"
 
 interface ActivityCode {
   code: string
@@ -22,8 +22,6 @@ interface ActivityCode {
 }
 
 export default function OtherExpensesTab({ locationId }: { locationId?: string }) {
-  const { user } = useAuth()
-  const tenantHeaders = buildTenantHeaders(user?.tenantId)
   const {
     deployments,
     loading,
@@ -51,15 +49,10 @@ export default function OtherExpensesTab({ locationId }: { locationId?: string }
     notes: "",
   })
 
-  useEffect(() => {
-    fetchActivities()
-  }, [locationId])
-
-  const fetchActivities = async () => {
+  const fetchActivities = useCallback(async () => {
     try {
       const response = await fetch(
         locationId ? `/api/get-activity?locationId=${locationId}` : "/api/get-activity",
-        { headers: tenantHeaders },
       )
       const data = await response.json()
       if (data.success && data.activities) {
@@ -69,7 +62,11 @@ export default function OtherExpensesTab({ locationId }: { locationId?: string }
     } catch (error) {
       console.error("Error fetching activities:", error)
     }
-  }
+  }, [locationId])
+
+  useEffect(() => {
+    fetchActivities()
+  }, [fetchActivities])
 
   // Autofill reference when code changes
   const handleCodeChange = (code: string) => {
@@ -143,14 +140,6 @@ export default function OtherExpensesTab({ locationId }: { locationId?: string }
     })
   }
 
-  const formatDate = (dateString: string) => {
-    const date = new Date(dateString)
-    const day = date.getDate().toString().padStart(2, "0")
-    const month = (date.getMonth() + 1).toString().padStart(2, "0")
-    const year = date.getFullYear()
-    return `${day}/${month}/${year}`
-  }
-
   const computedTotalAmount = deployments.reduce((sum, d) => sum + d.amount, 0)
   const totalExpenses = totalAmount || computedTotalAmount
   const resolvedTotalCount = totalCount || deployments.length
@@ -166,9 +155,7 @@ export default function OtherExpensesTab({ locationId }: { locationId?: string }
             </div>
             <div className="text-left sm:text-right">
               <p className="text-sm font-medium text-muted-foreground">Total Expenses</p>
-              <p className="text-xl sm:text-2xl font-bold">
-                ₹{totalExpenses.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-              </p>
+              <p className="text-xl sm:text-2xl font-bold">{formatCurrency(totalExpenses)}</p>
               {resolvedTotalCount > deployments.length && (
                 <p className="text-xs text-muted-foreground mt-1">
                   Showing {deployments.length} of {resolvedTotalCount}
@@ -305,17 +292,13 @@ export default function OtherExpensesTab({ locationId }: { locationId?: string }
                               <Badge variant="outline" className="font-mono text-xs">
                                 {deployment.code}
                               </Badge>
-                              <span className="text-xs text-muted-foreground">{formatDate(deployment.date)}</span>
+                              <span className="text-xs text-muted-foreground">{formatDateOnly(deployment.date)}</span>
                             </div>
                             <p className="font-medium text-sm line-clamp-1">
                               {deployment.reference || deployment.code}
                             </p>
                             <p className="text-lg font-bold text-green-700 mt-1">
-                              ₹
-                              {deployment.amount.toLocaleString("en-IN", {
-                                minimumFractionDigits: 2,
-                                maximumFractionDigits: 2,
-                              })}
+                              {formatCurrency(deployment.amount)}
                             </p>
                           </div>
                           {isExpanded ? (
@@ -360,28 +343,22 @@ export default function OtherExpensesTab({ locationId }: { locationId?: string }
             <div className="hidden sm:block overflow-x-auto">
               <Table>
                 <TableHeader>
-                  <TableRow>
-                    <TableHead>Date</TableHead>
-                    <TableHead>Code</TableHead>
-                    <TableHead>Reference</TableHead>
-                    <TableHead className="text-right">Amount</TableHead>
-                    <TableHead>Notes</TableHead>
-                    <TableHead className="w-[100px]">Actions</TableHead>
+                  <TableRow className="bg-muted/50">
+                    <TableHead className="sticky top-0 bg-muted/60">Date</TableHead>
+                    <TableHead className="sticky top-0 bg-muted/60">Code</TableHead>
+                    <TableHead className="sticky top-0 bg-muted/60">Reference</TableHead>
+                    <TableHead className="text-right sticky top-0 bg-muted/60">Amount</TableHead>
+                    <TableHead className="sticky top-0 bg-muted/60">Notes</TableHead>
+                    <TableHead className="w-[100px] sticky top-0 bg-muted/60">Actions</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {deployments.map((deployment) => (
-                    <TableRow key={deployment.id}>
-                      <TableCell>{formatDate(deployment.date)}</TableCell>
+                  {deployments.map((deployment, index) => (
+                    <TableRow key={deployment.id} className={index % 2 === 0 ? "bg-white" : "bg-muted/20"}>
+                      <TableCell>{formatDateOnly(deployment.date)}</TableCell>
                       <TableCell className="font-medium">{deployment.code}</TableCell>
                       <TableCell>{deployment.reference || deployment.code}</TableCell>
-                      <TableCell className="text-right font-semibold">
-                        ₹
-                        {deployment.amount.toLocaleString("en-IN", {
-                          minimumFractionDigits: 2,
-                          maximumFractionDigits: 2,
-                        })}
-                      </TableCell>
+                      <TableCell className="text-right font-semibold">{formatCurrency(deployment.amount)}</TableCell>
                       <TableCell className="max-w-xs truncate">{deployment.notes || "-"}</TableCell>
                       <TableCell>
                         <div className="flex gap-2">
@@ -418,7 +395,7 @@ export default function OtherExpensesTab({ locationId }: { locationId?: string }
       ) : (
         <Card>
           <CardContent className="text-center py-8 text-muted-foreground">
-            No expenses recorded yet. Click "Add Expense" to get started.
+            No expenses recorded yet. Click &quot;Add Expense&quot; to get started.
           </CardContent>
         </Card>
       )}

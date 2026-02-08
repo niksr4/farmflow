@@ -1,7 +1,7 @@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { requireSessionUser } from "@/lib/auth-server"
-import { sql } from "@/lib/neon"
+import { requireSessionUser } from "@/lib/server/auth"
+import { sql } from "@/lib/server/db"
 import { redirect } from "next/navigation"
 
 type TableRow = {

@@ -1,9 +1,9 @@
+import "server-only"
+
 import { getServerSession } from "next-auth/next"
-import { headers } from "next/headers"
 import { authOptions } from "@/lib/auth"
-import { sql } from "@/lib/neon"
-import { ROLE_HEADER, TENANT_HEADER } from "@/lib/tenant"
-import { normalizeTenantContext, runTenantQuery } from "@/lib/tenant-db"
+import { sql } from "@/lib/server/db"
+import { normalizeTenantContext, runTenantQuery } from "@/lib/server/tenant-db"
 
 export type SessionUser = {
   username: string
@@ -44,17 +44,5 @@ export async function requireSessionUser(): Promise<SessionUser> {
     }
   }
 
-  const requestHeaders = headers()
-  const headerTenantId = requestHeaders.get(TENANT_HEADER)
-  const headerRole = requestHeaders.get(ROLE_HEADER)
-
-  if (!headerTenantId) {
-    throw new Error("Unauthorized")
-  }
-
-  return {
-    username: String(user?.name || ""),
-    role: (headerRole as SessionUser["role"]) || "admin",
-    tenantId: headerTenantId,
-  }
+  throw new Error("Unauthorized")
 }

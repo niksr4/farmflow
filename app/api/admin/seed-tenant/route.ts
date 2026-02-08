@@ -1,8 +1,9 @@
 import { NextResponse } from "next/server"
-import { sql } from "@/lib/neon"
+import { sql } from "@/lib/server/db"
 import { requireOwnerRole } from "@/lib/tenant"
-import { requireSessionUser } from "@/lib/auth-server"
-import { normalizeTenantContext, runTenantQuery } from "@/lib/tenant-db"
+import { requireSessionUser } from "@/lib/server/auth"
+import { normalizeTenantContext, runTenantQuery } from "@/lib/server/tenant-db"
+import { logAuditEvent } from "@/lib/server/audit-log"
 
 const accountActivities = [
   { code: "ADMIN", activity: "Administrative Expenses" },
@@ -369,6 +370,17 @@ export async function POST(request: Request) {
           (${daysAgo(0)}::date, 'BL-108', ${mvId || defaultLocationId}, 'MV', 'Robusta', 'Dry Cherry', 2750, 70, 192500, 55, 2750, 30, 5600, 168000, 'HDFC-Primary', 'Advance received', ${tenantId})
       `,
     )
+
+    await logAuditEvent(sql, sessionUser, {
+      action: "upsert",
+      entityType: "tenant_seed",
+      entityId: tenantId,
+      after: {
+        locations: seedLocations.length,
+        activities: accountActivities.length,
+        transactions: transactions.length,
+      },
+    })
 
     return NextResponse.json({ success: true })
   } catch (error: any) {

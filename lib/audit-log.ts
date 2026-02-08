@@ -1,6 +1,8 @@
+import "server-only"
+
 import type { NeonQueryFunction } from "@neondatabase/serverless"
-import { normalizeTenantContext, runTenantQuery } from "@/lib/tenant-db"
-import type { SessionUser } from "@/lib/auth-server"
+import { normalizeTenantContext, runTenantQuery } from "@/lib/server/tenant-db"
+import type { SessionUser } from "@/lib/server/auth"
 
 type AuditAction = "create" | "update" | "delete" | "upsert"
 

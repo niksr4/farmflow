@@ -16,14 +16,15 @@ export function formatDateForDisplay(dateInput?: DateInput): string {
     if (!date) return typeof dateInput === "string" ? dateInput : "N/A"
 
     const day = date.getDate().toString().padStart(2, "0")
-    const month = (date.getMonth() + 1).toString().padStart(2, "0")
+    const monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
+    const month = monthNames[date.getMonth()] || ""
     const year = date.getFullYear()
     const hours = date.getHours()
     const minutes = date.getMinutes().toString().padStart(2, "0")
     const ampm = hours >= 12 ? "PM" : "AM"
     const displayHours = hours % 12 || 12
 
-    return `${day}/${month}/${year}, ${displayHours}:${minutes} ${ampm}`
+    return `${day}-${month}-${year}, ${displayHours}:${minutes} ${ampm}`
   } catch (error) {
     return typeof dateInput === "string" ? dateInput : "N/A"
   }
@@ -36,10 +37,11 @@ export function formatDateOnly(dateInput?: DateInput): string {
     if (!date) return typeof dateInput === "string" ? dateInput : "N/A"
 
     const day = date.getDate().toString().padStart(2, "0")
-    const month = (date.getMonth() + 1).toString().padStart(2, "0")
+    const monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
+    const month = monthNames[date.getMonth()] || ""
     const year = date.getFullYear()
 
-    return `${day}/${month}/${year}`
+    return `${day}-${month}-${year}`
   } catch (error) {
     return typeof dateInput === "string" ? dateInput : "N/A"
   }

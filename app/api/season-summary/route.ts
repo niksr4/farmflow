@@ -1,7 +1,8 @@
 import { NextResponse, type NextRequest } from "next/server"
-import { sql } from "@/lib/neon"
-import { requireModuleAccess, isModuleAccessError } from "@/lib/module-access"
-import { normalizeTenantContext, runTenantQueries } from "@/lib/tenant-db"
+import { sql } from "@/lib/server/db"
+import { requireModuleAccess, isModuleAccessError } from "@/lib/server/module-access"
+import { normalizeTenantContext, runTenantQueries } from "@/lib/server/tenant-db"
+import { computeProcessingKpis, safeDivide } from "@/lib/kpi"
 
 const DEFAULT_BAG_WEIGHT_KG = 50
 const LOSS_ALERT_THRESHOLD = 0.03
@@ -9,6 +10,17 @@ const COST_SPIKE_MULTIPLIER = 1.5
 
 const normalizeBagType = (value: string | null | undefined) =>
   String(value || "").toLowerCase().includes("cherry") ? "Dry Cherry" : "Dry Parchment"
+
+const resolveSalesKgs = (row: any, bagWeightKg: number) => {
+  const direct =
+    Number(row.kgs) ||
+    Number(row.weight_kgs) ||
+    Number(row.kgs_sent) ||
+    Number(row.kgs_received)
+  if (direct > 0) return direct
+  const bags = Number(row.bags_sold) || 0
+  return bags * bagWeightKg
+}
 
 export async function GET(request: NextRequest) {
   try {
@@ -101,6 +113,10 @@ export async function GET(request: NextRequest) {
           coffee_type,
           bag_type,
           COALESCE(SUM(bags_sold), 0) AS bags_sold,
+          COALESCE(SUM(kgs), 0) AS kgs,
+          COALESCE(SUM(weight_kgs), 0) AS weight_kgs,
+          COALESCE(SUM(kgs_sent), 0) AS kgs_sent,
+          COALESCE(SUM(kgs_received), 0) AS kgs_received,
           COALESCE(SUM(revenue), 0) AS revenue
         FROM sales_records
         WHERE tenant_id = $1
@@ -217,6 +233,10 @@ export async function GET(request: NextRequest) {
           coffee_type,
           bag_type,
           COALESCE(SUM(bags_sold), 0) AS bags_sold,
+          COALESCE(SUM(kgs), 0) AS kgs,
+          COALESCE(SUM(weight_kgs), 0) AS weight_kgs,
+          COALESCE(SUM(kgs_sent), 0) AS kgs_sent,
+          COALESCE(SUM(kgs_received), 0) AS kgs_received,
           COALESCE(SUM(revenue), 0) AS revenue
         FROM sales_records
         WHERE tenant_id = $1
@@ -270,6 +290,10 @@ export async function GET(request: NextRequest) {
           COALESCE(l.name, l.code, sr.estate, 'Unknown') AS location_name,
           COALESCE(l.code, '') AS location_code,
           COALESCE(SUM(sr.bags_sold), 0) AS bags_sold,
+          COALESCE(SUM(sr.kgs), 0) AS kgs,
+          COALESCE(SUM(sr.weight_kgs), 0) AS weight_kgs,
+          COALESCE(SUM(sr.kgs_sent), 0) AS kgs_sent,
+          COALESCE(SUM(sr.kgs_received), 0) AS kgs_received,
           COALESCE(SUM(sr.revenue), 0) AS revenue
         FROM sales_records sr
         LEFT JOIN locations l ON l.id = sr.location_id
@@ -315,8 +339,6 @@ export async function GET(request: NextRequest) {
     let totalDryParchKgs = 0
     let totalDryCherryKgs = 0
     let totalDryKgs = 0
-    const safeDivide = (numerator: number, denominator: number) => (denominator > 0 ? numerator / denominator : 0)
-
     processingRows?.forEach((row: any) => {
       const coffeeType = String(row.coffee_type || "Unknown")
       const dryParchmentKg = Number(row.dry_parchment) || 0
@@ -363,7 +385,7 @@ export async function GET(request: NextRequest) {
     const salesByType = new Map<string, { soldKgs: number; revenue: number }>()
     ;(salesRows || []).forEach((row: any) => {
       const coffeeType = String(row.coffee_type || "Unknown")
-      const soldKgs = (Number(row.bags_sold) || 0) * bagWeightKg
+      const soldKgs = resolveSalesKgs(row, bagWeightKg)
       const revenue = Number(row.revenue) || 0
       const current = salesByType.get(coffeeType) || { soldKgs: 0, revenue: 0 }
       current.soldKgs += soldKgs
@@ -398,9 +420,10 @@ export async function GET(request: NextRequest) {
       const bagType = normalizeBagType(row.bag_type)
       const soldBags = Number(row.bags_sold) || 0
       const revenue = Number(row.revenue) || 0
+      const soldKgs = resolveSalesKgs(row, bagWeightKg)
       const record = ensureBreakdown(coffeeType, bagType)
       record.soldBags += soldBags
-      record.soldKgs += soldBags * bagWeightKg
+      record.soldKgs += soldKgs
       record.revenue += revenue
     })
 
@@ -510,8 +533,9 @@ export async function GET(request: NextRequest) {
       const bagType = normalizeBagType(row.bag_type)
       const soldBags = Number(row.bags_sold) || 0
       const revenue = Number(row.revenue) || 0
+      const soldKgs = resolveSalesKgs(row, bagWeightKg)
       const record = ensureLot(lotId, coffeeType, bagType)
-      record.soldKgs += soldBags * bagWeightKg
+      record.soldKgs += soldKgs
       record.revenue += revenue
     })
 
@@ -640,7 +664,7 @@ export async function GET(request: NextRequest) {
     const salesByLocationMap = new Map<string, { soldKgs: number }>()
     ;(salesLocationRows || []).forEach((row: any) => {
       const estate = row.location_name || row.location_code || "Unknown"
-      const soldKgs = (Number(row.bags_sold) || 0) * bagWeightKg
+      const soldKgs = resolveSalesKgs(row, bagWeightKg)
       salesByLocationMap.set(estate, { soldKgs })
     })
 
@@ -659,27 +683,15 @@ export async function GET(request: NextRequest) {
       .sort((a, b) => Math.abs(b.deltaKgs) - Math.abs(a.deltaKgs))
       .slice(0, 5)
 
-    const processingKpis = {
-      totals: {
-        cropKgs: totalCropKgs,
-        ripeKgs: totalRipeKgs,
-        greenKgs: totalGreenKgs,
-        floatKgs: totalFloatKgs,
-        wetParchKgs: totalWetKgs,
-        dryParchKgs: totalDryParchKgs,
-        dryCherryKgs: totalDryCherryKgs,
-      },
-      ripePickRate: safeDivide(totalRipeKgs, totalCropKgs),
-      floatRateOfGreen: safeDivide(totalFloatKgs, totalGreenKgs),
-      floatRateOfGreenPlusFloat: safeDivide(totalFloatKgs, totalGreenKgs + totalFloatKgs),
-      wetParchmentYieldFromRipe: safeDivide(totalWetKgs, totalRipeKgs),
-      dryParchmentYieldFromWP: safeDivide(totalDryParchKgs, totalWetKgs),
-      dryParchmentYieldFromRipe: safeDivide(totalDryParchKgs, totalRipeKgs),
-      dryParchmentYieldFromCrop: safeDivide(totalDryParchKgs, totalCropKgs),
-      dryCherryYieldFromRipe: safeDivide(totalDryCherryKgs, totalRipeKgs),
-      washedShare: safeDivide(totalDryParchKgs, totalDryKgs),
-      naturalShare: safeDivide(totalDryCherryKgs, totalDryKgs),
-    }
+    const processingKpis = computeProcessingKpis({
+      cropKgs: totalCropKgs,
+      ripeKgs: totalRipeKgs,
+      greenKgs: totalGreenKgs,
+      floatKgs: totalFloatKgs,
+      wetParchKgs: totalWetKgs,
+      dryParchKgs: totalDryParchKgs,
+      dryCherryKgs: totalDryCherryKgs,
+    })
 
     const alerts: Array<{ id: string; severity: "low" | "medium" | "high"; title: string; description: string }> = []
 

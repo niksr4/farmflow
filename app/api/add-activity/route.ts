@@ -1,13 +1,17 @@
 import { NextResponse } from "next/server"
-import { accountsSql } from "@/lib/neon-connections"
-import { requireModuleAccess, isModuleAccessError } from "@/lib/module-access"
-import { normalizeTenantContext, runTenantQuery } from "@/lib/tenant-db"
+import { accountsSql } from "@/lib/server/db"
+import { requireModuleAccess, isModuleAccessError } from "@/lib/server/module-access"
+import { normalizeTenantContext, runTenantQuery } from "@/lib/server/tenant-db"
+import { requireAdminRole } from "@/lib/permissions"
+import { logAuditEvent } from "@/lib/server/audit-log"
 
 export async function POST(request: Request) {
   try {
     const sessionUser = await requireModuleAccess("accounts")
-    if (!["admin", "owner"].includes(sessionUser.role)) {
-      return NextResponse.json({ success: false, error: "Forbidden" }, { status: 403 })
+    try {
+      requireAdminRole(sessionUser.role)
+    } catch {
+      return NextResponse.json({ success: false, error: "Insufficient role" }, { status: 403 })
     }
     const tenantContext = normalizeTenantContext(sessionUser.tenantId, sessionUser.role)
     const body = await request.json()
@@ -43,6 +47,13 @@ export async function POST(request: Request) {
         VALUES (${code}, ${reference}, ${tenantContext.tenantId})
       `,
     )
+
+    await logAuditEvent(accountsSql, sessionUser, {
+      action: "create",
+      entityType: "account_activities",
+      entityId: code,
+      after: { code, activity: reference },
+    })
 
     return NextResponse.json({ success: true, message: "Activity added successfully" })
   } catch (error) {

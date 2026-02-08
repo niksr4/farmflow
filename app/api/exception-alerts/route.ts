@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server"
-import { sql } from "@/lib/neon"
-import { requireModuleAccess, isModuleAccessError } from "@/lib/module-access"
-import { normalizeTenantContext, runTenantQueries, runTenantQuery } from "@/lib/tenant-db"
+import { sql } from "@/lib/server/db"
+import { requireModuleAccess, isModuleAccessError } from "@/lib/server/module-access"
+import { normalizeTenantContext, runTenantQueries, runTenantQuery } from "@/lib/server/tenant-db"
 
 const DEFAULT_BAG_WEIGHT_KG = 50
 const WINDOW_DAYS = 7
@@ -43,6 +43,17 @@ const toDateString = (value: Date) => value.toISOString().slice(0, 10)
 const safeDivide = (num: number, den: number) => (den > 0 ? num / den : 0)
 
 const formatPercent = (value: number, digits = 1) => `${(value * 100).toFixed(digits)}%`
+
+const resolveSalesKgs = (row: any, bagWeightKg: number) => {
+  const direct =
+    Number(row.kgs) ||
+    Number(row.weight_kgs) ||
+    Number(row.kgs_sent) ||
+    Number(row.kgs_received)
+  if (direct > 0) return direct
+  const bags = Number(row.bags_sold) || 0
+  return bags * bagWeightKg
+}
 
 const parseAlertThresholds = (value: any) => {
   if (!value) return null
@@ -246,6 +257,10 @@ export async function GET() {
             sr.coffee_type,
             sr.bag_type,
             COALESCE(SUM(sr.bags_sold), 0) AS bags_sold,
+            COALESCE(SUM(sr.kgs), 0) AS kgs,
+            COALESCE(SUM(sr.weight_kgs), 0) AS weight_kgs,
+            COALESCE(SUM(sr.kgs_sent), 0) AS kgs_sent,
+            COALESCE(SUM(sr.kgs_received), 0) AS kgs_received,
             COALESCE(SUM(sr.revenue), 0) AS revenue
           FROM sales_records sr
           LEFT JOIN locations l ON l.id = sr.location_id
@@ -264,6 +279,10 @@ export async function GET() {
             sr.coffee_type,
             sr.bag_type,
             COALESCE(SUM(sr.bags_sold), 0) AS bags_sold,
+            COALESCE(SUM(sr.kgs), 0) AS kgs,
+            COALESCE(SUM(sr.weight_kgs), 0) AS weight_kgs,
+            COALESCE(SUM(sr.kgs_sent), 0) AS kgs_sent,
+            COALESCE(SUM(sr.kgs_received), 0) AS kgs_received,
             COALESCE(SUM(sr.revenue), 0) AS revenue
           FROM sales_records sr
           LEFT JOIN locations l ON l.id = sr.location_id
@@ -356,6 +375,10 @@ export async function GET() {
           SELECT
             sale_date,
             COALESCE(SUM(bags_sold), 0) AS bags_sold,
+            COALESCE(SUM(kgs), 0) AS kgs,
+            COALESCE(SUM(weight_kgs), 0) AS weight_kgs,
+            COALESCE(SUM(kgs_sent), 0) AS kgs_sent,
+            COALESCE(SUM(kgs_received), 0) AS kgs_received,
             COALESCE(SUM(revenue), 0) AS revenue
           FROM sales_records
           WHERE tenant_id = $1
@@ -428,6 +451,10 @@ export async function GET() {
         `
           SELECT
             COALESCE(SUM(bags_sold), 0) AS bags_sold,
+            COALESCE(SUM(kgs), 0) AS kgs,
+            COALESCE(SUM(weight_kgs), 0) AS weight_kgs,
+            COALESCE(SUM(kgs_sent), 0) AS kgs_sent,
+            COALESCE(SUM(kgs_received), 0) AS kgs_received,
             COALESCE(SUM(revenue), 0) AS revenue
           FROM sales_records
           WHERE tenant_id = $1
@@ -440,6 +467,10 @@ export async function GET() {
         `
           SELECT
             COALESCE(SUM(bags_sold), 0) AS bags_sold,
+            COALESCE(SUM(kgs), 0) AS kgs,
+            COALESCE(SUM(weight_kgs), 0) AS weight_kgs,
+            COALESCE(SUM(kgs_sent), 0) AS kgs_sent,
+            COALESCE(SUM(kgs_received), 0) AS kgs_received,
             COALESCE(SUM(revenue), 0) AS revenue
           FROM sales_records
           WHERE tenant_id = $1
@@ -617,7 +648,7 @@ export async function GET() {
     })
 
     ;(salesCurrentRows || []).forEach((row: any) => {
-      currentSoldKgs += (Number(row.bags_sold) || 0) * bagWeightKg
+      currentSoldKgs += resolveSalesKgs(row, bagWeightKg)
     })
 
     if (currentSoldKgs > currentProcessedKgs + thresholds.mismatchBufferKgs) {
@@ -637,8 +668,8 @@ export async function GET() {
       const key = `${locationLabel}|${row.coffee_type}|${row.bag_type}`
       const prior = priorSalesMap.get(key)
       if (!prior) return
-      const currentSold = (Number(row.bags_sold) || 0) * bagWeightKg
-      const priorSold = (Number(prior.bags_sold) || 0) * bagWeightKg
+      const currentSold = resolveSalesKgs(row, bagWeightKg)
+      const priorSold = resolveSalesKgs(prior, bagWeightKg)
       if (priorSold <= 0 || currentSold <= 0) return
       if (currentSold > priorSold * 1.6) {
         alerts.push({
@@ -736,7 +767,7 @@ export async function GET() {
 
     const weekSalesTotals = (salesCurrentRows || []).reduce(
       (acc: any, row: any) => {
-        const soldKgs = (Number(row.bags_sold) || 0) * bagWeightKg
+        const soldKgs = resolveSalesKgs(row, bagWeightKg)
         acc.soldKgs += soldKgs
         acc.revenue += Number(row.revenue) || 0
         return acc
@@ -746,7 +777,7 @@ export async function GET() {
 
     const priorSalesTotals = (salesPriorRows || []).reduce(
       (acc: any, row: any) => {
-        const soldKgs = (Number(row.bags_sold) || 0) * bagWeightKg
+        const soldKgs = resolveSalesKgs(row, bagWeightKg)
         acc.soldKgs += soldKgs
         acc.revenue += Number(row.revenue) || 0
         return acc
@@ -767,7 +798,7 @@ export async function GET() {
       dryCherry: Number(monthProcessing.dry_cherry_kgs) || 0,
       dispatchedKgs: (Number(monthDispatch.bags_dispatched) || 0) * bagWeightKg,
       receivedKgs: Number(monthDispatch.kgs_received) || 0,
-      soldKgs: (Number(monthSales.bags_sold) || 0) * bagWeightKg,
+      soldKgs: resolveSalesKgs(monthSales, bagWeightKg),
       revenue: Number(monthSales.revenue) || 0,
     }
 
@@ -777,7 +808,7 @@ export async function GET() {
       dryCherry: Number(monthProcessingLastYear.dry_cherry_kgs) || 0,
       dispatchedKgs: (Number(monthDispatchLastYear.bags_dispatched) || 0) * bagWeightKg,
       receivedKgs: Number(monthDispatchLastYear.kgs_received) || 0,
-      soldKgs: (Number(monthSalesLastYear.bags_sold) || 0) * bagWeightKg,
+      soldKgs: resolveSalesKgs(monthSalesLastYear, bagWeightKg),
       revenue: Number(monthSalesLastYear.revenue) || 0,
     }
 
@@ -847,7 +878,7 @@ export async function GET() {
       const green = Number(proc.green_kgs) || 0
       const dispatchedKgs = (Number(disp.bags_dispatched) || 0) * bagWeightKg
       const receivedKgs = Number(disp.kgs_received) || 0
-      const soldKgs = (Number(sales.bags_sold) || 0) * bagWeightKg
+      const soldKgs = resolveSalesKgs(sales, bagWeightKg)
       const revenue = Number(sales.revenue) || 0
       return {
         date,

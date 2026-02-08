@@ -1,7 +1,9 @@
 import { type NextRequest, NextResponse } from "next/server"
-import { inventorySql } from "@/lib/neon-connections"
-import { requireModuleAccess, isModuleAccessError } from "@/lib/module-access"
-import { normalizeTenantContext, runTenantQueries, runTenantQuery } from "@/lib/tenant-db"
+import { inventorySql } from "@/lib/server/db"
+import { requireModuleAccess, isModuleAccessError } from "@/lib/server/module-access"
+import { canWriteModule } from "@/lib/permissions"
+import { logAuditEvent } from "@/lib/server/audit-log"
+import { normalizeTenantContext, runTenantQueries, runTenantQuery } from "@/lib/server/tenant-db"
 
 export const dynamic = "force-dynamic"
 
@@ -10,8 +12,15 @@ export async function GET(request: NextRequest) {
     console.log("[SERVER] 📥 GET /api/inventory-neon")
     const sessionUser = await requireModuleAccess("inventory")
     const tenantContext = normalizeTenantContext(sessionUser.tenantId, sessionUser.role)
-    const [inventory, summary] = await runTenantQueries(inventorySql, tenantContext, [
-      inventorySql`
+    const { searchParams } = new URL(request.url)
+    const locationParam = searchParams.get("locationId")
+    const locationFilter = locationParam ? locationParam.trim() : ""
+
+    let inventoryQuery
+    let summaryQuery
+
+    if (!locationFilter) {
+      inventoryQuery = inventorySql`
         SELECT 
           item_type,
           COALESCE(unit, 'kg') as unit,
@@ -25,15 +34,72 @@ export async function GET(request: NextRequest) {
         WHERE tenant_id = ${tenantContext.tenantId}
         GROUP BY item_type, unit
         ORDER BY item_type
-      `,
-      inventorySql`
+      `
+      summaryQuery = inventorySql`
         SELECT 
           COALESCE(SUM(total_cost), 0) as total_inventory_value,
           COUNT(DISTINCT item_type) as total_items,
           COALESCE(SUM(quantity), 0) as total_quantity
         FROM current_inventory
         WHERE tenant_id = ${tenantContext.tenantId}
-      `,
+      `
+    } else if (locationFilter === "unassigned") {
+      inventoryQuery = inventorySql`
+        SELECT 
+          item_type,
+          COALESCE(unit, 'kg') as unit,
+          COALESCE(SUM(quantity), 0) as quantity,
+          COALESCE(SUM(total_cost), 0) as total_cost,
+          CASE
+            WHEN COALESCE(SUM(quantity), 0) > 0 THEN COALESCE(SUM(total_cost), 0) / COALESCE(SUM(quantity), 0)
+            ELSE 0
+          END as avg_price
+        FROM current_inventory
+        WHERE tenant_id = ${tenantContext.tenantId}
+          AND location_id IS NULL
+        GROUP BY item_type, unit
+        ORDER BY item_type
+      `
+      summaryQuery = inventorySql`
+        SELECT 
+          COALESCE(SUM(total_cost), 0) as total_inventory_value,
+          COUNT(DISTINCT item_type) as total_items,
+          COALESCE(SUM(quantity), 0) as total_quantity
+        FROM current_inventory
+        WHERE tenant_id = ${tenantContext.tenantId}
+          AND location_id IS NULL
+      `
+    } else {
+      inventoryQuery = inventorySql`
+        SELECT 
+          item_type,
+          COALESCE(unit, 'kg') as unit,
+          COALESCE(SUM(quantity), 0) as quantity,
+          COALESCE(SUM(total_cost), 0) as total_cost,
+          CASE
+            WHEN COALESCE(SUM(quantity), 0) > 0 THEN COALESCE(SUM(total_cost), 0) / COALESCE(SUM(quantity), 0)
+            ELSE 0
+          END as avg_price
+        FROM current_inventory
+        WHERE tenant_id = ${tenantContext.tenantId}
+          AND location_id = ${locationFilter}
+        GROUP BY item_type, unit
+        ORDER BY item_type
+      `
+      summaryQuery = inventorySql`
+        SELECT 
+          COALESCE(SUM(total_cost), 0) as total_inventory_value,
+          COUNT(DISTINCT item_type) as total_items,
+          COALESCE(SUM(quantity), 0) as total_quantity
+        FROM current_inventory
+        WHERE tenant_id = ${tenantContext.tenantId}
+          AND location_id = ${locationFilter}
+      `
+    }
+
+    const [inventory, summary] = await runTenantQueries(inventorySql, tenantContext, [
+      inventoryQuery,
+      summaryQuery,
     ])
 
     const transformedInventory = inventory.map((item) => ({
@@ -81,14 +147,14 @@ export async function POST(request: NextRequest) {
   try {
     console.log("[SERVER] 📥 POST /api/inventory-neon - Add New Item")
     const sessionUser = await requireModuleAccess("inventory")
-    if (!["admin", "owner"].includes(sessionUser.role)) {
-      return NextResponse.json({ success: false, message: "Admin role required" }, { status: 403 })
+    if (!canWriteModule(sessionUser.role, "inventory")) {
+      return NextResponse.json({ success: false, message: "Insufficient role" }, { status: 403 })
     }
     const tenantContext = normalizeTenantContext(sessionUser.tenantId, sessionUser.role)
     const body = await request.json()
     console.log("[SERVER] Request body:", JSON.stringify(body, null, 2))
 
-    const { item_type, quantity, unit, price, user_id, notes } = body
+    const { item_type, quantity, unit, price, user_id, notes, location_id } = body
 
     if (!item_type || !unit) {
       return NextResponse.json(
@@ -113,26 +179,52 @@ export async function POST(request: NextRequest) {
       total_cost,
     })
 
+    const resolvedLocationId = typeof location_id === "string" ? location_id.trim() : ""
+    const locationValue = resolvedLocationId && resolvedLocationId !== "unassigned" ? resolvedLocationId : null
+
     // Ensure the item exists with the correct unit without double-counting inventory.
     // The transaction_history trigger will update quantity/total_cost when we insert a restock transaction.
-    await runTenantQuery(
-      inventorySql,
-      tenantContext,
-      inventorySql`
-        INSERT INTO current_inventory (item_type, quantity, unit, avg_price, total_cost, tenant_id)
-        VALUES (
-          ${item_type},
-          0,
-          ${unit},
-          0,
-          0,
-          ${tenantContext.tenantId}
-        )
-        ON CONFLICT (item_type, tenant_id)
-        DO UPDATE SET
-          unit = EXCLUDED.unit
-      `,
-    )
+    if (locationValue) {
+      await runTenantQuery(
+        inventorySql,
+        tenantContext,
+        inventorySql`
+          INSERT INTO current_inventory (item_type, quantity, unit, avg_price, total_cost, tenant_id, location_id)
+          VALUES (
+            ${item_type},
+            0,
+            ${unit},
+            0,
+            0,
+            ${tenantContext.tenantId},
+            ${locationValue}
+          )
+          ON CONFLICT (item_type, tenant_id, location_id)
+          DO UPDATE SET
+            unit = EXCLUDED.unit
+        `,
+      )
+    } else {
+      await runTenantQuery(
+        inventorySql,
+        tenantContext,
+        inventorySql`
+          INSERT INTO current_inventory (item_type, quantity, unit, avg_price, total_cost, tenant_id, location_id)
+          VALUES (
+            ${item_type},
+            0,
+            ${unit},
+            0,
+            0,
+            ${tenantContext.tenantId},
+            NULL
+          )
+          ON CONFLICT (item_type, tenant_id) WHERE location_id IS NULL
+          DO UPDATE SET
+            unit = EXCLUDED.unit
+        `,
+      )
+    }
 
     console.log("[SERVER] ✅ Item ensured in current_inventory")
 
@@ -150,7 +242,8 @@ export async function POST(request: NextRequest) {
             user_id,
             price,
             total_cost,
-            tenant_id
+            tenant_id,
+            location_id
           )
           VALUES (
             ${item_type},
@@ -160,12 +253,26 @@ export async function POST(request: NextRequest) {
             ${user_id || "system"},
             ${priceValue},
             ${total_cost},
-            ${tenantContext.tenantId}
+            ${tenantContext.tenantId},
+            ${locationValue}
           )
         `,
       )
       console.log("[SERVER] ✅ Initial transaction recorded")
     }
+
+    await logAuditEvent(inventorySql, sessionUser, {
+      action: "create",
+      entityType: "current_inventory",
+      entityId: item_type,
+      after: {
+        item_type,
+        quantity: quantityValue,
+        unit,
+        avg_price,
+        total_cost,
+      },
+    })
 
     return NextResponse.json({
       success: true,
@@ -198,8 +305,8 @@ export async function PUT(request: NextRequest) {
   try {
     console.log("[SERVER] 📥 PUT /api/inventory-neon - Update Item")
     const sessionUser = await requireModuleAccess("inventory")
-    if (!["admin", "owner"].includes(sessionUser.role)) {
-      return NextResponse.json({ success: false, message: "Forbidden" }, { status: 403 })
+    if (!canWriteModule(sessionUser.role, "inventory")) {
+      return NextResponse.json({ success: false, message: "Insufficient role" }, { status: 403 })
     }
     const tenantContext = normalizeTenantContext(sessionUser.tenantId, sessionUser.role)
     const body = await request.json()
@@ -289,6 +396,14 @@ export async function PUT(request: NextRequest) {
         RETURNING item_type, quantity, unit, avg_price, total_cost
       `,
     )
+
+    await logAuditEvent(inventorySql, sessionUser, {
+      action: "update",
+      entityType: "current_inventory",
+      entityId: resolvedName,
+      before: existing?.[0] ?? null,
+      after: result?.[0] ?? null,
+    })
 
     if (resolvedName !== item_type) {
       await runTenantQuery(

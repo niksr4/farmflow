@@ -13,49 +13,75 @@ const body = Manrope({ subsets: ["latin"], weight: ["400", "500", "600", "700"] 
 
 const HIGHLIGHTS = [
   {
-    title: "End-to-End Traceability",
-    description: "Track every coffee lot from cherry intake to dispatch with a complete digital trail.",
+    title: "Lot-to-Buyer Traceability",
+    description: "Every KG and bag is linked from intake to dispatch with a clean audit trail.",
     icon: Shield,
   },
   {
-    title: "Real-Time Inventory",
-    description: "Live stock levels, movement history, and alerts across estates and warehouses.",
+    title: "Inventory & Loss Control",
+    description: "Live stock, movement history, and loss signals across every location.",
     icon: Leaf,
   },
   {
-    title: "Processing Intelligence",
-    description: "Compare parchment vs cherry yields and spot anomalies across processing locations.",
+    title: "Processing Yield Clarity",
+    description: "Track parchment vs cherry yields and spot conversion drops early.",
     icon: Sparkles,
   },
   {
-    title: "Sales & Dispatch Control",
-    description: "Know exactly what was dispatched, sold, and still available in KGs and bags.",
+    title: "Dispatch + Sales Reconciliation",
+    description: "Know what left the gate, what arrived, and what is still available.",
     icon: Truck,
   },
 ]
 
 const BULLETS = [
-  "Lot-based reconciliation at every stage",
-  "Yield + cost per KG in one owner view",
-  "Role-based access with audit-ready logs",
-  "Buyer-ready exports and compliance snapshots",
+  "Daily intake → dry output reconciliation",
+  "Yield and loss by location or lot",
+  "Role-based access with audit logs",
+  "Buyer-ready exports in one click",
 ]
 
 const CONTROL_SIGNALS = [
   {
-    label: "Loss visibility (sample)",
-    value: "≤ 3.2%",
-    description: "Shrinkage flagged by lot and stage.",
+    label: "Processing loss (sample)",
+    value: "2.9%",
+    description: "Shrinkage flagged by stage and lot.",
   },
   {
-    label: "Cost per KG (sample)",
-    value: "₹124",
-    description: "Unified view across labor + inputs.",
+    label: "Yield conversion (sample)",
+    value: "46.4%",
+    description: "Ripe to dry output, tracked weekly.",
   },
   {
-    label: "Cash at risk (sample)",
+    label: "Cash exposure (sample)",
     value: "₹16.2L",
-    description: "Receivables + inventory value.",
+    description: "Receivables + inventory at risk.",
+  },
+]
+
+const LIVE_METRICS = [
+  { label: "Lots tracked", value: 152, suffix: "" },
+  { label: "Avg yield", value: 46.4, suffix: "%", decimals: 1 },
+  { label: "Alerts resolved", value: 18, suffix: "" },
+  { label: "Cash protected", value: 24.8, suffix: "L", decimals: 1 },
+]
+
+const LIVE_UPDATES = [
+  {
+    title: "MV Robusta float rate above baseline",
+    detail: "Washline check scheduled and lot flagged for review.",
+  },
+  {
+    title: "PG dispatch unconfirmed for 3 days",
+    detail: "Reminder sent to logistics team and buyer.",
+  },
+  {
+    title: "HF Arabica yield down vs last week",
+    detail: "Conversion review triggered for wet-parch output.",
+  },
+  {
+    title: "Receivables aging flagged",
+    detail: "Two buyers crossed 30 days outstanding.",
   },
 ]
 
@@ -63,22 +89,22 @@ const PRICING_TIERS = [
   {
     name: "Core",
     price: "₹9,900",
-    description: "For single estates that need tight control and daily reporting.",
+    description: "For a single estate that needs daily control and clean reporting.",
     modules: ["Inventory", "Transactions", "Accounts", "Processing"],
     highlight: "Best for first estate",
   },
   {
     name: "Operations",
     price: "₹18,900",
-    description: "Add dispatch + sales intelligence for commercial scale.",
+    description: "Add dispatch + sales reconciliation for commercial scale.",
     modules: ["Core +", "Dispatch", "Sales", "Rainfall", "Pepper"],
     highlight: "Most popular",
   },
   {
     name: "Enterprise",
     price: "Custom",
-    description: "Multi-tenant, AI analysis, and custom workflows across regions.",
-    modules: ["Operations +", "AI Analysis", "Weather", "News", "Custom Modules"],
+    description: "Multi-estate governance and custom workflows across regions.",
+    modules: ["Operations +", "Analytics", "Weather", "News", "Custom Modules"],
     highlight: "Full stack",
   },
 ]
@@ -86,7 +112,7 @@ const PRICING_TIERS = [
 const CHATBOT_FAQS = [
   {
     id: "capabilities",
-    question: "What can Farm Flow track?",
+    question: "What can FarmFlow track?",
     answer:
       "Inventory, processing, dispatch, sales, labor, and audits across locations. It supports Arabica/Robusta, parchment/cherry outputs, and KG ↔ bag conversion.",
   },
@@ -94,25 +120,25 @@ const CHATBOT_FAQS = [
     id: "pricing",
     question: "How does pricing work?",
     answer:
-      "Pricing is modular: start with Core, add Dispatch/Sales, and scale to Enterprise for multi-tenant and AI analytics.",
+      "Pricing is modular: start with Core, add Dispatch/Sales, and scale to Enterprise for multi-estate governance.",
   },
   {
     id: "onboarding",
     question: "How fast can we get started?",
     answer:
-      "Most estates go live in a day: add locations, load inventory, record processing, then start dispatch/sales. We include guided onboarding.",
+      "Most estates go live in a day: add locations, load inventory, record processing, then start dispatch/sales. Guided onboarding is included.",
   },
   {
     id: "security",
     question: "Is estate data isolated?",
     answer:
-      "Yes. Every estate is tenant-isolated with role-based access and audit logs so you can see who changed what and when.",
+      "Yes. Every estate is tenant-isolated with role-based access and audit logs to show who changed what and when.",
   },
   {
     id: "exports",
     question: "Can we export reports?",
     answer:
-      "Yes. Export processing, dispatch, and sales records for buyer-ready compliance reports and internal reconciliation.",
+      "Yes. Export processing, dispatch, and sales records for buyer-ready compliance and internal reconciliation.",
   },
   {
     id: "mobile",
@@ -136,19 +162,22 @@ const getChatbotReply = (input: string) => {
   const faq = CHATBOT_FAQS.find((item) => item.id === match?.id)
   if (faq) return faq.answer
 
-  return "I can help with features, pricing, onboarding, data isolation, exports, and mobile access. Ask me anything about Farm Flow."
+  return "I can help with features, pricing, onboarding, data isolation, exports, and mobile access. Ask me anything about FarmFlow."
 }
 
 export default function LandingPage() {
   const beanLayerRef = useRef<HTMLDivElement | null>(null)
   const chatEndRef = useRef<HTMLDivElement | null>(null)
+  const messageIdRef = useRef(0)
   const [isChatOpen, setIsChatOpen] = useState(false)
   const [draftMessage, setDraftMessage] = useState("")
+  const [activeUpdateIndex, setActiveUpdateIndex] = useState(0)
+  const [metricValues, setMetricValues] = useState<number[]>(() => LIVE_METRICS.map(() => 0))
   const [messages, setMessages] = useState([
     {
       id: "welcome",
       role: "bot" as const,
-      text: "Hi! I can answer questions about Farm Flow features, pricing, onboarding, and data security.",
+      text: "Hi! I can answer questions about FarmFlow features, pricing, onboarding, and data security.",
     },
   ])
 
@@ -214,6 +243,44 @@ export default function LandingPage() {
   }, [])
 
   useEffect(() => {
+    const interval = window.setInterval(() => {
+      setActiveUpdateIndex((prev) => (prev + 1) % LIVE_UPDATES.length)
+    }, 4200)
+
+    return () => {
+      window.clearInterval(interval)
+    }
+  }, [])
+
+  useEffect(() => {
+    if (typeof window === "undefined") return
+    const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches
+    if (reducedMotion) {
+      setMetricValues(LIVE_METRICS.map((metric) => metric.value))
+      return
+    }
+
+    let start: number | null = null
+    const duration = 1200
+    const step = (timestamp: number) => {
+      if (!start) start = timestamp
+      const progress = Math.min((timestamp - start) / duration, 1)
+      setMetricValues(
+        LIVE_METRICS.map((metric) => {
+          const value = metric.value * progress
+          if (metric.decimals) return Number(value.toFixed(metric.decimals))
+          return Math.round(value)
+        }),
+      )
+      if (progress < 1) {
+        window.requestAnimationFrame(step)
+      }
+    }
+
+    window.requestAnimationFrame(step)
+  }, [])
+
+  useEffect(() => {
     if (!isChatOpen || !chatEndRef.current) return
     chatEndRef.current.scrollIntoView({ behavior: "smooth" })
   }, [messages, isChatOpen])
@@ -221,9 +288,10 @@ export default function LandingPage() {
   const sendMessage = (text: string) => {
     const trimmed = text.trim()
     if (!trimmed) return
-    const timestamp = Date.now()
-    const userMessage = { id: `u-${timestamp}`, role: "user" as const, text: trimmed }
-    const botMessage = { id: `b-${timestamp + 1}`, role: "bot" as const, text: getChatbotReply(trimmed) }
+    const userId = `u-${++messageIdRef.current}`
+    const botId = `b-${++messageIdRef.current}`
+    const userMessage = { id: userId, role: "user" as const, text: trimmed }
+    const botMessage = { id: botId, role: "bot" as const, text: getChatbotReply(trimmed) }
     setMessages((prev) => [...prev, userMessage, botMessage])
     setDraftMessage("")
   }
@@ -252,7 +320,7 @@ export default function LandingPage() {
                 <Leaf className="h-5 w-5" />
               </div>
               <div>
-                <p className="text-sm font-semibold">Farm Flow</p>
+                <p className="text-sm font-semibold">FarmFlow</p>
                 <p className="text-xs text-muted-foreground">Operations OS</p>
               </div>
             </div>
@@ -285,14 +353,14 @@ export default function LandingPage() {
           <section className="mx-auto mt-10 w-full max-w-6xl grid gap-12 lg:grid-cols-[1.15fr_0.85fr] items-center sm:mt-16">
             <div className="space-y-6 rise-in">
               <Badge className="border border-white/60 bg-white/70 text-[color:var(--copper)] backdrop-blur-md">
-                Estate OS for coffee, tea, cocoa, and specialty crops
+                Estate OS for coffee and specialty crops
               </Badge>
               <h1 className={`${display.className} text-4xl md:text-6xl font-semibold leading-tight text-[color:var(--ink)]`}>
-                Run your estate like a modern supply chain, without losing the craft of the farm.
+                Know every kilogram, bag, and rupee across your estate.
               </h1>
               <p className="text-lg text-slate-700">
-                Farm Flow unifies inventory, processing, labor, dispatch, and sales into one auditable operating view.
-                Track Arabica and Robusta yields, parchment and cherry outputs, and buyer-ready records with confidence.
+                FarmFlow puts inventory, processing, labor, dispatch, and sales in one operating view. Track Arabica and
+                Robusta yields, parchment and cherry outputs, and buyer-ready records without spreadsheet drift.
               </p>
               <div className="flex flex-wrap items-center gap-4">
                 <Button size="lg" asChild className="group shadow-[0_22px_50px_-24px_rgba(164,90,42,0.65)]">
@@ -366,6 +434,43 @@ export default function LandingPage() {
                 <p className="text-xs text-muted-foreground">{signal.description}</p>
               </div>
             ))}
+          </section>
+
+          <section className="mx-auto mt-12 w-full max-w-6xl grid gap-6 lg:grid-cols-[1.2fr_0.8fr]">
+            <Card className="border border-white/70 bg-white/80 backdrop-blur-md signal-scan">
+              <CardHeader>
+                <CardTitle className={`${display.className} text-2xl`}>Live Operations Pulse</CardTitle>
+                <CardDescription>What owners see before it hits the P&L.</CardDescription>
+              </CardHeader>
+              <CardContent className="grid gap-4 sm:grid-cols-2">
+                {LIVE_METRICS.map((metric, index) => (
+                  <div key={metric.label} className="rounded-2xl border border-slate-200/60 bg-white/70 p-4">
+                    <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground">{metric.label}</p>
+                    <p className={`${display.className} text-3xl font-semibold text-[color:var(--ink)]`}>
+                      {metricValues[index]}
+                      {metric.suffix}
+                    </p>
+                    <p className="text-xs text-muted-foreground">This season snapshot</p>
+                  </div>
+                ))}
+              </CardContent>
+            </Card>
+
+            <Card className="border border-emerald-200/70 bg-emerald-50/70">
+              <CardHeader>
+                <div className="flex items-center gap-2 text-emerald-700 text-xs uppercase tracking-[0.3em]">
+                  <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
+                  Live feed
+                </div>
+                <CardTitle className={`${display.className} text-xl`}>{LIVE_UPDATES[activeUpdateIndex].title}</CardTitle>
+                <CardDescription>{LIVE_UPDATES[activeUpdateIndex].detail}</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="rounded-xl border border-emerald-200 bg-white/80 p-3 text-xs text-emerald-700">
+                  Updated a few seconds ago · Rolling 7-day baseline
+                </div>
+              </CardContent>
+            </Card>
           </section>
 
         <section id="features" className="mx-auto mt-16 w-full max-w-6xl space-y-6 scroll-mt-24 sm:mt-20">
@@ -501,7 +606,7 @@ export default function LandingPage() {
           <div>
             <h2 className={`${display.className} text-3xl font-semibold`}>Mission & Vision</h2>
             <p className="text-muted-foreground mt-2">
-              The operating principles that keep Farm Flow focused on real outcomes.
+              The operating principles that keep FarmFlow focused on real outcomes.
             </p>
           </div>
           <div className="grid gap-6 lg:grid-cols-2">
@@ -511,7 +616,7 @@ export default function LandingPage() {
                 <CardDescription>Give every estate complete control of stock, yield, and revenue.</CardDescription>
               </CardHeader>
               <CardContent className="text-sm text-muted-foreground">
-                Farm Flow replaces spreadsheets with a live operating system that reconciles every bag, lot, and cost
+                FarmFlow replaces spreadsheets with a live operating system that reconciles every bag, lot, and cost
                 across the season. Estates make faster decisions with fewer surprises and stronger buyer trust.
               </CardContent>
             </Card>
@@ -551,7 +656,7 @@ export default function LandingPage() {
                 <CardDescription>Transparent usage with clear responsibility.</CardDescription>
               </CardHeader>
               <CardContent className="text-sm text-muted-foreground space-y-3">
-                <p>Farm Flow provides operational tooling and reporting, not financial advice or guarantees.</p>
+                <p>FarmFlow provides operational tooling and reporting, not financial advice or guarantees.</p>
                 <p>Admins are responsible for data accuracy and user access within their estate.</p>
                 <p>Service updates are communicated in advance and designed to protect existing data.</p>
               </CardContent>
@@ -563,7 +668,7 @@ export default function LandingPage() {
         <footer className="border-t border-white/40 bg-white/70 backdrop-blur-md">
           <div className="mx-auto flex w-full max-w-6xl flex-col gap-6 px-6 py-10 md:flex-row md:items-center md:justify-between">
             <div className="space-y-2">
-              <p className="text-sm font-semibold">Farm Flow</p>
+              <p className="text-sm font-semibold">FarmFlow</p>
               <p className="text-xs text-muted-foreground">
                 Built for coffee estates today, adaptable to tea, cocoa, and specialty crops tomorrow.
               </p>
@@ -597,7 +702,7 @@ export default function LandingPage() {
           <div className="w-[320px] sm:w-[360px] rounded-2xl border border-white/60 bg-white/90 shadow-[0_30px_60px_-40px_rgba(15,23,42,0.7)] backdrop-blur-xl">
             <div className="flex items-center justify-between border-b border-slate-200/60 px-4 py-3">
               <div>
-                <p className="text-sm font-semibold">Farm Flow Concierge</p>
+                <p className="text-sm font-semibold">FarmFlow Concierge</p>
                 <p className="text-xs text-muted-foreground">Ask about features, pricing, or onboarding.</p>
               </div>
               <Button variant="ghost" size="icon" onClick={() => setIsChatOpen(false)}>
@@ -656,7 +761,7 @@ export default function LandingPage() {
             onClick={() => setIsChatOpen(true)}
           >
             <MessageCircle className="mr-2 h-5 w-5" />
-            Chat with Farm Flow
+            Chat with FarmFlow
           </Button>
         )}
       </div>

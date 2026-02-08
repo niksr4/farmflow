@@ -1,22 +1,62 @@
 import { NextResponse } from "next/server"
-import { sql } from "@/lib/neon"
-import { requireModuleAccess, isModuleAccessError } from "@/lib/module-access"
-import { normalizeTenantContext, runTenantQuery } from "@/lib/tenant-db"
+import { sql } from "@/lib/server/db"
+import { requireModuleAccess, isModuleAccessError } from "@/lib/server/module-access"
+import { normalizeTenantContext, runTenantQuery } from "@/lib/server/tenant-db"
+import { canDeleteModule, canWriteModule } from "@/lib/permissions"
+import { logAuditEvent } from "@/lib/server/audit-log"
+
+const LOCATION_ALL = "all"
+const LOCATION_UNASSIGNED = "unassigned"
 
 export async function GET(request: Request) {
   try {
     const sessionUser = await requireModuleAccess("pepper")
-    if (!["admin", "owner"].includes(sessionUser.role)) {
-      return NextResponse.json({ success: false, error: "Admin role required" }, { status: 403 })
-    }
     const tenantContext = normalizeTenantContext(sessionUser.tenantId, sessionUser.role)
     const { searchParams } = new URL(request.url)
     const date = searchParams.get("date")
     const locationId = searchParams.get("locationId")
     const fiscalYearStart = searchParams.get("fiscalYearStart")
     const fiscalYearEnd = searchParams.get("fiscalYearEnd")
+    const isAllLocations = locationId === LOCATION_ALL
+    const isUnassigned = locationId === LOCATION_UNASSIGNED
 
-    if (date && locationId) {
+    if (date && locationId && !isAllLocations) {
+      if (isUnassigned) {
+        const params: Array<string> = [tenantContext.tenantId, date]
+        const result = await runTenantQuery(
+          sql,
+          tenantContext,
+          sql.query(
+            `
+            SELECT pr.*, l.name as location_name, l.code as location_code
+            FROM pepper_records pr
+            LEFT JOIN locations l ON l.id = pr.location_id
+            WHERE pr.tenant_id = $1
+              AND pr.location_id IS NULL
+              AND DATE(pr.process_date) = $2::date
+            ORDER BY pr.id DESC
+            LIMIT 1
+            `,
+            params,
+          ),
+        )
+
+        if (result && Array.isArray(result) && result.length > 0) {
+          const record = result[0]
+          const numericFields = ["kg_picked", "green_pepper", "green_pepper_percent", "dry_pepper", "dry_pepper_percent"]
+
+          numericFields.forEach((field) => {
+            if (record[field] !== null && record[field] !== undefined) {
+              record[field] = Number(record[field])
+            }
+          })
+
+          return NextResponse.json({ success: true, record })
+        }
+
+        return NextResponse.json({ success: true, record: null })
+      }
+
       const params: Array<string> = [tenantContext.tenantId, locationId, date]
       const result = await runTenantQuery(
         sql,
@@ -25,7 +65,7 @@ export async function GET(request: Request) {
           `
           SELECT pr.*, l.name as location_name, l.code as location_code
           FROM pepper_records pr
-          JOIN locations l ON l.id = pr.location_id
+          LEFT JOIN locations l ON l.id = pr.location_id
           WHERE pr.tenant_id = $1
             AND pr.location_id = $2
             AND DATE(pr.process_date) = $3::date
@@ -61,8 +101,12 @@ export async function GET(request: Request) {
     }
 
     if (locationId) {
-      params.push(locationId)
-      whereClause += ` AND pr.location_id = $${params.length}`
+      if (isUnassigned) {
+        whereClause += " AND pr.location_id IS NULL"
+      } else if (!isAllLocations) {
+        params.push(locationId)
+        whereClause += ` AND pr.location_id = $${params.length}`
+      }
     }
 
     const results = await runTenantQuery(
@@ -72,7 +116,7 @@ export async function GET(request: Request) {
         `
         SELECT pr.*, l.name as location_name, l.code as location_code
         FROM pepper_records pr
-        JOIN locations l ON l.id = pr.location_id
+        LEFT JOIN locations l ON l.id = pr.location_id
         WHERE ${whereClause}
         ORDER BY pr.process_date DESC
         `,
@@ -109,6 +153,9 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
   try {
     const sessionUser = await requireModuleAccess("pepper")
+    if (!canWriteModule(sessionUser.role, "pepper")) {
+      return NextResponse.json({ success: false, error: "Insufficient role" }, { status: 403 })
+    }
     const tenantContext = normalizeTenantContext(sessionUser.tenantId, sessionUser.role)
     const data = await request.json()
     const locationId = data.locationId
@@ -127,6 +174,19 @@ export async function POST(request: Request) {
       notes: data.notes || "",
       recorded_by: data.recorded_by || "",
     }
+
+    const existing = await runTenantQuery(
+      sql,
+      tenantContext,
+      sql`
+        SELECT *
+        FROM pepper_records
+        WHERE tenant_id = ${tenantContext.tenantId}
+          AND location_id = ${locationId}
+          AND DATE(process_date) = ${record.process_date}::date
+        LIMIT 1
+      `,
+    )
 
     const result = await runTenantQuery(
       sql,
@@ -156,6 +216,14 @@ export async function POST(request: Request) {
       `,
     )
 
+    await logAuditEvent(sql, sessionUser, {
+      action: existing?.length ? "update" : "create",
+      entityType: "pepper_records",
+      entityId: result?.[0]?.id,
+      before: existing?.[0] ?? null,
+      after: result?.[0] ?? null,
+    })
+
     return NextResponse.json({ success: true, record: result[0] })
   } catch (error: any) {
     console.error("Error saving pepper record:", error)
@@ -169,8 +237,8 @@ export async function POST(request: Request) {
 export async function DELETE(request: Request) {
   try {
     const sessionUser = await requireModuleAccess("pepper")
-    if (!["admin", "owner"].includes(sessionUser.role)) {
-      return NextResponse.json({ success: false, error: "Admin role required" }, { status: 403 })
+    if (!canDeleteModule(sessionUser.role, "pepper")) {
+      return NextResponse.json({ success: false, error: "Insufficient role" }, { status: 403 })
     }
     const tenantContext = normalizeTenantContext(sessionUser.tenantId, sessionUser.role)
     const { searchParams } = new URL(request.url)
@@ -180,6 +248,19 @@ export async function DELETE(request: Request) {
     if (!date || !locationId) {
       return NextResponse.json({ success: false, error: "Date and location are required" }, { status: 400 })
     }
+
+    const existing = await runTenantQuery(
+      sql,
+      tenantContext,
+      sql`
+        SELECT *
+        FROM pepper_records
+        WHERE tenant_id = ${tenantContext.tenantId}
+          AND location_id = ${locationId}
+          AND DATE(process_date) = ${date}::date
+        LIMIT 1
+      `,
+    )
 
     await runTenantQuery(
       sql,
@@ -191,6 +272,13 @@ export async function DELETE(request: Request) {
           AND DATE(process_date) = ${date}::date
       `,
     )
+
+    await logAuditEvent(sql, sessionUser, {
+      action: "delete",
+      entityType: "pepper_records",
+      entityId: existing?.[0]?.id,
+      before: existing?.[0] ?? null,
+    })
 
     return NextResponse.json({ success: true })
   } catch (error: any) {

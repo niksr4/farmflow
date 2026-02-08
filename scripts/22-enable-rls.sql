@@ -7,6 +7,8 @@ DECLARE
   table_list TEXT[] := ARRAY[
     'locations',
     'processing_records',
+    'curing_records',
+    'quality_grading_records',
     'pepper_records',
     'users',
     'tenant_modules',

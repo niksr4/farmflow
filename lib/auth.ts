@@ -1,7 +1,9 @@
+import "server-only"
+
 import type { NextAuthOptions } from "next-auth"
 import CredentialsProvider from "next-auth/providers/credentials"
-import { sql } from "@/lib/neon"
-import { normalizeTenantContext, runTenantQuery } from "@/lib/tenant-db"
+import { sql } from "@/lib/server/db"
+import { normalizeTenantContext, runTenantQuery } from "@/lib/server/tenant-db"
 import { hashPassword, verifyPassword } from "@/lib/passwords"
 
 export const authOptions: NextAuthOptions = {

@@ -32,9 +32,10 @@ export function getAvailableFiscalYears(): FiscalYear[] {
   const fiscalYears: FiscalYear[] = []
   const currentFY = getCurrentFiscalYear()
   const currentFYStart = Number.parseInt(currentFY.startDate.split("-")[0])
+  const lookbackYears = 6
+  const startYear = currentFYStart - lookbackYears
 
-  // Start from 2025 and go up to current fiscal year
-  for (let year = 2025; year <= currentFYStart; year++) {
+  for (let year = startYear; year <= currentFYStart; year++) {
     const nextYear = year + 1
     fiscalYears.push({
       label: `FY ${year.toString().slice(2)}/${nextYear.toString().slice(2)}`,
@@ -43,7 +44,10 @@ export function getAvailableFiscalYears(): FiscalYear[] {
     })
   }
 
-  return fiscalYears.reverse() // Most recent first
+  return [
+    { label: "All time", startDate: "1900-01-01", endDate: "2100-12-31" },
+    ...fiscalYears.reverse(),
+  ]
 }
 
 /**

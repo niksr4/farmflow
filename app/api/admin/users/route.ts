@@ -1,9 +1,10 @@
 import { NextResponse } from "next/server"
-import { sql } from "@/lib/neon"
+import { sql } from "@/lib/server/db"
 import { requireAdminRole } from "@/lib/tenant"
-import { requireSessionUser } from "@/lib/auth-server"
-import { normalizeTenantContext, runTenantQuery } from "@/lib/tenant-db"
+import { requireSessionUser } from "@/lib/server/auth"
+import { normalizeTenantContext, runTenantQuery } from "@/lib/server/tenant-db"
 import { hashPassword } from "@/lib/passwords"
+import { logAuditEvent } from "@/lib/server/audit-log"
 
 export async function GET(request: Request) {
   try {
@@ -80,6 +81,13 @@ export async function POST(request: Request) {
       `,
     )
 
+    await logAuditEvent(sql, sessionUser, {
+      action: "create",
+      entityType: "users",
+      entityId: result?.[0]?.id,
+      after: result?.[0] ?? null,
+    })
+
     return NextResponse.json({ success: true, user: result[0] })
   } catch (error: any) {
     console.error("Error creating user:", error)
@@ -147,6 +155,14 @@ export async function PATCH(request: Request) {
       `,
     )
 
+    await logAuditEvent(sql, sessionUser, {
+      action: "update",
+      entityType: "users",
+      entityId: result?.[0]?.id ?? userId,
+      before: rows?.[0] ?? null,
+      after: result?.[0] ?? null,
+    })
+
     return NextResponse.json({ success: true, user: result[0] })
   } catch (error: any) {
     console.error("Error updating user role:", error)
@@ -203,6 +219,13 @@ export async function DELETE(request: Request) {
       tenantContext,
       sql`DELETE FROM users WHERE id = ${userId}`,
     )
+
+    await logAuditEvent(sql, sessionUser, {
+      action: "delete",
+      entityType: "users",
+      entityId: rows?.[0]?.id ?? userId,
+      before: rows?.[0] ?? null,
+    })
 
     return NextResponse.json({ success: true })
   } catch (error: any) {

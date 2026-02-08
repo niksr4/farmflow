@@ -1,137 +1,14 @@
 import { type NextRequest, NextResponse } from "next/server"
-import { sql } from "@/lib/neon"
-import { requireModuleAccess, isModuleAccessError } from "@/lib/module-access"
-import { normalizeTenantContext, runTenantQuery, runTenantQueries } from "@/lib/tenant-db"
-import { logAuditEvent } from "@/lib/audit-log"
+import { sql } from "@/lib/server/db"
+import { requireModuleAccess, isModuleAccessError } from "@/lib/server/module-access"
+import { canDeleteModule, canWriteModule } from "@/lib/permissions"
+import { normalizeTenantContext, runTenantQuery, runTenantQueries } from "@/lib/server/tenant-db"
+import { logAuditEvent } from "@/lib/server/audit-log"
+import { recomputeProcessingTotals } from "@/lib/server/processing-utils"
 
 const isUuid = (value: string) =>
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value)
 
-const resolveBagWeightKg = async (tenantContext: { tenantId: string; role: string }) => {
-  const rows = await runTenantQuery(
-    sql,
-    tenantContext,
-    sql`
-      SELECT bag_weight_kg
-      FROM tenants
-      WHERE id = ${tenantContext.tenantId}
-      LIMIT 1
-    `,
-  )
-  const bagWeightKg = Number(rows?.[0]?.bag_weight_kg) || 50
-  return bagWeightKg > 0 ? bagWeightKg : 50
-}
-
-const recomputeProcessingTotals = async (
-  tenantContext: { tenantId: string; role: string },
-  locationId: string,
-  coffeeType: string,
-) => {
-  const bagWeightKg = await resolveBagWeightKg(tenantContext)
-
-  await runTenantQuery(
-    sql,
-    tenantContext,
-    sql.query(
-      `
-      WITH ordered AS (
-        SELECT
-          id,
-          COALESCE(crop_today, 0) AS crop_today,
-          COALESCE(ripe_today, 0) AS ripe_today,
-          COALESCE(green_today, 0) AS green_today,
-          COALESCE(float_today, 0) AS float_today,
-          COALESCE(wet_parchment, 0) AS wet_parchment,
-          COALESCE(dry_parch, 0) AS dry_parch,
-          COALESCE(dry_cherry, 0) AS dry_cherry,
-          COALESCE(ROUND((COALESCE(dry_parch, 0) / NULLIF($4, 0))::numeric, 2), 0) AS dry_p_bags,
-          COALESCE(ROUND((COALESCE(dry_cherry, 0) / NULLIF($4, 0))::numeric, 2), 0) AS dry_cherry_bags,
-          SUM(COALESCE(crop_today, 0)) OVER (
-            PARTITION BY tenant_id, location_id, coffee_type
-            ORDER BY process_date, id
-          ) AS crop_todate,
-          SUM(COALESCE(ripe_today, 0)) OVER (
-            PARTITION BY tenant_id, location_id, coffee_type
-            ORDER BY process_date, id
-          ) AS ripe_todate,
-          SUM(COALESCE(green_today, 0)) OVER (
-            PARTITION BY tenant_id, location_id, coffee_type
-            ORDER BY process_date, id
-          ) AS green_todate,
-          SUM(COALESCE(float_today, 0)) OVER (
-            PARTITION BY tenant_id, location_id, coffee_type
-            ORDER BY process_date, id
-          ) AS float_todate,
-          SUM(COALESCE(dry_parch, 0)) OVER (
-            PARTITION BY tenant_id, location_id, coffee_type
-            ORDER BY process_date, id
-          ) AS dry_p_todate,
-          SUM(COALESCE(dry_cherry, 0)) OVER (
-            PARTITION BY tenant_id, location_id, coffee_type
-            ORDER BY process_date, id
-          ) AS dry_cherry_todate,
-          SUM(COALESCE(ROUND((COALESCE(dry_parch, 0) / NULLIF($4, 0))::numeric, 2), 0)) OVER (
-            PARTITION BY tenant_id, location_id, coffee_type
-            ORDER BY process_date, id
-          ) AS dry_p_bags_todate,
-          SUM(COALESCE(ROUND((COALESCE(dry_cherry, 0) / NULLIF($4, 0))::numeric, 2), 0)) OVER (
-            PARTITION BY tenant_id, location_id, coffee_type
-            ORDER BY process_date, id
-          ) AS dry_cherry_bags_todate,
-          CASE WHEN COALESCE(crop_today, 0) > 0
-            THEN ROUND((COALESCE(ripe_today, 0) / COALESCE(crop_today, 0)) * 100, 2)
-            ELSE 0
-          END AS ripe_percent,
-          CASE WHEN COALESCE(crop_today, 0) > 0
-            THEN ROUND((COALESCE(green_today, 0) / COALESCE(crop_today, 0)) * 100, 2)
-            ELSE 0
-          END AS green_percent,
-          CASE WHEN COALESCE(crop_today, 0) > 0
-            THEN ROUND((COALESCE(float_today, 0) / COALESCE(crop_today, 0)) * 100, 2)
-            ELSE 0
-          END AS float_percent,
-          CASE WHEN COALESCE(ripe_today, 0) > 0
-            THEN ROUND((COALESCE(wet_parchment, 0) / COALESCE(ripe_today, 0)) * 100, 2)
-            ELSE 0
-          END AS fr_wp_percent,
-          CASE WHEN COALESCE(wet_parchment, 0) > 0
-            THEN ROUND((COALESCE(dry_parch, 0) / COALESCE(wet_parchment, 0)) * 100, 2)
-            ELSE 0
-          END AS wp_dp_percent,
-          CASE WHEN (COALESCE(green_today, 0) + COALESCE(float_today, 0)) > 0
-            THEN ROUND((COALESCE(dry_cherry, 0) / (COALESCE(green_today, 0) + COALESCE(float_today, 0))) * 100, 2)
-            ELSE 0
-          END AS dry_cherry_percent
-        FROM processing_records
-        WHERE tenant_id = $1
-          AND location_id = $2
-          AND coffee_type = $3
-      )
-      UPDATE processing_records pr
-      SET
-        crop_todate = ordered.crop_todate,
-        ripe_todate = ordered.ripe_todate,
-        green_todate = ordered.green_todate,
-        float_todate = ordered.float_todate,
-        dry_p_todate = ordered.dry_p_todate,
-        dry_cherry_todate = ordered.dry_cherry_todate,
-        dry_p_bags = ordered.dry_p_bags,
-        dry_cherry_bags = ordered.dry_cherry_bags,
-        dry_p_bags_todate = ordered.dry_p_bags_todate,
-        dry_cherry_bags_todate = ordered.dry_cherry_bags_todate,
-        ripe_percent = ordered.ripe_percent,
-        green_percent = ordered.green_percent,
-        float_percent = ordered.float_percent,
-        fr_wp_percent = ordered.fr_wp_percent,
-        wp_dp_percent = ordered.wp_dp_percent,
-        dry_cherry_percent = ordered.dry_cherry_percent
-      FROM ordered
-      WHERE pr.id = ordered.id
-      `,
-      [tenantContext.tenantId, locationId, coffeeType, bagWeightKg],
-    ),
-  )
-}
 
 export async function GET(request: NextRequest) {
   try {
@@ -195,6 +72,9 @@ export async function GET(request: NextRequest) {
     }
 
     if (summary) {
+      if (locationId && !isUuid(locationId)) {
+        return NextResponse.json({ success: false, error: "locationId must be a valid UUID" }, { status: 400 })
+      }
       const params: any[] = [tenantContext.tenantId]
       let whereClause = `pr.tenant_id = $1`
 
@@ -204,13 +84,8 @@ export async function GET(request: NextRequest) {
       }
 
       if (locationId) {
-        if (isUuid(locationId)) {
-          params.push(locationId)
-          whereClause += ` AND pr.location_id = $${params.length}`
-        } else {
-          params.push(locationId, locationId)
-          whereClause += ` AND (l.code = $${params.length - 1} OR l.name = $${params.length})`
-        }
+        params.push(locationId)
+        whereClause += ` AND pr.location_id = $${params.length}`
       }
 
       if (coffeeType) {
@@ -277,16 +152,14 @@ export async function GET(request: NextRequest) {
     }
 
     if (beforeDate && locationId && coffeeType) {
+      if (!isUuid(locationId)) {
+        return NextResponse.json({ success: false, error: "locationId must be a valid UUID" }, { status: 400 })
+      }
       const params: any[] = [tenantContext.tenantId]
       let whereClause = `pr.tenant_id = $1`
 
-      if (isUuid(locationId)) {
-        params.push(locationId)
-        whereClause += ` AND pr.location_id = $${params.length}`
-      } else {
-        params.push(locationId, locationId)
-        whereClause += ` AND (l.code = $${params.length - 1} OR l.name = $${params.length})`
-      }
+      params.push(locationId)
+      whereClause += ` AND pr.location_id = $${params.length}`
 
       params.push(coffeeType)
       whereClause += ` AND pr.coffee_type = $${params.length}`
@@ -319,16 +192,14 @@ export async function GET(request: NextRequest) {
     }
 
     if (date && locationId && coffeeType) {
+      if (!isUuid(locationId)) {
+        return NextResponse.json({ success: false, error: "locationId must be a valid UUID" }, { status: 400 })
+      }
       const params: any[] = [tenantContext.tenantId]
       let whereClause = `pr.tenant_id = $1`
 
-      if (isUuid(locationId)) {
-        params.push(locationId)
-        whereClause += ` AND pr.location_id = $${params.length}`
-      } else {
-        params.push(locationId, locationId)
-        whereClause += ` AND (l.code = $${params.length - 1} OR l.name = $${params.length})`
-      }
+      params.push(locationId)
+      whereClause += ` AND pr.location_id = $${params.length}`
 
       params.push(coffeeType)
       whereClause += ` AND pr.coffee_type = $${params.length}`
@@ -369,13 +240,11 @@ export async function GET(request: NextRequest) {
     }
 
     if (locationId) {
-      if (isUuid(locationId)) {
-        params.push(locationId)
-        whereClause += ` AND pr.location_id = $${params.length}`
-      } else {
-        params.push(locationId, locationId)
-        whereClause += ` AND (l.code = $${params.length - 1} OR l.name = $${params.length})`
+      if (!isUuid(locationId)) {
+        return NextResponse.json({ success: false, error: "locationId must be a valid UUID" }, { status: 400 })
       }
+      params.push(locationId)
+      whereClause += ` AND pr.location_id = $${params.length}`
     }
 
     if (coffeeType) {
@@ -434,8 +303,8 @@ export async function POST(request: NextRequest) {
     }
 
     const sessionUser = await requireModuleAccess("processing")
-    if (!["admin", "owner"].includes(sessionUser.role)) {
-      return NextResponse.json({ success: false, error: "Admin role required" }, { status: 403 })
+    if (!canWriteModule(sessionUser.role, "processing")) {
+      return NextResponse.json({ success: false, error: "Insufficient role" }, { status: 403 })
     }
     const tenantContext = normalizeTenantContext(sessionUser.tenantId, sessionUser.role)
     const data = await request.json()
@@ -444,6 +313,9 @@ export async function POST(request: NextRequest) {
 
     if (!locationId || !coffeeType) {
       return NextResponse.json({ success: false, error: "Location and coffee type are required" }, { status: 400 })
+    }
+    if (!isUuid(String(locationId))) {
+      return NextResponse.json({ success: false, error: "locationId must be a valid UUID" }, { status: 400 })
     }
 
     const record = {
@@ -551,7 +423,7 @@ export async function POST(request: NextRequest) {
       `,
     )
 
-    await recomputeProcessingTotals(tenantContext, locationId, coffeeType)
+    await recomputeProcessingTotals(sql, tenantContext, locationId, coffeeType)
 
     await logAuditEvent(sql, sessionUser, {
       action: existing?.length ? "update" : "create",
@@ -578,6 +450,9 @@ export async function DELETE(request: NextRequest) {
     }
 
     const sessionUser = await requireModuleAccess("processing")
+    if (!canDeleteModule(sessionUser.role, "processing")) {
+      return NextResponse.json({ success: false, error: "Insufficient role" }, { status: 403 })
+    }
     const tenantContext = normalizeTenantContext(sessionUser.tenantId, sessionUser.role)
     const { searchParams } = new URL(request.url)
     const date = searchParams.get("date")
@@ -586,6 +461,9 @@ export async function DELETE(request: NextRequest) {
 
     if (!date || !locationId || !coffeeType) {
       return NextResponse.json({ success: false, error: "Date, location, and coffee type are required" }, { status: 400 })
+    }
+    if (!isUuid(String(locationId))) {
+      return NextResponse.json({ success: false, error: "locationId must be a valid UUID" }, { status: 400 })
     }
 
     const existing = await runTenantQuery(
@@ -614,7 +492,7 @@ export async function DELETE(request: NextRequest) {
       `,
     )
 
-    await recomputeProcessingTotals(tenantContext, locationId, coffeeType)
+    await recomputeProcessingTotals(sql, tenantContext, locationId, coffeeType)
 
     await logAuditEvent(sql, sessionUser, {
       action: "delete",

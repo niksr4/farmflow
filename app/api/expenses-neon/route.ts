@@ -1,7 +1,9 @@
 import { NextResponse } from "next/server"
-import { accountsSql } from "@/lib/neon-connections"
-import { requireModuleAccess, isModuleAccessError } from "@/lib/module-access"
-import { normalizeTenantContext, runTenantQueries, runTenantQuery } from "@/lib/tenant-db"
+import { accountsSql } from "@/lib/server/db"
+import { requireModuleAccess, isModuleAccessError } from "@/lib/server/module-access"
+import { normalizeTenantContext, runTenantQueries, runTenantQuery } from "@/lib/server/tenant-db"
+import { canDeleteModule, canWriteModule } from "@/lib/permissions"
+import { logAuditEvent } from "@/lib/server/audit-log"
 
 export async function GET(request: Request) {
   try {
@@ -108,8 +110,8 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
   try {
     const sessionUser = await requireModuleAccess("accounts")
-    if (!["admin", "owner"].includes(sessionUser.role)) {
-      return NextResponse.json({ success: false, error: "Admin role required" }, { status: 403 })
+    if (!canWriteModule(sessionUser.role, "accounts")) {
+      return NextResponse.json({ success: false, error: "Insufficient role" }, { status: 403 })
     }
     const tenantContext = normalizeTenantContext(sessionUser.tenantId, sessionUser.role)
     const body = await request.json()
@@ -138,6 +140,18 @@ export async function POST(request: Request) {
       `,
     )
 
+    await logAuditEvent(accountsSql, sessionUser, {
+      action: "create",
+      entityType: "expense_transactions",
+      entityId: result?.[0]?.id,
+      after: {
+        entry_date: date,
+        code,
+        total_amount: amount,
+        notes,
+      },
+    })
+
     console.log("✅ Expense added successfully with ID:", result[0].id)
 
     return NextResponse.json({
@@ -162,14 +176,26 @@ export async function POST(request: Request) {
 export async function PUT(request: Request) {
   try {
     const sessionUser = await requireModuleAccess("accounts")
-    if (!["admin", "owner"].includes(sessionUser.role)) {
-      return NextResponse.json({ success: false, error: "Admin role required" }, { status: 403 })
+    if (!canWriteModule(sessionUser.role, "accounts")) {
+      return NextResponse.json({ success: false, error: "Insufficient role" }, { status: 403 })
     }
     const tenantContext = normalizeTenantContext(sessionUser.tenantId, sessionUser.role)
     const body = await request.json()
     const { id, date, code, reference, amount, notes } = body
 
     console.log("📝 Updating expense:", id, { code, reference, amount })
+
+    const existing = await runTenantQuery(
+      accountsSql,
+      tenantContext,
+      accountsSql`
+        SELECT *
+        FROM expense_transactions
+        WHERE id = ${id}
+          AND tenant_id = ${tenantContext.tenantId}
+        LIMIT 1
+      `,
+    )
 
     await runTenantQuery(
       accountsSql,
@@ -186,6 +212,19 @@ export async function PUT(request: Request) {
           AND tenant_id = ${tenantContext.tenantId}
       `,
     )
+
+    await logAuditEvent(accountsSql, sessionUser, {
+      action: "update",
+      entityType: "expense_transactions",
+      entityId: id,
+      before: existing?.[0] ?? null,
+      after: {
+        entry_date: date,
+        code,
+        total_amount: amount,
+        notes,
+      },
+    })
 
     console.log("✅ Expense updated successfully")
 
@@ -212,8 +251,8 @@ export async function DELETE(request: Request) {
     const { searchParams } = new URL(request.url)
     const id = searchParams.get("id")
     const sessionUser = await requireModuleAccess("accounts")
-    if (!["admin", "owner"].includes(sessionUser.role)) {
-      return NextResponse.json({ success: false, error: "Admin role required" }, { status: 403 })
+    if (!canDeleteModule(sessionUser.role, "accounts")) {
+      return NextResponse.json({ success: false, error: "Insufficient role" }, { status: 403 })
     }
     const tenantContext = normalizeTenantContext(sessionUser.tenantId, sessionUser.role)
     if (!id) {
@@ -221,6 +260,18 @@ export async function DELETE(request: Request) {
     }
 
     console.log("🗑️ Deleting expense:", id)
+
+    const existing = await runTenantQuery(
+      accountsSql,
+      tenantContext,
+      accountsSql`
+        SELECT *
+        FROM expense_transactions
+        WHERE id = ${id}
+          AND tenant_id = ${tenantContext.tenantId}
+        LIMIT 1
+      `,
+    )
 
     await runTenantQuery(
       accountsSql,
@@ -231,6 +282,13 @@ export async function DELETE(request: Request) {
           AND tenant_id = ${tenantContext.tenantId}
       `,
     )
+
+    await logAuditEvent(accountsSql, sessionUser, {
+      action: "delete",
+      entityType: "expense_transactions",
+      entityId: existing?.[0]?.id ?? id,
+      before: existing?.[0] ?? null,
+    })
 
     console.log("✅ Expense deleted successfully")
 

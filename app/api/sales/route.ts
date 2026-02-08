@@ -1,80 +1,17 @@
-import { neon } from "@neondatabase/serverless"
 import { NextResponse } from "next/server"
 import { z } from "zod"
-import { requireModuleAccess, isModuleAccessError } from "@/lib/module-access"
-import { normalizeTenantContext, runTenantQueries, runTenantQuery } from "@/lib/tenant-db"
-import { logAuditEvent } from "@/lib/audit-log"
+import { sql } from "@/lib/server/db"
+import { requireModuleAccess, isModuleAccessError } from "@/lib/server/module-access"
+import { canDeleteModule, canWriteModule } from "@/lib/permissions"
+import { normalizeTenantContext, runTenantQueries, runTenantQuery } from "@/lib/server/tenant-db"
+import { resolveLocationInfo } from "@/lib/server/location-utils"
+import { logAuditEvent } from "@/lib/server/audit-log"
 
-// Single-DB connection
-function getDispatchDb() {
-  const baseUrl = process.env.DATABASE_URL || ""
-  return neon(baseUrl)
-}
-
-type LocationInfo = { id: string; name: string; code: string }
-
-async function resolveLocationInfo(
-  sql: ReturnType<typeof getDispatchDb>,
-  tenantContext: { tenantId: string; role: string },
-  input: { locationId?: string | null; estate?: string | null },
-): Promise<LocationInfo | null> {
-  const locationId = String(input.locationId || "").trim()
-  if (locationId) {
-    const rows = await runTenantQuery(
-      sql,
-      tenantContext,
-      sql`
-        SELECT id, name, code
-        FROM locations
-        WHERE id = ${locationId}
-          AND tenant_id = ${tenantContext.tenantId}
-        LIMIT 1
-      `,
-    )
-    if (rows?.length) {
-      return {
-        id: String(rows[0].id),
-        name: String(rows[0].name || ""),
-        code: String(rows[0].code || ""),
-      }
-    }
-  }
-
-  const estate = String(input.estate || "").trim()
-  if (!estate) return null
-  const normalized = estate.toLowerCase()
-  const token = normalized.split(" ")[0] || normalized
+async function resolveBagWeightKg(db: typeof sql, tenantContext: { tenantId: string; role: string }) {
   const rows = await runTenantQuery(
-    sql,
+    db,
     tenantContext,
-    sql`
-      SELECT id, name, code
-      FROM locations
-      WHERE tenant_id = ${tenantContext.tenantId}
-        AND (
-          LOWER(name) = ${normalized}
-          OR LOWER(code) = ${normalized}
-          OR LOWER(code) = ${token}
-          OR LOWER(name) = ${token}
-        )
-      LIMIT 1
-    `,
-  )
-  if (rows?.length) {
-    return {
-      id: String(rows[0].id),
-      name: String(rows[0].name || ""),
-      code: String(rows[0].code || ""),
-    }
-  }
-  return null
-}
-
-async function resolveBagWeightKg(sql: ReturnType<typeof getDispatchDb>, tenantContext: { tenantId: string; role: string }) {
-  const rows = await runTenantQuery(
-    sql,
-    tenantContext,
-    sql`
+    db`
       SELECT bag_weight_kg
       FROM tenants
       WHERE id = ${tenantContext.tenantId}
@@ -86,7 +23,6 @@ async function resolveBagWeightKg(sql: ReturnType<typeof getDispatchDb>, tenantC
 
 export async function GET(request: Request) {
   try {
-    const sql = getDispatchDb()
     const sessionUser = await requireModuleAccess("sales")
     // Allow data entry for user/admin/owner; reserve destructive actions for admin/owner.
     const tenantContext = normalizeTenantContext(sessionUser.tenantId, sessionUser.role)
@@ -266,8 +202,10 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   try {
-    const sql = getDispatchDb()
     const sessionUser = await requireModuleAccess("sales")
+    if (!canWriteModule(sessionUser.role, "sales")) {
+      return NextResponse.json({ success: false, error: "Insufficient role" }, { status: 403 })
+    }
     // Allow data entry for user/admin/owner; reserve destructive actions for admin/owner.
     const tenantContext = normalizeTenantContext(sessionUser.tenantId, sessionUser.role)
     const body = await request.json()
@@ -373,8 +311,10 @@ export async function POST(request: Request) {
 
 export async function PUT(request: Request) {
   try {
-    const sql = getDispatchDb()
     const sessionUser = await requireModuleAccess("sales")
+    if (!canWriteModule(sessionUser.role, "sales")) {
+      return NextResponse.json({ success: false, error: "Insufficient role" }, { status: 403 })
+    }
     const tenantContext = normalizeTenantContext(sessionUser.tenantId, sessionUser.role)
     const body = await request.json()
 
@@ -464,12 +404,11 @@ export async function PUT(request: Request) {
 
 export async function DELETE(request: Request) {
   try {
-    const sql = getDispatchDb()
     const { searchParams } = new URL(request.url)
     const id = searchParams.get("id")
     const sessionUser = await requireModuleAccess("sales")
-    if (!["admin", "owner"].includes(sessionUser.role)) {
-      return NextResponse.json({ success: false, error: "Admin role required" }, { status: 403 })
+    if (!canDeleteModule(sessionUser.role, "sales")) {
+      return NextResponse.json({ success: false, error: "Insufficient role" }, { status: 403 })
     }
     const tenantId = sessionUser.tenantId
 

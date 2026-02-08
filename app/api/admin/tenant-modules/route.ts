@@ -1,9 +1,10 @@
 import { NextResponse } from "next/server"
-import { sql } from "@/lib/neon"
+import { sql } from "@/lib/server/db"
 import { requireAdminRole } from "@/lib/tenant"
-import { requireSessionUser } from "@/lib/auth-server"
-import { MODULES } from "@/lib/modules"
-import { normalizeTenantContext, runTenantQuery } from "@/lib/tenant-db"
+import { requireSessionUser } from "@/lib/server/auth"
+import { MODULES, resolveModuleStates } from "@/lib/modules"
+import { normalizeTenantContext, runTenantQuery } from "@/lib/server/tenant-db"
+import { logAuditEvent } from "@/lib/server/audit-log"
 
 export async function GET(request: Request) {
   try {
@@ -36,12 +37,7 @@ export async function GET(request: Request) {
       `,
     )
 
-    const byModule = new Map(rows.map((row: any) => [String(row.module), Boolean(row.enabled)]))
-
-    const modules = MODULES.map((module) => ({
-      ...module,
-      enabled: byModule.get(module.id) ?? true,
-    }))
+    const modules = resolveModuleStates(rows)
 
     return NextResponse.json({ success: true, modules })
   } catch (error: any) {
@@ -72,19 +68,36 @@ export async function PUT(request: Request) {
     }
 
     const tenantContext = normalizeTenantContext(tenantId, sessionUser.role)
-    for (const module of MODULES) {
-      const enabled = Boolean(modules.find((m: any) => m.id === module.id)?.enabled)
+    const beforeRows = await runTenantQuery(
+      sql,
+      tenantContext,
+      sql`
+        SELECT module, enabled
+        FROM tenant_modules
+        WHERE tenant_id = ${tenantId}
+      `,
+    )
+    for (const moduleEntry of MODULES) {
+      const enabled = Boolean(modules.find((m: any) => m.id === moduleEntry.id)?.enabled)
       await runTenantQuery(
         sql,
         tenantContext,
         sql`
           INSERT INTO tenant_modules (tenant_id, module, enabled)
-          VALUES (${tenantId}, ${module.id}, ${enabled})
+          VALUES (${tenantId}, ${moduleEntry.id}, ${enabled})
           ON CONFLICT (tenant_id, module)
           DO UPDATE SET enabled = ${enabled}
         `,
       )
     }
+
+    await logAuditEvent(sql, sessionUser, {
+      action: "update",
+      entityType: "tenant_modules",
+      entityId: tenantId,
+      before: beforeRows ?? null,
+      after: modules,
+    })
 
     return NextResponse.json({ success: true })
   } catch (error: any) {

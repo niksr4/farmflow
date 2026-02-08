@@ -19,7 +19,8 @@ import LaborDeploymentTab from "./labor-deployment-tab"
 import OtherExpensesTab from "./other-expenses-tab"
 import { toast } from "sonner"
 import { getCurrentFiscalYear, getAvailableFiscalYears, type FiscalYear } from "@/lib/fiscal-year-utils"
-import { buildTenantHeaders } from "@/lib/tenant"
+import { formatDateOnly } from "@/lib/date-utils"
+import { formatCurrency } from "@/lib/format"
 
 interface AccountActivity {
   code: string
@@ -39,7 +40,6 @@ export default function AccountsPage() {
 
   const [selectedFiscalYear, setSelectedFiscalYear] = useState<FiscalYear>(getCurrentFiscalYear())
   const availableFiscalYears = getAvailableFiscalYears()
-  const tenantHeaders = useMemo(() => buildTenantHeaders(user?.tenantId), [user?.tenantId])
 
   const [exportStartDate, setExportStartDate] = useState<string>("")
   const [exportEndDate, setExportEndDate] = useState<string>("")
@@ -75,7 +75,7 @@ export default function AccountsPage() {
           startDate: selectedFiscalYear.startDate,
           endDate: selectedFiscalYear.endDate,
         })
-        const response = await fetch(`/api/accounts-totals?${params.toString()}`, { headers: tenantHeaders })
+        const response = await fetch(`/api/accounts-totals?${params.toString()}`)
         const data = await response.json()
 
         if (!response.ok || !data.success) {
@@ -98,12 +98,12 @@ export default function AccountsPage() {
     }
 
     fetchTotals()
-  }, [selectedFiscalYear.endDate, selectedFiscalYear.startDate, tenantHeaders, user?.tenantId])
+  }, [selectedFiscalYear.endDate, selectedFiscalYear.startDate, user?.tenantId])
 
   const fetchAllActivities = async () => {
     try {
       setIsLoading(true)
-      const response = await fetch("/api/get-activity", { headers: tenantHeaders })
+      const response = await fetch("/api/get-activity")
       const data = await response.json()
       console.log("Fetched activities:", data)
 
@@ -126,7 +126,7 @@ export default function AccountsPage() {
     setLoadingActivities(true)
     try {
       console.log("[v0] Fetching account activities...")
-      const response = await fetch("/api/get-activity", { headers: tenantHeaders })
+      const response = await fetch("/api/get-activity")
       const data = await response.json()
       console.log("[v0] Account activities response:", data)
       if (data.success && data.activities) {
@@ -156,7 +156,6 @@ export default function AccountsPage() {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          ...tenantHeaders,
         },
         body: JSON.stringify({
           code: newActivityCode.trim(),
@@ -193,8 +192,8 @@ export default function AccountsPage() {
   const fetchAllDeploymentsForExport = async (): Promise<CombinedDeployment[] | null> => {
     try {
       const [laborResponse, expenseResponse] = await Promise.all([
-        fetch("/api/labor-neon?all=true", { headers: tenantHeaders }),
-        fetch("/api/expenses-neon?all=true", { headers: tenantHeaders }),
+        fetch("/api/labor-neon?all=true"),
+        fetch("/api/expenses-neon?all=true"),
       ])
 
       if (!laborResponse.ok) {
@@ -492,24 +491,6 @@ export default function AccountsPage() {
     document.body.removeChild(link)
   }
 
-  const formatDate = (dateString: string) => {
-    const date = new Date(dateString)
-    const day = date.getDate().toString().padStart(2, "0")
-    const month = (date.getMonth() + 1).toString().padStart(2, "0")
-    const year = date.getFullYear()
-    const hours = date.getHours().toString().padStart(2, "0")
-    const minutes = date.getMinutes().toString().padStart(2, "0")
-    return `${day}/${month}/${year}, ${hours}:${minutes}`
-  }
-
-  const formatDateOnly = (dateString: string) => {
-    const date = new Date(dateString)
-    const day = date.getDate().toString().padStart(2, "0")
-    const month = (date.getMonth() + 1).toString().padStart(2, "0")
-    const year = date.getFullYear()
-    return `${day}/${month}/${year}`
-  }
-
   const formatDateForQIF = (dateString: string) => {
     const date = new Date(dateString)
     const day = date.getDate().toString().padStart(2, "0")
@@ -580,28 +561,10 @@ export default function AccountsPage() {
                   <Skeleton className="h-8 w-32 mt-1" />
                 ) : (
                   <div className="space-y-1">
-                    <p className="text-2xl font-bold">
-                      ₹
-                      {filteredGrandTotal.toLocaleString("en-IN", {
-                        minimumFractionDigits: 2,
-                        maximumFractionDigits: 2,
-                      })}
-                    </p>
+                    <p className="text-2xl font-bold">{formatCurrency(filteredGrandTotal)}</p>
                     <div className="text-xs text-muted-foreground space-y-0.5">
-                      <div>
-                        Labor: ₹
-                        {filteredLaborTotal.toLocaleString("en-IN", {
-                          minimumFractionDigits: 2,
-                          maximumFractionDigits: 2,
-                        })}
-                      </div>
-                      <div>
-                        Other: ₹
-                        {filteredOtherExpensesTotal.toLocaleString("en-IN", {
-                          minimumFractionDigits: 2,
-                          maximumFractionDigits: 2,
-                        })}
-                      </div>
+                      <div>Labor: {formatCurrency(filteredLaborTotal)}</div>
+                      <div>Other: {formatCurrency(filteredOtherExpensesTotal)}</div>
                     </div>
                   </div>
                 )}
