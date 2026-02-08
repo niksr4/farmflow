@@ -2,8 +2,9 @@
 
 import { useEffect, useRef, useState } from "react"
 import Link from "next/link"
-import { motion, useInView } from "framer-motion"
-import { ArrowRight, CheckCircle2, Leaf, Shield, Sparkles, Truck, MessageCircle, Send, X, Factory, DollarSign } from "lucide-react"
+import Image from "next/image"
+import { motion, useInView, useScroll, useTransform } from "framer-motion"
+import { ArrowRight, CheckCircle2, Leaf, Shield, Sparkles, Truck, MessageCircle, Send, X, Factory, DollarSign, TrendingUp } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
@@ -18,6 +19,12 @@ const JOURNEY_STEPS = [
     iconBg: "bg-emerald-100",
     iconColor: "text-emerald-700",
     metrics: ["KG tracked", "Lots created", "Variety noted"],
+    image: "/images/coffee-cherry-harvest.jpg",
+    advantage: {
+      title: "Eliminate Cherry Weight Disputes",
+      stat: "100%",
+      description: "Digital intake records with timestamps prevent disputes and ensure fair payment to pickers",
+    },
   },
   {
     step: "02",
@@ -28,6 +35,12 @@ const JOURNEY_STEPS = [
     iconBg: "bg-amber-100",
     iconColor: "text-amber-700",
     metrics: ["Yield %", "Grade assigned", "Processing loss"],
+    image: "/images/coffee-processing.jpg",
+    advantage: {
+      title: "Spot Processing Losses Early",
+      stat: "3-5%",
+      description: "Real-time yield tracking alerts you when conversion rates drop below baseline, saving thousands",
+    },
   },
   {
     step: "03",
@@ -38,6 +51,12 @@ const JOURNEY_STEPS = [
     iconBg: "bg-blue-100",
     iconColor: "text-blue-700",
     metrics: ["Bags dispatched", "Transit status", "Delivery confirmed"],
+    image: "/images/coffee-dispatch.jpg",
+    advantage: {
+      title: "Zero Dispatch Errors",
+      stat: "₹2.4L",
+      description: "Automated bag counts and weight verification prevent costly shipping mistakes and buyer disputes",
+    },
   },
   {
     step: "04",
@@ -48,6 +67,12 @@ const JOURNEY_STEPS = [
     iconBg: "bg-violet-100",
     iconColor: "text-violet-700",
     metrics: ["Revenue tracked", "Payment status", "Lot-to-buyer link"],
+    image: "/images/coffee-cherry-harvest.jpg",
+    advantage: {
+      title: "Complete Buyer Traceability",
+      stat: "Export-Ready",
+      description: "Generate compliance reports in seconds with full lot history from cherry to shipment",
+    },
   },
 ]
 
@@ -205,67 +230,224 @@ const getChatbotReply = (input: string) => {
   return "I can help with features, pricing, onboarding, data isolation, exports, and mobile access. Ask me anything about FarmFlow."
 }
 
-// Journey Step Component with scroll animation
+// Immersive Hero Section with Parallax
+function HeroSection() {
+  const ref = useRef(null)
+  const { scrollYProgress } = useScroll({
+    target: ref,
+    offset: ["start start", "end start"]
+  })
+  
+  const y = useTransform(scrollYProgress, [0, 1], ["0%", "50%"])
+  const opacity = useTransform(scrollYProgress, [0, 0.5], [1, 0])
+  
+  return (
+    <section ref={ref} className="relative h-screen flex items-center justify-center overflow-hidden">
+      {/* Parallax Background Image */}
+      <motion.div 
+        style={{ y }}
+        className="absolute inset-0 z-0"
+      >
+        <Image
+          src="/images/coffee-farm-aerial.jpg"
+          alt="Aerial view of coffee plantation"
+          fill
+          className="object-cover"
+          priority
+          quality={90}
+        />
+        <div className="absolute inset-0 bg-gradient-to-b from-background/60 via-background/40 to-background" />
+      </motion.div>
+      
+      {/* Hero Content */}
+      <motion.div 
+        style={{ opacity }}
+        className="relative z-10 px-6 text-center max-w-5xl mx-auto"
+      >
+        <motion.div
+          initial={{ opacity: 0, y: 30 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.8, delay: 0.2 }}
+        >
+          <Badge variant="secondary" className="text-sm px-5 py-2 font-medium mb-6 backdrop-blur-sm bg-background/80">
+            Coffee Estate Operations Platform
+          </Badge>
+        </motion.div>
+        
+        <motion.h1
+          initial={{ opacity: 0, y: 30 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.8, delay: 0.4 }}
+          className="font-display text-5xl md:text-7xl lg:text-8xl font-bold leading-[1.05] text-balance mb-8"
+        >
+          Track every kilogram<br />from cherry to buyer
+        </motion.h1>
+        
+        <motion.p
+          initial={{ opacity: 0, y: 30 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.8, delay: 0.6 }}
+          className="text-xl md:text-2xl leading-relaxed text-muted-foreground max-w-3xl mx-auto mb-10"
+        >
+          Complete traceability for Arabica and Robusta estates. From harvest through hulling, dispatch, and final sale.
+        </motion.p>
+        
+        <motion.div
+          initial={{ opacity: 0, y: 30 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.8, delay: 0.8 }}
+          className="flex flex-wrap items-center justify-center gap-4"
+        >
+          <Button size="lg" asChild className="h-14 px-8 text-lg shadow-xl hover:shadow-2xl transition-shadow">
+            <Link href="/signup">
+              Get Started <ArrowRight className="ml-2 h-5 w-5" />
+            </Link>
+          </Button>
+          <Button size="lg" variant="outline" asChild className="h-14 px-8 text-lg backdrop-blur-sm bg-background/80">
+            <Link href="/login">View Dashboard</Link>
+          </Button>
+        </motion.div>
+        
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ duration: 1, delay: 1.2 }}
+          className="grid grid-cols-2 md:grid-cols-4 gap-6 mt-16 text-sm"
+        >
+          {BULLETS.map((item, i) => (
+            <motion.div 
+              key={item}
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.5, delay: 1.2 + i * 0.1 }}
+              className="flex flex-col items-center gap-2 backdrop-blur-sm bg-background/60 rounded-xl p-4"
+            >
+              <CheckCircle2 className="h-6 w-6 text-primary flex-shrink-0" />
+              <span className="text-center">{item}</span>
+            </motion.div>
+          ))}
+        </motion.div>
+      </motion.div>
+      
+      {/* Scroll Indicator */}
+      <motion.div
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        transition={{ duration: 1, delay: 1.5 }}
+        style={{ opacity }}
+        className="absolute bottom-10 left-1/2 -translate-x-1/2 z-10"
+      >
+        <div className="flex flex-col items-center gap-2 text-muted-foreground">
+          <span className="text-xs uppercase tracking-wider">Scroll to explore</span>
+          <motion.div
+            animate={{ y: [0, 8, 0] }}
+            transition={{ duration: 1.5, repeat: Infinity, ease: "easeInOut" }}
+            className="w-6 h-10 rounded-full border-2 border-muted-foreground/40 flex items-start justify-center p-2"
+          >
+            <div className="w-1 h-2 bg-muted-foreground/60 rounded-full" />
+          </motion.div>
+        </div>
+      </motion.div>
+    </section>
+  )
+}
+
+// Journey Step Component with scroll animation and alternating layout
 function JourneyStepItem({ step, index }: { step: typeof JOURNEY_STEPS[0]; index: number }) {
   const ref = useRef(null)
-  const isInView = useInView(ref, { once: true, margin: "-80px" })
+  const isInView = useInView(ref, { once: true, margin: "-100px" })
+  const isEven = index % 2 === 0
   
   return (
     <motion.div
       ref={ref}
-      initial={{ opacity: 0, x: -30 }}
-      animate={isInView ? { opacity: 1, x: 0 } : { opacity: 0, x: -30 }}
-      transition={{ duration: 0.5, delay: index * 0.1, ease: "easeOut" }}
+      initial={{ opacity: 0, y: 50 }}
+      animate={isInView ? { opacity: 1, y: 0 } : { opacity: 0, y: 50 }}
+      transition={{ duration: 0.6, delay: index * 0.1, ease: "easeOut" }}
       className="relative"
     >
-      {index < JOURNEY_STEPS.length - 1 && (
-        <motion.div 
-          initial={{ scaleY: 0 }}
-          animate={isInView ? { scaleY: 1 } : { scaleY: 0 }}
-          transition={{ duration: 0.4, delay: index * 0.1 + 0.2 }}
-          className="hidden lg:block absolute left-10 top-24 w-0.5 h-[calc(100%+2rem)] bg-gradient-to-b from-border via-border to-transparent origin-top" 
-        />
-      )}
-      <div className="grid lg:grid-cols-[auto_1fr] gap-6 lg:gap-10">
-        <div className="flex items-start gap-4 lg:gap-6">
-          <div className="relative">
-            <motion.div 
-              initial={{ scale: 0, rotate: -180 }}
-              animate={isInView ? { scale: 1, rotate: 0 } : { scale: 0, rotate: -180 }}
-              transition={{ duration: 0.5, delay: index * 0.1 + 0.1, type: "spring", stiffness: 200 }}
-              className={`h-20 w-20 rounded-2xl ${step.iconBg} ${step.iconColor} flex items-center justify-center shadow-sm`}
-            >
-              <step.icon className="h-9 w-9" />
-            </motion.div>
-            <motion.div 
-              initial={{ scale: 0 }}
-              animate={isInView ? { scale: 1 } : { scale: 0 }}
-              transition={{ duration: 0.3, delay: index * 0.1 + 0.3 }}
-              className="absolute -top-2 -right-2 h-8 w-8 rounded-full bg-primary text-primary-foreground flex items-center justify-center text-xs font-bold"
-            >
-              {step.step}
-            </motion.div>
+      <div className={`grid lg:grid-cols-2 gap-8 lg:gap-12 items-center ${isEven ? '' : 'lg:flex-row-reverse'}`}>
+        {/* Image Side */}
+        <motion.div
+          initial={{ opacity: 0, x: isEven ? -30 : 30 }}
+          animate={isInView ? { opacity: 1, x: 0 } : { opacity: 0, x: isEven ? -30 : 30 }}
+          transition={{ duration: 0.6, delay: index * 0.1 + 0.2 }}
+          className={`relative ${isEven ? 'lg:order-1' : 'lg:order-2'}`}
+        >
+          <div className="relative aspect-[4/3] rounded-2xl overflow-hidden border shadow-xl">
+            <Image
+              src={step.image}
+              alt={step.title}
+              fill
+              className="object-cover"
+              sizes="(max-width: 768px) 100vw, 50vw"
+            />
           </div>
-        </div>
-        <div className="space-y-6">
-          <div className="space-y-3">
-            <h3 className="font-display text-3xl font-bold">{step.title}</h3>
-            <p className="text-lg text-muted-foreground leading-relaxed">{step.description}</p>
+          
+          {/* Step Number Badge */}
+          <div className="absolute -top-4 -left-4 h-16 w-16 rounded-2xl bg-primary text-primary-foreground flex items-center justify-center shadow-lg">
+            <span className="font-display text-2xl font-bold">{step.step}</span>
           </div>
-          <div className="grid grid-cols-3 gap-4">
+        </motion.div>
+        
+        {/* Content Side */}
+        <motion.div
+          initial={{ opacity: 0, x: isEven ? 30 : -30 }}
+          animate={isInView ? { opacity: 1, x: 0 } : { opacity: 0, x: isEven ? 30 : -30 }}
+          transition={{ duration: 0.6, delay: index * 0.1 + 0.3 }}
+          className={`space-y-6 ${isEven ? 'lg:order-2' : 'lg:order-1'}`}
+        >
+          <div className="flex items-center gap-4">
+            <div className={`h-16 w-16 rounded-2xl ${step.iconBg} ${step.iconColor} flex items-center justify-center shadow-sm`}>
+              <step.icon className="h-8 w-8" />
+            </div>
+            <h3 className="font-display text-4xl font-bold">{step.title}</h3>
+          </div>
+          
+          <p className="text-lg text-muted-foreground leading-relaxed">
+            {step.description}
+          </p>
+          
+          <div className="grid grid-cols-3 gap-3">
             {step.metrics.map((metric, metricIndex) => (
               <motion.div 
                 key={metric}
-                initial={{ opacity: 0, y: 20 }}
-                animate={isInView ? { opacity: 1, y: 0 } : { opacity: 0, y: 20 }}
-                transition={{ duration: 0.3, delay: index * 0.1 + 0.3 + metricIndex * 0.05 }}
-                className={`rounded-xl bg-gradient-to-br ${step.color} border p-4`}
+                initial={{ opacity: 0, scale: 0.8 }}
+                animate={isInView ? { opacity: 1, scale: 1 } : { opacity: 0, scale: 0.8 }}
+                transition={{ duration: 0.3, delay: index * 0.1 + 0.4 + metricIndex * 0.05 }}
+                className={`rounded-xl bg-gradient-to-br ${step.color} border p-4 text-center`}
               >
                 <p className="text-sm font-semibold">{metric}</p>
               </motion.div>
             ))}
           </div>
-        </div>
+          
+          {/* FarmFlow Advantage Card */}
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={isInView ? { opacity: 1, y: 0 } : { opacity: 0, y: 20 }}
+            transition={{ duration: 0.5, delay: index * 0.1 + 0.6 }}
+          >
+            <Card className="border-2 border-primary/20 bg-primary/5 backdrop-blur-sm">
+              <CardContent className="p-6">
+                <div className="flex items-start gap-4">
+                  <div className="h-12 w-12 rounded-xl bg-primary/10 flex items-center justify-center flex-shrink-0">
+                    <TrendingUp className="h-6 w-6 text-primary" />
+                  </div>
+                  <div className="space-y-2">
+                    <div className="flex items-baseline gap-3">
+                      <h4 className="font-display text-xl font-bold">{step.advantage.title}</h4>
+                      <Badge variant="secondary" className="text-xs font-bold">{step.advantage.stat}</Badge>
+                    </div>
+                    <p className="text-sm text-muted-foreground leading-relaxed">
+                      {step.advantage.description}
+                    </p>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          </motion.div>
+        </motion.div>
       </div>
     </motion.div>
   )
@@ -451,8 +633,8 @@ export default function LandingPage() {
       </div>
       <div ref={beanLayerRef} className="pointer-events-none absolute inset-0 z-30 overflow-hidden" />
       <div className="relative z-10">
-        <header className="px-6 pt-4 sm:pt-6">
-          <nav className="mx-auto flex w-full max-w-7xl flex-col gap-3 rounded-2xl border bg-card/80 px-4 py-3 backdrop-blur-xl shadow-sm sm:flex-row sm:items-center sm:justify-between">
+        <header className="fixed top-0 left-0 right-0 z-50 px-6 pt-4 sm:pt-6">
+          <nav className="mx-auto flex w-full max-w-7xl flex-col gap-3 rounded-2xl border bg-card/90 px-4 py-3 backdrop-blur-xl shadow-lg sm:flex-row sm:items-center sm:justify-between">
             <div className="flex items-center gap-3">
               <div className="h-10 w-10 rounded-xl bg-primary text-primary-foreground flex items-center justify-center">
                 <Leaf className="h-5 w-5" />
@@ -484,69 +666,35 @@ export default function LandingPage() {
           </nav>
         </header>
 
-        <main className="px-6 pb-20">
-          <section className="mx-auto mt-16 w-full max-w-7xl grid gap-16 lg:grid-cols-[1.15fr_0.85fr] items-center sm:mt-24">
-            <div className="space-y-8 rise-in">
-              <Badge variant="secondary" className="text-sm px-4 py-1.5 font-medium">
-                Coffee Estate Operations Platform
-              </Badge>
-              <h1 className="font-display text-5xl md:text-7xl font-bold leading-[1.1] text-balance">
-                Track every kilogram of coffee from cherry to buyer
-              </h1>
-              <p className="text-xl leading-relaxed text-muted-foreground">
-                Complete traceability for Arabica and Robusta estates. From harvest intake through hulling, grading, dispatch, and final sale—all in one unified platform.
-              </p>
-              <div className="flex flex-wrap items-center gap-4">
-                <Button size="lg" asChild className="h-12 px-6 text-base">
-                  <Link href="/signup">
-                    Get Started <ArrowRight className="ml-2 h-5 w-5" />
-                  </Link>
-                </Button>
-                <Button size="lg" variant="outline" asChild className="h-12 px-6 text-base">
-                  <Link href="/login">View Dashboard</Link>
-                </Button>
-              </div>
-              <div className="grid gap-4 text-sm sm:grid-cols-2 pt-4">
-                {BULLETS.map((item) => (
-                  <div key={item} className="flex items-start gap-3">
-                    <CheckCircle2 className="h-5 w-5 text-primary mt-0.5 flex-shrink-0" />
-                    <span className="text-muted-foreground">{item}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            <div className="relative rise-in-delayed">
-              <Card className="relative border bg-card/50 backdrop-blur-sm">
-                <CardHeader>
-                  <CardTitle className="font-display text-2xl">Live Dashboard</CardTitle>
-                  <CardDescription>Real-time visibility across operations</CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  <div className="rounded-xl border bg-primary/5 p-5">
-                    <p className="text-xs uppercase tracking-wider text-primary font-semibold">Active Lots</p>
-                    <p className="font-display text-4xl font-bold mt-2">152</p>
-                    <p className="text-xs text-muted-foreground mt-1">Fully traceable batches</p>
-                  </div>
-                  <div className="grid grid-cols-2 gap-3">
-                    <div className="rounded-xl border bg-card p-4">
-                      <p className="text-xs text-muted-foreground">Yield Rate</p>
-                      <p className="font-display text-2xl font-bold text-accent mt-1">46.4%</p>
-                    </div>
-                    <div className="rounded-xl border bg-card p-4">
-                      <p className="text-xs text-muted-foreground">Revenue</p>
-                      <p className="font-display text-2xl font-bold text-accent mt-1">₹24.8L</p>
-                    </div>
-                  </div>
-                  <div className="rounded-lg bg-muted/50 p-3 text-xs text-muted-foreground">
-                    Sample data for demonstration
-                  </div>
-                </CardContent>
-              </Card>
-            </div>
+        <main className="pb-20">
+          <HeroSection />
+          
+          <section className="mx-auto mt-20 w-full max-w-7xl px-6 grid gap-6 md:grid-cols-3">
+            {CONTROL_SIGNALS.map((signal, index) => {
+              const ref = useRef(null)
+              const isInView = useInView(ref, { once: true, margin: "-50px" })
+              
+              return (
+                <motion.div
+                  key={signal.label}
+                  ref={ref}
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={isInView ? { opacity: 1, y: 0 } : { opacity: 0, y: 20 }}
+                  transition={{ duration: 0.5, delay: index * 0.1 }}
+                >
+                  <Card className="border bg-card/50 backdrop-blur-sm hover:shadow-lg transition-shadow">
+                    <CardContent className="p-6 space-y-3">
+                      <p className="text-xs uppercase tracking-wider font-semibold text-muted-foreground">{signal.label}</p>
+                      <p className="font-display text-4xl font-bold text-accent">{signal.value}</p>
+                      <p className="text-sm text-muted-foreground">{signal.description}</p>
+                    </CardContent>
+                  </Card>
+                </motion.div>
+              )
+            })}
           </section>
 
-          <section id="journey" className="mx-auto mt-32 w-full max-w-7xl space-y-16 scroll-mt-24">
+          <section id="journey" className="mx-auto mt-32 w-full max-w-7xl px-6 space-y-20 scroll-mt-24">
             <div className="text-center space-y-4">
               <Badge variant="secondary" className="text-sm px-4 py-1.5">
                 Complete Traceability
@@ -559,7 +707,7 @@ export default function LandingPage() {
               </p>
             </div>
 
-            <div className="grid gap-8 lg:gap-12">
+            <div className="grid gap-20 lg:gap-32">
               {JOURNEY_STEPS.map((step, index) => (
                 <JourneyStepItem key={step.step} step={step} index={index} />
               ))}
@@ -581,22 +729,7 @@ export default function LandingPage() {
             </div>
           </section>
 
-          <section className="mx-auto mt-32 w-full max-w-7xl grid gap-6 md:grid-cols-3">
-            {CONTROL_SIGNALS.map((signal) => (
-              <Card
-                key={signal.label}
-                className="border bg-card/50 backdrop-blur-sm hover:shadow-lg transition-shadow"
-              >
-                <CardContent className="p-6 space-y-3">
-                  <p className="text-xs uppercase tracking-wider font-semibold text-muted-foreground">{signal.label}</p>
-                  <p className="font-display text-4xl font-bold text-accent">{signal.value}</p>
-                  <p className="text-sm text-muted-foreground">{signal.description}</p>
-                </CardContent>
-              </Card>
-            ))}
-          </section>
-
-          <section className="mx-auto mt-20 w-full max-w-7xl grid gap-6 lg:grid-cols-[1.2fr_0.8fr]">
+          <section className="mx-auto mt-32 w-full max-w-7xl px-6 grid gap-6 lg:grid-cols-[1.2fr_0.8fr]">
             <Card className="border bg-card/50 backdrop-blur-sm">
               <CardHeader>
                 <CardTitle className="font-display text-2xl">Operations Dashboard</CardTitle>
@@ -633,7 +766,7 @@ export default function LandingPage() {
             </Card>
           </section>
 
-        <section id="features" className="mx-auto mt-32 w-full max-w-7xl space-y-12 scroll-mt-24">
+        <section id="features" className="mx-auto mt-32 w-full max-w-7xl px-6 space-y-12 scroll-mt-24">
           <div className="text-center space-y-4">
             <h2 className="font-display text-4xl md:text-5xl font-bold">Built for coffee estate operations</h2>
             <p className="text-lg text-muted-foreground max-w-2xl mx-auto">
@@ -649,7 +782,7 @@ export default function LandingPage() {
 
           <section
             id="traceability"
-            className="mx-auto mt-32 w-full max-w-7xl grid gap-10 lg:grid-cols-2 items-center scroll-mt-24"
+            className="mx-auto mt-32 w-full max-w-7xl px-6 grid gap-10 lg:grid-cols-2 items-center scroll-mt-24"
           >
             <Card className="border bg-card/50 backdrop-blur-sm">
               <CardHeader>
@@ -682,7 +815,7 @@ export default function LandingPage() {
             </div>
           </section>
 
-        <section id="pricing" className="mx-auto mt-32 w-full max-w-7xl space-y-12 scroll-mt-24">
+        <section id="pricing" className="mx-auto mt-32 w-full max-w-7xl px-6 space-y-12 scroll-mt-24">
           <div className="text-center space-y-4">
             <h2 className="font-display text-4xl md:text-5xl font-bold">Simple, modular pricing</h2>
             <p className="text-lg text-muted-foreground max-w-2xl mx-auto">
