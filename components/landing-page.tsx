@@ -14,23 +14,23 @@ const body = Manrope({ subsets: ["latin"], weight: ["400", "500", "600", "700"] 
 const JOURNEY_STEPS = [
   {
     step: "01",
-    title: "Picking & Intake",
-    description: "Record harvest by lot, location, and variety. Track cherry and parchment inputs with automatic weight and bag conversions.",
+    title: "Cherry Intake",
+    description: "Record coffee cherry harvest by lot, location, and variety (Arabica/Robusta). Track cherry and parchment inputs with automatic weight and bag conversions.",
     icon: Leaf,
     color: "from-emerald-50 to-emerald-100/50",
     iconBg: "bg-emerald-100",
     iconColor: "text-emerald-700",
-    metrics: ["KG tracked", "Lots created", "Quality grade"],
+    metrics: ["KG tracked", "Lots created", "Variety noted"],
   },
   {
     step: "02",
-    title: "Processing & Quality",
-    description: "Monitor hulling, washing, drying, and grading stages. Capture yield rates, conversion ratios, and quality scores for every batch.",
+    title: "Hulling & Grading",
+    description: "Monitor coffee processing through hulling, washing, drying, and grading. Capture parchment-to-clean bean yields, conversion ratios, and quality scores for every batch.",
     icon: Factory,
     color: "from-amber-50 to-amber-100/50",
     iconBg: "bg-amber-100",
     iconColor: "text-amber-700",
-    metrics: ["Yield %", "Loss tracking", "Processing stage"],
+    metrics: ["Yield %", "Grade assigned", "Processing loss"],
   },
   {
     step: "03",
@@ -56,32 +56,32 @@ const JOURNEY_STEPS = [
 
 const HIGHLIGHTS = [
   {
-    title: "Lot-to-Buyer Traceability",
-    description: "Every KG and bag is linked from intake to dispatch with a clean audit trail.",
+    title: "Complete Coffee Traceability",
+    description: "Track every KG from cherry intake to clean bean dispatch with a verifiable audit trail for buyers.",
     icon: Shield,
   },
   {
-    title: "Inventory & Loss Control",
-    description: "Live stock, movement history, and loss signals across every location.",
+    title: "Arabica & Robusta Management",
+    description: "Separate tracking for varieties with cherry, parchment, and clean bean stock across locations.",
     icon: Leaf,
   },
   {
-    title: "Processing Yield Clarity",
-    description: "Track parchment vs cherry yields and spot conversion drops early.",
+    title: "Hulling & Yield Precision",
+    description: "Monitor parchment-to-clean bean conversion rates and spot processing losses by lot and stage.",
     icon: Sparkles,
   },
   {
-    title: "Dispatch + Sales Reconciliation",
-    description: "Know what left the gate, what arrived, and what is still available.",
+    title: "Dispatch & Export Records",
+    description: "Generate buyer-ready dispatch notes with bag counts, weights, and delivery confirmation.",
     icon: Truck,
   },
 ]
 
 const BULLETS = [
-  "Daily intake → dry output reconciliation",
-  "Yield and loss by location or lot",
-  "Role-based access with audit logs",
-  "Buyer-ready exports in one click",
+  "Cherry to clean bean reconciliation",
+  "Arabica & Robusta yield tracking",
+  "Lot-level traceability for buyers",
+  "Export-ready compliance reports",
 ]
 
 const CONTROL_SIGNALS = [
@@ -139,8 +139,8 @@ const PRICING_TIERS = [
   {
     name: "Operations",
     price: "₹18,900",
-    description: "Add dispatch + sales reconciliation for commercial scale.",
-    modules: ["Core +", "Dispatch", "Sales", "Rainfall", "Pepper"],
+    description: "Add dispatch + sales reconciliation for commercial coffee estates.",
+    modules: ["Core +", "Dispatch", "Sales", "Rainfall", "Labor Tracking"],
     highlight: "Most popular",
   },
   {
@@ -157,7 +157,7 @@ const CHATBOT_FAQS = [
     id: "capabilities",
     question: "What can FarmFlow track?",
     answer:
-      "Inventory, processing, dispatch, sales, labor, and audits across locations. It supports Arabica/Robusta, parchment/cherry outputs, and KG ↔ bag conversion.",
+      "Coffee inventory, hulling/processing, dispatch, sales, labor, and audits across locations. Full support for Arabica/Robusta varieties, cherry/parchment/clean bean stages, and KG ↔ bag conversion.",
   },
   {
     id: "pricing",
@@ -393,13 +393,13 @@ export default function LandingPage() {
           <section className="mx-auto mt-16 w-full max-w-7xl grid gap-16 lg:grid-cols-[1.15fr_0.85fr] items-center sm:mt-24">
             <div className="space-y-8 rise-in">
               <Badge variant="secondary" className="text-sm px-4 py-1.5 font-medium">
-                Farm Operations Platform
+                Coffee Estate Operations Platform
               </Badge>
               <h1 className={`${display.className} text-5xl md:text-7xl font-bold leading-[1.1] text-balance`}>
-                Track every kilogram from field to buyer
+                Track every kilogram of coffee from cherry to buyer
               </h1>
               <p className="text-xl leading-relaxed text-muted-foreground">
-                Complete traceability for specialty crops. From harvest intake through processing, dispatch, and final sale—all in one unified platform.
+                Complete traceability for Arabica and Robusta estates. From harvest intake through hulling, grading, dispatch, and final sale—all in one unified platform.
               </p>
               <div className="flex flex-wrap items-center gap-4">
                 <Button size="lg" asChild className="h-12 px-6 text-base">
@@ -457,10 +457,10 @@ export default function LandingPage() {
                 Complete Traceability
               </Badge>
               <h2 className={`${display.className} text-4xl md:text-5xl font-bold text-balance`}>
-                From harvest to sale, tracked at every step
+                From cherry to export-ready bean
               </h2>
               <p className="text-lg text-muted-foreground max-w-2xl mx-auto leading-relaxed">
-                Follow your crops through the complete journey with full visibility, data capture, and compliance at each stage.
+                Follow your coffee through the complete journey—harvest, hulling, dispatch, and sale—with full visibility and compliance at each stage.
               </p>
             </div>
 
@@ -569,9 +569,9 @@ export default function LandingPage() {
 
         <section id="features" className="mx-auto mt-32 w-full max-w-7xl space-y-12 scroll-mt-24">
           <div className="text-center space-y-4">
-            <h2 className={`${display.className} text-4xl md:text-5xl font-bold`}>Powerful features for modern estates</h2>
+            <h2 className={`${display.className} text-4xl md:text-5xl font-bold`}>Built for coffee estate operations</h2>
             <p className="text-lg text-muted-foreground max-w-2xl mx-auto">
-              Built for operations, compliance, and complete buyer transparency
+              Everything you need for coffee processing, compliance, and buyer transparency
             </p>
           </div>
           <div className="grid gap-6 md:grid-cols-2">
@@ -781,7 +781,7 @@ export default function LandingPage() {
                 <p className="text-base font-bold">FarmFlow</p>
               </div>
               <p className="text-sm text-muted-foreground max-w-sm">
-                Modern operations platform for specialty crop estates
+                Modern operations platform for coffee estates. Pepper, tea, and spice modules coming soon.
               </p>
             </div>
             <div className="flex flex-wrap gap-x-8 gap-y-3 text-sm">
