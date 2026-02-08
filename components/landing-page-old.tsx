@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react"
 import Link from "next/link"
 import { motion, useInView } from "framer-motion"
-import { ArrowRight, CheckCircle2, Leaf, Shield, Sparkles, Truck, MessageCircle, Send, X, Factory, DollarSign } from "lucide-react"
+import { ArrowRight, CheckCircle2, Leaf, Shield, Sparkles, Truck, MessageCircle, Send, X, Package, Factory, Send as SendIcon, DollarSign } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
@@ -203,104 +203,6 @@ const getChatbotReply = (input: string) => {
   if (faq) return faq.answer
 
   return "I can help with features, pricing, onboarding, data isolation, exports, and mobile access. Ask me anything about FarmFlow."
-}
-
-// Journey Step Component with scroll animation
-function JourneyStepItem({ step, index }: { step: typeof JOURNEY_STEPS[0]; index: number }) {
-  const ref = useRef(null)
-  const isInView = useInView(ref, { once: true, margin: "-80px" })
-  
-  return (
-    <motion.div
-      ref={ref}
-      initial={{ opacity: 0, x: -30 }}
-      animate={isInView ? { opacity: 1, x: 0 } : { opacity: 0, x: -30 }}
-      transition={{ duration: 0.5, delay: index * 0.1, ease: "easeOut" }}
-      className="relative"
-    >
-      {index < JOURNEY_STEPS.length - 1 && (
-        <motion.div 
-          initial={{ scaleY: 0 }}
-          animate={isInView ? { scaleY: 1 } : { scaleY: 0 }}
-          transition={{ duration: 0.4, delay: index * 0.1 + 0.2 }}
-          className="hidden lg:block absolute left-10 top-24 w-0.5 h-[calc(100%+2rem)] bg-gradient-to-b from-border via-border to-transparent origin-top" 
-        />
-      )}
-      <div className="grid lg:grid-cols-[auto_1fr] gap-6 lg:gap-10">
-        <div className="flex items-start gap-4 lg:gap-6">
-          <div className="relative">
-            <motion.div 
-              initial={{ scale: 0, rotate: -180 }}
-              animate={isInView ? { scale: 1, rotate: 0 } : { scale: 0, rotate: -180 }}
-              transition={{ duration: 0.5, delay: index * 0.1 + 0.1, type: "spring", stiffness: 200 }}
-              className={`h-20 w-20 rounded-2xl ${step.iconBg} ${step.iconColor} flex items-center justify-center shadow-sm`}
-            >
-              <step.icon className="h-9 w-9" />
-            </motion.div>
-            <motion.div 
-              initial={{ scale: 0 }}
-              animate={isInView ? { scale: 1 } : { scale: 0 }}
-              transition={{ duration: 0.3, delay: index * 0.1 + 0.3 }}
-              className="absolute -top-2 -right-2 h-8 w-8 rounded-full bg-primary text-primary-foreground flex items-center justify-center text-xs font-bold"
-            >
-              {step.step}
-            </motion.div>
-          </div>
-        </div>
-        <div className="space-y-6">
-          <div className="space-y-3">
-            <h3 className="font-display text-3xl font-bold">{step.title}</h3>
-            <p className="text-lg text-muted-foreground leading-relaxed">{step.description}</p>
-          </div>
-          <div className="grid grid-cols-3 gap-4">
-            {step.metrics.map((metric, metricIndex) => (
-              <motion.div 
-                key={metric}
-                initial={{ opacity: 0, y: 20 }}
-                animate={isInView ? { opacity: 1, y: 0 } : { opacity: 0, y: 20 }}
-                transition={{ duration: 0.3, delay: index * 0.1 + 0.3 + metricIndex * 0.05 }}
-                className={`rounded-xl bg-gradient-to-br ${step.color} border p-4`}
-              >
-                <p className="text-sm font-semibold">{metric}</p>
-              </motion.div>
-            ))}
-          </div>
-        </div>
-      </div>
-    </motion.div>
-  )
-}
-
-// Feature Card with scroll animation
-function FeatureCard({ feature, index }: { feature: typeof HIGHLIGHTS[0]; index: number }) {
-  const ref = useRef(null)
-  const isInView = useInView(ref, { once: true, margin: "-50px" })
-  
-  return (
-    <motion.div
-      ref={ref}
-      initial={{ opacity: 0, y: 30 }}
-      animate={isInView ? { opacity: 1, y: 0 } : { opacity: 0, y: 30 }}
-      transition={{ duration: 0.4, delay: index * 0.1 }}
-    >
-      <Card className="group border bg-card/50 backdrop-blur-sm transition-all duration-300 hover:shadow-lg hover:-translate-y-1 h-full">
-        <CardHeader className="space-y-4">
-          <motion.div 
-            initial={{ scale: 0 }}
-            animate={isInView ? { scale: 1 } : { scale: 0 }}
-            transition={{ duration: 0.4, delay: index * 0.1 + 0.2, type: "spring" }}
-            className="h-14 w-14 rounded-2xl bg-primary/10 text-primary flex items-center justify-center"
-          >
-            <feature.icon className="h-7 w-7" />
-          </motion.div>
-          <div className="space-y-2">
-            <CardTitle className="text-xl">{feature.title}</CardTitle>
-            <CardDescription className="text-base">{feature.description}</CardDescription>
-          </div>
-        </CardHeader>
-      </Card>
-    </motion.div>
-  )
 }
 
 export default function LandingPage() {
@@ -561,7 +463,36 @@ export default function LandingPage() {
 
             <div className="grid gap-8 lg:gap-12">
               {JOURNEY_STEPS.map((step, index) => (
-                <JourneyStepItem key={step.step} step={step} index={index} />
+                <div key={step.step} className="relative">
+                  {index < JOURNEY_STEPS.length - 1 && (
+                    <div className="hidden lg:block absolute left-10 top-24 w-0.5 h-[calc(100%+2rem)] bg-gradient-to-b from-border via-border to-transparent" />
+                  )}
+                  <div className="grid lg:grid-cols-[auto_1fr] gap-6 lg:gap-10">
+                    <div className="flex items-start gap-4 lg:gap-6">
+                      <div className="relative">
+                        <div className={`h-20 w-20 rounded-2xl ${step.iconBg} ${step.iconColor} flex items-center justify-center shadow-sm`}>
+                          <step.icon className="h-9 w-9" />
+                        </div>
+                        <div className="absolute -top-2 -right-2 h-8 w-8 rounded-full bg-primary text-primary-foreground flex items-center justify-center text-xs font-bold">
+                          {step.step}
+                        </div>
+                      </div>
+                    </div>
+                    <div className="space-y-6">
+                      <div className="space-y-3">
+                        <h3 className="font-display text-3xl font-bold">{step.title}</h3>
+                        <p className="text-lg text-muted-foreground leading-relaxed">{step.description}</p>
+                      </div>
+                      <div className="grid grid-cols-3 gap-4">
+                        {step.metrics.map((metric) => (
+                          <div key={metric} className={`rounded-xl bg-gradient-to-br ${step.color} border p-4`}>
+                            <p className="text-sm font-semibold">{metric}</p>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                </div>
               ))}
             </div>
 
@@ -641,50 +572,63 @@ export default function LandingPage() {
             </p>
           </div>
           <div className="grid gap-6 md:grid-cols-2">
-            {HIGHLIGHTS.map((item, index) => (
-              <FeatureCard key={item.title} feature={item} index={index} />
+            {HIGHLIGHTS.map((item) => (
+              <Card
+                key={item.title}
+                className="group border bg-card/50 backdrop-blur-sm transition-all duration-300 hover:shadow-lg hover:-translate-y-1"
+              >
+                <CardHeader className="space-y-4">
+                  <div className="h-14 w-14 rounded-2xl bg-primary/10 text-primary flex items-center justify-center">
+                    <item.icon className="h-7 w-7" />
+                  </div>
+                  <div className="space-y-2">
+                    <CardTitle className="text-xl">{item.title}</CardTitle>
+                    <CardDescription className="text-base">{item.description}</CardDescription>
+                  </div>
+                </CardHeader>
+              </Card>
             ))}
           </div>
         </section>
 
-          <section
-            id="traceability"
-            className="mx-auto mt-32 w-full max-w-7xl grid gap-10 lg:grid-cols-2 items-center scroll-mt-24"
-          >
-            <Card className="border bg-card/50 backdrop-blur-sm">
-              <CardHeader>
-                <CardTitle className="font-display text-3xl">Built-in traceability</CardTitle>
-                <CardDescription className="text-base">
-                  Every batch has a complete, verifiable history from harvest to buyer
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4 text-base text-muted-foreground">
-                <p>
-                  Record harvest intake, processing outputs, dispatch notes, and sales receipts in a unified workflow.
-                </p>
-                <p>
-                  Generate standardized reports with timestamps, user logs, and quality data that buyers and auditors trust.
-                </p>
+        <section
+          id="traceability"
+          className="mx-auto mt-32 w-full max-w-7xl grid gap-10 lg:grid-cols-2 items-center scroll-mt-24"
+        >
+          <Card className="border bg-card/50 backdrop-blur-sm">
+            <CardHeader>
+              <CardTitle className={`${display.className} text-3xl`}>Built-in traceability</CardTitle>
+              <CardDescription className="text-base">
+                Every batch has a complete, verifiable history from harvest to buyer
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4 text-base text-muted-foreground">
+              <p>
+                Record harvest intake, processing outputs, dispatch notes, and sales receipts in a unified workflow.
+              </p>
+              <p>
+                Generate standardized reports with timestamps, user logs, and quality data that buyers and auditors trust.
+              </p>
+            </CardContent>
+          </Card>
+
+          <div className="space-y-6">
+            <div className="rounded-2xl border-2 border-emerald-200 bg-emerald-50 p-8">
+              <p className="text-sm font-semibold text-emerald-700 uppercase tracking-wider">Audit Score</p>
+              <p className={`${display.className} text-5xl font-bold text-emerald-700 mt-2`}>A+</p>
+              <p className="text-sm text-emerald-600 mt-2">Complete batch-level compliance</p>
+            </div>
+            <Card className="border bg-card">
+              <CardContent className="p-6 text-base text-muted-foreground">
+                Export compliance reports instantly and share with buyers in one click
               </CardContent>
             </Card>
-
-            <div className="space-y-6">
-              <div className="rounded-2xl border-2 border-emerald-200 bg-emerald-50 p-8">
-                <p className="text-sm font-semibold text-emerald-700 uppercase tracking-wider">Audit Score</p>
-                <p className="font-display text-5xl font-bold text-emerald-700 mt-2">A+</p>
-                <p className="text-sm text-emerald-600 mt-2">Complete batch-level compliance</p>
-              </div>
-              <Card className="border bg-card">
-                <CardContent className="p-6 text-base text-muted-foreground">
-                  Export compliance reports instantly and share with buyers in one click
-                </CardContent>
-              </Card>
-            </div>
-          </section>
+          </div>
+        </section>
 
         <section id="pricing" className="mx-auto mt-32 w-full max-w-7xl space-y-12 scroll-mt-24">
           <div className="text-center space-y-4">
-            <h2 className="font-display text-4xl md:text-5xl font-bold">Simple, modular pricing</h2>
+            <h2 className={`${display.className} text-4xl md:text-5xl font-bold`}>Simple, modular pricing</h2>
             <p className="text-lg text-muted-foreground max-w-2xl mx-auto">
               Start with essentials and scale as your operations grow
             </p>
@@ -697,12 +641,12 @@ export default function LandingPage() {
               >
                 <CardHeader className="space-y-4">
                   <div className="flex items-start justify-between">
-                    <CardTitle className="font-display text-2xl">{tier.name}</CardTitle>
+                    <CardTitle className={`${display.className} text-2xl`}>{tier.name}</CardTitle>
                     <Badge variant="secondary" className="text-xs">
                       {tier.highlight}
                     </Badge>
                   </div>
-                  <p className="font-display text-4xl font-bold">{tier.price}</p>
+                  <p className={`${display.className} text-4xl font-bold`}>{tier.price}</p>
                   <CardDescription className="text-base">{tier.description}</CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-6">
@@ -726,7 +670,7 @@ export default function LandingPage() {
         <section id="results" className="mx-auto mt-32 w-full max-w-7xl scroll-mt-24">
           <Card className="border-2 bg-primary/5 backdrop-blur-sm">
             <CardHeader className="text-center space-y-4 pb-6">
-              <CardTitle className="font-display text-3xl md:text-4xl font-bold">
+              <CardTitle className={`${display.className} text-3xl md:text-4xl font-bold`}>
                 Ready to transform your operations?
               </CardTitle>
               <CardDescription className="text-lg max-w-2xl mx-auto">
@@ -753,7 +697,7 @@ export default function LandingPage() {
 
         <section className="mx-auto mt-32 w-full max-w-7xl space-y-12">
           <div className="text-center space-y-4">
-            <h2 className="font-display text-4xl font-bold">Our Mission & Vision</h2>
+            <h2 className={`${display.className} text-4xl font-bold`}>Our Mission & Vision</h2>
             <p className="text-lg text-muted-foreground max-w-2xl mx-auto">
               Focused on delivering real outcomes for agricultural operations
             </p>
@@ -761,7 +705,7 @@ export default function LandingPage() {
           <div className="grid gap-8 lg:grid-cols-2">
             <Card id="mission" className="scroll-mt-24 border bg-card/50 backdrop-blur-sm">
               <CardHeader>
-                <CardTitle className="font-display text-2xl">Mission</CardTitle>
+                <CardTitle className={`${display.className} text-2xl`}>Mission</CardTitle>
                 <CardDescription className="text-base">Complete control of stock, yield, and revenue for every estate</CardDescription>
               </CardHeader>
               <CardContent className="text-base text-muted-foreground space-y-3">
@@ -775,7 +719,7 @@ export default function LandingPage() {
             </Card>
             <Card id="vision" className="scroll-mt-24 border bg-card/50 backdrop-blur-sm">
               <CardHeader>
-                <CardTitle className="font-display text-2xl">Vision</CardTitle>
+                <CardTitle className={`${display.className} text-2xl`}>Vision</CardTitle>
                 <CardDescription className="text-base">Transparent supply chains for specialty crops worldwide</CardDescription>
               </CardHeader>
               <CardContent className="text-base text-muted-foreground space-y-3">
@@ -792,7 +736,7 @@ export default function LandingPage() {
 
         <section className="mx-auto mt-32 w-full max-w-7xl space-y-12 pb-20">
           <div className="text-center space-y-4">
-            <h2 className="font-display text-4xl font-bold">Privacy & Terms</h2>
+            <h2 className={`${display.className} text-4xl font-bold`}>Privacy & Terms</h2>
             <p className="text-lg text-muted-foreground max-w-2xl mx-auto">
               Clear commitments for data security and accountability
             </p>
@@ -800,7 +744,7 @@ export default function LandingPage() {
           <div className="grid gap-8 lg:grid-cols-2">
             <Card id="privacy" className="scroll-mt-24 border bg-card/50 backdrop-blur-sm">
               <CardHeader>
-                <CardTitle className="font-display text-2xl">Privacy</CardTitle>
+                <CardTitle className={`${display.className} text-2xl`}>Privacy</CardTitle>
                 <CardDescription className="text-base">Your data stays private and fully isolated</CardDescription>
               </CardHeader>
               <CardContent className="text-base text-muted-foreground space-y-4">
@@ -811,7 +755,7 @@ export default function LandingPage() {
             </Card>
             <Card id="terms" className="scroll-mt-24 border bg-card/50 backdrop-blur-sm">
               <CardHeader>
-                <CardTitle className="font-display text-2xl">Terms</CardTitle>
+                <CardTitle className={`${display.className} text-2xl`}>Terms</CardTitle>
                 <CardDescription className="text-base">Clear usage terms and responsibilities</CardDescription>
               </CardHeader>
               <CardContent className="text-base text-muted-foreground space-y-4">
@@ -822,7 +766,6 @@ export default function LandingPage() {
             </Card>
           </div>
         </section>
-
       </main>
 
         <footer className="border-t bg-card/50 backdrop-blur-sm">
@@ -930,84 +873,6 @@ export default function LandingPage() {
           </Button>
         )}
       </div>
-
-      <style jsx global>{`
-        .coffee-bean {
-          position: absolute;
-          border-radius: 50% 40%;
-          background: linear-gradient(135deg, #6b4423 0%, #3e2816 100%);
-          will-change: transform;
-          animation: bean-fall linear forwards;
-        }
-
-        @keyframes bean-fall {
-          from {
-            top: -40px;
-            transform: translateX(0) rotate(0deg);
-          }
-          to {
-            top: 100vh;
-            transform: translateX(calc(var(--drift, 0) * 1px)) rotate(720deg);
-          }
-        }
-
-        .glow-pulse {
-          animation: glow-pulse 6s ease-in-out infinite;
-        }
-
-        @keyframes glow-pulse {
-          0%, 100% { opacity: 0.4; }
-          50% { opacity: 0.7; }
-        }
-
-        .soft-shift {
-          animation: soft-shift 8s ease-in-out infinite;
-        }
-
-        @keyframes soft-shift {
-          0%, 100% { transform: translate(0, 0); }
-          50% { transform: translate(20px, -10px); }
-        }
-
-        .rise-in {
-          animation: rise-in 0.8s cubic-bezier(0.16, 1, 0.3, 1) backwards;
-        }
-
-        .rise-in-delayed {
-          animation: rise-in 0.8s cubic-bezier(0.16, 1, 0.3, 1) 0.15s backwards;
-        }
-
-        @keyframes rise-in {
-          from {
-            opacity: 0;
-            transform: translateY(24px);
-          }
-          to {
-            opacity: 1;
-            transform: translateY(0);
-          }
-        }
-
-        .signal-scan {
-          animation: signal-scan 3s ease-in-out infinite;
-        }
-
-        @keyframes signal-scan {
-          0%, 100% { box-shadow: 0 0 0 0 rgba(120, 119, 198, 0); }
-          50% { box-shadow: 0 0 0 4px rgba(120, 119, 198, 0.1); }
-        }
-
-        @media (prefers-reduced-motion: reduce) {
-          .coffee-bean,
-          .glow-pulse,
-          .soft-shift,
-          .rise-in,
-          .rise-in-delayed,
-          .signal-scan {
-            animation: none !important;
-          }
-        }
-      `}</style>
     </div>
   )
 }
