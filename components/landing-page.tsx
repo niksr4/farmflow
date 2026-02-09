@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react"
 import Link from "next/link"
 import { Fraunces, Manrope } from "next/font/google"
-import { ArrowRight, CheckCircle2, Leaf, Shield, Sparkles, Truck, MessageCircle, Send, X, Droplets, Sprout, TreePine } from "lucide-react"
+import { ArrowRight, CheckCircle2, Leaf, Shield, Sparkles, Truck, MessageCircle, Send, X, Droplets, Sprout, TreePine, Coffee, TrendingUp, Package } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
@@ -360,75 +360,150 @@ export default function LandingPage() {
         </header>
 
         <main className="px-6 pb-20">
-          <section className="mx-auto mt-10 w-full max-w-6xl grid gap-12 lg:grid-cols-[1.15fr_0.85fr] items-center sm:mt-16">
-            <div className="space-y-6 rise-in">
-              <Badge className="border border-white/60 bg-white/70 text-[color:var(--copper)] backdrop-blur-md">
-                Coffee Estate OS for sustainable farming
-              </Badge>
-              <h1 className={`${display.className} text-4xl md:text-6xl font-semibold leading-tight text-[color:var(--ink)]`}>
-                Know every kilogram, bag, and rupee across your coffee estate.
-              </h1>
-              <p className="text-lg text-slate-700">
-                FarmFlow puts inventory, processing, labor, dispatch, and sales in one operating view. Track Arabica and
-                Robusta yields, parchment and cherry outputs, and buyer-ready records without spreadsheet drift.
-              </p>
-              <div className="flex flex-wrap items-center gap-4">
-                <Button size="lg" asChild className="group shadow-[0_22px_50px_-24px_rgba(164,90,42,0.65)]">
-                  <Link href="/signup">
-                    Start with your coffee estate <ArrowRight className="ml-2 h-4 w-4 group-hover:translate-x-0.5" />
-                  </Link>
-                </Button>
-                <Button size="lg" variant="outline" asChild className="border-slate-200">
-                  <Link href="/login">View dashboard</Link>
-                </Button>
+          <section className="mx-auto mt-10 w-full max-w-7xl sm:mt-16">
+            <div className="relative overflow-hidden rounded-3xl border border-white/40 bg-gradient-to-br from-[#6b3f1f] via-[#4a2c16] to-[#2d1a0f] p-8 md:p-12 lg:p-16 shadow-[0_40px_100px_-40px_rgba(107,63,31,0.7)]">
+              {/* Coffee bean background pattern */}
+              <div className="pointer-events-none absolute inset-0 opacity-10">
+                <div className="absolute top-10 left-10 h-20 w-20 rounded-full bg-[#f7efe3]" />
+                <div className="absolute top-32 right-20 h-12 w-12 rounded-full bg-[#f7efe3]" />
+                <div className="absolute bottom-20 left-32 h-16 w-16 rounded-full bg-[#f7efe3]" />
+                <div className="absolute bottom-32 right-16 h-24 w-24 rounded-full bg-[#f7efe3]" />
               </div>
-              <div className="grid gap-3 text-sm text-slate-600 sm:grid-cols-2">
-                {BULLETS.map((item) => (
-                  <div key={item} className="flex items-center gap-2">
-                    <CheckCircle2 className="h-4 w-4 text-[color:var(--sage)]" />
-                    <span>{item}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
 
-            <div className="relative rise-in-delayed">
-              <div className="pointer-events-none absolute -inset-6 rounded-[36px] bg-[radial-gradient(circle_at_top,rgba(164,90,42,0.25),transparent_55%)] blur-2xl" />
-              <Card className="relative border border-white/60 bg-white/80 backdrop-blur-xl shadow-[0_40px_90px_-50px_rgba(15,23,42,0.9)]">
-                <CardHeader>
-                  <CardTitle className={`${display.className} text-2xl`}>Command Snapshot</CardTitle>
-                  <CardDescription>See every KG, lot, and cost signal in one screen.</CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  <div className="rounded-2xl border border-[color:var(--sage)]/20 bg-[color:var(--sand)]/70 p-4">
-                    <p className="text-xs uppercase tracking-[0.2em] text-[color:var(--sage)]">Traceable lots</p>
-                    <p className="text-2xl font-semibold text-[color:var(--ink)]">152</p>
-                    <p className="text-xs text-slate-600">Sample coffee estate snapshot</p>
+              <div className="relative z-10 grid gap-12 lg:grid-cols-2 items-center">
+                <div className="space-y-6 rise-in">
+                  <Badge className="border-white/30 bg-white/20 text-white backdrop-blur-md">
+                    <Coffee className="mr-2 h-3.5 w-3.5" />
+                    From cherry to buyer—complete coffee estate management
+                  </Badge>
+                  
+                  <h1 className={`${display.className} text-4xl md:text-5xl lg:text-6xl font-bold leading-tight text-white text-balance`}>
+                    From harvest to export, track every bean
+                  </h1>
+                  
+                  <p className="text-lg text-white/90 leading-relaxed">
+                    The operating system built specifically for Indian coffee estates. Track Arabica and Robusta from cherry intake through processing, drying, and dispatch with complete traceability and sustainability metrics.
+                  </p>
+
+                  <div className="flex flex-wrap items-center gap-4">
+                    <Button size="lg" className="bg-white text-[#6b3f1f] hover:bg-white/90 font-semibold group shadow-[0_20px_40px_-20px_rgba(255,255,255,0.5)]">
+                      <Link href="/signup" className="flex items-center">
+                        Start tracking your harvest <ArrowRight className="ml-2 h-4 w-4 group-hover:translate-x-1 transition-transform" />
+                      </Link>
+                    </Button>
+                    <Button size="lg" variant="outline" className="border-white/30 bg-white/10 text-white hover:bg-white/20 backdrop-blur-sm">
+                      <Link href="/login">View live demo</Link>
+                    </Button>
                   </div>
-                  <div className="grid grid-cols-2 gap-3 text-sm">
-                    <div className="rounded-xl border border-slate-200/60 bg-white/70 p-3">
-                      <p className="text-xs text-muted-foreground">Yield swing</p>
-                      <p className="text-lg font-semibold text-[color:var(--copper)]">+8.2%</p>
+
+                  {/* Quick stats */}
+                  <div className="grid grid-cols-3 gap-4 pt-4">
+                    <div className="space-y-1">
+                      <div className="flex items-center gap-1.5">
+                        <Coffee className="h-4 w-4 text-white/70" />
+                        <p className={`${display.className} text-2xl font-bold text-white`}>152</p>
+                      </div>
+                      <p className="text-xs text-white/70">Lots tracked</p>
                     </div>
-                    <div className="rounded-xl border border-slate-200/60 bg-white/70 p-3">
-                      <p className="text-xs text-muted-foreground">Revenue protected</p>
-                      <p className="text-lg font-semibold text-[color:var(--copper)]">₹16.2L</p>
+                    <div className="space-y-1">
+                      <div className="flex items-center gap-1.5">
+                        <TrendingUp className="h-4 w-4 text-white/70" />
+                        <p className={`${display.className} text-2xl font-bold text-white`}>46.4%</p>
+                      </div>
+                      <p className="text-xs text-white/70">Avg yield</p>
+                    </div>
+                    <div className="space-y-1">
+                      <div className="flex items-center gap-1.5">
+                        <Package className="h-4 w-4 text-white/70" />
+                        <p className={`${display.className} text-2xl font-bold text-white`}>100%</p>
+                      </div>
+                      <p className="text-xs text-white/70">Traceable</p>
                     </div>
                   </div>
-                  <div className="rounded-xl border border-slate-200/60 bg-white/70 p-3 text-xs text-muted-foreground">
-                    Illustrative data for demo purposes only.
+                </div>
+
+                {/* Right side - Enhanced coffee estate visual */}
+                <div className="relative rise-in-delayed">
+                  <div className="relative">
+                    {/* Main card with coffee estate data */}
+                    <Card className="relative border-white/30 bg-white/95 backdrop-blur-xl shadow-[0_40px_90px_-50px_rgba(0,0,0,0.9)]">
+                      <CardHeader className="pb-3">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-3">
+                            <div className="h-12 w-12 rounded-xl bg-gradient-to-br from-[#6b3f1f] to-[#4a2c16] flex items-center justify-center">
+                              <Coffee className="h-6 w-6 text-white" />
+                            </div>
+                            <div>
+                              <CardTitle className={`${display.className} text-xl`}>Estate Dashboard</CardTitle>
+                              <CardDescription>Live from Coorg, Karnataka</CardDescription>
+                            </div>
+                          </div>
+                          <Badge className="bg-emerald-100 text-emerald-700 border-emerald-200">
+                            <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 mr-1.5 animate-pulse" />
+                            Live
+                          </Badge>
+                        </div>
+                      </CardHeader>
+                      <CardContent className="space-y-4">
+                        {/* Current processing */}
+                        <div className="rounded-xl border border-amber-200/70 bg-gradient-to-br from-amber-50/80 to-orange-50/50 p-4">
+                          <div className="flex items-center justify-between mb-2">
+                            <p className="text-xs font-medium text-amber-900">Current Processing</p>
+                            <Sparkles className="h-4 w-4 text-amber-600" />
+                          </div>
+                          <p className={`${display.className} text-3xl font-bold text-amber-900`}>2,840 kg</p>
+                          <p className="text-xs text-amber-700 mt-1">Arabica cherry → parchment</p>
+                          <div className="mt-3 h-2 rounded-full bg-amber-200/50 overflow-hidden">
+                            <div className="h-full w-[68%] rounded-full bg-gradient-to-r from-amber-400 to-orange-500 animate-pulse" />
+                          </div>
+                        </div>
+
+                        {/* Grid metrics */}
+                        <div className="grid grid-cols-2 gap-3">
+                          <div className="rounded-xl border border-emerald-200/70 bg-gradient-to-br from-emerald-50/80 to-green-50/50 p-3">
+                            <div className="flex items-center gap-1.5 mb-1">
+                              <Droplets className="h-3.5 w-3.5 text-emerald-600" />
+                              <p className="text-[10px] font-medium text-emerald-900">Water Usage</p>
+                            </div>
+                            <p className={`${display.className} text-xl font-bold text-emerald-900`}>-28%</p>
+                            <p className="text-[10px] text-emerald-700">vs last season</p>
+                          </div>
+                          <div className="rounded-xl border border-blue-200/70 bg-gradient-to-br from-blue-50/80 to-sky-50/50 p-3">
+                            <div className="flex items-center gap-1.5 mb-1">
+                              <Shield className="h-3.5 w-3.5 text-blue-600" />
+                              <p className="text-[10px] font-medium text-blue-900">Certified Lots</p>
+                            </div>
+                            <p className={`${display.className} text-xl font-bold text-blue-900`}>89%</p>
+                            <p className="text-[10px] text-blue-700">organic verified</p>
+                          </div>
+                        </div>
+
+                        {/* Revenue protected */}
+                        <div className="rounded-xl border border-slate-200/70 bg-gradient-to-br from-slate-50/80 to-slate-100/50 p-4">
+                          <p className="text-xs font-medium text-slate-700 mb-1">Season Revenue</p>
+                          <p className={`${display.className} text-2xl font-bold text-slate-900`}>₹24.8 Lakh</p>
+                          <div className="flex items-center gap-2 mt-2">
+                            <div className="flex-1 text-xs text-slate-600">Protected & traceable</div>
+                            <CheckCircle2 className="h-4 w-4 text-emerald-600" />
+                          </div>
+                        </div>
+                      </CardContent>
+                    </Card>
+
+                    {/* Floating alert card */}
+                    <div className="absolute -bottom-6 -left-6 hidden lg:block w-56 rounded-xl border border-orange-200/70 bg-white shadow-[0_20px_50px_-20px_rgba(234,88,12,0.4)] p-3">
+                      <div className="flex items-start gap-2">
+                        <div className="h-8 w-8 rounded-lg bg-orange-100 flex items-center justify-center flex-shrink-0">
+                          <span className="text-orange-600 text-sm font-bold">!</span>
+                        </div>
+                        <div>
+                          <p className="text-xs font-semibold text-slate-900">Yield alert</p>
+                          <p className="text-[10px] text-slate-600 mt-0.5">Lot MV-847 below target by 3.2%</p>
+                        </div>
+                      </div>
+                    </div>
                   </div>
-                </CardContent>
-              </Card>
-              <div className="absolute -bottom-8 -left-4 hidden w-48 rounded-2xl border border-white/70 bg-white/90 p-3 text-xs text-slate-600 shadow-[0_24px_60px_-40px_rgba(15,23,42,0.6)] backdrop-blur-md lg:block">
-                <div className="text-[10px] uppercase tracking-[0.2em] text-[color:var(--sage)]">Lot risk</div>
-                <div className="mt-2 text-lg font-semibold text-[color:var(--ink)]">3 alerts</div>
-                <div className="mt-1">Losses &gt; 3% flagged instantly.</div>
-              </div>
-              <div className="absolute -top-8 right-0 hidden w-44 rounded-2xl border border-white/70 bg-white/90 p-3 text-xs text-slate-600 shadow-[0_24px_60px_-40px_rgba(15,23,42,0.6)] backdrop-blur-md lg:block">
-                <div className="text-[10px] uppercase tracking-[0.2em] text-[color:var(--copper)]">Season cash</div>
-                <div className="mt-2 text-lg font-semibold text-[color:var(--ink)]">₹24.8L</div>
-                <div className="mt-1">Net cash in this FY.</div>
+                </div>
               </div>
             </div>
           </section>
