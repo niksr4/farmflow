@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react"
 import Link from "next/link"
 import { Fraunces, Manrope } from "next/font/google"
-import { ArrowRight, CheckCircle2, Leaf, Shield, Sparkles, Truck, MessageCircle, Send, X } from "lucide-react"
+import { ArrowRight, CheckCircle2, Leaf, Shield, Sparkles, Truck, MessageCircle, Send, X, Droplets, Sprout, TreePine } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
@@ -31,6 +31,16 @@ const HIGHLIGHTS = [
     title: "Dispatch + Sales Reconciliation",
     description: "Know what left the gate, what arrived, and what is still available.",
     icon: Truck,
+  },
+  {
+    title: "Water Usage Tracking",
+    description: "Monitor water consumption in processing and promote sustainable practices.",
+    icon: Droplets,
+  },
+  {
+    title: "Organic & Shade-Grown Certification",
+    description: "Track and verify sustainable farming practices for premium certifications.",
+    icon: Sprout,
   },
 ]
 
@@ -89,22 +99,22 @@ const PRICING_TIERS = [
   {
     name: "Core",
     price: "₹9,900",
-    description: "For a single estate that needs daily control and clean reporting.",
+    description: "For a single coffee estate that needs daily control and clean reporting.",
     modules: ["Inventory", "Transactions", "Accounts", "Processing"],
-    highlight: "Best for first estate",
+    highlight: "Best for first coffee estate",
   },
   {
     name: "Operations",
     price: "₹18,900",
-    description: "Add dispatch + sales reconciliation for commercial scale.",
-    modules: ["Core +", "Dispatch", "Sales", "Rainfall", "Pepper"],
+    description: "Add dispatch + sales reconciliation for commercial scale coffee estates.",
+    modules: ["Core +", "Dispatch", "Sales", "Rainfall", "Pepper", "Sustainability Tracking"],
     highlight: "Most popular",
   },
   {
     name: "Enterprise",
     price: "Custom",
-    description: "Multi-estate governance and custom workflows across regions.",
-    modules: ["Operations +", "Analytics", "Weather", "News", "Custom Modules"],
+    description: "Multi-coffee-estate governance and custom workflows across regions.",
+    modules: ["Operations +", "Analytics", "Weather", "News", "Carbon Footprint", "Custom Modules"],
     highlight: "Full stack",
   },
 ]
@@ -126,13 +136,13 @@ const CHATBOT_FAQS = [
     id: "onboarding",
     question: "How fast can we get started?",
     answer:
-      "Most estates go live in a day: add locations, load inventory, record processing, then start dispatch/sales. Guided onboarding is included.",
+      "Most coffee estates go live in a day: add locations, load inventory, record processing, then start dispatch/sales. Guided onboarding is included.",
   },
   {
     id: "security",
-    question: "Is estate data isolated?",
+    question: "Is coffee estate data isolated?",
     answer:
-      "Yes. Every estate is tenant-isolated with role-based access and audit logs to show who changed what and when.",
+      "Yes. Every coffee estate is tenant-isolated with role-based access and audit logs to show who changed what and when.",
   },
   {
     id: "exports",
@@ -325,6 +335,9 @@ export default function LandingPage() {
               </div>
             </div>
             <div className="hidden md:flex items-center gap-6 text-sm text-muted-foreground">
+              <a href="#sustainability" className="hover:text-foreground">
+                Sustainability
+              </a>
               <a href="#features" className="hover:text-foreground">
                 Features
               </a>
@@ -333,9 +346,6 @@ export default function LandingPage() {
               </a>
               <a href="#pricing" className="hover:text-foreground">
                 Pricing
-              </a>
-              <a href="#results" className="hover:text-foreground">
-                Results
               </a>
             </div>
             <div className="flex items-center gap-2">
@@ -353,10 +363,10 @@ export default function LandingPage() {
           <section className="mx-auto mt-10 w-full max-w-6xl grid gap-12 lg:grid-cols-[1.15fr_0.85fr] items-center sm:mt-16">
             <div className="space-y-6 rise-in">
               <Badge className="border border-white/60 bg-white/70 text-[color:var(--copper)] backdrop-blur-md">
-                Estate OS for coffee and specialty crops
+                Coffee Estate OS for sustainable farming
               </Badge>
               <h1 className={`${display.className} text-4xl md:text-6xl font-semibold leading-tight text-[color:var(--ink)]`}>
-                Know every kilogram, bag, and rupee across your estate.
+                Know every kilogram, bag, and rupee across your coffee estate.
               </h1>
               <p className="text-lg text-slate-700">
                 FarmFlow puts inventory, processing, labor, dispatch, and sales in one operating view. Track Arabica and
@@ -365,7 +375,7 @@ export default function LandingPage() {
               <div className="flex flex-wrap items-center gap-4">
                 <Button size="lg" asChild className="group shadow-[0_22px_50px_-24px_rgba(164,90,42,0.65)]">
                   <Link href="/signup">
-                    Start with your estate <ArrowRight className="ml-2 h-4 w-4 group-hover:translate-x-0.5" />
+                    Start with your coffee estate <ArrowRight className="ml-2 h-4 w-4 group-hover:translate-x-0.5" />
                   </Link>
                 </Button>
                 <Button size="lg" variant="outline" asChild className="border-slate-200">
@@ -393,7 +403,7 @@ export default function LandingPage() {
                   <div className="rounded-2xl border border-[color:var(--sage)]/20 bg-[color:var(--sand)]/70 p-4">
                     <p className="text-xs uppercase tracking-[0.2em] text-[color:var(--sage)]">Traceable lots</p>
                     <p className="text-2xl font-semibold text-[color:var(--ink)]">152</p>
-                    <p className="text-xs text-slate-600">Sample estate snapshot</p>
+                    <p className="text-xs text-slate-600">Sample coffee estate snapshot</p>
                   </div>
                   <div className="grid grid-cols-2 gap-3 text-sm">
                     <div className="rounded-xl border border-slate-200/60 bg-white/70 p-3">
@@ -473,16 +483,74 @@ export default function LandingPage() {
             </Card>
           </section>
 
+        <section id="sustainability" className="mx-auto mt-16 w-full max-w-6xl space-y-6 scroll-mt-24 sm:mt-20">
+          <div className="text-center space-y-3">
+            <h2 className={`${display.className} text-3xl font-semibold`}>Sustainability at the Core</h2>
+            <p className="text-muted-foreground max-w-2xl mx-auto">
+              Track environmental impact alongside operations for certified sustainable coffee production.
+            </p>
+          </div>
+          <div className="grid gap-6 md:grid-cols-3">
+            <Card className="border border-emerald-200/70 bg-gradient-to-br from-emerald-50/80 to-white/80 backdrop-blur-md">
+              <CardHeader>
+                <div className="h-12 w-12 rounded-xl bg-emerald-100 text-emerald-700 flex items-center justify-center mb-2">
+                  <Droplets className="h-6 w-6" />
+                </div>
+                <CardTitle className={`${display.className} text-xl`}>Water Conservation</CardTitle>
+                <CardDescription>Monitor water usage per kg of coffee processed</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="rounded-xl border border-emerald-200 bg-white/70 p-4">
+                  <p className="text-2xl font-semibold text-emerald-700">-28%</p>
+                  <p className="text-xs text-muted-foreground mt-1">Average water reduction with tracking</p>
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card className="border border-green-200/70 bg-gradient-to-br from-green-50/80 to-white/80 backdrop-blur-md">
+              <CardHeader>
+                <div className="h-12 w-12 rounded-xl bg-green-100 text-green-700 flex items-center justify-center mb-2">
+                  <Sprout className="h-6 w-6" />
+                </div>
+                <CardTitle className={`${display.className} text-xl`}>Organic Certification</CardTitle>
+                <CardDescription>Track practices for organic and shade-grown certification</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="rounded-xl border border-green-200 bg-white/70 p-4">
+                  <p className="text-2xl font-semibold text-green-700">100%</p>
+                  <p className="text-xs text-muted-foreground mt-1">Audit-ready documentation</p>
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card className="border border-teal-200/70 bg-gradient-to-br from-teal-50/80 to-white/80 backdrop-blur-md">
+              <CardHeader>
+                <div className="h-12 w-12 rounded-xl bg-teal-100 text-teal-700 flex items-center justify-center mb-2">
+                  <TreePine className="h-6 w-6" />
+                </div>
+                <CardTitle className={`${display.className} text-xl`}>Carbon Footprint</CardTitle>
+                <CardDescription>Calculate and reduce emissions across operations</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="rounded-xl border border-teal-200 bg-white/70 p-4">
+                  <p className="text-2xl font-semibold text-teal-700">Tracked</p>
+                  <p className="text-xs text-muted-foreground mt-1">Per lot and processing stage</p>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+        </section>
+
         <section id="features" className="mx-auto mt-16 w-full max-w-6xl space-y-6 scroll-mt-24 sm:mt-20">
           <div className="flex items-center justify-between">
             <div>
-              <h2 className={`${display.className} text-3xl font-semibold`}>Everything your estate needs, in one system</h2>
+              <h2 className={`${display.className} text-3xl font-semibold`}>Everything your coffee estate needs, in one system</h2>
               <p className="text-muted-foreground mt-2">
                 Built for day-to-day operations, compliance, and buyer transparency.
               </p>
             </div>
           </div>
-          <div className="grid gap-6 md:grid-cols-2">
+          <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
             {HIGHLIGHTS.map((item) => (
               <Card
                 key={item.title}
@@ -540,7 +608,7 @@ export default function LandingPage() {
             <div>
               <h2 className={`${display.className} text-3xl font-semibold`}>Pricing by modules</h2>
               <p className="text-muted-foreground mt-2">
-                Start lean, add modules as each estate scales.
+                Start lean, add modules as each coffee estate scales.
               </p>
             </div>
           </div>
@@ -581,9 +649,9 @@ export default function LandingPage() {
         <section id="results" className="mx-auto mt-16 w-full max-w-6xl scroll-mt-24 sm:mt-20">
           <Card className="border border-white/50 bg-white/80 backdrop-blur-md">
             <CardHeader>
-              <CardTitle className={`${display.className} text-2xl`}>Ready to run a modern estate?</CardTitle>
+              <CardTitle className={`${display.className} text-2xl`}>Ready to run a modern coffee estate?</CardTitle>
               <CardDescription>
-                Start with one estate, expand to every location, and keep every KG accounted for.
+                Start with one coffee estate, expand to every location, and keep every KG accounted for.
               </CardDescription>
             </CardHeader>
             <CardContent className="flex flex-wrap gap-4 items-center justify-between">
@@ -592,7 +660,7 @@ export default function LandingPage() {
               </div>
               <div className="flex gap-3">
                 <Button asChild>
-                  <Link href="/signup">Create your estate</Link>
+                  <Link href="/signup">Create your coffee estate</Link>
                 </Button>
                 <Button variant="outline" asChild>
                   <Link href="/login">Sign in</Link>
@@ -613,11 +681,11 @@ export default function LandingPage() {
             <Card id="mission" className="scroll-mt-24 border border-white/50 bg-white/80 backdrop-blur-md">
               <CardHeader>
                 <CardTitle className={`${display.className} text-xl`}>Mission</CardTitle>
-                <CardDescription>Give every estate complete control of stock, yield, and revenue.</CardDescription>
+                <CardDescription>Give every coffee estate complete control of stock, yield, and revenue.</CardDescription>
               </CardHeader>
               <CardContent className="text-sm text-muted-foreground">
                 FarmFlow replaces spreadsheets with a live operating system that reconciles every bag, lot, and cost
-                across the season. Estates make faster decisions with fewer surprises and stronger buyer trust.
+                across the season. Coffee estates make faster decisions with fewer surprises and stronger buyer trust.
               </CardContent>
             </Card>
             <Card id="vision" className="scroll-mt-24 border border-white/50 bg-white/80 backdrop-blur-md">
@@ -626,8 +694,8 @@ export default function LandingPage() {
                 <CardDescription>Transparent supply chains for coffee, tea, cocoa, and specialty crops.</CardDescription>
               </CardHeader>
               <CardContent className="text-sm text-muted-foreground">
-                We want every estate to run with the same clarity as a modern factory: real-time tracking, verified
-                quality, and instant visibility for managers, buyers, and auditors.
+                We want every coffee estate to run with the same clarity as a modern factory: real-time tracking, verified
+                quality, instant visibility for managers, buyers, and auditors—while promoting sustainable farming practices.
               </CardContent>
             </Card>
           </div>
@@ -642,10 +710,10 @@ export default function LandingPage() {
             <Card id="privacy" className="scroll-mt-24 border border-white/50 bg-white/80 backdrop-blur-md">
               <CardHeader>
                 <CardTitle className={`${display.className} text-xl`}>Privacy</CardTitle>
-                <CardDescription>Estate data stays private and tenant-isolated.</CardDescription>
+                <CardDescription>Coffee estate data stays private and tenant-isolated.</CardDescription>
               </CardHeader>
               <CardContent className="text-sm text-muted-foreground space-y-3">
-                <p>We never sell your operational data. Each estate runs in a separated tenant space.</p>
+                <p>We never sell your operational data. Each coffee estate runs in a separated tenant space.</p>
                 <p>Access is role-based, with audit logs to show who changed what and when.</p>
                 <p>Exports and backups stay under your control, and you can revoke users any time.</p>
               </CardContent>
@@ -657,7 +725,7 @@ export default function LandingPage() {
               </CardHeader>
               <CardContent className="text-sm text-muted-foreground space-y-3">
                 <p>FarmFlow provides operational tooling and reporting, not financial advice or guarantees.</p>
-                <p>Admins are responsible for data accuracy and user access within their estate.</p>
+                <p>Admins are responsible for data accuracy and user access within their coffee estate.</p>
                 <p>Service updates are communicated in advance and designed to protect existing data.</p>
               </CardContent>
             </Card>
@@ -674,6 +742,9 @@ export default function LandingPage() {
               </p>
             </div>
             <div className="flex flex-wrap gap-4 text-sm text-muted-foreground">
+              <a href="#sustainability" className="hover:text-foreground">
+                Sustainability
+              </a>
               <a href="#features" className="hover:text-foreground">
                 Features
               </a>
