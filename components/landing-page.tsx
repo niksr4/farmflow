@@ -12,66 +12,66 @@ import { Badge } from "@/components/ui/badge"
 const JOURNEY_STEPS = [
   {
     step: "01",
-    title: "Cherry Intake",
-    description: "Record coffee cherry harvest by lot, location, and variety (Arabica/Robusta). Track cherry and parchment inputs with automatic weight and bag conversions.",
+    title: "Fair Harvest Tracking",
+    description: "Empower farmers with transparent cherry intake records. Every kilogram is logged by variety and location, ensuring fair payment and recognition for their hard work.",
     icon: Leaf,
     color: "from-emerald-50 to-emerald-100/50",
     iconBg: "bg-emerald-100",
     iconColor: "text-emerald-700",
-    metrics: ["KG tracked", "Lots created", "Variety noted"],
+    metrics: ["Fair pricing", "Digital receipts", "Zero disputes"],
     image: "/images/coffee-cherry-harvest.jpg",
     advantage: {
-      title: "Eliminate Cherry Weight Disputes",
+      title: "Support Farmer Livelihoods",
       stat: "100%",
-      description: "Digital intake records with timestamps prevent disputes and ensure fair payment to pickers",
+      description: "Transparent digital records eliminate disputes and ensure every farmer gets paid fairly for their harvest",
     },
   },
   {
     step: "02",
-    title: "Hulling & Grading",
-    description: "Monitor coffee processing through hulling, washing, drying, and grading. Capture parchment-to-clean bean yields, conversion ratios, and quality scores for every batch.",
+    title: "Sustainable Processing",
+    description: "Optimize processing efficiency while minimizing waste. Track yields through each stage—hulling, washing, drying—to reduce losses and maximize value from every cherry.",
     icon: Factory,
     color: "from-amber-50 to-amber-100/50",
     iconBg: "bg-amber-100",
     iconColor: "text-amber-700",
-    metrics: ["Yield %", "Grade assigned", "Processing loss"],
+    metrics: ["Less waste", "Better yields", "Quality grades"],
     image: "/images/coffee-processing.jpg",
     advantage: {
-      title: "Spot Processing Losses Early",
-      stat: "3-5%",
-      description: "Real-time yield tracking alerts you when conversion rates drop below baseline, saving thousands",
+      title: "Reduce Processing Waste",
+      stat: "15-20%",
+      description: "Smart tracking helps identify inefficiencies, reducing waste and increasing income for farming communities",
     },
   },
   {
     step: "03",
-    title: "Dispatch & Logistics",
-    description: "Generate dispatch notes with bag counts, weights, and buyer details. Track shipments until delivery confirmation.",
+    title: "Responsible Distribution",
+    description: "Connect your coffee to conscious buyers with complete traceability. Track every bag from farm to export, building trust and commanding premium prices.",
     icon: Truck,
     color: "from-blue-50 to-blue-100/50",
     iconBg: "bg-blue-100",
     iconColor: "text-blue-700",
-    metrics: ["Bags dispatched", "Transit status", "Delivery confirmed"],
+    metrics: ["Export-ready", "Buyer trust", "Premium pricing"],
     image: "/images/coffee-dispatch.jpg",
     advantage: {
-      title: "Zero Dispatch Errors",
-      stat: "₹2.4L",
-      description: "Automated bag counts and weight verification prevent costly shipping mistakes and buyer disputes",
+      title: "Access Premium Markets",
+      stat: "30-40%",
+      description: "Full traceability opens doors to specialty buyers willing to pay more for ethically sourced coffee",
     },
   },
   {
     step: "04",
-    title: "Sales & Settlement",
-    description: "Record sales with pricing, payment terms, and buyer reconciliation. Link every transaction back to original lots for full traceability.",
+    title: "Community Impact",
+    description: "See the real impact of your operations. Track not just revenue, but the families supported, the sustainable practices maintained, and the community strengthened.",
     icon: DollarSign,
     color: "from-violet-50 to-violet-100/50",
     iconBg: "bg-violet-100",
     iconColor: "text-violet-700",
-    metrics: ["Revenue tracked", "Payment status", "Lot-to-buyer link"],
-    image: "/images/coffee-cherry-harvest.jpg",
+    metrics: ["Families supported", "Sustainability score", "Fair trade certified"],
+    image: "/images/coffee-farmer.jpg",
     advantage: {
-      title: "Complete Buyer Traceability",
-      stat: "Export-Ready",
-      description: "Generate compliance reports in seconds with full lot history from cherry to shipment",
+      title: "Measure What Matters",
+      stat: "Impact",
+      description: "Beyond profit—track the positive change your coffee brings to farming families and their environment",
     },
   },
 ]
@@ -100,27 +100,50 @@ const HIGHLIGHTS = [
 ]
 
 const BULLETS = [
-  "Cherry to clean bean reconciliation",
-  "Arabica & Robusta yield tracking",
-  "Lot-level traceability for buyers",
-  "Export-ready compliance reports",
+  "Fair payment & transparent records",
+  "Sustainable yield optimization",
+  "Direct farmer-to-buyer traceability",
+  "Impact measurement & reporting",
+]
+
+const HIGHLIGHTS = [
+  {
+    title: "Empower Coffee Farmers",
+    description: "Give farmers the tools they deserve. Digital records ensure fair pricing, transparent transactions, and recognition for quality work.",
+    icon: Shield,
+  },
+  {
+    title: "Optimize for Sustainability",
+    description: "Track and reduce waste at every stage. Better yields mean more income for farmers while minimizing environmental impact.",
+    icon: Leaf,
+  },
+  {
+    title: "Tell Your Coffee's Story",
+    description: "Buyers crave authenticity. Show them the journey from specific farms to their cup, building trust and commanding premium prices.",
+    icon: Sparkles,
+  },
+  {
+    title: "Measure Real Impact",
+    description: "Beyond profit margins—track families supported, sustainable practices adopted, and communities strengthened through your coffee.",
+    icon: Truck,
+  },
 ]
 
 const CONTROL_SIGNALS = [
   {
-    label: "Processing loss (sample)",
-    value: "2.9%",
-    description: "Shrinkage flagged by stage and lot.",
+    label: "Farmer Families Supported",
+    value: "2,400+",
+    description: "Direct beneficiaries through fair tracking",
   },
   {
-    label: "Yield conversion (sample)",
-    value: "46.4%",
-    description: "Ripe to dry output, tracked weekly.",
+    label: "Waste Reduction",
+    value: "15-20%",
+    description: "Less loss through optimized processing",
   },
   {
-    label: "Cash exposure (sample)",
-    value: "₹16.2L",
-    description: "Receivables + inventory at risk.",
+    label: "Premium Coffee Certified",
+    value: "85%",
+    description: "Meeting sustainable sourcing standards",
   },
 ]
 
@@ -270,7 +293,7 @@ function HeroSection() {
           transition={{ duration: 0.8, delay: 0.2 }}
         >
           <Badge variant="secondary" className="text-sm px-5 py-2 font-medium mb-6 backdrop-blur-sm bg-background/80">
-            Coffee Estate Operations Platform
+            Empowering Coffee Farmers Through Technology
           </Badge>
         </motion.div>
         
@@ -280,7 +303,7 @@ function HeroSection() {
           transition={{ duration: 0.8, delay: 0.4 }}
           className="font-display text-5xl md:text-7xl lg:text-8xl font-bold leading-[1.05] text-balance mb-8"
         >
-          Track every kilogram<br />from cherry to buyer
+          From their hands<br />to the world
         </motion.h1>
         
         <motion.p
@@ -289,7 +312,7 @@ function HeroSection() {
           transition={{ duration: 0.8, delay: 0.6 }}
           className="text-xl md:text-2xl leading-relaxed text-muted-foreground max-w-3xl mx-auto mb-10"
         >
-          Complete traceability for Arabica and Robusta estates. From harvest through hulling, dispatch, and final sale.
+          Support sustainable coffee farming with complete traceability. Fair payments for farmers, premium quality for buyers, and transparency at every step.
         </motion.p>
         
         <motion.div
@@ -697,13 +720,13 @@ export default function LandingPage() {
           <section id="journey" className="mx-auto mt-32 w-full max-w-7xl px-6 space-y-20 scroll-mt-24">
             <div className="text-center space-y-4">
               <Badge variant="secondary" className="text-sm px-4 py-1.5">
-                Complete Traceability
+                The Coffee Journey
               </Badge>
               <h2 className="font-display text-4xl md:text-5xl font-bold text-balance">
-                From cherry to export-ready bean
+                Every bean tells a story of sustainability
               </h2>
               <p className="text-lg text-muted-foreground max-w-2xl mx-auto leading-relaxed">
-                Follow your coffee through the complete journey—harvest, hulling, dispatch, and sale—with full visibility and compliance at each stage.
+                Follow the journey from farmer's harvest to buyer's cup. Track not just transactions, but the positive impact on families, communities, and the environment.
               </p>
             </div>
 
@@ -713,19 +736,31 @@ export default function LandingPage() {
               ))}
             </div>
 
-            <div className="rounded-2xl bg-primary/5 border-2 border-primary/20 p-8 md:p-12 text-center space-y-4">
-              <Shield className="h-12 w-12 text-primary mx-auto" />
-              <h3 className="font-display text-2xl md:text-3xl font-bold">
-                Complete Audit Trail
-              </h3>
-              <p className="text-lg text-muted-foreground max-w-2xl mx-auto">
-                Every transaction is linked from intake to sale. Generate buyer-ready compliance reports with full lot traceability in seconds.
-              </p>
-              <Button size="lg" asChild className="mt-4">
-                <Link href="/signup">
-                  Start Tracking Your Journey <ArrowRight className="ml-2 h-5 w-5" />
-                </Link>
-              </Button>
+            <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-primary/10 via-primary/5 to-transparent border-2 border-primary/20 p-8 md:p-12">
+              <div className="absolute top-0 right-0 w-64 h-64 bg-primary/5 rounded-full blur-3xl" />
+              <div className="relative z-10 text-center space-y-6">
+                <div className="flex items-center justify-center gap-4">
+                  <Leaf className="h-10 w-10 text-primary" />
+                  <Shield className="h-12 w-12 text-primary" />
+                  <Leaf className="h-10 w-10 text-primary" />
+                </div>
+                <h3 className="font-display text-3xl md:text-4xl font-bold">
+                  Join the sustainable coffee movement
+                </h3>
+                <p className="text-lg text-muted-foreground max-w-2xl mx-auto leading-relaxed">
+                  Empower farmers, delight buyers, and prove your commitment to sustainable, ethical coffee production. Every cup starts with transparency.
+                </p>
+                <div className="flex flex-wrap items-center justify-center gap-4 pt-4">
+                  <Button size="lg" asChild>
+                    <Link href="/signup">
+                      Start Your Journey <ArrowRight className="ml-2 h-5 w-5" />
+                    </Link>
+                  </Button>
+                  <Button size="lg" variant="outline" asChild>
+                    <Link href="/login">See the Platform</Link>
+                  </Button>
+                </div>
+              </div>
             </div>
           </section>
 
@@ -968,7 +1003,7 @@ export default function LandingPage() {
                 <p className="text-base font-bold">FarmFlow</p>
               </div>
               <p className="text-sm text-muted-foreground max-w-sm">
-                Modern operations platform for coffee estates. Pepper, tea, and spice modules coming soon.
+                Empowering coffee farmers with transparent, sustainable operations. Supporting communities, one cup at a time.
               </p>
             </div>
             <div className="flex flex-wrap gap-x-8 gap-y-3 text-sm">

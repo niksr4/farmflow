@@ -63,6 +63,7 @@ import SeasonDashboard from "@/components/season-dashboard"
 import CuringTab from "@/components/curing-tab"
 import QualityGradingTab from "@/components/quality-grading-tab"
 import { PepperTab } from "./pepper-tab"
+import CoffeeResourcesTab from "@/components/coffee-resources-tab"
 import OnboardingChecklist, { type OnboardingStep } from "@/components/onboarding-checklist"
 import Link from "next/link"
 import { formatDateForDisplay, generateTimestamp, isWithinLast24Hours } from "@/lib/date-utils"
@@ -1304,13 +1305,17 @@ export default function InventorySystem() {
                   News
                 </TabsTrigger>
               )}
-              {canShowWeather && (
-                <TabsTrigger value="weather">
-                  <Cloudy className="h-4 w-4 mr-2" />
-                  Weather
-                </TabsTrigger>
-              )}
-            </TabsList>
+  {canShowWeather && (
+  <TabsTrigger value="weather">
+  <Cloudy className="h-4 w-4 mr-2" />
+  Weather
+  </TabsTrigger>
+  )}
+  <TabsTrigger value="resources">
+  <Coffee className="h-4 w-4 mr-2" />
+  Resources
+  </TabsTrigger>
+  </TabsList>
 
           {canShowInventory && (
             <TabsContent value="inventory" className="space-y-8">
@@ -1770,12 +1775,15 @@ export default function InventorySystem() {
               <NewsTab />
             </TabsContent>
           )}
-          {canShowWeather && (
-            <TabsContent value="weather" className="space-y-6">
-              <WeatherTab />
-            </TabsContent>
-          )}
-            </Tabs>
+  {canShowWeather && (
+  <TabsContent value="weather" className="space-y-6">
+  <WeatherTab />
+  </TabsContent>
+  )}
+  <TabsContent value="resources" className="space-y-6">
+  <CoffeeResourcesTab />
+  </TabsContent>
+  </Tabs>
         {isEditDialogOpen && editingTransaction && (
           <div
             className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
