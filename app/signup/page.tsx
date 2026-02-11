@@ -6,25 +6,31 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
+import { Info } from "lucide-react"
 
 export default function SignupRoute() {
   const [submitted, setSubmitted] = useState(false)
 
   return (
-    <div className="min-h-screen flex items-center justify-center px-4">
-      <div className="w-full max-w-md space-y-6">
+    <div className="min-h-screen flex items-center justify-center px-4 relative overflow-hidden">
+      <div className="pointer-events-none absolute inset-0">
+        <div className="absolute -top-24 left-[-8%] h-[280px] w-[280px] rounded-full bg-[radial-gradient(circle_at_center,rgba(152,85,42,0.35),transparent_70%)] blur-[120px]" />
+        <div className="absolute bottom-[-18%] right-[10%] h-[280px] w-[280px] rounded-full bg-[radial-gradient(circle_at_center,rgba(70,120,90,0.3),transparent_70%)] blur-[120px]" />
+      </div>
+      <div className="w-full max-w-md space-y-6 relative z-10">
         <Card className="border border-white/60 bg-white/85 backdrop-blur-md dark:bg-slate-900/75">
           <CardHeader>
-            <CardTitle>Request Access</CardTitle>
+            <CardTitle className="font-display">Request Access</CardTitle>
             <CardDescription>
-              Tell us about your estate and we will set up your tenant in minutes.
+              Tell us about your estate and we will set up your tenant, modules, and farmer-first traceability workflow.
             </CardDescription>
           </CardHeader>
           <CardContent>
             {submitted ? (
               <div className="space-y-3">
                 <p className="text-sm text-muted-foreground">
-                  Thanks. We will reach out with your login details shortly.
+                  Thanks. We will reach out with your login details and onboarding plan shortly.
                 </p>
                 <Button asChild className="w-full">
                   <Link href="/login">Go to Sign In</Link>
@@ -39,21 +45,101 @@ export default function SignupRoute() {
                 }}
               >
                 <div className="space-y-2">
-                  <Label htmlFor="name">Name</Label>
+                  <div className="flex items-center gap-2">
+                    <Label htmlFor="name">Name</Label>
+                    <TooltipProvider>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <button
+                            type="button"
+                            aria-label="Name help"
+                            className="inline-flex h-5 w-5 items-center justify-center rounded-full border border-slate-200 text-slate-500 hover:text-slate-700"
+                          >
+                            <Info className="h-3 w-3" />
+                          </button>
+                        </TooltipTrigger>
+                        <TooltipContent>Primary contact for estate onboarding.</TooltipContent>
+                      </Tooltip>
+                    </TooltipProvider>
+                  </div>
                   <Input id="name" placeholder="Your name" required />
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="email">Work Email</Label>
+                  <div className="flex items-center gap-2">
+                    <Label htmlFor="email">Work Email</Label>
+                    <TooltipProvider>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <button
+                            type="button"
+                            aria-label="Work email help"
+                            className="inline-flex h-5 w-5 items-center justify-center rounded-full border border-slate-200 text-slate-500 hover:text-slate-700"
+                          >
+                            <Info className="h-3 w-3" />
+                          </button>
+                        </TooltipTrigger>
+                        <TooltipContent>We send login details and onboarding updates here.</TooltipContent>
+                      </Tooltip>
+                    </TooltipProvider>
+                  </div>
                   <Input id="email" type="email" placeholder="you@estate.com" required />
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="estate">Estate Name</Label>
+                  <div className="flex items-center gap-2">
+                    <Label htmlFor="estate">Estate Name</Label>
+                    <TooltipProvider>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <button
+                            type="button"
+                            aria-label="Estate name help"
+                            className="inline-flex h-5 w-5 items-center justify-center rounded-full border border-slate-200 text-slate-500 hover:text-slate-700"
+                          >
+                            <Info className="h-3 w-3" />
+                          </button>
+                        </TooltipTrigger>
+                        <TooltipContent>This name appears in dashboards and reports.</TooltipContent>
+                      </Tooltip>
+                    </TooltipProvider>
+                  </div>
                   <Input id="estate" placeholder="Estate or cooperative name" required />
+                </div>
+                <div className="space-y-2">
+                  <div className="flex items-center gap-2">
+                    <Label htmlFor="region">Region</Label>
+                    <TooltipProvider>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <button
+                            type="button"
+                            aria-label="Region help"
+                            className="inline-flex h-5 w-5 items-center justify-center rounded-full border border-slate-200 text-slate-500 hover:text-slate-700"
+                          >
+                            <Info className="h-3 w-3" />
+                          </button>
+                        </TooltipTrigger>
+                        <TooltipContent>Helps us tailor onboarding and regional reporting.</TooltipContent>
+                      </Tooltip>
+                    </TooltipProvider>
+                  </div>
+                  <Input id="region" placeholder="Coorg, Chikmagalur, Wayanad..." />
                 </div>
                 <Button type="submit" className="w-full">
                   Request Access
                 </Button>
+                <p className="text-xs text-muted-foreground">
+                  By requesting access, you acknowledge the{" "}
+                  <Link href="/privacy" className="underline">
+                    Privacy Notice
+                  </Link>
+                  .
+                </p>
               </form>
+            )}
+            {!submitted && (
+              <div className="mt-6 rounded-xl border border-emerald-200/70 bg-emerald-50/70 p-4 text-xs text-emerald-800">
+                We will set up: estate profile, module access, rainfall logging, quality notes, and buyer-ready exports.
+              </div>
             )}
           </CardContent>
         </Card>

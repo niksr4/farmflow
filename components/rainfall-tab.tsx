@@ -1,9 +1,10 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, type ChangeEvent, type KeyboardEvent } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { FieldLabel } from "@/components/ui/field-label"
 import { Calendar } from "@/components/ui/calendar"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { toast } from "@/components/ui/use-toast"
@@ -12,6 +13,7 @@ import { format } from "date-fns"
 import { useAuth } from "@/hooks/use-auth"
 import { formatDateOnly } from "@/lib/date-utils"
 import { formatNumber } from "@/lib/format"
+import { canAcceptNonNegative, isBlockedNumericKey } from "@/lib/number-input"
 
 type RainfallRecord = {
   id: number
@@ -35,6 +37,16 @@ export default function RainfallTab({ username }: RainfallTabProps) {
   const [cents, setCents] = useState("")
   const [notes, setNotes] = useState("")
   const [loading, setLoading] = useState(false)
+  const blockInvalidNumberKey = (event: KeyboardEvent<HTMLInputElement>) => {
+    if (isBlockedNumericKey(event.key)) {
+      event.preventDefault()
+    }
+  }
+  const handleNonNegativeChange = (setter: (value: string) => void) => (event: ChangeEvent<HTMLInputElement>) => {
+    const nextValue = event.target.value
+    if (!canAcceptNonNegative(nextValue)) return
+    setter(nextValue)
+  }
 
   const fetchRecords = async () => {
     try {
@@ -53,8 +65,25 @@ export default function RainfallTab({ username }: RainfallTabProps) {
   }, [])
 
   const handleSaveRecord = async () => {
-    const inchesNum = Number.parseInt(inches) || 0
-    const centsNum = Number.parseInt(cents) || 0
+    const inchesNum = inches === "" ? 0 : Number.parseInt(inches, 10)
+    const centsNum = cents === "" ? 0 : Number.parseInt(cents, 10)
+
+    if (!Number.isFinite(inchesNum) || inchesNum < 0) {
+      toast({
+        title: "Invalid data",
+        description: "Inches must be 0 or more",
+        variant: "destructive",
+      })
+      return
+    }
+    if (!Number.isFinite(centsNum) || centsNum < 0 || centsNum > 99) {
+      toast({
+        title: "Invalid data",
+        description: "Hundredths must be between 0 and 99",
+        variant: "destructive",
+      })
+      return
+    }
 
     if (inchesNum === 0 && centsNum === 0) {
       toast({
@@ -269,7 +298,7 @@ export default function RainfallTab({ username }: RainfallTabProps) {
         <CardContent className="space-y-4">
           <div className="grid gap-4 md:grid-cols-2">
             <div>
-              <label className="block text-sm font-medium mb-2">Date</label>
+              <div className="mb-2 text-sm font-medium">Date</div>
               <Popover>
                 <PopoverTrigger asChild>
                   <Button variant="outline" className="w-full justify-start text-left font-normal bg-transparent">
@@ -293,18 +322,42 @@ export default function RainfallTab({ username }: RainfallTabProps) {
           </div>
           <div className="grid gap-4 md:grid-cols-2">
             <div>
-              <label className="block text-sm font-medium mb-2">Inches</label>
-              <Input type="number" placeholder="0" value={inches} onChange={(e) => setInches(e.target.value)} min="0" />
+              <FieldLabel
+                label="Inches"
+                htmlFor="rainfall-inches"
+                className="mb-2"
+                labelClassName="text-sm font-medium"
+                tooltip="Whole inches of rainfall for the day."
+              />
+              <Input
+                id="rainfall-inches"
+                type="number"
+                placeholder="0"
+                value={inches}
+                onChange={handleNonNegativeChange(setInches)}
+                onKeyDown={blockInvalidNumberKey}
+                min={0}
+                step="1"
+              />
             </div>
             <div>
-              <label className="block text-sm font-medium mb-2">Cents (Hundredths)</label>
+              <FieldLabel
+                label="Hundredths (0-99)"
+                htmlFor="rainfall-cents"
+                className="mb-2"
+                labelClassName="text-sm font-medium"
+                tooltip="Decimal part of inches (e.g., 0.25 in = 25)."
+              />
               <Input
+                id="rainfall-cents"
                 type="number"
                 placeholder="0"
                 value={cents}
-                onChange={(e) => setCents(e.target.value)}
-                min="0"
-                max="99"
+                onChange={handleNonNegativeChange(setCents)}
+                onKeyDown={blockInvalidNumberKey}
+                min={0}
+                max={99}
+                step="1"
               />
             </div>
           </div>

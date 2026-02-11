@@ -1,16 +1,17 @@
 import type React from "react"
 import type { Metadata } from "next"
-import { Inter } from "next/font/google"
+import { Fraunces, Manrope } from "next/font/google"
 import "./globals.css"
 import { ThemeProvider } from "@/components/theme-provider"
 import { AuthProvider } from "@/hooks/use-auth"
 import BrandWatermark from "@/components/brand-watermark"
 
-const inter = Inter({ subsets: ["latin"], display: "swap" })
+const bodyFont = Manrope({ subsets: ["latin"], display: "swap", variable: "--font-body" })
+const displayFont = Fraunces({ subsets: ["latin"], weight: ["600", "700", "800"], display: "swap", variable: "--font-display" })
 
 export const metadata: Metadata = {
   title: "FarmFlow",
-  description: "Traceability and operations for coffee, tea, cocoa, and specialty crops.",
+  description: "Coffee estate operations with traceability, yields, and buyer-ready reporting.",
   generator: "v0.dev",
 }
 
@@ -21,7 +22,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" suppressHydrationWarning>
-      <body className={inter.className} suppressHydrationWarning>
+      <body className={`${bodyFont.variable} ${displayFont.variable} font-body`} suppressHydrationWarning>
         <ThemeProvider attribute="class" defaultTheme="light" enableSystem disableTransitionOnChange>
           <AuthProvider>
             {children}

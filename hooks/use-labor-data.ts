@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from "react"
 import { useAuth } from "@/hooks/use-auth"
 
 export interface LaborEntry {
+  name?: string
   laborCount: number
   costPerLabor: number
 }
@@ -55,7 +56,6 @@ export function useLaborData(locationId?: string, options: LaborDataOptions = {}
           setLoading(true)
         }
         setError(null)
-        console.log("📡 Fetching labor deployments...")
 
       const query = new URLSearchParams()
       query.set("limit", pageSize.toString())
@@ -85,10 +85,8 @@ export function useLaborData(locationId?: string, options: LaborDataOptions = {}
           return
         }
 
-        console.log("📦 Received labor data:", data)
 
         if (data.success && Array.isArray(data.deployments)) {
-          console.log(`✅ Loaded ${data.deployments.length} labor deployments`)
           const nextTotalCount = Number(data.totalCount) || 0
           const nextTotalCost = Number(data.totalCost) || 0
           setTotalCount(nextTotalCount)
@@ -108,7 +106,6 @@ export function useLaborData(locationId?: string, options: LaborDataOptions = {}
           setError(null)
         } else if (data.success && Array.isArray(data.transactions)) {
           // Handle case where API returns transactions instead of deployments
-          console.log(`✅ Loaded ${data.transactions.length} labor transactions`)
           setDeployments(data.transactions)
           setHasMore(false)
           setError(null)
@@ -147,7 +144,6 @@ export function useLaborData(locationId?: string, options: LaborDataOptions = {}
 
   const addDeployment = async (deployment: Omit<LaborDeployment, "id" | "totalCost" | "updatedAt">) => {
     try {
-      console.log("📤 Adding new labor deployment...")
 
       const response = await fetch("/api/labor-neon", {
         method: "POST",
@@ -158,7 +154,6 @@ export function useLaborData(locationId?: string, options: LaborDataOptions = {}
       const data = await response.json()
 
       if (data.success) {
-        console.log("✅ Labor deployment added successfully")
         await fetchDeployments(0, false)
         setError(null)
         return true
@@ -179,7 +174,6 @@ export function useLaborData(locationId?: string, options: LaborDataOptions = {}
     deployment: Omit<LaborDeployment, "id" | "totalCost" | "user" | "updatedAt">,
   ) => {
     try {
-      console.log(`📤 Updating labor deployment ${id}...`)
 
       const response = await fetch("/api/labor-neon", {
         method: "PUT",
@@ -190,7 +184,6 @@ export function useLaborData(locationId?: string, options: LaborDataOptions = {}
       const data = await response.json()
 
       if (data.success) {
-        console.log("✅ Labor deployment updated successfully")
         await fetchDeployments(0, false)
         setError(null)
         return true
@@ -208,7 +201,6 @@ export function useLaborData(locationId?: string, options: LaborDataOptions = {}
 
   const deleteDeployment = async (id: string) => {
     try {
-      console.log(`📤 Deleting labor deployment ${id}...`)
 
       const response = await fetch(
         `/api/labor-neon?id=${id}${locationId ? `&locationId=${locationId}` : ""}`,
@@ -220,7 +212,6 @@ export function useLaborData(locationId?: string, options: LaborDataOptions = {}
       const data = await response.json()
 
       if (data.success) {
-        console.log("✅ Labor deployment deleted successfully")
         await fetchDeployments(0, false)
         setError(null)
         return true

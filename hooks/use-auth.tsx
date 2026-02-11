@@ -7,6 +7,8 @@ interface User {
   username: string
   role: "admin" | "user" | "owner"
   tenantId: string
+  mfaEnabled?: boolean
+  mfaVerified?: boolean
 }
 
 interface AuthContextType {
@@ -29,6 +31,8 @@ export function useAuth(): AuthContextType {
         username: String(session.user.name || ""),
         role: (session.user as any).role as User["role"],
         tenantId: String((session.user as any).tenantId || ""),
+        mfaEnabled: Boolean((session.user as any).mfaEnabled),
+        mfaVerified: Boolean((session.user as any).mfaVerified),
       }
     : null
 

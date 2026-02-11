@@ -27,7 +27,9 @@ import {
   Cloudy,
   Factory,
   Leaf,
+  Receipt,
   Settings,
+  Info,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -46,6 +48,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import { useMediaQuery } from "@/hooks/use-media-query"
 import { useAuth } from "@/hooks/use-auth"
 import { useTenantSettings } from "@/hooks/use-tenant-settings"
@@ -62,14 +65,17 @@ import WeatherTab from "@/components/weather-tab"
 import SeasonDashboard from "@/components/season-dashboard"
 import CuringTab from "@/components/curing-tab"
 import QualityGradingTab from "@/components/quality-grading-tab"
+import BillingTab from "@/components/billing-tab"
 import { PepperTab } from "./pepper-tab"
 import OnboardingChecklist, { type OnboardingStep } from "@/components/onboarding-checklist"
 import Link from "next/link"
 import { formatDateForDisplay, generateTimestamp, isWithinLast24Hours } from "@/lib/date-utils"
 import { formatCurrency, formatNumber } from "@/lib/format"
+import { getCurrentFiscalYear } from "@/lib/fiscal-year-utils"
 import { getModuleDefaultEnabled } from "@/lib/modules"
 import type { InventoryItem, Transaction } from "@/lib/inventory-types"
 import { toast } from "@/components/ui/use-toast"
+import { roleLabel } from "@/lib/roles"
 
 // API endpoints (adjust if your routes are different)
 const API_TRANSACTIONS = "/api/transactions-neon"
@@ -149,8 +155,9 @@ export default function InventorySystem() {
   const [inventory, setInventory] = useState<InventoryItem[]>([])
   const [transactions, setTransactions] = useState<Transaction[]>([])
   const [laborDeployments, setLaborDeployments] = useState<any[]>([])
-  const [itemValues, setItemValues] = useState<Record<string, any>>({})
   const [summary, setSummary] = useState({ total_inventory_value: 0, total_items: 0, total_quantity: 0 })
+  const [accountsTotals, setAccountsTotals] = useState({ laborTotal: 0, otherTotal: 0, grandTotal: 0 })
+  const [accountsTotalsLoading, setAccountsTotalsLoading] = useState(false)
   const [locations, setLocations] = useState<LocationOption[]>([])
   const [selectedLocationId, setSelectedLocationId] = useState<string>(LOCATION_ALL)
   const [transactionLocationId, setTransactionLocationId] = useState<string>(LOCATION_UNASSIGNED)
@@ -214,6 +221,16 @@ export default function InventorySystem() {
   const isTenantLoading = status === "loading"
   const router = useRouter()
   const searchParams = useSearchParams()
+  const preventNegativeKey = (event: React.KeyboardEvent<HTMLInputElement>) => {
+    if (event.key === "-" || event.key === "e" || event.key === "E") {
+      event.preventDefault()
+    }
+  }
+  const coerceNonNegativeNumber = (value: string) => {
+    const numeric = Number(value)
+    if (Number.isNaN(numeric) || numeric < 0) return null
+    return numeric
+  }
   const isModuleEnabled = useCallback(
     (moduleId: string) => {
       if (isOwner) {
@@ -229,6 +246,24 @@ export default function InventorySystem() {
 
   // helpers
   const isMobile = useMediaQuery("(max-width: 768px)")
+  const currentFiscalYear = useMemo(() => getCurrentFiscalYear(), [])
+  const estateMetrics = useMemo(() => {
+    const inventoryCount = inventory.length
+    const locationCount = locations.length
+    const recentActivity = transactions.filter((t) => isWithinLast24Hours(t.transaction_date)).length
+    const traceableCount = transactions.filter((t) => Boolean(t.location_id)).length
+    const traceabilityCoverage = transactions.length
+      ? Math.round((traceableCount / transactions.length) * 100)
+      : 0
+
+    return {
+      inventoryCount,
+      locationCount,
+      recentActivity,
+      traceabilityCoverage,
+      inventoryValue: summary.total_inventory_value,
+    }
+  }, [inventory.length, locations.length, summary.total_inventory_value, transactions])
 
   useEffect(() => {
     if (!user) {
@@ -280,6 +315,58 @@ export default function InventorySystem() {
   useEffect(() => {
     loadLocations()
   }, [loadLocations])
+
+  useEffect(() => {
+    if (!tenantId) return
+    if (activeTab !== "accounts" && activeTab !== "billing") {
+      setAccountsTotalsLoading(false)
+      return
+    }
+
+    let isActive = true
+    const fetchAccountsTotals = async () => {
+      try {
+        setAccountsTotalsLoading(true)
+        const params = new URLSearchParams({
+          startDate: currentFiscalYear.startDate,
+          endDate: currentFiscalYear.endDate,
+        })
+        const response = await fetch(`/api/accounts-totals?${params.toString()}`)
+        const data = await response.json()
+
+        if (!response.ok || !data.success) {
+          console.error("Failed to load accounts totals:", data)
+          if (isActive) {
+            setAccountsTotals({ laborTotal: 0, otherTotal: 0, grandTotal: 0 })
+          }
+          return
+        }
+
+        if (isActive) {
+          setAccountsTotals({
+            laborTotal: Number(data.laborTotal) || 0,
+            otherTotal: Number(data.otherTotal) || 0,
+            grandTotal: Number(data.grandTotal) || 0,
+          })
+        }
+      } catch (error) {
+        console.error("Error loading accounts totals:", error)
+        if (isActive) {
+          setAccountsTotals({ laborTotal: 0, otherTotal: 0, grandTotal: 0 })
+        }
+      } finally {
+        if (isActive) {
+          setAccountsTotalsLoading(false)
+        }
+      }
+    }
+
+    fetchAccountsTotals()
+
+    return () => {
+      isActive = false
+    }
+  }, [activeTab, currentFiscalYear.endDate, currentFiscalYear.startDate, tenantId])
 
   useEffect(() => {
     if (selectedLocationId !== LOCATION_ALL) {
@@ -515,6 +602,331 @@ export default function InventorySystem() {
       if (inventorySortOrder === "desc") return b.name.localeCompare(a.name)
       return 0
     })
+
+  const transactionPricing = useMemo(() => {
+    const agg: Record<string, { totalCost: number; totalQty: number }> = {}
+    transactions.forEach((tx) => {
+      const itemName = String(tx.item_type || "").trim()
+      if (!itemName) return
+      const qty = Number(tx.quantity) || 0
+      if (!Number.isFinite(qty) || qty <= 0) return
+      const priceValue = Number(tx.price)
+      const totalCostValue = Number(tx.total_cost)
+      let unitPrice = 0
+      if (Number.isFinite(priceValue) && priceValue > 0) {
+        unitPrice = priceValue
+      } else if (Number.isFinite(totalCostValue) && totalCostValue > 0) {
+        unitPrice = totalCostValue / qty
+      }
+      if (!Number.isFinite(unitPrice) || unitPrice <= 0) return
+      const existing = agg[itemName] || { totalCost: 0, totalQty: 0 }
+      existing.totalCost += unitPrice * qty
+      existing.totalQty += qty
+      agg[itemName] = existing
+    })
+
+    const pricing: Record<string, { avgPrice: number; totalCost: number }> = {}
+    Object.entries(agg).forEach(([itemName, data]) => {
+      const avgPrice = data.totalQty > 0 ? data.totalCost / data.totalQty : 0
+      pricing[itemName] = { avgPrice, totalCost: data.totalCost }
+    })
+    return pricing
+  }, [transactions])
+
+  const resolveItemValue = useCallback(
+    (item: InventoryItem) => {
+      const avgFromInventory = Number(item.avg_price) || 0
+      const totalFromInventory = Number(item.total_cost) || 0
+      const quantityValue = Number(item.quantity) || 0
+      const avgFromTotal = totalFromInventory > 0 && quantityValue > 0 ? totalFromInventory / quantityValue : 0
+      const fallback = transactionPricing[item.name] || { avgPrice: 0, totalCost: 0 }
+      const avgPrice =
+        avgFromInventory > 0 ? avgFromInventory : avgFromTotal > 0 ? avgFromTotal : fallback.avgPrice || 0
+      const totalValue =
+        totalFromInventory > 0 ? totalFromInventory : avgPrice * quantityValue
+      return { avgPrice, totalValue }
+    },
+    [transactionPricing],
+  )
+
+  const resolvedInventoryValue = useMemo(() => {
+    return inventory.reduce((sum, item) => {
+      const valueInfo = resolveItemValue(item)
+      return sum + (Number(valueInfo.totalValue) || 0)
+    }, 0)
+  }, [inventory, resolveItemValue])
+
+  const inventorySummary = useMemo(
+    () => ({
+      ...summary,
+      total_inventory_value: resolvedInventoryValue,
+    }),
+    [resolvedInventoryValue, summary],
+  )
+
+  const filteredInventoryTotals = useMemo(() => {
+    const totalQuantity = filteredAndSortedInventory.reduce((sum, item) => sum + (Number(item.quantity) || 0), 0)
+    const totalValue = filteredAndSortedInventory.reduce((sum, item) => {
+      const valueInfo = resolveItemValue(item)
+      return sum + (valueInfo.totalValue || 0)
+    }, 0)
+    const units = Array.from(new Set(filteredAndSortedInventory.map((item) => item.unit || "unit")))
+    return {
+      totalQuantity,
+      totalValue,
+      itemCount: filteredAndSortedInventory.length,
+      unitLabel: units.length === 1 ? units[0] : "mixed units",
+    }
+  }, [filteredAndSortedInventory, resolveItemValue])
+
+  const pricedItemCount = useMemo(
+    () => filteredAndSortedInventory.filter((item) => resolveItemValue(item).avgPrice > 0).length,
+    [filteredAndSortedInventory, resolveItemValue],
+  )
+  const formatCount = useCallback((value: number) => formatNumber(value, 0), [])
+  const totalTransactions = transactions.length
+  const unassignedTransactions = transactions.filter((t) => !t.location_id).length
+  const pricedItemsLabel = `Priced items: ${formatCount(pricedItemCount)}`
+  const unassignedLabel = `Unassigned moves: ${formatCount(unassignedTransactions)}`
+  const bagWeightLabel = `Standard bag weight: ${formatNumber(tenantSettings.bagWeightKg || 50)} kg`
+  const traceabilityLabel = `Traceability coverage: ${estateMetrics.traceabilityCoverage}%`
+  const recentActivityLabel = `24h activity: ${formatCount(estateMetrics.recentActivity)}`
+
+  type HeroChip = { icon: React.ElementType; label: string }
+  type HeroStat = { label: string; value: string }
+  type HeroContent = {
+    badge: string
+    title: string
+    description: string
+    chips: HeroChip[]
+    stats: HeroStat[]
+  }
+
+  const heroContent: HeroContent = useMemo(() => {
+    const inventoryStats: HeroStat[] = [
+      { label: "Items tracked", value: formatCount(estateMetrics.inventoryCount) },
+      { label: "Active locations", value: formatCount(estateMetrics.locationCount) },
+      { label: "24h activity", value: formatCount(estateMetrics.recentActivity) },
+      { label: "Inventory value", value: formatCurrency(resolvedInventoryValue) },
+    ]
+
+    const transactionStats: HeroStat[] = [
+      { label: "Total transactions", value: formatCount(totalTransactions) },
+      { label: "Unassigned moves", value: formatCount(unassignedTransactions) },
+      { label: "Priced items", value: formatCount(pricedItemCount) },
+      { label: "24h activity", value: formatCount(estateMetrics.recentActivity) },
+    ]
+
+    const salesStats: HeroStat[] = [
+      { label: "Priced items", value: formatCount(pricedItemCount) },
+      { label: "Active locations", value: formatCount(estateMetrics.locationCount) },
+      { label: "24h activity", value: formatCount(estateMetrics.recentActivity) },
+      { label: "Inventory value", value: formatCurrency(resolvedInventoryValue) },
+    ]
+
+    const processingStats: HeroStat[] = [
+      { label: "Active locations", value: formatCount(estateMetrics.locationCount) },
+      { label: "Items tracked", value: formatCount(estateMetrics.inventoryCount) },
+      { label: "24h activity", value: formatCount(estateMetrics.recentActivity) },
+      { label: "Inventory value", value: formatCurrency(resolvedInventoryValue) },
+    ]
+
+    const dispatchStats: HeroStat[] = [
+      { label: "Active locations", value: formatCount(estateMetrics.locationCount) },
+      { label: "Unassigned moves", value: formatCount(unassignedTransactions) },
+      { label: "24h activity", value: formatCount(estateMetrics.recentActivity) },
+      { label: "Inventory value", value: formatCurrency(resolvedInventoryValue) },
+    ]
+
+    const accountsStats: HeroStat[] = [
+      {
+        label: "FY labor spend",
+        value: accountsTotalsLoading ? "Loading..." : formatCurrency(accountsTotals.laborTotal),
+      },
+      {
+        label: "FY other expenses",
+        value: accountsTotalsLoading ? "Loading..." : formatCurrency(accountsTotals.otherTotal),
+      },
+      {
+        label: "FY total spend",
+        value: accountsTotalsLoading ? "Loading..." : formatCurrency(accountsTotals.grandTotal),
+      },
+      { label: "Fiscal year", value: currentFiscalYear.label },
+    ]
+
+    const chipsInventory: HeroChip[] = [
+      { icon: Leaf, label: bagWeightLabel },
+      { icon: CheckCircle2, label: traceabilityLabel },
+      { icon: CloudRain, label: "Rainfall + drying context in one view" },
+    ]
+
+    const chipsTransactions: HeroChip[] = [
+      { icon: History, label: recentActivityLabel },
+      { icon: CheckCircle2, label: pricedItemsLabel },
+      { icon: AlertTriangle, label: unassignedLabel },
+    ]
+
+    const chipsSales: HeroChip[] = [
+      { icon: TrendingUp, label: pricedItemsLabel },
+      { icon: CheckCircle2, label: traceabilityLabel },
+      { icon: Leaf, label: bagWeightLabel },
+    ]
+
+    const chipsProcessing: HeroChip[] = [
+      { icon: Factory, label: "Daily processing keeps yields honest" },
+      { icon: Leaf, label: bagWeightLabel },
+      { icon: CheckCircle2, label: traceabilityLabel },
+    ]
+
+    const chipsDispatch: HeroChip[] = [
+      { icon: Truck, label: "Dispatch reconciles processing output" },
+      { icon: CheckCircle2, label: traceabilityLabel },
+      { icon: AlertTriangle, label: unassignedLabel },
+    ]
+
+    const chipsAccounts: HeroChip[] = [
+      { icon: Users, label: "Labor & expense logs stay audit-ready" },
+      { icon: Receipt, label: "Weekly summaries keep spend visible" },
+      { icon: CheckCircle2, label: `Tracking ${currentFiscalYear.label}` },
+    ]
+
+    switch (activeTab) {
+      case "transactions":
+        return {
+          badge: "Traceability Log",
+          title: "Every movement captured for audit-ready traceability",
+          description: "Review stock movements, pricing, and who touched each transaction.",
+          chips: chipsTransactions,
+          stats: transactionStats,
+        }
+      case "processing":
+        return {
+          badge: "Processing Flow",
+          title: "From cherry to parchment, keep yields visible",
+          description: "Daily processing data keeps dispatch and sales aligned.",
+          chips: chipsProcessing,
+          stats: processingStats,
+        }
+      case "dispatch":
+        return {
+          badge: "Dispatch Highlights",
+          title: "Outbound bags and reconciliations in one view",
+          description: "Track what leaves the estate and match it to sales.",
+          chips: chipsDispatch,
+          stats: dispatchStats,
+        }
+      case "sales":
+        return {
+          badge: "Sales Highlights",
+          title: "Revenue and buyer activity at a glance",
+          description: "Stay on top of pricing, buyers, and inventory still available to sell.",
+          chips: chipsSales,
+          stats: salesStats,
+        }
+      case "curing":
+        return {
+          badge: "Curing & Drying",
+          title: "Moisture drop, loss, and outturn in focus",
+          description: "Track drying progress and protect quality through curing.",
+          chips: chipsProcessing,
+          stats: processingStats,
+        }
+      case "quality":
+        return {
+          badge: "Quality Checks",
+          title: "Grading and defects that shape buyer confidence",
+          description: "Keep quality scores tied to each lot and estate.",
+          chips: chipsProcessing,
+          stats: processingStats,
+        }
+      case "rainfall":
+        return {
+          badge: "Rainfall Signals",
+          title: "Weather context that explains yield swings",
+          description: "Link rainfall patterns to processing and drying outcomes.",
+          chips: chipsInventory,
+          stats: processingStats,
+        }
+      case "pepper":
+        return {
+          badge: "Pepper Notes",
+          title: "Pepper harvest flow and conversion insights",
+          description: "Track green-to-dry conversion with location context.",
+          chips: chipsInventory,
+          stats: processingStats,
+        }
+      case "accounts":
+        return {
+          badge: "Accounts Overview",
+          title: "Labor and expense logging with weekly clarity",
+          description: "Keep cost tracking tight and audit-ready.",
+          chips: chipsAccounts,
+          stats: accountsStats,
+        }
+      case "ai-analysis":
+        return {
+          badge: "AI Highlights",
+          title: "Patterns and insights from your estate data",
+          description: "Run AI summaries to spot drift, waste, and revenue opportunities.",
+          chips: chipsTransactions,
+          stats: transactionStats,
+        }
+      case "news":
+        return {
+          badge: "Market Watch",
+          title: "Coffee market and policy signals in view",
+          description: "Stay aware of pricing and demand shifts.",
+          chips: chipsSales,
+          stats: salesStats,
+        }
+      case "weather":
+        return {
+          badge: "Weather Context",
+          title: "Rainfall, drying, and estate readiness",
+          description: "Daily weather signals that impact operations.",
+          chips: chipsInventory,
+          stats: processingStats,
+        }
+      case "billing":
+        return {
+          badge: "Billing Snapshot",
+          title: "Keep invoices and GST-ready billing aligned",
+          description: "Track billing readiness and revenue documentation.",
+          chips: chipsAccounts,
+          stats: accountsStats,
+        }
+      default:
+        return {
+          badge: "Farmer-first Estate Pulse",
+          title: "Farmer-first operations, traceability, and yield at a glance",
+          description:
+            "Track yield, inventory, and reconciliation while documenting the processing and quality choices that protect farmer value.",
+          chips: chipsInventory,
+          stats: inventoryStats,
+        }
+    }
+  }, [
+    activeTab,
+    accountsTotals.grandTotal,
+    accountsTotals.laborTotal,
+    accountsTotals.otherTotal,
+    accountsTotalsLoading,
+    bagWeightLabel,
+    currentFiscalYear.label,
+    estateMetrics.inventoryCount,
+    estateMetrics.locationCount,
+    estateMetrics.recentActivity,
+    estateMetrics.traceabilityCoverage,
+    formatCount,
+    pricedItemCount,
+    pricedItemsLabel,
+    recentActivityLabel,
+    resolvedInventoryValue,
+    totalTransactions,
+    traceabilityLabel,
+    unassignedLabel,
+    unassignedTransactions,
+  ])
 
   const filteredTransactions = transactions
     .filter((t) => {
@@ -846,7 +1258,7 @@ export default function InventorySystem() {
   const exportInventoryToCSV = () => {
     const headers = ["Item Name", "Quantity", "Unit", "Value"]
     const rows = filteredAndSortedInventory.map((item) => {
-      const valueInfo = itemValues[item.name] || {}
+      const valueInfo = resolveItemValue(item)
       const itemValue = valueInfo.totalValue || 0
       return [item.name, String(item.quantity), item.unit || "kg", `₹${itemValue.toFixed(2)}`]
     })
@@ -919,6 +1331,7 @@ export default function InventorySystem() {
   const canShowNews = isModuleEnabled("news")
   const canShowWeather = isModuleEnabled("weather")
   const canShowSeason = isModuleEnabled("season")
+  const canShowBilling = isModuleEnabled("billing")
   const visibleTabs = useMemo(() => {
     const tabs: string[] = []
     if (canShowInventory) tabs.push("inventory")
@@ -935,10 +1348,12 @@ export default function InventorySystem() {
     if (canShowAiAnalysis) tabs.push("ai-analysis")
     if (canShowNews) tabs.push("news")
     if (canShowWeather) tabs.push("weather")
+    if (canShowBilling) tabs.push("billing")
     return tabs
   }, [
     canShowAccounts,
     canShowAiAnalysis,
+    canShowBilling,
     canShowDispatch,
     canShowInventory,
     canShowNews,
@@ -1085,87 +1500,145 @@ export default function InventorySystem() {
   ]
 
   return (
-    <div className="w-full px-4 py-6 mx-auto">
-      <div className="max-w-7xl mx-auto">
-        <header className="flex flex-col lg:flex-row justify-between items-start lg:items-center mb-8 gap-4">
-          <div className="space-y-1">
-            <div className="flex flex-wrap items-baseline gap-3">
-              <h1 className="text-2xl font-medium text-green-700">FarmFlow</h1>
-              <span className="text-[11px] uppercase tracking-[0.35em] text-emerald-700/70">Inventory System</span>
-            </div>
-            <p className="text-sm text-muted-foreground">
-              {tenantSettings.estateName ? `Estate: ${tenantSettings.estateName}` : "Estate: add a name in Settings"}
-            </p>
-          </div>
-          <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center">
-            <div className="flex items-center gap-4">
-              <div className="flex items-center">
-                <Badge variant="outline" className="bg-green-100 text-green-700 border-green-200 mr-2">
-                  {user.role}
-                </Badge>
-                <span className="text-gray-700">{user.username}</span>
+    <div className="relative w-full px-4 py-8 mx-auto">
+      <div className="relative max-w-7xl mx-auto">
+        <div className="pointer-events-none absolute -top-20 left-[-6%] h-[220px] w-[220px] rounded-full bg-[radial-gradient(circle_at_center,rgba(120,82,46,0.25),transparent_70%)] blur-[110px]" />
+        <div className="pointer-events-none absolute -top-16 right-[5%] h-[200px] w-[200px] rounded-full bg-[radial-gradient(circle_at_center,rgba(69,111,96,0.25),transparent_70%)] blur-[110px]" />
+
+        <header className="relative mb-8 overflow-hidden rounded-3xl border border-white/70 bg-white/85 p-6 shadow-[0_30px_70px_-40px_rgba(15,23,42,0.7)] backdrop-blur-xl">
+          <div className="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-emerald-500 via-amber-400 to-emerald-600" />
+          <div className="flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between">
+            <div className="space-y-3">
+              <div className="flex flex-wrap items-center gap-3">
+                <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-emerald-100 text-emerald-700 shadow-[0_16px_30px_-18px_rgba(16,185,129,0.6)]">
+                  <Leaf className="h-5 w-5" />
+                </div>
+                <div>
+                  <p className="text-xs uppercase tracking-[0.35em] text-emerald-700/80">FarmFlow</p>
+                  <h1 className="text-2xl font-display font-semibold text-[color:var(--foreground)]">
+                    Inventory Command
+                  </h1>
+                </div>
+                <Badge className="bg-white/90 text-emerald-700 border-emerald-200">Inventory System</Badge>
               </div>
-              {isOwner && (
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <Button variant="outline" size="sm">
+              <div className="flex flex-wrap items-center gap-3 text-sm text-muted-foreground">
+                <span className="inline-flex items-center gap-2 rounded-full border border-emerald-100 bg-white/80 px-3 py-1 text-xs text-emerald-700">
+                  <Leaf className="h-3.5 w-3.5" />
+                  {tenantSettings.estateName ? `Estate: ${tenantSettings.estateName}` : "Estate: add a name in Settings"}
+                </span>
+                <span className="text-xs text-emerald-700/70">Live operations with traceability</span>
+              </div>
+            </div>
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+              <div className="flex items-center gap-2 rounded-full border border-emerald-100 bg-white/80 px-3 py-2">
+                <Badge variant="outline" className="bg-emerald-100 text-emerald-700 border-emerald-200">
+                  {roleLabel(user.role)}
+                </Badge>
+                <span className="text-sm text-slate-700">{user.username}</span>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                {isOwner && (
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button variant="outline" size="sm">
+                        <Settings className="h-4 w-4 mr-2" />
+                        Super Admin
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end" className="w-56">
+                      <DropdownMenuLabel>Super Admin Tools</DropdownMenuLabel>
+                      <DropdownMenuSeparator />
+                      <DropdownMenuItem asChild>
+                        <Link href="/settings">
+                          <Settings className="h-4 w-4 mr-2" />
+                          Tenant Settings
+                        </Link>
+                      </DropdownMenuItem>
+                      <DropdownMenuItem asChild>
+                        <Link href="/admin/init-pepper-tables">
+                          <Leaf className="h-4 w-4 mr-2" />
+                          Initialize Pepper Tables
+                        </Link>
+                      </DropdownMenuItem>
+                      <DropdownMenuItem asChild>
+                        <Link href="/admin/init-processing-table">
+                          <Factory className="h-4 w-4 mr-2" />
+                          Initialize Processing Tables
+                        </Link>
+                      </DropdownMenuItem>
+                      <DropdownMenuItem asChild>
+                        <Link href="/admin/tenants">
+                          <Users className="h-4 w-4 mr-2" />
+                          Manage Tenants
+                        </Link>
+                      </DropdownMenuItem>
+                      <DropdownMenuItem asChild>
+                        <Link href="/admin/inspect-databases">
+                          <Settings className="h-4 w-4 mr-2" />
+                          Inspect Databases
+                        </Link>
+                      </DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                )}
+                {isAdmin && !isOwner && (
+                  <Button variant="outline" size="sm" asChild>
+                    <Link href="/settings">
                       <Settings className="h-4 w-4 mr-2" />
-                      Owner
-                    </Button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent align="end" className="w-56">
-                    <DropdownMenuLabel>Owner Tools</DropdownMenuLabel>
-                    <DropdownMenuSeparator />
-                    <DropdownMenuItem asChild>
-                      <Link href="/settings">
-                        <Settings className="h-4 w-4 mr-2" />
-                        Tenant Settings
-                      </Link>
-                    </DropdownMenuItem>
-                    <DropdownMenuItem asChild>
-                      <Link href="/admin/init-pepper-tables">
-                        <Leaf className="h-4 w-4 mr-2" />
-                        Initialize Pepper Tables
-                      </Link>
-                    </DropdownMenuItem>
-                    <DropdownMenuItem asChild>
-                      <Link href="/admin/init-processing-table">
-                        <Factory className="h-4 w-4 mr-2" />
-                        Initialize Processing Tables
-                      </Link>
-                    </DropdownMenuItem>
-                    <DropdownMenuItem asChild>
-                      <Link href="/admin/tenants">
-                        <Users className="h-4 w-4 mr-2" />
-                        Manage Tenants
-                      </Link>
-                    </DropdownMenuItem>
-                    <DropdownMenuItem asChild>
-                      <Link href="/admin/inspect-databases">
-                        <Settings className="h-4 w-4 mr-2" />
-                        Inspect Databases
-                      </Link>
-                    </DropdownMenuItem>
-                  </DropdownMenuContent>
-                </DropdownMenu>
-              )}
-              {isAdmin && !isOwner && (
-                <Button variant="outline" size="sm" asChild>
-                  <Link href="/settings">
-                    <Settings className="h-4 w-4 mr-2" />
-                    Settings
-                  </Link>
+                      Settings
+                    </Link>
+                  </Button>
+                )}
+                <Button variant="outline" size="sm" onClick={handleLogout}>
+                  <LogOut className="h-4 w-4 mr-2" /> Logout
                 </Button>
-              )}
-              <Button variant="outline" size="sm" onClick={handleLogout}>
-                <LogOut className="h-4 w-4 mr-2" /> Logout
-              </Button>
+              </div>
             </div>
           </div>
         </header>
 
-        <div className="mb-6 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
-          <div className="text-sm text-gray-500">
+        <div className="relative mb-8 overflow-hidden rounded-3xl border border-amber-200/70 bg-gradient-to-br from-white via-amber-50/70 to-emerald-100/60 p-7 shadow-[0_28px_70px_-40px_rgba(75,42,15,0.45)] grain sheen">
+          <div className="pointer-events-none absolute -right-10 top-8 h-40 w-40 rounded-full bg-[radial-gradient(circle_at_center,rgba(16,185,129,0.22),transparent_70%)] blur-[80px]" />
+          <div className="pointer-events-none absolute bottom-[-30%] left-10 h-48 w-48 rounded-full bg-[radial-gradient(circle_at_center,rgba(251,191,36,0.22),transparent_70%)] blur-[90px]" />
+          <div className="relative flex flex-col gap-6 lg:flex-row lg:items-start lg:justify-between lg:gap-10">
+            <div className="space-y-2 max-w-xl">
+              <Badge className="bg-emerald-600 text-white border-emerald-700 shadow-[0_12px_24px_-18px_rgba(16,185,129,0.6)]">
+                {heroContent.badge}
+              </Badge>
+              <h2 className="font-display text-2xl text-[color:var(--foreground)]">
+                {heroContent.title}
+              </h2>
+              <p className="text-sm text-muted-foreground">{heroContent.description}</p>
+              <div className="flex flex-wrap items-center gap-3 text-xs text-emerald-700">
+                {heroContent.chips.map((chip, index) => {
+                  const Icon = chip.icon
+                  return (
+                    <span key={`${chip.label}-${index}`} className="inline-flex items-center gap-1 rounded-full bg-white/80 px-3 py-1">
+                      <Icon className="h-3.5 w-3.5" />
+                      {chip.label}
+                    </span>
+                  )
+                })}
+              </div>
+            </div>
+            <div className="grid w-full gap-3 sm:grid-cols-2 xl:grid-cols-4 lg:flex-1">
+              {heroContent.stats.map((stat) => (
+                <div
+                  key={stat.label}
+                  className="min-w-0 rounded-2xl border border-amber-100/80 bg-white/95 p-4 shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-md"
+                >
+                  <p className="text-[10px] uppercase tracking-[0.3em] text-emerald-700/70">{stat.label}</p>
+                  <p className="font-display text-[clamp(1.15rem,2.2vw,1.6rem)] leading-tight text-slate-900 break-words tabular-nums">
+                    {stat.value}
+                  </p>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        <div className="mb-6 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 rounded-2xl border border-white/70 bg-white/80 p-4 shadow-[0_18px_40px_-28px_rgba(15,23,42,0.45)]">
+          <div className="text-sm text-slate-600">
             {syncError ? (
               <span className="text-red-500 flex items-center gap-1">
                 <AlertTriangle className="h-4 w-4" /> {syncError}
@@ -1193,7 +1666,7 @@ export default function InventorySystem() {
               size="sm"
               onClick={() => { setIsSyncing(true); refreshData(true).finally(() => setIsSyncing(false)) }}
               disabled={isSyncing}
-              className="flex items-center gap-1 bg-transparent"
+              className="flex items-center gap-1 bg-white/80"
             >
               <RefreshCw className={`h-3 w-3 ${isSyncing ? "animate-spin" : ""}`} />
               {isSyncing ? "Syncing..." : "Sync Now"}
@@ -1240,8 +1713,8 @@ export default function InventorySystem() {
           </Card>
         ) : (
           <>
-            <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-            <TabsList className="flex w-full overflow-x-auto border-b sm:justify-center">
+            <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full space-y-4">
+            <TabsList className="flex w-full flex-wrap gap-2 overflow-x-auto rounded-2xl border border-white/80 bg-white/85 p-2 shadow-[0_16px_30px_-20px_rgba(15,23,42,0.5)] sm:justify-center">
               {canShowInventory && <TabsTrigger value="inventory">Inventory</TabsTrigger>}
               {showTransactionHistory && <TabsTrigger value="transactions">Transaction History</TabsTrigger>}
               {canShowAccounts && (
@@ -1310,6 +1783,12 @@ export default function InventorySystem() {
                   Weather
                 </TabsTrigger>
               )}
+              {canShowBilling && (
+                <TabsTrigger value="billing">
+                  <Receipt className="h-4 w-4 mr-2" />
+                  Billing
+                </TabsTrigger>
+              )}
             </TabsList>
 
           {canShowInventory && (
@@ -1376,16 +1855,51 @@ export default function InventorySystem() {
                 </CardContent>
               </Card>
             )}
-            <InventoryValueSummary inventory={inventory} transactions={transactions} summary={summary} />
+            <InventoryValueSummary inventory={inventory} transactions={transactions} summary={inventorySummary} />
             <div className="grid md:grid-cols-2 gap-8">
               {/* New Transaction / Add Item panel */}
-              <div className="bg-white rounded-lg shadow-sm border border-gray-100 p-6">
-                <h2 className="text-lg font-medium text-green-700 flex items-center mb-5">
-                  <span className="mr-2">+</span> New Inventory Transaction
-                </h2>
-                <div className="border-t border-gray-200 pt-5">
+              <div className="relative overflow-hidden rounded-3xl border border-emerald-100/80 bg-white/95 p-6 shadow-[0_22px_60px_-34px_rgba(15,23,42,0.45)]">
+                <div className="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-emerald-500 via-amber-400 to-emerald-600" />
+                <div className="mb-6 space-y-3">
+                  <div className="flex flex-wrap items-center gap-3">
+                    <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-emerald-100 text-emerald-700 shadow-[0_12px_24px_-16px_rgba(16,185,129,0.5)]">
+                      <Plus className="h-5 w-5" />
+                    </div>
+                    <div>
+                      <h2 className="text-lg font-semibold text-emerald-800">Record Inventory Movement</h2>
+                      <p className="text-xs text-emerald-700/70">
+                        Keep estate lots traceable from harvest through storage.
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex flex-wrap gap-2 text-xs">
+                    <Badge variant="outline" className="border-emerald-200 bg-emerald-50 text-emerald-700">
+                      Harvest & processing
+                    </Badge>
+                    <Badge variant="outline" className="border-amber-200 bg-amber-50 text-amber-700">
+                      Restock or deplete
+                    </Badge>
+                  </div>
+                </div>
+                <div className="rounded-2xl border border-emerald-100/70 bg-white/90 p-5 shadow-sm">
                   <div className="mb-5">
-                    <label className="block text-gray-700 mb-2">Item Type</label>
+                    <div className="flex items-center gap-2 mb-2">
+                      <label className="block text-slate-700">Item Type</label>
+                      <TooltipProvider>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <button
+                              type="button"
+                              aria-label="Item type help"
+                              className="inline-flex h-5 w-5 items-center justify-center rounded-full border border-emerald-200/70 text-emerald-700/70 hover:text-emerald-800"
+                            >
+                              <Info className="h-3 w-3" />
+                            </button>
+                          </TooltipTrigger>
+                          <TooltipContent>Select the coffee or inventory item being adjusted.</TooltipContent>
+                        </Tooltip>
+                      </TooltipProvider>
+                    </div>
                     <Select
                       value={newTransaction?.item_type || ""}
                       onValueChange={(value) => {
@@ -1395,7 +1909,7 @@ export default function InventorySystem() {
                         handleFieldChange("unit", u)
                       }}
                     >
-                      <SelectTrigger className="w-full border-gray-300 h-12">
+                      <SelectTrigger className="w-full h-12 rounded-xl border-emerald-100 bg-white/95 focus-visible:ring-2 focus-visible:ring-emerald-200">
                         <SelectValue placeholder="Select item type" />
                       </SelectTrigger>
                       <SelectContent className="max-h-[40vh] overflow-y-auto">
@@ -1409,9 +1923,25 @@ export default function InventorySystem() {
                   </div>
 
                   <div className="mb-5">
-                    <label className="block text-gray-700 mb-2">Location</label>
+                    <div className="flex items-center gap-2 mb-2">
+                      <label className="block text-slate-700">Location</label>
+                      <TooltipProvider>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <button
+                              type="button"
+                              aria-label="Location help"
+                              className="inline-flex h-5 w-5 items-center justify-center rounded-full border border-emerald-200/70 text-emerald-700/70 hover:text-emerald-800"
+                            >
+                              <Info className="h-3 w-3" />
+                            </button>
+                          </TooltipTrigger>
+                          <TooltipContent>Tag by estate block for traceability and yield accuracy.</TooltipContent>
+                        </Tooltip>
+                      </TooltipProvider>
+                    </div>
                     <Select value={transactionLocationId} onValueChange={setTransactionLocationId}>
-                      <SelectTrigger className="w-full border-gray-300 h-12">
+                      <SelectTrigger className="w-full h-12 rounded-xl border-emerald-100 bg-white/95 focus-visible:ring-2 focus-visible:ring-emerald-200">
                         <SelectValue placeholder={locations.length ? "Select location" : "No locations yet"} />
                       </SelectTrigger>
                       <SelectContent className="max-h-[40vh] overflow-y-auto">
@@ -1423,35 +1953,74 @@ export default function InventorySystem() {
                         ))}
                       </SelectContent>
                     </Select>
-                    <p className="text-xs text-muted-foreground mt-1">
+                    <p className="text-xs text-emerald-700/70 mt-1">
                       Tag transactions to a location for accurate inventory usage.
                     </p>
                   </div>
 
                   <div className="mb-5">
-                    <label className="block text-gray-700 mb-2">Quantity</label>
+                    <div className="flex items-center gap-2 mb-2">
+                      <label className="block text-slate-700">Quantity</label>
+                      <TooltipProvider>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <button
+                              type="button"
+                              aria-label="Quantity help"
+                              className="inline-flex h-5 w-5 items-center justify-center rounded-full border border-emerald-200/70 text-emerald-700/70 hover:text-emerald-800"
+                            >
+                              <Info className="h-3 w-3" />
+                            </button>
+                          </TooltipTrigger>
+                          <TooltipContent>Enter the exact kg or unit amount for the lot.</TooltipContent>
+                        </Tooltip>
+                      </TooltipProvider>
+                    </div>
                     <div className="relative">
                       <Input
                         type="number"
+                        min={0}
+                        step="0.01"
                         placeholder="Enter quantity"
                         value={newTransaction?.quantity ?? ""}
-                        onChange={(e) => handleFieldChange("quantity", Number(e.target.value))}
-                        className="border-gray-300 pr-12 h-12"
+                        onKeyDown={preventNegativeKey}
+                        onChange={(e) => {
+                          const nextValue = coerceNonNegativeNumber(e.target.value)
+                          if (nextValue === null) return
+                          handleFieldChange("quantity", nextValue)
+                        }}
+                        className="h-12 rounded-xl border-emerald-100 bg-white/95 pr-12 focus-visible:ring-2 focus-visible:ring-emerald-200"
                       />
-                      <div className="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none text-gray-500">
+                      <div className="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none text-emerald-700/70">
                         {newTransaction?.unit || "kg"}
                       </div>
                     </div>
                   </div>
 
                   <div className="mb-5">
-                    <label className="block text-gray-700 mb-2">Transaction Type</label>
+                    <div className="flex items-center gap-2 mb-2">
+                      <label className="block text-slate-700">Transaction Type</label>
+                      <TooltipProvider>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <button
+                              type="button"
+                              aria-label="Transaction type help"
+                              className="inline-flex h-5 w-5 items-center justify-center rounded-full border border-emerald-200/70 text-emerald-700/70 hover:text-emerald-800"
+                            >
+                              <Info className="h-3 w-3" />
+                            </button>
+                          </TooltipTrigger>
+                          <TooltipContent>Restocking adds inventory, depleting records usage.</TooltipContent>
+                        </Tooltip>
+                      </TooltipProvider>
+                    </div>
                     <RadioGroup
                       value={newTransaction?.transaction_type === "restock" ? "Restocking" : "Depleting"}
                       onValueChange={(value: "Depleting" | "Restocking") =>
                         handleFieldChange("transaction_type", value === "Restocking" ? "restock" : "deplete")
                       }
-                      className="flex flex-col sm:flex-row gap-4"
+                      className="flex flex-col gap-3 rounded-2xl border border-emerald-100/70 bg-white/80 p-3 sm:flex-row sm:items-center"
                     >
                       <div className="flex items-center space-x-3">
                         <RadioGroupItem value="Depleting" id="depleting" className="h-5 w-5" />
@@ -1469,47 +2038,89 @@ export default function InventorySystem() {
                   </div>
 
                   <div className="mb-6">
-                    <label className="block text-gray-700 mb-2">Notes (Optional)</label>
+                    <div className="flex items-center gap-2 mb-2">
+                      <label className="block text-slate-700">Notes (Optional)</label>
+                      <TooltipProvider>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <button
+                              type="button"
+                              aria-label="Notes help"
+                              className="inline-flex h-5 w-5 items-center justify-center rounded-full border border-emerald-200/70 text-emerald-700/70 hover:text-emerald-800"
+                            >
+                              <Info className="h-3 w-3" />
+                            </button>
+                          </TooltipTrigger>
+                          <TooltipContent>Use notes for lot IDs, processing stage, or buyer references.</TooltipContent>
+                        </Tooltip>
+                      </TooltipProvider>
+                    </div>
                     <Textarea
                       placeholder="Add any additional details"
                       value={newTransaction?.notes ?? ""}
                       onChange={(e) => handleFieldChange("notes", e.target.value)}
-                      className="border-gray-300 min-h-[100px]"
+                      className="min-h-[110px] rounded-xl border-emerald-100 bg-white/95 focus-visible:ring-2 focus-visible:ring-emerald-200"
                     />
                   </div>
 
-                  <Button onClick={handleRecordTransaction} className="w-full bg-green-700 hover:bg-green-800 text-white h-12 text-base">
+                  <Button
+                    onClick={handleRecordTransaction}
+                    className="w-full h-12 text-base bg-emerald-700 hover:bg-emerald-800 text-white shadow-[0_16px_30px_-18px_rgba(16,185,129,0.6)]"
+                  >
                     <Check className="mr-2 h-5 w-5" /> Record Transaction
                   </Button>
                 </div>
               </div>
 
               {/* Inventory list */}
-              <div className="bg-white rounded-lg shadow-sm border border-gray-100 p-6">
-                <div className="flex justify-between items-center mb-5">
-                  <div>
-                    <h2 className="text-lg font-medium text-green-700 flex items-center">
-                      <List className="mr-2 h-5 w-5" /> Current Inventory Levels
-                    </h2>
-                    <p className="text-xs text-muted-foreground">Totals for {selectedLocationLabel}.</p>
+              <div className="relative overflow-hidden rounded-3xl border border-emerald-100/80 bg-white/95 p-6 shadow-[0_22px_60px_-34px_rgba(15,23,42,0.45)]">
+                <div className="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-emerald-500 via-amber-400 to-emerald-600" />
+                <div className="mb-6 flex flex-col gap-4">
+                  <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                    <div className="space-y-1">
+                      <h2 className="text-lg font-semibold text-emerald-800 flex items-center">
+                        <List className="mr-2 h-5 w-5" /> Current Inventory Levels
+                      </h2>
+                      <p className="text-xs text-emerald-700/70">Totals for {selectedLocationLabel}.</p>
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      <Button size="sm" variant="outline" onClick={exportInventoryToCSV} className="h-10 bg-transparent">
+                        <Download className="mr-2 h-4 w-4" /> Export
+                      </Button>
+                      <Button
+                        size="sm"
+                        onClick={() => setIsNewItemDialogOpen(true)}
+                        className="bg-emerald-700 hover:bg-emerald-800 h-10 shadow-[0_14px_26px_-16px_rgba(16,185,129,0.55)]"
+                      >
+                        <Plus className="mr-2 h-4 w-4" /> Add New Item
+                      </Button>
+                    </div>
                   </div>
-                  <div className="flex gap-2">
-                    <Button size="sm" variant="outline" onClick={exportInventoryToCSV} className="h-10 bg-transparent">
-                      <Download className="mr-2 h-4 w-4" /> Export
-                    </Button>
-                    <Button size="sm" onClick={() => setIsNewItemDialogOpen(true)} className="bg-green-700 hover:bg-green-800 h-10">
-                      <Plus className="mr-2 h-4 w-4" /> Add New Item
-                    </Button>
+                  <div className="flex flex-wrap gap-2 text-xs">
+                    <Badge variant="outline" className="border-emerald-200 bg-emerald-50 text-emerald-700">
+                      Items: {formatNumber(filteredInventoryTotals.itemCount)}
+                    </Badge>
+                    <Badge variant="outline" className="border-emerald-200 bg-white/90 text-emerald-700">
+                      Quantity: {formatNumber(filteredInventoryTotals.totalQuantity)} {filteredInventoryTotals.unitLabel}
+                    </Badge>
+                    <Badge variant="outline" className="border-amber-200 bg-amber-50 text-amber-700">
+                      Value: {formatCurrency(filteredInventoryTotals.totalValue)}
+                    </Badge>
                   </div>
                 </div>
 
-                <div className="flex flex-col sm:flex-row gap-3 mb-4">
+                <div className="flex flex-col sm:flex-row gap-3 mb-5">
                   <div className="relative flex-grow">
-                    <Search className="absolute left-3 top-3 h-4 w-4 text-gray-400" />
-                    <Input placeholder="Search inventory..." value={inventorySearchTerm} onChange={(e) => setInventorySearchTerm(e.target.value)} className="pl-10 h-10" />
+                    <Search className="absolute left-3 top-3 h-4 w-4 text-emerald-400" />
+                    <Input
+                      placeholder="Search inventory..."
+                      value={inventorySearchTerm}
+                      onChange={(e) => setInventorySearchTerm(e.target.value)}
+                      className="pl-10 h-11 rounded-xl border-emerald-100 bg-white/95 focus-visible:ring-2 focus-visible:ring-emerald-200"
+                    />
                   </div>
                   <Select value={selectedLocationId} onValueChange={setSelectedLocationId}>
-                    <SelectTrigger className="w-full sm:w-48 h-10 border-gray-300">
+                    <SelectTrigger className="w-full sm:w-52 h-11 rounded-xl border-emerald-100 bg-white/95 focus-visible:ring-2 focus-visible:ring-emerald-200">
                       <SelectValue placeholder="All locations" />
                     </SelectTrigger>
                     <SelectContent className="max-h-[40vh] overflow-y-auto">
@@ -1522,46 +2133,95 @@ export default function InventorySystem() {
                       ))}
                     </SelectContent>
                   </Select>
-                  <Button variant="outline" size="sm" onClick={toggleInventorySort} className="flex items-center gap-1 h-10 whitespace-nowrap bg-transparent">
-                    {inventorySortOrder === "asc" ? (<><SortAsc className="h-4 w-4 mr-1" /> Sort A-Z</>) : inventorySortOrder === "desc" ? (<><SortDesc className="h-4 w-4 mr-1" /> Sort Z-A</>) : (<><SortAsc className="h-4 w-4 mr-1" /> Sort</>)}
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={toggleInventorySort}
+                    className="flex items-center gap-1 h-11 whitespace-nowrap bg-white/90"
+                  >
+                    {inventorySortOrder === "asc" ? (
+                      <>
+                        <SortAsc className="h-4 w-4 mr-1" /> Sort A-Z
+                      </>
+                    ) : inventorySortOrder === "desc" ? (
+                      <>
+                        <SortDesc className="h-4 w-4 mr-1" /> Sort Z-A
+                      </>
+                    ) : (
+                      <>
+                        <SortAsc className="h-4 w-4 mr-1" /> Sort
+                      </>
+                    )}
                   </Button>
                 </div>
 
-                <div className="border-t border-gray-200 pt-5">
-                  <div className="grid grid-cols-1 gap-4">
-                    {filteredAndSortedInventory.map((item, index) => {
-                      const valueInfo = itemValues[item.name] || {}
-                      const itemValue = valueInfo.totalValue || 0
-                      const avgPrice = valueInfo.avgPrice || 0
-                      return (
-                        <div key={`${item.name}-${index}`} className="flex justify-between items-center py-4 border-b last:border-0 px-2 hover:bg-gray-50 rounded">
-                          <div className="font-medium text-base">{item.name}</div>
+                <div className="grid grid-cols-1 gap-4">
+                  {filteredAndSortedInventory.map((item, index) => {
+                    const valueInfo = resolveItemValue(item)
+                    const itemValue = valueInfo.totalValue || 0
+                    const avgPrice = valueInfo.avgPrice || 0
+                    const itemInitial = item.name?.charAt(0)?.toUpperCase() || "I"
+                    return (
+                      <div
+                        key={`${item.name}-${index}`}
+                        className="group relative overflow-hidden rounded-2xl border border-emerald-100/70 bg-white/95 p-4 shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-md"
+                      >
+                        <div className="pointer-events-none absolute inset-0 bg-gradient-to-r from-emerald-50/60 via-transparent to-amber-50/60 opacity-0 transition-opacity group-hover:opacity-100" />
+                        <div className="relative flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
                           <div className="flex items-center gap-3">
-                          <div className="text-right">
-                            <div className="text-base">
-                              {formatNumber(Number(item.quantity) || 0)} {item.unit}
+                            <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-emerald-100 text-emerald-700 text-sm font-semibold">
+                              {itemInitial}
                             </div>
-                            <div className="text-sm text-gray-600">
-                              {formatCurrency(itemValue)}
-                              {avgPrice > 0 && ` (avg: ${formatCurrency(avgPrice)}/${item.unit || "unit"})`}
+                            <div>
+                              <div className="text-base font-semibold text-slate-900">{item.name}</div>
+                              <div className="text-xs text-emerald-700/70">
+                                {avgPrice > 0
+                                  ? `Avg ${formatCurrency(avgPrice)}/${item.unit || "unit"}`
+                                  : "Pricing not yet recorded"}
+                              </div>
                             </div>
                           </div>
+                          <div className="flex flex-wrap items-center gap-3 sm:justify-end">
+                            <div className="rounded-full border border-emerald-100 bg-white/80 px-3 py-1 text-sm text-slate-700">
+                              {formatNumber(Number(item.quantity) || 0)} {item.unit}
+                            </div>
+                            <div className="rounded-full border border-amber-100 bg-amber-50/70 px-3 py-1 text-sm text-amber-800">
+                              {formatCurrency(itemValue)}
+                            </div>
                             {canManageData && (
-                              <>
-                                <Button size="sm" variant="ghost" onClick={() => handleOpenInventoryEdit(item)} className="text-amber-600 p-2 h-auto"><Edit className="h-4 w-4" /></Button>
-                                <Button size="sm" variant="ghost" onClick={() => { handleDeleteInventoryItem(item) }} className="text-red-600 p-2 h-auto"><Trash2 className="h-4 w-4" /></Button>
-                              </>
+                              <div className="flex items-center gap-1 opacity-100 transition-opacity sm:opacity-0 sm:group-hover:opacity-100">
+                                <Button
+                                  size="sm"
+                                  variant="ghost"
+                                  onClick={() => handleOpenInventoryEdit(item)}
+                                  className="text-amber-600 p-2 h-auto"
+                                >
+                                  <Edit className="h-4 w-4" />
+                                </Button>
+                                <Button
+                                  size="sm"
+                                  variant="ghost"
+                                  onClick={() => {
+                                    handleDeleteInventoryItem(item)
+                                  }}
+                                  className="text-red-600 p-2 h-auto"
+                                >
+                                  <Trash2 className="h-4 w-4" />
+                                </Button>
+                              </div>
                             )}
                           </div>
                         </div>
-                      )
-                    })}
-                  </div>
-
-                  {filteredAndSortedInventory.length === 0 && (
-                    <div className="text-center py-8 text-gray-500">{inventorySearchTerm ? "No items match your search." : "Inventory is empty or not yet loaded."}</div>
-                  )}
+                      </div>
+                    )
+                  })}
                 </div>
+
+                {filteredAndSortedInventory.length === 0 && (
+                  <div className="text-center py-8 text-gray-500">
+                    {inventorySearchTerm ? "No items match your search." : "Inventory is empty or not yet loaded."}
+                  </div>
+                )}
               </div>
             </div>
             </TabsContent>
@@ -1775,6 +2435,11 @@ export default function InventorySystem() {
               <WeatherTab />
             </TabsContent>
           )}
+          {canShowBilling && (
+            <TabsContent value="billing" className="space-y-6">
+              <BillingTab />
+            </TabsContent>
+          )}
             </Tabs>
         {isEditDialogOpen && editingTransaction && (
           <div
@@ -1804,7 +2469,23 @@ export default function InventorySystem() {
               <div className="mt-4 space-y-4">
                 <div className="grid gap-4 sm:grid-cols-2">
                   <div className="space-y-2">
-                    <Label htmlFor="edit-transaction-item">Item Type</Label>
+                    <div className="flex items-center gap-2">
+                      <Label htmlFor="edit-transaction-item">Item Type</Label>
+                      <TooltipProvider>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <button
+                              type="button"
+                              aria-label="Edit item type help"
+                              className="inline-flex h-5 w-5 items-center justify-center rounded-full border border-slate-200 text-slate-500 hover:text-slate-700"
+                            >
+                              <Info className="h-3 w-3" />
+                            </button>
+                          </TooltipTrigger>
+                          <TooltipContent>Choose the inventory item tied to this transaction.</TooltipContent>
+                        </Tooltip>
+                      </TooltipProvider>
+                    </div>
                     <Input
                       id="edit-transaction-item"
                       value={editingTransaction.item_type}
@@ -1812,7 +2493,23 @@ export default function InventorySystem() {
                     />
                   </div>
                   <div className="space-y-2">
-                    <Label htmlFor="edit-transaction-type">Transaction Type</Label>
+                    <div className="flex items-center gap-2">
+                      <Label htmlFor="edit-transaction-type">Transaction Type</Label>
+                      <TooltipProvider>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <button
+                              type="button"
+                              aria-label="Edit transaction type help"
+                              className="inline-flex h-5 w-5 items-center justify-center rounded-full border border-slate-200 text-slate-500 hover:text-slate-700"
+                            >
+                              <Info className="h-3 w-3" />
+                            </button>
+                          </TooltipTrigger>
+                          <TooltipContent>Restocking adds stock, depleting reduces it.</TooltipContent>
+                        </Tooltip>
+                      </TooltipProvider>
+                    </div>
                     <Select
                       value={editingTransaction.transaction_type}
                       onValueChange={(value) => handleEditTransactionChange("transaction_type", value)}
@@ -1828,7 +2525,23 @@ export default function InventorySystem() {
                   </div>
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="edit-transaction-location">Location</Label>
+                  <div className="flex items-center gap-2">
+                    <Label htmlFor="edit-transaction-location">Location</Label>
+                    <TooltipProvider>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <button
+                            type="button"
+                            aria-label="Edit location help"
+                            className="inline-flex h-5 w-5 items-center justify-center rounded-full border border-slate-200 text-slate-500 hover:text-slate-700"
+                          >
+                            <Info className="h-3 w-3" />
+                          </button>
+                        </TooltipTrigger>
+                        <TooltipContent>Location ties the transaction to an estate block.</TooltipContent>
+                      </Tooltip>
+                    </TooltipProvider>
+                  </div>
                   <Select
                     value={editingTransaction.location_id ?? LOCATION_UNASSIGNED}
                     onValueChange={(value) =>
@@ -1850,16 +2563,55 @@ export default function InventorySystem() {
                 </div>
                 <div className="grid gap-4 sm:grid-cols-2">
                   <div className="space-y-2">
-                    <Label htmlFor="edit-transaction-qty">Quantity</Label>
+                    <div className="flex items-center gap-2">
+                      <Label htmlFor="edit-transaction-qty">Quantity</Label>
+                      <TooltipProvider>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <button
+                              type="button"
+                              aria-label="Edit quantity help"
+                              className="inline-flex h-5 w-5 items-center justify-center rounded-full border border-slate-200 text-slate-500 hover:text-slate-700"
+                            >
+                              <Info className="h-3 w-3" />
+                            </button>
+                          </TooltipTrigger>
+                          <TooltipContent>Adjusting quantity will recalc inventory totals.</TooltipContent>
+                        </Tooltip>
+                      </TooltipProvider>
+                    </div>
                     <Input
                       id="edit-transaction-qty"
                       type="number"
+                      min={0}
+                      step="0.01"
                       value={editingTransaction.quantity ?? ""}
-                      onChange={(event) => handleEditTransactionChange("quantity", Number(event.target.value))}
+                      onKeyDown={preventNegativeKey}
+                      onChange={(event) => {
+                        const nextValue = coerceNonNegativeNumber(event.target.value)
+                        if (nextValue === null) return
+                        handleEditTransactionChange("quantity", nextValue)
+                      }}
                     />
                   </div>
                   <div className="space-y-2">
-                    <Label htmlFor="edit-transaction-price">Unit Price</Label>
+                    <div className="flex items-center gap-2">
+                      <Label htmlFor="edit-transaction-price">Unit Price</Label>
+                      <TooltipProvider>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <button
+                              type="button"
+                              aria-label="Edit unit price help"
+                              className="inline-flex h-5 w-5 items-center justify-center rounded-full border border-slate-200 text-slate-500 hover:text-slate-700"
+                            >
+                              <Info className="h-3 w-3" />
+                            </button>
+                          </TooltipTrigger>
+                          <TooltipContent>Used to compute total cost for this transaction.</TooltipContent>
+                        </Tooltip>
+                      </TooltipProvider>
+                    </div>
                     <Input
                       id="edit-transaction-price"
                       type="number"
@@ -1872,7 +2624,23 @@ export default function InventorySystem() {
                   Total Cost: {formatCurrency(Number(editingTransaction.total_cost || 0))}
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="edit-transaction-notes">Notes</Label>
+                  <div className="flex items-center gap-2">
+                    <Label htmlFor="edit-transaction-notes">Notes</Label>
+                    <TooltipProvider>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <button
+                            type="button"
+                            aria-label="Edit notes help"
+                            className="inline-flex h-5 w-5 items-center justify-center rounded-full border border-slate-200 text-slate-500 hover:text-slate-700"
+                          >
+                            <Info className="h-3 w-3" />
+                          </button>
+                        </TooltipTrigger>
+                        <TooltipContent>Capture lot IDs, buyer refs, or processing notes.</TooltipContent>
+                      </Tooltip>
+                    </TooltipProvider>
+                  </div>
                   <Textarea
                     id="edit-transaction-notes"
                     value={editingTransaction.notes ?? ""}
@@ -1925,7 +2693,23 @@ export default function InventorySystem() {
               <div className="mt-4 space-y-4">
                 <div className="grid gap-4 sm:grid-cols-2">
                   <div className="space-y-2">
-                    <Label htmlFor="edit-item-name">Item Name</Label>
+                    <div className="flex items-center gap-2">
+                      <Label htmlFor="edit-item-name">Item Name</Label>
+                      <TooltipProvider>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <button
+                              type="button"
+                              aria-label="Item name help"
+                              className="inline-flex h-5 w-5 items-center justify-center rounded-full border border-slate-200 text-slate-500 hover:text-slate-700"
+                            >
+                              <Info className="h-3 w-3" />
+                            </button>
+                          </TooltipTrigger>
+                          <TooltipContent>Use clear names (e.g., Arabica Cherry, Dry Parch).</TooltipContent>
+                        </Tooltip>
+                      </TooltipProvider>
+                    </div>
                     <Input
                       id="edit-item-name"
                       value={inventoryEditForm.name}
@@ -1935,7 +2719,23 @@ export default function InventorySystem() {
                     />
                   </div>
                   <div className="space-y-2">
-                    <Label htmlFor="edit-item-unit">Unit</Label>
+                    <div className="flex items-center gap-2">
+                      <Label htmlFor="edit-item-unit">Unit</Label>
+                      <TooltipProvider>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <button
+                              type="button"
+                              aria-label="Unit help"
+                              className="inline-flex h-5 w-5 items-center justify-center rounded-full border border-slate-200 text-slate-500 hover:text-slate-700"
+                            >
+                              <Info className="h-3 w-3" />
+                            </button>
+                          </TooltipTrigger>
+                          <TooltipContent>Common units are kg, bags, or liters.</TooltipContent>
+                        </Tooltip>
+                      </TooltipProvider>
+                    </div>
                     <Input
                       id="edit-item-unit"
                       value={inventoryEditForm.unit}
@@ -1946,7 +2746,23 @@ export default function InventorySystem() {
                   </div>
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="edit-item-location">Adjustment Location</Label>
+                  <div className="flex items-center gap-2">
+                    <Label htmlFor="edit-item-location">Adjustment Location</Label>
+                    <TooltipProvider>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <button
+                            type="button"
+                            aria-label="Adjustment location help"
+                            className="inline-flex h-5 w-5 items-center justify-center rounded-full border border-slate-200 text-slate-500 hover:text-slate-700"
+                          >
+                            <Info className="h-3 w-3" />
+                          </button>
+                        </TooltipTrigger>
+                        <TooltipContent>Choose where the correction should be applied.</TooltipContent>
+                      </Tooltip>
+                    </TooltipProvider>
+                  </div>
                   <Select value={inventoryEditLocationId} onValueChange={setInventoryEditLocationId}>
                     <SelectTrigger id="edit-item-location" className="w-full">
                       <SelectValue placeholder="Select location" />
@@ -1965,14 +2781,36 @@ export default function InventorySystem() {
                   </p>
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="edit-item-qty">Quantity</Label>
+                  <div className="flex items-center gap-2">
+                    <Label htmlFor="edit-item-qty">Quantity</Label>
+                    <TooltipProvider>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <button
+                            type="button"
+                            aria-label="Adjustment quantity help"
+                            className="inline-flex h-5 w-5 items-center justify-center rounded-full border border-slate-200 text-slate-500 hover:text-slate-700"
+                          >
+                            <Info className="h-3 w-3" />
+                          </button>
+                        </TooltipTrigger>
+                        <TooltipContent>Updating quantity adds a correction transaction.</TooltipContent>
+                      </Tooltip>
+                    </TooltipProvider>
+                  </div>
                   <Input
                     id="edit-item-qty"
                     type="number"
+                    min={0}
+                    step="0.01"
                     value={inventoryEditForm.quantity}
-                    onChange={(event) =>
-                      setInventoryEditForm((prev) => ({ ...prev, quantity: event.target.value }))
-                    }
+                    onKeyDown={preventNegativeKey}
+                    onChange={(event) => {
+                      const nextValue = event.target.value
+                      const numeric = coerceNonNegativeNumber(nextValue)
+                      if (numeric === null && nextValue !== "") return
+                      setInventoryEditForm((prev) => ({ ...prev, quantity: nextValue }))
+                    }}
                   />
                   <p className="text-xs text-muted-foreground">
                     Changing quantity adds a correction transaction to keep history consistent.

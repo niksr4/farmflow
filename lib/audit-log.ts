@@ -3,6 +3,7 @@ import "server-only"
 import type { NeonQueryFunction } from "@neondatabase/serverless"
 import { normalizeTenantContext, runTenantQuery } from "@/lib/server/tenant-db"
 import type { SessionUser } from "@/lib/server/auth"
+import { logSecurityEvent } from "@/lib/server/security-events"
 
 type AuditAction = "create" | "update" | "delete" | "upsert"
 
@@ -93,4 +94,18 @@ export async function logAuditEvent(
       console.warn("Audit log write failed:", error)
     }
   }
+
+  await logSecurityEvent({
+    tenantId: tenantContext.tenantId,
+    actorUsername: sessionUser.username,
+    actorRole: sessionUser.role,
+    eventType: "data_write",
+    severity: "info",
+    source: "audit-log",
+    metadata: {
+      action: event.action,
+      entityType: event.entityType,
+      entityId: event.entityId ?? null,
+    },
+  })
 }

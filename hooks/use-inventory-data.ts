@@ -25,7 +25,6 @@ export function useInventoryData() {
 
   const refreshData = useCallback(async (force = false) => {
     try {
-      console.log("[CLIENT] 🔄 Refreshing inventory data...")
       setLoading(true)
       setError(null)
 
@@ -41,8 +40,6 @@ export function useInventoryData() {
       const inventoryData = await inventoryRes.json()
       const transactionsData = await transactionsRes.json()
 
-      console.log("[CLIENT] 📦 Inventory data:", inventoryData)
-      console.log("[CLIENT] 📜 Transactions data:", transactionsData)
 
       if (inventoryData.success) {
         setInventory(inventoryData.inventory || [])
@@ -87,7 +84,6 @@ export function useInventoryData() {
         })
 
         setTransactions(mappedTransactions)
-        console.log("[CLIENT] ✅ Mapped transactions:", mappedTransactions.length)
       }
 
       setLastSync(new Date())
@@ -105,7 +101,6 @@ export function useInventoryData() {
 
   const addTransaction = async (transaction: Omit<InventoryTransactionView, "id" | "date">) => {
     try {
-      console.log("[CLIENT] ➕ Adding transaction:", transaction)
 
       let transactionType = "deplete"
       if (transaction.transactionType === "Restocking") {
@@ -131,7 +126,6 @@ export function useInventoryData() {
         throw new Error(data.message || "Failed to add transaction")
       }
 
-      console.log("[CLIENT] ✅ Transaction added successfully")
       await refreshData(true)
       return true
     } catch (err: any) {
@@ -142,7 +136,6 @@ export function useInventoryData() {
 
   const addNewItem = async (item: { name: string; quantity: number; unit: string; price: number; user: string }) => {
     try {
-      console.log("[CLIENT] 🆕 Adding new item:", item)
 
       const response = await fetch("/api/inventory-neon", {
         method: "POST",
@@ -163,7 +156,6 @@ export function useInventoryData() {
         throw new Error(data.message || "Failed to add item")
       }
 
-      console.log("[CLIENT] ✅ Item added successfully")
       await refreshData(true)
       return true
     } catch (err: any) {
@@ -174,7 +166,6 @@ export function useInventoryData() {
 
   const updateTransaction = async (transaction: InventoryTransactionView) => {
     try {
-      console.log("[CLIENT] ✏️ Updating transaction:", transaction)
 
       let transactionType = "deplete"
       if (transaction.transactionType === "Restocking") {
@@ -200,7 +191,6 @@ export function useInventoryData() {
         throw new Error(data.message || "Failed to update transaction")
       }
 
-      console.log("[CLIENT] ✅ Transaction updated successfully")
       await refreshData(true)
       return true
     } catch (err: any) {
@@ -210,7 +200,6 @@ export function useInventoryData() {
   }
 
   const batchUpdate = async (updatedTransactions: InventoryTransactionView[]) => {
-    console.log("[CLIENT] 📝 Batch update - updating first transaction only for now")
     if (updatedTransactions.length > 0) {
       return updateTransaction(updatedTransactions[0])
     }

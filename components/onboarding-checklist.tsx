@@ -1,11 +1,12 @@
 "use client"
 
-import { Check, Clock } from "lucide-react"
+import { Check, Clock, Info } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import { cn } from "@/lib/utils"
 
 export type OnboardingStep = {
@@ -57,8 +58,8 @@ export default function OnboardingChecklist({
       <CardHeader className="space-y-3">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <CardTitle>Estate Setup Checklist</CardTitle>
-            <CardDescription>Complete these steps to unlock the full coffee workflow.</CardDescription>
+            <CardTitle>Estate Launch Checklist</CardTitle>
+            <CardDescription>Complete these steps to unlock traceability and season reporting.</CardDescription>
           </div>
           <div className="flex items-center gap-2">
             <Badge className="bg-emerald-100 text-emerald-700 border-emerald-200">
@@ -113,11 +114,29 @@ export default function OnboardingChecklist({
           <div className="rounded-lg border bg-white/80 p-4 space-y-3">
             <div>
               <p className="text-sm font-medium">Add your first location</p>
-              <p className="text-xs text-muted-foreground">Locations unlock processing, dispatch, and sales records.</p>
+              <p className="text-xs text-muted-foreground">
+                Locations unlock processing, dispatch, and season reporting.
+              </p>
             </div>
             <div className="grid gap-3 md:grid-cols-[2fr_1fr_auto]">
               <div className="space-y-2">
-                <Label htmlFor="onboarding-location-name">Location name</Label>
+                <div className="flex items-center gap-2">
+                  <Label htmlFor="onboarding-location-name">Location name</Label>
+                  <TooltipProvider>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <button
+                          type="button"
+                          aria-label="Location name help"
+                          className="inline-flex h-5 w-5 items-center justify-center rounded-full border border-slate-200 text-slate-500 hover:text-slate-700"
+                        >
+                          <Info className="h-3 w-3" />
+                        </button>
+                      </TooltipTrigger>
+                      <TooltipContent>Use estate block names (HF, MV, PG) for clean reports.</TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
+                </div>
                 <Input
                   id="onboarding-location-name"
                   placeholder="HF A, MV, etc."
@@ -126,7 +145,23 @@ export default function OnboardingChecklist({
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="onboarding-location-code">Location code (optional)</Label>
+                <div className="flex items-center gap-2">
+                  <Label htmlFor="onboarding-location-code">Location code (optional)</Label>
+                  <TooltipProvider>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <button
+                          type="button"
+                          aria-label="Location code help"
+                          className="inline-flex h-5 w-5 items-center justify-center rounded-full border border-slate-200 text-slate-500 hover:text-slate-700"
+                        >
+                          <Info className="h-3 w-3" />
+                        </button>
+                      </TooltipTrigger>
+                      <TooltipContent>Short codes show up in export files and buyer reports.</TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
+                </div>
                 <Input
                   id="onboarding-location-code"
                   placeholder="HF-A"
@@ -145,7 +180,7 @@ export default function OnboardingChecklist({
               </div>
             </div>
             <p className="text-xs text-muted-foreground">
-              Keep names consistent with estate signage so reports stay clean.
+              Keep names consistent with estate signage so traceability reports stay clean.
             </p>
           </div>
         )}

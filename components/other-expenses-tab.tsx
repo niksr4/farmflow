@@ -9,6 +9,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import { PlusCircle, Trash2, Edit2, Save, X, ChevronDown, ChevronUp } from "lucide-react"
 import { Textarea } from "@/components/ui/textarea"
 import { Badge } from "@/components/ui/badge"
@@ -56,7 +57,6 @@ export default function OtherExpensesTab({ locationId }: { locationId?: string }
       )
       const data = await response.json()
       if (data.success && data.activities) {
-        console.log("📋 Fetched activities:", data.activities)
         setActivities(data.activities)
       }
     } catch (error) {
@@ -76,10 +76,8 @@ export default function OtherExpensesTab({ locationId }: { locationId?: string }
     const matchingActivity = activities.find((activity) => activity.code.toLowerCase() === code.toLowerCase())
 
     if (matchingActivity) {
-      console.log("✅ Found matching activity:", matchingActivity)
       setFormData((prev) => ({ ...prev, reference: matchingActivity.reference }))
     } else {
-      console.log("⚠️ No matching activity found for code:", code)
     }
   }
 
@@ -361,22 +359,34 @@ export default function OtherExpensesTab({ locationId }: { locationId?: string }
                       <TableCell className="text-right font-semibold">{formatCurrency(deployment.amount)}</TableCell>
                       <TableCell className="max-w-xs truncate">{deployment.notes || "-"}</TableCell>
                       <TableCell>
-                        <div className="flex gap-2">
-                          <Button variant="ghost" size="icon" onClick={() => startEdit(deployment)}>
-                            <Edit2 className="h-4 w-4" />
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            onClick={() => {
-                              if (confirm("Are you sure you want to delete this expense?")) {
-                                deleteDeployment(deployment.id)
-                              }
-                            }}
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
-                        </div>
+                        <TooltipProvider>
+                          <div className="flex gap-2">
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <Button variant="ghost" size="icon" onClick={() => startEdit(deployment)}>
+                                  <Edit2 className="h-4 w-4" />
+                                </Button>
+                              </TooltipTrigger>
+                              <TooltipContent>Edit expense</TooltipContent>
+                            </Tooltip>
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  onClick={() => {
+                                    if (confirm("Are you sure you want to delete this expense?")) {
+                                      deleteDeployment(deployment.id)
+                                    }
+                                  }}
+                                >
+                                  <Trash2 className="h-4 w-4" />
+                                </Button>
+                              </TooltipTrigger>
+                              <TooltipContent>Delete expense</TooltipContent>
+                            </Tooltip>
+                          </div>
+                        </TooltipProvider>
                       </TableCell>
                     </TableRow>
                   ))}

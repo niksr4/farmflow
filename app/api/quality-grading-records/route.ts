@@ -22,6 +22,14 @@ const coerceRecordNumbers = (record: any) => {
   return record
 }
 
+const findInvalidNumericField = (record: Record<string, any>) =>
+  numericFields.find((field) => {
+    const value = record[field]
+    if (value === null || value === undefined) return false
+    const numeric = Number(value)
+    return !Number.isFinite(numeric) || numeric < 0
+  })
+
 export async function GET(request: Request) {
   try {
     const sessionUser = await requireModuleAccess("quality")
@@ -158,6 +166,14 @@ export async function POST(request: Request) {
       buyer_reference: data.buyer_reference || null,
       graded_by: data.graded_by || sessionUser.username || "system",
       notes: data.notes || null,
+    }
+
+    const invalidField = findInvalidNumericField(record)
+    if (invalidField) {
+      return NextResponse.json(
+        { success: false, error: `${invalidField.replace(/_/g, " ")} must be 0 or more` },
+        { status: 400 },
+      )
     }
 
     const existing = await runTenantQuery(

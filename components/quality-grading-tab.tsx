@@ -1,14 +1,16 @@
 "use client"
 
-import { useCallback, useEffect, useState } from "react"
+import { useCallback, useEffect, useState, type ChangeEvent, type KeyboardEvent } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { FieldLabel } from "@/components/ui/field-label"
 import { Textarea } from "@/components/ui/textarea"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import { Calendar } from "@/components/ui/calendar"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { CalendarIcon, Loader2, Save, Trash2 } from "lucide-react"
@@ -16,6 +18,7 @@ import { format } from "date-fns"
 import { useToast } from "@/hooks/use-toast"
 import { useAuth } from "@/hooks/use-auth"
 import { getAvailableFiscalYears, getCurrentFiscalYear, type FiscalYear } from "@/lib/fiscal-year-utils"
+import { canAcceptNonNegative, isBlockedNumericKey } from "@/lib/number-input"
 
 interface LocationOption {
   id: string
@@ -67,10 +70,38 @@ export default function QualityGradingTab() {
   const [buyerReference, setBuyerReference] = useState("")
   const [gradedBy, setGradedBy] = useState("")
   const [notes, setNotes] = useState("")
+  const [hasExistingRecord, setHasExistingRecord] = useState(false)
 
   const [recentRecords, setRecentRecords] = useState<QualityRecord[]>([])
   const [loading, setLoading] = useState(false)
   const [saving, setSaving] = useState(false)
+  const blockInvalidNumberKey = (event: KeyboardEvent<HTMLInputElement>) => {
+    if (isBlockedNumericKey(event.key)) {
+      event.preventDefault()
+    }
+  }
+  const handleNonNegativeChange = (setter: (value: string) => void) => (event: ChangeEvent<HTMLInputElement>) => {
+    const nextValue = event.target.value
+    if (!canAcceptNonNegative(nextValue)) return
+    setter(nextValue)
+  }
+
+  const resetForm = useCallback(() => {
+    setCoffeeType("")
+    setProcessType("")
+    setGrade("")
+    setMoisture("")
+    setScreenSize("")
+    setDefectsCount("")
+    setDefectNotes("")
+    setSampleWeight("")
+    setOutturnPct("")
+    setCupScore("")
+    setBuyerReference("")
+    setGradedBy("")
+    setNotes("")
+    setHasExistingRecord(false)
+  }, [])
 
   const loadLocations = useCallback(async () => {
     try {
@@ -107,7 +138,10 @@ export default function QualityGradingTab() {
 
   const fetchRecordForDate = useCallback(
     async (date: Date) => {
-      if (!selectedLocationId || !lotId.trim()) return
+      if (!selectedLocationId || !lotId.trim()) {
+        resetForm()
+        return
+      }
       try {
         const dateStr = format(date, "yyyy-MM-dd")
         const response = await fetch(
@@ -129,12 +163,15 @@ export default function QualityGradingTab() {
           setBuyerReference(record.buyer_reference || "")
           setGradedBy(record.graded_by || "")
           setNotes(record.notes || "")
+          setHasExistingRecord(true)
+        } else {
+          resetForm()
         }
       } catch (error) {
         console.error("Error fetching quality record:", error)
       }
     },
-    [lotId, selectedLocationId],
+    [lotId, resetForm, selectedLocationId],
   )
 
   useEffect(() => {
@@ -146,10 +183,12 @@ export default function QualityGradingTab() {
   }, [fetchRecentRecords])
 
   useEffect(() => {
-    if (lotId.trim()) {
-      fetchRecordForDate(selectedDate)
+    if (!lotId.trim()) {
+      resetForm()
+      return
     }
-  }, [fetchRecordForDate, lotId, selectedDate])
+    fetchRecordForDate(selectedDate)
+  }, [fetchRecordForDate, lotId, resetForm, selectedDate])
 
   const handleSave = async () => {
     if (!selectedLocationId) {
@@ -190,6 +229,7 @@ export default function QualityGradingTab() {
         throw new Error(data.error || "Failed to save record")
       }
       toast({ title: "Saved", description: "Quality record saved successfully." })
+      setHasExistingRecord(true)
       fetchRecentRecords()
     } catch (error: any) {
       toast({ title: "Error", description: error.message || "Failed to save record", variant: "destructive" })
@@ -229,6 +269,7 @@ export default function QualityGradingTab() {
     setBuyerReference(record.buyer_reference || "")
     setGradedBy(record.graded_by || "")
     setNotes(record.notes || "")
+    setHasExistingRecord(true)
   }
 
   return (
@@ -300,7 +341,10 @@ export default function QualityGradingTab() {
               </Popover>
             </div>
             <div className="space-y-2">
-              <Label>Lot / Batch ID</Label>
+              <FieldLabel
+                label="Lot / Batch ID"
+                tooltip="Use the lot ID that matches processing and dispatch records."
+              />
               <Input value={lotId} onChange={(event) => setLotId(event.target.value)} placeholder="LOT-001" />
             </div>
             <div className="space-y-2">
@@ -312,35 +356,88 @@ export default function QualityGradingTab() {
               <Input value={processType} onChange={(event) => setProcessType(event.target.value)} placeholder="Washed" />
             </div>
             <div className="space-y-2">
-              <Label>Grade</Label>
+              <FieldLabel
+                label="Grade"
+                tooltip="Estate grading label or screen grade (e.g., AA, AB, PB)."
+              />
               <Input value={grade} onChange={(event) => setGrade(event.target.value)} placeholder="AA, AB, PB" />
             </div>
           </div>
 
           <div className="grid gap-4 md:grid-cols-4">
             <div className="space-y-2">
-              <Label>Moisture (%)</Label>
-              <Input value={moisture} onChange={(event) => setMoisture(event.target.value)} type="number" />
+              <FieldLabel
+                label="Moisture (%)"
+                tooltip="Moisture at grading time; keep within safe storage range."
+              />
+              <Input
+                value={moisture}
+                onChange={handleNonNegativeChange(setMoisture)}
+                onKeyDown={blockInvalidNumberKey}
+                type="number"
+                min={0}
+                step="0.01"
+              />
             </div>
             <div className="space-y-2">
               <Label>Screen Size</Label>
               <Input value={screenSize} onChange={(event) => setScreenSize(event.target.value)} />
             </div>
             <div className="space-y-2">
-              <Label>Defects Count</Label>
-              <Input value={defectsCount} onChange={(event) => setDefectsCount(event.target.value)} type="number" />
+              <FieldLabel
+                label="Defects Count"
+                tooltip="Number of defects found in the sample."
+              />
+              <Input
+                value={defectsCount}
+                onChange={handleNonNegativeChange(setDefectsCount)}
+                onKeyDown={blockInvalidNumberKey}
+                type="number"
+                min={0}
+                step="1"
+              />
             </div>
             <div className="space-y-2">
-              <Label>Sample Weight (g)</Label>
-              <Input value={sampleWeight} onChange={(event) => setSampleWeight(event.target.value)} type="number" />
+              <FieldLabel
+                label="Sample Weight (g)"
+                tooltip="Sample weight used to count defects and calculate outturn."
+              />
+              <Input
+                value={sampleWeight}
+                onChange={handleNonNegativeChange(setSampleWeight)}
+                onKeyDown={blockInvalidNumberKey}
+                type="number"
+                min={0}
+                step="0.01"
+              />
             </div>
             <div className="space-y-2">
-              <Label>Outturn (%)</Label>
-              <Input value={outturnPct} onChange={(event) => setOutturnPct(event.target.value)} type="number" />
+              <FieldLabel
+                label="Outturn (%)"
+                tooltip="Estimated clean coffee yield after hulling."
+              />
+              <Input
+                value={outturnPct}
+                onChange={handleNonNegativeChange(setOutturnPct)}
+                onKeyDown={blockInvalidNumberKey}
+                type="number"
+                min={0}
+                step="0.01"
+              />
             </div>
             <div className="space-y-2">
-              <Label>Cup Score</Label>
-              <Input value={cupScore} onChange={(event) => setCupScore(event.target.value)} type="number" />
+              <FieldLabel
+                label="Cup Score"
+                tooltip="Cupping score or internal sensory rating."
+              />
+              <Input
+                value={cupScore}
+                onChange={handleNonNegativeChange(setCupScore)}
+                onKeyDown={blockInvalidNumberKey}
+                type="number"
+                min={0}
+                step="0.01"
+              />
             </div>
             <div className="space-y-2">
               <Label>Buyer Reference</Label>
@@ -353,7 +450,10 @@ export default function QualityGradingTab() {
           </div>
 
           <div className="space-y-2">
-            <Label>Defect Notes</Label>
+            <FieldLabel
+              label="Defect Notes"
+              tooltip="Record defect types, cup notes, or corrective actions."
+            />
             <Textarea value={defectNotes} onChange={(event) => setDefectNotes(event.target.value)} />
           </div>
           <div className="space-y-2">
@@ -363,7 +463,7 @@ export default function QualityGradingTab() {
 
           <Button onClick={handleSave} disabled={saving}>
             {saving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
-            Save Record
+            {hasExistingRecord ? "Update Record" : "Save Record"}
           </Button>
         </CardContent>
       </Card>
@@ -404,12 +504,19 @@ export default function QualityGradingTab() {
                       <TableCell>{record.defects_count ?? "-"}</TableCell>
                       <TableCell className="flex gap-2">
                         <Button variant="outline" size="sm" onClick={() => loadRecord(record)}>
-                          Load
+                          Edit
                         </Button>
                         {isAdmin && (
-                          <Button variant="ghost" size="icon" onClick={() => handleDelete(record.id)}>
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
+                          <TooltipProvider>
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <Button variant="ghost" size="icon" onClick={() => handleDelete(record.id)}>
+                                  <Trash2 className="h-4 w-4" />
+                                </Button>
+                              </TooltipTrigger>
+                              <TooltipContent>Delete record</TooltipContent>
+                            </Tooltip>
+                          </TooltipProvider>
                         )}
                       </TableCell>
                     </TableRow>

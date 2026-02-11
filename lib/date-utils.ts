@@ -83,3 +83,16 @@ export function formatDateForInput(dateInput?: DateInput): string {
     return ""
   }
 }
+
+export function isWithinLast24Hours(dateInput?: DateInput): boolean {
+  const date = resolveDate(dateInput)
+  if (!date) return false
+  const now = Date.now()
+  const diff = now - date.getTime()
+  return diff >= 0 && diff <= 24 * 60 * 60 * 1000
+}
+
+export function generateTimestamp(dateInput?: DateInput): string {
+  const date = resolveDate(dateInput) ?? new Date()
+  return date.toISOString()
+}

@@ -208,7 +208,6 @@ export default function AiAnalysisCharts({ inventory, transactions }: AiAnalysis
           total: item.total,
         }
       })
-    console.log("Processed consumptionData:", sortedData)
     return sortedData
   }, [chartTransactions])
 
@@ -227,13 +226,11 @@ export default function AiAnalysisCharts({ inventory, transactions }: AiAnalysis
       .map(([name, value]) => ({ name, value }))
       .sort((a, b) => b.value - a.value)
       .slice(0, 6) // Top 6 items by cost
-    console.log("Processed costAnalysisData:", sortedData)
     return sortedData
   }, [chartTransactions])
 
   const inventoryValueData = React.useMemo(() => {
     if (chartTransactions.length === 0) {
-      console.log("Processed inventoryValueData (no transactions): []")
       return []
     }
 
@@ -292,7 +289,6 @@ export default function AiAnalysisCharts({ inventory, transactions }: AiAnalysis
       .map(([date, value]) => ({ date, value }))
       .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime()) // Ensure chronological order
       .slice(-30) // Last 30 days
-    console.log("Processed inventoryValueData:", sortedData)
     return sortedData
   }, [chartTransactions])
 

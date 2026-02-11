@@ -9,7 +9,6 @@ export const dynamic = "force-dynamic"
 
 export async function POST(request: NextRequest) {
   try {
-    console.log("🔄 POST /api/transactions-neon/batch")
     const sessionUser = await requireModuleAccess("transactions")
     if (!canDeleteModule(sessionUser.role, "transactions")) {
       return NextResponse.json({ success: false, message: "Insufficient role" }, { status: 403 })
@@ -28,7 +27,6 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    console.log(`Processing ${transactions.length} transactions...`)
 
     // Delete all existing transactions and reset inventory before re-insert
     await runTenantQuery(

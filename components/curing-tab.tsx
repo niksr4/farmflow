@@ -1,14 +1,16 @@
 "use client"
 
-import { useCallback, useEffect, useMemo, useState } from "react"
+import { useCallback, useEffect, useMemo, useState, type ChangeEvent, type KeyboardEvent } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { FieldLabel } from "@/components/ui/field-label"
 import { Textarea } from "@/components/ui/textarea"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import { Calendar } from "@/components/ui/calendar"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { CalendarIcon, Loader2, Save, Trash2 } from "lucide-react"
@@ -16,6 +18,7 @@ import { format } from "date-fns"
 import { useToast } from "@/hooks/use-toast"
 import { useAuth } from "@/hooks/use-auth"
 import { getAvailableFiscalYears, getCurrentFiscalYear, type FiscalYear } from "@/lib/fiscal-year-utils"
+import { canAcceptNonNegative, isBlockedNumericKey } from "@/lib/number-input"
 
 interface LocationOption {
   id: string
@@ -67,12 +70,39 @@ export default function CuringTab() {
   const [lossKg, setLossKg] = useState("")
   const [storageBin, setStorageBin] = useState("")
   const [notes, setNotes] = useState("")
+  const [hasExistingRecord, setHasExistingRecord] = useState(false)
 
   const [recentRecords, setRecentRecords] = useState<CuringRecord[]>([])
   const [loading, setLoading] = useState(false)
   const [saving, setSaving] = useState(false)
+  const blockInvalidNumberKey = (event: KeyboardEvent<HTMLInputElement>) => {
+    if (isBlockedNumericKey(event.key)) {
+      event.preventDefault()
+    }
+  }
+  const handleNonNegativeChange = (setter: (value: string) => void) => (event: ChangeEvent<HTMLInputElement>) => {
+    const nextValue = event.target.value
+    if (!canAcceptNonNegative(nextValue)) return
+    setter(nextValue)
+  }
 
   const selectedLocation = locations.find((loc) => loc.id === selectedLocationId) || null
+
+  const resetForm = useCallback(() => {
+    setCoffeeType("")
+    setProcessType("")
+    setIntakeKg("")
+    setIntakeBags("")
+    setMoistureStart("")
+    setMoistureEnd("")
+    setDryingDays("")
+    setOutputKg("")
+    setOutputBags("")
+    setLossKg("")
+    setStorageBin("")
+    setNotes("")
+    setHasExistingRecord(false)
+  }, [])
 
   const calculatedLoss = useMemo(() => {
     const intake = Number(intakeKg)
@@ -118,7 +148,10 @@ export default function CuringTab() {
 
   const fetchRecordForDate = useCallback(
     async (date: Date) => {
-      if (!selectedLocationId || !lotId.trim()) return
+      if (!selectedLocationId || !lotId.trim()) {
+        resetForm()
+        return
+      }
       try {
         const dateStr = format(date, "yyyy-MM-dd")
         const response = await fetch(
@@ -139,12 +172,15 @@ export default function CuringTab() {
           setLossKg(record.loss_kg?.toString() || "")
           setStorageBin(record.storage_bin || "")
           setNotes(record.notes || "")
+          setHasExistingRecord(true)
+        } else {
+          resetForm()
         }
       } catch (error) {
         console.error("Error fetching curing record:", error)
       }
     },
-    [lotId, selectedLocationId],
+    [lotId, resetForm, selectedLocationId],
   )
 
   useEffect(() => {
@@ -156,10 +192,12 @@ export default function CuringTab() {
   }, [fetchRecentRecords])
 
   useEffect(() => {
-    if (lotId.trim()) {
-      fetchRecordForDate(selectedDate)
+    if (!lotId.trim()) {
+      resetForm()
+      return
     }
-  }, [fetchRecordForDate, lotId, selectedDate])
+    fetchRecordForDate(selectedDate)
+  }, [fetchRecordForDate, lotId, resetForm, selectedDate])
 
   const handleSave = async () => {
     if (!selectedLocationId) {
@@ -200,6 +238,7 @@ export default function CuringTab() {
         throw new Error(data.error || "Failed to save record")
       }
       toast({ title: "Saved", description: "Curing record saved successfully." })
+      setHasExistingRecord(true)
       fetchRecentRecords()
     } catch (error: any) {
       toast({ title: "Error", description: error.message || "Failed to save record", variant: "destructive" })
@@ -217,6 +256,7 @@ export default function CuringTab() {
         throw new Error(data.error || "Failed to delete record")
       }
       toast({ title: "Deleted", description: "Curing record removed." })
+      resetForm()
       fetchRecentRecords()
     } catch (error: any) {
       toast({ title: "Error", description: error.message || "Failed to delete record", variant: "destructive" })
@@ -238,6 +278,7 @@ export default function CuringTab() {
     setLossKg(record.loss_kg?.toString() || "")
     setStorageBin(record.storage_bin || "")
     setNotes(record.notes || "")
+    setHasExistingRecord(true)
   }
 
   return (
@@ -309,7 +350,10 @@ export default function CuringTab() {
               </Popover>
             </div>
             <div className="space-y-2">
-              <Label>Lot / Batch ID</Label>
+              <FieldLabel
+                label="Lot / Batch ID"
+                tooltip="Use the lot ID that matches processing and dispatch."
+              />
               <Input value={lotId} onChange={(event) => setLotId(event.target.value)} placeholder="LOT-001" />
             </div>
             <div className="space-y-2">
@@ -321,46 +365,119 @@ export default function CuringTab() {
               <Input value={processType} onChange={(event) => setProcessType(event.target.value)} placeholder="Washed" />
             </div>
             <div className="space-y-2">
-              <Label>Storage Bin</Label>
+              <FieldLabel
+                label="Storage Bin"
+                tooltip="Warehouse bin or drying bay where this lot is cured."
+              />
               <Input value={storageBin} onChange={(event) => setStorageBin(event.target.value)} placeholder="Drying Bay A" />
             </div>
           </div>
 
           <div className="grid gap-4 md:grid-cols-4">
             <div className="space-y-2">
-              <Label>Input (KG)</Label>
-              <Input value={intakeKg} onChange={(event) => setIntakeKg(event.target.value)} type="number" />
+              <FieldLabel
+                label="Input (KG)"
+                tooltip="Weight entering curing or drying stage."
+              />
+              <Input
+                value={intakeKg}
+                onChange={handleNonNegativeChange(setIntakeKg)}
+                onKeyDown={blockInvalidNumberKey}
+                type="number"
+                min={0}
+                step="0.01"
+              />
             </div>
             <div className="space-y-2">
               <Label>Input (Bags)</Label>
-              <Input value={intakeBags} onChange={(event) => setIntakeBags(event.target.value)} type="number" />
+              <Input
+                value={intakeBags}
+                onChange={handleNonNegativeChange(setIntakeBags)}
+                onKeyDown={blockInvalidNumberKey}
+                type="number"
+                min={0}
+                step="0.01"
+              />
             </div>
             <div className="space-y-2">
-              <Label>Moisture Start (%)</Label>
-              <Input value={moistureStart} onChange={(event) => setMoistureStart(event.target.value)} type="number" />
+              <FieldLabel
+                label="Moisture Start (%)"
+                tooltip="Moisture at the beginning of drying."
+              />
+              <Input
+                value={moistureStart}
+                onChange={handleNonNegativeChange(setMoistureStart)}
+                onKeyDown={blockInvalidNumberKey}
+                type="number"
+                min={0}
+                step="0.01"
+              />
             </div>
             <div className="space-y-2">
-              <Label>Moisture End (%)</Label>
-              <Input value={moistureEnd} onChange={(event) => setMoistureEnd(event.target.value)} type="number" />
+              <FieldLabel
+                label="Moisture End (%)"
+                tooltip="Moisture at the end of drying or before storage."
+              />
+              <Input
+                value={moistureEnd}
+                onChange={handleNonNegativeChange(setMoistureEnd)}
+                onKeyDown={blockInvalidNumberKey}
+                type="number"
+                min={0}
+                step="0.01"
+              />
             </div>
             <div className="space-y-2">
-              <Label>Drying Days</Label>
-              <Input value={dryingDays} onChange={(event) => setDryingDays(event.target.value)} type="number" />
+              <FieldLabel
+                label="Drying Days"
+                tooltip="Total drying days for this lot."
+              />
+              <Input
+                value={dryingDays}
+                onChange={handleNonNegativeChange(setDryingDays)}
+                onKeyDown={blockInvalidNumberKey}
+                type="number"
+                min={0}
+                step="1"
+              />
             </div>
             <div className="space-y-2">
-              <Label>Output (KG)</Label>
-              <Input value={outputKg} onChange={(event) => setOutputKg(event.target.value)} type="number" />
+              <FieldLabel
+                label="Output (KG)"
+                tooltip="Final weight after drying or curing."
+              />
+              <Input
+                value={outputKg}
+                onChange={handleNonNegativeChange(setOutputKg)}
+                onKeyDown={blockInvalidNumberKey}
+                type="number"
+                min={0}
+                step="0.01"
+              />
             </div>
             <div className="space-y-2">
               <Label>Output (Bags)</Label>
-              <Input value={outputBags} onChange={(event) => setOutputBags(event.target.value)} type="number" />
+              <Input
+                value={outputBags}
+                onChange={handleNonNegativeChange(setOutputBags)}
+                onKeyDown={blockInvalidNumberKey}
+                type="number"
+                min={0}
+                step="0.01"
+              />
             </div>
             <div className="space-y-2">
-              <Label>Loss (KG)</Label>
+              <FieldLabel
+                label="Loss (KG)"
+                tooltip="Difference between input and output weight."
+              />
               <Input
                 value={lossKg || calculatedLoss}
-                onChange={(event) => setLossKg(event.target.value)}
+                onChange={handleNonNegativeChange(setLossKg)}
+                onKeyDown={blockInvalidNumberKey}
                 type="number"
+                min={0}
+                step="0.01"
               />
             </div>
           </div>
@@ -372,7 +489,7 @@ export default function CuringTab() {
 
           <Button onClick={handleSave} disabled={saving}>
             {saving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
-            Save Record
+            {hasExistingRecord ? "Update Record" : "Save Record"}
           </Button>
         </CardContent>
       </Card>
@@ -415,12 +532,19 @@ export default function CuringTab() {
                       <TableCell>{record.loss_kg ?? "-"}</TableCell>
                       <TableCell className="flex gap-2">
                         <Button variant="outline" size="sm" onClick={() => loadRecord(record)}>
-                          Load
+                          Edit
                         </Button>
                         {isAdmin && (
-                          <Button variant="ghost" size="icon" onClick={() => handleDelete(record.id)}>
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
+                          <TooltipProvider>
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <Button variant="ghost" size="icon" onClick={() => handleDelete(record.id)}>
+                                  <Trash2 className="h-4 w-4" />
+                                </Button>
+                              </TooltipTrigger>
+                              <TooltipContent>Delete record</TooltipContent>
+                            </Tooltip>
+                          </TooltipProvider>
                         )}
                       </TableCell>
                     </TableRow>

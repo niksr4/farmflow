@@ -1,10 +1,11 @@
 "use client"
 
-import { useState, useEffect, useCallback, useMemo } from "react"
+import { useState, useEffect, useCallback, useMemo, type ChangeEvent, type KeyboardEvent } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { FieldLabel } from "@/components/ui/field-label"
 import { Textarea } from "@/components/ui/textarea"
 import { Calendar } from "@/components/ui/calendar"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
@@ -20,6 +21,7 @@ import { useAuth } from "@/hooks/use-auth"
 import { useTenantSettings } from "@/hooks/use-tenant-settings"
 import { formatDateOnly } from "@/lib/date-utils"
 import { formatNumber } from "@/lib/format"
+import { canAcceptNonNegative, isBlockedNumericKey } from "@/lib/number-input"
 
 interface DispatchRecord {
   id?: number
@@ -103,6 +105,16 @@ export default function DispatchTab() {
   const [isSaving, setIsSaving] = useState(false)
   const { toast } = useToast()
   const dispatchPageSize = 25
+  const blockInvalidNumberKey = (event: KeyboardEvent<HTMLInputElement>) => {
+    if (isBlockedNumericKey(event.key)) {
+      event.preventDefault()
+    }
+  }
+  const handleNonNegativeChange = (setter: (value: string) => void) => (event: ChangeEvent<HTMLInputElement>) => {
+    const nextValue = event.target.value
+    if (!canAcceptNonNegative(nextValue)) return
+    setter(nextValue)
+  }
 
   const selectedLocation = useMemo(
     () => locations.find((loc) => loc.id === selectedLocationId) || null,
@@ -190,10 +202,15 @@ export default function DispatchTab() {
   const fetchBagTotals = useCallback(async () => {
     try {
       const { startDate, endDate } = getFiscalYearDateRange(selectedFiscalYear)
-      const response = await fetch(
-        `/api/processing-records?summary=bagTotals&fiscalYearStart=${startDate}&fiscalYearEnd=${endDate}`,
-        
-      )
+      const params = new URLSearchParams({
+        summary: "bagTotals",
+        fiscalYearStart: startDate,
+        fiscalYearEnd: endDate,
+      })
+      if (selectedLocationId) {
+        params.set("locationId", selectedLocationId)
+      }
+      const response = await fetch(`/api/processing-records?${params.toString()}`)
       const data = await response.json()
 
       if (!data.success || !Array.isArray(data.totals)) {
@@ -225,7 +242,28 @@ export default function DispatchTab() {
     } catch (error) {
       console.error("Error fetching bag totals:", error)
     }
-  }, [selectedFiscalYear])
+  }, [selectedFiscalYear, selectedLocationId])
+
+  const fetchDispatchSummary = useCallback(async () => {
+    try {
+      const { startDate, endDate } = getFiscalYearDateRange(selectedFiscalYear)
+      const params = new URLSearchParams({
+        startDate,
+        endDate,
+        summaryOnly: "true",
+      })
+      if (selectedLocationId) {
+        params.set("locationId", selectedLocationId)
+      }
+      const response = await fetch(`/api/dispatch?${params.toString()}`)
+      const data = await response.json()
+      if (data.success) {
+        setDispatchSummary(Array.isArray(data.totalsByType) ? data.totalsByType : [])
+      }
+    } catch (error) {
+      console.error("Error fetching dispatch summary:", error)
+    }
+  }, [selectedFiscalYear, selectedLocationId])
 
   // Fetch dispatch records
   const fetchDispatchRecords = useCallback(async (pageIndex = 0, append = false) => {
@@ -249,7 +287,6 @@ export default function DispatchTab() {
         const nextRecords = Array.isArray(data.records) ? data.records : []
         const nextTotalCount = Number(data.totalCount) || 0
         setDispatchRecords((prev) => (append ? [...prev, ...nextRecords] : nextRecords))
-        setDispatchSummary(Array.isArray(data.totalsByType) ? data.totalsByType : [])
         setDispatchTotalCount(nextTotalCount)
         const resolvedCount = append ? pageIndex * dispatchPageSize + nextRecords.length : nextRecords.length
         setDispatchHasMore(nextTotalCount ? resolvedCount < nextTotalCount : nextRecords.length === dispatchPageSize)
@@ -271,8 +308,9 @@ export default function DispatchTab() {
   useEffect(() => {
     loadLocations()
     fetchBagTotals()
+    fetchDispatchSummary()
     fetchDispatchRecords(0, false)
-  }, [fetchBagTotals, fetchDispatchRecords, loadLocations])
+  }, [fetchBagTotals, fetchDispatchRecords, fetchDispatchSummary, loadLocations])
 
   const handleSave = async () => {
     if (!selectedLocationId) {
@@ -283,7 +321,8 @@ export default function DispatchTab() {
       })
       return
     }
-    if (!bagsDispatched || Number(bagsDispatched) <= 0) {
+    const bagsValue = Number(bagsDispatched)
+    if (!Number.isFinite(bagsValue) || bagsValue <= 0) {
       toast({
         title: "Error",
         description: "Please enter a valid number of bags",
@@ -291,10 +330,19 @@ export default function DispatchTab() {
       })
       return
     }
+    const kgsValue = kgsReceived ? Number(kgsReceived) : null
+    if (kgsValue !== null && (!Number.isFinite(kgsValue) || kgsValue < 0)) {
+      toast({
+        title: "Error",
+        description: "KGs received must be 0 or more",
+        variant: "destructive",
+      })
+      return
+    }
 
     // Check if we have enough bags available from processing
     const balance = getBalanceForSelection()
-    if (Number(bagsDispatched) > balance) {
+    if (bagsValue > balance) {
       toast({
         title: "Insufficient Inventory",
         description: `Only ${formatNumber(balance)} ${coffeeType} ${bagType} bags available from processing. You are trying to dispatch ${bagsDispatched} bags.`,
@@ -318,8 +366,8 @@ export default function DispatchTab() {
           lot_id: lotId || null,
           coffee_type: coffeeType,
           bag_type: bagType,
-          bags_dispatched: Number(bagsDispatched),
-          kgs_received: kgsReceived ? Number(kgsReceived) : null,
+          bags_dispatched: bagsValue,
+          kgs_received: kgsValue,
           notes: notes || null,
           created_by: "dispatch",
         }),
@@ -336,6 +384,8 @@ export default function DispatchTab() {
         resetForm()
         // Refresh records
         fetchDispatchRecords(0, false)
+        fetchDispatchSummary()
+        fetchBagTotals()
       } else {
         toast({
           title: "Error",
@@ -394,6 +444,8 @@ export default function DispatchTab() {
           description: "Record deleted successfully",
         })
         fetchDispatchRecords(0, false)
+        fetchDispatchSummary()
+        fetchBagTotals()
       } else {
         toast({
           title: "Error",
@@ -607,7 +659,9 @@ export default function DispatchTab() {
             {editingRecord ? "Edit Dispatch" : "Record Dispatch"}
           </CardTitle>
           <CardDescription>
-            {editingRecord ? "Update the dispatch record" : "Record coffee bags sent out from the location"}
+            {editingRecord
+              ? "Update the dispatch record"
+              : "Record coffee bags sent from the selected location (availability is location-specific)."}
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -646,11 +700,15 @@ export default function DispatchTab() {
                   ))}
                 </SelectContent>
               </Select>
+              <p className="text-xs text-muted-foreground">Availability is calculated for this location.</p>
             </div>
 
             {/* Lot ID */}
             <div className="space-y-2">
-              <Label>Lot ID</Label>
+              <FieldLabel
+                label="Lot ID"
+                tooltip="Match the lot/batch ID used in processing for traceability."
+              />
               <Input
                 placeholder="e.g. LOT-2026-001"
                 value={lotId}
@@ -677,7 +735,10 @@ export default function DispatchTab() {
 
             {/* Bag Type */}
             <div className="space-y-2">
-              <Label>Bag Type</Label>
+              <FieldLabel
+                label="Bag Type"
+                tooltip="Select dry parchment or dry cherry to match processing output."
+              />
               <Select value={bagType} onValueChange={setBagType}>
                 <SelectTrigger>
                   <SelectValue />
@@ -700,13 +761,18 @@ export default function DispatchTab() {
 
             {/* Bags Dispatched */}
             <div className="space-y-2">
-              <Label>Bags Dispatched</Label>
+              <FieldLabel
+                label="Bags Dispatched"
+                tooltip={`Number of bags shipped (estate bag weight ${bagWeightKg} kg).`}
+              />
               <Input
                 type="number"
                 step="0.01"
+                min={0}
                 placeholder="Enter number of bags"
                 value={bagsDispatched}
-                onChange={(e) => setBagsDispatched(e.target.value)}
+                onKeyDown={blockInvalidNumberKey}
+                onChange={handleNonNegativeChange(setBagsDispatched)}
                 max={currentBalance}
               />
               {bagsDispatched && Number(bagsDispatched) > currentBalance && (
@@ -718,13 +784,18 @@ export default function DispatchTab() {
 
             {/* KGs Received */}
             <div className="space-y-2">
-              <Label>KGs Received (Optional)</Label>
+              <FieldLabel
+                label="KGs Received (Optional)"
+                tooltip="Actual received weight from the buyer or warehouse for reconciliation."
+              />
               <Input
                 type="number"
                 step="0.01"
+                min={0}
                 placeholder="Enter KGs received"
                 value={kgsReceived}
-                onChange={(e) => setKgsReceived(e.target.value)}
+                onKeyDown={blockInvalidNumberKey}
+                onChange={handleNonNegativeChange(setKgsReceived)}
               />
               {kgsReceived && (
                 <p className="text-xs text-muted-foreground">

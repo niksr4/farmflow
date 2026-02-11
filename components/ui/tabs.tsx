@@ -14,7 +14,7 @@ const TabsList = React.forwardRef<
   <TabsPrimitive.List
     ref={ref}
     className={cn(
-      "flex h-10 w-full max-w-full items-center justify-start gap-1 overflow-x-auto rounded-md border border-white/40 bg-muted/70 p-1 text-muted-foreground backdrop-blur-sm shadow-[0_10px_24px_-18px_rgba(15,23,42,0.5)] no-scrollbar touch-pan-x dark:border-white/10",
+      "flex h-11 w-full max-w-full items-center justify-start gap-1 overflow-x-auto rounded-md border border-amber-200/70 bg-white/90 p-1 text-slate-700 backdrop-blur-sm shadow-[0_12px_28px_-18px_rgba(15,23,42,0.55)] no-scrollbar touch-pan-x dark:border-slate-700 dark:bg-slate-900/80 dark:text-slate-200",
       className,
     )}
     {...props}
@@ -29,7 +29,7 @@ const TabsTrigger = React.forwardRef<
   <TabsPrimitive.Trigger
     ref={ref}
     className={cn(
-      "inline-flex items-center justify-center whitespace-nowrap rounded-sm px-2.5 py-1 text-xs font-medium ring-offset-background transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 data-[state=active]:bg-background/90 data-[state=active]:text-foreground data-[state=active]:shadow-[0_10px_20px_-16px_rgba(15,23,42,0.65)] sm:px-3 sm:py-1.5 sm:text-sm",
+      "inline-flex items-center justify-center whitespace-nowrap rounded-sm px-3 py-1.5 text-xs font-medium text-slate-600 ring-offset-background transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 data-[state=active]:bg-emerald-700 data-[state=active]:text-white data-[state=active]:shadow-[0_12px_24px_-16px_rgba(16,185,129,0.6)] sm:text-sm",
       className,
     )}
     {...props}

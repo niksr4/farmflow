@@ -7,7 +7,6 @@ import { logAuditEvent } from "@/lib/server/audit-log"
 
 export async function GET(request: Request) {
   try {
-    console.log("📡 Fetching all expense transactions from accounts_db...")
     const sessionUser = await requireModuleAccess("accounts")
     const tenantContext = normalizeTenantContext(sessionUser.tenantId, sessionUser.role)
     const { searchParams } = new URL(request.url)
@@ -67,7 +66,6 @@ export async function GET(request: Request) {
     const totalCount = Number(totalCountResult[0]?.count) || 0
     const totalAmount = Number(totalAmountResult[0]?.total) || 0
 
-    console.log("📊 Sample raw result:", JSON.stringify(result[0], null, 2))
 
     // Transform the data to match the expected format
     const deployments = result.map((row: any) => ({
@@ -80,9 +78,7 @@ export async function GET(request: Request) {
       user: "system",
     }))
 
-    console.log(`✅ Found ${deployments.length} expense transactions`)
     if (deployments.length > 0) {
-      console.log("📋 First deployment:", JSON.stringify(deployments[0], null, 2))
     }
 
     return NextResponse.json({
@@ -117,7 +113,6 @@ export async function POST(request: Request) {
     const body = await request.json()
     const { date, code, reference, amount, notes, user } = body
 
-    console.log("➕ Adding new expense:", { code, reference, amount })
 
     const result = await runTenantQuery(
       accountsSql,
@@ -152,7 +147,6 @@ export async function POST(request: Request) {
       },
     })
 
-    console.log("✅ Expense added successfully with ID:", result[0].id)
 
     return NextResponse.json({
       success: true,
@@ -183,7 +177,6 @@ export async function PUT(request: Request) {
     const body = await request.json()
     const { id, date, code, reference, amount, notes } = body
 
-    console.log("📝 Updating expense:", id, { code, reference, amount })
 
     const existing = await runTenantQuery(
       accountsSql,
@@ -226,7 +219,6 @@ export async function PUT(request: Request) {
       },
     })
 
-    console.log("✅ Expense updated successfully")
 
     return NextResponse.json({
       success: true,
@@ -259,7 +251,6 @@ export async function DELETE(request: Request) {
       return NextResponse.json({ success: false, error: "ID is required" }, { status: 400 })
     }
 
-    console.log("🗑️ Deleting expense:", id)
 
     const existing = await runTenantQuery(
       accountsSql,
@@ -290,7 +281,6 @@ export async function DELETE(request: Request) {
       before: existing?.[0] ?? null,
     })
 
-    console.log("✅ Expense deleted successfully")
 
     return NextResponse.json({
       success: true,

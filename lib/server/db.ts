@@ -2,12 +2,11 @@ import "server-only"
 
 import { neon } from "@neondatabase/serverless"
 
-const baseUrl = process.env.DATABASE_URL
-if (!baseUrl) {
-  throw new Error("DATABASE_URL environment variable is not set")
-}
+const isProd = process.env.NODE_ENV === "production"
+const baseUrl = isProd ? process.env.DATABASE_URL : process.env.DATABASE_URL_DEV
 
-export const sql = neon(baseUrl)
+export const sql = baseUrl ? neon(baseUrl) : null
 export const inventorySql = sql
 export const accountsSql = sql
 export const processingSql = sql
+export const isDbConfigured = Boolean(baseUrl)

@@ -7,7 +7,6 @@ import { logAuditEvent } from "@/lib/server/audit-log"
 
 export async function GET(request: Request) {
   try {
-    console.log("📡 Fetching all activity codes from accounts_db...")
     const sessionUser = await requireModuleAccess("accounts")
     const tenantContext = normalizeTenantContext(sessionUser.tenantId, sessionUser.role)
     const result = await runTenantQuery(
@@ -21,7 +20,6 @@ export async function GET(request: Request) {
       `,
     )
 
-    console.log(`✅ Found ${result.length} activity codes`)
 
     return NextResponse.json({
       success: true,
@@ -55,7 +53,6 @@ export async function POST(request: Request) {
     const body = await request.json()
     const { code, activity } = body
 
-    console.log("➕ Adding new activity:", { code, activity })
 
     // Check if code already exists
     const existing = await runTenantQuery(
@@ -86,7 +83,6 @@ export async function POST(request: Request) {
       `,
     )
 
-    console.log("✅ Activity added successfully")
 
     await logAuditEvent(accountsSql, sessionUser, {
       action: "create",

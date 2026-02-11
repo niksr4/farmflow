@@ -7,7 +7,6 @@ import { logAuditEvent } from "@/lib/server/audit-log"
 
 export async function GET(request: Request) {
   try {
-    console.log("📡 Fetching all labor transactions from accounts_db...")
     const sessionUser = await requireModuleAccess("accounts")
     const tenantContext = normalizeTenantContext(sessionUser.tenantId, sessionUser.role)
     const { searchParams } = new URL(request.url)
@@ -72,20 +71,25 @@ export async function GET(request: Request) {
       const laborEntries = []
 
       // Add HF labor entry
-      if (row.hf_laborers && row.hf_laborers > 0) {
+      const hfLaborers = Number(row.hf_laborers) || 0
+      const outsideLaborers = Number(row.outside_laborers) || 0
+      const hfCostPerLaborer = Number.parseFloat(row.hf_cost_per_laborer || 0)
+      const outsideCostPerLaborer = Number.parseFloat(row.outside_cost_per_laborer || 0)
+
+      if (hfLaborers > 0) {
         laborEntries.push({
           name: "Estate Labor",
-          laborCount: row.hf_laborers,
-          costPerLabor: Number.parseFloat(row.hf_cost_per_laborer || 0),
+          laborCount: hfLaborers,
+          costPerLabor: hfCostPerLaborer,
         })
       }
 
       // Add outside labor entry
-      if (row.outside_laborers && row.outside_laborers > 0) {
+      if (outsideLaborers > 0) {
         laborEntries.push({
           name: "Outside Labor",
-          laborCount: row.outside_laborers,
-          costPerLabor: Number.parseFloat(row.outside_cost_per_laborer || 0),
+          laborCount: outsideLaborers,
+          costPerLabor: outsideCostPerLaborer,
         })
       }
 
@@ -123,7 +127,6 @@ export async function GET(request: Request) {
       })
     }
 
-    console.log(`✅ Found ${deployments.length} labor deployments`)
 
     return NextResponse.json({
       success: true,
@@ -157,7 +160,6 @@ export async function POST(request: Request) {
     const body = await request.json()
     const { date, code, reference, laborEntries, totalCost, notes, user } = body
 
-    console.log("➕ Adding new labor deployment:", { code, reference, totalCost })
 
     // Extract HF and outside labor details
     const hfEntry = laborEntries.find((e: any) => e.name === "Estate Labor")
@@ -213,7 +215,6 @@ export async function POST(request: Request) {
       },
     })
 
-    console.log("✅ Labor deployment added successfully")
 
     return NextResponse.json({
       success: true,
@@ -244,7 +245,6 @@ export async function PUT(request: Request) {
     const body = await request.json()
     const { id, date, code, reference, laborEntries, totalCost, notes } = body
 
-    console.log("📝 Updating labor deployment:", id)
 
     // Extract HF and outside labor details
     const hfEntry = laborEntries.find((e: any) => e.name === "Estate Labor")
@@ -304,7 +304,6 @@ export async function PUT(request: Request) {
       },
     })
 
-    console.log("✅ Labor deployment updated successfully")
 
     return NextResponse.json({
       success: true,
@@ -337,7 +336,6 @@ export async function DELETE(request: Request) {
       return NextResponse.json({ success: false, error: "ID is required" }, { status: 400 })
     }
 
-    console.log("🗑️ Deleting labor deployment:", id)
 
     const existing = await runTenantQuery(
       accountsSql,
@@ -368,7 +366,6 @@ export async function DELETE(request: Request) {
       before: existing?.[0] ?? null,
     })
 
-    console.log("✅ Labor deployment deleted successfully")
 
     return NextResponse.json({
       success: true,

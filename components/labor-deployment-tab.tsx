@@ -9,6 +9,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import { PlusCircle, Trash2, Edit2, Save, X, ChevronDown, ChevronUp } from "lucide-react"
 import { Textarea } from "@/components/ui/textarea"
 import { Badge } from "@/components/ui/badge"
@@ -153,10 +154,9 @@ export default function LaborDeploymentTab({ locationId }: { locationId?: string
   }
 
   const startEdit = (deployment: any) => {
-    console.log("[v0] startEdit called with deployment:", deployment)
 
-    const hfEntry = deployment.laborEntries[0]
-    const outsideEntry = deployment.laborEntries[1]
+    const hfEntry = deployment.laborEntries.find((entry: any) => entry.name === "Estate Labor")
+    const outsideEntry = deployment.laborEntries.find((entry: any) => entry.name === "Outside Labor")
 
     setFormData({
       date: deployment.date.split("T")[0],
@@ -171,7 +171,6 @@ export default function LaborDeploymentTab({ locationId }: { locationId?: string
     setEditingId(deployment.id)
     setIsAdding(true)
 
-    console.log("[v0] Form state updated, isAdding:", true, "editingId:", deployment.id)
 
     setTimeout(() => {
       formRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })
@@ -401,8 +400,8 @@ export default function LaborDeploymentTab({ locationId }: { locationId?: string
             {/* Mobile View */}
             <div className="block sm:hidden">
               {deployments.map((deployment) => {
-                const hfEntry = deployment.laborEntries[0]
-                const outsideEntry = deployment.laborEntries[1]
+                const hfEntry = deployment.laborEntries.find((entry: any) => entry.name === "Estate Labor")
+                const outsideEntry = deployment.laborEntries.find((entry: any) => entry.name === "Outside Labor")
                 const isExpanded = expandedRows.has(deployment.id)
 
                 return (
@@ -429,15 +428,15 @@ export default function LaborDeploymentTab({ locationId }: { locationId?: string
                       </CollapsibleTrigger>
 
                       <CollapsibleContent className="pt-3 space-y-2">
-                        {hfEntry && hfEntry.laborCount > 0 && (
+                        {hfEntry && Number(hfEntry.laborCount) > 0 && (
                           <div className="text-sm">
-                            <span className="font-medium">HF Labor:</span> {formatNumber(hfEntry.laborCount)} @{" "}
+                            <span className="font-medium">HF Labor:</span> {formatNumber(Number(hfEntry.laborCount) || 0, 0)} @{" "}
                             {formatCurrency(hfEntry.costPerLabor)}
                           </div>
                         )}
-                        {outsideEntry && outsideEntry.laborCount > 0 && (
+                        {outsideEntry && Number(outsideEntry.laborCount) > 0 && (
                           <div className="text-sm">
-                            <span className="font-medium">Outside Labor:</span> {formatNumber(outsideEntry.laborCount)} @{" "}
+                            <span className="font-medium">Outside Labor:</span> {formatNumber(Number(outsideEntry.laborCount) || 0, 0)} @{" "}
                             {formatCurrency(outsideEntry.costPerLabor)}
                           </div>
                         )}
@@ -486,8 +485,8 @@ export default function LaborDeploymentTab({ locationId }: { locationId?: string
                 </TableHeader>
                 <TableBody>
                   {deployments.map((deployment, index) => {
-                    const hfEntry = deployment.laborEntries[0]
-                    const outsideEntry = deployment.laborEntries[1]
+                    const hfEntry = deployment.laborEntries.find((entry) => entry.name === "Estate Labor")
+                    const outsideEntry = deployment.laborEntries.find((entry) => entry.name === "Outside Labor")
                     return (
                       <TableRow key={deployment.id} className={index % 2 === 0 ? "bg-white" : "bg-muted/20"}>
                         <TableCell>{formatDateOnly(deployment.date)}</TableCell>
@@ -495,32 +494,44 @@ export default function LaborDeploymentTab({ locationId }: { locationId?: string
                         <TableCell>{deployment.reference}</TableCell>
                         <TableCell>
                           {hfEntry
-                            ? `${formatNumber(hfEntry.laborCount)} @ ${formatCurrency(hfEntry.costPerLabor)}`
+                            ? `${formatNumber(Number(hfEntry.laborCount) || 0, 0)} @ ${formatCurrency(hfEntry.costPerLabor)}`
                             : "-"}
                         </TableCell>
                         <TableCell>
                           {outsideEntry
-                            ? `${formatNumber(outsideEntry.laborCount)} @ ${formatCurrency(outsideEntry.costPerLabor)}`
+                            ? `${formatNumber(Number(outsideEntry.laborCount) || 0, 0)} @ ${formatCurrency(outsideEntry.costPerLabor)}`
                             : "-"}
                         </TableCell>
                         <TableCell className="text-right font-semibold">{formatCurrency(deployment.totalCost)}</TableCell>
                         <TableCell>
-                          <div className="flex gap-2">
-                            <Button variant="ghost" size="icon" onClick={() => startEdit(deployment)}>
-                              <Edit2 className="h-4 w-4" />
-                            </Button>
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              onClick={() => {
-                                if (confirm("Are you sure you want to delete this deployment?")) {
-                                  deleteDeployment(deployment.id)
-                                }
-                              }}
-                            >
-                              <Trash2 className="h-4 w-4" />
-                            </Button>
-                          </div>
+                          <TooltipProvider>
+                            <div className="flex gap-2">
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <Button variant="ghost" size="icon" onClick={() => startEdit(deployment)}>
+                                    <Edit2 className="h-4 w-4" />
+                                  </Button>
+                                </TooltipTrigger>
+                                <TooltipContent>Edit deployment</TooltipContent>
+                              </Tooltip>
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    onClick={() => {
+                                      if (confirm("Are you sure you want to delete this deployment?")) {
+                                        deleteDeployment(deployment.id)
+                                      }
+                                    }}
+                                  >
+                                    <Trash2 className="h-4 w-4" />
+                                  </Button>
+                                </TooltipTrigger>
+                                <TooltipContent>Delete deployment</TooltipContent>
+                              </Tooltip>
+                            </div>
+                          </TooltipProvider>
                         </TableCell>
                       </TableRow>
                     )

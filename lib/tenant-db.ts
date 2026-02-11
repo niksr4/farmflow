@@ -24,12 +24,13 @@ export async function runTenantQuery<T = any>(
   query: NeonQueryPromise<T>,
 ): Promise<T> {
   const results = await client.transaction([
+    client`SELECT set_config('TimeZone', 'UTC', true)`,
     client`SELECT set_config('app.tenant_id', ${context.tenantId}, true)`,
     client`SELECT set_config('app.role', ${context.role}, true)`,
     query,
   ])
 
-  return results[2] as T
+  return results[3] as T
 }
 
 export async function runTenantQueries(
@@ -38,10 +39,11 @@ export async function runTenantQueries(
   queries: NeonQueryPromise<any>[],
 ): Promise<any[]> {
   const results = await client.transaction([
+    client`SELECT set_config('TimeZone', 'UTC', true)`,
     client`SELECT set_config('app.tenant_id', ${context.tenantId}, true)`,
     client`SELECT set_config('app.role', ${context.role}, true)`,
     ...queries,
   ])
 
-  return results.slice(2)
+  return results.slice(3)
 }

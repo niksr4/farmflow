@@ -1,15 +1,20 @@
 import { NextResponse } from "next/server"
 import { sql } from "@/lib/server/db"
-import { requireAdminRole } from "@/lib/tenant"
-import { requireSessionUser } from "@/lib/server/auth"
+import { requireAdminSession } from "@/lib/server/mfa"
 import { MODULES, resolveModuleStates } from "@/lib/modules"
 import { normalizeTenantContext, runTenantQuery } from "@/lib/server/tenant-db"
 import { logAuditEvent } from "@/lib/server/audit-log"
+import { logSecurityEvent } from "@/lib/server/security-events"
+
+const adminErrorResponse = (error: any, fallback: string) => {
+  const message = error?.message || fallback
+  const status = ["MFA required", "Admin role required", "Unauthorized"].includes(message) ? 403 : 500
+  return NextResponse.json({ success: false, error: message }, { status })
+}
 
 export async function GET(request: Request) {
   try {
-    const sessionUser = await requireSessionUser()
-    requireAdminRole(sessionUser.role)
+    const sessionUser = await requireAdminSession()
     if (!sql) {
       return NextResponse.json({ success: false, error: "Database not configured" }, { status: 500 })
     }
@@ -42,14 +47,13 @@ export async function GET(request: Request) {
     return NextResponse.json({ success: true, modules })
   } catch (error: any) {
     console.error("Error fetching tenant modules:", error)
-    return NextResponse.json({ success: false, error: error.message || "Failed to fetch tenant modules" }, { status: 500 })
+    return adminErrorResponse(error, "Failed to fetch tenant modules")
   }
 }
 
 export async function PUT(request: Request) {
   try {
-    const sessionUser = await requireSessionUser()
-    requireAdminRole(sessionUser.role)
+    const sessionUser = await requireAdminSession()
     if (!sql) {
       return NextResponse.json({ success: false, error: "Database not configured" }, { status: 500 })
     }
@@ -99,9 +103,22 @@ export async function PUT(request: Request) {
       after: modules,
     })
 
+    await logSecurityEvent({
+      tenantId,
+      actorUsername: sessionUser.username,
+      actorRole: sessionUser.role,
+      eventType: "permission_change",
+      severity: "warning",
+      source: "admin/tenant-modules",
+      metadata: {
+        action: "tenant_modules_updated",
+        moduleCount: modules.length,
+      },
+    })
+
     return NextResponse.json({ success: true })
   } catch (error: any) {
     console.error("Error updating tenant modules:", error)
-    return NextResponse.json({ success: false, error: error.message || "Failed to update tenant modules" }, { status: 500 })
+    return adminErrorResponse(error, "Failed to update tenant modules")
   }
 }

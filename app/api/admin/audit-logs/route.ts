@@ -1,7 +1,6 @@
 import { NextResponse } from "next/server"
 import { sql } from "@/lib/server/db"
-import { requireSessionUser } from "@/lib/server/auth"
-import { requireAdminRole } from "@/lib/tenant"
+import { requireAdminSession } from "@/lib/server/mfa"
 import { normalizeTenantContext, runTenantQueries } from "@/lib/server/tenant-db"
 
 const isMissingRelation = (error: unknown, relation: string) => {
@@ -9,10 +8,15 @@ const isMissingRelation = (error: unknown, relation: string) => {
   return message.includes(`relation "${relation}" does not exist`)
 }
 
+const adminErrorResponse = (error: any, fallback: string) => {
+  const message = error?.message || fallback
+  const status = ["MFA required", "Admin role required", "Unauthorized"].includes(message) ? 403 : 500
+  return NextResponse.json({ success: false, error: message }, { status })
+}
+
 export async function GET(request: Request) {
   try {
-    const sessionUser = await requireSessionUser()
-    requireAdminRole(sessionUser.role)
+    const sessionUser = await requireAdminSession()
 
     if (!sql) {
       return NextResponse.json({ success: false, error: "Database not configured" }, { status: 500 })
@@ -70,6 +74,6 @@ export async function GET(request: Request) {
     if (isMissingRelation(error, "audit_logs")) {
       return NextResponse.json({ success: true, totalCount: 0, logs: [] })
     }
-    return NextResponse.json({ success: false, error: error.message || "Failed to load audit logs" }, { status: 500 })
+    return adminErrorResponse(error, "Failed to load audit logs")
   }
 }

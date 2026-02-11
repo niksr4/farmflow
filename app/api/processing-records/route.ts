@@ -9,6 +9,50 @@ import { recomputeProcessingTotals } from "@/lib/server/processing-utils"
 const isUuid = (value: string) =>
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value)
 
+const numericFields = [
+  "crop_today",
+  "crop_todate",
+  "ripe_today",
+  "ripe_todate",
+  "ripe_percent",
+  "green_today",
+  "green_todate",
+  "green_percent",
+  "float_today",
+  "float_todate",
+  "float_percent",
+  "wet_parchment",
+  "fr_wp_percent",
+  "dry_parch",
+  "dry_p_todate",
+  "wp_dp_percent",
+  "dry_cherry",
+  "dry_cherry_todate",
+  "dry_cherry_percent",
+  "dry_p_bags",
+  "dry_p_bags_todate",
+  "dry_cherry_bags",
+  "dry_cherry_bags_todate",
+  "moisture_pct",
+]
+
+const normalizeRecord = (record: any) => {
+  numericFields.forEach((field) => {
+    if (record[field] !== null && record[field] !== undefined) {
+      record[field] = Number(record[field])
+    }
+  })
+  return record
+}
+
+const findInvalidNumericField = (record: Record<string, any>) =>
+  numericFields.find((field) => {
+    const value = record[field]
+    if (value === null || value === undefined) return false
+    const numeric = Number(value)
+    return !Number.isFinite(numeric) || numeric < 0
+  })
+
 
 export async function GET(request: NextRequest) {
   try {
@@ -32,44 +76,6 @@ export async function GET(request: NextRequest) {
     const offsetParam = searchParams.get("offset")
     const limit = !all && limitParam ? Math.min(Math.max(Number.parseInt(limitParam, 10) || 0, 1), 500) : null
     const offset = !all && offsetParam ? Math.max(Number.parseInt(offsetParam, 10) || 0, 0) : 0
-
-    console.log("GET request - locationId:", locationId, "coffeeType:", coffeeType, "date:", date)
-
-    const numericFields = [
-      "crop_today",
-      "crop_todate",
-      "ripe_today",
-      "ripe_todate",
-      "ripe_percent",
-      "green_today",
-      "green_todate",
-      "green_percent",
-      "float_today",
-      "float_todate",
-      "float_percent",
-      "wet_parchment",
-      "fr_wp_percent",
-      "dry_parch",
-      "dry_p_todate",
-      "wp_dp_percent",
-      "dry_cherry",
-      "dry_cherry_todate",
-      "dry_cherry_percent",
-      "dry_p_bags",
-      "dry_p_bags_todate",
-      "dry_cherry_bags",
-      "dry_cherry_bags_todate",
-      "moisture_pct",
-    ]
-
-    const normalizeRecord = (record: any) => {
-      numericFields.forEach((field) => {
-        if (record[field] !== null && record[field] !== undefined) {
-          record[field] = Number(record[field])
-        }
-      })
-      return record
-    }
 
     if (summary) {
       if (locationId && !isUuid(locationId)) {
@@ -349,6 +355,14 @@ export async function POST(request: NextRequest) {
       defect_notes: data.defect_notes || null,
       quality_photo_url: data.quality_photo_url || null,
       notes: data.notes || "",
+    }
+
+    const invalidField = findInvalidNumericField(record)
+    if (invalidField) {
+      return NextResponse.json(
+        { success: false, error: `${invalidField.replace(/_/g, " ")} must be 0 or more` },
+        { status: 400 },
+      )
     }
 
     const existing = await runTenantQuery(

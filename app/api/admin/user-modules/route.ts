@@ -1,17 +1,22 @@
 import { NextResponse } from "next/server"
 import { sql } from "@/lib/server/db"
-import { requireAdminRole } from "@/lib/tenant"
-import { requireSessionUser } from "@/lib/server/auth"
+import { requireAdminSession } from "@/lib/server/mfa"
 import { MODULES, MODULE_IDS, resolveEnabledModules, resolveModuleStates } from "@/lib/modules"
 import { normalizeTenantContext, runTenantQueries, runTenantQuery } from "@/lib/server/tenant-db"
 import { logAuditEvent } from "@/lib/server/audit-log"
+import { logSecurityEvent } from "@/lib/server/security-events"
 
 type ModuleState = { id: string; label: string; enabled: boolean }
 
+const adminErrorResponse = (error: any, fallback: string) => {
+  const message = error?.message || fallback
+  const status = ["MFA required", "Admin role required", "Unauthorized"].includes(message) ? 403 : 500
+  return NextResponse.json({ success: false, error: message }, { status })
+}
+
 export async function GET(request: Request) {
   try {
-    const sessionUser = await requireSessionUser()
-    requireAdminRole(sessionUser.role)
+    const sessionUser = await requireAdminSession()
     if (!sql) {
       return NextResponse.json({ success: false, error: "Database not configured" }, { status: 500 })
     }
@@ -68,14 +73,13 @@ export async function GET(request: Request) {
     return NextResponse.json({ success: true, modules, source })
   } catch (error: any) {
     console.error("Error fetching user modules:", error)
-    return NextResponse.json({ success: false, error: error.message || "Failed to fetch user modules" }, { status: 500 })
+    return adminErrorResponse(error, "Failed to fetch user modules")
   }
 }
 
 export async function PUT(request: Request) {
   try {
-    const sessionUser = await requireSessionUser()
-    requireAdminRole(sessionUser.role)
+    const sessionUser = await requireAdminSession()
     if (!sql) {
       return NextResponse.json({ success: false, error: "Database not configured" }, { status: 500 })
     }
@@ -156,17 +160,29 @@ export async function PUT(request: Request) {
       after: modules,
     })
 
+    await logSecurityEvent({
+      tenantId,
+      actorUsername: sessionUser.username,
+      actorRole: sessionUser.role,
+      eventType: "permission_change",
+      severity: "warning",
+      source: "admin/user-modules",
+      metadata: {
+        action: "user_modules_updated",
+        targetUserId: userId,
+      },
+    })
+
     return NextResponse.json({ success: true })
   } catch (error: any) {
     console.error("Error updating user modules:", error)
-    return NextResponse.json({ success: false, error: error.message || "Failed to update user modules" }, { status: 500 })
+    return adminErrorResponse(error, "Failed to update user modules")
   }
 }
 
 export async function DELETE(request: Request) {
   try {
-    const sessionUser = await requireSessionUser()
-    requireAdminRole(sessionUser.role)
+    const sessionUser = await requireAdminSession()
     if (!sql) {
       return NextResponse.json({ success: false, error: "Database not configured" }, { status: 500 })
     }
@@ -228,9 +244,22 @@ export async function DELETE(request: Request) {
       before: beforeModules ?? null,
     })
 
+    await logSecurityEvent({
+      tenantId,
+      actorUsername: sessionUser.username,
+      actorRole: sessionUser.role,
+      eventType: "permission_change",
+      severity: "warning",
+      source: "admin/user-modules",
+      metadata: {
+        action: "user_modules_reset",
+        targetUserId: userId,
+      },
+    })
+
     return NextResponse.json({ success: true })
   } catch (error: any) {
     console.error("Error resetting user modules:", error)
-    return NextResponse.json({ success: false, error: error.message || "Failed to reset user modules" }, { status: 500 })
+    return adminErrorResponse(error, "Failed to reset user modules")
   }
 }

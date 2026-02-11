@@ -5,6 +5,7 @@ import { canDeleteModule, canWriteModule } from "@/lib/permissions"
 import { normalizeTenantContext, runTenantQueries, runTenantQuery } from "@/lib/server/tenant-db"
 import { resolveLocationInfo } from "@/lib/server/location-utils"
 import { logAuditEvent } from "@/lib/server/audit-log"
+import { requirePositiveNumber, toNonNegativeNumber } from "@/lib/number-input"
 
 export async function GET(request: Request) {
   try {
@@ -16,6 +17,7 @@ export async function GET(request: Request) {
     const endDate = searchParams.get("endDate")
     const summaryOnly = searchParams.get("summaryOnly") === "true"
     const all = searchParams.get("all") === "true"
+    const locationId = searchParams.get("locationId")
     const limitParam = searchParams.get("limit")
     const offsetParam = searchParams.get("offset")
     const limit = !all && limitParam ? Math.min(Math.max(Number.parseInt(limitParam, 10) || 0, 1), 500) : null
@@ -25,6 +27,8 @@ export async function GET(request: Request) {
     let totalsByTypeResult
     let records = []
 
+    const locationClause = locationId ? sql` AND location_id = ${locationId}` : sql``
+
     if (startDate && endDate) {
       const queryList = [
         sql`
@@ -33,6 +37,7 @@ export async function GET(request: Request) {
           WHERE dispatch_date >= ${startDate}::date
             AND dispatch_date <= ${endDate}::date
             AND tenant_id = ${tenantContext.tenantId}
+            ${locationClause}
         `,
         sql`
           SELECT 
@@ -44,6 +49,7 @@ export async function GET(request: Request) {
           WHERE dispatch_date >= ${startDate}::date
             AND dispatch_date <= ${endDate}::date
             AND tenant_id = ${tenantContext.tenantId}
+            ${locationClause}
           GROUP BY coffee_type, bag_type
         `,
       ]
@@ -57,6 +63,7 @@ export async function GET(request: Request) {
                 WHERE dr.dispatch_date >= ${startDate}::date 
                   AND dr.dispatch_date <= ${endDate}::date
                   AND dr.tenant_id = ${tenantContext.tenantId}
+                  ${locationClause}
                 ORDER BY dr.dispatch_date DESC, dr.created_at DESC
                 LIMIT ${limit} OFFSET ${offset}
               `
@@ -67,6 +74,7 @@ export async function GET(request: Request) {
                 WHERE dr.dispatch_date >= ${startDate}::date 
                   AND dr.dispatch_date <= ${endDate}::date
                   AND dr.tenant_id = ${tenantContext.tenantId}
+                  ${locationClause}
                 ORDER BY dr.dispatch_date DESC, dr.created_at DESC
               `,
         )
@@ -82,6 +90,7 @@ export async function GET(request: Request) {
           SELECT COUNT(*)::int as count
           FROM dispatch_records
           WHERE tenant_id = ${tenantContext.tenantId}
+            ${locationClause}
         `,
         sql`
           SELECT 
@@ -91,6 +100,7 @@ export async function GET(request: Request) {
             COALESCE(SUM(kgs_received), 0) as kgs_received
           FROM dispatch_records
           WHERE tenant_id = ${tenantContext.tenantId}
+            ${locationClause}
           GROUP BY coffee_type, bag_type
         `,
       ]
@@ -102,6 +112,7 @@ export async function GET(request: Request) {
                 FROM dispatch_records dr
                 LEFT JOIN locations l ON l.id = dr.location_id
                 WHERE dr.tenant_id = ${tenantContext.tenantId}
+                  ${locationClause}
                 ORDER BY dr.dispatch_date DESC, dr.created_at DESC
                 LIMIT ${limit} OFFSET ${offset}
               `
@@ -110,6 +121,7 @@ export async function GET(request: Request) {
                 FROM dispatch_records dr
                 LEFT JOIN locations l ON l.id = dr.location_id
                 WHERE dr.tenant_id = ${tenantContext.tenantId}
+                  ${locationClause}
                 ORDER BY dr.dispatch_date DESC, dr.created_at DESC
               `,
         )
@@ -136,7 +148,6 @@ export async function GET(request: Request) {
     }
     // Check if database doesn't exist yet
     if (errorMessage.includes("does not exist")) {
-      console.log("Dispatch database not set up yet")
       return NextResponse.json({ success: true, records: [] })
     }
     console.error("Error fetching dispatch records:", error)
@@ -175,6 +186,22 @@ export async function POST(request: Request) {
         { status: 400 }
       )
     }
+    if (!requirePositiveNumber(bags_dispatched)) {
+      return NextResponse.json(
+        { success: false, error: "Bags dispatched must be a positive number" },
+        { status: 400 },
+      )
+    }
+    const kgsValue =
+      kgs_received === undefined || kgs_received === null || kgs_received === ""
+        ? null
+        : toNonNegativeNumber(kgs_received)
+    if (kgsValue === null && kgs_received !== undefined && kgs_received !== null && kgs_received !== "") {
+      return NextResponse.json(
+        { success: false, error: "KGs received must be 0 or more" },
+        { status: 400 },
+      )
+    }
 
     const locationInfo = await resolveLocationInfo(sql, tenantContext, { locationId, estate })
     if (!locationInfo) {
@@ -193,8 +220,8 @@ export async function POST(request: Request) {
         dispatch_date, location_id, estate, lot_id, coffee_type, bag_type, bags_dispatched, 
         kgs_received, notes, created_by, tenant_id
       ) VALUES (
-        ${dispatch_date}::date, ${locationInfo.id}, ${resolvedEstate}, ${lot_id || null}, ${coffee_type}, ${bag_type}, ${bags_dispatched},
-        ${kgs_received ?? null}, ${notes || null}, ${created_by || 'unknown'}, ${tenantContext.tenantId}
+        ${dispatch_date}::date, ${locationInfo.id}, ${resolvedEstate}, ${lot_id || null}, ${coffee_type}, ${bag_type}, ${Number(bags_dispatched)},
+        ${kgsValue}, ${notes || null}, ${created_by || 'unknown'}, ${tenantContext.tenantId}
       )
       RETURNING *
     `,
@@ -247,6 +274,22 @@ export async function PUT(request: Request) {
         { status: 400 }
       )
     }
+    if (!requirePositiveNumber(bags_dispatched)) {
+      return NextResponse.json(
+        { success: false, error: "Bags dispatched must be a positive number" },
+        { status: 400 },
+      )
+    }
+    const kgsValue =
+      kgs_received === undefined || kgs_received === null || kgs_received === ""
+        ? null
+        : toNonNegativeNumber(kgs_received)
+    if (kgsValue === null && kgs_received !== undefined && kgs_received !== null && kgs_received !== "") {
+      return NextResponse.json(
+        { success: false, error: "KGs received must be 0 or more" },
+        { status: 400 },
+      )
+    }
 
     const locationInfo = await resolveLocationInfo(sql, tenantContext, { locationId, estate })
     if (!locationInfo) {
@@ -268,8 +311,8 @@ export async function PUT(request: Request) {
         lot_id = ${lot_id || null},
         coffee_type = ${coffee_type},
         bag_type = ${bag_type},
-        bags_dispatched = ${bags_dispatched},
-        kgs_received = ${kgs_received ?? null},
+        bags_dispatched = ${Number(bags_dispatched)},
+        kgs_received = ${kgsValue},
         notes = ${notes || null},
         tenant_id = ${tenantContext.tenantId},
         updated_at = CURRENT_TIMESTAMP

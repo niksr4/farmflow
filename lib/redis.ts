@@ -12,7 +12,6 @@ export const KEYS = {
 }
 
 export async function getRedisAvailability(): Promise<boolean> {
-  console.log("⚠️ Redis is no longer used. All data is stored in Neon PostgreSQL.")
   return false
 }
 

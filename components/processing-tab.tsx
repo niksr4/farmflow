@@ -1,10 +1,11 @@
 "use client"
 
-import { useCallback, useEffect, useState } from "react"
+import { useCallback, useEffect, useState, type ChangeEvent, type KeyboardEvent } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { FieldLabel } from "@/components/ui/field-label"
 import { Textarea } from "@/components/ui/textarea"
 import { Calendar } from "@/components/ui/calendar"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
@@ -20,6 +21,7 @@ import { useAuth } from "@/hooks/use-auth"
 import { useTenantSettings } from "@/hooks/use-tenant-settings"
 import { formatDateOnly } from "@/lib/date-utils"
 import { formatNumber } from "@/lib/format"
+import { canAcceptNonNegative, isBlockedNumericKey } from "@/lib/number-input"
 
 interface ProcessingRecord {
   id?: number
@@ -125,6 +127,7 @@ export default function ProcessingTab() {
   const [selectedLocationId, setSelectedLocationId] = useState<string>("")
   const [coffeeType, setCoffeeType] = useState<string>(COFFEE_TYPES[0])
   const [record, setRecord] = useState<Omit<ProcessingRecord, "id">>(emptyRecord)
+  const [hasExistingRecord, setHasExistingRecord] = useState(false)
   const [previousRecord, setPreviousRecord] = useState<ProcessingRecord | null>(null)
   const [recentRecords, setRecentRecords] = useState<ProcessingRecord[]>([])
   const [isLoading, setIsLoading] = useState(false)
@@ -246,7 +249,6 @@ export default function ProcessingTab() {
     if (!selectedLocationId) {
       return
     }
-    console.log("loadRecentRecords called for location:", selectedLocationId)
     if (append) {
       setIsLoadingMoreRecords(true)
     } else {
@@ -262,7 +264,6 @@ export default function ProcessingTab() {
         offset: String(pageIndex * recordsPageSize),
       })
       const url = `/api/processing-records?${params.toString()}`
-      console.log("Fetching from URL:", url)
 
       const response = await fetch(url)
       const responseText = await response.text()
@@ -273,7 +274,6 @@ export default function ProcessingTab() {
         data = null
       }
 
-      console.log("Recent records response:", data)
 
       if (!response.ok) {
         console.error("Processing API error:", response.status, responseText)
@@ -288,7 +288,6 @@ export default function ProcessingTab() {
 
       if (data?.success) {
         if (Array.isArray(data.records)) {
-          console.log("Setting recent records, count:", data.records.length)
           const nextTotalCount = Number(data.totalCount) || 0
           setRecordsTotalCount(nextTotalCount)
           setRecentRecords((prev) => {
@@ -342,12 +341,13 @@ export default function ProcessingTab() {
 
   const loadRecordForDate = useCallback(async (selectedDate: Date) => {
     if (!selectedLocationId) {
+      setRecord({ ...emptyRecord, process_date: format(selectedDate, "yyyy-MM-dd") })
+      setHasExistingRecord(false)
       return
     }
     setIsLoading(true)
     try {
       const dateStr = format(selectedDate, "yyyy-MM-dd")
-      console.log("Loading record for date:", dateStr, "location:", selectedLocationId)
 
       const response = await fetch(
         `/api/processing-records?date=${dateStr}&locationId=${selectedLocationId}&coffeeType=${encodeURIComponent(
@@ -356,7 +356,6 @@ export default function ProcessingTab() {
       )
       const data = await response.json()
 
-      console.log("Record for date response:", data)
 
       if (data.success && data.record) {
         const record = data.record
@@ -378,8 +377,10 @@ export default function ProcessingTab() {
           }
         })
         setRecord(record)
+        setHasExistingRecord(true)
       } else {
         setRecord({ ...emptyRecord, process_date: dateStr })
+        setHasExistingRecord(false)
       }
 
       const previousResponse = await fetch(
@@ -409,10 +410,8 @@ export default function ProcessingTab() {
           }
         })
 
-        console.log("Found previous record:", prevRecord.process_date, "with crop_todate:", prevRecord.crop_todate)
         setPreviousRecord(prevRecord)
       } else {
-        console.log("No records found before the selected date")
         setPreviousRecord(null)
       }
     } catch (error: any) {
@@ -514,15 +513,16 @@ export default function ProcessingTab() {
 
   useEffect(() => {
     if (selectedLocationId) {
-      console.log("Location changed to:", selectedLocationId)
       loadRecentRecords(0, false)
     }
   }, [selectedLocationId, loadRecentRecords])
 
   useEffect(() => {
     if (selectedLocationId) {
-      console.log("Date or location changed, loading record for date:", format(date, "yyyy-MM-dd"))
       loadRecordForDate(date)
+    } else {
+      setRecord({ ...emptyRecord, process_date: format(date, "yyyy-MM-dd") })
+      setHasExistingRecord(false)
     }
   }, [date, selectedLocationId, loadRecordForDate])
 
@@ -564,6 +564,7 @@ export default function ProcessingTab() {
           title: "Success",
           description: `Processing record saved successfully for ${selectedLocation?.name || "estate"}`,
         })
+        setHasExistingRecord(true)
 
         await loadRecentRecords(0, false)
         await loadDashboardData()
@@ -607,6 +608,7 @@ export default function ProcessingTab() {
           description: "Record deleted successfully",
         })
         setRecord({ ...emptyRecord, process_date: format(date, "yyyy-MM-dd") })
+        setHasExistingRecord(false)
         loadRecentRecords(0, false)
       } else {
         throw new Error(data.error)
@@ -804,6 +806,17 @@ export default function ProcessingTab() {
   const updateField = (field: keyof ProcessingRecord, value: number | string | null) => {
     setRecord((prev) => ({ ...prev, [field]: value }))
   }
+  const blockInvalidNumberKey = (event: KeyboardEvent<HTMLInputElement>) => {
+    if (isBlockedNumericKey(event.key)) {
+      event.preventDefault()
+    }
+  }
+  const handleNonNegativeFloat =
+    (field: keyof ProcessingRecord) => (event: ChangeEvent<HTMLInputElement>) => {
+      const nextValue = event.target.value
+      if (!canAcceptNonNegative(nextValue)) return
+      updateField(field, nextValue === "" ? null : Number.parseFloat(nextValue))
+    }
 
   return (
     <div className="container mx-auto p-6 space-y-6">
@@ -938,7 +951,10 @@ export default function ProcessingTab() {
             </div>
 
             <div className="flex items-center gap-2">
-              <Label>Lot ID:</Label>
+              <FieldLabel
+                label="Lot ID:"
+                tooltip="Use the lot or batch ID that will carry through dispatch and sales."
+              />
               <Input
                 value={record.lot_id ?? ""}
                 onChange={(e) => updateField("lot_id", e.target.value)}
@@ -975,14 +991,17 @@ export default function ProcessingTab() {
                 </CardHeader>
                 <CardContent className="grid grid-cols-2 gap-4">
                   <div>
-                    <Label>Crop Today (kg)</Label>
+                    <FieldLabel
+                      label="Crop Today (kg)"
+                      tooltip="Total cherry received today before sorting."
+                    />
                     <Input
                       type="number"
                       step="0.01"
+                      min={0}
                       value={record.crop_today ?? ""}
-                      onChange={(e) =>
-                        updateField("crop_today", e.target.value === "" ? null : Number.parseFloat(e.target.value))
-                      }
+                      onKeyDown={blockInvalidNumberKey}
+                      onChange={handleNonNegativeFloat("crop_today")}
                       placeholder="Enter crop today"
                     />
                   </div>
@@ -1006,14 +1025,17 @@ export default function ProcessingTab() {
                 </CardHeader>
                 <CardContent className="grid grid-cols-3 gap-4">
                   <div>
-                    <Label>Ripe Today (kg)</Label>
+                    <FieldLabel
+                      label="Ripe Today (kg)"
+                      tooltip="Ripe cherry selected for washed processing."
+                    />
                     <Input
                       type="number"
                       step="0.01"
+                      min={0}
                       value={record.ripe_today ?? ""}
-                      onChange={(e) =>
-                        updateField("ripe_today", e.target.value === "" ? null : Number.parseFloat(e.target.value))
-                      }
+                      onKeyDown={blockInvalidNumberKey}
+                      onChange={handleNonNegativeFloat("ripe_today")}
                       placeholder="Enter ripe today"
                     />
                   </div>
@@ -1048,14 +1070,17 @@ export default function ProcessingTab() {
                 </CardHeader>
                 <CardContent className="grid grid-cols-3 gap-4">
                   <div>
-                    <Label>Green Today (kg)</Label>
+                    <FieldLabel
+                      label="Green Today (kg)"
+                      tooltip="Under-ripe cherry separated from ripe intake."
+                    />
                     <Input
                       type="number"
                       step="0.01"
+                      min={0}
                       value={record.green_today ?? ""}
-                      onChange={(e) =>
-                        updateField("green_today", e.target.value === "" ? null : Number.parseFloat(e.target.value))
-                      }
+                      onKeyDown={blockInvalidNumberKey}
+                      onChange={handleNonNegativeFloat("green_today")}
                       placeholder="Enter green today"
                     />
                   </div>
@@ -1090,14 +1115,17 @@ export default function ProcessingTab() {
                 </CardHeader>
                 <CardContent className="grid grid-cols-3 gap-4">
                   <div>
-                    <Label>Float Today (kg)</Label>
+                    <FieldLabel
+                      label="Float Today (kg)"
+                      tooltip="Low-density floaters removed during water sorting."
+                    />
                     <Input
                       type="number"
                       step="0.01"
+                      min={0}
                       value={record.float_today ?? ""}
-                      onChange={(e) =>
-                        updateField("float_today", e.target.value === "" ? null : Number.parseFloat(e.target.value))
-                      }
+                      onKeyDown={blockInvalidNumberKey}
+                      onChange={handleNonNegativeFloat("float_today")}
                       placeholder="Enter float today"
                     />
                   </div>
@@ -1132,14 +1160,17 @@ export default function ProcessingTab() {
                 </CardHeader>
                 <CardContent className="grid grid-cols-2 gap-4">
                   <div>
-                    <Label>Wet Parchment (kg)</Label>
+                    <FieldLabel
+                      label="Wet Parchment (kg)"
+                      tooltip="Weight after pulping, fermentation, and washing."
+                    />
                     <Input
                       type="number"
                       step="0.01"
+                      min={0}
                       value={record.wet_parchment ?? ""}
-                      onChange={(e) =>
-                        updateField("wet_parchment", e.target.value === "" ? null : Number.parseFloat(e.target.value))
-                      }
+                      onKeyDown={blockInvalidNumberKey}
+                      onChange={handleNonNegativeFloat("wet_parchment")}
                       placeholder="Enter wet parchment"
                     />
                   </div>
@@ -1163,14 +1194,17 @@ export default function ProcessingTab() {
                 </CardHeader>
                 <CardContent className="grid grid-cols-3 gap-4">
                   <div>
-                    <Label>Dry Parchment (kg)</Label>
+                    <FieldLabel
+                      label="Dry Parchment (kg)"
+                      tooltip="Weight after drying to storage moisture."
+                    />
                     <Input
                       type="number"
                       step="0.01"
+                      min={0}
                       value={record.dry_parch ?? ""}
-                      onChange={(e) =>
-                        updateField("dry_parch", e.target.value === "" ? null : Number.parseFloat(e.target.value))
-                      }
+                      onKeyDown={blockInvalidNumberKey}
+                      onChange={handleNonNegativeFloat("dry_parch")}
                       placeholder="Enter dry parch"
                     />
                   </div>
@@ -1205,14 +1239,17 @@ export default function ProcessingTab() {
                 </CardHeader>
                 <CardContent className="grid grid-cols-3 gap-4">
                   <div>
-                    <Label>Dry Cherry (kg)</Label>
+                    <FieldLabel
+                      label="Dry Cherry (kg)"
+                      tooltip="Natural-process dried cherry weight."
+                    />
                     <Input
                       type="number"
                       step="0.01"
+                      min={0}
                       value={record.dry_cherry ?? ""}
-                      onChange={(e) =>
-                        updateField("dry_cherry", e.target.value === "" ? null : Number.parseFloat(e.target.value))
-                      }
+                      onKeyDown={blockInvalidNumberKey}
+                      onChange={handleNonNegativeFloat("dry_cherry")}
                       placeholder="Enter dry cherry"
                     />
                   </div>
@@ -1299,19 +1336,25 @@ export default function ProcessingTab() {
                 </CardHeader>
                 <CardContent className="grid grid-cols-2 gap-4">
                   <div>
-                    <Label>Moisture %</Label>
+                    <FieldLabel
+                      label="Moisture %"
+                      tooltip="Moisture reading at the time of measurement."
+                    />
                     <Input
                       type="number"
                       step="0.01"
+                      min={0}
                       value={record.moisture_pct ?? ""}
-                      onChange={(e) =>
-                        updateField("moisture_pct", e.target.value === "" ? null : Number.parseFloat(e.target.value))
-                      }
+                      onKeyDown={blockInvalidNumberKey}
+                      onChange={handleNonNegativeFloat("moisture_pct")}
                       placeholder="e.g. 11.5"
                     />
                   </div>
                   <div>
-                    <Label>Quality Grade</Label>
+                    <FieldLabel
+                      label="Quality Grade"
+                      tooltip="Estate grade, screen size, or buyer-facing quality label."
+                    />
                     <Input
                       value={record.quality_grade ?? ""}
                       onChange={(e) => updateField("quality_grade", e.target.value)}
@@ -1319,7 +1362,10 @@ export default function ProcessingTab() {
                     />
                   </div>
                   <div className="col-span-2">
-                    <Label>Defect Notes</Label>
+                    <FieldLabel
+                      label="Defect Notes"
+                      tooltip="Record defects, cup notes, or grading observations."
+                    />
                     <Textarea
                       value={record.defect_notes ?? ""}
                       onChange={(e) => updateField("defect_notes", e.target.value)}
@@ -1328,7 +1374,10 @@ export default function ProcessingTab() {
                     />
                   </div>
                   <div className="col-span-2">
-                    <Label>Quality Photo URL (optional)</Label>
+                    <FieldLabel
+                      label="Quality Photo URL (optional)"
+                      tooltip="Link to a grading photo or QC evidence for this lot."
+                    />
                     <Input
                       value={record.quality_photo_url ?? ""}
                       onChange={(e) => updateField("quality_photo_url", e.target.value)}
@@ -1358,11 +1407,11 @@ export default function ProcessingTab() {
                   ) : (
                     <>
                       <Save className="mr-2 h-4 w-4" />
-                      Save Record
+                      {hasExistingRecord ? "Update Record" : "Save Record"}
                     </>
                   )}
                 </Button>
-                {record.process_date && canDelete && (
+                {hasExistingRecord && canDelete && (
                   <Button variant="destructive" onClick={handleDelete}>
                     <Trash2 className="mr-2 h-4 w-4" />
                     Delete
@@ -1405,7 +1454,6 @@ export default function ProcessingTab() {
                   variant="outline"
                   className="w-full justify-start bg-transparent"
                   onClick={() => {
-                    console.log("Clicking record:", rec)
                     setDate(new Date(rec.process_date))
                   }}
                 >

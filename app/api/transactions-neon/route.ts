@@ -9,7 +9,6 @@ export const dynamic = "force-dynamic"
 
 export async function GET(request: NextRequest) {
   try {
-    console.log("[SERVER] 📥 GET /api/transactions-neon")
     const sessionUser = await requireModuleAccess("transactions")
     const tenantContext = normalizeTenantContext(sessionUser.tenantId, sessionUser.role)
 
@@ -233,7 +232,6 @@ export async function GET(request: NextRequest) {
       location_code: row.location_code ? String(row.location_code) : undefined,
     }))
 
-    console.log(`[SERVER] ✅ Returning ${transactions.length} transactions`)
 
     return NextResponse.json({
       success: true,
@@ -260,14 +258,12 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
-    console.log("[SERVER] 📥 POST /api/transactions-neon")
     const sessionUser = await requireModuleAccess("transactions")
     if (!canWriteModule(sessionUser.role, "transactions")) {
       return NextResponse.json({ success: false, message: "Insufficient role" }, { status: 403 })
     }
     const tenantContext = normalizeTenantContext(sessionUser.tenantId, sessionUser.role)
     const body = await request.json()
-    console.log("[SERVER] Request body:", JSON.stringify(body, null, 2))
 
     const { item_type, quantity, transaction_type, notes, user_id, price, location_id } = body
 
@@ -295,15 +291,16 @@ export async function POST(request: NextRequest) {
 
     const priceValue = Number(price) || 0
     const quantityValue = Number(quantity)
+    if (!Number.isFinite(quantityValue) || quantityValue <= 0) {
+      return NextResponse.json(
+        {
+          success: false,
+          message: "Quantity must be a positive number",
+        },
+        { status: 400 },
+      )
+    }
     const total_cost = quantityValue * priceValue
-
-    console.log("[SERVER] Adding transaction:", {
-      item_type,
-      quantity: quantityValue,
-      transaction_type: normalizedType,
-      price: priceValue,
-      total_cost,
-    })
 
     // Just insert into transaction_history - don't touch current_inventory
     const result = await runTenantQuery(
@@ -346,7 +343,6 @@ export async function POST(request: NextRequest) {
     `,
     )
 
-    console.log("[SERVER] ✅ Transaction added:", result[0])
 
     await logAuditEvent(inventorySql, sessionUser, {
       action: "create",

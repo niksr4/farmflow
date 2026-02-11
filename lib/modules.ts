@@ -13,6 +13,7 @@ export const MODULES: ModuleDefinition[] = [
   { id: "quality", label: "Quality & Grading", defaultEnabled: false },
   { id: "dispatch", label: "Dispatch", defaultEnabled: true },
   { id: "sales", label: "Sales", defaultEnabled: true },
+  { id: "billing", label: "Billing & Invoices", defaultEnabled: true },
   { id: "rainfall", label: "Rainfall", defaultEnabled: true },
   { id: "pepper", label: "Pepper", defaultEnabled: true },
   { id: "ai-analysis", label: "AI Analysis", defaultEnabled: true },

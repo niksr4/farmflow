@@ -105,7 +105,6 @@ export default function AccountsPage() {
       setIsLoading(true)
       const response = await fetch("/api/get-activity")
       const data = await response.json()
-      console.log("Fetched activities:", data)
 
       if (data.activities) {
         // Map 'activity' field to 'reference' for display
@@ -125,12 +124,9 @@ export default function AccountsPage() {
   const fetchAccountActivities = async () => {
     setLoadingActivities(true)
     try {
-      console.log("[v0] Fetching account activities...")
       const response = await fetch("/api/get-activity")
       const data = await response.json()
-      console.log("[v0] Account activities response:", data)
       if (data.success && data.activities) {
-        console.log("[v0] Setting account activities:", data.activities)
         setAccountActivities(data.activities)
       }
     } catch (error) {
@@ -151,7 +147,6 @@ export default function AccountsPage() {
     setIsSubmitting(true)
 
     try {
-      console.log("[v0] Adding activity:", { code: newActivityCode, reference: newActivityReference })
       const response = await fetch("/api/add-activity", {
         method: "POST",
         headers: {
@@ -164,7 +159,6 @@ export default function AccountsPage() {
       })
 
       const data = await response.json()
-      console.log("[v0] Add activity response:", data)
 
       if (data.success) {
         toast.success("Activity added successfully")
@@ -173,7 +167,6 @@ export default function AccountsPage() {
         setIsAddingActivity(false)
         await fetchAccountActivities()
         await fetchAllActivities()
-        console.log("[v0] Activities refetched after add")
       } else {
         toast.error(data.error || "Failed to add activity")
       }
@@ -510,7 +503,7 @@ export default function AccountsPage() {
     <div className="container mx-auto p-6 space-y-6">
       <div>
         <h1 className="text-3xl font-bold">Accounts Management</h1>
-        <p className="text-muted-foreground">Track labor deployments, expenses, and pepper records</p>
+        <p className="text-muted-foreground">Track labor deployments and expense records</p>
       </div>
 
       <Card>

@@ -8,11 +8,14 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import { useToast } from "@/hooks/use-toast"
 import { useAuth } from "@/hooks/use-auth"
 import { AlertThresholds, useTenantSettings } from "@/hooks/use-tenant-settings"
 import { MODULES } from "@/lib/modules"
 import { formatDateForDisplay, formatDateOnly } from "@/lib/date-utils"
+import { roleLabel } from "@/lib/roles"
+import { Info } from "lucide-react"
 
 interface User {
   id: string
@@ -113,9 +116,269 @@ export default function TenantSettingsPage() {
   const [editingLocationCode, setEditingLocationCode] = useState("")
   const [isUpdatingLocationId, setIsUpdatingLocationId] = useState<string | null>(null)
 
+  const [privacyStatus, setPrivacyStatus] = useState<{
+    noticeVersion: string
+    acceptedAt: string | null
+    consentMarketing: boolean
+    consentMarketingUpdatedAt: string | null
+    deletionRequestedAt: string | null
+    anonymizedAt: string | null
+  } | null>(null)
+  const [privacyError, setPrivacyError] = useState<string | null>(null)
+  const [isPrivacyLoading, setIsPrivacyLoading] = useState(false)
+  const [isAcceptingNotice, setIsAcceptingNotice] = useState(false)
+  const [isExportingPersonalData, setIsExportingPersonalData] = useState(false)
+  const [correctionUsername, setCorrectionUsername] = useState("")
+  const [isSubmittingCorrection, setIsSubmittingCorrection] = useState(false)
+  const [isRequestingDeletion, setIsRequestingDeletion] = useState(false)
+  const [isUpdatingConsent, setIsUpdatingConsent] = useState(false)
+
+  const [mfaStatus, setMfaStatus] = useState<{ enabled: boolean; enrolledAt: string | null } | null>(null)
+  const [mfaSecret, setMfaSecret] = useState<string | null>(null)
+  const [mfaOtpAuth, setMfaOtpAuth] = useState<string | null>(null)
+  const [mfaToken, setMfaToken] = useState("")
+  const [isMfaLoading, setIsMfaLoading] = useState(false)
+  const [isMfaSetupLoading, setIsMfaSetupLoading] = useState(false)
+  const [isMfaVerifyLoading, setIsMfaVerifyLoading] = useState(false)
+  const [isMfaDisableLoading, setIsMfaDisableLoading] = useState(false)
+  const [mfaError, setMfaError] = useState<string | null>(null)
+
+  const isAdminOrOwner = user?.role === "admin" || user?.role === "owner"
+  const mfaFeatureEnabled = false
+  const mfaEnabled = mfaFeatureEnabled ? Boolean(mfaStatus?.enabled) : false
+  const mfaVerified = mfaFeatureEnabled ? Boolean(user?.mfaVerified) : true
+  const mfaGate = Boolean(isAdminOrOwner && mfaFeatureEnabled && mfaEnabled && !mfaVerified)
+
   useEffect(() => {
     setEstateNameInput(settings.estateName || "")
   }, [settings.estateName])
+
+  const loadPrivacyStatus = useCallback(async () => {
+    if (!tenantId) return
+    setIsPrivacyLoading(true)
+    setPrivacyError(null)
+    try {
+      const response = await fetch("/api/privacy/notice-status")
+      const data = await response.json()
+      if (!response.ok || !data.success) {
+        throw new Error(data.error || "Failed to load privacy status")
+      }
+      setPrivacyStatus(data.status)
+    } catch (error: any) {
+      setPrivacyError(error.message || "Failed to load privacy status")
+    } finally {
+      setIsPrivacyLoading(false)
+    }
+  }, [tenantId])
+
+  useEffect(() => {
+    loadPrivacyStatus()
+  }, [loadPrivacyStatus])
+
+  const handleAcceptNotice = async () => {
+    setIsAcceptingNotice(true)
+    setPrivacyError(null)
+    try {
+      const response = await fetch("/api/privacy/accept", { method: "POST" })
+      const data = await response.json()
+      if (!response.ok || !data.success) {
+        throw new Error(data.error || "Failed to record notice acceptance")
+      }
+      await loadPrivacyStatus()
+      toast({ title: "Notice accepted", description: "Your acceptance has been recorded." })
+    } catch (error: any) {
+      setPrivacyError(error.message || "Failed to accept notice")
+    } finally {
+      setIsAcceptingNotice(false)
+    }
+  }
+
+  const handleExportPersonalData = async () => {
+    setIsExportingPersonalData(true)
+    setPrivacyError(null)
+    try {
+      const response = await fetch("/api/privacy/export")
+      const data = await response.json()
+      if (!response.ok || !data.success) {
+        throw new Error(data.error || "Failed to export data")
+      }
+      const blob = new Blob([JSON.stringify(data.payload, null, 2)], { type: "application/json" })
+      const url = window.URL.createObjectURL(blob)
+      const anchor = document.createElement("a")
+      anchor.href = url
+      anchor.download = `farmflow-personal-data-${new Date().toISOString().slice(0, 10)}.json`
+      anchor.click()
+      window.URL.revokeObjectURL(url)
+      toast({ title: "Export ready", description: "Your personal data export has been downloaded." })
+    } catch (error: any) {
+      setPrivacyError(error.message || "Failed to export data")
+    } finally {
+      setIsExportingPersonalData(false)
+    }
+  }
+
+  const handleSubmitCorrection = async () => {
+    if (!correctionUsername.trim()) {
+      setPrivacyError("Enter the corrected username")
+      return
+    }
+    setIsSubmittingCorrection(true)
+    setPrivacyError(null)
+    try {
+      const response = await fetch("/api/privacy/correct", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ newUsername: correctionUsername.trim() }),
+      })
+      const data = await response.json()
+      if (!response.ok || !data.success) {
+        throw new Error(data.error || "Failed to update username")
+      }
+      setCorrectionUsername("")
+      toast({ title: "Username updated", description: "Sign in again with the new username." })
+    } catch (error: any) {
+      setPrivacyError(error.message || "Failed to update username")
+    } finally {
+      setIsSubmittingCorrection(false)
+    }
+  }
+
+  const handleRequestDeletion = async () => {
+    if (!window.confirm("Request deletion and anonymization of your personal data?")) return
+    setIsRequestingDeletion(true)
+    setPrivacyError(null)
+    try {
+      const response = await fetch("/api/privacy/delete", { method: "POST" })
+      const data = await response.json()
+      if (!response.ok || !data.success) {
+        throw new Error(data.error || "Failed to request deletion")
+      }
+      await loadPrivacyStatus()
+      toast({ title: "Deletion requested", description: "We will process this per the retention policy." })
+    } catch (error: any) {
+      setPrivacyError(error.message || "Failed to request deletion")
+    } finally {
+      setIsRequestingDeletion(false)
+    }
+  }
+
+  const handleConsentToggle = async (value: boolean) => {
+    setIsUpdatingConsent(true)
+    setPrivacyError(null)
+    try {
+      const response = await fetch("/api/privacy/consent", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ consent: value }),
+      })
+      const data = await response.json()
+      if (!response.ok || !data.success) {
+        throw new Error(data.error || "Failed to update consent")
+      }
+      await loadPrivacyStatus()
+    } catch (error: any) {
+      setPrivacyError(error.message || "Failed to update consent")
+    } finally {
+      setIsUpdatingConsent(false)
+    }
+  }
+
+  const loadMfaStatus = useCallback(async () => {
+    if (!user) return
+    setIsMfaLoading(true)
+    setMfaError(null)
+    try {
+      const response = await fetch("/api/mfa/status")
+      const data = await response.json()
+      if (!response.ok || !data.success) {
+        throw new Error(data.error || "Failed to load MFA status")
+      }
+      setMfaStatus(data.status)
+    } catch (error: any) {
+      setMfaError(error.message || "Failed to load MFA status")
+    } finally {
+      setIsMfaLoading(false)
+    }
+  }, [user])
+
+  useEffect(() => {
+    if (!mfaFeatureEnabled) return
+    loadMfaStatus()
+  }, [loadMfaStatus, mfaFeatureEnabled])
+
+  const handleMfaSetup = async () => {
+    setIsMfaSetupLoading(true)
+    setMfaError(null)
+    try {
+      const response = await fetch("/api/mfa/setup", { method: "POST" })
+      const data = await response.json()
+      if (!response.ok || !data.success) {
+        throw new Error(data.error || "Failed to start MFA setup")
+      }
+      setMfaSecret(data.secret)
+      setMfaOtpAuth(data.otpauth)
+    } catch (error: any) {
+      setMfaError(error.message || "Failed to start MFA setup")
+    } finally {
+      setIsMfaSetupLoading(false)
+    }
+  }
+
+  const handleMfaVerify = async () => {
+    if (!mfaToken.trim()) {
+      setMfaError("Enter the 6-digit MFA code")
+      return
+    }
+    setIsMfaVerifyLoading(true)
+    setMfaError(null)
+    try {
+      const response = await fetch("/api/mfa/verify", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ token: mfaToken.trim() }),
+      })
+      const data = await response.json()
+      if (!response.ok || !data.success) {
+        throw new Error(data.error || "Failed to verify MFA code")
+      }
+      setMfaToken("")
+      setMfaSecret(null)
+      setMfaOtpAuth(null)
+      await loadMfaStatus()
+      toast({ title: "MFA enabled", description: "Admin actions now require MFA." })
+    } catch (error: any) {
+      setMfaError(error.message || "Failed to verify MFA code")
+    } finally {
+      setIsMfaVerifyLoading(false)
+    }
+  }
+
+  const handleMfaDisable = async () => {
+    if (!mfaToken.trim()) {
+      setMfaError("Enter the 6-digit MFA code")
+      return
+    }
+    setIsMfaDisableLoading(true)
+    setMfaError(null)
+    try {
+      const response = await fetch("/api/mfa/disable", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ token: mfaToken.trim() }),
+      })
+      const data = await response.json()
+      if (!response.ok || !data.success) {
+        throw new Error(data.error || "Failed to disable MFA")
+      }
+      setMfaToken("")
+      await loadMfaStatus()
+      toast({ title: "MFA disabled", description: "Admin actions will be blocked until MFA is re-enabled." })
+    } catch (error: any) {
+      setMfaError(error.message || "Failed to disable MFA")
+    } finally {
+      setIsMfaDisableLoading(false)
+    }
+  }
 
   useEffect(() => {
     if (settings.alertThresholds) {
@@ -124,7 +387,7 @@ export default function TenantSettingsPage() {
   }, [settings.alertThresholds])
 
   const loadUsers = useCallback(async () => {
-    if (!tenantId) return
+    if (!tenantId || mfaGate) return
     try {
       const response = await fetch(`/api/admin/users?tenantId=${tenantId}`)
       const data = await response.json()
@@ -140,10 +403,10 @@ export default function TenantSettingsPage() {
     } catch (error: any) {
       toast({ title: "Error", description: error.message || "Failed to load users", variant: "destructive" })
     }
-  }, [tenantId, toast])
+  }, [tenantId, toast, mfaGate])
 
   const loadModules = useCallback(async () => {
-    if (!tenantId) return
+    if (!tenantId || mfaGate) return
     try {
       const response = await fetch(`/api/admin/tenant-modules?tenantId=${tenantId}`)
       const data = await response.json()
@@ -154,9 +417,12 @@ export default function TenantSettingsPage() {
     } catch (error: any) {
       toast({ title: "Error", description: error.message || "Failed to load tenant modules", variant: "destructive" })
     }
-  }, [tenantId, toast])
+  }, [tenantId, toast, mfaGate])
 
   const loadUserModules = useCallback(async (userId: string) => {
+    if (mfaGate) {
+      return
+    }
     if (!userId) {
       setUserModulePermissions(MODULES.map((module) => ({ ...module, enabled: module.defaultEnabled !== false })))
       setUserModuleSource("default")
@@ -181,10 +447,10 @@ export default function TenantSettingsPage() {
     } finally {
       setIsUserModulesLoading(false)
     }
-  }, [toast])
+  }, [toast, mfaGate])
 
   const loadAuditLogs = useCallback(async () => {
-    if (!tenantId) return
+    if (!tenantId || mfaGate) return
     setIsAuditLoading(true)
     try {
       const params = new URLSearchParams({ tenantId, limit: "50" })
@@ -205,7 +471,7 @@ export default function TenantSettingsPage() {
     } finally {
       setIsAuditLoading(false)
     }
-  }, [auditEntityType, tenantId, toast])
+  }, [auditEntityType, tenantId, toast, mfaGate])
 
   const loadLocations = useCallback(async () => {
     if (!tenantId) return
@@ -223,17 +489,19 @@ export default function TenantSettingsPage() {
 
   useEffect(() => {
     if (!tenantId) return
-    loadUsers()
-    loadModules()
-    loadAuditLogs()
-    loadLocations()
-  }, [tenantId, loadAuditLogs, loadLocations, loadModules, loadUsers])
-
-  useEffect(() => {
-    if (tenantId) {
+    if (!mfaGate) {
+      loadUsers()
+      loadModules()
       loadAuditLogs()
     }
-  }, [auditEntityType, tenantId, loadAuditLogs])
+    loadLocations()
+  }, [tenantId, loadAuditLogs, loadLocations, loadModules, loadUsers, mfaGate])
+
+  useEffect(() => {
+    if (tenantId && !mfaGate) {
+      loadAuditLogs()
+    }
+  }, [auditEntityType, tenantId, loadAuditLogs, mfaGate])
 
   useEffect(() => {
     if (!users.length) {
@@ -246,15 +514,26 @@ export default function TenantSettingsPage() {
   }, [users, selectedUserId])
 
   useEffect(() => {
+    if (mfaGate) {
+      return
+    }
     if (selectedUserId) {
       loadUserModules(selectedUserId)
       return
     }
     setUserModulePermissions(MODULES.map((module) => ({ ...module, enabled: module.defaultEnabled !== false })))
     setUserModuleSource("default")
-  }, [selectedUserId, loadUserModules])
+  }, [selectedUserId, loadUserModules, mfaGate])
 
   const handleCreateUser = async () => {
+    if (mfaGate) {
+      toast({
+        title: "MFA required",
+        description: "Sign out and sign back in with your MFA code to manage users.",
+        variant: "destructive",
+      })
+      return
+    }
     if (!tenantId) {
       toast({ title: "Tenant missing", description: "Tenant context not available." })
       return
@@ -294,6 +573,14 @@ export default function TenantSettingsPage() {
   }
 
   const handleSaveUserRole = async (user: User) => {
+    if (mfaGate) {
+      toast({
+        title: "MFA required",
+        description: "Sign out and sign back in with your MFA code to update roles.",
+        variant: "destructive",
+      })
+      return
+    }
     const nextRole = userRoleDrafts[user.id] || user.role
     if (nextRole === user.role) {
       return
@@ -320,6 +607,14 @@ export default function TenantSettingsPage() {
   }
 
   const handleDeleteUser = async (user: User) => {
+    if (mfaGate) {
+      toast({
+        title: "MFA required",
+        description: "Sign out and sign back in with your MFA code to delete users.",
+        variant: "destructive",
+      })
+      return
+    }
     if (!window.confirm(`Delete ${user.username}? This cannot be undone.`)) {
       return
     }
@@ -356,6 +651,14 @@ export default function TenantSettingsPage() {
   }
 
   const handleSaveModules = async () => {
+    if (mfaGate) {
+      toast({
+        title: "MFA required",
+        description: "Sign out and sign back in with your MFA code to update tenant modules.",
+        variant: "destructive",
+      })
+      return
+    }
     if (!tenantId) return
     setIsSavingModules(true)
     try {
@@ -377,6 +680,14 @@ export default function TenantSettingsPage() {
   }
 
   const handleSaveUserModules = async () => {
+    if (mfaGate) {
+      toast({
+        title: "MFA required",
+        description: "Sign out and sign back in with your MFA code to update user modules.",
+        variant: "destructive",
+      })
+      return
+    }
     if (!selectedUserId) return
     setIsSavingUserModules(true)
     try {
@@ -399,6 +710,14 @@ export default function TenantSettingsPage() {
   }
 
   const handleResetUserModules = async () => {
+    if (mfaGate) {
+      toast({
+        title: "MFA required",
+        description: "Sign out and sign back in with your MFA code to reset user modules.",
+        variant: "destructive",
+      })
+      return
+    }
     if (!selectedUserId) return
     try {
       const response = await fetch(`/api/admin/user-modules?userId=${selectedUserId}`, {
@@ -560,6 +879,40 @@ export default function TenantSettingsPage() {
         </CardContent>
       </Card>
 
+      {user?.role === "owner" && (
+        <Card className="border-emerald-200/70 bg-emerald-50/60">
+          <CardHeader>
+            <CardTitle>Super Admin Console</CardTitle>
+            <CardDescription>Expanded visibility and system-level tools for owners.</CardDescription>
+          </CardHeader>
+          <CardContent className="flex flex-col gap-3 text-sm text-emerald-900">
+            <div className="flex flex-wrap gap-2">
+              <Button asChild variant="outline" className="bg-white/80">
+                <Link href="/admin/tenants">View All Tenants</Link>
+              </Button>
+              <Button asChild variant="outline" className="bg-white/80">
+                <Link href="/admin/inspect-databases">Inspect Databases</Link>
+              </Button>
+            </div>
+            <p className="text-xs text-emerald-800">
+              Super Admins can review tenants, seed demo data, and inspect database health across estates.
+            </p>
+          </CardContent>
+        </Card>
+      )}
+
+      {mfaGate && (
+        <Card className="border-amber-200/70 bg-amber-50/70">
+          <CardHeader>
+            <CardTitle>MFA verification required</CardTitle>
+            <CardDescription>
+              MFA is enabled for your account. Sign out and sign back in with your 6-digit code to access admin settings
+              like users, modules, and audit logs.
+            </CardDescription>
+          </CardHeader>
+        </Card>
+      )}
+
       <Card>
         <CardHeader>
           <CardTitle>Estate Identity</CardTitle>
@@ -570,7 +923,23 @@ export default function TenantSettingsPage() {
         <CardContent className="space-y-3">
           <div className="grid grid-cols-1 md:grid-cols-[2fr_auto] gap-3 items-end">
             <div className="space-y-2">
-              <Label htmlFor="estate-name">Estate name</Label>
+              <div className="flex items-center gap-2">
+                <Label htmlFor="estate-name">Estate name</Label>
+                <TooltipProvider>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <button
+                        type="button"
+                        aria-label="Estate name help"
+                        className="inline-flex h-5 w-5 items-center justify-center rounded-full border border-slate-200 text-slate-500 hover:text-slate-700"
+                      >
+                        <Info className="h-3 w-3" />
+                      </button>
+                    </TooltipTrigger>
+                    <TooltipContent>This appears on dashboards, exports, and buyer reports.</TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
+              </div>
               <Input
                 id="estate-name"
                 placeholder="Estate Name"
@@ -619,7 +988,23 @@ export default function TenantSettingsPage() {
             <>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="space-y-2">
-                  <Label htmlFor="threshold-float">Float rate increase (ratio)</Label>
+                  <div className="flex items-center gap-2">
+                    <Label htmlFor="threshold-float">Float rate increase (ratio)</Label>
+                    <TooltipProvider>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <button
+                            type="button"
+                            aria-label="Float rate help"
+                            className="inline-flex h-5 w-5 items-center justify-center rounded-full border border-slate-200 text-slate-500 hover:text-slate-700"
+                          >
+                            <Info className="h-3 w-3" />
+                          </button>
+                        </TooltipTrigger>
+                        <TooltipContent>Flags lots when float rate jumps vs last week.</TooltipContent>
+                      </Tooltip>
+                    </TooltipProvider>
+                  </div>
                   <Input
                     id="threshold-float"
                     type="number"
@@ -630,7 +1015,23 @@ export default function TenantSettingsPage() {
                   <p className="text-xs text-muted-foreground">Example: 0.15 = 15% above last week.</p>
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="threshold-yield">Dry parch yield drop (ratio)</Label>
+                  <div className="flex items-center gap-2">
+                    <Label htmlFor="threshold-yield">Dry parch yield drop (ratio)</Label>
+                    <TooltipProvider>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <button
+                            type="button"
+                            aria-label="Yield drop help"
+                            className="inline-flex h-5 w-5 items-center justify-center rounded-full border border-slate-200 text-slate-500 hover:text-slate-700"
+                          >
+                            <Info className="h-3 w-3" />
+                          </button>
+                        </TooltipTrigger>
+                        <TooltipContent>Flags when dry-parch yield falls below last week.</TooltipContent>
+                      </Tooltip>
+                    </TooltipProvider>
+                  </div>
                   <Input
                     id="threshold-yield"
                     type="number"
@@ -663,7 +1064,23 @@ export default function TenantSettingsPage() {
                   <p className="text-xs text-muted-foreground">Example: 0.5 = 50% above last week.</p>
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="threshold-mismatch">Inventory mismatch buffer (KGs)</Label>
+                  <div className="flex items-center gap-2">
+                    <Label htmlFor="threshold-mismatch">Inventory mismatch buffer (KGs)</Label>
+                    <TooltipProvider>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <button
+                            type="button"
+                            aria-label="Inventory mismatch help"
+                            className="inline-flex h-5 w-5 items-center justify-center rounded-full border border-slate-200 text-slate-500 hover:text-slate-700"
+                          >
+                            <Info className="h-3 w-3" />
+                          </button>
+                        </TooltipTrigger>
+                        <TooltipContent>Allowed gap between stock and transaction totals.</TooltipContent>
+                      </Tooltip>
+                    </TooltipProvider>
+                  </div>
                   <Input
                     id="threshold-mismatch"
                     type="number"
@@ -673,7 +1090,23 @@ export default function TenantSettingsPage() {
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="threshold-dispatch">Dispatch unconfirmed days</Label>
+                  <div className="flex items-center gap-2">
+                    <Label htmlFor="threshold-dispatch">Dispatch unconfirmed days</Label>
+                    <TooltipProvider>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <button
+                            type="button"
+                            aria-label="Dispatch unconfirmed help"
+                            className="inline-flex h-5 w-5 items-center justify-center rounded-full border border-slate-200 text-slate-500 hover:text-slate-700"
+                          >
+                            <Info className="h-3 w-3" />
+                          </button>
+                        </TooltipTrigger>
+                        <TooltipContent>Days before a shipment is flagged as unconfirmed.</TooltipContent>
+                      </Tooltip>
+                    </TooltipProvider>
+                  </div>
                   <Input
                     id="threshold-dispatch"
                     type="number"
@@ -683,7 +1116,23 @@ export default function TenantSettingsPage() {
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="threshold-bagweight">Bag weight drift (ratio)</Label>
+                  <div className="flex items-center gap-2">
+                    <Label htmlFor="threshold-bagweight">Bag weight drift (ratio)</Label>
+                    <TooltipProvider>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <button
+                            type="button"
+                            aria-label="Bag weight drift help"
+                            className="inline-flex h-5 w-5 items-center justify-center rounded-full border border-slate-200 text-slate-500 hover:text-slate-700"
+                          >
+                            <Info className="h-3 w-3" />
+                          </button>
+                        </TooltipTrigger>
+                        <TooltipContent>Flags when recorded bag weights deviate from standard.</TooltipContent>
+                      </Tooltip>
+                    </TooltipProvider>
+                  </div>
                   <Input
                     id="threshold-bagweight"
                     type="number"
@@ -694,7 +1143,23 @@ export default function TenantSettingsPage() {
                   <p className="text-xs text-muted-foreground">Example: 0.05 = 5% drift.</p>
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="threshold-minkgs">Minimum KGs for signal</Label>
+                  <div className="flex items-center gap-2">
+                    <Label htmlFor="threshold-minkgs">Minimum KGs for signal</Label>
+                    <TooltipProvider>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <button
+                            type="button"
+                            aria-label="Minimum kgs help"
+                            className="inline-flex h-5 w-5 items-center justify-center rounded-full border border-slate-200 text-slate-500 hover:text-slate-700"
+                          >
+                            <Info className="h-3 w-3" />
+                          </button>
+                        </TooltipTrigger>
+                        <TooltipContent>Ignore tiny lots to avoid noisy alerts.</TooltipContent>
+                      </Tooltip>
+                    </TooltipProvider>
+                  </div>
                   <Input
                     id="threshold-minkgs"
                     type="number"
@@ -709,7 +1174,23 @@ export default function TenantSettingsPage() {
                 <div className="text-sm font-medium">Season Targets (optional)</div>
                 <div className="mt-3 grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div className="space-y-2">
-                    <Label htmlFor="target-yield">Target dry parch yield from ripe</Label>
+                    <div className="flex items-center gap-2">
+                      <Label htmlFor="target-yield">Target dry parch yield from ripe</Label>
+                      <TooltipProvider>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <button
+                              type="button"
+                              aria-label="Target yield help"
+                              className="inline-flex h-5 w-5 items-center justify-center rounded-full border border-slate-200 text-slate-500 hover:text-slate-700"
+                            >
+                              <Info className="h-3 w-3" />
+                            </button>
+                          </TooltipTrigger>
+                          <TooltipContent>Benchmark for seasonal yield performance.</TooltipContent>
+                        </Tooltip>
+                      </TooltipProvider>
+                    </div>
                     <Input
                       id="target-yield"
                       type="number"
@@ -720,7 +1201,23 @@ export default function TenantSettingsPage() {
                     />
                   </div>
                   <div className="space-y-2">
-                    <Label htmlFor="target-loss">Target transit loss %</Label>
+                    <div className="flex items-center gap-2">
+                      <Label htmlFor="target-loss">Target transit loss %</Label>
+                      <TooltipProvider>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <button
+                              type="button"
+                              aria-label="Target loss help"
+                              className="inline-flex h-5 w-5 items-center justify-center rounded-full border border-slate-200 text-slate-500 hover:text-slate-700"
+                            >
+                              <Info className="h-3 w-3" />
+                            </button>
+                          </TooltipTrigger>
+                          <TooltipContent>Expected transit shrinkage for buyer reconciliation.</TooltipContent>
+                        </Tooltip>
+                      </TooltipProvider>
+                    </div>
                     <Input
                       id="target-loss"
                       type="number"
@@ -731,7 +1228,23 @@ export default function TenantSettingsPage() {
                     />
                   </div>
                   <div className="space-y-2">
-                    <Label htmlFor="target-price">Target avg price/kg (INR)</Label>
+                    <div className="flex items-center gap-2">
+                      <Label htmlFor="target-price">Target avg price/kg (INR)</Label>
+                      <TooltipProvider>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <button
+                              type="button"
+                              aria-label="Target price help"
+                              className="inline-flex h-5 w-5 items-center justify-center rounded-full border border-slate-200 text-slate-500 hover:text-slate-700"
+                            >
+                              <Info className="h-3 w-3" />
+                            </button>
+                          </TooltipTrigger>
+                          <TooltipContent>Benchmark for premium pricing per kg.</TooltipContent>
+                        </Tooltip>
+                      </TooltipProvider>
+                    </div>
                     <Input
                       id="target-price"
                       type="number"
@@ -742,7 +1255,23 @@ export default function TenantSettingsPage() {
                     />
                   </div>
                   <div className="space-y-2">
-                    <Label htmlFor="target-float">Target float rate</Label>
+                    <div className="flex items-center gap-2">
+                      <Label htmlFor="target-float">Target float rate</Label>
+                      <TooltipProvider>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <button
+                              type="button"
+                              aria-label="Target float rate help"
+                              className="inline-flex h-5 w-5 items-center justify-center rounded-full border border-slate-200 text-slate-500 hover:text-slate-700"
+                            >
+                              <Info className="h-3 w-3" />
+                            </button>
+                          </TooltipTrigger>
+                          <TooltipContent>Expected float rate for quality grading.</TooltipContent>
+                        </Tooltip>
+                      </TooltipProvider>
+                    </div>
                     <Input
                       id="target-float"
                       type="number"
@@ -771,7 +1300,23 @@ export default function TenantSettingsPage() {
         <CardContent className="space-y-4">
           <div className="grid grid-cols-1 md:grid-cols-[2fr_1fr_auto] gap-3">
             <div className="space-y-2">
-              <Label htmlFor="location-name">Location name</Label>
+              <div className="flex items-center gap-2">
+                <Label htmlFor="location-name">Location name</Label>
+                <TooltipProvider>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <button
+                        type="button"
+                        aria-label="Location name help"
+                        className="inline-flex h-5 w-5 items-center justify-center rounded-full border border-slate-200 text-slate-500 hover:text-slate-700"
+                      >
+                        <Info className="h-3 w-3" />
+                      </button>
+                    </TooltipTrigger>
+                    <TooltipContent>Use estate block names (HF, MV, PG) for reports.</TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
+              </div>
               <Input
                 id="location-name"
                 placeholder="HF, MV, PG"
@@ -780,7 +1325,23 @@ export default function TenantSettingsPage() {
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="location-code">Location code (optional)</Label>
+              <div className="flex items-center gap-2">
+                <Label htmlFor="location-code">Location code (optional)</Label>
+                <TooltipProvider>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <button
+                        type="button"
+                        aria-label="Location code help"
+                        className="inline-flex h-5 w-5 items-center justify-center rounded-full border border-slate-200 text-slate-500 hover:text-slate-700"
+                      >
+                        <Info className="h-3 w-3" />
+                      </button>
+                    </TooltipTrigger>
+                    <TooltipContent>Short codes show up in exports and buyer docs.</TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
+              </div>
               <Input
                 id="location-code"
                 placeholder="HF"
@@ -916,8 +1477,8 @@ export default function TenantSettingsPage() {
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="admin">admin</SelectItem>
-                  <SelectItem value="user">user</SelectItem>
+                  <SelectItem value="admin">Admin</SelectItem>
+                  <SelectItem value="user">User</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -950,21 +1511,24 @@ export default function TenantSettingsPage() {
                       <TableRow key={u.id}>
                       <TableCell>{u.username}</TableCell>
                       <TableCell>
-                        <Select
-                          value={userRoleDrafts[u.id] || u.role}
-                          onValueChange={(value) => handleRoleDraftChange(u.id, value)}
-                          disabled={isOwnerUser}
-                        >
-                          <SelectTrigger className="h-9">
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="admin">admin</SelectItem>
-                            <SelectItem value="user">user</SelectItem>
-                          </SelectContent>
-                        </Select>
+                        {isOwnerUser ? (
+                          <div className="text-sm font-medium text-emerald-700">{roleLabel(u.role)}</div>
+                        ) : (
+                          <Select
+                            value={userRoleDrafts[u.id] || u.role}
+                            onValueChange={(value) => handleRoleDraftChange(u.id, value)}
+                          >
+                            <SelectTrigger className="h-9">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="admin">Admin</SelectItem>
+                              <SelectItem value="user">User</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        )}
                         {isOwnerUser && (
-                          <p className="mt-1 text-xs text-muted-foreground">Owner role cannot be modified.</p>
+                          <p className="mt-1 text-xs text-muted-foreground">Super Admin role cannot be modified.</p>
                         )}
                       </TableCell>
                       <TableCell>{formatDateOnly(u.created_at)}</TableCell>
@@ -1019,7 +1583,7 @@ export default function TenantSettingsPage() {
               <SelectContent>
                 {users.map((u) => (
                   <SelectItem key={u.id} value={u.id}>
-                    {u.username} ({u.role})
+                    {u.username} ({roleLabel(u.role)})
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -1051,6 +1615,153 @@ export default function TenantSettingsPage() {
             </Button>
             <Button variant="outline" onClick={handleResetUserModules} disabled={!selectedUserId || isUserModulesLoading}>
               Reset to Tenant Defaults
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+
+      {mfaFeatureEnabled && (user?.role === "admin" || user?.role === "owner") && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Admin Security (MFA)</CardTitle>
+            <CardDescription>Admins must enroll in MFA to access sensitive settings and admin APIs.</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4 text-sm text-muted-foreground">
+            {mfaError && <div className="rounded-md border border-red-200 bg-red-50 p-3 text-red-700">{mfaError}</div>}
+            {isMfaLoading ? (
+              <div>Loading MFA status...</div>
+            ) : (
+              <div className="rounded-md border bg-white/80 p-4 space-y-3">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm font-medium text-foreground">MFA status</p>
+                    <p>
+                      {mfaStatus?.enabled
+                        ? `Enabled · Enrolled ${mfaStatus?.enrolledAt ? formatDateForDisplay(mfaStatus.enrolledAt) : ""}`
+                        : "Not enabled"}
+                    </p>
+                  </div>
+                  <Button onClick={handleMfaSetup} disabled={isMfaSetupLoading}>
+                    {isMfaSetupLoading ? "Preparing..." : "Generate MFA secret"}
+                  </Button>
+                </div>
+
+                {(mfaSecret || mfaOtpAuth) && (
+                  <div className="space-y-2 rounded-md border border-emerald-200 bg-emerald-50/60 p-3">
+                    <p className="text-sm font-medium text-emerald-800">Step 1: Add to Authenticator</p>
+                    <p>Secret: <span className="font-mono text-emerald-900">{mfaSecret}</span></p>
+                    {mfaOtpAuth && (
+                      <p className="text-xs text-emerald-800 break-all">OTP URI: {mfaOtpAuth}</p>
+                    )}
+                    <p className="text-xs text-emerald-800">Use your authenticator app to add a manual key. QR code support can be added later.</p>
+                  </div>
+                )}
+
+                <div className="flex flex-col sm:flex-row gap-2 items-end">
+                  <div className="flex-1">
+                    <Label>Enter 6-digit MFA code</Label>
+                    <Input value={mfaToken} onChange={(event) => setMfaToken(event.target.value)} />
+                  </div>
+                  <Button onClick={handleMfaVerify} disabled={isMfaVerifyLoading}>
+                    {isMfaVerifyLoading ? "Verifying..." : "Verify & enable"}
+                  </Button>
+                  <Button variant="outline" onClick={handleMfaDisable} disabled={isMfaDisableLoading}>
+                    {isMfaDisableLoading ? "Disabling..." : "Disable"}
+                  </Button>
+                </div>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Privacy & DPDP</CardTitle>
+          <CardDescription>Manage personal data rights, notices, and consent settings.</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4 text-sm text-muted-foreground">
+          {privacyError && <div className="rounded-md border border-red-200 bg-red-50 p-3 text-red-700">{privacyError}</div>}
+          {isPrivacyLoading ? (
+            <div>Loading privacy status...</div>
+          ) : (
+            <div className="rounded-md border bg-white/80 p-4 space-y-2">
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  <p className="text-sm font-medium text-foreground">Privacy notice</p>
+                  <p>
+                    Version: {privacyStatus?.noticeVersion || "Not available"}{" "}
+                    {privacyStatus?.acceptedAt ? `· Accepted ${formatDateForDisplay(privacyStatus.acceptedAt)}` : "· Not accepted yet"}
+                  </p>
+                </div>
+                <div className="flex gap-2">
+                  <Button variant="outline" asChild>
+                    <Link href="/privacy">View Notice</Link>
+                  </Button>
+                  <Button onClick={handleAcceptNotice} disabled={isAcceptingNotice || !tenantId}>
+                    {isAcceptingNotice ? "Saving..." : "Acknowledge"}
+                  </Button>
+                </div>
+              </div>
+              <div className="flex items-center justify-between border-t pt-3">
+                <div>
+                  <p className="text-sm font-medium text-foreground">Optional product updates</p>
+                  <p>Allow FarmFlow to send product updates and training materials.</p>
+                </div>
+                <label className="flex items-center gap-2 text-sm">
+                  <input
+                    type="checkbox"
+                    checked={Boolean(privacyStatus?.consentMarketing)}
+                    onChange={(event) => handleConsentToggle(event.target.checked)}
+                    disabled={isUpdatingConsent || !tenantId}
+                  />
+                  {privacyStatus?.consentMarketing ? "Opted in" : "Opted out"}
+                </label>
+              </div>
+            </div>
+          )}
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="rounded-md border bg-white/80 p-4 space-y-3">
+              <div>
+                <p className="text-sm font-medium text-foreground">Export my data</p>
+                <p>Download a JSON export of your personal data across FarmFlow.</p>
+              </div>
+              <Button onClick={handleExportPersonalData} disabled={isExportingPersonalData || !tenantId}>
+                {isExportingPersonalData ? "Preparing..." : "Download export"}
+              </Button>
+            </div>
+            <div className="rounded-md border bg-white/80 p-4 space-y-3">
+              <div>
+                <p className="text-sm font-medium text-foreground">Correct my username</p>
+                <p>Update the username used across logs and records.</p>
+              </div>
+              <div className="flex flex-col sm:flex-row gap-2">
+                <Input
+                  value={correctionUsername}
+                  onChange={(event) => setCorrectionUsername(event.target.value)}
+                  placeholder="New username"
+                />
+                <Button onClick={handleSubmitCorrection} disabled={isSubmittingCorrection || !tenantId}>
+                  {isSubmittingCorrection ? "Updating..." : "Update"}
+                </Button>
+              </div>
+            </div>
+          </div>
+
+          <div className="rounded-md border border-amber-200 bg-amber-50/60 p-4 space-y-2">
+            <p className="text-sm font-medium text-amber-900">Request deletion or anonymization</p>
+            <p>
+              We will remove or anonymize your personal data once the request is processed. Some records may be retained
+              when required by law.
+            </p>
+            {privacyStatus?.deletionRequestedAt && (
+              <p className="text-xs text-amber-900">
+                Request logged on {formatDateForDisplay(privacyStatus.deletionRequestedAt)}.
+              </p>
+            )}
+            <Button variant="destructive" onClick={handleRequestDeletion} disabled={isRequestingDeletion || !tenantId}>
+              {isRequestingDeletion ? "Submitting..." : "Request deletion"}
             </Button>
           </div>
         </CardContent>
@@ -1112,7 +1823,7 @@ export default function TenantSettingsPage() {
                       <TableCell>{formatAuditTimestamp(log.created_at)}</TableCell>
                       <TableCell>
                         {log.username}
-                        <span className="text-xs text-muted-foreground"> ({log.role})</span>
+                        <span className="text-xs text-muted-foreground"> ({roleLabel(log.role)})</span>
                       </TableCell>
                       <TableCell className="capitalize">{log.action}</TableCell>
                       <TableCell>{log.entity_type}</TableCell>

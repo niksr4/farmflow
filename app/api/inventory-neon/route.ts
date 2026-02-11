@@ -9,7 +9,6 @@ export const dynamic = "force-dynamic"
 
 export async function GET(request: NextRequest) {
   try {
-    console.log("[SERVER] 📥 GET /api/inventory-neon")
     const sessionUser = await requireModuleAccess("inventory")
     const tenantContext = normalizeTenantContext(sessionUser.tenantId, sessionUser.role)
     const { searchParams } = new URL(request.url)
@@ -110,7 +109,6 @@ export async function GET(request: NextRequest) {
       total_cost: item.total_cost ? Number(item.total_cost) : undefined,
     }))
 
-    console.log(`[SERVER] ✅ Returning ${transformedInventory.length} inventory items`)
 
     return NextResponse.json({
       success: true,
@@ -145,14 +143,12 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
-    console.log("[SERVER] 📥 POST /api/inventory-neon - Add New Item")
     const sessionUser = await requireModuleAccess("inventory")
     if (!canWriteModule(sessionUser.role, "inventory")) {
       return NextResponse.json({ success: false, message: "Insufficient role" }, { status: 403 })
     }
     const tenantContext = normalizeTenantContext(sessionUser.tenantId, sessionUser.role)
     const body = await request.json()
-    console.log("[SERVER] Request body:", JSON.stringify(body, null, 2))
 
     const { item_type, quantity, unit, price, user_id, notes, location_id } = body
 
@@ -170,14 +166,6 @@ export async function POST(request: NextRequest) {
     const priceValue = Number(price) || 0
     const total_cost = quantityValue * priceValue
     const avg_price = quantityValue > 0 ? total_cost / quantityValue : 0
-
-    console.log("[SERVER] Creating new inventory item:", {
-      item_type,
-      quantity: quantityValue,
-      unit,
-      avg_price,
-      total_cost,
-    })
 
     const resolvedLocationId = typeof location_id === "string" ? location_id.trim() : ""
     const locationValue = resolvedLocationId && resolvedLocationId !== "unassigned" ? resolvedLocationId : null
@@ -226,7 +214,6 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    console.log("[SERVER] ✅ Item ensured in current_inventory")
 
     // Add initial transaction if quantity > 0 (trigger updates current_inventory)
     if (quantityValue > 0) {
@@ -258,7 +245,6 @@ export async function POST(request: NextRequest) {
           )
         `,
       )
-      console.log("[SERVER] ✅ Initial transaction recorded")
     }
 
     await logAuditEvent(inventorySql, sessionUser, {
@@ -303,14 +289,12 @@ export async function POST(request: NextRequest) {
 
 export async function PUT(request: NextRequest) {
   try {
-    console.log("[SERVER] 📥 PUT /api/inventory-neon - Update Item")
     const sessionUser = await requireModuleAccess("inventory")
     if (!canWriteModule(sessionUser.role, "inventory")) {
       return NextResponse.json({ success: false, message: "Insufficient role" }, { status: 403 })
     }
     const tenantContext = normalizeTenantContext(sessionUser.tenantId, sessionUser.role)
     const body = await request.json()
-    console.log("[SERVER] Request body:", JSON.stringify(body, null, 2))
 
     const { item_type, new_item_type, unit } = body
 

@@ -4,6 +4,7 @@ import { requireModuleAccess, isModuleAccessError } from "@/lib/server/module-ac
 import { normalizeTenantContext, runTenantQuery } from "@/lib/server/tenant-db"
 import { canDeleteModule, canWriteModule } from "@/lib/permissions"
 import { logAuditEvent } from "@/lib/server/audit-log"
+import { toNonNegativeNumber } from "@/lib/number-input"
 
 export async function GET(request: NextRequest) {
   try {
@@ -41,12 +42,23 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: false, error: "Date is required" }, { status: 400 })
     }
 
+    const inchesValue =
+      inches === undefined || inches === null || inches === "" ? 0 : toNonNegativeNumber(inches)
+    if (inchesValue === null) {
+      return NextResponse.json({ success: false, error: "Inches must be 0 or more" }, { status: 400 })
+    }
+    const centsValue =
+      cents === undefined || cents === null || cents === "" ? 0 : toNonNegativeNumber(cents)
+    if (centsValue === null || centsValue > 99) {
+      return NextResponse.json({ success: false, error: "Hundredths must be between 0 and 99" }, { status: 400 })
+    }
+
     const result = await runTenantQuery(
       sql,
       tenantContext,
       sql`
         INSERT INTO rainfall_records (record_date, inches, cents, notes, user_id, tenant_id)
-        VALUES (${record_date}, ${inches || 0}, ${cents || 0}, ${notes || ""}, ${user_id || "unknown"}, ${tenantContext.tenantId})
+        VALUES (${record_date}, ${inchesValue}, ${centsValue}, ${notes || ""}, ${user_id || "unknown"}, ${tenantContext.tenantId})
         RETURNING *
       `,
     )

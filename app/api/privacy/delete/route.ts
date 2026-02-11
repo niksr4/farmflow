@@ -1,0 +1,29 @@
+import { NextResponse } from "next/server"
+import { requireSessionUser } from "@/lib/server/auth"
+import { ensurePrivacySchema, requestDeletion } from "@/lib/server/privacy"
+
+export const dynamic = "force-dynamic"
+
+export async function POST(request: Request) {
+  try {
+    const sessionUser = await requireSessionUser()
+    const schema = await ensurePrivacySchema(sessionUser)
+    if (!schema.ok) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: "DPDP schema missing. Run scripts/40-dpdp-privacy.sql.",
+          missing: schema,
+        },
+        { status: 500 },
+      )
+    }
+
+    const body = await request.json().catch(() => ({}))
+    const reason = body?.reason ? String(body.reason) : null
+    await requestDeletion(sessionUser, reason)
+    return NextResponse.json({ success: true })
+  } catch (error: any) {
+    return NextResponse.json({ success: false, error: error.message || "Failed to request deletion" }, { status: 500 })
+  }
+}

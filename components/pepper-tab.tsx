@@ -60,6 +60,7 @@ export function PepperTab() {
   const [loading, setLoading] = useState(false)
   const [saving, setSaving] = useState(false)
   const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null)
+  const [hasExistingRecord, setHasExistingRecord] = useState(false)
   const selectedLocation = locations.find((loc) => loc.id === selectedLocationId) || null
   const showLocationColumn = selectedLocationId === LOCATION_ALL || selectedLocationId === LOCATION_UNASSIGNED
 
@@ -116,6 +117,7 @@ export function PepperTab() {
       setGreenPepper("")
       setDryPepper("")
       setNotes("")
+      setHasExistingRecord(false)
       return
     }
     try {
@@ -131,12 +133,14 @@ export function PepperTab() {
         setGreenPepper(record.green_pepper?.toString() || "")
         setDryPepper(record.dry_pepper?.toString() || "")
         setNotes(record.notes || "")
+        setHasExistingRecord(true)
       } else {
         // Clear form for new entry
         setKgPicked("")
         setGreenPepper("")
         setDryPepper("")
         setNotes("")
+        setHasExistingRecord(false)
       }
     } catch (error) {
       console.error("Error fetching record:", error)
@@ -191,6 +195,7 @@ export function PepperTab() {
 
       if (data.success) {
         setMessage({ type: "success", text: "Record saved successfully!" })
+        setHasExistingRecord(true)
         fetchRecentRecords()
       } else {
         setMessage({ type: "error", text: data.error || "Failed to save record" })
@@ -249,6 +254,7 @@ export function PepperTab() {
     setGreenPepper(record.green_pepper.toString())
     setDryPepper(record.dry_pepper.toString())
     setNotes(record.notes || "")
+    setHasExistingRecord(true)
   }
 
   return (
@@ -427,7 +433,7 @@ export function PepperTab() {
               ) : (
                 <>
                   <Save className="mr-2 h-4 w-4" />
-                  Save Record
+                  {hasExistingRecord ? "Update Record" : "Save Record"}
                 </>
               )}
             </Button>
@@ -445,7 +451,7 @@ export function PepperTab() {
               Export CSV
             </Button>
           </div>
-          <CardDescription>Click a row to load that record</CardDescription>
+          <CardDescription>Click a row to edit that record</CardDescription>
         </CardHeader>
         <CardContent>
           {loading ? (

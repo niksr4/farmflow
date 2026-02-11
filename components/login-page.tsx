@@ -2,12 +2,14 @@
 
 import type React from "react"
 
-import { useEffect, useRef, useState } from "react"
+import { useState } from "react"
 import { useRouter } from "next/navigation"
-import { User, Lock } from "lucide-react"
+import Link from "next/link"
+import { User, Lock, Info, CheckCircle2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import { useAuth } from "@/hooks/use-auth"
 
 export default function LoginPage() {
@@ -16,45 +18,6 @@ export default function LoginPage() {
   const [error, setError] = useState("")
   const { login } = useAuth()
   const router = useRouter()
-  const beanLayerRef = useRef<HTMLDivElement | null>(null)
-
-  useEffect(() => {
-    if (typeof window === "undefined") return
-    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return
-
-    let lastSpawn = 0
-    const spawnBeans = () => {
-      const now = Date.now()
-      if (now - lastSpawn < 140) return
-      lastSpawn = now
-
-      const layer = beanLayerRef.current
-      if (!layer) return
-
-      const beanCount = Math.floor(Math.random() * 2) + 1
-      for (let i = 0; i < beanCount; i += 1) {
-        const bean = document.createElement("span")
-        bean.className = "coffee-bean"
-        bean.style.left = `${Math.random() * 90 + 5}%`
-        bean.style.animationDuration = `${Math.random() * 1.8 + 3.2}s`
-        bean.style.opacity = `${Math.random() * 0.4 + 0.4}`
-        bean.style.transform = `rotate(${Math.random() * 180}deg)`
-        layer.appendChild(bean)
-
-        window.setTimeout(() => {
-          bean.remove()
-        }, 5200)
-      }
-    }
-
-    window.addEventListener("scroll", spawnBeans, { passive: true })
-    window.addEventListener("touchmove", spawnBeans, { passive: true })
-
-    return () => {
-      window.removeEventListener("scroll", spawnBeans)
-      window.removeEventListener("touchmove", spawnBeans)
-    }
-  }, [])
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -72,64 +35,140 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="relative min-h-screen overflow-hidden px-4 py-8">
-      <div ref={beanLayerRef} className="pointer-events-none absolute inset-0 overflow-hidden" />
-      <div className="relative z-10 flex min-h-[calc(100vh-4rem)] items-center justify-center">
-        <div className="w-full max-w-md">
-          <div className="bg-white/85 dark:bg-slate-900/75 rounded-2xl border border-white/50 dark:border-white/10 shadow-2xl backdrop-blur-md p-6 sm:p-8">
-            <div className="text-center mb-6">
-              <h1 className="text-2xl font-bold text-green-700">FarmFlow</h1>
-              <p className="text-gray-600 mt-2">Sign in to access your estate operations workspace</p>
+    <div className="relative min-h-screen overflow-hidden px-6 py-10">
+      <div className="pointer-events-none absolute inset-0">
+        <div className="absolute -top-28 left-[-6%] h-[320px] w-[320px] rounded-full bg-[radial-gradient(circle_at_center,rgba(152,85,42,0.35),transparent_70%)] blur-[120px]" />
+        <div className="absolute bottom-[-18%] right-[10%] h-[320px] w-[320px] rounded-full bg-[radial-gradient(circle_at_center,rgba(70,120,90,0.3),transparent_70%)] blur-[120px]" />
+      </div>
+
+      <div className="relative z-10 mx-auto grid w-full max-w-5xl gap-10 lg:grid-cols-[1.05fr_0.95fr] items-center">
+        <div className="space-y-6">
+          <p className="text-xs uppercase tracking-[0.4em] text-emerald-700/80">FarmFlow</p>
+          <h1 className="font-display text-3xl sm:text-4xl text-slate-900">
+            Welcome back to your estate workspace
+          </h1>
+          <p className="text-muted-foreground">
+            Sign in to manage lots, yields, quality evidence, and farmer-first traceability across the season.
+          </p>
+          <div className="space-y-2 text-sm text-slate-700">
+            <div className="flex items-center gap-2">
+              <CheckCircle2 className="h-4 w-4 text-emerald-600" />
+              <span>Traceability across lots and locations</span>
             </div>
+            <div className="flex items-center gap-2">
+              <CheckCircle2 className="h-4 w-4 text-emerald-600" />
+              <span>Processing, moisture, and quality notes</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <CheckCircle2 className="h-4 w-4 text-emerald-600" />
+              <span>Dispatch and sales reconciliation</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <CheckCircle2 className="h-4 w-4 text-emerald-600" />
+              <span>Rainfall and weather context</span>
+            </div>
+          </div>
+          <p className="text-xs text-muted-foreground">
+            Need access?{" "}
+            <Link href="/signup" className="underline">
+              Request access
+            </Link>
+            .
+          </p>
+        </div>
+
+        <div className="bg-white/90 dark:bg-slate-900/80 rounded-2xl border border-white/60 dark:border-white/10 shadow-2xl backdrop-blur-md p-6 sm:p-8">
+          <div className="text-center mb-6">
+            <h1 className="text-2xl font-semibold text-emerald-700">Sign in</h1>
+            <p className="text-gray-600 mt-2">Access your estate operations workspace</p>
+          </div>
 
           {error && <div className="bg-red-50 text-red-700 p-3 rounded-md mb-4 text-sm">{error}</div>}
 
-            <form onSubmit={handleLogin} className="space-y-4">
-              <div>
+          <form onSubmit={handleLogin} className="space-y-4">
+            <div>
+              <div className="flex items-center gap-2">
                 <Label htmlFor="username" className="block text-gray-700 mb-1">
                   Username
                 </Label>
-                <div className="relative">
-                  <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                    <User className="h-5 w-5 text-gray-400" />
-                  </div>
-                  <Input
-                    id="username"
-                    type="text"
-                    value={username}
-                    onChange={(e) => setUsername(e.target.value)}
-                    className="pl-10"
-                    placeholder="Enter username"
-                    required
-                  />
-                </div>
+                <TooltipProvider>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <button
+                        type="button"
+                        aria-label="Username help"
+                        className="inline-flex h-5 w-5 items-center justify-center rounded-full border border-slate-200 text-slate-500 hover:text-slate-700"
+                      >
+                        <Info className="h-3 w-3" />
+                      </button>
+                    </TooltipTrigger>
+                    <TooltipContent>Use the username created for your estate account.</TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
               </div>
+              <div className="relative">
+                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                  <User className="h-5 w-5 text-gray-400" />
+                </div>
+                <Input
+                  id="username"
+                  type="text"
+                  value={username}
+                  onChange={(e) => setUsername(e.target.value)}
+                  className="pl-10"
+                  placeholder="Enter username"
+                  required
+                />
+              </div>
+            </div>
 
-              <div>
+            <div>
+              <div className="flex items-center gap-2">
                 <Label htmlFor="password" className="block text-gray-700 mb-1">
                   Password
                 </Label>
-                <div className="relative">
-                  <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                    <Lock className="h-5 w-5 text-gray-400" />
-                  </div>
-                  <Input
-                    id="password"
-                    type="password"
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    className="pl-10"
-                    placeholder="Enter password"
-                    required
-                  />
-                </div>
+                <TooltipProvider>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <button
+                        type="button"
+                        aria-label="Password help"
+                        className="inline-flex h-5 w-5 items-center justify-center rounded-full border border-slate-200 text-slate-500 hover:text-slate-700"
+                      >
+                        <Info className="h-3 w-3" />
+                      </button>
+                    </TooltipTrigger>
+                    <TooltipContent>Credentials are unique to each estate tenant.</TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
               </div>
+              <div className="relative">
+                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                  <Lock className="h-5 w-5 text-gray-400" />
+                </div>
+                <Input
+                  id="password"
+                  type="password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  className="pl-10"
+                  placeholder="Enter password"
+                  required
+                />
+              </div>
+            </div>
 
-              <Button type="submit" className="w-full bg-green-700 hover:bg-green-800">
-                Sign In
-              </Button>
-            </form>
-          </div>
+            <Button type="submit" className="w-full bg-emerald-700 hover:bg-emerald-800">
+              Sign In
+            </Button>
+          </form>
+          <p className="mt-4 text-xs text-gray-500">
+            By signing in, you acknowledge the{" "}
+            <Link href="/privacy" className="underline">
+              Privacy Notice
+            </Link>
+            .
+          </p>
         </div>
       </div>
     </div>

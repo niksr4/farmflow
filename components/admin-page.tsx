@@ -11,6 +11,7 @@ import { useToast } from "@/hooks/use-toast"
 import { useAuth } from "@/hooks/use-auth"
 import { MODULES } from "@/lib/modules"
 import { formatDateForDisplay, formatDateOnly } from "@/lib/date-utils"
+import { roleLabel } from "@/lib/roles"
 
 interface Tenant {
   id: string
@@ -571,8 +572,8 @@ export default function AdminPage() {
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="admin">admin</SelectItem>
-                  <SelectItem value="user">user</SelectItem>
+                  <SelectItem value="admin">Admin</SelectItem>
+                  <SelectItem value="user">User</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -605,21 +606,24 @@ export default function AdminPage() {
                       <TableRow key={u.id}>
                       <TableCell>{u.username}</TableCell>
                       <TableCell>
-                        <Select
-                          value={userRoleDrafts[u.id] || u.role}
-                          onValueChange={(value) => handleRoleDraftChange(u.id, value)}
-                          disabled={isOwnerUser}
-                        >
-                          <SelectTrigger className="h-9">
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="admin">admin</SelectItem>
-                            <SelectItem value="user">user</SelectItem>
-                          </SelectContent>
-                        </Select>
+                        {isOwnerUser ? (
+                          <div className="text-sm font-medium text-emerald-700">{roleLabel(u.role)}</div>
+                        ) : (
+                          <Select
+                            value={userRoleDrafts[u.id] || u.role}
+                            onValueChange={(value) => handleRoleDraftChange(u.id, value)}
+                          >
+                            <SelectTrigger className="h-9">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="admin">Admin</SelectItem>
+                              <SelectItem value="user">User</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        )}
                         {isOwnerUser && (
-                          <p className="mt-1 text-xs text-muted-foreground">Owner role cannot be modified.</p>
+                          <p className="mt-1 text-xs text-muted-foreground">Super Admin role cannot be modified.</p>
                         )}
                       </TableCell>
                       <TableCell>{formatDateOnly(u.created_at)}</TableCell>
@@ -676,7 +680,7 @@ export default function AdminPage() {
               <SelectContent>
                 {users.map((u) => (
                   <SelectItem key={u.id} value={u.id}>
-                    {u.username} ({u.role})
+                    {u.username} ({roleLabel(u.role)})
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -773,7 +777,7 @@ export default function AdminPage() {
                       <TableCell>{formatAuditTimestamp(log.created_at)}</TableCell>
                       <TableCell>
                         {log.username}
-                        <span className="text-xs text-muted-foreground"> ({log.role})</span>
+                        <span className="text-xs text-muted-foreground"> ({roleLabel(log.role)})</span>
                       </TableCell>
                       <TableCell className="capitalize">{log.action}</TableCell>
                       <TableCell>{log.entity_type}</TableCell>

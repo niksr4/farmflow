@@ -10,14 +10,12 @@ export const dynamic = "force-dynamic"
 
 export async function PUT(request: NextRequest) {
   try {
-    console.log("[SERVER] 📥 PUT /api/transactions-neon/update")
     const sessionUser = await requireModuleAccess("transactions")
     if (!canWriteModule(sessionUser.role, "transactions")) {
       return NextResponse.json({ success: false, message: "Insufficient role" }, { status: 403 })
     }
     const tenantContext = normalizeTenantContext(sessionUser.tenantId, sessionUser.role)
     const body = await request.json()
-    console.log("[SERVER] Request body:", JSON.stringify(body, null, 2))
 
     const { id, item_type, quantity, transaction_type, notes, price, location_id } = body
 
@@ -72,16 +70,16 @@ export async function PUT(request: NextRequest) {
 
     const priceValue = Number(price) || 0
     const quantityValue = Number(quantity)
+    if (!Number.isFinite(quantityValue) || quantityValue <= 0) {
+      return NextResponse.json(
+        {
+          success: false,
+          message: "Quantity must be a positive number",
+        },
+        { status: 400 },
+      )
+    }
     const total_cost = quantityValue * priceValue
-
-    console.log("[SERVER] Updating transaction:", {
-      id,
-      item_type,
-      quantity: quantityValue,
-      transaction_type: normalizedType,
-      price: priceValue,
-      total_cost,
-    })
 
     const result = await runTenantQuery(
       inventorySql,
@@ -134,7 +132,6 @@ export async function PUT(request: NextRequest) {
       )
     }
 
-    console.log("[SERVER] ✅ Transaction updated:", result[0])
 
     await logAuditEvent(inventorySql, sessionUser, {
       action: "update",

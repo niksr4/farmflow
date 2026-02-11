@@ -43,7 +43,6 @@ export function useConsumablesData(locationId?: string, options: ConsumablesData
         } else {
           setLoading(true)
         }
-        console.log("🔄 Fetching deployments from /api/expenses-neon...")
 
       const query = new URLSearchParams()
       query.set("limit", pageSize.toString())
@@ -62,11 +61,8 @@ export function useConsumablesData(locationId?: string, options: ConsumablesData
         }
         const data = await response.json()
 
-        console.log("📥 Raw API response:", data)
 
         if (data.success && data.deployments) {
-          console.log("✅ Deployments loaded:", data.deployments.length)
-          console.log("📋 First deployment:", data.deployments[0])
           const nextTotalCount = Number(data.totalCount) || 0
           const nextTotalAmount = Number(data.totalAmount) || 0
           setTotalCount(nextTotalCount)
@@ -116,7 +112,6 @@ export function useConsumablesData(locationId?: string, options: ConsumablesData
 
   const addDeployment = async (deployment: Omit<ConsumableDeployment, "id">) => {
     try {
-      console.log("➕ Adding deployment:", deployment)
 
       const response = await fetch("/api/expenses-neon", {
         method: "POST",
@@ -127,7 +122,6 @@ export function useConsumablesData(locationId?: string, options: ConsumablesData
       const data = await response.json()
 
       if (data.success) {
-        console.log("✅ Deployment added successfully")
         await fetchDeployments(0, false) // Refresh the list
       } else {
         console.error("❌ Failed to add deployment:", data)
@@ -139,7 +133,6 @@ export function useConsumablesData(locationId?: string, options: ConsumablesData
 
   const updateDeployment = async (id: number, deployment: Omit<ConsumableDeployment, "id" | "user">) => {
     try {
-      console.log("📝 Updating deployment:", id, deployment)
 
       const response = await fetch("/api/expenses-neon", {
         method: "PUT",
@@ -150,7 +143,6 @@ export function useConsumablesData(locationId?: string, options: ConsumablesData
       const data = await response.json()
 
       if (data.success) {
-        console.log("✅ Deployment updated successfully")
         await fetchDeployments(0, false) // Refresh the list
       } else {
         console.error("❌ Failed to update deployment:", data)
@@ -162,7 +154,6 @@ export function useConsumablesData(locationId?: string, options: ConsumablesData
 
   const deleteDeployment = async (id: number) => {
     try {
-      console.log("🗑️ Deleting deployment:", id)
 
       const response = await fetch(`/api/expenses-neon?id=${id}${locationId ? `&locationId=${locationId}` : ""}`, {
         method: "DELETE",
@@ -171,7 +162,6 @@ export function useConsumablesData(locationId?: string, options: ConsumablesData
       const data = await response.json()
 
       if (data.success) {
-        console.log("✅ Deployment deleted successfully")
         await fetchDeployments(0, false) // Refresh the list
       } else {
         console.error("❌ Failed to delete deployment:", data)

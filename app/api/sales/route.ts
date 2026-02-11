@@ -21,6 +21,13 @@ async function resolveBagWeightKg(db: typeof sql, tenantContext: { tenantId: str
   return Number(rows?.[0]?.bag_weight_kg) || 50
 }
 
+const getZodErrorMessage = (error: unknown) => {
+  if (error instanceof z.ZodError) {
+    return error.issues?.[0]?.message || "Invalid request payload"
+  }
+  return null
+}
+
 export async function GET(request: Request) {
   try {
     const sessionUser = await requireModuleAccess("sales")
@@ -32,6 +39,7 @@ export async function GET(request: Request) {
     const summaryOnly = searchParams.get("summaryOnly") === "true"
     const all = searchParams.get("all") === "true"
     const buyersOnly = searchParams.get("buyers") === "true"
+    const locationId = searchParams.get("locationId")
     const limitParam = searchParams.get("limit")
     const offsetParam = searchParams.get("offset")
     const limit = !all && limitParam ? Math.min(Math.max(Number.parseInt(limitParam, 10) || 0, 1), 500) : null
@@ -60,6 +68,8 @@ export async function GET(request: Request) {
     let totalsByTypeResult
     let records = []
 
+    const locationClause = locationId ? sql` AND location_id = ${locationId}` : sql``
+
     if (startDate && endDate) {
       const queryList = [
         sql`
@@ -68,6 +78,7 @@ export async function GET(request: Request) {
           WHERE sale_date >= ${startDate}::date
             AND sale_date <= ${endDate}::date
             AND tenant_id = ${tenantContext.tenantId}
+            ${locationClause}
         `,
         sql`
           SELECT 
@@ -77,6 +88,7 @@ export async function GET(request: Request) {
           WHERE sale_date >= ${startDate}::date
             AND sale_date <= ${endDate}::date
             AND tenant_id = ${tenantContext.tenantId}
+            ${locationClause}
         `,
         sql`
           SELECT 
@@ -88,6 +100,7 @@ export async function GET(request: Request) {
           WHERE sale_date >= ${startDate}::date
             AND sale_date <= ${endDate}::date
             AND tenant_id = ${tenantContext.tenantId}
+            ${locationClause}
           GROUP BY coffee_type, bag_type
         `,
       ]
@@ -101,6 +114,7 @@ export async function GET(request: Request) {
                 WHERE sr.sale_date >= ${startDate}::date 
                   AND sr.sale_date <= ${endDate}::date
                   AND sr.tenant_id = ${tenantContext.tenantId}
+                  ${locationClause}
                 ORDER BY sr.sale_date DESC, sr.created_at DESC
                 LIMIT ${limit} OFFSET ${offset}
               `
@@ -111,6 +125,7 @@ export async function GET(request: Request) {
                 WHERE sr.sale_date >= ${startDate}::date 
                   AND sr.sale_date <= ${endDate}::date
                   AND sr.tenant_id = ${tenantContext.tenantId}
+                  ${locationClause}
                 ORDER BY sr.sale_date DESC, sr.created_at DESC
               `,
         )
@@ -126,6 +141,7 @@ export async function GET(request: Request) {
           SELECT COUNT(*)::int as count
           FROM sales_records
           WHERE tenant_id = ${tenantContext.tenantId}
+            ${locationClause}
         `,
         sql`
           SELECT 
@@ -133,6 +149,7 @@ export async function GET(request: Request) {
             COALESCE(SUM(revenue), 0) as total_revenue
           FROM sales_records
           WHERE tenant_id = ${tenantContext.tenantId}
+            ${locationClause}
         `,
         sql`
           SELECT 
@@ -142,6 +159,7 @@ export async function GET(request: Request) {
             COALESCE(SUM(revenue), 0) as revenue
           FROM sales_records
           WHERE tenant_id = ${tenantContext.tenantId}
+            ${locationClause}
           GROUP BY coffee_type, bag_type
         `,
       ]
@@ -153,6 +171,7 @@ export async function GET(request: Request) {
                 FROM sales_records sr
                 LEFT JOIN locations l ON l.id = sr.location_id
                 WHERE sr.tenant_id = ${tenantContext.tenantId}
+                  ${locationClause}
                 ORDER BY sr.sale_date DESC, sr.created_at DESC
                 LIMIT ${limit} OFFSET ${offset}
               `
@@ -161,6 +180,7 @@ export async function GET(request: Request) {
                 FROM sales_records sr
                 LEFT JOIN locations l ON l.id = sr.location_id
                 WHERE sr.tenant_id = ${tenantContext.tenantId}
+                  ${locationClause}
                 ORDER BY sr.sale_date DESC, sr.created_at DESC
               `,
         )
@@ -189,7 +209,6 @@ export async function GET(request: Request) {
       return NextResponse.json({ success: false, error: "Module access disabled" }, { status: 403 })
     }
     if (errorMessage.includes("does not exist")) {
-      console.log("Sales table not set up yet")
       return NextResponse.json({ success: true, records: [] })
     }
     console.error("Error fetching sales records:", error)
@@ -220,8 +239,8 @@ export async function POST(request: Request) {
         coffee_type: z.string().nullable().optional(),
         bag_type: z.string().nullable().optional(),
         buyer_name: z.string().nullable().optional(),
-        bags_sold: z.number().nonnegative(),
-        price_per_bag: z.number().nonnegative(),
+        bags_sold: z.number().positive(),
+        price_per_bag: z.number().positive(),
         bank_account: z.string().nullable().optional(),
         notes: z.string().nullable().optional(),
       })
@@ -298,6 +317,10 @@ export async function POST(request: Request) {
 
     return NextResponse.json({ success: true, record: result[0] })
   } catch (error) {
+    const zodMessage = getZodErrorMessage(error)
+    if (zodMessage) {
+      return NextResponse.json({ success: false, error: zodMessage }, { status: 400 })
+    }
     console.error("Error creating sales record:", error)
     if (isModuleAccessError(error)) {
       return NextResponse.json({ success: false, error: "Module access disabled" }, { status: 403 })
@@ -328,8 +351,8 @@ export async function PUT(request: Request) {
         estate: z.string().nullable().optional(),
         coffee_type: z.string().nullable().optional(),
         bag_type: z.string().nullable().optional(),
-        bags_sold: z.number().nonnegative(),
-        price_per_bag: z.number().nonnegative(),
+        bags_sold: z.number().positive(),
+        price_per_bag: z.number().positive(),
         buyer_name: z.string().nullable().optional(),
         bank_account: z.string().nullable().optional(),
         notes: z.string().nullable().optional(),
@@ -391,6 +414,10 @@ export async function PUT(request: Request) {
 
     return NextResponse.json({ success: true, record: result[0] })
   } catch (error) {
+    const zodMessage = getZodErrorMessage(error)
+    if (zodMessage) {
+      return NextResponse.json({ success: false, error: zodMessage }, { status: 400 })
+    }
     console.error("Error updating sales record:", error)
     if (isModuleAccessError(error)) {
       return NextResponse.json({ success: false, error: "Module access disabled" }, { status: 403 })

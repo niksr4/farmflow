@@ -1,14 +1,20 @@
 import { NextResponse } from "next/server"
 import { sql } from "@/lib/server/db"
 import { requireOwnerRole } from "@/lib/tenant"
-import { requireSessionUser } from "@/lib/server/auth"
+import { requireAdminSession } from "@/lib/server/mfa"
 import { MODULES } from "@/lib/modules"
 import { normalizeTenantContext, runTenantQuery } from "@/lib/server/tenant-db"
 import { logAuditEvent } from "@/lib/server/audit-log"
 
+const adminErrorResponse = (error: any, fallback: string) => {
+  const message = error?.message || fallback
+  const status = ["MFA required", "Admin role required", "Unauthorized"].includes(message) ? 403 : 500
+  return NextResponse.json({ success: false, error: message }, { status })
+}
+
 export async function GET(request: Request) {
   try {
-    const sessionUser = await requireSessionUser()
+    const sessionUser = await requireAdminSession()
     requireOwnerRole(sessionUser.role)
     if (!sql) {
       return NextResponse.json({ success: false, error: "Database not configured" }, { status: 500 })
@@ -28,13 +34,13 @@ export async function GET(request: Request) {
     return NextResponse.json({ success: true, tenants })
   } catch (error: any) {
     console.error("Error fetching tenants:", error)
-    return NextResponse.json({ success: false, error: error.message || "Failed to fetch tenants" }, { status: 500 })
+    return adminErrorResponse(error, "Failed to fetch tenants")
   }
 }
 
 export async function POST(request: Request) {
   try {
-    const sessionUser = await requireSessionUser()
+    const sessionUser = await requireAdminSession()
     requireOwnerRole(sessionUser.role)
     if (!sql) {
       return NextResponse.json({ success: false, error: "Database not configured" }, { status: 500 })
@@ -83,6 +89,6 @@ export async function POST(request: Request) {
     return NextResponse.json({ success: true, tenant: result[0] })
   } catch (error: any) {
     console.error("Error creating tenant:", error)
-    return NextResponse.json({ success: false, error: error.message || "Failed to create tenant" }, { status: 500 })
+    return adminErrorResponse(error, "Failed to create tenant")
   }
 }

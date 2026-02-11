@@ -1,9 +1,15 @@
 import { NextResponse } from "next/server"
 import { sql } from "@/lib/server/db"
 import { requireOwnerRole } from "@/lib/tenant"
-import { requireSessionUser } from "@/lib/server/auth"
+import { requireAdminSession } from "@/lib/server/mfa"
 import { normalizeTenantContext, runTenantQuery } from "@/lib/server/tenant-db"
 import { logAuditEvent } from "@/lib/server/audit-log"
+
+const adminErrorResponse = (error: any, fallback: string) => {
+  const message = error?.message || fallback
+  const status = ["MFA required", "Admin role required", "Unauthorized"].includes(message) ? 403 : 500
+  return NextResponse.json({ success: false, error: message }, { status })
+}
 
 const accountActivities = [
   { code: "ADMIN", activity: "Administrative Expenses" },
@@ -32,7 +38,7 @@ const daysAgo = (days: number) => {
 
 export async function POST(request: Request) {
   try {
-    const sessionUser = await requireSessionUser()
+    const sessionUser = await requireAdminSession()
     requireOwnerRole(sessionUser.role)
     if (!sql) {
       return NextResponse.json({ success: false, error: "Database not configured" }, { status: 500 })
@@ -385,6 +391,6 @@ export async function POST(request: Request) {
     return NextResponse.json({ success: true })
   } catch (error: any) {
     console.error("Error seeding tenant data:", error)
-    return NextResponse.json({ success: false, error: error.message || "Failed to seed tenant data" }, { status: 500 })
+    return adminErrorResponse(error, "Failed to seed tenant data")
   }
 }

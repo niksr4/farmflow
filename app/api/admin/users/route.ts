@@ -1,15 +1,20 @@
 import { NextResponse } from "next/server"
 import { sql } from "@/lib/server/db"
-import { requireAdminRole } from "@/lib/tenant"
-import { requireSessionUser } from "@/lib/server/auth"
+import { requireAdminSession } from "@/lib/server/mfa"
 import { normalizeTenantContext, runTenantQuery } from "@/lib/server/tenant-db"
 import { hashPassword } from "@/lib/passwords"
 import { logAuditEvent } from "@/lib/server/audit-log"
+import { logSecurityEvent } from "@/lib/server/security-events"
+
+const adminErrorResponse = (error: any, fallback: string) => {
+  const message = error?.message || fallback
+  const status = ["MFA required", "Admin role required", "Unauthorized"].includes(message) ? 403 : 500
+  return NextResponse.json({ success: false, error: message }, { status })
+}
 
 export async function GET(request: Request) {
   try {
-    const sessionUser = await requireSessionUser()
-    requireAdminRole(sessionUser.role)
+    const sessionUser = await requireAdminSession()
     if (!sql) {
       return NextResponse.json({ success: false, error: "Database not configured" }, { status: 500 })
     }
@@ -41,14 +46,13 @@ export async function GET(request: Request) {
     return NextResponse.json({ success: true, users })
   } catch (error: any) {
     console.error("Error fetching users:", error)
-    return NextResponse.json({ success: false, error: error.message || "Failed to fetch users" }, { status: 500 })
+    return adminErrorResponse(error, "Failed to fetch users")
   }
 }
 
 export async function POST(request: Request) {
   try {
-    const sessionUser = await requireSessionUser()
-    requireAdminRole(sessionUser.role)
+    const sessionUser = await requireAdminSession()
     if (!sql) {
       return NextResponse.json({ success: false, error: "Database not configured" }, { status: 500 })
     }
@@ -88,17 +92,31 @@ export async function POST(request: Request) {
       after: result?.[0] ?? null,
     })
 
+    await logSecurityEvent({
+      tenantId,
+      actorUsername: sessionUser.username,
+      actorRole: sessionUser.role,
+      eventType: "permission_change",
+      severity: "warning",
+      source: "admin/users",
+      metadata: {
+        action: "user_created",
+        targetUserId: result?.[0]?.id ?? null,
+        targetUsername: result?.[0]?.username ?? null,
+        role,
+      },
+    })
+
     return NextResponse.json({ success: true, user: result[0] })
   } catch (error: any) {
     console.error("Error creating user:", error)
-    return NextResponse.json({ success: false, error: error.message || "Failed to create user" }, { status: 500 })
+    return adminErrorResponse(error, "Failed to create user")
   }
 }
 
 export async function PATCH(request: Request) {
   try {
-    const sessionUser = await requireSessionUser()
-    requireAdminRole(sessionUser.role)
+    const sessionUser = await requireAdminSession()
     if (!sql) {
       return NextResponse.json({ success: false, error: "Database not configured" }, { status: 500 })
     }
@@ -163,17 +181,30 @@ export async function PATCH(request: Request) {
       after: result?.[0] ?? null,
     })
 
+    await logSecurityEvent({
+      tenantId: targetTenantId,
+      actorUsername: sessionUser.username,
+      actorRole: sessionUser.role,
+      eventType: "permission_change",
+      severity: "warning",
+      source: "admin/users",
+      metadata: {
+        action: "role_updated",
+        targetUserId: result?.[0]?.id ?? userId,
+        targetRole: role,
+      },
+    })
+
     return NextResponse.json({ success: true, user: result[0] })
   } catch (error: any) {
     console.error("Error updating user role:", error)
-    return NextResponse.json({ success: false, error: error.message || "Failed to update user role" }, { status: 500 })
+    return adminErrorResponse(error, "Failed to update user role")
   }
 }
 
 export async function DELETE(request: Request) {
   try {
-    const sessionUser = await requireSessionUser()
-    requireAdminRole(sessionUser.role)
+    const sessionUser = await requireAdminSession()
     if (!sql) {
       return NextResponse.json({ success: false, error: "Database not configured" }, { status: 500 })
     }
@@ -227,9 +258,23 @@ export async function DELETE(request: Request) {
       before: rows?.[0] ?? null,
     })
 
+    await logSecurityEvent({
+      tenantId: targetTenantId,
+      actorUsername: sessionUser.username,
+      actorRole: sessionUser.role,
+      eventType: "permission_change",
+      severity: "warning",
+      source: "admin/users",
+      metadata: {
+        action: "user_deleted",
+        targetUserId: rows?.[0]?.id ?? userId,
+        targetRole: rows?.[0]?.role ?? null,
+      },
+    })
+
     return NextResponse.json({ success: true })
   } catch (error: any) {
     console.error("Error deleting user:", error)
-    return NextResponse.json({ success: false, error: error.message || "Failed to delete user" }, { status: 500 })
+    return adminErrorResponse(error, "Failed to delete user")
   }
 }

@@ -241,6 +241,21 @@ BEGIN
     END IF;
   END IF;
 
+  IF to_regclass('privacy_requests') IS NOT NULL THEN
+    IF to_regclass('tenants') IS NOT NULL AND NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'fk_privacy_requests_tenant') THEN
+      ALTER TABLE privacy_requests
+        ADD CONSTRAINT fk_privacy_requests_tenant
+        FOREIGN KEY (tenant_id) REFERENCES tenants(id)
+        ON DELETE RESTRICT NOT VALID;
+    END IF;
+    IF to_regclass('users') IS NOT NULL AND NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'fk_privacy_requests_user') THEN
+      ALTER TABLE privacy_requests
+        ADD CONSTRAINT fk_privacy_requests_user
+        FOREIGN KEY (user_id) REFERENCES users(id)
+        ON DELETE SET NULL NOT VALID;
+    END IF;
+  END IF;
+
   IF to_regclass('audit_logs') IS NOT NULL THEN
     IF to_regclass('tenants') IS NOT NULL AND NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'fk_audit_logs_tenant') THEN
       ALTER TABLE audit_logs
