@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react"
 import Link from "next/link"
 import { Fraunces, Manrope } from "next/font/google"
-import { ArrowRight, CheckCircle2, Leaf, Shield, Sparkles, Truck, MessageCircle, Send, X, Droplets, Sprout, TreePine, Coffee, TrendingUp, Package } from "lucide-react"
+import { ArrowRight, CheckCircle2, Leaf, Shield, Sparkles, Truck, MessageCircle, Send, X, Droplets, Sprout, Coffee, TrendingUp, Package, Cloudy } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
@@ -14,41 +14,41 @@ const body = Manrope({ subsets: ["latin"], weight: ["400", "500", "600", "700"] 
 const HIGHLIGHTS = [
   {
     title: "Lot-to-Buyer Traceability",
-    description: "Every KG and bag is linked from intake to dispatch with a clean audit trail.",
+    description: "Link every lot from intake to buyer shipment with a verified trail that protects farmer value.",
     icon: Shield,
   },
   {
     title: "Inventory & Loss Control",
-    description: "Live stock, movement history, and loss signals across every location.",
+    description: "Spot shrinkage early and protect lot value with live stock signals.",
     icon: Leaf,
   },
   {
     title: "Processing Yield Clarity",
-    description: "Track parchment vs cherry yields and spot conversion drops early.",
+    description: "Track moisture, conversion, and quality notes by lot before it hits the P&L.",
     icon: Sparkles,
   },
   {
     title: "Dispatch + Sales Reconciliation",
-    description: "Know what left the gate, what arrived, and what is still available.",
+    description: "Reconcile gate-out, receipts, and cash so every bag is accounted for.",
     icon: Truck,
   },
   {
-    title: "Water Usage Tracking",
-    description: "Monitor water consumption in processing and promote sustainable practices.",
+    title: "Rainfall + Weather Context",
+    description: "Log rainfall and view weather signals alongside drying and harvest data.",
     icon: Droplets,
   },
   {
-    title: "Organic & Shade-Grown Certification",
-    description: "Track and verify sustainable farming practices for premium certifications.",
+    title: "Quality + Curing Records",
+    description: "Capture grading, drying, and defect notes across the season.",
     icon: Sprout,
   },
 ]
 
 const BULLETS = [
-  "Daily intake → dry output reconciliation",
-  "Yield and loss by location or lot",
-  "Role-based access with audit logs",
-  "Buyer-ready exports in one click",
+  "Daily intake → processing → dispatch reconciliation",
+  "Moisture, defect, and quality notes by lot",
+  "Rainfall + weather context for drying",
+  "Buyer-ready traceability exports",
 ]
 
 const CONTROL_SIGNALS = [
@@ -63,9 +63,9 @@ const CONTROL_SIGNALS = [
     description: "Ripe to dry output, tracked weekly.",
   },
   {
-    label: "Cash exposure (sample)",
+    label: "Receivables aging (sample)",
     value: "₹16.2L",
-    description: "Receivables + inventory at risk.",
+    description: "Cash at risk across buyers.",
   },
 ]
 
@@ -78,20 +78,57 @@ const LIVE_METRICS = [
 
 const LIVE_UPDATES = [
   {
-    title: "MV Robusta float rate above baseline",
-    detail: "Washline check scheduled and lot flagged for review.",
+    title: "Wet parchment moisture trending higher",
+    detail: "Drying schedule adjusted and lot flagged for follow-up.",
   },
   {
-    title: "PG dispatch unconfirmed for 3 days",
+    title: "Dispatch unconfirmed for 3 days",
     detail: "Reminder sent to logistics team and buyer.",
   },
   {
-    title: "HF Arabica yield down vs last week",
-    detail: "Conversion review triggered for wet-parch output.",
+    title: "Arabica yield down vs last week",
+    detail: "Conversion review triggered for wet parchment output.",
   },
   {
-    title: "Receivables aging flagged",
-    detail: "Two buyers crossed 30 days outstanding.",
+    title: "Rainfall spike logged",
+    detail: "Drying plans updated for the week ahead.",
+  },
+]
+
+const ESTATE_JOURNEY = [
+  {
+    title: "Harvest intake",
+    description: "Record crop intake and sorting splits (ripe, green, float).",
+  },
+  {
+    title: "Washed or natural processing",
+    description: "Track wet parchment or dry cherry outputs with moisture notes.",
+  },
+  {
+    title: "Curing + quality",
+    description: "Log drying days, grades, defects, and quality evidence.",
+  },
+  {
+    title: "Dispatch + sales",
+    description: "Ship bags, reconcile receipts, and close the revenue loop.",
+  },
+]
+
+const IMPACT_PILLARS = [
+  {
+    title: "Waste & loss visibility",
+    description: "Spot shrinkage early and protect farmer value before it leaks.",
+    icon: TrendingUp,
+  },
+  {
+    title: "Climate-aware decisions",
+    description: "Rainfall logs and forecasts help plan drying and harvest activity.",
+    icon: Droplets,
+  },
+  {
+    title: "Evidence for buyers",
+    description: "Moisture, defect, and quality notes strengthen buyer trust.",
+    icon: Shield,
   },
 ]
 
@@ -99,23 +136,23 @@ const PRICING_TIERS = [
   {
     name: "Core",
     price: "₹9,900",
-    description: "For a single coffee estate that needs daily control and clean reporting.",
+    description: "For a single coffee estate that needs daily control and traceable, farmer-first reporting.",
     modules: ["Inventory", "Transactions", "Accounts", "Processing"],
-    highlight: "Best for first coffee estate",
+    highlight: "Best for first estate",
   },
   {
     name: "Operations",
     price: "₹18,900",
-    description: "Add dispatch + sales reconciliation for commercial scale coffee estates.",
-    modules: ["Core +", "Dispatch", "Sales", "Rainfall", "Pepper", "Sustainability Tracking"],
-    highlight: "Most popular",
+    description: "Add dispatch + sales reconciliation for multi-location operations.",
+    modules: ["Core +", "Dispatch", "Sales", "Rainfall", "Pepper", "Quality & Curing"],
+    highlight: "Most chosen",
   },
   {
     name: "Enterprise",
     price: "Custom",
-    description: "Multi-coffee-estate governance and custom workflows across regions.",
-    modules: ["Operations +", "Analytics", "Weather", "News", "Carbon Footprint", "Custom Modules"],
-    highlight: "Full stack",
+    description: "Multi-estate governance with custom workflows and analytics.",
+    modules: ["Operations +", "Analytics", "Weather", "News", "Custom Modules"],
+    highlight: "Estate network",
   },
 ]
 
@@ -124,19 +161,25 @@ const CHATBOT_FAQS = [
     id: "capabilities",
     question: "What can FarmFlow track?",
     answer:
-      "Inventory, processing, dispatch, sales, labor, and audits across locations. It supports Arabica/Robusta, parchment/cherry outputs, and KG ↔ bag conversion.",
+      "Inventory, processing, dispatch, sales, labor, rainfall, and audits across locations. It supports Arabica/Robusta and parchment/cherry outputs with quality notes.",
   },
   {
     id: "pricing",
     question: "How does pricing work?",
     answer:
-      "Pricing is modular: start with Core, add Dispatch/Sales, and scale to Enterprise for multi-estate governance.",
+      "Pricing is modular: start with Core, add Dispatch/Sales, then scale to Enterprise for multi-estate governance.",
   },
   {
     id: "onboarding",
     question: "How fast can we get started?",
     answer:
-      "Most coffee estates go live in a day: add locations, load inventory, record processing, then start dispatch/sales. Guided onboarding is included.",
+      "Most coffee estates go live in a day: add locations, load inventory, record processing, then start dispatch/sales. We include guided onboarding.",
+  },
+  {
+    id: "sustainability",
+    question: "Does FarmFlow track sustainability?",
+    answer:
+      "FarmFlow documents operational evidence like rainfall, moisture, and quality notes with full traceability. Carbon or water accounting is not built-in yet.",
   },
   {
     id: "security",
@@ -148,7 +191,7 @@ const CHATBOT_FAQS = [
     id: "exports",
     question: "Can we export reports?",
     answer:
-      "Yes. Export processing, dispatch, and sales records for buyer-ready compliance and internal reconciliation.",
+      "Yes. Export processing, dispatch, and sales records for buyer-ready compliance and reconciliation.",
   },
   {
     id: "mobile",
@@ -162,6 +205,7 @@ const getChatbotReply = (input: string) => {
   const lookup = [
     { keys: ["price", "pricing", "plan", "cost"], id: "pricing" },
     { keys: ["start", "onboard", "setup", "begin"], id: "onboarding" },
+    { keys: ["sustain", "sustainability", "climate", "rainfall", "quality notes", "water"], id: "sustainability" },
     { keys: ["security", "privacy", "tenant", "isolate", "audit"], id: "security" },
     { keys: ["export", "csv", "report"], id: "exports" },
     { keys: ["mobile", "phone", "tablet"], id: "mobile" },
@@ -172,7 +216,7 @@ const getChatbotReply = (input: string) => {
   const faq = CHATBOT_FAQS.find((item) => item.id === match?.id)
   if (faq) return faq.answer
 
-  return "I can help with features, pricing, onboarding, data isolation, exports, and mobile access. Ask me anything about FarmFlow."
+  return "I can help with features, pricing, onboarding, sustainability evidence, data isolation, exports, and mobile access. Ask me anything about FarmFlow."
 }
 
 export default function LandingPage() {
@@ -187,7 +231,7 @@ export default function LandingPage() {
     {
       id: "welcome",
       role: "bot" as const,
-      text: "Hi! I can answer questions about FarmFlow features, pricing, onboarding, and data security.",
+      text: "Hi! Ask me about FarmFlow features, pricing, onboarding, and data security.",
     },
   ])
 
@@ -291,6 +335,33 @@ export default function LandingPage() {
   }, [])
 
   useEffect(() => {
+    if (typeof window === "undefined") return
+    const targets = Array.from(document.querySelectorAll("[data-reveal]")) as HTMLElement[]
+    if (targets.length === 0) return
+
+    const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches
+    if (reducedMotion) {
+      targets.forEach((el) => el.classList.add("reveal-visible"))
+      return
+    }
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        entries.forEach((entry) => {
+          if (entry.isIntersecting) {
+            entry.target.classList.add("reveal-visible")
+            observer.unobserve(entry.target)
+          }
+        })
+      },
+      { threshold: 0.18 },
+    )
+
+    targets.forEach((target) => observer.observe(target))
+    return () => observer.disconnect()
+  }, [])
+
+  useEffect(() => {
     if (!isChatOpen || !chatEndRef.current) return
     chatEndRef.current.scrollIntoView({ behavior: "smooth" })
   }, [messages, isChatOpen])
@@ -310,23 +381,23 @@ export default function LandingPage() {
     <div
       className={`${body.className} relative min-h-[100svh] overflow-x-hidden text-slate-900`}
       style={{
-        ["--copper" as any]: "#a45a2a",
-        ["--sage" as any]: "#3f6b5d",
-        ["--sand" as any]: "#f7efe3",
+        ["--copper" as any]: "#0f6f66",
+        ["--sage" as any]: "#1f6b5d",
+        ["--sand" as any]: "#e8f6f3",
         ["--ink" as any]: "#1b1a17",
       }}
     >
       <div className="pointer-events-none absolute inset-0">
-        <div className="absolute -top-28 right-[-6%] h-[460px] w-[460px] rounded-full bg-[radial-gradient(circle_at_center,rgba(164,90,42,0.45),transparent_70%)] blur-[120px] glow-pulse" />
-        <div className="absolute top-[18%] left-[-8%] h-[380px] w-[380px] rounded-full bg-[radial-gradient(circle_at_center,rgba(63,107,93,0.35),transparent_70%)] blur-[140px] soft-shift" />
-        <div className="absolute bottom-[-18%] right-[8%] h-[420px] w-[420px] rounded-full bg-[radial-gradient(circle_at_center,rgba(247,239,227,0.8),transparent_70%)] blur-[140px]" />
+        <div className="absolute -top-28 right-[-6%] h-[460px] w-[460px] rounded-full bg-[radial-gradient(circle_at_center,rgba(15,111,102,0.45),transparent_70%)] blur-[120px] glow-pulse" />
+        <div className="absolute top-[18%] left-[-8%] h-[380px] w-[380px] rounded-full bg-[radial-gradient(circle_at_center,rgba(31,107,93,0.35),transparent_70%)] blur-[140px] soft-shift" />
+        <div className="absolute bottom-[-18%] right-[8%] h-[420px] w-[420px] rounded-full bg-[radial-gradient(circle_at_center,rgba(232,246,243,0.8),transparent_70%)] blur-[140px]" />
       </div>
       <div ref={beanLayerRef} className="pointer-events-none absolute inset-0 z-30 overflow-hidden" />
       <div className="relative z-10">
         <header className="px-6 pt-4 sm:pt-6">
           <nav className="mx-auto flex w-full max-w-6xl flex-col gap-3 rounded-2xl border border-white/60 bg-white/75 px-3 py-3 backdrop-blur-md shadow-[0_24px_50px_-32px_rgba(15,23,42,0.6)] dark:border-white/10 dark:bg-slate-900/70 sm:flex-row sm:items-center sm:justify-between sm:px-4">
             <div className="flex items-center gap-2">
-              <div className="h-9 w-9 rounded-xl bg-[color:var(--sand)] text-[color:var(--copper)] flex items-center justify-center shadow-[0_0_25px_rgba(164,90,42,0.35)]">
+              <div className="h-9 w-9 rounded-xl bg-[color:var(--sand)] text-[color:var(--copper)] flex items-center justify-center shadow-[0_0_25px_rgba(15,111,102,0.35)]">
                 <Leaf className="h-5 w-5" />
               </div>
               <div>
@@ -335,14 +406,20 @@ export default function LandingPage() {
               </div>
             </div>
             <div className="hidden md:flex items-center gap-6 text-sm text-muted-foreground">
-              <a href="#sustainability" className="hover:text-foreground">
-                Sustainability
+              <a href="#field-signals" className="hover:text-foreground">
+                Field Signals
               </a>
               <a href="#features" className="hover:text-foreground">
                 Features
               </a>
+              <a href="#journey" className="hover:text-foreground">
+                Journey
+              </a>
               <a href="#traceability" className="hover:text-foreground">
                 Traceability
+              </a>
+              <a href="#impact" className="hover:text-foreground">
+                Impact
               </a>
               <a href="#pricing" className="hover:text-foreground">
                 Pricing
@@ -361,34 +438,35 @@ export default function LandingPage() {
 
         <main className="px-6 pb-20">
           <section className="mx-auto mt-10 w-full max-w-7xl sm:mt-16">
-            <div className="relative overflow-hidden rounded-3xl border border-white/40 bg-gradient-to-br from-[#6b3f1f] via-[#4a2c16] to-[#2d1a0f] p-8 md:p-12 lg:p-16 shadow-[0_40px_100px_-40px_rgba(107,63,31,0.7)]">
+            <div className="relative overflow-hidden rounded-3xl border border-white/40 bg-gradient-to-br from-[#0f6f66] via-[#0b4f49] to-[#083730] p-8 md:p-12 lg:p-16 shadow-[0_40px_100px_-40px_rgba(15,111,102,0.7)] grain">
               {/* Coffee bean background pattern */}
               <div className="pointer-events-none absolute inset-0 opacity-10">
-                <div className="absolute top-10 left-10 h-20 w-20 rounded-full bg-[#f7efe3]" />
-                <div className="absolute top-32 right-20 h-12 w-12 rounded-full bg-[#f7efe3]" />
-                <div className="absolute bottom-20 left-32 h-16 w-16 rounded-full bg-[#f7efe3]" />
-                <div className="absolute bottom-32 right-16 h-24 w-24 rounded-full bg-[#f7efe3]" />
+                <div className="absolute top-10 left-10 h-20 w-20 rounded-full bg-[color:var(--sand)]" />
+                <div className="absolute top-32 right-20 h-12 w-12 rounded-full bg-[color:var(--sand)]" />
+                <div className="absolute bottom-20 left-32 h-16 w-16 rounded-full bg-[color:var(--sand)]" />
+                <div className="absolute bottom-32 right-16 h-24 w-24 rounded-full bg-[color:var(--sand)]" />
               </div>
 
               <div className="relative z-10 grid gap-12 lg:grid-cols-2 items-center">
                 <div className="space-y-6 rise-in">
                   <Badge className="border-white/30 bg-white/20 text-white backdrop-blur-md">
                     <Coffee className="mr-2 h-3.5 w-3.5" />
-                    From cherry to buyer—complete coffee estate management
+                    Built for coffee estates, grower collectives, and mill teams
                   </Badge>
                   
                   <h1 className={`${display.className} text-4xl md:text-5xl lg:text-6xl font-bold leading-tight text-white text-balance`}>
-                    From harvest to export, track every bean
+                    Run a farmer-first coffee estate with complete lot traceability
                   </h1>
                   
                   <p className="text-lg text-white/90 leading-relaxed">
-                    The operating system built specifically for Indian coffee estates. Track Arabica and Robusta from cherry intake through processing, drying, and dispatch with complete traceability and sustainability metrics.
+                    FarmFlow is the operations OS for coffee estates. Track Arabica and Robusta from cherry intake to buyer
+                    shipment with clean traceability, yield insights, and documented quality decisions that protect farmer value.
                   </p>
 
                   <div className="flex flex-wrap items-center gap-4">
-                    <Button size="lg" className="bg-white text-[#6b3f1f] hover:bg-white/90 font-semibold group shadow-[0_20px_40px_-20px_rgba(255,255,255,0.5)]">
+                    <Button size="lg" className="bg-white text-[#0f6f66] hover:bg-white/90 font-semibold group shadow-[0_20px_40px_-20px_rgba(255,255,255,0.5)]">
                       <Link href="/signup" className="flex items-center">
-                        Start tracking your harvest <ArrowRight className="ml-2 h-4 w-4 group-hover:translate-x-1 transition-transform" />
+                        Launch your estate workspace <ArrowRight className="ml-2 h-4 w-4 group-hover:translate-x-1 transition-transform" />
                       </Link>
                     </Button>
                     <Button size="lg" variant="outline" className="border-white/30 bg-white/10 text-white hover:bg-white/20 backdrop-blur-sm">
@@ -426,11 +504,11 @@ export default function LandingPage() {
                 <div className="relative rise-in-delayed">
                   <div className="relative">
                     {/* Main card with coffee estate data */}
-                    <Card className="relative border-white/30 bg-white/95 backdrop-blur-xl shadow-[0_40px_90px_-50px_rgba(0,0,0,0.9)]">
+                    <Card className="relative border-white/30 bg-white/95 backdrop-blur-xl shadow-[0_40px_90px_-50px_rgba(0,0,0,0.9)] sheen">
                       <CardHeader className="pb-3">
                         <div className="flex items-center justify-between">
                           <div className="flex items-center gap-3">
-                            <div className="h-12 w-12 rounded-xl bg-gradient-to-br from-[#6b3f1f] to-[#4a2c16] flex items-center justify-center">
+                            <div className="h-12 w-12 rounded-xl bg-gradient-to-br from-[#0f6f66] to-[#0b4f49] flex items-center justify-center">
                               <Coffee className="h-6 w-6 text-white" />
                             </div>
                             <div>
@@ -463,18 +541,18 @@ export default function LandingPage() {
                           <div className="rounded-xl border border-emerald-200/70 bg-gradient-to-br from-emerald-50/80 to-green-50/50 p-3">
                             <div className="flex items-center gap-1.5 mb-1">
                               <Droplets className="h-3.5 w-3.5 text-emerald-600" />
-                              <p className="text-[10px] font-medium text-emerald-900">Water Usage</p>
+                              <p className="text-[10px] font-medium text-emerald-900">Rainfall Logs</p>
                             </div>
-                            <p className={`${display.className} text-xl font-bold text-emerald-900`}>-28%</p>
-                            <p className="text-[10px] text-emerald-700">vs last season</p>
+                            <p className={`${display.className} text-xl font-bold text-emerald-900`}>12</p>
+                            <p className="text-[10px] text-emerald-700">entries this month</p>
                           </div>
                           <div className="rounded-xl border border-blue-200/70 bg-gradient-to-br from-blue-50/80 to-sky-50/50 p-3">
                             <div className="flex items-center gap-1.5 mb-1">
                               <Shield className="h-3.5 w-3.5 text-blue-600" />
-                              <p className="text-[10px] font-medium text-blue-900">Certified Lots</p>
+                              <p className="text-[10px] font-medium text-blue-900">Quality Checks</p>
                             </div>
-                            <p className={`${display.className} text-xl font-bold text-blue-900`}>89%</p>
-                            <p className="text-[10px] text-blue-700">organic verified</p>
+                            <p className={`${display.className} text-xl font-bold text-blue-900`}>38</p>
+                            <p className="text-[10px] text-blue-700">grading entries logged</p>
                           </div>
                         </div>
 
@@ -512,7 +590,7 @@ export default function LandingPage() {
             {CONTROL_SIGNALS.map((signal) => (
               <div
                 key={signal.label}
-                className="rounded-2xl border border-white/70 bg-white/75 p-5 shadow-[0_20px_45px_-32px_rgba(164,90,42,0.4)] backdrop-blur-md"
+                className="rounded-2xl border border-white/70 bg-white/75 p-5 shadow-[0_20px_45px_-32px_rgba(15,111,102,0.4)] backdrop-blur-md"
               >
                 <p className="text-xs uppercase tracking-[0.2em] text-[color:var(--copper)]">{signal.label}</p>
                 <p className={`${display.className} text-3xl font-semibold text-[color:var(--ink)]`}>{signal.value}</p>
@@ -525,7 +603,7 @@ export default function LandingPage() {
             <Card className="border border-white/70 bg-white/80 backdrop-blur-md signal-scan">
               <CardHeader>
                 <CardTitle className={`${display.className} text-2xl`}>Live Operations Pulse</CardTitle>
-                <CardDescription>What owners see before it hits the P&L.</CardDescription>
+                <CardDescription>What estate leads see before it impacts quality or revenue.</CardDescription>
               </CardHeader>
               <CardContent className="grid gap-4 sm:grid-cols-2">
                 {LIVE_METRICS.map((metric, index) => (
@@ -558,11 +636,11 @@ export default function LandingPage() {
             </Card>
           </section>
 
-        <section id="sustainability" className="mx-auto mt-16 w-full max-w-6xl space-y-6 scroll-mt-24 sm:mt-20">
+        <section id="field-signals" className="mx-auto mt-16 w-full max-w-6xl space-y-6 scroll-mt-24 sm:mt-20">
           <div className="text-center space-y-3">
-            <h2 className={`${display.className} text-3xl font-semibold`}>Sustainability at the Core</h2>
+            <h2 className={`${display.className} text-3xl font-semibold`}>Field Signals & Climate Context</h2>
             <p className="text-muted-foreground max-w-2xl mx-auto">
-              Track environmental impact alongside operations for certified sustainable coffee production.
+              Log rainfall, monitor weather, and track quality checkpoints alongside daily operations.
             </p>
           </div>
           <div className="grid gap-6 md:grid-cols-3">
@@ -571,45 +649,45 @@ export default function LandingPage() {
                 <div className="h-12 w-12 rounded-xl bg-emerald-100 text-emerald-700 flex items-center justify-center mb-2">
                   <Droplets className="h-6 w-6" />
                 </div>
-                <CardTitle className={`${display.className} text-xl`}>Water Conservation</CardTitle>
-                <CardDescription>Monitor water usage per kg of coffee processed</CardDescription>
+                <CardTitle className={`${display.className} text-xl`}>Rainfall Logs</CardTitle>
+                <CardDescription>Daily rainfall entries tied to each estate location</CardDescription>
               </CardHeader>
               <CardContent>
                 <div className="rounded-xl border border-emerald-200 bg-white/70 p-4">
-                  <p className="text-2xl font-semibold text-emerald-700">-28%</p>
-                  <p className="text-xs text-muted-foreground mt-1">Average water reduction with tracking</p>
+                  <p className="text-2xl font-semibold text-emerald-700">Tracked</p>
+                  <p className="text-xs text-muted-foreground mt-1">Per day with notes and observations</p>
                 </div>
               </CardContent>
             </Card>
 
-            <Card className="border border-green-200/70 bg-gradient-to-br from-green-50/80 to-white/80 backdrop-blur-md">
+            <Card className="border border-blue-200/70 bg-gradient-to-br from-blue-50/80 to-white/80 backdrop-blur-md">
               <CardHeader>
-                <div className="h-12 w-12 rounded-xl bg-green-100 text-green-700 flex items-center justify-center mb-2">
-                  <Sprout className="h-6 w-6" />
+                <div className="h-12 w-12 rounded-xl bg-blue-100 text-blue-700 flex items-center justify-center mb-2">
+                  <Cloudy className="h-6 w-6" />
                 </div>
-                <CardTitle className={`${display.className} text-xl`}>Organic Certification</CardTitle>
-                <CardDescription>Track practices for organic and shade-grown certification</CardDescription>
+                <CardTitle className={`${display.className} text-xl`}>Weather Signals</CardTitle>
+                <CardDescription>Local forecasts for planning harvest, processing, and drying</CardDescription>
               </CardHeader>
               <CardContent>
-                <div className="rounded-xl border border-green-200 bg-white/70 p-4">
-                  <p className="text-2xl font-semibold text-green-700">100%</p>
-                  <p className="text-xs text-muted-foreground mt-1">Audit-ready documentation</p>
+                <div className="rounded-xl border border-blue-200 bg-white/70 p-4">
+                  <p className="text-2xl font-semibold text-blue-700">Live</p>
+                  <p className="text-xs text-muted-foreground mt-1">Pulled from trusted weather data</p>
                 </div>
               </CardContent>
             </Card>
 
-            <Card className="border border-teal-200/70 bg-gradient-to-br from-teal-50/80 to-white/80 backdrop-blur-md">
+            <Card className="border border-amber-200/70 bg-gradient-to-br from-amber-50/80 to-white/80 backdrop-blur-md">
               <CardHeader>
-                <div className="h-12 w-12 rounded-xl bg-teal-100 text-teal-700 flex items-center justify-center mb-2">
-                  <TreePine className="h-6 w-6" />
+                <div className="h-12 w-12 rounded-xl bg-amber-100 text-amber-700 flex items-center justify-center mb-2">
+                  <Sparkles className="h-6 w-6" />
                 </div>
-                <CardTitle className={`${display.className} text-xl`}>Carbon Footprint</CardTitle>
-                <CardDescription>Calculate and reduce emissions across operations</CardDescription>
+                <CardTitle className={`${display.className} text-xl`}>Quality Checkpoints</CardTitle>
+                <CardDescription>Grading, curing, and defect notes captured per lot</CardDescription>
               </CardHeader>
               <CardContent>
-                <div className="rounded-xl border border-teal-200 bg-white/70 p-4">
-                  <p className="text-2xl font-semibold text-teal-700">Tracked</p>
-                  <p className="text-xs text-muted-foreground mt-1">Per lot and processing stage</p>
+                <div className="rounded-xl border border-amber-200 bg-white/70 p-4">
+                  <p className="text-2xl font-semibold text-amber-700">Logged</p>
+                  <p className="text-xs text-muted-foreground mt-1">With moisture and defect tracking</p>
                 </div>
               </CardContent>
             </Card>
@@ -632,7 +710,7 @@ export default function LandingPage() {
                 className="group border border-white/60 bg-white/75 backdrop-blur-md shadow-[0_16px_40px_-32px_rgba(15,23,42,0.6)] transition-all duration-300 hover:-translate-y-1 hover:shadow-[0_24px_60px_-32px_rgba(15,23,42,0.75)]"
               >
                 <CardHeader className="flex flex-row items-center gap-3">
-                  <div className="h-10 w-10 rounded-xl bg-[color:var(--sand)] text-[color:var(--copper)] flex items-center justify-center shadow-[0_0_20px_rgba(164,90,42,0.2)]">
+                  <div className="h-10 w-10 rounded-xl bg-[color:var(--sand)] text-[color:var(--copper)] flex items-center justify-center shadow-[0_0_20px_rgba(15,111,102,0.2)]">
                     <item.icon className="h-5 w-5" />
                   </div>
                   <div>
@@ -646,6 +724,68 @@ export default function LandingPage() {
         </section>
 
         <section
+          id="journey"
+          data-reveal
+          className="mx-auto mt-16 w-full max-w-6xl space-y-6 scroll-mt-24 sm:mt-20"
+        >
+          <div className="text-center space-y-3">
+            <h2 className={`${display.className} text-3xl font-semibold`}>Estate journey, from cherry to buyer</h2>
+            <p className="text-muted-foreground max-w-2xl mx-auto">
+              Document every step so quality decisions are visible to managers, buyers, and farmers.
+            </p>
+          </div>
+          <div className="grid gap-6 lg:grid-cols-[1.1fr_0.9fr]">
+            <Card className="border border-white/60 bg-white/80 backdrop-blur-md">
+              <CardHeader>
+                <CardTitle className={`${display.className} text-2xl`}>Workflow you can audit</CardTitle>
+                <CardDescription>Each step links back to the lot that created it.</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="journey-line space-y-6">
+                  {ESTATE_JOURNEY.map((step, index) => (
+                    <div key={step.title} className="relative pl-8">
+                      <span className="absolute left-0 top-1.5 h-3 w-3 rounded-full bg-emerald-500 shadow-[0_0_16px_rgba(16,185,129,0.5)]" />
+                      <p className="text-sm uppercase tracking-[0.25em] text-emerald-700/70">Step {index + 1}</p>
+                      <p className="text-base font-semibold text-slate-900">{step.title}</p>
+                      <p className="text-sm text-muted-foreground">{step.description}</p>
+                    </div>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+            <Card className="border border-emerald-200/70 bg-emerald-50/70">
+              <CardHeader>
+                <CardTitle className={`${display.className} text-xl`}>Buyer trust pack</CardTitle>
+                <CardDescription>Evidence you can export when audits or buyers ask.</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4 text-sm text-emerald-800">
+                <div className="flex items-start gap-2">
+                  <CheckCircle2 className="mt-0.5 h-4 w-4 text-emerald-600" />
+                  <div>
+                    <p className="font-medium">Lot ID + processing timeline</p>
+                    <p className="text-xs text-emerald-700/80">From intake through curing and dispatch.</p>
+                  </div>
+                </div>
+                <div className="flex items-start gap-2">
+                  <CheckCircle2 className="mt-0.5 h-4 w-4 text-emerald-600" />
+                  <div>
+                    <p className="font-medium">Moisture, grade, and defect notes</p>
+                    <p className="text-xs text-emerald-700/80">Quality evidence tied to each lot.</p>
+                  </div>
+                </div>
+                <div className="flex items-start gap-2">
+                  <CheckCircle2 className="mt-0.5 h-4 w-4 text-emerald-600" />
+                  <div>
+                    <p className="font-medium">Dispatch + sales reconciliation</p>
+                    <p className="text-xs text-emerald-700/80">Every bag is accounted for and auditable.</p>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+        </section>
+
+        <section
           id="traceability"
           className="mx-auto mt-16 w-full max-w-6xl grid gap-10 lg:grid-cols-2 items-start scroll-mt-24 sm:mt-20"
         >
@@ -653,15 +793,15 @@ export default function LandingPage() {
             <CardHeader>
               <CardTitle className={`${display.className} text-2xl`}>Traceability that earns trust</CardTitle>
               <CardDescription>
-                Provide buyers and auditors with a clean, searchable history for every batch.
+                Provide buyers and auditors a clean, searchable history for every lot and movement.
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-3 text-sm text-muted-foreground">
               <p>
-                Record harvest intake, processing outputs, dispatch notes, and sales receipts in a single workflow.
+                Record harvest intake, processing outputs, moisture readings, dispatch notes, and sales receipts in one workflow.
               </p>
               <p>
-                Create a verifiable chain from estate to buyer with timestamps, user logs, and standardized reports.
+                Create a verifiable chain from estate to buyer with timestamps, user logs, and audit-ready evidence for farmer-first pricing.
               </p>
             </CardContent>
           </Card>
@@ -678,12 +818,42 @@ export default function LandingPage() {
           </div>
         </section>
 
+        <section
+          id="impact"
+          data-reveal
+          className="mx-auto mt-16 w-full max-w-6xl space-y-6 scroll-mt-24 sm:mt-20"
+        >
+          <div className="text-center space-y-3">
+            <h2 className={`${display.className} text-3xl font-semibold`}>Sustainability that is actually measurable</h2>
+            <p className="text-muted-foreground max-w-2xl mx-auto">
+              FarmFlow focuses on the operational evidence you already collect so farmer-first practices are visible
+              without greenwashing.
+            </p>
+          </div>
+          <div className="grid gap-6 md:grid-cols-3">
+            {IMPACT_PILLARS.map((pillar) => (
+              <Card
+                key={pillar.title}
+                className="border border-white/60 bg-white/80 backdrop-blur-md shadow-[0_20px_45px_-32px_rgba(15,23,42,0.6)]"
+              >
+                <CardHeader className="space-y-3">
+                  <div className="h-10 w-10 rounded-xl bg-emerald-100 text-emerald-700 flex items-center justify-center">
+                    <pillar.icon className="h-5 w-5" />
+                  </div>
+                  <CardTitle className="text-lg">{pillar.title}</CardTitle>
+                  <CardDescription>{pillar.description}</CardDescription>
+                </CardHeader>
+              </Card>
+            ))}
+          </div>
+        </section>
+
         <section id="pricing" className="mx-auto mt-16 w-full max-w-6xl space-y-6 scroll-mt-24 sm:mt-20">
           <div className="flex items-center justify-between">
             <div>
               <h2 className={`${display.className} text-3xl font-semibold`}>Pricing by modules</h2>
               <p className="text-muted-foreground mt-2">
-                Start lean, add modules as each coffee estate scales.
+                Start lean, add modules as your estate scales.
               </p>
             </div>
           </div>
@@ -724,9 +894,9 @@ export default function LandingPage() {
         <section id="results" className="mx-auto mt-16 w-full max-w-6xl scroll-mt-24 sm:mt-20">
           <Card className="border border-white/50 bg-white/80 backdrop-blur-md">
             <CardHeader>
-              <CardTitle className={`${display.className} text-2xl`}>Ready to run a modern coffee estate?</CardTitle>
+              <CardTitle className={`${display.className} text-2xl`}>Ready to run a farmer-first coffee estate?</CardTitle>
               <CardDescription>
-                Start with one coffee estate, expand to every location, and keep every KG accounted for.
+                Start with one estate, expand to every location, and keep every KG traceable.
               </CardDescription>
             </CardHeader>
             <CardContent className="flex flex-wrap gap-4 items-center justify-between">
@@ -749,29 +919,32 @@ export default function LandingPage() {
           <div>
             <h2 className={`${display.className} text-3xl font-semibold`}>Mission & Vision</h2>
             <p className="text-muted-foreground mt-2">
-              The operating principles that keep FarmFlow focused on real outcomes.
+              The operating principles that keep FarmFlow focused on farmers, quality, and resilience.
             </p>
           </div>
           <div className="grid gap-6 lg:grid-cols-2">
             <Card id="mission" className="scroll-mt-24 border border-white/50 bg-white/80 backdrop-blur-md">
               <CardHeader>
                 <CardTitle className={`${display.className} text-xl`}>Mission</CardTitle>
-                <CardDescription>Give every coffee estate complete control of stock, yield, and revenue.</CardDescription>
-              </CardHeader>
-              <CardContent className="text-sm text-muted-foreground">
+              <CardDescription>
+                  Help coffee estates protect quality and build trust with farmers and buyers through traceability.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="text-sm text-muted-foreground">
                 FarmFlow replaces spreadsheets with a live operating system that reconciles every bag, lot, and cost
-                across the season. Coffee estates make faster decisions with fewer surprises and stronger buyer trust.
-              </CardContent>
+                across the season. Estates make faster decisions, protect lot value, and document the practices that
+                reward farmers.
+            </CardContent>
             </Card>
             <Card id="vision" className="scroll-mt-24 border border-white/50 bg-white/80 backdrop-blur-md">
               <CardHeader>
-                <CardTitle className={`${display.className} text-xl`}>Vision</CardTitle>
-                <CardDescription>Transparent supply chains for coffee, tea, cocoa, and specialty crops.</CardDescription>
-              </CardHeader>
-              <CardContent className="text-sm text-muted-foreground">
-                We want every coffee estate to run with the same clarity as a modern factory: real-time tracking, verified
-                quality, instant visibility for managers, buyers, and auditors—while promoting sustainable farming practices.
-              </CardContent>
+              <CardTitle className={`${display.className} text-xl`}>Vision</CardTitle>
+              <CardDescription>Transparent supply chains that reward quality for farmers and buyers.</CardDescription>
+            </CardHeader>
+            <CardContent className="text-sm text-muted-foreground">
+                We want every coffee estate to run with real-time tracking, verified quality, and instant visibility for
+                managers, buyers, and auditors—so good practices are visible and rewarded.
+            </CardContent>
             </Card>
           </div>
         </section>
@@ -817,11 +990,17 @@ export default function LandingPage() {
               </p>
             </div>
             <div className="flex flex-wrap gap-4 text-sm text-muted-foreground">
-              <a href="#sustainability" className="hover:text-foreground">
-                Sustainability
+              <a href="#field-signals" className="hover:text-foreground">
+                Field Signals
               </a>
               <a href="#features" className="hover:text-foreground">
                 Features
+              </a>
+              <a href="#journey" className="hover:text-foreground">
+                Journey
+              </a>
+              <a href="#impact" className="hover:text-foreground">
+                Impact
               </a>
               <a href="#pricing" className="hover:text-foreground">
                 Pricing
@@ -835,9 +1014,24 @@ export default function LandingPage() {
               <a href="#privacy" className="hover:text-foreground">
                 Privacy
               </a>
+              <Link href="/privacy" className="hover:text-foreground">
+                Privacy Notice
+              </Link>
               <a href="#terms" className="hover:text-foreground">
                 Terms
               </a>
+              <Link href="/legal/terms" className="hover:text-foreground">
+                MSA / ToS
+              </Link>
+              <Link href="/legal/privacy" className="hover:text-foreground">
+                Privacy Policy
+              </Link>
+              <Link href="/legal/dpa" className="hover:text-foreground">
+                DPA
+              </Link>
+              <Link href="/legal/subprocessors" className="hover:text-foreground">
+                Subprocessors
+              </Link>
             </div>
           </div>
         </footer>
@@ -903,7 +1097,7 @@ export default function LandingPage() {
         {!isChatOpen && (
           <Button
             size="lg"
-            className="rounded-full shadow-[0_22px_50px_-30px_rgba(164,90,42,0.6)]"
+            className="rounded-full shadow-[0_22px_50px_-30px_rgba(15,111,102,0.6)]"
             onClick={() => setIsChatOpen(true)}
           >
             <MessageCircle className="mr-2 h-5 w-5" />
