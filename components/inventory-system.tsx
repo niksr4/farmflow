@@ -2234,14 +2234,28 @@ export default function InventorySystem() {
                             </div>
                             {canManageData && (
                               <div className="flex items-center gap-1 opacity-100 transition-opacity sm:opacity-0 sm:group-hover:opacity-100">
-                                <Button
-                                  size="sm"
-                                  variant="ghost"
-                                  onClick={() => handleOpenInventoryEdit(item)}
-                                  className="text-amber-600 p-2 h-auto"
-                                >
-                                  <Edit className="h-4 w-4" />
-                                </Button>
+                                <TooltipProvider>
+                                  <Tooltip>
+                                    <TooltipTrigger asChild>
+                                      <span>
+                                        <Button
+                                          size="sm"
+                                          variant="ghost"
+                                          onClick={() => handleOpenInventoryEdit(item)}
+                                          disabled={selectedLocationId === LOCATION_ALL}
+                                          className="text-amber-600 p-2 h-auto"
+                                        >
+                                          <Edit className="h-4 w-4" />
+                                        </Button>
+                                      </span>
+                                    </TooltipTrigger>
+                                    <TooltipContent>
+                                      {selectedLocationId === LOCATION_ALL
+                                        ? "Select a specific location to edit quantities."
+                                        : "Edit inventory item"}
+                                    </TooltipContent>
+                                  </Tooltip>
+                                </TooltipProvider>
                                 <Button
                                   size="sm"
                                   variant="ghost"

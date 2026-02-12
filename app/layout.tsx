@@ -5,6 +5,7 @@ import "./globals.css"
 import { ThemeProvider } from "@/components/theme-provider"
 import { AuthProvider } from "@/hooks/use-auth"
 import BrandWatermark from "@/components/brand-watermark"
+import { Toaster } from "@/components/ui/toaster"
 
 const bodyFont = Manrope({ subsets: ["latin"], display: "swap", variable: "--font-body" })
 const displayFont = Fraunces({ subsets: ["latin"], weight: ["600", "700", "800"], display: "swap", variable: "--font-display" })
@@ -27,6 +28,7 @@ export default function RootLayout({
           <AuthProvider>
             {children}
             <BrandWatermark />
+            <Toaster />
           </AuthProvider>
         </ThemeProvider>
       </body>
