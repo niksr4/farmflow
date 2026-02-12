@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="800" viewBox="0 0 1200 800" fill="none">
+  <defs>
+    <linearGradient id="g" x1="0" y1="0" x2="1200" y2="800" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#ECFEFF" />
+      <stop offset="1" stop-color="#FEF3C7" />
+    </linearGradient>
+    <linearGradient id="road" x1="0" y1="520" x2="1200" y2="800" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#CBD5F5" />
+      <stop offset="1" stop-color="#A7F3D0" />
+    </linearGradient>
+  </defs>
+  <rect width="1200" height="800" rx="48" fill="url(#g)" />
+  <rect x="120" y="140" width="300" height="190" rx="28" fill="#93C5FD" opacity="0.55" />
+  <rect x="840" y="150" width="220" height="170" rx="24" fill="#FDE68A" opacity="0.6" />
+  <path d="M0 560C180 520 320 520 480 560C640 600 820 600 1000 560C1100 538 1160 520 1200 500V800H0V560Z" fill="url(#road)" />
+  <path d="M120 610C240 580 360 580 480 610C600 640 720 640 840 610C960 580 1080 580 1200 610" stroke="#1E3A8A" stroke-width="12" opacity="0.3" />
+  <rect x="470" y="360" width="180" height="90" rx="16" fill="#F97316" />
+  <rect x="620" y="380" width="120" height="70" rx="14" fill="#FB923C" />
+  <circle cx="520" cy="470" r="18" fill="#1F2937" />
+  <circle cx="640" cy="470" r="18" fill="#1F2937" />
+  <path d="M520 330C550 300 590 295 625 310C600 340 560 355 520 330Z" fill="#22C55E" />
+</svg>

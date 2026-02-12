@@ -100,18 +100,26 @@ const ESTATE_JOURNEY = [
   {
     title: "Harvest intake",
     description: "Record crop intake and sorting splits (ripe, green, float).",
+    image: "/images/estate-journey-harvest.svg",
+    alt: "Harvest intake illustration with coffee cherries and estate hills",
   },
   {
     title: "Washed or natural processing",
     description: "Track wet parchment or dry cherry outputs with moisture notes.",
+    image: "/images/estate-journey-processing.svg",
+    alt: "Processing stage illustration with water and cherry flow",
   },
   {
     title: "Curing + quality",
     description: "Log drying days, grades, defects, and quality evidence.",
+    image: "/images/estate-journey-curing.svg",
+    alt: "Curing stage illustration with drying beds and coffee cherries",
   },
   {
     title: "Dispatch + sales",
     description: "Ship bags, reconcile receipts, and close the revenue loop.",
+    image: "/images/estate-journey-dispatch.svg",
+    alt: "Dispatch stage illustration with transport and delivery",
   },
 ]
 
@@ -776,6 +784,15 @@ export default function LandingPage() {
                         }`}
                       />
                       <Card className="border border-white/70 bg-white/85 backdrop-blur-md shadow-[0_20px_45px_-35px_rgba(16,185,129,0.35)]">
+                        <div className="h-36 w-full overflow-hidden rounded-t-xl border-b border-emerald-100/60 bg-emerald-50/40">
+                          <img
+                            src={step.image}
+                            alt={step.alt}
+                            className="h-full w-full object-cover"
+                            loading="lazy"
+                            decoding="async"
+                          />
+                        </div>
                         <CardHeader className="space-y-2">
                           <p className="text-xs uppercase tracking-[0.35em] text-emerald-700/70">Step {index + 1}</p>
                           <CardTitle className={`${display.className} text-xl`}>{step.title}</CardTitle>
