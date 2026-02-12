@@ -1,7 +1,7 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { inventorySql } from "@/lib/server/db"
 import { requireModuleAccess, isModuleAccessError } from "@/lib/server/module-access"
-import { canWriteModule } from "@/lib/permissions"
+import { canDeleteModule, canWriteModule } from "@/lib/permissions"
 import { logAuditEvent } from "@/lib/server/audit-log"
 import { normalizeTenantContext, runTenantQueries, runTenantQuery } from "@/lib/server/tenant-db"
 
@@ -280,6 +280,169 @@ export async function POST(request: NextRequest) {
       {
         success: false,
         message: error.message || "Failed to add item",
+        error: error.toString(),
+      },
+      { status: 500 },
+    )
+  }
+}
+
+export async function DELETE(request: NextRequest) {
+  try {
+    const sessionUser = await requireModuleAccess("inventory")
+    if (!canDeleteModule(sessionUser.role, "inventory")) {
+      return NextResponse.json({ success: false, message: "Insufficient role" }, { status: 403 })
+    }
+
+    const tenantContext = normalizeTenantContext(sessionUser.tenantId, sessionUser.role)
+    const body = await request.json().catch(() => ({}))
+    const itemType = typeof body.item_type === "string" ? body.item_type.trim() : ""
+    const rawLocation = typeof body.location_id === "string" ? body.location_id.trim() : ""
+    const scope = typeof body.scope === "string" ? body.scope : "single"
+
+    if (!itemType) {
+      return NextResponse.json({ success: false, message: "Missing required field: item_type" }, { status: 400 })
+    }
+
+    const deleteAll = scope === "all" || rawLocation === "all"
+    const locationValue =
+      rawLocation && rawLocation !== "unassigned" && rawLocation !== "all" ? rawLocation : null
+
+    if (!deleteAll && rawLocation === "") {
+      return NextResponse.json(
+        { success: false, message: "Missing required field: location_id (or scope=all)" },
+        { status: 400 },
+      )
+    }
+
+    let existingRows: any[] = []
+    if (deleteAll) {
+      existingRows = await runTenantQuery(
+        inventorySql,
+        tenantContext,
+        inventorySql`
+          SELECT item_type, quantity, unit, location_id
+          FROM current_inventory
+          WHERE tenant_id = ${tenantContext.tenantId}
+            AND item_type = ${itemType}
+        `,
+      )
+    } else if (locationValue === null) {
+      existingRows = await runTenantQuery(
+        inventorySql,
+        tenantContext,
+        inventorySql`
+          SELECT item_type, quantity, unit, location_id
+          FROM current_inventory
+          WHERE tenant_id = ${tenantContext.tenantId}
+            AND item_type = ${itemType}
+            AND location_id IS NULL
+        `,
+      )
+    } else {
+      existingRows = await runTenantQuery(
+        inventorySql,
+        tenantContext,
+        inventorySql`
+          SELECT item_type, quantity, unit, location_id
+          FROM current_inventory
+          WHERE tenant_id = ${tenantContext.tenantId}
+            AND item_type = ${itemType}
+            AND location_id = ${locationValue}
+        `,
+      )
+    }
+
+    const rows = Array.isArray(existingRows) ? existingRows : []
+    for (const row of rows) {
+      const quantityValue = Number(row.quantity) || 0
+      if (quantityValue <= 0) {
+        continue
+      }
+      await runTenantQuery(
+        inventorySql,
+        tenantContext,
+        inventorySql`
+          INSERT INTO transaction_history (
+            item_type,
+            quantity,
+            transaction_type,
+            notes,
+            user_id,
+            price,
+            total_cost,
+            tenant_id,
+            location_id
+          )
+          VALUES (
+            ${itemType},
+            ${quantityValue},
+            'deplete',
+            ${`Inventory item deleted by ${sessionUser.username || "system"}`},
+            ${sessionUser.username || "system"},
+            0,
+            0,
+            ${tenantContext.tenantId},
+            ${row.location_id ?? null}
+          )
+        `,
+      )
+    }
+
+    if (deleteAll) {
+      await runTenantQuery(
+        inventorySql,
+        tenantContext,
+        inventorySql`
+          DELETE FROM current_inventory
+          WHERE tenant_id = ${tenantContext.tenantId}
+            AND item_type = ${itemType}
+        `,
+      )
+    } else if (locationValue === null) {
+      await runTenantQuery(
+        inventorySql,
+        tenantContext,
+        inventorySql`
+          DELETE FROM current_inventory
+          WHERE tenant_id = ${tenantContext.tenantId}
+            AND item_type = ${itemType}
+            AND location_id IS NULL
+        `,
+      )
+    } else {
+      await runTenantQuery(
+        inventorySql,
+        tenantContext,
+        inventorySql`
+          DELETE FROM current_inventory
+          WHERE tenant_id = ${tenantContext.tenantId}
+            AND item_type = ${itemType}
+            AND location_id = ${locationValue}
+        `,
+      )
+    }
+
+    await logAuditEvent(inventorySql, sessionUser, {
+      action: "delete",
+      entityType: "current_inventory",
+      entityId: itemType,
+      before: rows,
+    })
+
+    return NextResponse.json({
+      success: true,
+      deleted: rows.length,
+    })
+  } catch (error: any) {
+    console.error("[SERVER] ❌ Error deleting inventory item:", error)
+    if (isModuleAccessError(error)) {
+      return NextResponse.json({ success: false, message: "Module access disabled" }, { status: 403 })
+    }
+    return NextResponse.json(
+      {
+        success: false,
+        message: error.message || "Failed to delete item",
         error: error.toString(),
       },
       { status: 500 },

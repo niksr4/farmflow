@@ -5,6 +5,7 @@ import Image from "next/image"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Wind, Droplets, Thermometer, AlertTriangle, Cloudy } from "lucide-react"
 import { formatDateOnly } from "@/lib/date-utils"
 
@@ -46,13 +47,24 @@ export default function WeatherTab() {
   const [weatherData, setWeatherData] = useState<WeatherApiData | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const regions = [
+    { label: "Kodagu (Coorg)", query: "Kodagu, India" },
+    { label: "Chikmagalur", query: "Chikmagalur, India" },
+    { label: "Wayanad", query: "Wayanad, India" },
+    { label: "Idukki", query: "Idukki, India" },
+    { label: "Nilgiris", query: "Nilgiris, India" },
+    { label: "Araku", query: "Araku, India" },
+    { label: "Bababudangiri", query: "Bababudangiri, India" },
+  ]
+  const [selectedRegion, setSelectedRegion] = useState(regions[0]?.query ?? "Kodagu, India")
+  const selectedRegionLabel = regions.find((region) => region.query === selectedRegion)?.label ?? selectedRegion
 
   useEffect(() => {
     const fetchWeather = async () => {
       try {
         setLoading(true)
         setError(null)
-        const response = await fetch("/api/weather")
+        const response = await fetch(`/api/weather?region=${encodeURIComponent(selectedRegion)}`)
         const data = await response.json()
 
         if (!response.ok) {
@@ -72,7 +84,7 @@ export default function WeatherTab() {
     }
 
     fetchWeather()
-  }, [])
+  }, [selectedRegion])
 
   if (loading) {
     return <WeatherSkeleton />
@@ -83,7 +95,7 @@ export default function WeatherTab() {
       <Card>
         <CardHeader>
           <CardTitle>Weather Information</CardTitle>
-          <CardDescription>Current conditions and forecast for Kodagu/Coorg, India.</CardDescription>
+          <CardDescription>Current conditions and forecast for {selectedRegionLabel}.</CardDescription>
         </CardHeader>
         <CardContent>
           <Alert variant="destructive">
@@ -126,15 +138,34 @@ export default function WeatherTab() {
   }
 
   const { location, current, forecast } = weatherData
+  const locationLabel = [location.name, location.region, location.country].filter(Boolean).join(", ")
 
   return (
     <div className="space-y-6">
       <Card>
         <CardHeader>
-          <CardTitle>Current Weather in {location.name}</CardTitle>
-          <CardDescription>
-            Last updated: {new Date(location.localtime_epoch * 1000).toLocaleTimeString("en-IN")}
-          </CardDescription>
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <CardTitle>Current Weather in {locationLabel || selectedRegionLabel}</CardTitle>
+              <CardDescription>
+                Last updated: {new Date(location.localtime_epoch * 1000).toLocaleTimeString("en-IN")}
+              </CardDescription>
+            </div>
+            <div className="w-full sm:w-[220px]">
+              <Select value={selectedRegion} onValueChange={setSelectedRegion}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Select region" />
+                </SelectTrigger>
+                <SelectContent>
+                  {regions.map((region) => (
+                    <SelectItem key={region.query} value={region.query}>
+                      {region.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
         </CardHeader>
         <CardContent className="grid gap-6 md:grid-cols-2">
           <div className="flex items-center space-x-6">
@@ -174,7 +205,7 @@ export default function WeatherTab() {
       <Card>
         <CardHeader>
           <CardTitle>{forecast.forecastday.length}-Day Forecast</CardTitle>
-          <CardDescription>Weather forecast for the upcoming week in {location.name}.</CardDescription>
+          <CardDescription>Weather forecast for the upcoming week in {locationLabel || selectedRegionLabel}.</CardDescription>
         </CardHeader>
         <CardContent>
           <div className="space-y-4">

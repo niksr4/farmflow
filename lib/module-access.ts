@@ -56,6 +56,10 @@ export async function getEnabledModules(sessionUser?: SessionUser): Promise<stri
   )
   const tenantEnabled = tenantModules?.length ? resolveEnabledModules(tenantModules) : resolveEnabledModules()
 
+  if (user.role === "admin") {
+    return tenantEnabled
+  }
+
   if (userId) {
     try {
       const userModules = await runTenantQuery(

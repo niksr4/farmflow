@@ -13,27 +13,28 @@ export const MODULES: ModuleDefinition[] = [
   { id: "quality", label: "Quality & Grading", defaultEnabled: false },
   { id: "dispatch", label: "Dispatch", defaultEnabled: true },
   { id: "sales", label: "Sales", defaultEnabled: true },
-  { id: "billing", label: "Billing & Invoices", defaultEnabled: true },
-  { id: "rainfall", label: "Rainfall", defaultEnabled: true },
-  { id: "pepper", label: "Pepper", defaultEnabled: true },
-  { id: "ai-analysis", label: "AI Analysis", defaultEnabled: true },
-  { id: "news", label: "Market News", defaultEnabled: true },
-  { id: "weather", label: "Weather", defaultEnabled: true },
-  { id: "season", label: "Season View", defaultEnabled: true },
+  { id: "billing", label: "Billing & Invoices", defaultEnabled: false },
+  { id: "journal", label: "Journal", defaultEnabled: false },
+  { id: "rainfall", label: "Rainfall", defaultEnabled: false },
+  { id: "pepper", label: "Pepper", defaultEnabled: false },
+  { id: "ai-analysis", label: "AI Analysis", defaultEnabled: false },
+  { id: "news", label: "Market News", defaultEnabled: false },
+  { id: "weather", label: "Weather", defaultEnabled: false },
+  { id: "season", label: "Season View", defaultEnabled: false },
 ]
 
 export const MODULE_IDS = MODULES.map((module) => module.id)
-export const DEFAULT_ENABLED_MODULE_IDS = MODULES.filter((module) => module.defaultEnabled !== false).map(
+export const DEFAULT_ENABLED_MODULE_IDS = MODULES.filter((module) => module.defaultEnabled === true).map(
   (module) => module.id,
 )
 
 export const getModuleDefaultEnabled = (moduleId: string) =>
-  MODULES.find((module) => module.id === moduleId)?.defaultEnabled !== false
+  MODULES.find((module) => module.id === moduleId)?.defaultEnabled === true
 
 export const resolveEnabledModules = (rows?: Array<{ module: string; enabled: boolean }>) => {
   const byModule = new Map((rows || []).map((row) => [String(row.module), Boolean(row.enabled)]))
   return MODULES.filter((module) =>
-    byModule.has(module.id) ? byModule.get(module.id) : module.defaultEnabled !== false,
+    byModule.has(module.id) ? byModule.get(module.id) : module.defaultEnabled === true,
   ).map((module) => module.id)
 }
 
@@ -41,6 +42,6 @@ export const resolveModuleStates = (rows?: Array<{ module: string; enabled: bool
   const byModule = new Map((rows || []).map((row) => [String(row.module), Boolean(row.enabled)]))
   return MODULES.map((module) => ({
     ...module,
-    enabled: byModule.has(module.id) ? Boolean(byModule.get(module.id)) : module.defaultEnabled !== false,
+    enabled: byModule.has(module.id) ? Boolean(byModule.get(module.id)) : module.defaultEnabled === true,
   }))
 }

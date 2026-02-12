@@ -74,6 +74,12 @@ const normalizeBagType = (value: string | null | undefined) =>
   String(value || "").toLowerCase().includes("cherry") ? "cherry" : "parchment"
 const formatBagTypeLabel = (value: string | null | undefined) =>
   normalizeBagType(value) === "cherry" ? "Dry Cherry" : "Dry Parchment"
+const normalizeCoffeeType = (value: string | null | undefined) => {
+  const normalized = String(value || "").toLowerCase()
+  if (normalized.includes("arabica")) return "arabica"
+  if (normalized.includes("robusta")) return "robusta"
+  return "other"
+}
 
 export default function SalesTab() {
   const { user } = useAuth()
@@ -730,7 +736,33 @@ export default function SalesTab() {
     totalKgsSold: totalBagsSold * bagWeightKg,
     totalRevenue,
   }
-  const avgPricePerBag = totals.totalBagsSold > 0 ? totals.totalRevenue / totals.totalBagsSold : 0
+  const pricePerBagByType = useMemo(() => {
+    const totalsByKey: Record<string, { revenue: number; bags: number }> = {}
+    overviewSalesSummary.forEach((row) => {
+      const coffee = normalizeCoffeeType(row.coffee_type)
+      const bagType = normalizeBagType(row.bag_type)
+      if (coffee !== "arabica" && coffee !== "robusta") return
+      const key = `${coffee}_${bagType}`
+      if (!totalsByKey[key]) {
+        totalsByKey[key] = { revenue: 0, bags: 0 }
+      }
+      totalsByKey[key].revenue += Number(row.revenue) || 0
+      totalsByKey[key].bags += Number(row.bags_sold) || 0
+    })
+
+    const getPrice = (key: string) => {
+      const entry = totalsByKey[key]
+      if (!entry || entry.bags <= 0) return 0
+      return entry.revenue / entry.bags
+    }
+
+    return {
+      ap: getPrice("arabica_parchment"),
+      ac: getPrice("arabica_cherry"),
+      rp: getPrice("robusta_parchment"),
+      rc: getPrice("robusta_cherry"),
+    }
+  }, [overviewSalesSummary])
   const resolvedSalesCount = salesTotalCount || salesRecords.length
   const resolvedSalesCountLabel =
     salesTotalCount > salesRecords.length
@@ -830,8 +862,8 @@ export default function SalesTab() {
             <div className="text-sm text-muted-foreground mt-1">
               {resolvedSalesCount} sales recorded
             </div>
-            <div className="text-sm font-medium mt-1 text-blue-600">
-              Avg Price/Bag: {formatCurrency(avgPricePerBag)}
+            <div className="text-sm text-muted-foreground mt-1">
+              Pricing by type below
             </div>
           </CardContent>
         </Card>
@@ -862,16 +894,31 @@ export default function SalesTab() {
           </CardContent>
         </Card>
 
-        {/* Avg Price per Bag */}
+        {/* Price per bag by coffee + form */}
         <Card className="border-2 border-muted">
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">Avg Price per Bag</CardTitle>
+            <CardTitle className="text-sm font-medium text-muted-foreground">Price/Bag by Type</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-blue-600">{formatCurrency(avgPricePerBag)}</div>
-            <div className="text-sm text-muted-foreground mt-1">
-              Revenue / Bags Sold
+            <div className="grid grid-cols-2 gap-3 text-sm">
+              <div className="rounded-md border p-2">
+                <div className="text-xs text-muted-foreground">AP</div>
+                <div className="text-lg font-semibold">{formatCurrency(pricePerBagByType.ap)}</div>
+              </div>
+              <div className="rounded-md border p-2">
+                <div className="text-xs text-muted-foreground">AC</div>
+                <div className="text-lg font-semibold">{formatCurrency(pricePerBagByType.ac)}</div>
+              </div>
+              <div className="rounded-md border p-2">
+                <div className="text-xs text-muted-foreground">RP</div>
+                <div className="text-lg font-semibold">{formatCurrency(pricePerBagByType.rp)}</div>
+              </div>
+              <div className="rounded-md border p-2">
+                <div className="text-xs text-muted-foreground">RC</div>
+                <div className="text-lg font-semibold">{formatCurrency(pricePerBagByType.rc)}</div>
+              </div>
             </div>
+            <div className="text-xs text-muted-foreground mt-2">AP/AC/RP/RC = Arabica/Robusta · Parchment/Cherry</div>
           </CardContent>
         </Card>
       </div>

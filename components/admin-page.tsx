@@ -52,6 +52,7 @@ const AUDIT_ENTITY_TYPES = [
   { id: "processing_records", label: "Processing" },
   { id: "dispatch_records", label: "Dispatch" },
   { id: "sales_records", label: "Sales" },
+  { id: "journal_entries", label: "Journal" },
 ]
 
 const formatAuditTimestamp = (value: string) => {
@@ -116,6 +117,13 @@ export default function AdminPage() {
       toast({ title: "Error", description: error.message || "Failed to load tenants", variant: "destructive" })
     }
   }, [toast])
+
+  useEffect(() => {
+    if (isOwner) return
+    if (user?.tenantId) {
+      setSelectedTenantId((prev) => prev || user.tenantId)
+    }
+  }, [isOwner, user?.tenantId])
 
   const loadUsers = useCallback(async (tenantId: string) => {
     try {
@@ -310,6 +318,10 @@ export default function AdminPage() {
   }
 
   const handleSaveModules = async () => {
+    if (!isOwner) {
+      toast({ title: "Owner access only", description: "Only owners can change tenant modules." })
+      return
+    }
     if (!selectedTenantId) {
       return
     }
@@ -454,101 +466,102 @@ export default function AdminPage() {
     }
   }
 
-  if (!isOwner) {
-    return (
-      <Card>
-        <CardHeader>
-          <CardTitle>Owner Access Only</CardTitle>
-          <CardDescription>You do not have permission to manage tenants.</CardDescription>
-        </CardHeader>
-      </Card>
-    )
-  }
-
   return (
     <div className="space-y-6">
-      <Card>
-        <CardHeader>
-          <CardTitle>Tenants</CardTitle>
-          <CardDescription>Create and manage estates/tenants.</CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="flex flex-col md:flex-row gap-3">
-            <div className="flex-1 space-y-2">
-              <Label htmlFor="tenantName">New Tenant</Label>
-              <Input
-                id="tenantName"
-                placeholder="Estate name"
-                value={newTenantName}
-                onChange={(e) => setNewTenantName(e.target.value)}
-              />
-            </div>
-            <div className="flex items-end">
-              <Button onClick={handleCreateTenant}>Create Tenant</Button>
-            </div>
-          </div>
-
-          <div className="space-y-2">
-            <Label>Current Tenant</Label>
-            <Select value={selectedTenantId} onValueChange={setSelectedTenantId}>
-              <SelectTrigger>
-                <SelectValue placeholder="Select tenant" />
-              </SelectTrigger>
-              <SelectContent>
-                {tenants.map((tenant) => (
-                  <SelectItem key={tenant.id} value={tenant.id}>
-                    {tenant.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader>
-          <CardTitle>Tenant Modules</CardTitle>
-          <CardDescription>Control which modules are available to users in this tenant.</CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-            {modulePermissions.map((module) => (
-              <label key={module.id} className="flex items-center gap-2 border rounded-md p-3">
-                <input
-                  type="checkbox"
-                  checked={module.enabled}
-                  onChange={() => toggleModule(module.id)}
+      {isOwner && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Tenants</CardTitle>
+            <CardDescription>Create and manage estates/tenants.</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="flex flex-col md:flex-row gap-3">
+              <div className="flex-1 space-y-2">
+                <Label htmlFor="tenantName">New Tenant</Label>
+                <Input
+                  id="tenantName"
+                  placeholder="Estate name"
+                  value={newTenantName}
+                  onChange={(e) => setNewTenantName(e.target.value)}
                 />
-                <span>{module.label}</span>
-              </label>
-            ))}
-          </div>
-          <Button onClick={handleSaveModules} disabled={!selectedTenantId}>
-            Save Module Access
-          </Button>
-        </CardContent>
-      </Card>
+              </div>
+              <div className="flex items-end">
+                <Button onClick={handleCreateTenant}>Create Tenant</Button>
+              </div>
+            </div>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Seed Tenant Data</CardTitle>
-          <CardDescription>Generate mock inventory, accounts, processing, dispatch, and sales records.</CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-3">
-          <Button onClick={handleSeedMockData} disabled={!selectedTenantId || isSeeding}>
-            {isSeeding ? "Seeding..." : "Seed Mock Data"}
-          </Button>
-          <p className="text-sm text-muted-foreground">
-            Use this for demo tenants that should start with sample data.
-          </p>
-        </CardContent>
-      </Card>
+            <div className="space-y-2">
+              <Label>Current Tenant</Label>
+              <Select value={selectedTenantId} onValueChange={setSelectedTenantId}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Select tenant" />
+                </SelectTrigger>
+                <SelectContent>
+                  {tenants.map((tenant) => (
+                    <SelectItem key={tenant.id} value={tenant.id}>
+                      {tenant.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {isOwner && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Tenant Modules</CardTitle>
+            <CardDescription>Control which modules are available to users in this tenant.</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              {modulePermissions.map((module) => (
+                <label key={module.id} className="flex items-center gap-2 border rounded-md p-3">
+                  <input
+                    type="checkbox"
+                    checked={module.enabled}
+                    onChange={() => toggleModule(module.id)}
+                  />
+                  <span>{module.label}</span>
+                </label>
+              ))}
+            </div>
+            <Button onClick={handleSaveModules} disabled={!selectedTenantId}>
+              Save Module Access
+            </Button>
+          </CardContent>
+        </Card>
+      )}
+
+      {isOwner && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Seed Tenant Data</CardTitle>
+            <CardDescription>Generate mock inventory, accounts, processing, dispatch, and sales records.</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <Button onClick={handleSeedMockData} disabled={!selectedTenantId || isSeeding}>
+              {isSeeding ? "Seeding..." : "Seed Mock Data"}
+            </Button>
+            <p className="text-sm text-muted-foreground">
+              Use this for demo tenants that should start with sample data.
+            </p>
+          </CardContent>
+        </Card>
+      )}
 
       <Card>
         <CardHeader>
           <CardTitle>Tenant Users</CardTitle>
-          <CardDescription>{selectedTenant ? `Users for ${selectedTenant.name}` : "Select a tenant"}</CardDescription>
+          <CardDescription>
+            {selectedTenant
+              ? `Users for ${selectedTenant.name}`
+              : isOwner
+                ? "Select a tenant"
+                : "Users for your estate"}
+          </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
@@ -581,6 +594,7 @@ export default function AdminPage() {
           <Button onClick={handleCreateUser} disabled={!selectedTenantId}>
             Create User
           </Button>
+          <p className="text-xs text-muted-foreground">System accounts are read-only and cannot be edited.</p>
 
           <div className="rounded-md border">
             <Table>
@@ -602,12 +616,18 @@ export default function AdminPage() {
                 ) : (
                   users.map((u) => {
                     const isOwnerUser = u.role === "owner"
+                    const isSystemUser =
+                      String(u.username || "").toLowerCase() === "system" ||
+                      String(u.username || "").toLowerCase().startsWith("system_") ||
+                      String(u.username || "").toLowerCase().startsWith("system-")
                     return (
                       <TableRow key={u.id}>
                       <TableCell>{u.username}</TableCell>
                       <TableCell>
                         {isOwnerUser ? (
                           <div className="text-sm font-medium text-emerald-700">{roleLabel(u.role)}</div>
+                        ) : isSystemUser ? (
+                          <div className="text-sm font-medium text-slate-700">System Admin</div>
                         ) : (
                           <Select
                             value={userRoleDrafts[u.id] || u.role}
@@ -625,6 +645,9 @@ export default function AdminPage() {
                         {isOwnerUser && (
                           <p className="mt-1 text-xs text-muted-foreground">Super Admin role cannot be modified.</p>
                         )}
+                        {isSystemUser && (
+                          <p className="mt-1 text-xs text-muted-foreground">System user is read-only.</p>
+                        )}
                       </TableCell>
                       <TableCell>{formatDateOnly(u.created_at)}</TableCell>
                       <TableCell>
@@ -634,7 +657,10 @@ export default function AdminPage() {
                             variant="outline"
                             onClick={() => handleSaveUserRole(u)}
                             disabled={
-                              isOwnerUser || isUpdatingUserId === u.id || (userRoleDrafts[u.id] || u.role) === u.role
+                              isOwnerUser ||
+                              isSystemUser ||
+                              isUpdatingUserId === u.id ||
+                              (userRoleDrafts[u.id] || u.role) === u.role
                             }
                           >
                             {isUpdatingUserId === u.id ? "Saving..." : "Save"}
@@ -643,7 +669,7 @@ export default function AdminPage() {
                             size="sm"
                             variant="destructive"
                             onClick={() => handleDeleteUser(u)}
-                            disabled={isOwnerUser || isDeletingUserId === u.id}
+                            disabled={isOwnerUser || isSystemUser || isDeletingUserId === u.id}
                           >
                             {isDeletingUserId === u.id ? "Deleting..." : "Delete"}
                           </Button>

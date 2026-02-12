@@ -211,6 +211,21 @@ BEGIN
     END IF;
   END IF;
 
+  IF to_regclass('journal_entries') IS NOT NULL THEN
+    IF to_regclass('tenants') IS NOT NULL AND NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'fk_journal_entries_tenant') THEN
+      ALTER TABLE journal_entries
+        ADD CONSTRAINT fk_journal_entries_tenant
+        FOREIGN KEY (tenant_id) REFERENCES tenants(id)
+        ON DELETE RESTRICT NOT VALID;
+    END IF;
+    IF to_regclass('locations') IS NOT NULL AND NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'fk_journal_entries_location') THEN
+      ALTER TABLE journal_entries
+        ADD CONSTRAINT fk_journal_entries_location
+        FOREIGN KEY (location_id) REFERENCES locations(id)
+        ON DELETE SET NULL NOT VALID;
+    END IF;
+  END IF;
+
   IF to_regclass('dispatch_records') IS NOT NULL THEN
     IF to_regclass('tenants') IS NOT NULL AND NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'fk_dispatch_records_tenant') THEN
       ALTER TABLE dispatch_records
@@ -295,6 +310,10 @@ BEGIN
   END IF;
   IF to_regclass('rainfall_records') IS NOT NULL THEN
     EXECUTE 'CREATE INDEX IF NOT EXISTS idx_rainfall_records_tenant_date ON rainfall_records (tenant_id, record_date)';
+  END IF;
+  IF to_regclass('journal_entries') IS NOT NULL THEN
+    EXECUTE 'CREATE INDEX IF NOT EXISTS idx_journal_entries_tenant_date ON journal_entries (tenant_id, entry_date)';
+    EXECUTE 'CREATE INDEX IF NOT EXISTS idx_journal_entries_tenant_location_date ON journal_entries (tenant_id, location_id, entry_date)';
   END IF;
   IF to_regclass('labor_transactions') IS NOT NULL THEN
     EXECUTE 'CREATE INDEX IF NOT EXISTS idx_labor_transactions_tenant_location_date ON labor_transactions (tenant_id, location_id, deployment_date)';

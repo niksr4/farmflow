@@ -23,6 +23,7 @@ DECLARE
     'current_inventory',
     'inventory_summary',
     'rainfall_records',
+    'journal_entries',
     'dispatch_records',
     'sales_records',
     'billing_invoices',

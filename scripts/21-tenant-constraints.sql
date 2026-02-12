@@ -90,6 +90,30 @@ BEGIN
   IF EXISTS (
     SELECT 1
     FROM information_schema.columns
+    WHERE table_name = 'journal_entries' AND column_name = 'tenant_id' AND data_type = 'uuid'
+  ) AND NOT EXISTS (
+    SELECT 1 FROM pg_constraint WHERE conname = 'journal_entries_tenant_fk'
+  ) THEN
+    ALTER TABLE journal_entries
+      ADD CONSTRAINT journal_entries_tenant_fk
+      FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE;
+  END IF;
+
+  IF EXISTS (
+    SELECT 1
+    FROM information_schema.columns
+    WHERE table_name = 'journal_entries' AND column_name = 'location_id' AND data_type = 'uuid'
+  ) AND NOT EXISTS (
+    SELECT 1 FROM pg_constraint WHERE conname = 'journal_entries_location_fk'
+  ) THEN
+    ALTER TABLE journal_entries
+      ADD CONSTRAINT journal_entries_location_fk
+      FOREIGN KEY (location_id) REFERENCES locations(id) ON DELETE SET NULL;
+  END IF;
+
+  IF EXISTS (
+    SELECT 1
+    FROM information_schema.columns
     WHERE table_name = 'account_activities' AND column_name = 'tenant_id' AND data_type = 'uuid'
   ) AND NOT EXISTS (
     SELECT 1 FROM pg_constraint WHERE conname = 'account_activities_tenant_fk'

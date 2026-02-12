@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server"
 import { sql } from "@/lib/server/db"
 import { requireAdminSession } from "@/lib/server/mfa"
+import { requireOwnerRole } from "@/lib/tenant"
 import { MODULES, resolveModuleStates } from "@/lib/modules"
 import { normalizeTenantContext, runTenantQuery } from "@/lib/server/tenant-db"
 import { logAuditEvent } from "@/lib/server/audit-log"
@@ -54,6 +55,7 @@ export async function GET(request: Request) {
 export async function PUT(request: Request) {
   try {
     const sessionUser = await requireAdminSession()
+    requireOwnerRole(sessionUser.role)
     if (!sql) {
       return NextResponse.json({ success: false, error: "Database not configured" }, { status: 500 })
     }

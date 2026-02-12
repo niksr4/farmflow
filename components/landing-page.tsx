@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react"
 import Link from "next/link"
 import { Fraunces, Manrope } from "next/font/google"
 import { ArrowRight, CheckCircle2, Leaf, Shield, Sparkles, Truck, MessageCircle, Send, X, Droplets, Sprout, Coffee, TrendingUp, Package, Cloudy } from "lucide-react"
+import { motion, useReducedMotion, useScroll, useTransform } from "framer-motion"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
@@ -222,7 +223,9 @@ const getChatbotReply = (input: string) => {
 export default function LandingPage() {
   const beanLayerRef = useRef<HTMLDivElement | null>(null)
   const chatEndRef = useRef<HTMLDivElement | null>(null)
+  const journeyRef = useRef<HTMLDivElement | null>(null)
   const messageIdRef = useRef(0)
+  const prefersReducedMotion = useReducedMotion()
   const [isChatOpen, setIsChatOpen] = useState(false)
   const [draftMessage, setDraftMessage] = useState("")
   const [activeUpdateIndex, setActiveUpdateIndex] = useState(0)
@@ -234,6 +237,13 @@ export default function LandingPage() {
       text: "Hi! Ask me about FarmFlow features, pricing, onboarding, and data security.",
     },
   ])
+
+  const { scrollYProgress: journeyProgress } = useScroll({
+    target: journeyRef,
+    offset: ["start 0.2", "end 0.8"],
+  })
+  const timelineScale = useTransform(journeyProgress, [0, 1], [0, 1])
+  const timelineGlow = useTransform(journeyProgress, [0, 0.4, 1], [0.1, 0.7, 1])
 
   useEffect(() => {
     if (typeof window === "undefined") return
@@ -498,6 +508,7 @@ export default function LandingPage() {
                       <p className="text-xs text-white/70">Traceable</p>
                     </div>
                   </div>
+                  <p className="text-xs text-white/60">Illustrative metrics for demo purposes.</p>
                 </div>
 
                 {/* Right side - Enhanced coffee estate visual */}
@@ -513,12 +524,11 @@ export default function LandingPage() {
                             </div>
                             <div>
                               <CardTitle className={`${display.className} text-xl`}>Estate Dashboard</CardTitle>
-                              <CardDescription>Live from Coorg, Karnataka</CardDescription>
+                              <CardDescription>Demo estate · Western Ghats</CardDescription>
                             </div>
                           </div>
                           <Badge className="bg-emerald-100 text-emerald-700 border-emerald-200">
-                            <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 mr-1.5 animate-pulse" />
-                            Live
+                            Sample data
                           </Badge>
                         </div>
                       </CardHeader>
@@ -734,55 +744,80 @@ export default function LandingPage() {
               Document every step so quality decisions are visible to managers, buyers, and farmers.
             </p>
           </div>
-          <div className="grid gap-6 lg:grid-cols-[1.1fr_0.9fr]">
-            <Card className="border border-white/60 bg-white/80 backdrop-blur-md">
-              <CardHeader>
-                <CardTitle className={`${display.className} text-2xl`}>Workflow you can audit</CardTitle>
-                <CardDescription>Each step links back to the lot that created it.</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="journey-line space-y-6">
-                  {ESTATE_JOURNEY.map((step, index) => (
-                    <div key={step.title} className="relative pl-8">
-                      <span className="absolute left-0 top-1.5 h-3 w-3 rounded-full bg-emerald-500 shadow-[0_0_16px_rgba(16,185,129,0.5)]" />
-                      <p className="text-sm uppercase tracking-[0.25em] text-emerald-700/70">Step {index + 1}</p>
-                      <p className="text-base font-semibold text-slate-900">{step.title}</p>
-                      <p className="text-sm text-muted-foreground">{step.description}</p>
+          <div ref={journeyRef} className="relative mt-10 space-y-12">
+            <div className="pointer-events-none absolute left-4 top-0 h-full w-[2px] bg-emerald-100/80 md:left-1/2 md:-translate-x-1/2" />
+            <motion.div
+              className="pointer-events-none absolute left-4 top-0 h-full w-[3px] origin-top bg-gradient-to-b from-emerald-500 via-emerald-400 to-transparent md:left-1/2 md:-translate-x-1/2"
+              style={{
+                scaleY: prefersReducedMotion ? 1 : timelineScale,
+                opacity: prefersReducedMotion ? 1 : timelineGlow,
+              }}
+            />
+            <div className="space-y-10 md:space-y-14">
+              {ESTATE_JOURNEY.map((step, index) => {
+                const isLeft = index % 2 === 0
+                return (
+                  <motion.div
+                    key={step.title}
+                    initial={
+                      prefersReducedMotion
+                        ? { opacity: 1, y: 0, x: 0 }
+                        : { opacity: 0, y: 32, x: isLeft ? -24 : 24 }
+                    }
+                    whileInView={{ opacity: 1, y: 0, x: 0 }}
+                    viewport={{ once: true, amount: 0.35 }}
+                    transition={{ duration: 0.6, ease: "easeOut" }}
+                    className={`relative flex ${isLeft ? "md:justify-start" : "md:justify-end"}`}
+                  >
+                    <div className={`relative w-full md:w-[calc(50%-3rem)] ${isLeft ? "md:pr-10" : "md:pl-10"} pl-10 md:pl-0`}>
+                      <span
+                        className={`absolute top-7 left-[10px] h-3 w-3 rounded-full bg-emerald-500 shadow-[0_0_18px_rgba(16,185,129,0.55)] md:left-auto ${
+                          isLeft ? "md:right-[-3rem]" : "md:left-[-3rem]"
+                        }`}
+                      />
+                      <Card className="border border-white/70 bg-white/85 backdrop-blur-md shadow-[0_20px_45px_-35px_rgba(16,185,129,0.35)]">
+                        <CardHeader className="space-y-2">
+                          <p className="text-xs uppercase tracking-[0.35em] text-emerald-700/70">Step {index + 1}</p>
+                          <CardTitle className={`${display.className} text-xl`}>{step.title}</CardTitle>
+                          <CardDescription>{step.description}</CardDescription>
+                        </CardHeader>
+                      </Card>
                     </div>
-                  ))}
-                </div>
-              </CardContent>
-            </Card>
-            <Card className="border border-emerald-200/70 bg-emerald-50/70">
-              <CardHeader>
-                <CardTitle className={`${display.className} text-xl`}>Buyer trust pack</CardTitle>
-                <CardDescription>Evidence you can export when audits or buyers ask.</CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4 text-sm text-emerald-800">
-                <div className="flex items-start gap-2">
-                  <CheckCircle2 className="mt-0.5 h-4 w-4 text-emerald-600" />
-                  <div>
-                    <p className="font-medium">Lot ID + processing timeline</p>
-                    <p className="text-xs text-emerald-700/80">From intake through curing and dispatch.</p>
-                  </div>
-                </div>
-                <div className="flex items-start gap-2">
-                  <CheckCircle2 className="mt-0.5 h-4 w-4 text-emerald-600" />
-                  <div>
-                    <p className="font-medium">Moisture, grade, and defect notes</p>
-                    <p className="text-xs text-emerald-700/80">Quality evidence tied to each lot.</p>
-                  </div>
-                </div>
-                <div className="flex items-start gap-2">
-                  <CheckCircle2 className="mt-0.5 h-4 w-4 text-emerald-600" />
-                  <div>
-                    <p className="font-medium">Dispatch + sales reconciliation</p>
-                    <p className="text-xs text-emerald-700/80">Every bag is accounted for and auditable.</p>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
+                  </motion.div>
+                )
+              })}
+            </div>
           </div>
+
+          <Card className="border border-emerald-200/70 bg-emerald-50/70">
+            <CardHeader>
+              <CardTitle className={`${display.className} text-xl`}>Buyer trust pack</CardTitle>
+              <CardDescription>Evidence you can export when audits or buyers ask.</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4 text-sm text-emerald-800">
+              <div className="flex items-start gap-2">
+                <CheckCircle2 className="mt-0.5 h-4 w-4 text-emerald-600" />
+                <div>
+                  <p className="font-medium">Lot ID + processing timeline</p>
+                  <p className="text-xs text-emerald-700/80">From intake through curing and dispatch.</p>
+                </div>
+              </div>
+              <div className="flex items-start gap-2">
+                <CheckCircle2 className="mt-0.5 h-4 w-4 text-emerald-600" />
+                <div>
+                  <p className="font-medium">Moisture, grade, and defect notes</p>
+                  <p className="text-xs text-emerald-700/80">Quality evidence tied to each lot.</p>
+                </div>
+              </div>
+              <div className="flex items-start gap-2">
+                <CheckCircle2 className="mt-0.5 h-4 w-4 text-emerald-600" />
+                <div>
+                  <p className="font-medium">Dispatch + sales reconciliation</p>
+                  <p className="text-xs text-emerald-700/80">Every bag is accounted for and auditable.</p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
         </section>
 
         <section

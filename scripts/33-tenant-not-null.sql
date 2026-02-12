@@ -16,6 +16,7 @@ DECLARE
     'expense_transactions',
     'labor_transactions',
     'locations',
+    'journal_entries',
     'pepper_records',
     'privacy_requests',
     'processing_records',

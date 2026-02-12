@@ -72,7 +72,7 @@ export async function POST(request: Request) {
           adminContext,
           sql`
             INSERT INTO tenant_modules (tenant_id, module, enabled)
-            VALUES (${tenantId}, ${moduleEntry.id}, ${moduleEntry.defaultEnabled !== false})
+            VALUES (${tenantId}, ${moduleEntry.id}, ${moduleEntry.defaultEnabled === true})
             ON CONFLICT (tenant_id, module) DO NOTHING
           `,
         )

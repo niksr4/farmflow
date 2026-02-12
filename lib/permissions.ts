@@ -9,6 +9,7 @@ const USER_WRITE_MODULES = new Set<string>([
   "sales",
   "rainfall",
   "pepper",
+  "journal",
 ])
 
 export const isAdminRole = (role?: string | null) => role === "owner" || role === "admin"

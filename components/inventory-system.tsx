@@ -27,6 +27,7 @@ import {
   Cloudy,
   Factory,
   Leaf,
+  NotebookPen,
   Receipt,
   Settings,
   Info,
@@ -66,6 +67,7 @@ import SeasonDashboard from "@/components/season-dashboard"
 import CuringTab from "@/components/curing-tab"
 import QualityGradingTab from "@/components/quality-grading-tab"
 import BillingTab from "@/components/billing-tab"
+import JournalTab from "@/components/journal-tab"
 import { PepperTab } from "./pepper-tab"
 import OnboardingChecklist, { type OnboardingStep } from "@/components/onboarding-checklist"
 import Link from "next/link"
@@ -124,6 +126,18 @@ const formatDate = (dateString?: string | null) => {
 
 const safeGet = <T,>(value: T | null | undefined, fallback: T): T => {
   return value !== null && value !== undefined ? value : fallback
+}
+
+const parseJsonResponse = async (res: Response) => {
+  const text = await res.text()
+  if (!text) {
+    return { json: null as any, text: "" }
+  }
+  try {
+    return { json: JSON.parse(text), text }
+  } catch {
+    return { json: null as any, text }
+  }
 }
 
 const createDefaultTransaction = (): Transaction => {
@@ -790,6 +804,19 @@ export default function InventorySystem() {
       { icon: CheckCircle2, label: `Tracking ${currentFiscalYear.label}` },
     ]
 
+    const journalStats: HeroStat[] = [
+      { label: "Active locations", value: formatCount(estateMetrics.locationCount) },
+      { label: "Items tracked", value: formatCount(estateMetrics.inventoryCount) },
+      { label: "24h activity", value: formatCount(estateMetrics.recentActivity) },
+      { label: "Inventory value", value: formatCurrency(resolvedInventoryValue) },
+    ]
+
+    const chipsJournal: HeroChip[] = [
+      { icon: NotebookPen, label: "Daily notes, fertilizers, sprays" },
+      { icon: Leaf, label: "Irrigation history stays searchable" },
+      { icon: CheckCircle2, label: "Filter by date & plot" },
+    ]
+
     switch (activeTab) {
       case "transactions":
         return {
@@ -854,6 +881,14 @@ export default function InventorySystem() {
           description: "Track green-to-dry conversion with location context.",
           chips: chipsInventory,
           stats: processingStats,
+        }
+      case "journal":
+        return {
+          badge: "Estate Journal",
+          title: "Daily notes you can search months later",
+          description: "Log fertilizer mixes, spray compositions, irrigation, and field observations.",
+          chips: chipsJournal,
+          stats: journalStats,
         }
       case "accounts":
         return {
@@ -1101,11 +1136,15 @@ export default function InventorySystem() {
   }
 
   const handleDeleteTransaction = async () => {
-    if (!transactionToDelete) return
+    if (transactionToDelete == null) return
     try {
       const res = await fetch(`${API_TRANSACTIONS}/${transactionToDelete}`, { method: "DELETE" })
-      const json = await res.json()
-      if (!res.ok || !json.success) throw new Error(json.message || "Delete failed")
+      const { json, text } = await parseJsonResponse(res)
+      if (!res.ok || !json?.success) {
+        const fallback =
+          res.status === 401 || res.status === 403 ? "Not authorized to delete this transaction." : "Delete failed"
+        throw new Error(json?.message || fallback || text)
+      }
       toast({ title: "Transaction deleted", description: "Transaction removed.", variant: "default" })
       await refreshData(true)
     } catch (error: any) {
@@ -1216,33 +1255,29 @@ export default function InventorySystem() {
 
   const handleDeleteInventoryItem = async (itemToDelete: InventoryItem) => {
     if (!tenantId) return
-    if (selectedLocationId === LOCATION_ALL) {
-      toast({
-        title: "Select a location",
-        description: "Choose a specific location before deleting inventory.",
-        variant: "destructive",
-      })
-      return
-    }
-    if (!confirm(`Delete "${itemToDelete.name}"? This will log a deplete transaction and hide the item.`)) return
-    const deleteLocationId = selectedLocationId !== LOCATION_ALL ? selectedLocationId : null
-    const tx = {
-      item_type: itemToDelete.name,
-      quantity: itemToDelete.quantity,
-      transaction_type: "deplete",
-      notes: `Item "${itemToDelete.name}" permanently deleted from inventory.`,
-      user_id: user?.username || "system",
-      price: 0,
-      location_id: deleteLocationId,
-    }
+    const deleteAllLocations = selectedLocationId === LOCATION_ALL
+    const confirmMessage = deleteAllLocations
+      ? `Delete "${itemToDelete.name}" across all locations? This removes it from inventory and logs depletion.`
+      : `Delete "${itemToDelete.name}" from ${selectedLocationLabel}? This removes it from inventory and logs depletion.`
+    if (!confirm(confirmMessage)) return
+    const deleteLocationId = deleteAllLocations ? "all" : selectedLocationId
     try {
-      const res = await fetch("/api/transactions-neon", {
-        method: "POST",
+      const res = await fetch(API_INVENTORY, {
+        method: "DELETE",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(tx),
+        body: JSON.stringify({
+          item_type: itemToDelete.name,
+          location_id: deleteLocationId,
+          scope: deleteAllLocations ? "all" : "single",
+        }),
       })
-      const json = await res.json()
-      if (!res.ok || !json.success) throw new Error(json.message || "Failed")
+      const { json, text } = await parseJsonResponse(res)
+      if (!res.ok || !json?.success) {
+        const fallback =
+          res.status === 401 || res.status === 403 ? "Not authorized to delete inventory." : "Failed to delete item"
+        throw new Error(json?.message || fallback || text)
+      }
+      toast({ title: "Item deleted", description: "Inventory updated.", variant: "default" })
       await refreshData(true)
     } catch (err: any) {
       console.error("delete inventory item error", err)
@@ -1332,6 +1367,7 @@ export default function InventorySystem() {
   const canShowWeather = isModuleEnabled("weather")
   const canShowSeason = isModuleEnabled("season")
   const canShowBilling = isModuleEnabled("billing")
+  const canShowJournal = isModuleEnabled("journal")
   const visibleTabs = useMemo(() => {
     const tabs: string[] = []
     if (canShowInventory) tabs.push("inventory")
@@ -1345,6 +1381,7 @@ export default function InventorySystem() {
     if (canShowSeason) tabs.push("season")
     if (canShowRainfall) tabs.push("rainfall")
     if (canShowPepper) tabs.push("pepper")
+    if (canShowJournal) tabs.push("journal")
     if (canShowAiAnalysis) tabs.push("ai-analysis")
     if (canShowNews) tabs.push("news")
     if (canShowWeather) tabs.push("weather")
@@ -1356,6 +1393,7 @@ export default function InventorySystem() {
     canShowBilling,
     canShowDispatch,
     canShowInventory,
+    canShowJournal,
     canShowNews,
     canShowPepper,
     canShowProcessing,
@@ -1763,6 +1801,12 @@ export default function InventorySystem() {
                 <TabsTrigger value="pepper" className="flex items-center gap-2">
                   <Leaf className="h-4 w-4" />
                   Pepper
+                </TabsTrigger>
+              )}
+              {canShowJournal && (
+                <TabsTrigger value="journal" className="flex items-center gap-2">
+                  <NotebookPen className="h-4 w-4" />
+                  Journal
                 </TabsTrigger>
               )}
               {canShowAiAnalysis && (
@@ -2395,6 +2439,11 @@ export default function InventorySystem() {
           {canShowPepper && (
             <TabsContent value="pepper" className="space-y-6">
               <PepperTab />
+            </TabsContent>
+          )}
+          {canShowJournal && (
+            <TabsContent value="journal" className="space-y-6">
+              <JournalTab />
             </TabsContent>
           )}
           {canShowAiAnalysis && (

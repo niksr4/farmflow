@@ -12,6 +12,11 @@ const adminErrorResponse = (error: any, fallback: string) => {
   return NextResponse.json({ success: false, error: message }, { status })
 }
 
+const isSystemUsername = (value: string) => {
+  const normalized = value.trim().toLowerCase()
+  return normalized === "system" || normalized.startsWith("system_") || normalized.startsWith("system-")
+}
+
 export async function GET(request: Request) {
   try {
     const sessionUser = await requireAdminSession()
@@ -66,6 +71,10 @@ export async function POST(request: Request) {
 
     if (!username || !password || !tenantId) {
       return NextResponse.json({ success: false, error: "username, password, and tenantId are required" }, { status: 400 })
+    }
+
+    if (isSystemUsername(username)) {
+      return NextResponse.json({ success: false, error: "System usernames are reserved" }, { status: 400 })
     }
 
     if (sessionUser.role !== "owner" && requestedTenantId && requestedTenantId !== sessionUser.tenantId) {
@@ -141,7 +150,7 @@ export async function PATCH(request: Request) {
       sql,
       lookupContext,
       sql`
-        SELECT id, role, tenant_id
+        SELECT id, role, tenant_id, username
         FROM users
         WHERE id = ${userId}
         LIMIT 1
@@ -154,6 +163,9 @@ export async function PATCH(request: Request) {
 
     if (String(rows[0].role) === "owner") {
       return NextResponse.json({ success: false, error: "Owner role cannot be modified" }, { status: 403 })
+    }
+    if (isSystemUsername(String(rows[0].username || ""))) {
+      return NextResponse.json({ success: false, error: "System users cannot be modified" }, { status: 403 })
     }
 
     const targetTenantId = String(rows[0].tenant_id)
@@ -224,7 +236,7 @@ export async function DELETE(request: Request) {
       sql,
       lookupContext,
       sql`
-        SELECT id, role, tenant_id
+        SELECT id, role, tenant_id, username
         FROM users
         WHERE id = ${userId}
         LIMIT 1
@@ -237,6 +249,9 @@ export async function DELETE(request: Request) {
 
     if (String(rows[0].role) === "owner") {
       return NextResponse.json({ success: false, error: "Owner user cannot be deleted" }, { status: 403 })
+    }
+    if (isSystemUsername(String(rows[0].username || ""))) {
+      return NextResponse.json({ success: false, error: "System users cannot be deleted" }, { status: 403 })
     }
 
     const targetTenantId = String(rows[0].tenant_id)

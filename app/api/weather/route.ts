@@ -2,8 +2,8 @@ import { type NextRequest, NextResponse } from "next/server"
 import { requireModuleAccess, isModuleAccessError } from "@/lib/server/module-access"
 import { buildRateLimitHeaders, checkRateLimit } from "@/lib/rate-limit"
 
-// The location is hardcoded to Kodagu as requested.
-const LOCATION = "Kodagu"
+// Default location if no region is provided.
+const LOCATION = "Kodagu, India"
 const FORECAST_DAYS = "8"
 
 export async function GET(request: NextRequest) {
@@ -21,7 +21,17 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: "Weather service not configured. API key is missing." }, { status: 500, headers: rateHeaders })
     }
 
-    const url = `https://api.weatherapi.com/v1/forecast.json?key=${apiKey}&q=${LOCATION}&days=${FORECAST_DAYS}&aqi=no&alerts=no`
+    const { searchParams } = new URL(request.url)
+    const requestedRegion = (searchParams.get("region") || searchParams.get("q") || "").trim()
+    const locationQuery = requestedRegion.length > 0 ? requestedRegion : LOCATION
+
+    if (locationQuery.length > 80) {
+      return NextResponse.json({ error: "Region query too long." }, { status: 400, headers: rateHeaders })
+    }
+
+    const url = `https://api.weatherapi.com/v1/forecast.json?key=${apiKey}&q=${encodeURIComponent(
+      locationQuery,
+    )}&days=${FORECAST_DAYS}&aqi=no&alerts=no`
 
     const response = await fetch(url, {
       next: { revalidate: 3600 }, // Revalidate every hour
