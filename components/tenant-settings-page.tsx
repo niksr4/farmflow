@@ -143,6 +143,7 @@ export default function TenantSettingsPage() {
   const [isMfaDisableLoading, setIsMfaDisableLoading] = useState(false)
   const [mfaError, setMfaError] = useState<string | null>(null)
 
+  const isOwner = user?.role === "owner"
   const isAdminOrOwner = user?.role === "admin" || user?.role === "owner"
   const mfaFeatureEnabled = false
   const mfaEnabled = mfaFeatureEnabled ? Boolean(mfaStatus?.enabled) : false
@@ -406,7 +407,7 @@ export default function TenantSettingsPage() {
   }, [tenantId, toast, mfaGate])
 
   const loadModules = useCallback(async () => {
-    if (!tenantId || mfaGate) return
+    if (!tenantId || mfaGate || !isOwner) return
     try {
       const response = await fetch(`/api/admin/tenant-modules?tenantId=${tenantId}`)
       const data = await response.json()
@@ -417,7 +418,7 @@ export default function TenantSettingsPage() {
     } catch (error: any) {
       toast({ title: "Error", description: error.message || "Failed to load tenant modules", variant: "destructive" })
     }
-  }, [tenantId, toast, mfaGate])
+  }, [isOwner, tenantId, toast, mfaGate])
 
   const loadUserModules = useCallback(async (userId: string) => {
     if (mfaGate) {
@@ -450,7 +451,7 @@ export default function TenantSettingsPage() {
   }, [toast, mfaGate])
 
   const loadAuditLogs = useCallback(async () => {
-    if (!tenantId || mfaGate) return
+    if (!tenantId || mfaGate || !isOwner) return
     setIsAuditLoading(true)
     try {
       const params = new URLSearchParams({ tenantId, limit: "50" })
@@ -471,7 +472,7 @@ export default function TenantSettingsPage() {
     } finally {
       setIsAuditLoading(false)
     }
-  }, [auditEntityType, tenantId, toast, mfaGate])
+  }, [auditEntityType, isOwner, tenantId, toast, mfaGate])
 
   const loadLocations = useCallback(async () => {
     if (!tenantId) return
@@ -491,17 +492,19 @@ export default function TenantSettingsPage() {
     if (!tenantId) return
     if (!mfaGate) {
       loadUsers()
-      loadModules()
-      loadAuditLogs()
+      if (isOwner) {
+        loadModules()
+        loadAuditLogs()
+      }
     }
     loadLocations()
-  }, [tenantId, loadAuditLogs, loadLocations, loadModules, loadUsers, mfaGate])
+  }, [tenantId, loadAuditLogs, loadLocations, loadModules, loadUsers, mfaGate, isOwner])
 
   useEffect(() => {
-    if (tenantId && !mfaGate) {
+    if (tenantId && !mfaGate && isOwner) {
       loadAuditLogs()
     }
-  }, [auditEntityType, tenantId, loadAuditLogs, mfaGate])
+  }, [auditEntityType, tenantId, loadAuditLogs, mfaGate, isOwner])
 
   useEffect(() => {
     if (!users.length) {
@@ -1424,31 +1427,33 @@ export default function TenantSettingsPage() {
         </CardContent>
       </Card>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Tenant Modules</CardTitle>
-          <CardDescription>
-            Control which modules are available to users in this tenant (subject to your subscription plan).
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-            {modulePermissions.map((module) => (
-              <label key={module.id} className="flex items-center gap-2 border rounded-md p-3">
-                <input
-                  type="checkbox"
-                  checked={module.enabled}
-                  onChange={() => toggleModule(module.id)}
-                />
-                <span>{module.label}</span>
-              </label>
-            ))}
-          </div>
-          <Button onClick={handleSaveModules} disabled={!tenantId || isSavingModules}>
-            {isSavingModules ? "Saving..." : "Save Module Access"}
-          </Button>
-        </CardContent>
-      </Card>
+      {isOwner && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Tenant Modules</CardTitle>
+            <CardDescription>
+              Control which modules are available to users in this tenant (subject to your subscription plan).
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              {modulePermissions.map((module) => (
+                <label key={module.id} className="flex items-center gap-2 border rounded-md p-3">
+                  <input
+                    type="checkbox"
+                    checked={module.enabled}
+                    onChange={() => toggleModule(module.id)}
+                  />
+                  <span>{module.label}</span>
+                </label>
+              ))}
+            </div>
+            <Button onClick={handleSaveModules} disabled={!tenantId || isSavingModules}>
+              {isSavingModules ? "Saving..." : "Save Module Access"}
+            </Button>
+          </CardContent>
+        </Card>
+      )}
 
       <Card>
         <CardHeader>
@@ -1767,90 +1772,92 @@ export default function TenantSettingsPage() {
         </CardContent>
       </Card>
 
-      <Card>
-        <CardHeader>
-          <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
-            <div>
-              <CardTitle>Audit Log</CardTitle>
-              <CardDescription>Track who changed what for this tenant.</CardDescription>
-            </div>
-            <div className="flex flex-col gap-2 sm:flex-row sm:items-end">
-              <div className="space-y-1">
-                <Label>Filter</Label>
-                <Select value={auditEntityType} onValueChange={setAuditEntityType}>
-                  <SelectTrigger className="w-[180px]">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {AUDIT_ENTITY_TYPES.map((option) => (
-                      <SelectItem key={option.id} value={option.id}>
-                        {option.label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+      {isOwner && (
+        <Card>
+          <CardHeader>
+            <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
+              <div>
+                <CardTitle>Audit Log</CardTitle>
+                <CardDescription>Track who changed what for this tenant.</CardDescription>
               </div>
-              <Button variant="outline" onClick={loadAuditLogs} disabled={!tenantId || isAuditLoading}>
-                {isAuditLoading ? "Loading..." : "Refresh"}
-              </Button>
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-end">
+                <div className="space-y-1">
+                  <Label>Filter</Label>
+                  <Select value={auditEntityType} onValueChange={setAuditEntityType}>
+                    <SelectTrigger className="w-[180px]">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {AUDIT_ENTITY_TYPES.map((option) => (
+                        <SelectItem key={option.id} value={option.id}>
+                          {option.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <Button variant="outline" onClick={loadAuditLogs} disabled={!tenantId || isAuditLoading}>
+                  {isAuditLoading ? "Loading..." : "Refresh"}
+                </Button>
+              </div>
             </div>
-          </div>
-        </CardHeader>
-        <CardContent className="space-y-3">
-          <p className="text-xs text-muted-foreground">
-            Showing {auditLogs.length} of {auditTotalCount} recent events.
-          </p>
-          {isAuditLoading ? (
-            <div className="text-sm text-muted-foreground">Loading audit log...</div>
-          ) : auditLogs.length === 0 ? (
-            <div className="text-sm text-muted-foreground">No audit events yet.</div>
-          ) : (
-            <div className="rounded-md border">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Time</TableHead>
-                    <TableHead>User</TableHead>
-                    <TableHead>Action</TableHead>
-                    <TableHead>Entity</TableHead>
-                    <TableHead>ID</TableHead>
-                    <TableHead>Details</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {auditLogs.map((log) => (
-                    <TableRow key={log.id}>
-                      <TableCell>{formatAuditTimestamp(log.created_at)}</TableCell>
-                      <TableCell>
-                        {log.username}
-                        <span className="text-xs text-muted-foreground"> ({roleLabel(log.role)})</span>
-                      </TableCell>
-                      <TableCell className="capitalize">{log.action}</TableCell>
-                      <TableCell>{log.entity_type}</TableCell>
-                      <TableCell>{log.entity_id || "-"}</TableCell>
-                      <TableCell>
-                        <details>
-                          <summary className="cursor-pointer text-xs text-emerald-600">View</summary>
-                          <div className="mt-2 space-y-2 text-xs text-muted-foreground">
-                            <div>
-                              <span className="font-semibold text-foreground">Before</span>
-                              <pre className="mt-1 whitespace-pre-wrap">{formatAuditPayload(log.before_data)}</pre>
-                            </div>
-                            <div>
-                              <span className="font-semibold text-foreground">After</span>
-                              <pre className="mt-1 whitespace-pre-wrap">{formatAuditPayload(log.after_data)}</pre>
-                            </div>
-                          </div>
-                        </details>
-                      </TableCell>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <p className="text-xs text-muted-foreground">
+              Showing {auditLogs.length} of {auditTotalCount} recent events.
+            </p>
+            {isAuditLoading ? (
+              <div className="text-sm text-muted-foreground">Loading audit log...</div>
+            ) : auditLogs.length === 0 ? (
+              <div className="text-sm text-muted-foreground">No audit events yet.</div>
+            ) : (
+              <div className="rounded-md border">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Time</TableHead>
+                      <TableHead>User</TableHead>
+                      <TableHead>Action</TableHead>
+                      <TableHead>Entity</TableHead>
+                      <TableHead>ID</TableHead>
+                      <TableHead>Details</TableHead>
                     </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </div>
-          )}
-        </CardContent>
-      </Card>
+                  </TableHeader>
+                  <TableBody>
+                    {auditLogs.map((log) => (
+                      <TableRow key={log.id}>
+                        <TableCell>{formatAuditTimestamp(log.created_at)}</TableCell>
+                        <TableCell>
+                          {log.username}
+                          <span className="text-xs text-muted-foreground"> ({roleLabel(log.role)})</span>
+                        </TableCell>
+                        <TableCell className="capitalize">{log.action}</TableCell>
+                        <TableCell>{log.entity_type}</TableCell>
+                        <TableCell>{log.entity_id || "-"}</TableCell>
+                        <TableCell>
+                          <details>
+                            <summary className="cursor-pointer text-xs text-emerald-600">View</summary>
+                            <div className="mt-2 space-y-2 text-xs text-muted-foreground">
+                              <div>
+                                <span className="font-semibold text-foreground">Before</span>
+                                <pre className="mt-1 whitespace-pre-wrap">{formatAuditPayload(log.before_data)}</pre>
+                              </div>
+                              <div>
+                                <span className="font-semibold text-foreground">After</span>
+                                <pre className="mt-1 whitespace-pre-wrap">{formatAuditPayload(log.after_data)}</pre>
+                              </div>
+                            </div>
+                          </details>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
     </div>
   )
 }

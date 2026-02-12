@@ -4,8 +4,8 @@ import { redirect } from "next/navigation"
 
 export default async function TenantsPage() {
   const sessionUser = await requireSessionUser()
-  if (!["owner", "admin"].includes(sessionUser.role)) {
-    redirect("/dashboard")
+  if (sessionUser.role !== "owner") {
+    redirect("/settings")
   }
 
   return <AdminPage />

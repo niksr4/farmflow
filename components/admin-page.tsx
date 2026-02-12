@@ -743,94 +743,96 @@ export default function AdminPage() {
         </CardContent>
       </Card>
 
-      <Card>
-        <CardHeader>
-          <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
-            <div>
-              <CardTitle>Audit Log</CardTitle>
-              <CardDescription>Track who changed what for the selected tenant.</CardDescription>
-            </div>
-            <div className="flex flex-col gap-2 sm:flex-row sm:items-end">
-              <div className="space-y-1">
-                <Label>Filter</Label>
-                <Select value={auditEntityType} onValueChange={setAuditEntityType}>
-                  <SelectTrigger className="w-[180px]">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {AUDIT_ENTITY_TYPES.map((option) => (
-                      <SelectItem key={option.id} value={option.id}>
-                        {option.label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+      {isOwner && (
+        <Card>
+          <CardHeader>
+            <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
+              <div>
+                <CardTitle>Audit Log</CardTitle>
+                <CardDescription>Track who changed what for the selected tenant.</CardDescription>
               </div>
-              <Button
-                variant="outline"
-                onClick={() => selectedTenantId && loadAuditLogs(selectedTenantId, auditEntityType)}
-                disabled={!selectedTenantId || isAuditLoading}
-              >
-                {isAuditLoading ? "Loading..." : "Refresh"}
-              </Button>
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-end">
+                <div className="space-y-1">
+                  <Label>Filter</Label>
+                  <Select value={auditEntityType} onValueChange={setAuditEntityType}>
+                    <SelectTrigger className="w-[180px]">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {AUDIT_ENTITY_TYPES.map((option) => (
+                        <SelectItem key={option.id} value={option.id}>
+                          {option.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <Button
+                  variant="outline"
+                  onClick={() => selectedTenantId && loadAuditLogs(selectedTenantId, auditEntityType)}
+                  disabled={!selectedTenantId || isAuditLoading}
+                >
+                  {isAuditLoading ? "Loading..." : "Refresh"}
+                </Button>
+              </div>
             </div>
-          </div>
-        </CardHeader>
-        <CardContent className="space-y-3">
-          <p className="text-xs text-muted-foreground">
-            Showing {auditLogs.length} of {auditTotalCount} recent events.
-          </p>
-          {isAuditLoading ? (
-            <div className="text-sm text-muted-foreground">Loading audit log...</div>
-          ) : auditLogs.length === 0 ? (
-            <div className="text-sm text-muted-foreground">No audit events yet.</div>
-          ) : (
-            <div className="rounded-md border">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Time</TableHead>
-                    <TableHead>User</TableHead>
-                    <TableHead>Action</TableHead>
-                    <TableHead>Entity</TableHead>
-                    <TableHead>ID</TableHead>
-                    <TableHead>Details</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {auditLogs.map((log) => (
-                    <TableRow key={log.id}>
-                      <TableCell>{formatAuditTimestamp(log.created_at)}</TableCell>
-                      <TableCell>
-                        {log.username}
-                        <span className="text-xs text-muted-foreground"> ({roleLabel(log.role)})</span>
-                      </TableCell>
-                      <TableCell className="capitalize">{log.action}</TableCell>
-                      <TableCell>{log.entity_type}</TableCell>
-                      <TableCell>{log.entity_id || "-"}</TableCell>
-                      <TableCell>
-                        <details>
-                          <summary className="cursor-pointer text-xs text-emerald-600">View</summary>
-                          <div className="mt-2 space-y-2 text-xs text-muted-foreground">
-                            <div>
-                              <span className="font-semibold text-foreground">Before</span>
-                              <pre className="mt-1 whitespace-pre-wrap">{formatAuditPayload(log.before_data)}</pre>
-                            </div>
-                            <div>
-                              <span className="font-semibold text-foreground">After</span>
-                              <pre className="mt-1 whitespace-pre-wrap">{formatAuditPayload(log.after_data)}</pre>
-                            </div>
-                          </div>
-                        </details>
-                      </TableCell>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <p className="text-xs text-muted-foreground">
+              Showing {auditLogs.length} of {auditTotalCount} recent events.
+            </p>
+            {isAuditLoading ? (
+              <div className="text-sm text-muted-foreground">Loading audit log...</div>
+            ) : auditLogs.length === 0 ? (
+              <div className="text-sm text-muted-foreground">No audit events yet.</div>
+            ) : (
+              <div className="rounded-md border">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Time</TableHead>
+                      <TableHead>User</TableHead>
+                      <TableHead>Action</TableHead>
+                      <TableHead>Entity</TableHead>
+                      <TableHead>ID</TableHead>
+                      <TableHead>Details</TableHead>
                     </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </div>
-          )}
-        </CardContent>
-      </Card>
+                  </TableHeader>
+                  <TableBody>
+                    {auditLogs.map((log) => (
+                      <TableRow key={log.id}>
+                        <TableCell>{formatAuditTimestamp(log.created_at)}</TableCell>
+                        <TableCell>
+                          {log.username}
+                          <span className="text-xs text-muted-foreground"> ({roleLabel(log.role)})</span>
+                        </TableCell>
+                        <TableCell className="capitalize">{log.action}</TableCell>
+                        <TableCell>{log.entity_type}</TableCell>
+                        <TableCell>{log.entity_id || "-"}</TableCell>
+                        <TableCell>
+                          <details>
+                            <summary className="cursor-pointer text-xs text-emerald-600">View</summary>
+                            <div className="mt-2 space-y-2 text-xs text-muted-foreground">
+                              <div>
+                                <span className="font-semibold text-foreground">Before</span>
+                                <pre className="mt-1 whitespace-pre-wrap">{formatAuditPayload(log.before_data)}</pre>
+                              </div>
+                              <div>
+                                <span className="font-semibold text-foreground">After</span>
+                                <pre className="mt-1 whitespace-pre-wrap">{formatAuditPayload(log.after_data)}</pre>
+                              </div>
+                            </div>
+                          </details>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
     </div>
   )
 }
