@@ -647,6 +647,11 @@ export default function InventorySystem() {
     return pricing
   }, [transactions])
 
+  const hasLegacyUnassignedTransactions = useMemo(
+    () => transactions.some((t) => !t.location_id),
+    [transactions],
+  )
+
   const resolveItemValue = useCallback(
     (item: InventoryItem) => {
       const avgFromInventory = Number(item.avg_price) || 0
@@ -2329,6 +2334,19 @@ export default function InventorySystem() {
                     {transactionSortOrder === "desc" ? (<><SortDesc className="h-4 w-4 mr-1" /> Date: Newest First</>) : (<><SortAsc className="h-4 w-4 mr-1" /> Date: Oldest First</>)}
                   </Button>
                 </div>
+                {hasLegacyUnassignedTransactions && selectedLocationId !== LOCATION_UNASSIGNED && (
+                  <div className="mb-4 flex flex-wrap items-center gap-2 text-xs text-emerald-700/80">
+                    <span>Legacy transactions without location live under {UNASSIGNED_LABEL}.</span>
+                    <Button
+                      variant="link"
+                      size="sm"
+                      onClick={() => setSelectedLocationId(LOCATION_UNASSIGNED)}
+                      className="h-auto p-0 text-emerald-700"
+                    >
+                      View unassigned
+                    </Button>
+                  </div>
+                )}
 
                 <div className="border rounded-md overflow-x-auto">
                   <table className="min-w-full">
@@ -2623,6 +2641,11 @@ export default function InventorySystem() {
                       ))}
                     </SelectContent>
                   </Select>
+                  {!editingTransaction.location_id && (
+                    <p className="text-xs text-muted-foreground">
+                      Legacy transaction (no location). Keep Unassigned (legacy) or assign a location.
+                    </p>
+                  )}
                 </div>
                 <div className="grid gap-4 sm:grid-cols-2">
                   <div className="space-y-2">
