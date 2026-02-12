@@ -935,6 +935,21 @@ export default function ProcessingTab() {
         <CardContent className="space-y-6">
           <div className="flex items-center gap-4 flex-wrap">
             <div className="flex items-center gap-2">
+              <Label>Location:</Label>
+              <Select value={selectedLocationId} onValueChange={setSelectedLocationId}>
+                <SelectTrigger className="w-[200px]">
+                  <SelectValue placeholder="Select location" />
+                </SelectTrigger>
+                <SelectContent>
+                  {locations.map((loc) => (
+                    <SelectItem key={loc.id} value={loc.id}>
+                      {loc.name || loc.code || "Unnamed location"}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="flex items-center gap-2">
               <Label>Coffee Type:</Label>
               <Select value={coffeeType} onValueChange={setCoffeeType}>
                 <SelectTrigger className="w-[160px]">
@@ -1326,63 +1341,6 @@ export default function ProcessingTab() {
                       className="bg-gray-100 cursor-not-allowed"
                     />
                     <p className="text-xs text-muted-foreground mt-1">Auto-calculated</p>
-                  </div>
-                </CardContent>
-              </Card>
-
-              <Card>
-                <CardHeader>
-                  <CardTitle className="text-lg">Quality & Moisture</CardTitle>
-                </CardHeader>
-                <CardContent className="grid grid-cols-2 gap-4">
-                  <div>
-                    <FieldLabel
-                      label="Moisture %"
-                      tooltip="Moisture reading at the time of measurement."
-                    />
-                    <Input
-                      type="number"
-                      step="0.01"
-                      min={0}
-                      value={record.moisture_pct ?? ""}
-                      onKeyDown={blockInvalidNumberKey}
-                      onChange={handleNonNegativeFloat("moisture_pct")}
-                      placeholder="e.g. 11.5"
-                    />
-                  </div>
-                  <div>
-                    <FieldLabel
-                      label="Quality Grade"
-                      tooltip="Estate grade, screen size, or buyer-facing quality label."
-                    />
-                    <Input
-                      value={record.quality_grade ?? ""}
-                      onChange={(e) => updateField("quality_grade", e.target.value)}
-                      placeholder="Grade AA / Screen 18"
-                    />
-                  </div>
-                  <div className="col-span-2">
-                    <FieldLabel
-                      label="Defect Notes"
-                      tooltip="Record defects, cup notes, or grading observations."
-                    />
-                    <Textarea
-                      value={record.defect_notes ?? ""}
-                      onChange={(e) => updateField("defect_notes", e.target.value)}
-                      placeholder="Defects, cup notes, or QC checklist remarks..."
-                      rows={2}
-                    />
-                  </div>
-                  <div className="col-span-2">
-                    <FieldLabel
-                      label="Quality Photo URL (optional)"
-                      tooltip="Link to a grading photo or QC evidence for this lot."
-                    />
-                    <Input
-                      value={record.quality_photo_url ?? ""}
-                      onChange={(e) => updateField("quality_photo_url", e.target.value)}
-                      placeholder="https://..."
-                    />
                   </div>
                 </CardContent>
               </Card>
