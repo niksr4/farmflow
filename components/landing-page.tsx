@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react"
 import Link from "next/link"
+import Image from "next/image"
 import { Fraunces, Manrope } from "next/font/google"
 import { ArrowRight, CheckCircle2, Leaf, Shield, Sparkles, Truck, MessageCircle, Send, X, Droplets, Sprout, Coffee, TrendingUp, Package, Cloudy } from "lucide-react"
 import { motion, useReducedMotion, useScroll, useTransform } from "framer-motion"
@@ -784,13 +785,13 @@ export default function LandingPage() {
                         }`}
                       />
                       <Card className="border border-white/70 bg-white/85 backdrop-blur-md shadow-[0_20px_45px_-35px_rgba(16,185,129,0.35)]">
-                        <div className="h-36 w-full overflow-hidden rounded-t-xl border-b border-emerald-100/60 bg-emerald-50/40">
-                          <img
+                        <div className="relative h-36 w-full overflow-hidden rounded-t-xl border-b border-emerald-100/60 bg-emerald-50/40">
+                          <Image
                             src={step.image}
                             alt={step.alt}
-                            className="h-full w-full object-cover"
-                            loading="lazy"
-                            decoding="async"
+                            fill
+                            sizes="(min-width: 768px) 480px, 100vw"
+                            className="object-cover"
                           />
                         </div>
                         <CardHeader className="space-y-2">

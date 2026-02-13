@@ -956,7 +956,6 @@ export default function InventorySystem() {
     estateMetrics.inventoryCount,
     estateMetrics.locationCount,
     estateMetrics.recentActivity,
-    estateMetrics.traceabilityCoverage,
     formatCount,
     pricedItemCount,
     pricedItemsLabel,
