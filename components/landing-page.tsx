@@ -100,26 +100,26 @@ const ESTATE_JOURNEY = [
   {
     title: "Harvest intake",
     description: "Record crop intake and sorting splits (ripe, green, float).",
-    image: "/images/estate-journey-harvest.svg",
-    alt: "Harvest intake illustration with coffee cherries and estate hills",
+    image: "/images/estate-journey-harvest.jpg",
+    alt: "Coffee harvest scene at an estate",
   },
   {
     title: "Washed or natural processing",
     description: "Track wet parchment or dry cherry outputs with moisture notes.",
-    image: "/images/estate-journey-processing.svg",
-    alt: "Processing stage illustration with water and cherry flow",
+    image: "/images/estate-journey-processing.jpg",
+    alt: "Coffee processing scene with beans and equipment",
   },
   {
     title: "Curing + quality",
     description: "Log drying days, grades, defects, and quality evidence.",
-    image: "/images/estate-journey-curing.svg",
-    alt: "Curing stage illustration with drying beds and coffee cherries",
+    image: "/images/estate-journey-curing.jpg",
+    alt: "Coffee beans drying during curing",
   },
   {
     title: "Dispatch + sales",
     description: "Ship bags, reconcile receipts, and close the revenue loop.",
-    image: "/images/estate-journey-dispatch.svg",
-    alt: "Dispatch stage illustration with transport and delivery",
+    image: "/images/estate-journey-dispatch.jpg",
+    alt: "Coffee delivery transport ready for dispatch",
   },
 ]
 
