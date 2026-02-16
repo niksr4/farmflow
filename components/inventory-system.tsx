@@ -209,6 +209,10 @@ export default function InventorySystem() {
   const [analysisError, setAnalysisError] = useState("")
   const [aiAnalysis, setAiAnalysis] = useState<string | null>(null)
   const [showWelcome, setShowWelcome] = useState(false)
+  const WELCOME_SKIP_TENANTS = useMemo(
+    () => new Set<string>(["41b4b10c-428c-4155-882f-1cc7f6e89a78"]),
+    [],
+  )
   const [exceptionsSummary, setExceptionsSummary] = useState<{ count: number; highlights: string[] }>({
     count: 0,
     highlights: [],
@@ -1474,6 +1478,10 @@ export default function InventorySystem() {
 
   useEffect(() => {
     if (!user || !tenantId || isOwner) return
+    if (WELCOME_SKIP_TENANTS.has(tenantId)) {
+      setShowWelcome(false)
+      return
+    }
     const key = `farmflow_welcome_seen:${tenantId}:${user.username}`
     try {
       const hasSeen = window.localStorage.getItem(key) === "true"
@@ -1483,7 +1491,7 @@ export default function InventorySystem() {
     } catch (error) {
       console.warn("Unable to read welcome flag", error)
     }
-  }, [isOwner, tenantId, user])
+  }, [WELCOME_SKIP_TENANTS, isOwner, tenantId, user])
 
   const dismissWelcome = () => {
     if (!user || !tenantId) {
