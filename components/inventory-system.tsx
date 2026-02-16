@@ -31,6 +31,7 @@ import {
   Receipt,
   Settings,
   Info,
+  BookOpen,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -68,6 +69,7 @@ import CuringTab from "@/components/curing-tab"
 import QualityGradingTab from "@/components/quality-grading-tab"
 import BillingTab from "@/components/billing-tab"
 import JournalTab from "@/components/journal-tab"
+import ResourcesTab from "@/components/resources-tab"
 import { PepperTab } from "./pepper-tab"
 import OnboardingChecklist, { type OnboardingStep } from "@/components/onboarding-checklist"
 import Link from "next/link"
@@ -206,6 +208,7 @@ export default function InventorySystem() {
   const [isAnalyzing, setIsAnalyzing] = useState(false)
   const [analysisError, setAnalysisError] = useState("")
   const [aiAnalysis, setAiAnalysis] = useState<string | null>(null)
+  const [showWelcome, setShowWelcome] = useState(false)
   const [exceptionsSummary, setExceptionsSummary] = useState<{ count: number; highlights: string[] }>({
     count: 0,
     highlights: [],
@@ -1372,6 +1375,7 @@ export default function InventorySystem() {
   const canShowSeason = isModuleEnabled("season")
   const canShowBilling = isModuleEnabled("billing")
   const canShowJournal = isModuleEnabled("journal")
+  const canShowResources = isModuleEnabled("resources")
   const visibleTabs = useMemo(() => {
     const tabs: string[] = []
     if (canShowInventory) tabs.push("inventory")
@@ -1386,6 +1390,7 @@ export default function InventorySystem() {
     if (canShowRainfall) tabs.push("rainfall")
     if (canShowPepper) tabs.push("pepper")
     if (canShowJournal) tabs.push("journal")
+    if (canShowResources) tabs.push("resources")
     if (canShowAiAnalysis) tabs.push("ai-analysis")
     if (canShowNews) tabs.push("news")
     if (canShowWeather) tabs.push("weather")
@@ -1398,6 +1403,7 @@ export default function InventorySystem() {
     canShowDispatch,
     canShowInventory,
     canShowJournal,
+    canShowResources,
     canShowNews,
     canShowPepper,
     canShowProcessing,
@@ -1451,13 +1457,13 @@ export default function InventorySystem() {
 
   const tabParam = searchParams.get("tab")
   useEffect(() => {
-    if (isOwner || isModulesLoading) {
+    if (isModulesLoading) {
       return
     }
     if (visibleTabs.length && !visibleTabs.includes(activeTab)) {
       setActiveTab(visibleTabs[0])
     }
-  }, [activeTab, isModulesLoading, isOwner, visibleTabs])
+  }, [activeTab, isModulesLoading, visibleTabs])
 
   useEffect(() => {
     if (!tabParam) return
@@ -1465,6 +1471,33 @@ export default function InventorySystem() {
       setActiveTab(tabParam)
     }
   }, [activeTab, tabParam, visibleTabs])
+
+  useEffect(() => {
+    if (!user || !tenantId || isOwner) return
+    const key = `farmflow_welcome_seen:${tenantId}:${user.username}`
+    try {
+      const hasSeen = window.localStorage.getItem(key) === "true"
+      if (!hasSeen) {
+        setShowWelcome(true)
+      }
+    } catch (error) {
+      console.warn("Unable to read welcome flag", error)
+    }
+  }, [isOwner, tenantId, user])
+
+  const dismissWelcome = () => {
+    if (!user || !tenantId) {
+      setShowWelcome(false)
+      return
+    }
+    const key = `farmflow_welcome_seen:${tenantId}:${user.username}`
+    try {
+      window.localStorage.setItem(key, "true")
+    } catch (error) {
+      console.warn("Unable to store welcome flag", error)
+    }
+    setShowWelcome(false)
+  }
 
   // UI render: simplified, mirrors your original layout and components
   if (!user) return null
@@ -1639,6 +1672,44 @@ export default function InventorySystem() {
           </div>
         </header>
 
+        {showWelcome && (
+          <Card className="mb-6 border-emerald-100 bg-emerald-50/70">
+            <CardHeader className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <CardTitle>Welcome to your estate workspace</CardTitle>
+                <CardDescription>
+                  Start by adding locations and logging your first processing output. Everything else builds on those
+                  records.
+                </CardDescription>
+              </div>
+              <Badge variant="outline" className="bg-white text-emerald-700 border-emerald-200">
+                First login
+              </Badge>
+            </CardHeader>
+            <CardContent className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <div className="text-sm text-muted-foreground">
+                Use the checklist below to get to a live, traceable setup in under 10 minutes.
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <Button onClick={() => setActiveTab("inventory")}>Start setup</Button>
+                {isAdmin && (
+                  <Button asChild variant="outline" className="bg-transparent">
+                    <Link href="/settings">Manage users</Link>
+                  </Button>
+                )}
+                {canShowResources && (
+                  <Button variant="outline" className="bg-transparent" onClick={() => setActiveTab("resources")}>
+                    Open resources
+                  </Button>
+                )}
+                <Button variant="ghost" onClick={dismissWelcome}>
+                  Dismiss
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
         <div className="relative mb-8 overflow-hidden rounded-3xl border border-amber-200/70 bg-gradient-to-br from-white via-amber-50/70 to-emerald-100/60 p-7 shadow-[0_28px_70px_-40px_rgba(75,42,15,0.45)] grain sheen">
           <div className="pointer-events-none absolute -right-10 top-8 h-40 w-40 rounded-full bg-[radial-gradient(circle_at_center,rgba(16,185,129,0.22),transparent_70%)] blur-[80px]" />
           <div className="pointer-events-none absolute bottom-[-30%] left-10 h-48 w-48 rounded-full bg-[radial-gradient(circle_at_center,rgba(251,191,36,0.22),transparent_70%)] blur-[90px]" />
@@ -1716,7 +1787,7 @@ export default function InventorySystem() {
           </div>
         </div>
 
-        {isOwner ? (
+        {isOwner && (
           <Card className="border-2 border-muted bg-white/90">
             <CardHeader>
               <div className="flex items-center gap-2">
@@ -1753,10 +1824,29 @@ export default function InventorySystem() {
               </div>
             </CardContent>
           </Card>
-        ) : (
-          <>
+        )}
+        {showOnboarding && (
+          <div className="mb-6">
+            <OnboardingChecklist
+              isVisible={showOnboarding}
+              isLoading={isOnboardingLoading}
+              error={onboardingError}
+              completedCount={onboardingCompletedCount}
+              totalCount={onboardingTotalCount}
+              steps={onboardingSteps}
+              canCreateLocation={isAdmin}
+              locationName={newLocationName}
+              locationCode={newLocationCode}
+              onLocationNameChange={setNewLocationName}
+              onLocationCodeChange={setNewLocationCode}
+              onCreateLocation={handleCreateLocation}
+              isCreatingLocation={isCreatingLocation}
+              onRefresh={loadOnboardingStatus}
+            />
+          </div>
+        )}
             <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full space-y-4">
-            <TabsList className="flex w-full flex-wrap gap-2 overflow-x-auto rounded-2xl border border-white/80 bg-white/85 p-2 shadow-[0_16px_30px_-20px_rgba(15,23,42,0.5)] sm:justify-center">
+            <TabsList className="flex w-full flex-wrap items-start gap-2 rounded-2xl border border-white/80 bg-white/85 p-2 shadow-[0_16px_30px_-20px_rgba(15,23,42,0.5)] h-auto overflow-visible sm:justify-center">
               {canShowInventory && <TabsTrigger value="inventory">Inventory</TabsTrigger>}
               {showTransactionHistory && <TabsTrigger value="transactions">Transaction History</TabsTrigger>}
               {canShowAccounts && (
@@ -1813,6 +1903,12 @@ export default function InventorySystem() {
                   Journal
                 </TabsTrigger>
               )}
+              {canShowResources && (
+                <TabsTrigger value="resources" className="flex items-center gap-2">
+                  <BookOpen className="h-4 w-4" />
+                  Resources
+                </TabsTrigger>
+              )}
               {canShowAiAnalysis && (
                 <TabsTrigger value="ai-analysis">
                   <Brain className="h-4 w-4 mr-2" />
@@ -1841,24 +1937,6 @@ export default function InventorySystem() {
 
           {canShowInventory && (
             <TabsContent value="inventory" className="space-y-8">
-            {showOnboarding && (
-              <OnboardingChecklist
-                isVisible={showOnboarding}
-                isLoading={isOnboardingLoading}
-                error={onboardingError}
-                completedCount={onboardingCompletedCount}
-                totalCount={onboardingTotalCount}
-                steps={onboardingSteps}
-                canCreateLocation={isAdmin}
-                locationName={newLocationName}
-                locationCode={newLocationCode}
-                onLocationNameChange={setNewLocationName}
-                onLocationCodeChange={setNewLocationCode}
-                onCreateLocation={handleCreateLocation}
-                isCreatingLocation={isCreatingLocation}
-                onRefresh={loadOnboardingStatus}
-              />
-            )}
             {canShowSeason && (
               <Card className="border-amber-100 bg-amber-50/40">
                 <CardHeader className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
@@ -2477,6 +2555,11 @@ export default function InventorySystem() {
               <JournalTab />
             </TabsContent>
           )}
+          {canShowResources && (
+            <TabsContent value="resources" className="space-y-6">
+              <ResourcesTab />
+            </TabsContent>
+          )}
           {canShowAiAnalysis && (
             <TabsContent value="ai-analysis" className="space-y-6">
               <AiAnalysisCharts inventory={inventory} transactions={transactions} />
@@ -2951,8 +3034,6 @@ export default function InventorySystem() {
               </div>
             </div>
           </div>
-        )}
-          </>
         )}
       </div>
     </div>

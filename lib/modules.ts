@@ -15,6 +15,7 @@ export const MODULES: ModuleDefinition[] = [
   { id: "sales", label: "Sales", defaultEnabled: true },
   { id: "billing", label: "Billing & Invoices", defaultEnabled: false },
   { id: "journal", label: "Journal", defaultEnabled: false },
+  { id: "resources", label: "Estate Resources", defaultEnabled: false },
   { id: "rainfall", label: "Rainfall", defaultEnabled: false },
   { id: "pepper", label: "Pepper", defaultEnabled: false },
   { id: "ai-analysis", label: "AI Analysis", defaultEnabled: false },
