@@ -14,6 +14,14 @@ export const metadata: Metadata = {
   title: "FarmFlow",
   description: "Coffee estate operations with traceability, yields, and buyer-ready reporting.",
   generator: "v0.dev",
+  icons: {
+    icon: [
+      { url: "/icon.svg", type: "image/svg+xml" },
+      { url: "/icon-light-32x32.png", sizes: "32x32", type: "image/png" },
+    ],
+    shortcut: "/icon-light-32x32.png",
+    apple: "/apple-icon.png",
+  },
 }
 
 export default function RootLayout({

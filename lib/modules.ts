@@ -4,6 +4,13 @@ export type ModuleDefinition = {
   defaultEnabled?: boolean
 }
 
+export type ModuleBundle = {
+  id: string
+  label: string
+  description: string
+  modules: string[]
+}
+
 export const MODULES: ModuleDefinition[] = [
   { id: "inventory", label: "Inventory Management", defaultEnabled: true },
   { id: "transactions", label: "Transaction History", defaultEnabled: true },
@@ -13,6 +20,7 @@ export const MODULES: ModuleDefinition[] = [
   { id: "quality", label: "Quality & Grading", defaultEnabled: false },
   { id: "dispatch", label: "Dispatch", defaultEnabled: true },
   { id: "sales", label: "Sales", defaultEnabled: true },
+  { id: "receivables", label: "Receivables", defaultEnabled: false },
   { id: "billing", label: "Billing & Invoices", defaultEnabled: false },
   { id: "journal", label: "Journal", defaultEnabled: false },
   { id: "resources", label: "Estate Resources", defaultEnabled: false },
@@ -22,6 +30,44 @@ export const MODULES: ModuleDefinition[] = [
   { id: "news", label: "Market News", defaultEnabled: false },
   { id: "weather", label: "Weather", defaultEnabled: false },
   { id: "season", label: "Season View", defaultEnabled: false },
+]
+
+export const MODULE_BUNDLES: ModuleBundle[] = [
+  {
+    id: "estate_ops",
+    label: "Estate Ops",
+    description: "Core estate operations from inventory to sales with rainfall context.",
+    modules: [
+      "inventory",
+      "transactions",
+      "accounts",
+      "processing",
+      "dispatch",
+      "sales",
+      "receivables",
+      "rainfall",
+      "weather",
+      "journal",
+    ],
+  },
+  {
+    id: "exporter_ops",
+    label: "Exporter Ops",
+    description: "Dispatch, sales, and billing focus for exporter workflows.",
+    modules: ["inventory", "transactions", "accounts", "dispatch", "sales", "receivables", "billing"],
+  },
+  {
+    id: "curing_works",
+    label: "Curing Works",
+    description: "Processing, curing, and grading controls for quality-heavy estates.",
+    modules: ["inventory", "transactions", "processing", "curing", "quality", "dispatch"],
+  },
+  {
+    id: "simple_inventory",
+    label: "Simple Inventory Only",
+    description: "Lightweight tracking for stock movements and transactions.",
+    modules: ["inventory", "transactions"],
+  },
 ]
 
 export const MODULE_IDS = MODULES.map((module) => module.id)

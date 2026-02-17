@@ -114,7 +114,7 @@ export default function ResourcesTab() {
             </CardDescription>
           </div>
           <Badge variant="outline" className="bg-white text-emerald-700 border-emerald-200">
-            Owner-enabled module
+            Platform-enabled module
           </Badge>
         </CardHeader>
         <CardContent className="text-sm text-muted-foreground">

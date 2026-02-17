@@ -6,6 +6,22 @@ import { normalizeTenantContext, runTenantQueries, runTenantQuery } from "@/lib/
 import { resolveLocationInfo } from "@/lib/server/location-utils"
 import { logAuditEvent } from "@/lib/server/audit-log"
 import { requirePositiveNumber, toNonNegativeNumber } from "@/lib/number-input"
+import { resolveLocationCompatibility } from "@/lib/server/location-compatibility"
+
+async function resolveBagWeightKg(tenantId: string, role: string) {
+  const tenantContext = normalizeTenantContext(tenantId, role)
+  const rows = await runTenantQuery(
+    sql,
+    tenantContext,
+    sql`
+      SELECT bag_weight_kg
+      FROM tenants
+      WHERE id = ${tenantContext.tenantId}
+      LIMIT 1
+    `,
+  )
+  return Number(rows?.[0]?.bag_weight_kg) || 50
+}
 
 export async function GET(request: Request) {
   try {
@@ -22,12 +38,31 @@ export async function GET(request: Request) {
     const offsetParam = searchParams.get("offset")
     const limit = !all && limitParam ? Math.min(Math.max(Number.parseInt(limitParam, 10) || 0, 1), 500) : null
     const offset = !all && offsetParam ? Math.max(Number.parseInt(offsetParam, 10) || 0, 0) : 0
+    const useLegacyLocationScope = summaryOnly
+    const locationCompatibility =
+      locationId && useLegacyLocationScope ? await resolveLocationCompatibility(sql, tenantContext) : null
+    const legacyLocationCutover =
+      locationCompatibility?.includeLegacyPreLocationRecords && locationCompatibility.firstLocationCreatedAt
+        ? locationCompatibility.firstLocationCreatedAt
+        : null
+    const isLegacyPooledScope = Boolean(locationId && useLegacyLocationScope && legacyLocationCutover)
+    const locationScope = isLegacyPooledScope ? "legacy_pool" : locationId ? "location" : "all"
+    const bagWeightKg = await resolveBagWeightKg(sessionUser.tenantId, sessionUser.role)
 
     let totalCountResult
     let totalsByTypeResult
     let records = []
 
-    const locationClause = locationId ? sql` AND location_id = ${locationId}` : sql``
+    const locationClause =
+      !locationId
+        ? sql``
+        : isLegacyPooledScope
+          ? sql``
+          : sql` AND location_id = ${locationId}`
+    const recordsLocationClause =
+      !locationId
+        ? sql``
+        : sql` AND dr.location_id = ${locationId}`
 
     if (startDate && endDate) {
       const queryList = [
@@ -44,7 +79,7 @@ export async function GET(request: Request) {
             coffee_type,
             bag_type,
             COALESCE(SUM(bags_dispatched), 0) as bags_dispatched,
-            COALESCE(SUM(kgs_received), 0) as kgs_received
+            COALESCE(SUM(COALESCE(NULLIF(kgs_received, 0), bags_dispatched * ${bagWeightKg})), 0) as kgs_received
           FROM dispatch_records
           WHERE dispatch_date >= ${startDate}::date
             AND dispatch_date <= ${endDate}::date
@@ -63,7 +98,7 @@ export async function GET(request: Request) {
                 WHERE dr.dispatch_date >= ${startDate}::date 
                   AND dr.dispatch_date <= ${endDate}::date
                   AND dr.tenant_id = ${tenantContext.tenantId}
-                  ${locationClause}
+                  ${recordsLocationClause}
                 ORDER BY dr.dispatch_date DESC, dr.created_at DESC
                 LIMIT ${limit} OFFSET ${offset}
               `
@@ -74,7 +109,7 @@ export async function GET(request: Request) {
                 WHERE dr.dispatch_date >= ${startDate}::date 
                   AND dr.dispatch_date <= ${endDate}::date
                   AND dr.tenant_id = ${tenantContext.tenantId}
-                  ${locationClause}
+                  ${recordsLocationClause}
                 ORDER BY dr.dispatch_date DESC, dr.created_at DESC
               `,
         )
@@ -97,7 +132,7 @@ export async function GET(request: Request) {
             coffee_type,
             bag_type,
             COALESCE(SUM(bags_dispatched), 0) as bags_dispatched,
-            COALESCE(SUM(kgs_received), 0) as kgs_received
+            COALESCE(SUM(COALESCE(NULLIF(kgs_received, 0), bags_dispatched * ${bagWeightKg})), 0) as kgs_received
           FROM dispatch_records
           WHERE tenant_id = ${tenantContext.tenantId}
             ${locationClause}
@@ -112,7 +147,7 @@ export async function GET(request: Request) {
                 FROM dispatch_records dr
                 LEFT JOIN locations l ON l.id = dr.location_id
                 WHERE dr.tenant_id = ${tenantContext.tenantId}
-                  ${locationClause}
+                  ${recordsLocationClause}
                 ORDER BY dr.dispatch_date DESC, dr.created_at DESC
                 LIMIT ${limit} OFFSET ${offset}
               `
@@ -121,7 +156,7 @@ export async function GET(request: Request) {
                 FROM dispatch_records dr
                 LEFT JOIN locations l ON l.id = dr.location_id
                 WHERE dr.tenant_id = ${tenantContext.tenantId}
-                  ${locationClause}
+                  ${recordsLocationClause}
                 ORDER BY dr.dispatch_date DESC, dr.created_at DESC
               `,
         )
@@ -140,7 +175,7 @@ export async function GET(request: Request) {
       kgs_received: Number(row.kgs_received) || 0,
     }))
 
-    return NextResponse.json({ success: true, records, totalCount, totalsByType })
+    return NextResponse.json({ success: true, records, totalCount, totalsByType, locationScope })
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : "Unknown error"
     if (isModuleAccessError(error)) {

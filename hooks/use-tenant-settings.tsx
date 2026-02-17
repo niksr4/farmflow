@@ -8,6 +8,11 @@ export type TenantSettings = {
   bagWeightKg: number
   estateName: string
   alertThresholds?: AlertThresholds
+  uiPreferences?: UiPreferences
+}
+
+export type UiPreferences = {
+  hideEmptyMetrics: boolean
 }
 
 export type AlertThresholds = {
@@ -28,6 +33,9 @@ export type AlertThresholds = {
 }
 
 const DEFAULT_BAG_WEIGHT_KG = 50
+const DEFAULT_UI_PREFERENCES: UiPreferences = {
+  hideEmptyMetrics: false,
+}
 const DEFAULT_ALERT_THRESHOLDS: AlertThresholds = {
   floatRateIncreasePct: 0.15,
   yieldDropPct: 0.12,
@@ -51,6 +59,7 @@ export function useTenantSettings() {
     bagWeightKg: DEFAULT_BAG_WEIGHT_KG,
     estateName: "",
     alertThresholds: DEFAULT_ALERT_THRESHOLDS,
+    uiPreferences: DEFAULT_UI_PREFERENCES,
   })
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -73,7 +82,11 @@ export function useTenantSettings() {
           ...data.settings.alertThresholds.targets,
         }
       }
-      setSettings({ bagWeightKg, estateName, alertThresholds })
+      const uiPreferences =
+        data.settings?.uiPreferences && typeof data.settings.uiPreferences === "object"
+          ? { ...DEFAULT_UI_PREFERENCES, ...data.settings.uiPreferences }
+          : DEFAULT_UI_PREFERENCES
+      setSettings({ bagWeightKg, estateName, alertThresholds, uiPreferences })
     } catch (err: any) {
       console.error("Error loading tenant settings:", err)
       setError(err.message || "Failed to load tenant settings")
@@ -101,6 +114,10 @@ export function useTenantSettings() {
         nextSettings.alertThresholds && typeof nextSettings.alertThresholds === "object"
           ? nextSettings.alertThresholds
           : undefined
+      const uiPreferences =
+        nextSettings.uiPreferences && typeof nextSettings.uiPreferences === "object"
+          ? { ...settings.uiPreferences, ...nextSettings.uiPreferences }
+          : undefined
       if (estateName !== undefined && estateName.length === 0) {
         throw new Error("Estate name cannot be empty")
       }
@@ -108,6 +125,7 @@ export function useTenantSettings() {
         bagWeightKg,
         ...(estateName !== undefined ? { estateName } : {}),
         ...(alertThresholds ? { alertThresholds } : {}),
+        ...(uiPreferences ? { uiPreferences } : {}),
       }
       const data = await apiRequest<{ success: boolean; settings: TenantSettings }>("/api/tenant-settings", {
         method: "PUT",
@@ -126,14 +144,24 @@ export function useTenantSettings() {
           ...data.settings.alertThresholds.targets,
         }
       }
+      const updatedUiPreferences =
+        data.settings?.uiPreferences && typeof data.settings.uiPreferences === "object"
+          ? { ...DEFAULT_UI_PREFERENCES, ...data.settings.uiPreferences }
+          : settings.uiPreferences ?? DEFAULT_UI_PREFERENCES
       setSettings({
         bagWeightKg: updatedBagWeightKg,
         estateName: updatedEstateName,
         alertThresholds: updatedAlertThresholds,
+        uiPreferences: updatedUiPreferences,
       })
-      return { bagWeightKg: updatedBagWeightKg, estateName: updatedEstateName, alertThresholds: updatedAlertThresholds }
+      return {
+        bagWeightKg: updatedBagWeightKg,
+        estateName: updatedEstateName,
+        alertThresholds: updatedAlertThresholds,
+        uiPreferences: updatedUiPreferences,
+      }
     },
-    [settings.bagWeightKg, settings.estateName, settings.alertThresholds, user?.tenantId],
+    [settings.bagWeightKg, settings.estateName, settings.alertThresholds, settings.uiPreferences, user?.tenantId],
   )
 
   return {

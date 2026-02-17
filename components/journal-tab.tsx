@@ -414,7 +414,9 @@ export default function JournalTab() {
             {loading ? (
               <div className="text-sm text-muted-foreground">Loading entries...</div>
             ) : entries.length === 0 ? (
-              <div className="text-sm text-muted-foreground">No journal entries yet.</div>
+              <div className="text-sm text-muted-foreground">
+                No journal entries yet. Start with fertilizer mixes, sprays, or irrigation notes.
+              </div>
             ) : (
               <div className="rounded-lg border divide-y">
                 {entries.map((entry) => (

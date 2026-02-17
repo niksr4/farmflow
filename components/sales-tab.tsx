@@ -39,6 +39,7 @@ interface SalesRecord {
   bags_sold: number
   price_per_bag: number
   revenue: number
+  kgs_received?: number | null
   kgs?: number | null
   bank_account: string | null
   notes: string | null
@@ -55,6 +56,7 @@ interface SalesSummaryRow {
   coffee_type: string
   bag_type: string
   bags_sold: number
+  kgs_sold?: number
   revenue: number
 }
 
@@ -63,6 +65,9 @@ interface LocationOption {
   name: string
   code: string
 }
+
+type LocationScope = "all" | "location" | "legacy_pool"
+type SalesTotals = { totalBagsSold: number; totalKgsSold: number; totalRevenue: number }
 
 type InventoryTotals = { bags: number; kgs: number }
 type InventoryBreakdown = { cherry: InventoryTotals; parchment: InventoryTotals; total: InventoryTotals }
@@ -79,6 +84,27 @@ const normalizeCoffeeType = (value: string | null | undefined) => {
   if (normalized.includes("arabica")) return "arabica"
   if (normalized.includes("robusta")) return "robusta"
   return "other"
+}
+
+const resolveDispatchReceivedKgs = (
+  row: Pick<DispatchSummaryRow, "kgs_received" | "bags_dispatched">,
+  bagWeightKg: number,
+) => {
+  const received = Number(row.kgs_received) || 0
+  if (received > 0) return received
+  const dispatchedBags = Number(row.bags_dispatched) || 0
+  return dispatchedBags * bagWeightKg
+}
+
+const resolveSalesRecordKgs = (
+  record: Pick<SalesRecord, "kgs" | "kgs_received" | "bags_sold">,
+  bagWeightKg: number,
+) => {
+  const received = Number(record.kgs_received) || 0
+  if (received > 0) return received
+  const kgs = Number(record.kgs) || 0
+  if (kgs > 0) return kgs
+  return (Number(record.bags_sold) || 0) * bagWeightKg
 }
 
 export default function SalesTab() {
@@ -115,7 +141,9 @@ export default function SalesTab() {
   const [overviewSalesSummary, setOverviewSalesSummary] = useState<SalesSummaryRow[]>([])
   const [salesSummary, setSalesSummary] = useState<SalesSummaryRow[]>([])
   const [salesTotalCount, setSalesTotalCount] = useState(0)
-  const [salesTotals, setSalesTotals] = useState({ totalBagsSold: 0, totalRevenue: 0 })
+  const [salesTotals, setSalesTotals] = useState<SalesTotals | null>(null)
+  const [dispatchSummaryScope, setDispatchSummaryScope] = useState<LocationScope>("location")
+  const [salesSummaryScope, setSalesSummaryScope] = useState<LocationScope>("location")
   const [salesPage, setSalesPage] = useState(0)
   const [salesHasMore, setSalesHasMore] = useState(false)
   const [isLoadingMore, setIsLoadingMore] = useState(false)
@@ -208,7 +236,7 @@ export default function SalesTab() {
     salesRecords.forEach((record) => {
       const bagsSoldCount = Number(record.bags_sold) || 0
       totals.totalBagsSold += bagsSoldCount
-      totals.totalKgsSold += bagsSoldCount * bagWeightKg
+      totals.totalKgsSold += resolveSalesRecordKgs(record, bagWeightKg)
       totals.totalRevenue += Number(record.revenue) || 0
     })
 
@@ -242,6 +270,7 @@ export default function SalesTab() {
         setSalesRecords((prev) => (append ? [...prev, ...nextRecords] : nextRecords))
         setSalesTotals({
           totalBagsSold: Number(data.totalBagsSold) || 0,
+          totalKgsSold: Number(data.totalKgsSold) || 0,
           totalRevenue: Number(data.totalRevenue) || 0,
         })
         setSalesTotalCount(nextTotalCount)
@@ -278,15 +307,23 @@ export default function SalesTab() {
 
       if (data.success) {
         setDispatchSummary(Array.isArray(data.totalsByType) ? data.totalsByType : [])
+        const scope = data.locationScope === "legacy_pool" ? "legacy_pool" : selectedLocationId ? "location" : "all"
+        setDispatchSummaryScope(scope)
+      } else {
+        setDispatchSummary([])
+        setDispatchSummaryScope(selectedLocationId ? "location" : "all")
       }
     } catch (error) {
       console.error("Error fetching dispatch records:", error)
+      setDispatchSummary([])
+      setDispatchSummaryScope(selectedLocationId ? "location" : "all")
     }
   }, [selectedFiscalYear, selectedLocationId])
 
   const fetchSalesSummary = useCallback(async () => {
     if (!selectedLocationId) {
       setSalesSummary([])
+      setSalesSummaryScope("all")
       return
     }
     try {
@@ -302,9 +339,15 @@ export default function SalesTab() {
 
       if (data.success) {
         setSalesSummary(Array.isArray(data.totalsByType) ? data.totalsByType : [])
+        setSalesSummaryScope(data.locationScope === "legacy_pool" ? "legacy_pool" : "location")
+      } else {
+        setSalesSummary([])
+        setSalesSummaryScope("location")
       }
     } catch (error) {
       console.error("Error fetching sales summary:", error)
+      setSalesSummary([])
+      setSalesSummaryScope("location")
     }
   }, [selectedFiscalYear, selectedLocationId])
 
@@ -324,9 +367,12 @@ export default function SalesTab() {
 
       if (data.success) {
         setOverviewDispatchSummary(Array.isArray(data.totalsByType) ? data.totalsByType : [])
+      } else {
+        setOverviewDispatchSummary([])
       }
     } catch (error) {
       console.error("Error fetching dispatch summary:", error)
+      setOverviewDispatchSummary([])
     }
   }, [salesFilterLocationId, selectedFiscalYear])
 
@@ -346,9 +392,12 @@ export default function SalesTab() {
 
       if (data.success) {
         setOverviewSalesSummary(Array.isArray(data.totalsByType) ? data.totalsByType : [])
+      } else {
+        setOverviewSalesSummary([])
       }
     } catch (error) {
       console.error("Error fetching sales overview:", error)
+      setOverviewSalesSummary([])
     }
   }, [salesFilterLocationId, selectedFiscalYear])
 
@@ -403,7 +452,7 @@ export default function SalesTab() {
         if (!receivedTotals[type]) {
           receivedTotals[type] = createBreakdown()
         }
-        const kgsReceived = Number(record.kgs_received) || 0
+        const kgsReceived = resolveDispatchReceivedKgs(record, bagWeightKg)
         const bagsReceived = kgsReceived / bagWeightKg
         const bagType = normalizeBagType(record.bag_type)
         receivedTotals[type][bagType].bags += bagsReceived
@@ -418,7 +467,8 @@ export default function SalesTab() {
           soldTotals[type] = createBreakdown()
         }
         const bagsSoldCount = Number(record.bags_sold) || 0
-        const kgsSoldCount = bagsSoldCount * bagWeightKg
+        const kgsSoldCountRaw = Number(record.kgs_sold) || 0
+        const kgsSoldCount = kgsSoldCountRaw > 0 ? kgsSoldCountRaw : bagsSoldCount * bagWeightKg
         const bagType = normalizeBagType(record.bag_type)
         soldTotals[type][bagType].bags += bagsSoldCount
         soldTotals[type][bagType].kgs += kgsSoldCount
@@ -441,8 +491,12 @@ export default function SalesTab() {
       const totalReceivedBags = COFFEE_TYPES.reduce((sum, type) => sum + (receivedTotals[type]?.total.bags || 0), 0)
       const totalSold = COFFEE_TYPES.reduce((sum, type) => sum + (soldTotals[type]?.total.kgs || 0), 0)
       const totalSoldBags = COFFEE_TYPES.reduce((sum, type) => sum + (soldTotals[type]?.total.bags || 0), 0)
-      const totalAvailable = Math.max(0, totalReceived - totalSold)
-      const totalAvailableBags = Math.max(0, totalReceivedBags - totalSoldBags)
+      const totalNetKgs = totalReceived - totalSold
+      const totalNetBags = totalReceivedBags - totalSoldBags
+      const totalAvailable = Math.max(0, totalNetKgs)
+      const totalAvailableBags = Math.max(0, totalNetBags)
+      const totalOverdrawn = Math.max(0, -totalNetKgs)
+      const totalOverdrawnBags = Math.max(0, -totalNetBags)
 
       return {
         receivedTotals,
@@ -454,6 +508,8 @@ export default function SalesTab() {
         totalSoldBags,
         totalAvailable,
         totalAvailableBags,
+        totalOverdrawn,
+        totalOverdrawnBags,
       }
     },
     [bagWeightKg],
@@ -474,9 +530,7 @@ export default function SalesTab() {
       const recordCoffee = String(row.coffee_type || "").toLowerCase()
       if (recordCoffee !== normalizedCoffee) return
       if (normalizeBagType(row.bag_type) !== normalizedBag) return
-      const received = Number(row.kgs_received) || 0
-      const dispatchedBags = Number(row.bags_dispatched) || 0
-      receivedKgs += received > 0 ? received : dispatchedBags * bagWeightKg
+      receivedKgs += resolveDispatchReceivedKgs(row, bagWeightKg)
     })
 
     salesSummary.forEach((row) => {
@@ -484,13 +538,37 @@ export default function SalesTab() {
       if (recordCoffee !== normalizedCoffee) return
       if (normalizeBagType(row.bag_type) !== normalizedBag) return
       const bagsSoldCount = Number(row.bags_sold) || 0
-      soldKgs += bagsSoldCount * bagWeightKg
+      const kgsSoldCountRaw = Number(row.kgs_sold) || 0
+      soldKgs += kgsSoldCountRaw > 0 ? kgsSoldCountRaw : bagsSoldCount * bagWeightKg
     })
 
-    const availableKgs = Math.max(0, receivedKgs - soldKgs)
+    const netKgs = receivedKgs - soldKgs
+    const availableKgs = Math.max(0, netKgs)
     const availableBags = availableKgs / bagWeightKg
-    return { availableKgs, availableBags }
+    const overdrawnKgs = Math.max(0, -netKgs)
+    const overdrawnBags = overdrawnKgs / bagWeightKg
+    return { availableKgs, availableBags, overdrawnKgs, overdrawnBags }
   }
+
+  const editAllowance = useMemo(() => {
+    if (!editingRecord) {
+      return { allowanceKgs: 0, matchesSelection: false }
+    }
+    const editLocationId =
+      editingRecord.location_id ||
+      resolveLocationIdFromLabel(editingRecord.location_name || editingRecord.location_code || editingRecord.estate)
+    const matchesLocation = Boolean(editLocationId) && editLocationId === selectedLocationId
+    const matchesCoffee =
+      String(editingRecord.coffee_type || "").toLowerCase() === String(coffeeType || "").toLowerCase()
+    const matchesBag = normalizeBagType(editingRecord.bag_type) === normalizeBagType(bagType)
+    if (matchesLocation && matchesCoffee && matchesBag) {
+      return {
+        allowanceKgs: resolveSalesRecordKgs(editingRecord, bagWeightKg),
+        matchesSelection: true,
+      }
+    }
+    return { allowanceKgs: 0, matchesSelection: false }
+  }, [bagType, bagWeightKg, coffeeType, editingRecord, resolveLocationIdFromLabel, selectedLocationId])
 
   const handleSave = async () => {
     if (!selectedLocationId) {
@@ -522,10 +600,11 @@ export default function SalesTab() {
     }
 
     const { availableKgs } = getAvailableForSelection()
-    if (kgsValue > availableKgs) {
+    const effectiveAvailableKgs = availableKgs + editAllowance.allowanceKgs
+    if (kgsValue > effectiveAvailableKgs) {
       toast({
         title: "Insufficient Inventory",
-        description: `Only ${availableKgs.toFixed(2)} KGs of ${coffeeType} ${bagType} available based on received inventory.`,
+        description: `Only ${effectiveAvailableKgs.toFixed(2)} KGs of ${coffeeType} ${bagType} available based on received inventory.`,
         variant: "destructive",
       })
       return
@@ -549,6 +628,7 @@ export default function SalesTab() {
           bag_type: bagType,
           buyer_name: buyerName || null,
           bags_sold: bagsSoldValue,
+          kgs_sold: kgsValue,
           price_per_bag: priceValue,
           bank_account: bankAccount || null,
           notes: notes || null,
@@ -614,8 +694,7 @@ export default function SalesTab() {
     }
     setCoffeeType(record.coffee_type || "Arabica")
     setBagType(formatBagTypeLabel(record.bag_type))
-    const kgsFromRecord = Number(record.kgs) || 0
-    const kgsValue = kgsFromRecord > 0 ? kgsFromRecord : Number(record.bags_sold) * bagWeightKg
+    const kgsValue = resolveSalesRecordKgs(record, bagWeightKg)
     setKgsSold(kgsValue ? kgsValue.toFixed(2) : "")
     setPricePerBag(record.price_per_bag.toString())
     setBuyerName(record.buyer_name || "")
@@ -697,7 +776,7 @@ export default function SalesTab() {
         record.coffee_type || "",
         record.bags_sold.toString(),
         formatBagTypeLabel(record.bag_type),
-        ((Number(record.kgs) || 0) > 0 ? Number(record.kgs) : Number(record.bags_sold) * bagWeightKg).toFixed(2),
+        resolveSalesRecordKgs(record, bagWeightKg).toFixed(2),
         record.buyer_name || "",
         record.price_per_bag.toString(),
         record.revenue.toString(),
@@ -729,11 +808,12 @@ export default function SalesTab() {
   }
 
   const fallbackTotals = calculateTotals()
-  const totalBagsSold = salesTotals.totalBagsSold || fallbackTotals.totalBagsSold
-  const totalRevenue = salesTotals.totalRevenue || fallbackTotals.totalRevenue
+  const totalBagsSold = salesTotals?.totalBagsSold ?? fallbackTotals.totalBagsSold
+  const totalKgsSold = salesTotals?.totalKgsSold ?? fallbackTotals.totalKgsSold
+  const totalRevenue = salesTotals?.totalRevenue ?? fallbackTotals.totalRevenue
   const totals = {
     totalBagsSold,
-    totalKgsSold: totalBagsSold * bagWeightKg,
+    totalKgsSold,
     totalRevenue,
   }
   const pricePerBagByType = useMemo(() => {
@@ -768,15 +848,36 @@ export default function SalesTab() {
     salesTotalCount > salesRecords.length
       ? `Showing ${salesRecords.length} of ${salesTotalCount}`
       : `${salesRecords.length} record(s)`
-  const selectionAvailability = getAvailableForSelection()
+  const baseSelectionAvailability = getAvailableForSelection()
+  const netSelectionOverdrawnKgs = Math.max(0, baseSelectionAvailability.overdrawnKgs - editAllowance.allowanceKgs)
+  const netSelectionOverdrawnBags = netSelectionOverdrawnKgs / bagWeightKg
+  const selectionAvailability = {
+    availableKgs: baseSelectionAvailability.availableKgs + editAllowance.allowanceKgs,
+    availableBags: (baseSelectionAvailability.availableKgs + editAllowance.allowanceKgs) / bagWeightKg,
+  }
+  const isLegacyPooledAvailability = dispatchSummaryScope === "legacy_pool" || salesSummaryScope === "legacy_pool"
+  const selectedLocationLabel = selectedLocation?.name || selectedLocation?.code || "No location selected"
+  const exceedsAvailability = kgsSoldValue > selectionAvailability.availableKgs
+  const excessKgs = Math.max(0, kgsSoldValue - selectionAvailability.availableKgs)
+  const projectedRemainingKgs = Math.max(0, selectionAvailability.availableKgs - kgsSoldValue)
+  const projectedRemainingBags = projectedRemainingKgs / bagWeightKg
+  const canSubmitSale =
+    Boolean(selectedLocationId) &&
+    kgsSoldValue > 0 &&
+    pricePerBagValue > 0 &&
+    !exceedsAvailability &&
+    !isSaving
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-8">
       {/* Fiscal Year Selector */}
-      <div className="flex items-center justify-between">
-        <h2 className="text-xl font-semibold">Coffee Sales</h2>
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <h2 className="text-xl font-semibold text-foreground">Coffee Sales</h2>
+          <p className="text-sm text-muted-foreground">Track sales by location, buyer, and lot.</p>
+        </div>
         <div className="flex items-center gap-2">
-          <Label htmlFor="fiscal-year" className="text-sm text-muted-foreground">
+          <Label htmlFor="fiscal-year" className="text-xs uppercase tracking-[0.2em] text-muted-foreground">
             Fiscal Year:
           </Label>
           <Select
@@ -786,7 +887,7 @@ export default function SalesTab() {
               if (fy) setSelectedFiscalYear(fy)
             }}
           >
-            <SelectTrigger className="w-[120px]">
+            <SelectTrigger className="w-[140px]">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
@@ -800,28 +901,92 @@ export default function SalesTab() {
         </div>
       </div>
 
-      <Card className="border-2 border-muted">
+      <Card
+        className={cn(
+          "bg-white/90",
+          exceedsAvailability ? "border-rose-200/80" : "border-emerald-200/80",
+        )}
+      >
         <CardHeader className="pb-3">
-          <CardTitle className="text-sm font-medium text-muted-foreground">Inventory Available for Sale</CardTitle>
-          <CardDescription>Received coffee available to sell (in KGs)</CardDescription>
+          <CardTitle className="text-xs uppercase tracking-[0.2em] text-muted-foreground">Sale Pre-Check</CardTitle>
+          <CardDescription>
+            Validate quantity and revenue before saving.
+          </CardDescription>
+          {isLegacyPooledAvailability && (
+            <p className="text-xs font-medium text-amber-700">
+              Legacy pooled stock mode: availability is estate-wide to preserve pre-location history.
+            </p>
+          )}
+          {editAllowance.matchesSelection && (
+            <p className="text-xs text-muted-foreground">
+              Edit allowance applied: {formatNumber(editAllowance.allowanceKgs)} KGs from this record.
+            </p>
+          )}
+        </CardHeader>
+        <CardContent className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-5">
+          <div className="rounded-lg border border-border/60 bg-white/80 p-3">
+            <p className="text-xs text-muted-foreground">Location</p>
+            <p className="mt-1 text-sm font-semibold text-foreground">{selectedLocationLabel}</p>
+            <p className="mt-1 text-xs text-muted-foreground">{coffeeType} · {bagType}</p>
+          </div>
+          <div className="rounded-lg border border-border/60 bg-white/80 p-3">
+            <p className="text-xs text-muted-foreground">Available now</p>
+            <p className="mt-1 text-sm font-semibold text-foreground">
+              {formatNumber(selectionAvailability.availableKgs)} KGs
+            </p>
+            <p className="mt-1 text-xs text-muted-foreground">{formatNumber(selectionAvailability.availableBags)} bags</p>
+            {netSelectionOverdrawnKgs > 0 && (
+              <p className="mt-1 text-xs text-rose-600">
+                Overdrawn: {formatNumber(netSelectionOverdrawnKgs)} KGs ({formatNumber(netSelectionOverdrawnBags)} bags)
+              </p>
+            )}
+          </div>
+          <div className="rounded-lg border border-border/60 bg-white/80 p-3">
+            <p className="text-xs text-muted-foreground">This entry</p>
+            <p className={cn("mt-1 text-sm font-semibold", exceedsAvailability ? "text-rose-700" : "text-foreground")}>
+              {formatNumber(kgsSoldValue)} KGs
+            </p>
+            <p className="mt-1 text-xs text-muted-foreground">{formatNumber(bagsSoldValue)} bags</p>
+          </div>
+          <div className="rounded-lg border border-border/60 bg-white/80 p-3">
+            <p className="text-xs text-muted-foreground">Projected balance</p>
+            <p className="mt-1 text-sm font-semibold text-foreground">{formatNumber(projectedRemainingKgs)} KGs</p>
+            <p className="mt-1 text-xs text-muted-foreground">{formatNumber(projectedRemainingBags)} bags</p>
+          </div>
+          <div className="rounded-lg border border-border/60 bg-white/80 p-3">
+            <p className="text-xs text-muted-foreground">Estimated revenue</p>
+            <p className="mt-1 text-sm font-semibold text-emerald-700">{formatCurrency(calculatedRevenue)}</p>
+            <p className="mt-1 text-xs text-muted-foreground">Price: {formatCurrency(pricePerBagValue)}</p>
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card className="border-border/70 bg-white/85">
+        <CardHeader className="pb-3">
+          <CardTitle className="text-xs uppercase tracking-[0.2em] text-muted-foreground">
+            Inventory Available for Sale
+          </CardTitle>
+          <CardDescription>
+            Based on dispatch received KGs (falls back to nominal bags x bag weight only when KGs are missing).
+          </CardDescription>
         </CardHeader>
         <CardContent className="grid grid-cols-1 lg:grid-cols-3 gap-4">
           {COFFEE_TYPES.map((type) => {
             const totals = overviewAvailabilityTotals.availableTotals[type]
             return (
               <div key={type} className="space-y-3">
-                <div className="text-sm font-semibold">{type}</div>
-                <div className="rounded-md border p-3 space-y-1">
+                <div className="text-sm font-semibold text-foreground">{type}</div>
+                <div className="rounded-lg border border-border/60 bg-white/80 p-3 space-y-1">
                   <div className="text-xs text-muted-foreground">Cherry</div>
                   <div className="text-lg font-semibold">{formatNumber(totals.cherry.kgs)} KGs</div>
                   <div className="text-xs text-muted-foreground">{formatNumber(totals.cherry.bags)} Bags</div>
                 </div>
-                <div className="rounded-md border p-3 space-y-1">
+                <div className="rounded-lg border border-border/60 bg-white/80 p-3 space-y-1">
                   <div className="text-xs text-muted-foreground">Parchment</div>
                   <div className="text-lg font-semibold">{formatNumber(totals.parchment.kgs)} KGs</div>
                   <div className="text-xs text-muted-foreground">{formatNumber(totals.parchment.bags)} Bags</div>
                 </div>
-                <div className="rounded-md border p-3 space-y-1">
+                <div className="rounded-lg border border-border/60 bg-white/80 p-3 space-y-1">
                   <div className="text-xs text-muted-foreground">Total {type}</div>
                   <div className="text-lg font-semibold">{formatNumber(totals.total.kgs)} KGs</div>
                   <div className="text-xs text-muted-foreground">{formatNumber(totals.total.bags)} Bags</div>
@@ -830,22 +995,31 @@ export default function SalesTab() {
             )
           })}
             <div className="space-y-3">
-            <div className="text-sm font-semibold">Summary</div>
-            <div className="rounded-md border p-3 space-y-1">
+            <div className="text-sm font-semibold text-foreground">Summary</div>
+            <div className="rounded-lg border border-border/60 bg-white/80 p-3 space-y-1">
               <div className="text-xs text-muted-foreground">Total Received</div>
               <div className="text-lg font-semibold">{formatNumber(overviewAvailabilityTotals.totalReceived)} KGs</div>
               <div className="text-xs text-muted-foreground">{formatNumber(overviewAvailabilityTotals.totalReceivedBags)} Bags</div>
             </div>
-            <div className="rounded-md border p-3 space-y-1">
+            <div className="rounded-lg border border-border/60 bg-white/80 p-3 space-y-1">
               <div className="text-xs text-muted-foreground">Total Sold</div>
               <div className="text-lg font-semibold">{formatNumber(overviewAvailabilityTotals.totalSold)} KGs</div>
               <div className="text-xs text-muted-foreground">{formatNumber(overviewAvailabilityTotals.totalSoldBags)} Bags</div>
             </div>
-            <div className="rounded-md border p-3 space-y-1">
+            <div className="rounded-lg border border-border/60 bg-white/80 p-3 space-y-1">
               <div className="text-xs text-muted-foreground">Total Available</div>
               <div className="text-lg font-semibold">{formatNumber(overviewAvailabilityTotals.totalAvailable)} KGs</div>
               <div className="text-xs text-muted-foreground">{formatNumber(overviewAvailabilityTotals.totalAvailableBags)} Bags</div>
             </div>
+            {overviewAvailabilityTotals.totalOverdrawn > 0 && (
+              <div className="rounded-lg border border-rose-200 bg-rose-50/70 p-3 space-y-1">
+                <div className="text-xs text-rose-700">Historical Overdrawn</div>
+                <div className="text-lg font-semibold text-rose-700">
+                  {formatNumber(overviewAvailabilityTotals.totalOverdrawn)} KGs
+                </div>
+                <div className="text-xs text-rose-700">{formatNumber(overviewAvailabilityTotals.totalOverdrawnBags)} Bags</div>
+              </div>
+            )}
           </div>
         </CardContent>
       </Card>
@@ -853,12 +1027,12 @@ export default function SalesTab() {
       {/* Summary Cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         {/* Total Revenue */}
-        <Card className="border-2 border-muted">
+        <Card className="border-border/60 bg-white/85">
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">Total Revenue</CardTitle>
+            <CardTitle className="text-xs uppercase tracking-[0.2em] text-muted-foreground">Total Revenue</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-green-600">{formatCurrency(totals.totalRevenue, 0)}</div>
+            <div className="text-2xl font-semibold text-emerald-700">{formatCurrency(totals.totalRevenue, 0)}</div>
             <div className="text-sm text-muted-foreground mt-1">
               {resolvedSalesCount} sales recorded
             </div>
@@ -869,51 +1043,53 @@ export default function SalesTab() {
         </Card>
 
         {/* Total Bags Sold */}
-        <Card className="border-2 border-muted">
+        <Card className="border-border/60 bg-white/85">
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">Total Bags Sold</CardTitle>
+            <CardTitle className="text-xs uppercase tracking-[0.2em] text-muted-foreground">Bags Sold (Logistics)</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{formatNumber(totals.totalBagsSold)}</div>
+            <div className="text-2xl font-semibold text-foreground">{formatNumber(totals.totalBagsSold)}</div>
             <div className="text-sm text-muted-foreground mt-1">
               KGs Sold: {formatNumber(totals.totalKgsSold)}
             </div>
+            <div className="text-xs text-muted-foreground mt-1">Bags are shipment units, not moisture-adjusted weight.</div>
           </CardContent>
         </Card>
 
         {/* Total KGs Sold */}
-        <Card className="border-2 border-muted">
+        <Card className="border-border/60 bg-white/85">
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">Total KGs Sold</CardTitle>
+            <CardTitle className="text-xs uppercase tracking-[0.2em] text-muted-foreground">KGs Sold (Sales Basis)</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{formatNumber(totals.totalKgsSold)}</div>
+            <div className="text-2xl font-semibold text-foreground">{formatNumber(totals.totalKgsSold)}</div>
             <div className="text-sm text-muted-foreground mt-1">
               Bags Sold: {formatNumber(totals.totalBagsSold)}
             </div>
+            <div className="text-xs text-muted-foreground mt-1">Validated against dispatch received KGs.</div>
           </CardContent>
         </Card>
 
         {/* Price per bag by coffee + form */}
-        <Card className="border-2 border-muted">
+        <Card className="border-border/60 bg-white/85">
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">Price/Bag by Type</CardTitle>
+            <CardTitle className="text-xs uppercase tracking-[0.2em] text-muted-foreground">Price/Bag by Type</CardTitle>
           </CardHeader>
           <CardContent>
             <div className="grid grid-cols-2 gap-3 text-sm">
-              <div className="rounded-md border p-2">
+              <div className="rounded-lg border border-border/60 bg-white/80 p-2">
                 <div className="text-xs text-muted-foreground">AP</div>
                 <div className="text-lg font-semibold">{formatCurrency(pricePerBagByType.ap)}</div>
               </div>
-              <div className="rounded-md border p-2">
+              <div className="rounded-lg border border-border/60 bg-white/80 p-2">
                 <div className="text-xs text-muted-foreground">AC</div>
                 <div className="text-lg font-semibold">{formatCurrency(pricePerBagByType.ac)}</div>
               </div>
-              <div className="rounded-md border p-2">
+              <div className="rounded-lg border border-border/60 bg-white/80 p-2">
                 <div className="text-xs text-muted-foreground">RP</div>
                 <div className="text-lg font-semibold">{formatCurrency(pricePerBagByType.rp)}</div>
               </div>
-              <div className="rounded-md border p-2">
+              <div className="rounded-lg border border-border/60 bg-white/80 p-2">
                 <div className="text-xs text-muted-foreground">RC</div>
                 <div className="text-lg font-semibold">{formatCurrency(pricePerBagByType.rc)}</div>
               </div>
@@ -924,7 +1100,7 @@ export default function SalesTab() {
       </div>
 
       {/* Add/Edit Sale Form */}
-      <Card>
+      <Card className="border-border/70 bg-white/85">
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <IndianRupee className="h-5 w-5" />
@@ -937,7 +1113,7 @@ export default function SalesTab() {
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
             {/* Date */}
             <div className="space-y-2">
               <Label>Date</Label>
@@ -1000,7 +1176,11 @@ export default function SalesTab() {
                   ))}
                 </SelectContent>
               </Select>
-              <p className="text-xs text-muted-foreground">Totals and availability follow this location.</p>
+              <p className="text-xs text-muted-foreground">
+                {isLegacyPooledAvailability
+                  ? "Legacy pooled mode is active for this estate; availability is estate-wide."
+                  : "Totals and availability follow this location."}
+              </p>
             </div>
 
             {/* Coffee Type */}
@@ -1055,15 +1235,32 @@ export default function SalesTab() {
                 onKeyDown={blockInvalidNumberKey}
                 onChange={handleNonNegativeChange(setKgsSold)}
               />
-              <p className="text-xs text-muted-foreground">
-                Available: {selectionAvailability.availableKgs.toFixed(2)} KGs ({selectionAvailability.availableBags.toFixed(2)} bags)
-              </p>
+              {exceedsAvailability ? (
+                <p className="text-xs text-rose-600">
+                  Exceeds available stock by {formatNumber(excessKgs)} KGs.
+                </p>
+              ) : (
+                <p className="text-xs text-muted-foreground">
+                  Available: {selectionAvailability.availableKgs.toFixed(2)} KGs ({selectionAvailability.availableBags.toFixed(2)} bags)
+                </p>
+              )}
+              {editAllowance.matchesSelection && (
+                <p className="text-xs text-muted-foreground">
+                  Includes {formatNumber(editAllowance.allowanceKgs)} KGs from the record you are editing.
+                </p>
+              )}
+              {netSelectionOverdrawnKgs > 0 && (
+                <p className="text-xs text-rose-600">
+                  Historical mismatch: sold exceeds received by {formatNumber(netSelectionOverdrawnKgs)} KGs (
+                  {formatNumber(netSelectionOverdrawnBags)} bags).
+                </p>
+              )}
             </div>
 
             {/* Bags Sold (Auto-calculated) */}
             <div className="space-y-2">
               <Label>Bags Sold (Auto)</Label>
-              <div className="flex items-center h-10 px-3 border rounded-md bg-muted">
+              <div className="flex items-center h-10 px-3 border rounded-md bg-muted/50">
                 <span className="font-medium">{bagsSoldValue.toFixed(2)}</span>
               </div>
               <p className="text-xs text-muted-foreground">Auto-calculated (KGs / {bagWeightKg})</p>
@@ -1089,9 +1286,9 @@ export default function SalesTab() {
             {/* Revenue (Auto-calculated) */}
             <div className="space-y-2">
               <Label>Revenue (Calculated)</Label>
-              <div className="flex items-center h-10 px-3 border rounded-md bg-muted">
-                <TrendingUp className="h-4 w-4 mr-2 text-green-600" />
-                <span className="font-medium text-green-600">₹{calculatedRevenue.toLocaleString()}</span>
+              <div className="flex items-center h-10 px-3 border rounded-md bg-muted/50">
+                <TrendingUp className="h-4 w-4 mr-2 text-emerald-600" />
+                <span className="font-medium text-emerald-700">₹{calculatedRevenue.toLocaleString()}</span>
               </div>
               <p className="text-xs text-muted-foreground">Bags Sold x Price/Bag</p>
             </div>
@@ -1131,7 +1328,7 @@ export default function SalesTab() {
             </div>
 
             {/* Notes */}
-            <div className="space-y-2">
+            <div className="space-y-2 md:col-span-2 xl:col-span-2">
               <Label>Notes (Optional)</Label>
               <Input
                 type="text"
@@ -1142,13 +1339,17 @@ export default function SalesTab() {
             </div>
           </div>
 
-          <div className="mt-4 flex justify-end gap-2">
+          <div className="mt-4 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
             {editingRecord && (
-              <Button variant="outline" onClick={resetForm}>
+              <Button variant="outline" onClick={resetForm} className="w-full sm:w-auto">
                 Cancel
               </Button>
             )}
-            <Button onClick={handleSave} disabled={isSaving} className="bg-green-700 hover:bg-green-800">
+            <Button
+              onClick={handleSave}
+              disabled={!canSubmitSale}
+              className="w-full bg-emerald-700 hover:bg-emerald-800 sm:w-auto"
+            >
               {isSaving ? (
                 <>
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
@@ -1162,13 +1363,18 @@ export default function SalesTab() {
               )}
             </Button>
           </div>
+          {!canSubmitSale && !isSaving && (
+            <p className="mt-2 text-xs text-muted-foreground">
+              Enter location, quantity, and price. Quantity must be within available stock.
+            </p>
+          )}
         </CardContent>
       </Card>
 
       {/* Sales Records Table */}
-      <Card>
+      <Card className="border-border/70 bg-white/85">
         <CardHeader>
-          <div className="flex items-center justify-between">
+          <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
             <div>
               <CardTitle className="flex items-center gap-2">
                 <TrendingUp className="h-5 w-5" />
@@ -1176,12 +1382,12 @@ export default function SalesTab() {
               </CardTitle>
               <CardDescription>History of all coffee sales · {resolvedSalesCountLabel}</CardDescription>
             </div>
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
               <Select value={salesFilterLocationId} onValueChange={(value) => {
                 setSalesFilterLocationId(value)
                 setSalesPage(0)
               }}>
-                <SelectTrigger className="w-[180px] bg-transparent">
+                <SelectTrigger className="w-full bg-white/70 sm:w-[220px]">
                   <SelectValue placeholder="All locations" />
                 </SelectTrigger>
                 <SelectContent>
@@ -1193,7 +1399,7 @@ export default function SalesTab() {
                   ))}
                 </SelectContent>
               </Select>
-              <Button variant="outline" size="sm" onClick={exportToCSV} className="bg-transparent">
+              <Button variant="outline" size="sm" onClick={exportToCSV} className="w-full bg-transparent sm:w-auto">
                 <Download className="mr-2 h-4 w-4" />
                 Export CSV
               </Button>
@@ -1206,32 +1412,35 @@ export default function SalesTab() {
               <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
             </div>
           ) : salesRecords.length === 0 ? (
-            <div className="text-center py-8 text-muted-foreground">No sales records found</div>
+            <div className="text-center py-8 text-muted-foreground">
+              <p>No sales recorded yet</p>
+              <p className="text-sm mt-2">Add your first buyer and price to start tracking revenue.</p>
+            </div>
           ) : (
             <div className="space-y-4">
               <div className="overflow-x-auto">
                 <Table>
                   <TableHeader>
-                    <TableRow className="bg-muted/50">
-                      <TableHead className="sticky top-0 bg-muted/60">Date</TableHead>
-                      <TableHead className="sticky top-0 bg-muted/60">B&L Batch No</TableHead>
-                      <TableHead className="sticky top-0 bg-muted/60">Lot ID</TableHead>
-                      <TableHead className="sticky top-0 bg-muted/60">Location</TableHead>
-                      <TableHead className="sticky top-0 bg-muted/60">Coffee Type</TableHead>
-                      <TableHead className="sticky top-0 bg-muted/60">Bag Type</TableHead>
-                      <TableHead className="sticky top-0 bg-muted/60">Buyer</TableHead>
-                      <TableHead className="text-right sticky top-0 bg-muted/60">Bags Sold</TableHead>
-                      <TableHead className="text-right sticky top-0 bg-muted/60">KGs Sold</TableHead>
-                      <TableHead className="text-right sticky top-0 bg-muted/60">Price/Bag</TableHead>
-                      <TableHead className="text-right sticky top-0 bg-muted/60">Revenue</TableHead>
-                      <TableHead className="sticky top-0 bg-muted/60">Bank Account</TableHead>
-                      <TableHead className="sticky top-0 bg-muted/60">Notes</TableHead>
-                      <TableHead className="text-right sticky top-0 bg-muted/60">Actions</TableHead>
+                    <TableRow>
+                      <TableHead className="sticky top-0 bg-muted/70 backdrop-blur">Date</TableHead>
+                      <TableHead className="sticky top-0 bg-muted/70 backdrop-blur">B&L Batch No</TableHead>
+                      <TableHead className="sticky top-0 bg-muted/70 backdrop-blur">Lot ID</TableHead>
+                      <TableHead className="sticky top-0 bg-muted/70 backdrop-blur">Location</TableHead>
+                      <TableHead className="sticky top-0 bg-muted/70 backdrop-blur">Coffee Type</TableHead>
+                      <TableHead className="sticky top-0 bg-muted/70 backdrop-blur">Bag Type</TableHead>
+                      <TableHead className="sticky top-0 bg-muted/70 backdrop-blur">Buyer</TableHead>
+                      <TableHead className="text-right sticky top-0 bg-muted/70 backdrop-blur">Bags Sold</TableHead>
+                      <TableHead className="text-right sticky top-0 bg-muted/70 backdrop-blur">KGs Sold</TableHead>
+                      <TableHead className="text-right sticky top-0 bg-muted/70 backdrop-blur">Price/Bag</TableHead>
+                      <TableHead className="text-right sticky top-0 bg-muted/70 backdrop-blur">Revenue</TableHead>
+                      <TableHead className="sticky top-0 bg-muted/70 backdrop-blur">Bank Account</TableHead>
+                      <TableHead className="sticky top-0 bg-muted/70 backdrop-blur">Notes</TableHead>
+                      <TableHead className="text-right sticky top-0 bg-muted/70 backdrop-blur">Actions</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {salesRecords.map((record, index) => (
-                      <TableRow key={record.id} className={index % 2 === 0 ? "bg-white" : "bg-muted/20"}>
+                    {salesRecords.map((record) => (
+                      <TableRow key={record.id}>
                         <TableCell>{formatDateOnly(record.sale_date)}</TableCell>
                         <TableCell>{record.batch_no || "-"}</TableCell>
                         <TableCell>{record.lot_id || "-"}</TableCell>
@@ -1241,12 +1450,10 @@ export default function SalesTab() {
                         <TableCell>{record.buyer_name || "-"}</TableCell>
                         <TableCell className="text-right">{formatNumber(Number(record.bags_sold) || 0)}</TableCell>
                         <TableCell className="text-right">
-                          {formatNumber(
-                            (Number(record.kgs) || 0) > 0 ? Number(record.kgs) : Number(record.bags_sold) * bagWeightKg,
-                          )}
+                          {formatNumber(resolveSalesRecordKgs(record, bagWeightKg))}
                         </TableCell>
                         <TableCell className="text-right">{formatCurrency(Number(record.price_per_bag) || 0)}</TableCell>
-                        <TableCell className="text-right font-medium text-green-600">
+                        <TableCell className="text-right font-medium text-emerald-700">
                           {formatCurrency(Number(record.revenue) || 0, 0)}
                         </TableCell>
                         <TableCell>{record.bank_account || "-"}</TableCell>

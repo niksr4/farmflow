@@ -50,8 +50,10 @@ export async function GET(request: Request) {
         `,
       )
       if (userModules?.length) {
-        const userEnabled = resolveEnabledModules(userModules)
-        const effective = tenantEnabled.filter((moduleId) => userEnabled.includes(moduleId))
+        const userMap = new Map(userModules.map((row: any) => [String(row.module), Boolean(row.enabled)]))
+        const effective = tenantEnabled.filter((moduleId) =>
+          userMap.has(moduleId) ? Boolean(userMap.get(moduleId)) : true,
+        )
         return NextResponse.json({ success: true, modules: effective })
       }
     }

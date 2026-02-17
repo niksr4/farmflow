@@ -26,6 +26,10 @@ const DEFAULT_ALERT_THRESHOLDS = {
   },
 }
 
+const DEFAULT_UI_PREFERENCES = {
+  hideEmptyMetrics: false,
+}
+
 const sanitizeAlertThresholds = (input: any) => {
   if (!input || typeof input !== "object") return null
   const allowedFields = [
@@ -68,6 +72,15 @@ const sanitizeAlertThresholds = (input: any) => {
   return Object.keys(cleaned).length > 0 ? cleaned : null
 }
 
+const sanitizeUiPreferences = (input: any) => {
+  if (!input || typeof input !== "object") return null
+  const cleaned: any = {}
+  if (typeof input.hideEmptyMetrics === "boolean") {
+    cleaned.hideEmptyMetrics = input.hideEmptyMetrics
+  }
+  return Object.keys(cleaned).length > 0 ? cleaned : null
+}
+
 export async function GET() {
   try {
     if (!sql) {
@@ -80,7 +93,7 @@ export async function GET() {
       sql,
       tenantContext,
       sql`
-        SELECT name, bag_weight_kg, alert_thresholds
+        SELECT name, bag_weight_kg, alert_thresholds, ui_preferences
         FROM tenants
         WHERE id = ${tenantContext.tenantId}
         LIMIT 1
@@ -103,7 +116,22 @@ export async function GET() {
     if (parsedThresholds?.targets && typeof parsedThresholds.targets === "object") {
       alertThresholds.targets = { ...DEFAULT_ALERT_THRESHOLDS.targets, ...parsedThresholds.targets }
     }
-    return NextResponse.json({ success: true, settings: { bagWeightKg, estateName, alertThresholds } })
+    const rawUiPreferences = rows?.[0]?.ui_preferences
+    let parsedUiPreferences: any = null
+    if (rawUiPreferences) {
+      try {
+        parsedUiPreferences =
+          typeof rawUiPreferences === "string"
+            ? JSON.parse(rawUiPreferences)
+            : typeof rawUiPreferences === "object"
+              ? rawUiPreferences
+              : null
+      } catch (err) {
+        console.warn("Failed to parse ui preferences JSON:", err)
+      }
+    }
+    const uiPreferences = { ...DEFAULT_UI_PREFERENCES, ...(parsedUiPreferences || {}) }
+    return NextResponse.json({ success: true, settings: { bagWeightKg, estateName, alertThresholds, uiPreferences } })
   } catch (error: any) {
     console.error("Error loading tenant settings:", error)
     return NextResponse.json({ success: false, error: error.message || "Failed to load tenant settings" }, { status: 500 })
@@ -127,6 +155,7 @@ export async function PUT(request: Request) {
     const bagWeightKg = Number(body.bagWeightKg)
     const estateNameInput = typeof body.estateName === "string" ? body.estateName.trim() : null
     const alertThresholdsInput = sanitizeAlertThresholds(body.alertThresholds)
+    const uiPreferencesInput = sanitizeUiPreferences(body.uiPreferences)
 
     if (!Number.isFinite(bagWeightKg)) {
       return NextResponse.json({ success: false, error: "bagWeightKg must be a number" }, { status: 400 })
@@ -148,7 +177,7 @@ export async function PUT(request: Request) {
       sql,
       tenantContext,
       sql`
-        SELECT bag_weight_kg, name, alert_thresholds
+        SELECT bag_weight_kg, name, alert_thresholds, ui_preferences
         FROM tenants
         WHERE id = ${tenantContext.tenantId}
         LIMIT 1
@@ -162,9 +191,10 @@ export async function PUT(request: Request) {
         UPDATE tenants
         SET bag_weight_kg = ${bagWeightKg},
             name = COALESCE(${estateNameInput}, name),
-            alert_thresholds = COALESCE(${alertThresholdsInput ? JSON.stringify(alertThresholdsInput) : null}::jsonb, alert_thresholds)
+            alert_thresholds = COALESCE(${alertThresholdsInput ? JSON.stringify(alertThresholdsInput) : null}::jsonb, alert_thresholds),
+            ui_preferences = COALESCE(${uiPreferencesInput ? JSON.stringify(uiPreferencesInput) : null}::jsonb, ui_preferences)
         WHERE id = ${tenantContext.tenantId}
-        RETURNING bag_weight_kg, name, alert_thresholds
+        RETURNING bag_weight_kg, name, alert_thresholds, ui_preferences
       `,
     )
 
@@ -188,6 +218,21 @@ export async function PUT(request: Request) {
     if (parsedThresholds?.targets && typeof parsedThresholds.targets === "object") {
       alertThresholds.targets = { ...DEFAULT_ALERT_THRESHOLDS.targets, ...parsedThresholds.targets }
     }
+    const storedUiPreferences = rows?.[0]?.ui_preferences
+    let parsedUiPreferences: any = null
+    if (storedUiPreferences) {
+      try {
+        parsedUiPreferences =
+          typeof storedUiPreferences === "string"
+            ? JSON.parse(storedUiPreferences)
+            : typeof storedUiPreferences === "object"
+              ? storedUiPreferences
+              : null
+      } catch (err) {
+        console.warn("Failed to parse stored ui preferences:", err)
+      }
+    }
+    const uiPreferences = { ...DEFAULT_UI_PREFERENCES, ...(parsedUiPreferences || {}) }
 
     await logAuditEvent(sql, sessionUser, {
       action: "update",
@@ -197,7 +242,7 @@ export async function PUT(request: Request) {
       after: rows?.[0] ?? null,
     })
 
-    return NextResponse.json({ success: true, settings: { bagWeightKg: updated, estateName, alertThresholds } })
+    return NextResponse.json({ success: true, settings: { bagWeightKg: updated, estateName, alertThresholds, uiPreferences } })
   } catch (error: any) {
     console.error("Error updating tenant settings:", error)
     return NextResponse.json({ success: false, error: error.message || "Failed to update tenant settings" }, { status: 500 })

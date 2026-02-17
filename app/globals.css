@@ -4,24 +4,24 @@
 
 @layer base {
   :root {
-    --background: 36 33% 96%;
-    --foreground: 24 22% 12%;
-    --card: 0 0% 100%;
-    --card-foreground: 24 22% 12%;
-    --popover: 0 0% 100%;
-    --popover-foreground: 24 22% 12%;
+    --background: 30 33% 97%;
+    --foreground: 24 26% 11%;
+    --card: 0 0% 99%;
+    --card-foreground: 24 26% 11%;
+    --popover: 0 0% 99%;
+    --popover-foreground: 24 26% 11%;
     --primary: 24 52% 36%;
     --primary-foreground: 30 100% 98%;
-    --secondary: 33 30% 93%;
-    --secondary-foreground: 24 18% 18%;
-    --muted: 33 24% 92%;
-    --muted-foreground: 24 12% 45%;
-    --accent: 152 25% 88%;
-    --accent-foreground: 164 22% 20%;
+    --secondary: 0 0% 95%;
+    --secondary-foreground: 24 20% 18%;
+    --muted: 0 0% 94%;
+    --muted-foreground: 24 16% 38%;
+    --accent: 152 28% 90%;
+    --accent-foreground: 164 24% 18%;
     --destructive: 0 70% 52%;
     --destructive-foreground: 0 0% 100%;
-    --border: 32 18% 86%;
-    --input: 32 18% 86%;
+    --border: 0 0% 88%;
+    --input: 0 0% 88%;
     --ring: 24 52% 36%;
     --radius: 0.75rem;
   }
@@ -54,11 +54,13 @@
     @apply border-border;
   }
   body {
-    @apply bg-background text-foreground;
+    @apply bg-background text-foreground antialiased;
     font-family: var(--font-body), "Manrope", "Segoe UI", sans-serif;
     position: relative;
     min-height: 100%;
     isolation: isolate;
+    line-height: 1.6;
+    text-rendering: optimizeLegibility;
   }
 }
 
@@ -67,11 +69,7 @@ body::before {
   position: fixed;
   inset: 0;
   z-index: -1;
-  background:
-    radial-gradient(circle at 12% 18%, rgba(120, 82, 46, 0.22), transparent 55%),
-    radial-gradient(circle at 82% 12%, rgba(69, 111, 96, 0.22), transparent 50%),
-    radial-gradient(circle at 35% 88%, rgba(235, 216, 190, 0.7), transparent 55%),
-    linear-gradient(120deg, rgba(255, 255, 255, 0.72), rgba(232, 219, 200, 0.95));
+  background: hsl(var(--background));
 }
 
 .font-display {

@@ -61,14 +61,28 @@ interface BagTotals {
   robusta_dry_cherry_bags: number
 }
 
+type LocationScope = "all" | "location" | "legacy_pool"
+
 const COFFEE_TYPES = DEFAULT_COFFEE_VARIETIES
 const BAG_TYPES = ["Dry Parchment", "Dry Cherry"]
+const emptyBagTotals: BagTotals = {
+  arabica_dry_parchment_bags: 0,
+  arabica_dry_cherry_bags: 0,
+  robusta_dry_parchment_bags: 0,
+  robusta_dry_cherry_bags: 0,
+}
 const normalizeBagTypeKey = (value: string) => {
   const normalized = value.toLowerCase().trim()
   if (normalized.includes("cherry")) return "dry_cherry"
   return "dry_parchment"
 }
 const formatBagTypeLabel = (value: string) => (normalizeBagTypeKey(value) === "dry_cherry" ? "Dry Cherry" : "Dry Parchment")
+const resolveDispatchRecordReceivedKgs = (record: Pick<DispatchRecord, "kgs_received" | "bags_dispatched">, bagWeightKg: number) => {
+  const kgsReceivedValue = Number(record.kgs_received) || 0
+  if (kgsReceivedValue > 0) return kgsReceivedValue
+  const bagsValue = Number(record.bags_dispatched) || 0
+  return bagsValue * bagWeightKg
+}
 
 export default function DispatchTab() {
   const { user } = useAuth()
@@ -88,21 +102,14 @@ export default function DispatchTab() {
   const [kgsReceived, setKgsReceived] = useState<string>("")
   const [notes, setNotes] = useState<string>("")
   
-  const [bagTotals, setBagTotals] = useState<BagTotals>({
-    arabica_dry_parchment_bags: 0,
-    arabica_dry_cherry_bags: 0,
-    robusta_dry_parchment_bags: 0,
-    robusta_dry_cherry_bags: 0,
-  })
-  const [formBagTotals, setFormBagTotals] = useState<BagTotals>({
-    arabica_dry_parchment_bags: 0,
-    arabica_dry_cherry_bags: 0,
-    robusta_dry_parchment_bags: 0,
-    robusta_dry_cherry_bags: 0,
-  })
+  const [bagTotals, setBagTotals] = useState<BagTotals>(emptyBagTotals)
+  const [formBagTotals, setFormBagTotals] = useState<BagTotals>(emptyBagTotals)
   const [dispatchRecords, setDispatchRecords] = useState<DispatchRecord[]>([])
   const [dispatchSummary, setDispatchSummary] = useState<DispatchSummaryRow[]>([])
   const [formDispatchSummary, setFormDispatchSummary] = useState<DispatchSummaryRow[]>([])
+  const [bagTotalsScope, setBagTotalsScope] = useState<LocationScope>("all")
+  const [formBagTotalsScope, setFormBagTotalsScope] = useState<LocationScope>("location")
+  const [formDispatchScope, setFormDispatchScope] = useState<LocationScope>("location")
   const [dispatchTotalCount, setDispatchTotalCount] = useState(0)
   const [dispatchPage, setDispatchPage] = useState(0)
   const [dispatchHasMore, setDispatchHasMore] = useState(false)
@@ -205,6 +212,37 @@ export default function DispatchTab() {
     return totals
   }, [dispatchRecords, dispatchSummary])
 
+  const dispatchReceivedKgsTotals = useMemo(() => {
+    const totals = {
+      arabica_dry_parchment: 0,
+      arabica_dry_cherry: 0,
+      robusta_dry_parchment: 0,
+      robusta_dry_cherry: 0,
+    }
+
+    if (dispatchSummary.length > 0) {
+      dispatchSummary.forEach((row) => {
+        const coffeeKey = String(row.coffee_type || "").toLowerCase()
+        const bagKey = normalizeBagTypeKey(String(row.bag_type || ""))
+        const key = `${coffeeKey}_${bagKey}` as keyof typeof totals
+        if (totals[key] !== undefined) {
+          totals[key] += Number(row.kgs_received) || 0
+        }
+      })
+      return totals
+    }
+
+    dispatchRecords.forEach((record) => {
+      const bagKey = normalizeBagTypeKey(record.bag_type)
+      const key = `${record.coffee_type.toLowerCase()}_${bagKey}` as keyof typeof totals
+      if (totals[key] !== undefined) {
+        totals[key] += resolveDispatchRecordReceivedKgs(record, bagWeightKg)
+      }
+    })
+
+    return totals
+  }, [bagWeightKg, dispatchRecords, dispatchSummary])
+
   const formDispatchedTotals = useMemo(() => {
     const totals = {
       arabica_dry_parchment: 0,
@@ -245,73 +283,100 @@ export default function DispatchTab() {
   }, [dispatchRecords, formDispatchSummary, resolveLocationIdFromLabel, selectedLocationId])
 
   // Fetch bag totals from processing data across all locations
-  const fetchBagTotals = useCallback(async (locationId: string | null, setter: (totals: BagTotals) => void) => {
-    try {
-      const { startDate, endDate } = getFiscalYearDateRange(selectedFiscalYear)
-      const params = new URLSearchParams({
-        summary: "bagTotals",
-        fiscalYearStart: startDate,
-        fiscalYearEnd: endDate,
-      })
+  const fetchBagTotals = useCallback(
+    async (
+      locationId: string | null,
+      setter: (totals: BagTotals) => void,
+      scopeSetter?: (scope: LocationScope) => void,
+    ) => {
       const resolvedLocation = locationId ? locationId.trim() : ""
-      if (resolvedLocation) {
-        params.set("locationId", resolvedLocation)
-      }
-      const response = await fetch(`/api/processing-records?${params.toString()}`)
-      const data = await response.json()
-
-      if (!data.success || !Array.isArray(data.totals)) {
-        return
-      }
-
-      let arabicaDryParchment = 0
-      let arabicaDryCherry = 0
-      let robustaDryParchment = 0
-      let robustaDryCherry = 0
-
-      for (const record of data.totals) {
-        const type = String(record.coffee_type || "").toLowerCase()
-        if (type === "arabica") {
-          arabicaDryParchment += Number(record.dry_p_bags) || 0
-          arabicaDryCherry += Number(record.dry_cherry_bags) || 0
-        } else if (type === "robusta") {
-          robustaDryParchment += Number(record.dry_p_bags) || 0
-          robustaDryCherry += Number(record.dry_cherry_bags) || 0
+      const fallbackScope: LocationScope = resolvedLocation ? "location" : "all"
+      try {
+        const { startDate, endDate } = getFiscalYearDateRange(selectedFiscalYear)
+        const params = new URLSearchParams({
+          summary: "bagTotals",
+          fiscalYearStart: startDate,
+          fiscalYearEnd: endDate,
+        })
+        if (resolvedLocation) {
+          params.set("locationId", resolvedLocation)
         }
+        const response = await fetch(`/api/processing-records?${params.toString()}`)
+        const data = await response.json()
+
+        if (!data.success || !Array.isArray(data.totals)) {
+          setter(emptyBagTotals)
+          scopeSetter?.(fallbackScope)
+          return
+        }
+
+        let arabicaDryParchment = 0
+        let arabicaDryCherry = 0
+        let robustaDryParchment = 0
+        let robustaDryCherry = 0
+
+        for (const record of data.totals) {
+          const type = String(record.coffee_type || "").toLowerCase()
+          if (type === "arabica") {
+            arabicaDryParchment += Number(record.dry_p_bags) || 0
+            arabicaDryCherry += Number(record.dry_cherry_bags) || 0
+          } else if (type === "robusta") {
+            robustaDryParchment += Number(record.dry_p_bags) || 0
+            robustaDryCherry += Number(record.dry_cherry_bags) || 0
+          }
+        }
+
+        setter({
+          arabica_dry_parchment_bags: Number(arabicaDryParchment.toFixed(2)),
+          arabica_dry_cherry_bags: Number(arabicaDryCherry.toFixed(2)),
+          robusta_dry_parchment_bags: Number(robustaDryParchment.toFixed(2)),
+          robusta_dry_cherry_bags: Number(robustaDryCherry.toFixed(2)),
+        })
+        scopeSetter?.(data.locationScope === "legacy_pool" ? "legacy_pool" : fallbackScope)
+      } catch (error) {
+        console.error("Error fetching bag totals:", error)
+        setter(emptyBagTotals)
+        scopeSetter?.(fallbackScope)
       }
+    },
+    [selectedFiscalYear],
+  )
 
-      setter({
-        arabica_dry_parchment_bags: Number(arabicaDryParchment.toFixed(2)),
-        arabica_dry_cherry_bags: Number(arabicaDryCherry.toFixed(2)),
-        robusta_dry_parchment_bags: Number(robustaDryParchment.toFixed(2)),
-        robusta_dry_cherry_bags: Number(robustaDryCherry.toFixed(2)),
-      })
-    } catch (error) {
-      console.error("Error fetching bag totals:", error)
-    }
-  }, [selectedFiscalYear])
-
-  const fetchDispatchSummary = useCallback(async (locationId: string | null, setter: (rows: DispatchSummaryRow[]) => void) => {
-    try {
-      const { startDate, endDate } = getFiscalYearDateRange(selectedFiscalYear)
-      const params = new URLSearchParams({
-        startDate,
-        endDate,
-        summaryOnly: "true",
-      })
+  const fetchDispatchSummary = useCallback(
+    async (
+      locationId: string | null,
+      setter: (rows: DispatchSummaryRow[]) => void,
+      scopeSetter?: (scope: LocationScope) => void,
+    ) => {
       const resolvedLocation = locationId ? locationId.trim() : ""
-      if (resolvedLocation) {
-        params.set("locationId", resolvedLocation)
+      const fallbackScope: LocationScope = resolvedLocation ? "location" : "all"
+      try {
+        const { startDate, endDate } = getFiscalYearDateRange(selectedFiscalYear)
+        const params = new URLSearchParams({
+          startDate,
+          endDate,
+          summaryOnly: "true",
+        })
+        if (resolvedLocation) {
+          params.set("locationId", resolvedLocation)
+        }
+        const response = await fetch(`/api/dispatch?${params.toString()}`)
+        const data = await response.json()
+        if (data.success) {
+          setter(Array.isArray(data.totalsByType) ? data.totalsByType : [])
+          scopeSetter?.(data.locationScope === "legacy_pool" ? "legacy_pool" : fallbackScope)
+        } else {
+          setter([])
+          scopeSetter?.(fallbackScope)
+        }
+      } catch (error) {
+        console.error("Error fetching dispatch summary:", error)
+        setter([])
+        scopeSetter?.(fallbackScope)
       }
-      const response = await fetch(`/api/dispatch?${params.toString()}`)
-      const data = await response.json()
-      if (data.success) {
-        setter(Array.isArray(data.totalsByType) ? data.totalsByType : [])
-      }
-    } catch (error) {
-      console.error("Error fetching dispatch summary:", error)
-    }
-  }, [selectedFiscalYear])
+    },
+    [selectedFiscalYear],
+  )
 
   // Fetch dispatch records
   const fetchDispatchRecords = useCallback(async (pageIndex = 0, append = false) => {
@@ -359,23 +424,20 @@ export default function DispatchTab() {
   }, [fetchDispatchRecords, loadLocations])
 
   useEffect(() => {
-    fetchBagTotals(null, setBagTotals)
+    fetchBagTotals(null, setBagTotals, setBagTotalsScope)
     fetchDispatchSummary(null, setDispatchSummary)
   }, [fetchBagTotals, fetchDispatchSummary])
 
   useEffect(() => {
     if (!selectedLocationId) {
-      setFormBagTotals({
-        arabica_dry_parchment_bags: 0,
-        arabica_dry_cherry_bags: 0,
-        robusta_dry_parchment_bags: 0,
-        robusta_dry_cherry_bags: 0,
-      })
+      setFormBagTotals(emptyBagTotals)
       setFormDispatchSummary([])
+      setFormBagTotalsScope("all")
+      setFormDispatchScope("all")
       return
     }
-    fetchBagTotals(selectedLocationId, setFormBagTotals)
-    fetchDispatchSummary(selectedLocationId, setFormDispatchSummary)
+    fetchBagTotals(selectedLocationId, setFormBagTotals, setFormBagTotalsScope)
+    fetchDispatchSummary(selectedLocationId, setFormDispatchSummary, setFormDispatchScope)
   }, [fetchBagTotals, fetchDispatchSummary, selectedLocationId])
 
   const handleSave = async () => {
@@ -451,10 +513,10 @@ export default function DispatchTab() {
         // Refresh records
         fetchDispatchRecords(0, false)
         fetchDispatchSummary(null, setDispatchSummary)
-        fetchBagTotals(null, setBagTotals)
+        fetchBagTotals(null, setBagTotals, setBagTotalsScope)
         if (selectedLocationId) {
-          fetchDispatchSummary(selectedLocationId, setFormDispatchSummary)
-          fetchBagTotals(selectedLocationId, setFormBagTotals)
+          fetchDispatchSummary(selectedLocationId, setFormDispatchSummary, setFormDispatchScope)
+          fetchBagTotals(selectedLocationId, setFormBagTotals, setFormBagTotalsScope)
         }
       } else {
         toast({
@@ -515,10 +577,10 @@ export default function DispatchTab() {
         })
         fetchDispatchRecords(0, false)
         fetchDispatchSummary(null, setDispatchSummary)
-        fetchBagTotals(null, setBagTotals)
+        fetchBagTotals(null, setBagTotals, setBagTotalsScope)
         if (selectedLocationId) {
-          fetchDispatchSummary(selectedLocationId, setFormDispatchSummary)
-          fetchBagTotals(selectedLocationId, setFormBagTotals)
+          fetchDispatchSummary(selectedLocationId, setFormDispatchSummary, setFormDispatchScope)
+          fetchBagTotals(selectedLocationId, setFormBagTotals, setFormBagTotalsScope)
         }
       } else {
         toast({
@@ -561,7 +623,7 @@ export default function DispatchTab() {
         "Coffee Type",
         "Bag Type",
         "Bags Dispatched",
-        "KGs Received",
+        "KGs Resolved",
         "Notes",
       ]
       const rows = data.records.map((record: DispatchRecord) => [
@@ -571,7 +633,7 @@ export default function DispatchTab() {
         record.coffee_type,
         formatBagTypeLabel(record.bag_type),
         record.bags_dispatched.toString(),
-        record.kgs_received ? Number(record.kgs_received).toFixed(2) : "",
+        resolveDispatchRecordReceivedKgs(record, bagWeightKg).toFixed(2),
         record.notes || "",
       ])
 
@@ -648,18 +710,30 @@ export default function DispatchTab() {
   const allowedBalance = editAllowance.matchesSelection
     ? Math.max(availableBalance, editAllowance.allowance)
     : availableBalance
+  const bagsDispatchedValue = Number(bagsDispatched) || 0
+  const exceedsAvailability = bagsDispatchedValue > allowedBalance
+  const excessBags = Math.max(0, bagsDispatchedValue - allowedBalance)
+  const isLegacyPooledAvailability = formBagTotalsScope === "legacy_pool" || formDispatchScope === "legacy_pool"
+  const canSubmitDispatch =
+    Boolean(selectedLocationId) &&
+    bagsDispatchedValue > 0 &&
+    !exceedsAvailability &&
+    !isSaving
   const resolvedCountLabel =
     dispatchTotalCount > dispatchRecords.length
       ? `Showing ${dispatchRecords.length} of ${dispatchTotalCount}`
       : `${dispatchRecords.length} record(s)`
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-8">
       {/* Fiscal Year Selector */}
-      <div className="flex items-center justify-between">
-        <h2 className="text-xl font-semibold">Coffee Bag Dispatch</h2>
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <h2 className="text-xl font-semibold text-foreground">Coffee Bag Dispatch</h2>
+          <p className="text-sm text-muted-foreground">Track outbound bags and reconcile location availability.</p>
+        </div>
         <div className="flex items-center gap-2">
-          <Label htmlFor="fiscal-year" className="text-sm text-muted-foreground">
+          <Label htmlFor="fiscal-year" className="text-xs uppercase tracking-[0.2em] text-muted-foreground">
             Fiscal Year:
           </Label>
           <Select
@@ -669,7 +743,7 @@ export default function DispatchTab() {
               if (fy) setSelectedFiscalYear(fy)
             }}
           >
-            <SelectTrigger className="w-[120px]">
+            <SelectTrigger className="w-[140px]">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
@@ -683,95 +757,160 @@ export default function DispatchTab() {
         </div>
       </div>
 
+      {bagTotalsScope === "legacy_pool" && (
+        <p className="text-xs text-amber-700">
+          Summary totals include pooled pre-location records for this legacy estate.
+        </p>
+      )}
+      <p className="text-xs text-muted-foreground">
+        Bags are logistics units; received KGs feed downstream sales availability.
+      </p>
+
       {/* Summary Cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         {/* Arabica Dry Parchment */}
-        <Card>
+        <Card className="border-border/60 bg-white/85">
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">Arabica Dry Parchment Bags</CardTitle>
+            <CardTitle className="text-xs uppercase tracking-[0.2em] text-muted-foreground">
+              Arabica Dry Parchment
+            </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{formatNumber(bagTotals.arabica_dry_parchment_bags)}</div>
+            <div className="text-2xl font-semibold text-foreground">
+              {formatNumber(bagTotals.arabica_dry_parchment_bags)}
+            </div>
             <div className="text-sm text-muted-foreground mt-1">
-              Dispatched: {formatNumber(dispatchedTotals.arabica_dry_parchment)}
+              Processed nominal: {formatNumber(bagTotals.arabica_dry_parchment_bags * bagWeightKg)} KGs
+            </div>
+            <div className="text-sm text-muted-foreground mt-1">
+              Dispatched: {formatNumber(dispatchedTotals.arabica_dry_parchment)} bags (
+              {formatNumber(dispatchedTotals.arabica_dry_parchment * bagWeightKg)} KGs)
+            </div>
+            <div className="text-xs text-muted-foreground mt-1">
+              Received (sales basis): {formatNumber(dispatchReceivedKgsTotals.arabica_dry_parchment)} KGs
             </div>
             <div
               className={cn(
                 "text-sm font-medium mt-1",
-                summaryBalanceArabicaDryParchment < 0 ? "text-red-600" : "text-green-600",
+                summaryBalanceArabicaDryParchment < 0 ? "text-rose-600" : "text-emerald-600",
               )}
             >
-              Balance: {formatNumber(summaryBalanceArabicaDryParchment)}
+              Balance: {formatNumber(summaryBalanceArabicaDryParchment)} bags
+            </div>
+            <div className="text-xs text-muted-foreground mt-1">
+              {formatNumber(summaryBalanceArabicaDryParchment * bagWeightKg)} KGs
             </div>
           </CardContent>
         </Card>
 
         {/* Arabica Dry Cherry */}
-        <Card>
+        <Card className="border-border/60 bg-white/85">
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">Arabica Dry Cherry Bags</CardTitle>
+            <CardTitle className="text-xs uppercase tracking-[0.2em] text-muted-foreground">
+              Arabica Dry Cherry
+            </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{formatNumber(bagTotals.arabica_dry_cherry_bags)}</div>
+            <div className="text-2xl font-semibold text-foreground">
+              {formatNumber(bagTotals.arabica_dry_cherry_bags)}
+            </div>
             <div className="text-sm text-muted-foreground mt-1">
-              Dispatched: {formatNumber(dispatchedTotals.arabica_dry_cherry)}
+              Processed nominal: {formatNumber(bagTotals.arabica_dry_cherry_bags * bagWeightKg)} KGs
+            </div>
+            <div className="text-sm text-muted-foreground mt-1">
+              Dispatched: {formatNumber(dispatchedTotals.arabica_dry_cherry)} bags (
+              {formatNumber(dispatchedTotals.arabica_dry_cherry * bagWeightKg)} KGs)
+            </div>
+            <div className="text-xs text-muted-foreground mt-1">
+              Received (sales basis): {formatNumber(dispatchReceivedKgsTotals.arabica_dry_cherry)} KGs
             </div>
             <div
               className={cn(
                 "text-sm font-medium mt-1",
-                summaryBalanceArabicaDryCherry < 0 ? "text-red-600" : "text-green-600",
+                summaryBalanceArabicaDryCherry < 0 ? "text-rose-600" : "text-emerald-600",
               )}
             >
-              Balance: {formatNumber(summaryBalanceArabicaDryCherry)}
+              Balance: {formatNumber(summaryBalanceArabicaDryCherry)} bags
+            </div>
+            <div className="text-xs text-muted-foreground mt-1">
+              {formatNumber(summaryBalanceArabicaDryCherry * bagWeightKg)} KGs
             </div>
           </CardContent>
         </Card>
 
         {/* Robusta Dry Parchment */}
-        <Card>
+        <Card className="border-border/60 bg-white/85">
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">Robusta Dry Parchment Bags</CardTitle>
+            <CardTitle className="text-xs uppercase tracking-[0.2em] text-muted-foreground">
+              Robusta Dry Parchment
+            </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{formatNumber(bagTotals.robusta_dry_parchment_bags)}</div>
+            <div className="text-2xl font-semibold text-foreground">
+              {formatNumber(bagTotals.robusta_dry_parchment_bags)}
+            </div>
             <div className="text-sm text-muted-foreground mt-1">
-              Dispatched: {formatNumber(dispatchedTotals.robusta_dry_parchment)}
+              Processed nominal: {formatNumber(bagTotals.robusta_dry_parchment_bags * bagWeightKg)} KGs
+            </div>
+            <div className="text-sm text-muted-foreground mt-1">
+              Dispatched: {formatNumber(dispatchedTotals.robusta_dry_parchment)} bags (
+              {formatNumber(dispatchedTotals.robusta_dry_parchment * bagWeightKg)} KGs)
+            </div>
+            <div className="text-xs text-muted-foreground mt-1">
+              Received (sales basis): {formatNumber(dispatchReceivedKgsTotals.robusta_dry_parchment)} KGs
             </div>
             <div
               className={cn(
                 "text-sm font-medium mt-1",
-                summaryBalanceRobustaDryParchment < 0 ? "text-red-600" : "text-green-600",
+                summaryBalanceRobustaDryParchment < 0 ? "text-rose-600" : "text-emerald-600",
               )}
             >
-              Balance: {formatNumber(summaryBalanceRobustaDryParchment)}
+              Balance: {formatNumber(summaryBalanceRobustaDryParchment)} bags
+            </div>
+            <div className="text-xs text-muted-foreground mt-1">
+              {formatNumber(summaryBalanceRobustaDryParchment * bagWeightKg)} KGs
             </div>
           </CardContent>
         </Card>
 
         {/* Robusta Dry Cherry */}
-        <Card>
+        <Card className="border-border/60 bg-white/85">
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">Robusta Dry Cherry Bags</CardTitle>
+            <CardTitle className="text-xs uppercase tracking-[0.2em] text-muted-foreground">
+              Robusta Dry Cherry
+            </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{formatNumber(bagTotals.robusta_dry_cherry_bags)}</div>
+            <div className="text-2xl font-semibold text-foreground">
+              {formatNumber(bagTotals.robusta_dry_cherry_bags)}
+            </div>
             <div className="text-sm text-muted-foreground mt-1">
-              Dispatched: {formatNumber(dispatchedTotals.robusta_dry_cherry)}
+              Processed nominal: {formatNumber(bagTotals.robusta_dry_cherry_bags * bagWeightKg)} KGs
+            </div>
+            <div className="text-sm text-muted-foreground mt-1">
+              Dispatched: {formatNumber(dispatchedTotals.robusta_dry_cherry)} bags (
+              {formatNumber(dispatchedTotals.robusta_dry_cherry * bagWeightKg)} KGs)
+            </div>
+            <div className="text-xs text-muted-foreground mt-1">
+              Received (sales basis): {formatNumber(dispatchReceivedKgsTotals.robusta_dry_cherry)} KGs
             </div>
             <div
               className={cn(
                 "text-sm font-medium mt-1",
-                summaryBalanceRobustaDryCherry < 0 ? "text-red-600" : "text-green-600",
+                summaryBalanceRobustaDryCherry < 0 ? "text-rose-600" : "text-emerald-600",
               )}
             >
-              Balance: {formatNumber(summaryBalanceRobustaDryCherry)}
+              Balance: {formatNumber(summaryBalanceRobustaDryCherry)} bags
+            </div>
+            <div className="text-xs text-muted-foreground mt-1">
+              {formatNumber(summaryBalanceRobustaDryCherry * bagWeightKg)} KGs
             </div>
           </CardContent>
         </Card>
       </div>
 
       {/* Add Dispatch Form */}
-      <Card>
+      <Card className="border-border/70 bg-white/85">
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <Truck className="h-5 w-5" />
@@ -780,7 +919,7 @@ export default function DispatchTab() {
           <CardDescription>
             {editingRecord
               ? "Update the dispatch record"
-              : "Record coffee bags sent from the selected location (availability is location-specific)."}
+              : "Record coffee bags sent from the selected location (availability follows processing output)."}
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -819,7 +958,11 @@ export default function DispatchTab() {
                   ))}
                 </SelectContent>
               </Select>
-              <p className="text-xs text-muted-foreground">Availability is calculated for this location.</p>
+              <p className="text-xs text-muted-foreground">
+                {isLegacyPooledAvailability
+                  ? "Legacy pooled mode is active; availability is estate-wide."
+                  : "Availability is calculated for this location."}
+              </p>
             </div>
 
             {/* Lot ID */}
@@ -870,13 +1013,8 @@ export default function DispatchTab() {
                   ))}
                 </SelectContent>
               </Select>
-              <p
-                className={cn(
-                  "text-xs",
-                  availableBalance > 0 ? "text-green-600" : "text-red-600",
-                )}
-              >
-                Available: {formatNumber(availableBalance)} bags
+              <p className={cn("text-xs", allowedBalance > 0 ? "text-emerald-600" : "text-rose-600")}>
+                Available: {formatNumber(allowedBalance)} bags ({formatNumber(allowedBalance * bagWeightKg)} KGs)
               </p>
               {editAllowance.matchesSelection && (
                 <p className="text-[11px] text-muted-foreground">
@@ -901,9 +1039,9 @@ export default function DispatchTab() {
                 onChange={handleNonNegativeChange(setBagsDispatched)}
                 max={Math.max(0, allowedBalance)}
               />
-              {bagsDispatched && Number(bagsDispatched) > allowedBalance && (
-                <p className="text-xs text-red-600">
-                  Exceeds available inventory from processing!
+              {exceedsAvailability && (
+                <p className="text-xs text-rose-600">
+                  Exceeds available inventory by {formatNumber(excessBags)} bags.
                 </p>
               )}
             </div>
@@ -923,9 +1061,13 @@ export default function DispatchTab() {
                 onKeyDown={blockInvalidNumberKey}
                 onChange={handleNonNegativeChange(setKgsReceived)}
               />
-              {kgsReceived && (
+              {kgsReceived ? (
                 <p className="text-xs text-muted-foreground">
                   {formatNumber(Number(kgsReceived) / bagWeightKg || 0)} bags received
+                </p>
+              ) : (
+                <p className="text-xs text-muted-foreground">
+                  Blank means fallback to {formatNumber(bagsDispatchedValue * bagWeightKg)} KGs ({bagWeightKg} KG per bag).
                 </p>
               )}
             </div>
@@ -942,13 +1084,13 @@ export default function DispatchTab() {
             </div>
           </div>
 
-          <div className="mt-4 flex justify-end gap-2">
+          <div className="mt-4 flex flex-wrap justify-end gap-2">
             {editingRecord && (
               <Button variant="outline" onClick={resetForm}>
                 Cancel
               </Button>
             )}
-            <Button onClick={handleSave} disabled={isSaving} className="bg-green-700 hover:bg-green-800">
+            <Button onClick={handleSave} disabled={!canSubmitDispatch} className="bg-emerald-700 hover:bg-emerald-800">
               {isSaving ? (
                 <>
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
@@ -962,11 +1104,16 @@ export default function DispatchTab() {
               )}
             </Button>
           </div>
+          {!canSubmitDispatch && !isSaving && (
+            <p className="mt-2 text-xs text-muted-foreground">
+              Enter location and quantity. Quantity must be within available stock.
+            </p>
+          )}
         </CardContent>
       </Card>
 
       {/* Dispatch Records Table */}
-      <Card>
+      <Card className="border-border/70 bg-white/85">
         <CardHeader>
           <div className="flex items-center justify-between">
             <div>
@@ -988,27 +1135,30 @@ export default function DispatchTab() {
               <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
             </div>
           ) : dispatchRecords.length === 0 ? (
-            <div className="text-center py-8 text-muted-foreground">No dispatch records found</div>
+            <div className="text-center py-8 text-muted-foreground">
+              <p>No dispatch records yet</p>
+              <p className="text-sm mt-2">Log your first outbound shipment to reconcile inventory and sales.</p>
+            </div>
           ) : (
             <div className="space-y-4">
               <div className="overflow-x-auto">
                 <Table>
                   <TableHeader>
-                    <TableRow className="bg-muted/50">
-                      <TableHead className="sticky top-0 bg-muted/60">Date</TableHead>
-                      <TableHead className="sticky top-0 bg-muted/60">Location</TableHead>
-                      <TableHead className="sticky top-0 bg-muted/60">Lot ID</TableHead>
-                      <TableHead className="sticky top-0 bg-muted/60">Coffee Type</TableHead>
-                      <TableHead className="sticky top-0 bg-muted/60">Bag Type</TableHead>
-                      <TableHead className="text-right sticky top-0 bg-muted/60">Bags</TableHead>
-                      <TableHead className="text-right sticky top-0 bg-muted/60">KGs Received</TableHead>
-                      <TableHead className="sticky top-0 bg-muted/60">Notes</TableHead>
-                      <TableHead className="text-right sticky top-0 bg-muted/60">Actions</TableHead>
+                    <TableRow>
+                      <TableHead className="sticky top-0 bg-muted/70 backdrop-blur">Date</TableHead>
+                      <TableHead className="sticky top-0 bg-muted/70 backdrop-blur">Location</TableHead>
+                      <TableHead className="sticky top-0 bg-muted/70 backdrop-blur">Lot ID</TableHead>
+                      <TableHead className="sticky top-0 bg-muted/70 backdrop-blur">Coffee Type</TableHead>
+                      <TableHead className="sticky top-0 bg-muted/70 backdrop-blur">Bag Type</TableHead>
+                      <TableHead className="text-right sticky top-0 bg-muted/70 backdrop-blur">Bags</TableHead>
+                      <TableHead className="text-right sticky top-0 bg-muted/70 backdrop-blur">KGs (Resolved)</TableHead>
+                      <TableHead className="sticky top-0 bg-muted/70 backdrop-blur">Notes</TableHead>
+                      <TableHead className="text-right sticky top-0 bg-muted/70 backdrop-blur">Actions</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {dispatchRecords.map((record, index) => (
-                      <TableRow key={record.id} className={index % 2 === 0 ? "bg-white" : "bg-muted/20"}>
+                    {dispatchRecords.map((record) => (
+                      <TableRow key={record.id}>
                         <TableCell>{formatDateOnly(record.dispatch_date)}</TableCell>
                         <TableCell>{getLocationLabel(record)}</TableCell>
                         <TableCell>{record.lot_id || "-"}</TableCell>
@@ -1016,7 +1166,7 @@ export default function DispatchTab() {
                         <TableCell>{formatBagTypeLabel(record.bag_type)}</TableCell>
                         <TableCell className="text-right">{formatNumber(Number(record.bags_dispatched) || 0)}</TableCell>
                         <TableCell className="text-right">
-                          {record.kgs_received ? formatNumber(Number(record.kgs_received) || 0) : "-"}
+                          {formatNumber(resolveDispatchRecordReceivedKgs(record, bagWeightKg))}
                         </TableCell>
                         <TableCell className="max-w-[200px] truncate">{record.notes || "-"}</TableCell>
                         <TableCell className="text-right">

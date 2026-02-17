@@ -819,9 +819,9 @@ export default function ProcessingTab() {
     }
 
   return (
-    <div className="container mx-auto p-6 space-y-6">
+    <div className="container mx-auto space-y-8 px-4 pb-10 pt-6 sm:px-6 lg:px-8">
       {/* Fiscal Year Selector */}
-      <Card>
+      <Card className="border-border/70 bg-white/80">
         <CardHeader>
           <CardTitle>Fiscal Year</CardTitle>
           <CardDescription>Select the accounting year to view (April 1 - March 31)</CardDescription>
@@ -849,9 +849,9 @@ export default function ProcessingTab() {
       </Card>
 
       {/* Processing Dashboard */}
-      <Card>
+      <Card className="border-border/70 bg-white/80">
         <CardHeader>
-          <CardTitle>Processing Dashboard - All Locations</CardTitle>
+          <CardTitle>Processing Dashboard</CardTitle>
           <CardDescription>
             Cumulative &quot;To Date&quot; values for all processing locations. Compare KPIs in Season View
             against the &quot;Total All (All Types)&quot; row.
@@ -867,17 +867,25 @@ export default function ProcessingTab() {
             <div className="overflow-x-auto">
               <Table>
                 <TableHeader>
-                  <TableRow className="bg-muted/50">
-                    <TableHead className="font-semibold sticky top-0 bg-muted/60">Location</TableHead>
-                    <TableHead className="text-right sticky top-0 bg-muted/60">Crop To Date (kg)</TableHead>
-                    <TableHead className="text-right sticky top-0 bg-muted/60">Ripe To Date (kg)</TableHead>
-                    <TableHead className="text-right sticky top-0 bg-muted/60">Green To Date (kg)</TableHead>
-                    <TableHead className="text-right sticky top-0 bg-muted/60">Float To Date (kg)</TableHead>
-                    <TableHead className="text-right sticky top-0 bg-muted/60">WP To Date (kg)</TableHead>
-                    <TableHead className="text-right sticky top-0 bg-muted/60">Dry Parchment To Date (kg)</TableHead>
-                    <TableHead className="text-right sticky top-0 bg-muted/60">Dry Cherry To Date (kg)</TableHead>
-                    <TableHead className="text-right sticky top-0 bg-muted/60">Dry Parchment Bags To Date</TableHead>
-                    <TableHead className="text-right sticky top-0 bg-muted/60">Dry Cherry Bags To Date</TableHead>
+                  <TableRow>
+                    <TableHead className="font-semibold sticky top-0 bg-muted/70 backdrop-blur">Location</TableHead>
+                    <TableHead className="text-right sticky top-0 bg-muted/70 backdrop-blur">Crop To Date (kg)</TableHead>
+                    <TableHead className="text-right sticky top-0 bg-muted/70 backdrop-blur">Ripe To Date (kg)</TableHead>
+                    <TableHead className="text-right sticky top-0 bg-muted/70 backdrop-blur">Green To Date (kg)</TableHead>
+                    <TableHead className="text-right sticky top-0 bg-muted/70 backdrop-blur">Float To Date (kg)</TableHead>
+                    <TableHead className="text-right sticky top-0 bg-muted/70 backdrop-blur">WP To Date (kg)</TableHead>
+                    <TableHead className="text-right sticky top-0 bg-muted/70 backdrop-blur">
+                      Dry Parchment To Date (kg)
+                    </TableHead>
+                    <TableHead className="text-right sticky top-0 bg-muted/70 backdrop-blur">
+                      Dry Cherry To Date (kg)
+                    </TableHead>
+                    <TableHead className="text-right sticky top-0 bg-muted/70 backdrop-blur">
+                      Dry Parchment Bags To Date
+                    </TableHead>
+                    <TableHead className="text-right sticky top-0 bg-muted/70 backdrop-blur">
+                      Dry Cherry Bags To Date
+                    </TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -885,9 +893,8 @@ export default function ProcessingTab() {
                     <TableRow
                       key={data.location}
                       className={cn(
-                        index % 2 === 0 ? "bg-white" : "bg-muted/20",
-                        data.isGrandTotal && "border-t-2 border-emerald-200 font-semibold bg-emerald-50",
-                        data.isTotal && "border-t-2 border-muted font-semibold bg-muted/40",
+                        data.isGrandTotal && "border-t-2 border-emerald-200 font-semibold bg-emerald-50/70",
+                        data.isTotal && "border-t-2 border-border/70 font-semibold bg-muted/50",
                       )}
                     >
                       <TableCell className="font-medium">{data.location}</TableCell>
@@ -910,9 +917,9 @@ export default function ProcessingTab() {
       </Card>
 
       {/* Processing Records */}
-      <Card>
+      <Card className="border-border/70 bg-white/80">
         <CardHeader>
-          <div className="flex justify-between items-start">
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
             <div>
               <CardTitle>Processing Records</CardTitle>
               <CardDescription>Track daily coffee processing from cherry to final bags</CardDescription>
@@ -933,11 +940,11 @@ export default function ProcessingTab() {
           </div>
         </CardHeader>
         <CardContent className="space-y-6">
-          <div className="flex items-center gap-4 flex-wrap">
-            <div className="flex items-center gap-2">
-              <Label>Location:</Label>
+          <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+            <div className="space-y-2">
+              <Label>Location</Label>
               <Select value={selectedLocationId} onValueChange={setSelectedLocationId}>
-                <SelectTrigger className="w-[200px]">
+                <SelectTrigger>
                   <SelectValue placeholder="Select location" />
                 </SelectTrigger>
                 <SelectContent>
@@ -949,10 +956,10 @@ export default function ProcessingTab() {
                 </SelectContent>
               </Select>
             </div>
-            <div className="flex items-center gap-2">
-              <Label>Coffee Type:</Label>
+            <div className="space-y-2">
+              <Label>Coffee Type</Label>
               <Select value={coffeeType} onValueChange={setCoffeeType}>
-                <SelectTrigger className="w-[160px]">
+                <SelectTrigger>
                   <SelectValue placeholder="Select type" />
                 </SelectTrigger>
                 <SelectContent>
@@ -964,43 +971,42 @@ export default function ProcessingTab() {
                 </SelectContent>
               </Select>
             </div>
-
-            <div className="flex items-center gap-2">
+            <div className="space-y-2">
               <FieldLabel
-                label="Lot ID:"
+                label="Lot ID"
                 tooltip="Use the lot or batch ID that will carry through dispatch and sales."
               />
               <Input
                 value={record.lot_id ?? ""}
                 onChange={(e) => updateField("lot_id", e.target.value)}
                 placeholder="e.g. LOT-2026-001"
-                className="w-[200px]"
               />
             </div>
-
-            <div className="flex items-center gap-2">
-              <Label>Date:</Label>
-              <Popover>
-                <PopoverTrigger asChild>
-                  <Button
-                    variant="outline"
-                    className={cn("w-[240px] justify-start text-left font-normal", !date && "text-muted-foreground")}
-                  >
-                    <CalendarIcon className="mr-2 h-4 w-4" />
-                    {date ? formatDateOnly(date) : <span>Pick a date</span>}
-                  </Button>
-                </PopoverTrigger>
-                <PopoverContent className="w-auto p-0" align="start">
-                  <Calendar mode="single" selected={date} onSelect={(d) => d && setDate(d)} initialFocus />
-                </PopoverContent>
-              </Popover>
-              {isLoading && <Loader2 className="h-4 w-4 animate-spin" />}
+            <div className="space-y-2">
+              <Label>Date</Label>
+              <div className="flex items-center gap-2">
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <Button
+                      variant="outline"
+                      className={cn("w-full justify-start text-left font-normal", !date && "text-muted-foreground")}
+                    >
+                      <CalendarIcon className="mr-2 h-4 w-4" />
+                      {date ? formatDateOnly(date) : <span>Pick a date</span>}
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-auto p-0" align="start">
+                    <Calendar mode="single" selected={date} onSelect={(d) => d && setDate(d)} initialFocus />
+                  </PopoverContent>
+                </Popover>
+                {isLoading && <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />}
+              </div>
             </div>
           </div>
 
           {!isLoading && selectedLocationId && (
             <>
-              <Card>
+              <Card className="border-border/60 bg-white/80">
                 <CardHeader>
                   <CardTitle className="text-lg">Crop</CardTitle>
                 </CardHeader>
@@ -1027,14 +1033,14 @@ export default function ProcessingTab() {
                       step="0.01"
                       value={record.crop_todate}
                       disabled
-                      className="bg-gray-100 cursor-not-allowed"
+                      className="bg-muted/60 text-muted-foreground cursor-not-allowed"
                     />
                     <p className="text-xs text-muted-foreground mt-1">Auto-calculated</p>
                   </div>
                 </CardContent>
               </Card>
 
-              <Card>
+              <Card className="border-border/60 bg-white/80">
                 <CardHeader>
                   <CardTitle className="text-lg">Ripe Cherry</CardTitle>
                 </CardHeader>
@@ -1061,7 +1067,7 @@ export default function ProcessingTab() {
                       step="0.01"
                       value={record.ripe_todate}
                       disabled
-                      className="bg-gray-100 cursor-not-allowed"
+                      className="bg-muted/60 text-muted-foreground cursor-not-allowed"
                     />
                     <p className="text-xs text-muted-foreground mt-1">Auto-calculated</p>
                   </div>
@@ -1072,14 +1078,14 @@ export default function ProcessingTab() {
                       step="0.01"
                       value={record.ripe_percent}
                       disabled
-                      className="bg-gray-100 cursor-not-allowed"
+                      className="bg-muted/60 text-muted-foreground cursor-not-allowed"
                     />
                     <p className="text-xs text-muted-foreground mt-1">Auto-calculated</p>
                   </div>
                 </CardContent>
               </Card>
 
-              <Card>
+              <Card className="border-border/60 bg-white/80">
                 <CardHeader>
                   <CardTitle className="text-lg">Green Cherry</CardTitle>
                 </CardHeader>
@@ -1106,7 +1112,7 @@ export default function ProcessingTab() {
                       step="0.01"
                       value={record.green_todate}
                       disabled
-                      className="bg-gray-100 cursor-not-allowed"
+                      className="bg-muted/60 text-muted-foreground cursor-not-allowed"
                     />
                     <p className="text-xs text-muted-foreground mt-1">Auto-calculated</p>
                   </div>
@@ -1117,14 +1123,14 @@ export default function ProcessingTab() {
                       step="0.01"
                       value={record.green_percent}
                       disabled
-                      className="bg-gray-100 cursor-not-allowed"
+                      className="bg-muted/60 text-muted-foreground cursor-not-allowed"
                     />
                     <p className="text-xs text-muted-foreground mt-1">Auto-calculated</p>
                   </div>
                 </CardContent>
               </Card>
 
-              <Card>
+              <Card className="border-border/60 bg-white/80">
                 <CardHeader>
                   <CardTitle className="text-lg">Float</CardTitle>
                 </CardHeader>
@@ -1151,7 +1157,7 @@ export default function ProcessingTab() {
                       step="0.01"
                       value={record.float_todate}
                       disabled
-                      className="bg-gray-100 cursor-not-allowed"
+                      className="bg-muted/60 text-muted-foreground cursor-not-allowed"
                     />
                     <p className="text-xs text-muted-foreground mt-1">Auto-calculated</p>
                   </div>
@@ -1162,14 +1168,14 @@ export default function ProcessingTab() {
                       step="0.01"
                       value={record.float_percent}
                       disabled
-                      className="bg-gray-100 cursor-not-allowed"
+                      className="bg-muted/60 text-muted-foreground cursor-not-allowed"
                     />
                     <p className="text-xs text-muted-foreground mt-1">Auto-calculated</p>
                   </div>
                 </CardContent>
               </Card>
 
-              <Card>
+              <Card className="border-border/60 bg-white/80">
                 <CardHeader>
                   <CardTitle className="text-lg">Wet Parchment</CardTitle>
                 </CardHeader>
@@ -1196,14 +1202,14 @@ export default function ProcessingTab() {
                       step="0.01"
                       value={record.fr_wp_percent}
                       disabled
-                      className="bg-gray-100 cursor-not-allowed"
+                      className="bg-muted/60 text-muted-foreground cursor-not-allowed"
                     />
                     <p className="text-xs text-muted-foreground mt-1">Auto-calculated (WP/Ripe Today)</p>
                   </div>
                 </CardContent>
               </Card>
 
-              <Card>
+              <Card className="border-border/60 bg-white/80">
                 <CardHeader>
                   <CardTitle className="text-lg">Dry Parchment</CardTitle>
                 </CardHeader>
@@ -1230,7 +1236,7 @@ export default function ProcessingTab() {
                       step="0.01"
                       value={record.dry_p_todate}
                       disabled
-                      className="bg-gray-100 cursor-not-allowed"
+                      className="bg-muted/60 text-muted-foreground cursor-not-allowed"
                     />
                     <p className="text-xs text-muted-foreground mt-1">Auto-calculated</p>
                   </div>
@@ -1241,14 +1247,14 @@ export default function ProcessingTab() {
                       step="0.01"
                       value={record.wp_dp_percent}
                       disabled
-                      className="bg-gray-100 cursor-not-allowed"
+                      className="bg-muted/60 text-muted-foreground cursor-not-allowed"
                     />
                     <p className="text-xs text-muted-foreground mt-1">Auto-calculated (DP/WP)</p>
                   </div>
                 </CardContent>
               </Card>
 
-              <Card>
+              <Card className="border-border/60 bg-white/80">
                 <CardHeader>
                   <CardTitle className="text-lg">Dry Cherry</CardTitle>
                 </CardHeader>
@@ -1275,7 +1281,7 @@ export default function ProcessingTab() {
                       step="0.01"
                       value={record.dry_cherry_todate}
                       disabled
-                      className="bg-gray-100 cursor-not-allowed"
+                      className="bg-muted/60 text-muted-foreground cursor-not-allowed"
                     />
                     <p className="text-xs text-muted-foreground mt-1">Auto-calculated</p>
                   </div>
@@ -1286,14 +1292,14 @@ export default function ProcessingTab() {
                       step="0.01"
                       value={record.dry_cherry_percent}
                       disabled
-                      className="bg-gray-100 cursor-not-allowed"
+                      className="bg-muted/60 text-muted-foreground cursor-not-allowed"
                     />
                     <p className="text-xs text-muted-foreground mt-1">Auto-calculated</p>
                   </div>
                 </CardContent>
               </Card>
 
-              <Card>
+              <Card className="border-border/60 bg-white/80">
                 <CardHeader>
                   <CardTitle className="text-lg">Bags</CardTitle>
                 </CardHeader>
@@ -1305,7 +1311,7 @@ export default function ProcessingTab() {
                       step="0.01"
                       value={record.dry_p_bags}
                       disabled
-                      className="bg-gray-100 cursor-not-allowed"
+                      className="bg-muted/60 text-muted-foreground cursor-not-allowed"
                     />
                     <p className="text-xs text-muted-foreground mt-1">Auto-calculated (kg/{bagWeightKg})</p>
                   </div>
@@ -1316,7 +1322,7 @@ export default function ProcessingTab() {
                       step="0.01"
                       value={record.dry_p_bags_todate}
                       disabled
-                      className="bg-gray-100 cursor-not-allowed"
+                      className="bg-muted/60 text-muted-foreground cursor-not-allowed"
                     />
                     <p className="text-xs text-muted-foreground mt-1">Auto-calculated</p>
                   </div>
@@ -1327,7 +1333,7 @@ export default function ProcessingTab() {
                       step="0.01"
                       value={record.dry_cherry_bags}
                       disabled
-                      className="bg-gray-100 cursor-not-allowed"
+                      className="bg-muted/60 text-muted-foreground cursor-not-allowed"
                     />
                     <p className="text-xs text-muted-foreground mt-1">Auto-calculated (kg/{bagWeightKg})</p>
                   </div>
@@ -1338,7 +1344,7 @@ export default function ProcessingTab() {
                       step="0.01"
                       value={record.dry_cherry_bags_todate}
                       disabled
-                      className="bg-gray-100 cursor-not-allowed"
+                      className="bg-muted/60 text-muted-foreground cursor-not-allowed"
                     />
                     <p className="text-xs text-muted-foreground mt-1">Auto-calculated</p>
                   </div>
@@ -1355,7 +1361,7 @@ export default function ProcessingTab() {
                 />
               </div>
 
-              <div className="flex gap-4">
+              <div className="flex flex-wrap gap-3">
                 <Button onClick={handleSave} disabled={isSaving}>
                   {isSaving ? (
                     <>
@@ -1382,7 +1388,7 @@ export default function ProcessingTab() {
       </Card>
 
       {/* Recent Records */}
-      <Card>
+      <Card className="border-border/70 bg-white/80">
         <CardHeader>
           <CardTitle>Recent Records</CardTitle>
           <CardDescription>
@@ -1401,8 +1407,10 @@ export default function ProcessingTab() {
             </div>
           ) : recentRecords.length === 0 ? (
             <div className="text-center py-8 text-muted-foreground">
-              <p>No records found yet</p>
-              <p className="text-sm mt-2">Add your first record above to get started</p>
+              <p>No processing records yet</p>
+              <p className="text-sm mt-2">
+                Start by logging today’s intake and output so dispatch and sales stay aligned.
+              </p>
             </div>
           ) : (
             <div className="space-y-2">
@@ -1410,7 +1418,7 @@ export default function ProcessingTab() {
                 <Button
                   key={rec.id}
                   variant="outline"
-                  className="w-full justify-start bg-transparent"
+                  className="w-full justify-start border-border/60 bg-white/70 text-left hover:bg-muted/40"
                   onClick={() => {
                     setDate(new Date(rec.process_date))
                   }}

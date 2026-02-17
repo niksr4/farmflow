@@ -152,18 +152,20 @@ Run these scripts (in order) on the target database:
 
 1. `20-tenant-schema.sql`
 2. `25-tenant-settings.sql` (bag weight per estate)
-3. `23-normalize-processing.sql`
-4. `32-normalize-dispatch-sales.sql` (adds `location_id` to dispatch + sales and backfills from estate labels)
-5. `26-lot-traceability.sql` (lot IDs for processing, dispatch, sales)
-6. `27-quality-metrics.sql` (moisture + quality fields on processing records)
-7. `28-audit-logs.sql` (audit trail table)
-8. `21-tenant-constraints.sql`
-9. `24-location-aware-inventory-accounts.sql` (optional, if you want inventory + accounts per location)
-10. `39-inventory-location-indexes.sql` (optional, enables location-aware inventory without backfilling legacy rows)
-11. `29-backfill-tenant-ids.sql` (set tenant_id on legacy rows before enabling RLS)
-12. `22-enable-rls.sql` (enable row-level security after data is in place)
-13. `30-lock-legacy-tables.sql` (optional, prevent writes to deprecated legacy tables)
-14. `31-drop-legacy-tables.sql` (optional, permanently remove legacy tables after verification)
+3. `46-ui-preferences.sql` (optional, dashboard UI preferences like hiding empty metrics)
+4. `23-normalize-processing.sql`
+5. `32-normalize-dispatch-sales.sql` (adds `location_id` to dispatch + sales and backfills from estate labels)
+6. `26-lot-traceability.sql` (lot IDs for processing, dispatch, sales)
+7. `27-quality-metrics.sql` (moisture + quality fields on processing records)
+8. `28-audit-logs.sql` (audit trail table)
+9. `21-tenant-constraints.sql`
+10. `24-location-aware-inventory-accounts.sql` (optional, if you want inventory + accounts per location)
+11. `39-inventory-location-indexes.sql` (optional, enables location-aware inventory without backfilling legacy rows)
+12. `29-backfill-tenant-ids.sql` (set tenant_id on legacy rows before enabling RLS)
+13. `47-receivables.sql` (optional, add receivables tracking before enabling RLS)
+14. `22-enable-rls.sql` (enable row-level security after data is in place)
+15. `30-lock-legacy-tables.sql` (optional, prevent writes to deprecated legacy tables)
+16. `31-drop-legacy-tables.sql` (optional, permanently remove legacy tables after verification)
 
 New tables:
 - `locations`

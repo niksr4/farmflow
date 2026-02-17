@@ -696,7 +696,10 @@ export default function AccountsPage() {
                   </Table>
                 </div>
               ) : (
-                <div className="text-center py-8 text-gray-500">No account activities found.</div>
+                <div className="text-center py-8 text-gray-500">
+                  <p>No account activities yet</p>
+                  <p className="text-sm mt-2">Add labor or expense codes to start tracking estate spend.</p>
+                </div>
               )}
             </CardContent>
           </Card>

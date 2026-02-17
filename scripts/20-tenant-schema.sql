@@ -8,6 +8,7 @@ CREATE TABLE IF NOT EXISTS tenants (
   name TEXT NOT NULL,
   bag_weight_kg NUMERIC NOT NULL DEFAULT 50,
   alert_thresholds JSONB DEFAULT '{}'::jsonb,
+  ui_preferences JSONB DEFAULT '{}'::jsonb,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -15,6 +16,8 @@ ALTER TABLE tenants
   ADD COLUMN IF NOT EXISTS bag_weight_kg NUMERIC NOT NULL DEFAULT 50;
 ALTER TABLE tenants
   ADD COLUMN IF NOT EXISTS alert_thresholds JSONB DEFAULT '{}'::jsonb;
+ALTER TABLE tenants
+  ADD COLUMN IF NOT EXISTS ui_preferences JSONB DEFAULT '{}'::jsonb;
 
 CREATE TABLE IF NOT EXISTS users (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),

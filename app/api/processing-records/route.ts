@@ -5,6 +5,7 @@ import { canDeleteModule, canWriteModule } from "@/lib/permissions"
 import { normalizeTenantContext, runTenantQuery, runTenantQueries } from "@/lib/server/tenant-db"
 import { logAuditEvent } from "@/lib/server/audit-log"
 import { recomputeProcessingTotals } from "@/lib/server/processing-utils"
+import { resolveLocationCompatibility } from "@/lib/server/location-compatibility"
 
 const isUuid = (value: string) =>
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value)
@@ -53,6 +54,23 @@ const findInvalidNumericField = (record: Record<string, any>) =>
     return !Number.isFinite(numeric) || numeric < 0
   })
 
+const appendProcessingLocationClause = (
+  params: any[],
+  whereClause: string,
+  locationId: string,
+  legacyLocationCutover: string | null,
+) => {
+  params.push(locationId)
+  const locationParam = params.length
+  if (!legacyLocationCutover) {
+    return `${whereClause} AND pr.location_id = $${locationParam}`
+  }
+
+  params.push(legacyLocationCutover)
+  const cutoverParam = params.length
+  return `${whereClause} AND (pr.location_id = $${locationParam} OR pr.created_at < $${cutoverParam}::timestamp)`
+}
+
 
 export async function GET(request: NextRequest) {
   try {
@@ -76,22 +94,31 @@ export async function GET(request: NextRequest) {
     const offsetParam = searchParams.get("offset")
     const limit = !all && limitParam ? Math.min(Math.max(Number.parseInt(limitParam, 10) || 0, 1), 500) : null
     const offset = !all && offsetParam ? Math.max(Number.parseInt(offsetParam, 10) || 0, 0) : 0
+    if (locationId && !isUuid(locationId)) {
+      return NextResponse.json({ success: false, error: "locationId must be a valid UUID" }, { status: 400 })
+    }
+
+    const useLegacyLocationScope = summary === "bagTotals"
+    const locationCompatibility =
+      locationId && useLegacyLocationScope ? await resolveLocationCompatibility(sql, tenantContext) : null
+    const legacyLocationCutover =
+      locationCompatibility?.includeLegacyPreLocationRecords && locationCompatibility.firstLocationCreatedAt
+        ? locationCompatibility.firstLocationCreatedAt
+        : null
 
     if (summary) {
-      if (locationId && !isUuid(locationId)) {
-        return NextResponse.json({ success: false, error: "locationId must be a valid UUID" }, { status: 400 })
-      }
       const params: any[] = [tenantContext.tenantId]
       let whereClause = `pr.tenant_id = $1`
+      const isLegacyPooledScope = Boolean(locationId && useLegacyLocationScope && legacyLocationCutover)
+      const locationScope = isLegacyPooledScope ? "legacy_pool" : locationId ? "location" : "all"
 
       if (fiscalYearStart && fiscalYearEnd) {
         params.push(fiscalYearStart, fiscalYearEnd)
         whereClause += ` AND pr.process_date >= $${params.length - 1}::date AND pr.process_date <= $${params.length}::date`
       }
 
-      if (locationId) {
-        params.push(locationId)
-        whereClause += ` AND pr.location_id = $${params.length}`
+      if (locationId && !isLegacyPooledScope) {
+        whereClause = appendProcessingLocationClause(params, whereClause, locationId, legacyLocationCutover)
       }
 
       if (coffeeType) {
@@ -128,7 +155,7 @@ export async function GET(request: NextRequest) {
         ),
         )
 
-        return NextResponse.json({ success: true, records: result })
+        return NextResponse.json({ success: true, records: result, locationScope })
       }
 
       if (summary === "bagTotals") {
@@ -151,21 +178,17 @@ export async function GET(request: NextRequest) {
         ),
         )
 
-        return NextResponse.json({ success: true, totals: result })
+        return NextResponse.json({ success: true, totals: result, locationScope })
       }
 
       return NextResponse.json({ success: false, error: "Unknown summary type" }, { status: 400 })
     }
 
     if (beforeDate && locationId && coffeeType) {
-      if (!isUuid(locationId)) {
-        return NextResponse.json({ success: false, error: "locationId must be a valid UUID" }, { status: 400 })
-      }
       const params: any[] = [tenantContext.tenantId]
       let whereClause = `pr.tenant_id = $1`
 
-      params.push(locationId)
-      whereClause += ` AND pr.location_id = $${params.length}`
+      whereClause = appendProcessingLocationClause(params, whereClause, locationId, legacyLocationCutover)
 
       params.push(coffeeType)
       whereClause += ` AND pr.coffee_type = $${params.length}`
@@ -198,14 +221,10 @@ export async function GET(request: NextRequest) {
     }
 
     if (date && locationId && coffeeType) {
-      if (!isUuid(locationId)) {
-        return NextResponse.json({ success: false, error: "locationId must be a valid UUID" }, { status: 400 })
-      }
       const params: any[] = [tenantContext.tenantId]
       let whereClause = `pr.tenant_id = $1`
 
-      params.push(locationId)
-      whereClause += ` AND pr.location_id = $${params.length}`
+      whereClause = appendProcessingLocationClause(params, whereClause, locationId, legacyLocationCutover)
 
       params.push(coffeeType)
       whereClause += ` AND pr.coffee_type = $${params.length}`
@@ -246,11 +265,7 @@ export async function GET(request: NextRequest) {
     }
 
     if (locationId) {
-      if (!isUuid(locationId)) {
-        return NextResponse.json({ success: false, error: "locationId must be a valid UUID" }, { status: 400 })
-      }
-      params.push(locationId)
-      whereClause += ` AND pr.location_id = $${params.length}`
+      whereClause = appendProcessingLocationClause(params, whereClause, locationId, legacyLocationCutover)
     }
 
     if (coffeeType) {

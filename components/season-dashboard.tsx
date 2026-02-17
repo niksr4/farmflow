@@ -758,7 +758,7 @@ export default function SeasonDashboard() {
       : "Last 7 days"
 
     const text = [
-      `Owner Brief (${windowLabel})`,
+      `Estate Brief (${windowLabel})`,
       "",
       "Highlights:",
       ...highlights.map((line) => `- ${line}`),
@@ -947,7 +947,7 @@ export default function SeasonDashboard() {
             <Card>
               <CardHeader className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
                 <div>
-                  <CardTitle>Owner Brief</CardTitle>
+                  <CardTitle>Estate Brief</CardTitle>
                   <CardDescription>Auto-generated weekly summary grounded in your KPIs.</CardDescription>
                 </div>
                 <div className="flex items-center gap-2">

@@ -6,6 +6,7 @@ import { canDeleteModule, canWriteModule } from "@/lib/permissions"
 import { normalizeTenantContext, runTenantQueries, runTenantQuery } from "@/lib/server/tenant-db"
 import { resolveLocationInfo } from "@/lib/server/location-utils"
 import { logAuditEvent } from "@/lib/server/audit-log"
+import { resolveLocationCompatibility } from "@/lib/server/location-compatibility"
 
 async function resolveBagWeightKg(db: typeof sql, tenantContext: { tenantId: string; role: string }) {
   const rows = await runTenantQuery(
@@ -28,6 +29,14 @@ const getZodErrorMessage = (error: unknown) => {
   return null
 }
 
+const resolveKgsSold = (bagsSold: number, bagWeightKg: number, explicitKgsSold?: number | null) => {
+  const explicit = Number(explicitKgsSold)
+  if (Number.isFinite(explicit) && explicit > 0) {
+    return Number(explicit.toFixed(2))
+  }
+  return Number((bagsSold * bagWeightKg).toFixed(2))
+}
+
 export async function GET(request: Request) {
   try {
     const sessionUser = await requireModuleAccess("sales")
@@ -44,6 +53,15 @@ export async function GET(request: Request) {
     const offsetParam = searchParams.get("offset")
     const limit = !all && limitParam ? Math.min(Math.max(Number.parseInt(limitParam, 10) || 0, 1), 500) : null
     const offset = !all && offsetParam ? Math.max(Number.parseInt(offsetParam, 10) || 0, 0) : 0
+    const useLegacyLocationScope = summaryOnly
+    const locationCompatibility =
+      locationId && useLegacyLocationScope ? await resolveLocationCompatibility(sql, tenantContext) : null
+    const legacyLocationCutover =
+      locationCompatibility?.includeLegacyPreLocationRecords && locationCompatibility.firstLocationCreatedAt
+        ? locationCompatibility.firstLocationCreatedAt
+        : null
+    const isLegacyPooledScope = Boolean(locationId && useLegacyLocationScope && legacyLocationCutover)
+    const locationScope = isLegacyPooledScope ? "legacy_pool" : locationId ? "location" : "all"
 
     if (buyersOnly) {
       const buyersRows = await runTenantQuery(
@@ -62,13 +80,23 @@ export async function GET(request: Request) {
       const buyers = (buyersRows || []).map((row: any) => String(row.buyer_name)).filter(Boolean)
       return NextResponse.json({ success: true, buyers })
     }
+    const bagWeightKg = await resolveBagWeightKg(sql, tenantContext)
 
     let totalCountResult
     let totalsResult
     let totalsByTypeResult
     let records = []
 
-    const locationClause = locationId ? sql` AND location_id = ${locationId}` : sql``
+    const locationClause =
+      !locationId
+        ? sql``
+        : isLegacyPooledScope
+          ? sql``
+          : sql` AND location_id = ${locationId}`
+    const recordsLocationClause =
+      !locationId
+        ? sql``
+        : sql` AND sr.location_id = ${locationId}`
 
     if (startDate && endDate) {
       const queryList = [
@@ -83,6 +111,7 @@ export async function GET(request: Request) {
         sql`
           SELECT 
             COALESCE(SUM(bags_sold), 0) as total_bags_sold,
+            COALESCE(SUM(COALESCE(NULLIF(kgs_received, 0), NULLIF(kgs, 0), bags_sold * ${bagWeightKg})), 0) as total_kgs_sold,
             COALESCE(SUM(revenue), 0) as total_revenue
           FROM sales_records
           WHERE sale_date >= ${startDate}::date
@@ -95,6 +124,7 @@ export async function GET(request: Request) {
             coffee_type,
             bag_type,
             COALESCE(SUM(bags_sold), 0) as bags_sold,
+            COALESCE(SUM(COALESCE(NULLIF(kgs_received, 0), NULLIF(kgs, 0), bags_sold * ${bagWeightKg})), 0) as kgs_sold,
             COALESCE(SUM(revenue), 0) as revenue
           FROM sales_records
           WHERE sale_date >= ${startDate}::date
@@ -114,7 +144,7 @@ export async function GET(request: Request) {
                 WHERE sr.sale_date >= ${startDate}::date 
                   AND sr.sale_date <= ${endDate}::date
                   AND sr.tenant_id = ${tenantContext.tenantId}
-                  ${locationClause}
+                  ${recordsLocationClause}
                 ORDER BY sr.sale_date DESC, sr.created_at DESC
                 LIMIT ${limit} OFFSET ${offset}
               `
@@ -125,7 +155,7 @@ export async function GET(request: Request) {
                 WHERE sr.sale_date >= ${startDate}::date 
                   AND sr.sale_date <= ${endDate}::date
                   AND sr.tenant_id = ${tenantContext.tenantId}
-                  ${locationClause}
+                  ${recordsLocationClause}
                 ORDER BY sr.sale_date DESC, sr.created_at DESC
               `,
         )
@@ -146,6 +176,7 @@ export async function GET(request: Request) {
         sql`
           SELECT 
             COALESCE(SUM(bags_sold), 0) as total_bags_sold,
+            COALESCE(SUM(COALESCE(NULLIF(kgs_received, 0), NULLIF(kgs, 0), bags_sold * ${bagWeightKg})), 0) as total_kgs_sold,
             COALESCE(SUM(revenue), 0) as total_revenue
           FROM sales_records
           WHERE tenant_id = ${tenantContext.tenantId}
@@ -156,6 +187,7 @@ export async function GET(request: Request) {
             coffee_type,
             bag_type,
             COALESCE(SUM(bags_sold), 0) as bags_sold,
+            COALESCE(SUM(COALESCE(NULLIF(kgs_received, 0), NULLIF(kgs, 0), bags_sold * ${bagWeightKg})), 0) as kgs_sold,
             COALESCE(SUM(revenue), 0) as revenue
           FROM sales_records
           WHERE tenant_id = ${tenantContext.tenantId}
@@ -171,7 +203,7 @@ export async function GET(request: Request) {
                 FROM sales_records sr
                 LEFT JOIN locations l ON l.id = sr.location_id
                 WHERE sr.tenant_id = ${tenantContext.tenantId}
-                  ${locationClause}
+                  ${recordsLocationClause}
                 ORDER BY sr.sale_date DESC, sr.created_at DESC
                 LIMIT ${limit} OFFSET ${offset}
               `
@@ -180,7 +212,7 @@ export async function GET(request: Request) {
                 FROM sales_records sr
                 LEFT JOIN locations l ON l.id = sr.location_id
                 WHERE sr.tenant_id = ${tenantContext.tenantId}
-                  ${locationClause}
+                  ${recordsLocationClause}
                 ORDER BY sr.sale_date DESC, sr.created_at DESC
               `,
         )
@@ -194,15 +226,17 @@ export async function GET(request: Request) {
 
     const totalCount = Number(totalCountResult?.[0]?.count) || 0
     const totalBagsSold = Number(totalsResult?.[0]?.total_bags_sold) || 0
+    const totalKgsSold = Number(totalsResult?.[0]?.total_kgs_sold) || 0
     const totalRevenue = Number(totalsResult?.[0]?.total_revenue) || 0
     const totalsByType = (totalsByTypeResult || []).map((row: any) => ({
       coffee_type: row.coffee_type,
       bag_type: row.bag_type,
       bags_sold: Number(row.bags_sold) || 0,
+      kgs_sold: Number(row.kgs_sold) || 0,
       revenue: Number(row.revenue) || 0,
     }))
 
-    return NextResponse.json({ success: true, records, totalCount, totalBagsSold, totalRevenue, totalsByType })
+    return NextResponse.json({ success: true, records, totalCount, totalBagsSold, totalKgsSold, totalRevenue, totalsByType, locationScope })
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : "Unknown error"
     if (isModuleAccessError(error)) {
@@ -240,6 +274,7 @@ export async function POST(request: Request) {
         bag_type: z.string().nullable().optional(),
         buyer_name: z.string().nullable().optional(),
         bags_sold: z.number().positive(),
+        kgs_sold: z.number().positive().optional(),
         price_per_bag: z.number().positive(),
         bank_account: z.string().nullable().optional(),
         notes: z.string().nullable().optional(),
@@ -248,7 +283,7 @@ export async function POST(request: Request) {
 
     const bagWeightKg = await resolveBagWeightKg(sql, tenantContext)
     const bagsSold = Number(payload.bags_sold) || 0
-    const kgsSold = Number((bagsSold * bagWeightKg).toFixed(2))
+    const kgsSold = resolveKgsSold(bagsSold, bagWeightKg, payload.kgs_sold)
     const computedRevenue = Number((bagsSold * payload.price_per_bag).toFixed(2))
     const locationInfo = await resolveLocationInfo(sql, tenantContext, {
       locationId: payload.locationId,
@@ -352,6 +387,7 @@ export async function PUT(request: Request) {
         coffee_type: z.string().nullable().optional(),
         bag_type: z.string().nullable().optional(),
         bags_sold: z.number().positive(),
+        kgs_sold: z.number().positive().optional(),
         price_per_bag: z.number().positive(),
         buyer_name: z.string().nullable().optional(),
         bank_account: z.string().nullable().optional(),
@@ -361,7 +397,7 @@ export async function PUT(request: Request) {
 
     const bagWeightKg = await resolveBagWeightKg(sql, tenantContext)
     const bagsSold = Number(payload.bags_sold) || 0
-    const kgsSold = Number((bagsSold * bagWeightKg).toFixed(2))
+    const kgsSold = resolveKgsSold(bagsSold, bagWeightKg, payload.kgs_sold)
     const computedRevenue = Number((bagsSold * payload.price_per_bag).toFixed(2))
     const locationInfo = await resolveLocationInfo(sql, tenantContext, {
       locationId: payload.locationId,

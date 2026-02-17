@@ -28,6 +28,7 @@ DECLARE
     'sales_records',
     'billing_invoices',
     'billing_invoice_items',
+    'receivables',
     'hf_arabica',
     'hf_robusta',
     'mv_robusta',

@@ -79,47 +79,57 @@ export default function InventoryValueSummary({ inventory, transactions, summary
     .join(" · ")
 
   return (
-    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-      <Card>
-        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-          <CardTitle className="text-sm font-medium">Total Inventory Value</CardTitle>
+    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+      <Card className="h-full">
+        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-1">
+          <CardTitle className="text-xs font-medium uppercase tracking-[0.2em] text-neutral-500">
+            Total Inventory Value
+          </CardTitle>
           <TrendingUp className="h-4 w-4 text-muted-foreground" />
         </CardHeader>
         <CardContent>
-          <div className="text-2xl font-bold">{formatCurrency(summary.total_inventory_value)}</div>
+          <div className="text-3xl font-semibold tabular-nums whitespace-nowrap">
+            {formatCurrency(summary.total_inventory_value, 0)}
+          </div>
           <p className="text-xs text-muted-foreground">Based on weighted average cost</p>
         </CardContent>
       </Card>
 
-      <Card>
-        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-          <CardTitle className="text-sm font-medium">Total Items</CardTitle>
+      <Card className="h-full">
+        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-1">
+          <CardTitle className="text-xs font-medium uppercase tracking-[0.2em] text-neutral-500">
+            Total Items
+          </CardTitle>
           <Package className="h-4 w-4 text-muted-foreground" />
         </CardHeader>
         <CardContent>
-          <div className="text-2xl font-bold">{summary.total_items}</div>
+          <div className="text-3xl font-semibold tabular-nums">{summary.total_items}</div>
           <p className="text-xs text-muted-foreground">Unique inventory items</p>
         </CardContent>
       </Card>
 
-      <Card>
-        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-          <CardTitle className="text-sm font-medium">Total Quantity</CardTitle>
+      <Card className="h-full">
+        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-1">
+          <CardTitle className="text-xs font-medium uppercase tracking-[0.2em] text-neutral-500">
+            Total Quantity
+          </CardTitle>
           <Scale className="h-4 w-4 text-muted-foreground" />
         </CardHeader>
         <CardContent>
-          <div className="text-2xl font-bold">{totalsByUnitLabel || "0"}</div>
+          <div className="text-3xl font-semibold tabular-nums">{totalsByUnitLabel || "0"}</div>
           <p className="text-xs text-muted-foreground">Totals by unit type</p>
         </CardContent>
       </Card>
 
-      <Card>
-        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-          <CardTitle className="text-sm font-medium">Recent Activity</CardTitle>
+      <Card className="h-full">
+        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-1">
+          <CardTitle className="text-xs font-medium uppercase tracking-[0.2em] text-neutral-500">
+            Recent Activity
+          </CardTitle>
           <Activity className="h-4 w-4 text-muted-foreground" />
         </CardHeader>
         <CardContent>
-          <div className="text-2xl font-bold">{recentTransactions.length}</div>
+          <div className="text-3xl font-semibold tabular-nums">{recentTransactions.length}</div>
           <p className="text-xs text-muted-foreground">Transactions in last 7 days</p>
         </CardContent>
       </Card>

@@ -65,9 +65,15 @@ export async function GET(request: Request) {
     const tenantEnabled = tenantModules?.length ? resolveEnabledModules(tenantModules) : resolveEnabledModules()
     const source = userModules?.length ? "user" : tenantModules?.length ? "tenant" : "default"
     const sourceRows = source === "user" ? userModules : source === "tenant" ? tenantModules : []
+    const userMap =
+      source === "user"
+        ? new Map((userModules || []).map((row: any) => [String(row.module), Boolean(row.enabled)]))
+        : null
     const modules: ModuleState[] = resolveModuleStates(sourceRows).map((module) => ({
       ...module,
-      enabled: tenantEnabled.includes(module.id) && module.enabled,
+      enabled:
+        tenantEnabled.includes(module.id) &&
+        (userMap ? (userMap.has(module.id) ? Boolean(userMap.get(module.id)) : true) : module.enabled),
     }))
 
     return NextResponse.json({ success: true, modules, source })

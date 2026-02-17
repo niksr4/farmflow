@@ -92,3 +92,63 @@ export async function POST(request: Request) {
     return adminErrorResponse(error, "Failed to create tenant")
   }
 }
+
+export async function DELETE(request: Request) {
+  try {
+    const sessionUser = await requireAdminSession()
+    requireOwnerRole(sessionUser.role)
+    if (!sql) {
+      return NextResponse.json({ success: false, error: "Database not configured" }, { status: 500 })
+    }
+
+    const { searchParams } = new URL(request.url)
+    const tenantId = String(searchParams.get("tenantId") || "").trim()
+    if (!tenantId) {
+      return NextResponse.json({ success: false, error: "tenantId is required" }, { status: 400 })
+    }
+
+    if (tenantId === sessionUser.tenantId) {
+      return NextResponse.json(
+        { success: false, error: "Cannot delete the active tenant for the current session" },
+        { status: 400 },
+      )
+    }
+
+    const adminContext = normalizeTenantContext(sessionUser.tenantId, sessionUser.role)
+    const existing = await runTenantQuery(
+      sql,
+      adminContext,
+      sql`
+        SELECT id, name
+        FROM tenants
+        WHERE id = ${tenantId}
+        LIMIT 1
+      `,
+    )
+
+    if (!existing?.length) {
+      return NextResponse.json({ success: false, error: "Tenant not found" }, { status: 404 })
+    }
+
+    await runTenantQuery(
+      sql,
+      adminContext,
+      sql`
+        DELETE FROM tenants
+        WHERE id = ${tenantId}
+      `,
+    )
+
+    await logAuditEvent(sql, sessionUser, {
+      action: "delete",
+      entityType: "tenants",
+      entityId: tenantId,
+      before: existing?.[0] ?? null,
+    })
+
+    return NextResponse.json({ success: true })
+  } catch (error: any) {
+    console.error("Error deleting tenant:", error)
+    return adminErrorResponse(error, "Failed to delete tenant")
+  }
+}

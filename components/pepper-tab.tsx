@@ -459,7 +459,10 @@ export function PepperTab() {
               <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
             </div>
           ) : recentRecords.length === 0 ? (
-            <div className="text-center py-8 text-muted-foreground">No records found yet</div>
+            <div className="text-center py-8 text-muted-foreground">
+              <p>No pepper records yet</p>
+              <p className="text-sm mt-2">Log the first picking to start tracking conversions.</p>
+            </div>
           ) : (
             <div className="rounded-md border overflow-x-auto">
               <Table>

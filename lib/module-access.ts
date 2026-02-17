@@ -72,8 +72,10 @@ export async function getEnabledModules(sessionUser?: SessionUser): Promise<stri
         `,
       )
       if (userModules?.length) {
-        const userEnabled = resolveEnabledModules(userModules)
-        return tenantEnabled.filter((moduleId) => userEnabled.includes(moduleId))
+        const userMap = new Map(userModules.map((row: any) => [String(row.module), Boolean(row.enabled)]))
+        return tenantEnabled.filter((moduleId) =>
+          userMap.has(moduleId) ? Boolean(userMap.get(moduleId)) : true,
+        )
       }
     } catch (error) {
       if (!isMissingRelation(error, "user_modules")) {
@@ -94,6 +96,25 @@ export async function requireModuleAccess(moduleId: string, sessionUser?: Sessio
 
   const enabled = await getEnabledModules(user)
   if (!enabled.includes(moduleId)) {
+    throw new ModuleAccessError()
+  }
+
+  return user
+}
+
+export async function requireAnyModuleAccess(
+  moduleIds: string[],
+  sessionUser?: SessionUser,
+): Promise<SessionUser> {
+  const user = sessionUser ?? (await requireSessionUser())
+
+  if (user.role === "owner") {
+    return user
+  }
+
+  const enabled = await getEnabledModules(user)
+  const allowed = moduleIds.some((moduleId) => enabled.includes(moduleId))
+  if (!allowed) {
     throw new ModuleAccessError()
   }
 

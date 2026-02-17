@@ -9,8 +9,9 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { useToast } from "@/hooks/use-toast"
 import { useAuth } from "@/hooks/use-auth"
-import { MODULES } from "@/lib/modules"
+import { MODULES, MODULE_BUNDLES, type ModuleBundle } from "@/lib/modules"
 import { formatDateForDisplay, formatDateOnly } from "@/lib/date-utils"
+import { formatCurrency } from "@/lib/format"
 import { roleLabel } from "@/lib/roles"
 
 interface Tenant {
@@ -47,6 +48,31 @@ interface AuditLog {
   created_at: string
 }
 
+interface WeeklySummary {
+  inventoryCount: number
+  transactionCount: number
+  processingCount: number
+  dispatchCount: number
+  salesCount: number
+  salesRevenue: number
+  laborSpend: number
+  expenseSpend: number
+  receivablesOutstanding: number
+}
+
+interface WeeklySummaryRange {
+  startDate: string
+  endDate: string
+  totalDays: number
+}
+
+interface WeeklySummaryResponse {
+  summary: WeeklySummary
+  compareSummary: WeeklySummary | null
+  range: WeeklySummaryRange | null
+  compareRange: WeeklySummaryRange | null
+}
+
 const AUDIT_ENTITY_TYPES = [
   { id: "all", label: "All modules" },
   { id: "processing_records", label: "Processing" },
@@ -59,6 +85,16 @@ const formatAuditTimestamp = (value: string) => {
   return formatDateForDisplay(value)
 }
 
+const toDateInputValue = (value: Date) => {
+  const year = value.getFullYear()
+  const month = String(value.getMonth() + 1).padStart(2, "0")
+  const day = String(value.getDate()).padStart(2, "0")
+  return `${year}-${month}-${day}`
+}
+
+const DEFAULT_WEEKLY_END = toDateInputValue(new Date())
+const DEFAULT_WEEKLY_START = toDateInputValue(new Date(new Date().setDate(new Date().getDate() - 6)))
+
 const formatAuditPayload = (payload: any) => {
   if (!payload) return "None"
   try {
@@ -66,6 +102,71 @@ const formatAuditPayload = (payload: any) => {
   } catch {
     return String(payload)
   }
+}
+
+const formatCount = (value: number) => Number(value || 0).toLocaleString()
+
+const formatDeltaText = (delta: number, currency = false) => {
+  if (delta === 0) return "no change"
+  const abs = currency ? formatCurrency(Math.abs(delta)) : formatCount(Math.abs(delta))
+  return `${delta > 0 ? "+" : "-"}${abs}`
+}
+
+const buildWeeklySummaryText = (
+  summary: WeeklySummary,
+  tenantName: string,
+  range: WeeklySummaryRange | null,
+  compareSummary: WeeklySummary | null,
+  compareRange: WeeklySummaryRange | null,
+) => {
+  const periodDays = range?.totalDays || 7
+  const rangeLabel = range ? `${range.startDate} to ${range.endDate}` : "last 7 days"
+  const compareLabel = compareRange ? `${compareRange.startDate} to ${compareRange.endDate}` : "previous period"
+  const withCompare = (label: string, value: string, delta?: string | null) =>
+    delta ? `${label}: ${value} (${delta} vs ${compareLabel})` : `${label}: ${value}`
+
+  const lines = [
+    `FarmFlow Weekly Summary (${tenantName})`,
+    `Range: ${rangeLabel} (${periodDays} day${periodDays === 1 ? "" : "s"})`,
+    `Inventory items: ${formatCount(summary.inventoryCount)}`,
+    withCompare(
+      `Transactions (${periodDays}d)`,
+      formatCount(summary.transactionCount),
+      compareSummary ? formatDeltaText(summary.transactionCount - compareSummary.transactionCount) : null,
+    ),
+    withCompare(
+      `Processing records (${periodDays}d)`,
+      formatCount(summary.processingCount),
+      compareSummary ? formatDeltaText(summary.processingCount - compareSummary.processingCount) : null,
+    ),
+    withCompare(
+      `Dispatches (${periodDays}d)`,
+      formatCount(summary.dispatchCount),
+      compareSummary ? formatDeltaText(summary.dispatchCount - compareSummary.dispatchCount) : null,
+    ),
+    withCompare(
+      `Sales (${periodDays}d)`,
+      formatCount(summary.salesCount),
+      compareSummary ? formatDeltaText(summary.salesCount - compareSummary.salesCount) : null,
+    ),
+    withCompare(
+      `Sales revenue (${periodDays}d)`,
+      formatCurrency(summary.salesRevenue),
+      compareSummary ? formatDeltaText(summary.salesRevenue - compareSummary.salesRevenue, true) : null,
+    ),
+    withCompare(
+      `Labor spend (${periodDays}d)`,
+      formatCurrency(summary.laborSpend),
+      compareSummary ? formatDeltaText(summary.laborSpend - compareSummary.laborSpend, true) : null,
+    ),
+    withCompare(
+      `Expense spend (${periodDays}d)`,
+      formatCurrency(summary.expenseSpend),
+      compareSummary ? formatDeltaText(summary.expenseSpend - compareSummary.expenseSpend, true) : null,
+    ),
+    `Receivables outstanding: ${formatCurrency(summary.receivablesOutstanding)}`,
+  ]
+  return lines.join("\n")
 }
 
 export default function AdminPage() {
@@ -87,6 +188,7 @@ export default function AdminPage() {
   const [userRoleDrafts, setUserRoleDrafts] = useState<Record<string, string>>({})
   const [isUpdatingUserId, setIsUpdatingUserId] = useState<string | null>(null)
   const [isDeletingUserId, setIsDeletingUserId] = useState<string | null>(null)
+  const [isDeletingTenantId, setIsDeletingTenantId] = useState<string | null>(null)
   const [selectedUserId, setSelectedUserId] = useState("")
   const [userModulePermissions, setUserModulePermissions] = useState<ModulePermission[]>([])
   const [userModuleSource, setUserModuleSource] = useState<"user" | "tenant" | "default" | "">("")
@@ -96,10 +198,22 @@ export default function AdminPage() {
   const [auditTotalCount, setAuditTotalCount] = useState(0)
   const [auditEntityType, setAuditEntityType] = useState("all")
   const [isAuditLoading, setIsAuditLoading] = useState(false)
+  const [weeklySummary, setWeeklySummary] = useState<WeeklySummary | null>(null)
+  const [weeklyCompareSummary, setWeeklyCompareSummary] = useState<WeeklySummary | null>(null)
+  const [weeklySummaryRange, setWeeklySummaryRange] = useState<WeeklySummaryRange | null>(null)
+  const [weeklyCompareRange, setWeeklyCompareRange] = useState<WeeklySummaryRange | null>(null)
+  const [weeklyStartDate, setWeeklyStartDate] = useState(DEFAULT_WEEKLY_START)
+  const [weeklyEndDate, setWeeklyEndDate] = useState(DEFAULT_WEEKLY_END)
+  const [weeklyCompareMode, setWeeklyCompareMode] = useState<"none" | "previous">("previous")
+  const [isWeeklyLoading, setIsWeeklyLoading] = useState(false)
 
   const selectedTenant = useMemo(
     () => tenants.find((tenant) => tenant.id === selectedTenantId) || null,
     [tenants, selectedTenantId],
+  )
+  const enabledModuleLabels = useMemo(
+    () => modulePermissions.filter((module) => module.enabled).map((module) => module.label),
+    [modulePermissions],
   )
 
   const loadTenants = useCallback(async () => {
@@ -179,6 +293,146 @@ export default function AdminPage() {
     }
   }, [toast])
 
+  const loadWeeklySummary = useCallback(async (): Promise<WeeklySummaryResponse | null> => {
+    if (!selectedTenantId) {
+      toast({ title: "Select a tenant", description: "Choose a tenant to generate the weekly summary." })
+      return null
+    }
+    if (!weeklyStartDate || !weeklyEndDate) {
+      toast({ title: "Choose a date range", description: "Select both start and end dates." })
+      return null
+    }
+    if (weeklyStartDate > weeklyEndDate) {
+      toast({ title: "Invalid date range", description: "Start date must be before end date.", variant: "destructive" })
+      return null
+    }
+    setIsWeeklyLoading(true)
+    try {
+      const params = new URLSearchParams({
+        tenantId: selectedTenantId,
+        startDate: weeklyStartDate,
+        endDate: weeklyEndDate,
+        compare: weeklyCompareMode === "previous" ? "true" : "false",
+      })
+      const response = await fetch(`/api/admin/weekly-summary?${params.toString()}`)
+      const data = await response.json()
+      if (!response.ok || !data.success) {
+        throw new Error(data.error || "Failed to load weekly summary")
+      }
+      const payload: WeeklySummaryResponse = {
+        summary: data.summary as WeeklySummary,
+        compareSummary: (data.compareSummary as WeeklySummary | null) || null,
+        range: (data.range as WeeklySummaryRange | null) || null,
+        compareRange: (data.compareRange as WeeklySummaryRange | null) || null,
+      }
+      setWeeklySummary(payload.summary)
+      setWeeklyCompareSummary(payload.compareSummary)
+      setWeeklySummaryRange(payload.range)
+      setWeeklyCompareRange(payload.compareRange)
+      return payload
+    } catch (error: any) {
+      toast({ title: "Error", description: error.message || "Failed to load weekly summary", variant: "destructive" })
+      setWeeklySummary(null)
+      setWeeklyCompareSummary(null)
+      setWeeklySummaryRange(null)
+      setWeeklyCompareRange(null)
+      return null
+    } finally {
+      setIsWeeklyLoading(false)
+    }
+  }, [selectedTenantId, toast, weeklyCompareMode, weeklyEndDate, weeklyStartDate])
+
+  const weeklySummaryText = useMemo(() => {
+    if (!weeklySummary || !selectedTenant) return ""
+    return buildWeeklySummaryText(
+      weeklySummary,
+      selectedTenant.name,
+      weeklySummaryRange,
+      weeklyCompareSummary,
+      weeklyCompareRange,
+    )
+  }, [selectedTenant, weeklyCompareRange, weeklyCompareSummary, weeklySummary, weeklySummaryRange])
+
+  const handleCopyWeeklySummary = async () => {
+    let textToCopy = weeklySummaryText
+    if (!textToCopy) {
+      const payload = await loadWeeklySummary()
+      if (!payload) return
+      textToCopy = buildWeeklySummaryText(
+        payload.summary,
+        selectedTenant?.name || "Tenant",
+        payload.range,
+        payload.compareSummary,
+        payload.compareRange,
+      )
+    }
+    try {
+      await navigator.clipboard.writeText(textToCopy)
+      toast({ title: "Summary copied", description: "Paste into WhatsApp or email." })
+    } catch (error: any) {
+      toast({ title: "Copy failed", description: error.message || "Unable to copy summary", variant: "destructive" })
+    }
+  }
+
+  const handleDownloadWeeklySummary = async () => {
+    let payload: WeeklySummaryResponse | null = null
+    if (!weeklySummary) {
+      payload = await loadWeeklySummary()
+      if (!payload) return
+    } else {
+      payload = {
+        summary: weeklySummary,
+        compareSummary: weeklyCompareSummary,
+        range: weeklySummaryRange,
+        compareRange: weeklyCompareRange,
+      }
+    }
+    if (!payload) return
+    const tenantName = selectedTenant?.name || "Tenant"
+    const summaryText = buildWeeklySummaryText(
+      payload.summary,
+      tenantName,
+      payload.range,
+      payload.compareSummary,
+      payload.compareRange,
+    )
+    const summaryWindow = window.open("", "_blank")
+    if (!summaryWindow) {
+      toast({ title: "Popup blocked", description: "Allow popups to save the PDF." })
+      return
+    }
+    const doc = summaryWindow.document
+    doc.open()
+    summaryWindow.document.write(`
+      <html>
+        <head>
+          <title>Weekly Summary</title>
+          <style>
+            body { font-family: Arial, sans-serif; padding: 24px; }
+            h1 { font-size: 18px; margin-bottom: 12px; }
+            pre { white-space: pre-wrap; font-size: 14px; }
+          </style>
+        </head>
+        <body>
+          <h1 id="summary-title"></h1>
+          <pre id="summary-body"></pre>
+        </body>
+      </html>
+    `)
+    doc.close()
+    const titleEl = doc.getElementById("summary-title")
+    if (titleEl) {
+      const rangeLabel = payload.range ? `${payload.range.startDate} to ${payload.range.endDate}` : "Current period"
+      titleEl.textContent = `${tenantName} Weekly Summary (${rangeLabel})`
+    }
+    const bodyEl = doc.getElementById("summary-body")
+    if (bodyEl) {
+      bodyEl.textContent = summaryText
+    }
+    summaryWindow.focus()
+    summaryWindow.print()
+  }
+
   useEffect(() => {
     if (isOwner) {
       loadTenants()
@@ -198,6 +452,13 @@ export default function AdminPage() {
       loadAuditLogs(selectedTenantId, auditEntityType)
     }
   }, [selectedTenantId, auditEntityType, loadAuditLogs])
+
+  useEffect(() => {
+    setWeeklySummary(null)
+    setWeeklyCompareSummary(null)
+    setWeeklySummaryRange(null)
+    setWeeklyCompareRange(null)
+  }, [selectedTenantId])
 
   useEffect(() => {
     if (!users.length) {
@@ -269,6 +530,38 @@ export default function AdminPage() {
     }
   }
 
+  const handleDeleteTenant = async (tenant: Tenant) => {
+    if (!isOwner) {
+      toast({ title: "Platform owner only", description: "Only platform owners can delete tenants." })
+      return
+    }
+    if (tenant.id === user?.tenantId) {
+      toast({
+        title: "Cannot delete active tenant",
+        description: "Switch accounts before deleting this tenant.",
+        variant: "destructive",
+      })
+      return
+    }
+    if (!window.confirm(`Delete ${tenant.name}? This will remove all estate data.`)) {
+      return
+    }
+    setIsDeletingTenantId(tenant.id)
+    try {
+      const response = await fetch(`/api/admin/tenants?tenantId=${tenant.id}`, { method: "DELETE" })
+      const data = await response.json()
+      if (!response.ok || !data.success) {
+        throw new Error(data.error || "Failed to delete tenant")
+      }
+      toast({ title: "Tenant deleted", description: `${tenant.name} removed.` })
+      await loadTenants()
+    } catch (error: any) {
+      toast({ title: "Error", description: error.message || "Failed to delete tenant", variant: "destructive" })
+    } finally {
+      setIsDeletingTenantId(null)
+    }
+  }
+
   const handleCreateUser = async () => {
     if (!selectedTenantId) {
       toast({ title: "Pick a tenant", description: "Select a tenant before creating a user." })
@@ -311,6 +604,23 @@ export default function AdminPage() {
     )
   }
 
+  const applyModuleBundle = useCallback(
+    (bundle: ModuleBundle) => {
+      setModulePermissions(
+        MODULES.map((module) => ({
+          id: module.id,
+          label: module.label,
+          enabled: bundle.modules.includes(module.id),
+        })),
+      )
+      toast({
+        title: `${bundle.label} applied`,
+        description: "Review the checklist below and save to confirm module access.",
+      })
+    },
+    [toast],
+  )
+
   const toggleUserModule = (moduleId: string) => {
     setUserModulePermissions((prev) =>
       prev.map((module) => (module.id === moduleId ? { ...module, enabled: !module.enabled } : module)),
@@ -319,7 +629,7 @@ export default function AdminPage() {
 
   const handleSaveModules = async () => {
     if (!isOwner) {
-      toast({ title: "Owner access only", description: "Only owners can change tenant modules." })
+      toast({ title: "Platform owner only", description: "Only platform owners can change tenant modules." })
       return
     }
     if (!selectedTenantId) {
@@ -466,10 +776,38 @@ export default function AdminPage() {
     }
   }
 
+  const weeklyPeriodDays = weeklySummaryRange?.totalDays || 7
+  const weeklyPeriodLabel = `${weeklyPeriodDays}d`
+  const weeklyRangeLabel = weeklySummaryRange
+    ? `${weeklySummaryRange.startDate} to ${weeklySummaryRange.endDate}`
+    : `${weeklyStartDate} to ${weeklyEndDate}`
+  const weeklyCompareLabel =
+    weeklyCompareSummary && weeklyCompareRange ? `${weeklyCompareRange.startDate} to ${weeklyCompareRange.endDate}` : null
+  const getDeltaMeta = (current: number, previous: number, currency = false) => {
+    const delta = current - previous
+    const magnitude = currency ? formatCurrency(Math.abs(delta)) : formatCount(Math.abs(delta))
+    const text =
+      delta === 0 ? "No change vs previous period" : `${delta > 0 ? "+" : "-"}${magnitude} vs previous period`
+    const className = delta > 0 ? "text-emerald-600" : delta < 0 ? "text-rose-600" : "text-muted-foreground"
+    return { text, className }
+  }
+  const weeklyDeltas =
+    weeklySummary && weeklyCompareSummary
+      ? {
+          transaction: getDeltaMeta(weeklySummary.transactionCount, weeklyCompareSummary.transactionCount),
+          processing: getDeltaMeta(weeklySummary.processingCount, weeklyCompareSummary.processingCount),
+          dispatch: getDeltaMeta(weeklySummary.dispatchCount, weeklyCompareSummary.dispatchCount),
+          salesCount: getDeltaMeta(weeklySummary.salesCount, weeklyCompareSummary.salesCount),
+          salesRevenue: getDeltaMeta(weeklySummary.salesRevenue, weeklyCompareSummary.salesRevenue, true),
+          laborSpend: getDeltaMeta(weeklySummary.laborSpend, weeklyCompareSummary.laborSpend, true),
+          expenseSpend: getDeltaMeta(weeklySummary.expenseSpend, weeklyCompareSummary.expenseSpend, true),
+        }
+      : null
+
   return (
     <div className="space-y-6">
       {isOwner && (
-        <Card>
+        <Card className="border-border/70 bg-white/85">
           <CardHeader>
             <CardTitle>Tenants</CardTitle>
             <CardDescription>Create and manage estates/tenants.</CardDescription>
@@ -505,20 +843,249 @@ export default function AdminPage() {
                 </SelectContent>
               </Select>
             </div>
+
+            <div className="rounded-lg border border-border/60 bg-white/80">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Tenant</TableHead>
+                    <TableHead>Created</TableHead>
+                    <TableHead className="text-right">Actions</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {tenants.length === 0 && (
+                    <TableRow>
+                      <TableCell colSpan={3} className="text-sm text-muted-foreground">
+                        No tenants found yet.
+                      </TableCell>
+                    </TableRow>
+                  )}
+                  {tenants.map((tenant) => (
+                    <TableRow key={tenant.id}>
+                      <TableCell className="font-medium">{tenant.name}</TableCell>
+                      <TableCell>{formatDateOnly(tenant.created_at)}</TableCell>
+                      <TableCell className="text-right">
+                          <Button
+                            size="sm"
+                            variant="destructive"
+                            onClick={() => handleDeleteTenant(tenant)}
+                            disabled={tenant.id === user?.tenantId || isDeletingTenantId === tenant.id}
+                          >
+                          {isDeletingTenantId === tenant.id ? "Deleting..." : "Delete"}
+                        </Button>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
           </CardContent>
         </Card>
       )}
 
       {isOwner && (
-        <Card>
+        <Card className="border-border/70 bg-white/85">
+          <CardHeader>
+            <CardTitle>Weekly Summary</CardTitle>
+            <CardDescription>Share a quick snapshot with owners or buyers.</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="grid grid-cols-1 gap-3 md:grid-cols-4">
+              <div className="space-y-2">
+                <Label htmlFor="weekly-start">Start date</Label>
+                <Input
+                  id="weekly-start"
+                  type="date"
+                  value={weeklyStartDate}
+                  onChange={(event) => {
+                    setWeeklyStartDate(event.target.value)
+                    setWeeklySummary(null)
+                    setWeeklyCompareSummary(null)
+                    setWeeklySummaryRange(null)
+                    setWeeklyCompareRange(null)
+                  }}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="weekly-end">End date</Label>
+                <Input
+                  id="weekly-end"
+                  type="date"
+                  value={weeklyEndDate}
+                  onChange={(event) => {
+                    setWeeklyEndDate(event.target.value)
+                    setWeeklySummary(null)
+                    setWeeklyCompareSummary(null)
+                    setWeeklySummaryRange(null)
+                    setWeeklyCompareRange(null)
+                  }}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>Compare period</Label>
+                <Select
+                  value={weeklyCompareMode}
+                  onValueChange={(value) => {
+                    const mode = value === "previous" ? "previous" : "none"
+                    setWeeklyCompareMode(mode)
+                    setWeeklySummary(null)
+                    setWeeklyCompareSummary(null)
+                    setWeeklySummaryRange(null)
+                    setWeeklyCompareRange(null)
+                  }}
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="previous">Previous period</SelectItem>
+                    <SelectItem value="none">No compare</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label>Selected range</Label>
+                <div className="rounded-md border border-border/60 bg-white/80 px-3 py-2 text-sm text-muted-foreground">
+                  {weeklyRangeLabel}
+                </div>
+              </div>
+            </div>
+            <div className="flex flex-col gap-2 sm:flex-row">
+              <Button
+                variant="outline"
+                className="w-full sm:w-auto"
+                onClick={loadWeeklySummary}
+                disabled={!selectedTenantId || isWeeklyLoading}
+              >
+                {isWeeklyLoading ? "Loading..." : "Generate Summary"}
+              </Button>
+              <Button
+                variant="outline"
+                className="w-full sm:w-auto"
+                onClick={handleCopyWeeklySummary}
+                disabled={!selectedTenantId}
+              >
+                Copy WhatsApp summary
+              </Button>
+              <Button
+                variant="outline"
+                className="w-full sm:w-auto"
+                onClick={handleDownloadWeeklySummary}
+                disabled={!selectedTenantId}
+              >
+                Print / Save PDF
+              </Button>
+            </div>
+            {weeklyCompareLabel && (
+              <p className="text-xs text-muted-foreground">
+                Comparison window: {weeklyCompareLabel}
+              </p>
+            )}
+            {!weeklySummary && (
+              <p className="text-sm text-muted-foreground">
+                Generate a summary to see activity in your selected date range.
+              </p>
+            )}
+            {weeklySummary && (
+              <div className="grid gap-3 md:grid-cols-2 text-sm">
+                <div className="rounded-lg border border-border/60 bg-white/80 p-3">
+                  <p className="text-xs text-muted-foreground">Inventory items</p>
+                  <p className="font-semibold">{formatCount(weeklySummary.inventoryCount)}</p>
+                </div>
+                <div className="rounded-lg border border-border/60 bg-white/80 p-3">
+                  <p className="text-xs text-muted-foreground">Transactions ({weeklyPeriodLabel})</p>
+                  <p className="font-semibold">{formatCount(weeklySummary.transactionCount)}</p>
+                  {weeklyDeltas && <p className={`mt-1 text-xs ${weeklyDeltas.transaction.className}`}>{weeklyDeltas.transaction.text}</p>}
+                </div>
+                <div className="rounded-lg border border-border/60 bg-white/80 p-3">
+                  <p className="text-xs text-muted-foreground">Processing records ({weeklyPeriodLabel})</p>
+                  <p className="font-semibold">{formatCount(weeklySummary.processingCount)}</p>
+                  {weeklyDeltas && <p className={`mt-1 text-xs ${weeklyDeltas.processing.className}`}>{weeklyDeltas.processing.text}</p>}
+                </div>
+                <div className="rounded-lg border border-border/60 bg-white/80 p-3">
+                  <p className="text-xs text-muted-foreground">Dispatches ({weeklyPeriodLabel})</p>
+                  <p className="font-semibold">{formatCount(weeklySummary.dispatchCount)}</p>
+                  {weeklyDeltas && <p className={`mt-1 text-xs ${weeklyDeltas.dispatch.className}`}>{weeklyDeltas.dispatch.text}</p>}
+                </div>
+                <div className="rounded-lg border border-border/60 bg-white/80 p-3">
+                  <p className="text-xs text-muted-foreground">Sales ({weeklyPeriodLabel})</p>
+                  <p className="font-semibold">{formatCount(weeklySummary.salesCount)}</p>
+                  {weeklyDeltas && <p className={`mt-1 text-xs ${weeklyDeltas.salesCount.className}`}>{weeklyDeltas.salesCount.text}</p>}
+                </div>
+                <div className="rounded-lg border border-border/60 bg-white/80 p-3">
+                  <p className="text-xs text-muted-foreground">Sales revenue ({weeklyPeriodLabel})</p>
+                  <p className="font-semibold">{formatCurrency(weeklySummary.salesRevenue)}</p>
+                  {weeklyDeltas && <p className={`mt-1 text-xs ${weeklyDeltas.salesRevenue.className}`}>{weeklyDeltas.salesRevenue.text}</p>}
+                </div>
+                <div className="rounded-lg border border-border/60 bg-white/80 p-3">
+                  <p className="text-xs text-muted-foreground">Labor spend ({weeklyPeriodLabel})</p>
+                  <p className="font-semibold">{formatCurrency(weeklySummary.laborSpend)}</p>
+                  {weeklyDeltas && <p className={`mt-1 text-xs ${weeklyDeltas.laborSpend.className}`}>{weeklyDeltas.laborSpend.text}</p>}
+                </div>
+                <div className="rounded-lg border border-border/60 bg-white/80 p-3">
+                  <p className="text-xs text-muted-foreground">Expense spend ({weeklyPeriodLabel})</p>
+                  <p className="font-semibold">{formatCurrency(weeklySummary.expenseSpend)}</p>
+                  {weeklyDeltas && <p className={`mt-1 text-xs ${weeklyDeltas.expenseSpend.className}`}>{weeklyDeltas.expenseSpend.text}</p>}
+                </div>
+                <div className="rounded-lg border border-border/60 bg-white/80 p-3 md:col-span-2">
+                  <p className="text-xs text-muted-foreground">Receivables outstanding</p>
+                  <p className="font-semibold">{formatCurrency(weeklySummary.receivablesOutstanding)}</p>
+                </div>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
+      {isOwner && (
+        <Card className="border-border/70 bg-white/85">
           <CardHeader>
             <CardTitle>Tenant Modules</CardTitle>
             <CardDescription>Control which modules are available to users in this tenant.</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
+            <div className="rounded-lg border border-emerald-100 bg-emerald-50/50 p-4 text-sm">
+              <p className="font-medium text-emerald-900">Enabled modules ({enabledModuleLabels.length})</p>
+              <p className="text-xs text-muted-foreground">
+                These are active for the selected tenant.
+              </p>
+              <div className="mt-3 flex flex-wrap gap-2">
+                {enabledModuleLabels.length === 0 ? (
+                  <span className="text-xs text-muted-foreground">None enabled yet.</span>
+                ) : (
+                  enabledModuleLabels.map((label) => (
+                    <span key={label} className="rounded-full bg-white px-2.5 py-1 text-xs text-emerald-800">
+                      {label}
+                    </span>
+                  ))
+                )}
+              </div>
+            </div>
+            <div className="space-y-3 rounded-lg border border-border/60 bg-muted/30 p-4">
+              <div>
+                <p className="text-sm font-medium text-foreground">Module bundles</p>
+                <p className="text-xs text-muted-foreground">
+                  Apply a preset, then adjust individual modules as needed.
+                </p>
+              </div>
+              <div className="grid gap-3 md:grid-cols-2">
+                {MODULE_BUNDLES.map((bundle) => (
+                  <button
+                    key={bundle.id}
+                    type="button"
+                    onClick={() => applyModuleBundle(bundle)}
+                    className="rounded-lg border border-border/60 bg-white/80 p-3 text-left transition hover:border-emerald-200 hover:bg-emerald-50/40"
+                  >
+                    <p className="text-sm font-medium text-foreground">{bundle.label}</p>
+                    <p className="text-xs text-muted-foreground">{bundle.description}</p>
+                  </button>
+                ))}
+              </div>
+            </div>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
               {modulePermissions.map((module) => (
-                <label key={module.id} className="flex items-center gap-2 border rounded-md p-3">
+                <label key={module.id} className="flex items-center gap-2 rounded-lg border border-border/60 bg-white/80 p-3">
                   <input
                     type="checkbox"
                     checked={module.enabled}
@@ -536,7 +1103,7 @@ export default function AdminPage() {
       )}
 
       {isOwner && (
-        <Card>
+        <Card className="border-border/70 bg-white/85">
           <CardHeader>
             <CardTitle>Seed Tenant Data</CardTitle>
             <CardDescription>Generate mock inventory, accounts, processing, dispatch, and sales records.</CardDescription>
@@ -552,7 +1119,7 @@ export default function AdminPage() {
         </Card>
       )}
 
-      <Card>
+      <Card className="border-border/70 bg-white/85">
         <CardHeader>
           <CardTitle>Tenant Users</CardTitle>
           <CardDescription>
@@ -596,7 +1163,7 @@ export default function AdminPage() {
           </Button>
           <p className="text-xs text-muted-foreground">System accounts are read-only and cannot be edited.</p>
 
-          <div className="rounded-md border">
+          <div className="rounded-md border border-border/60 bg-white/80">
             <Table>
               <TableHeader>
                 <TableRow>
@@ -622,60 +1189,60 @@ export default function AdminPage() {
                       String(u.username || "").toLowerCase().startsWith("system-")
                     return (
                       <TableRow key={u.id}>
-                      <TableCell>{u.username}</TableCell>
-                      <TableCell>
-                        {isOwnerUser ? (
-                          <div className="text-sm font-medium text-emerald-700">{roleLabel(u.role)}</div>
-                        ) : isSystemUser ? (
-                          <div className="text-sm font-medium text-slate-700">System Admin</div>
-                        ) : (
-                          <Select
-                            value={userRoleDrafts[u.id] || u.role}
-                            onValueChange={(value) => handleRoleDraftChange(u.id, value)}
-                          >
-                            <SelectTrigger className="h-9">
-                              <SelectValue />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="admin">Admin</SelectItem>
-                              <SelectItem value="user">User</SelectItem>
-                            </SelectContent>
-                          </Select>
-                        )}
-                        {isOwnerUser && (
-                          <p className="mt-1 text-xs text-muted-foreground">Super Admin role cannot be modified.</p>
-                        )}
-                        {isSystemUser && (
-                          <p className="mt-1 text-xs text-muted-foreground">System user is read-only.</p>
-                        )}
-                      </TableCell>
-                      <TableCell>{formatDateOnly(u.created_at)}</TableCell>
-                      <TableCell>
-                        <div className="flex flex-col sm:flex-row gap-2">
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={() => handleSaveUserRole(u)}
-                            disabled={
-                              isOwnerUser ||
-                              isSystemUser ||
-                              isUpdatingUserId === u.id ||
-                              (userRoleDrafts[u.id] || u.role) === u.role
-                            }
-                          >
-                            {isUpdatingUserId === u.id ? "Saving..." : "Save"}
-                          </Button>
-                          <Button
-                            size="sm"
-                            variant="destructive"
-                            onClick={() => handleDeleteUser(u)}
-                            disabled={isOwnerUser || isSystemUser || isDeletingUserId === u.id}
-                          >
-                            {isDeletingUserId === u.id ? "Deleting..." : "Delete"}
-                          </Button>
-                        </div>
-                      </TableCell>
-                    </TableRow>
+                        <TableCell>{u.username}</TableCell>
+                        <TableCell>
+                          {isOwnerUser ? (
+                            <div className="text-sm font-medium text-emerald-700">{roleLabel(u.role)}</div>
+                          ) : isSystemUser ? (
+                            <div className="text-sm font-medium text-foreground">System Admin</div>
+                          ) : (
+                            <Select
+                              value={userRoleDrafts[u.id] || u.role}
+                              onValueChange={(value) => handleRoleDraftChange(u.id, value)}
+                            >
+                              <SelectTrigger className="h-9">
+                                <SelectValue />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="admin">Admin</SelectItem>
+                                <SelectItem value="user">User</SelectItem>
+                              </SelectContent>
+                            </Select>
+                          )}
+                          {isOwnerUser && (
+                            <p className="mt-1 text-xs text-muted-foreground">Platform Owner role cannot be modified.</p>
+                          )}
+                          {isSystemUser && (
+                            <p className="mt-1 text-xs text-muted-foreground">System user is read-only.</p>
+                          )}
+                        </TableCell>
+                        <TableCell>{formatDateOnly(u.created_at)}</TableCell>
+                        <TableCell>
+                          <div className="flex flex-col sm:flex-row gap-2">
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => handleSaveUserRole(u)}
+                              disabled={
+                                isOwnerUser ||
+                                isSystemUser ||
+                                isUpdatingUserId === u.id ||
+                                (userRoleDrafts[u.id] || u.role) === u.role
+                              }
+                            >
+                              {isUpdatingUserId === u.id ? "Saving..." : "Save"}
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="destructive"
+                              onClick={() => handleDeleteUser(u)}
+                              disabled={isOwnerUser || isSystemUser || isDeletingUserId === u.id}
+                            >
+                              {isDeletingUserId === u.id ? "Deleting..." : "Delete"}
+                            </Button>
+                          </div>
+                        </TableCell>
+                      </TableRow>
                     )
                   })
                 )}
@@ -685,7 +1252,7 @@ export default function AdminPage() {
         </CardContent>
       </Card>
 
-      <Card>
+      <Card className="border-border/70 bg-white/85">
         <CardHeader>
           <CardTitle>User Module Overrides</CardTitle>
           <CardDescription>
@@ -720,7 +1287,7 @@ export default function AdminPage() {
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
             {userModulePermissions.map((module) => (
-              <label key={module.id} className="flex items-center gap-2 border rounded-md p-3">
+              <label key={module.id} className="flex items-center gap-2 rounded-lg border border-border/60 bg-white/80 p-3">
                 <input
                   type="checkbox"
                   checked={module.enabled}
@@ -744,7 +1311,7 @@ export default function AdminPage() {
       </Card>
 
       {isOwner && (
-        <Card>
+        <Card className="border-border/70 bg-white/85">
           <CardHeader>
             <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
               <div>
@@ -786,7 +1353,7 @@ export default function AdminPage() {
             ) : auditLogs.length === 0 ? (
               <div className="text-sm text-muted-foreground">No audit events yet.</div>
             ) : (
-              <div className="rounded-md border">
+              <div className="rounded-md border border-border/60 bg-white/80">
                 <Table>
                   <TableHeader>
                     <TableRow>

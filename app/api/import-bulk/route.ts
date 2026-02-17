@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server"
 import { sql } from "@/lib/server/db"
 import { requireSessionUser } from "@/lib/server/auth"
+import { requireModuleAccess, isModuleAccessError } from "@/lib/server/module-access"
 import { normalizeTenantContext, runTenantQueries, runTenantQuery } from "@/lib/server/tenant-db"
 import { csvToObjects, normalizeCsvHeader } from "@/lib/csv"
 import { resolveLocationInfo } from "@/lib/server/location-utils"
@@ -9,6 +10,17 @@ import { recomputeProcessingTotals, resolveBagWeightKg } from "@/lib/server/proc
 
 const MAX_ROWS = 5000
 const CHUNK_SIZE = 100
+const DATASET_MODULE_MAP: Record<string, string> = {
+  processing: "processing",
+  pepper: "pepper",
+  rainfall: "rainfall",
+  dispatch: "dispatch",
+  sales: "sales",
+  transactions: "transactions",
+  inventory: "inventory",
+  labor: "accounts",
+  expenses: "accounts",
+}
 
 const isUuid = (value: string) =>
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value)
@@ -98,6 +110,13 @@ export async function POST(request: Request) {
     if (!dataset) {
       return NextResponse.json({ success: false, error: "Dataset is required" }, { status: 400 })
     }
+
+    const moduleId = DATASET_MODULE_MAP[dataset]
+    if (!moduleId) {
+      return NextResponse.json({ success: false, error: "Unsupported dataset" }, { status: 400 })
+    }
+
+    await requireModuleAccess(moduleId, sessionUser)
 
     if (!csvText.trim()) {
       return NextResponse.json({ success: false, error: "CSV content is required" }, { status: 400 })
@@ -898,6 +917,9 @@ export async function POST(request: Request) {
     return NextResponse.json({ success: false, error: "Unsupported dataset" }, { status: 400 })
   } catch (error: any) {
     console.error("Import error:", error)
+    if (isModuleAccessError(error)) {
+      return NextResponse.json({ success: false, error: "Module access disabled" }, { status: 403 })
+    }
     return NextResponse.json({ success: false, error: error?.message || "Import failed" }, { status: 500 })
   }
 }

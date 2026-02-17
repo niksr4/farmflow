@@ -1,9 +1,26 @@
 import { NextResponse } from "next/server"
 import { sql } from "@/lib/server/db"
 import { requireSessionUser } from "@/lib/server/auth"
+import { requireAnyModuleAccess, isModuleAccessError } from "@/lib/server/module-access"
 import { normalizeTenantContext, runTenantQuery } from "@/lib/server/tenant-db"
 import { requireAdminRole } from "@/lib/permissions"
 import { logAuditEvent } from "@/lib/server/audit-log"
+
+const LOCATION_MODULES = [
+  "inventory",
+  "transactions",
+  "accounts",
+  "processing",
+  "curing",
+  "quality",
+  "dispatch",
+  "sales",
+  "rainfall",
+  "pepper",
+  "journal",
+  "season",
+  "billing",
+]
 
 function normalizeCode(value: string) {
   return value.trim().toUpperCase().replace(/\s+/g, "-")
@@ -12,6 +29,7 @@ function normalizeCode(value: string) {
 export async function GET(request: Request) {
   try {
     const sessionUser = await requireSessionUser()
+    await requireAnyModuleAccess(LOCATION_MODULES, sessionUser)
     const { searchParams } = new URL(request.url)
     const requestedTenantId = searchParams.get("tenantId")
     const tenantId = sessionUser.role === "owner" && requestedTenantId ? requestedTenantId : sessionUser.tenantId
@@ -31,6 +49,9 @@ export async function GET(request: Request) {
     return NextResponse.json({ success: true, locations })
   } catch (error: any) {
     console.error("Error fetching locations:", error)
+    if (isModuleAccessError(error)) {
+      return NextResponse.json({ success: false, error: "Module access disabled" }, { status: 403 })
+    }
     return NextResponse.json({ success: false, error: error.message || "Failed to load locations" }, { status: 500 })
   }
 }
@@ -38,6 +59,7 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
   try {
     const sessionUser = await requireSessionUser()
+    await requireAnyModuleAccess(LOCATION_MODULES, sessionUser)
     try {
       requireAdminRole(sessionUser.role)
     } catch {
@@ -80,6 +102,9 @@ export async function POST(request: Request) {
     return NextResponse.json({ success: true, location: result[0] })
   } catch (error: any) {
     console.error("Error creating location:", error)
+    if (isModuleAccessError(error)) {
+      return NextResponse.json({ success: false, error: "Module access disabled" }, { status: 403 })
+    }
     return NextResponse.json({ success: false, error: error.message || "Failed to create location" }, { status: 500 })
   }
 }
@@ -87,6 +112,7 @@ export async function POST(request: Request) {
 export async function PATCH(request: Request) {
   try {
     const sessionUser = await requireSessionUser()
+    await requireAnyModuleAccess(LOCATION_MODULES, sessionUser)
     try {
       requireAdminRole(sessionUser.role)
     } catch {
@@ -163,6 +189,9 @@ export async function PATCH(request: Request) {
     return NextResponse.json({ success: true, location: result[0] })
   } catch (error: any) {
     console.error("Error updating location:", error)
+    if (isModuleAccessError(error)) {
+      return NextResponse.json({ success: false, error: "Module access disabled" }, { status: 403 })
+    }
     return NextResponse.json({ success: false, error: error.message || "Failed to update location" }, { status: 500 })
   }
 }

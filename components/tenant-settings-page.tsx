@@ -12,7 +12,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/comp
 import { useToast } from "@/hooks/use-toast"
 import { useAuth } from "@/hooks/use-auth"
 import { AlertThresholds, useTenantSettings } from "@/hooks/use-tenant-settings"
-import { MODULES } from "@/lib/modules"
+import { MODULES, MODULE_BUNDLES, type ModuleBundle } from "@/lib/modules"
 import { formatDateForDisplay, formatDateOnly } from "@/lib/date-utils"
 import { roleLabel } from "@/lib/roles"
 import { Info } from "lucide-react"
@@ -95,6 +95,8 @@ export default function TenantSettingsPage() {
 
   const [modulePermissions, setModulePermissions] = useState<ModulePermission[]>([])
   const [isSavingModules, setIsSavingModules] = useState(false)
+  const [uiPreferencesDraft, setUiPreferencesDraft] = useState({ hideEmptyMetrics: false })
+  const [isSavingUiPreferences, setIsSavingUiPreferences] = useState(false)
 
   const [selectedUserId, setSelectedUserId] = useState("")
   const [userModulePermissions, setUserModulePermissions] = useState<ModulePermission[]>([])
@@ -153,6 +155,12 @@ export default function TenantSettingsPage() {
   useEffect(() => {
     setEstateNameInput(settings.estateName || "")
   }, [settings.estateName])
+
+  useEffect(() => {
+    setUiPreferencesDraft({
+      hideEmptyMetrics: Boolean(settings.uiPreferences?.hideEmptyMetrics),
+    })
+  }, [settings.uiPreferences?.hideEmptyMetrics])
 
   const loadPrivacyStatus = useCallback(async () => {
     if (!tenantId) return
@@ -647,6 +655,23 @@ export default function TenantSettingsPage() {
     )
   }
 
+  const applyModuleBundle = useCallback(
+    (bundle: ModuleBundle) => {
+      setModulePermissions(
+        MODULES.map((module) => ({
+          id: module.id,
+          label: module.label,
+          enabled: bundle.modules.includes(module.id),
+        })),
+      )
+      toast({
+        title: `${bundle.label} applied`,
+        description: "Review the checklist below and save to confirm module access.",
+      })
+    },
+    [toast],
+  )
+
   const toggleUserModule = (moduleId: string) => {
     setUserModulePermissions((prev) =>
       prev.map((module) => (module.id === moduleId ? { ...module, enabled: !module.enabled } : module)),
@@ -679,6 +704,22 @@ export default function TenantSettingsPage() {
       toast({ title: "Error", description: error.message || "Failed to update modules", variant: "destructive" })
     } finally {
       setIsSavingModules(false)
+    }
+  }
+
+  const handleSaveUiPreferences = async () => {
+    setIsSavingUiPreferences(true)
+    try {
+      await updateSettings({ uiPreferences: { hideEmptyMetrics: uiPreferencesDraft.hideEmptyMetrics } })
+      toast({ title: "Preferences updated", description: "Dashboard display preferences saved." })
+    } catch (error: any) {
+      toast({
+        title: "Save failed",
+        description: error.message || "Unable to update preferences.",
+        variant: "destructive",
+      })
+    } finally {
+      setIsSavingUiPreferences(false)
     }
   }
 
@@ -868,8 +909,8 @@ export default function TenantSettingsPage() {
   }
 
   return (
-    <div className="space-y-6">
-      <Card>
+    <div className="space-y-8">
+      <Card className="border-border/70 bg-white/85">
         <CardHeader>
           <CardTitle className="flex items-baseline gap-3">
             Tenant Settings
@@ -885,20 +926,20 @@ export default function TenantSettingsPage() {
       {user?.role === "owner" && (
         <Card className="border-emerald-200/70 bg-emerald-50/60">
           <CardHeader>
-            <CardTitle>Super Admin Console</CardTitle>
-            <CardDescription>Expanded visibility and system-level tools for owners.</CardDescription>
+            <CardTitle>Platform Owner Tools</CardTitle>
+            <CardDescription>Tenant management and platform controls now live in a dedicated owner view.</CardDescription>
           </CardHeader>
           <CardContent className="flex flex-col gap-3 text-sm text-emerald-900">
             <div className="flex flex-wrap gap-2">
               <Button asChild variant="outline" className="bg-white/80">
-                <Link href="/admin/tenants">View All Tenants</Link>
+                <Link href="/admin/tenants">Open Owner Console</Link>
               </Button>
               <Button asChild variant="outline" className="bg-white/80">
                 <Link href="/admin/inspect-databases">Inspect Databases</Link>
               </Button>
             </div>
             <p className="text-xs text-emerald-800">
-              Super Admins can review tenants, seed demo data, and inspect database health across estates.
+              Estate settings remain on this page. Platform-level controls are separated under the owner console.
             </p>
           </CardContent>
         </Card>
@@ -916,7 +957,7 @@ export default function TenantSettingsPage() {
         </Card>
       )}
 
-      <Card>
+      <Card className="border-border/70 bg-white/85">
         <CardHeader>
           <CardTitle>Estate Identity</CardTitle>
           <CardDescription>
@@ -934,7 +975,7 @@ export default function TenantSettingsPage() {
                       <button
                         type="button"
                         aria-label="Estate name help"
-                        className="inline-flex h-5 w-5 items-center justify-center rounded-full border border-slate-200 text-slate-500 hover:text-slate-700"
+                        className="inline-flex h-5 w-5 items-center justify-center rounded-full border border-border/70 bg-white/70 text-muted-foreground hover:text-foreground"
                       >
                         <Info className="h-3 w-3" />
                       </button>
@@ -962,7 +1003,40 @@ export default function TenantSettingsPage() {
         </CardContent>
       </Card>
 
-      <Card>
+      {isAdminOrOwner && (
+        <Card className="border-border/70 bg-white/85">
+          <CardHeader>
+            <CardTitle>Dashboard Preferences</CardTitle>
+            <CardDescription>Trim empty highlights for a cleaner estate view.</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <label className="flex items-start gap-3 rounded-lg border border-border/60 bg-white/80 p-3">
+              <input
+                type="checkbox"
+                className="mt-1"
+                checked={uiPreferencesDraft.hideEmptyMetrics}
+                onChange={(event) =>
+                  setUiPreferencesDraft((prev) => ({
+                    ...prev,
+                    hideEmptyMetrics: event.target.checked,
+                  }))
+                }
+              />
+              <div className="space-y-1">
+                <p className="text-sm font-medium text-foreground">Hide empty metrics</p>
+                <p className="text-xs text-muted-foreground">
+                  Removes 0-value highlights like “24h activity” when there is no recent activity.
+                </p>
+              </div>
+            </label>
+            <Button onClick={handleSaveUiPreferences} disabled={isSavingUiPreferences || settingsLoading}>
+              {isSavingUiPreferences ? "Saving..." : "Save Preferences"}
+            </Button>
+          </CardContent>
+        </Card>
+      )}
+
+      <Card className="border-border/70 bg-white/85">
         <CardHeader>
           <CardTitle>Data Import</CardTitle>
           <CardDescription>Upload CSVs to onboard a new tenant faster.</CardDescription>
@@ -977,7 +1051,7 @@ export default function TenantSettingsPage() {
         </CardContent>
       </Card>
 
-      <Card>
+      <Card className="border-border/70 bg-white/85">
         <CardHeader>
           <CardTitle>Exception Thresholds & Targets</CardTitle>
           <CardDescription>
@@ -999,7 +1073,7 @@ export default function TenantSettingsPage() {
                           <button
                             type="button"
                             aria-label="Float rate help"
-                            className="inline-flex h-5 w-5 items-center justify-center rounded-full border border-slate-200 text-slate-500 hover:text-slate-700"
+                            className="inline-flex h-5 w-5 items-center justify-center rounded-full border border-border/70 bg-white/70 text-muted-foreground hover:text-foreground"
                           >
                             <Info className="h-3 w-3" />
                           </button>
@@ -1026,7 +1100,7 @@ export default function TenantSettingsPage() {
                           <button
                             type="button"
                             aria-label="Yield drop help"
-                            className="inline-flex h-5 w-5 items-center justify-center rounded-full border border-slate-200 text-slate-500 hover:text-slate-700"
+                            className="inline-flex h-5 w-5 items-center justify-center rounded-full border border-border/70 bg-white/70 text-muted-foreground hover:text-foreground"
                           >
                             <Info className="h-3 w-3" />
                           </button>
@@ -1075,7 +1149,7 @@ export default function TenantSettingsPage() {
                           <button
                             type="button"
                             aria-label="Inventory mismatch help"
-                            className="inline-flex h-5 w-5 items-center justify-center rounded-full border border-slate-200 text-slate-500 hover:text-slate-700"
+                            className="inline-flex h-5 w-5 items-center justify-center rounded-full border border-border/70 bg-white/70 text-muted-foreground hover:text-foreground"
                           >
                             <Info className="h-3 w-3" />
                           </button>
@@ -1101,7 +1175,7 @@ export default function TenantSettingsPage() {
                           <button
                             type="button"
                             aria-label="Dispatch unconfirmed help"
-                            className="inline-flex h-5 w-5 items-center justify-center rounded-full border border-slate-200 text-slate-500 hover:text-slate-700"
+                            className="inline-flex h-5 w-5 items-center justify-center rounded-full border border-border/70 bg-white/70 text-muted-foreground hover:text-foreground"
                           >
                             <Info className="h-3 w-3" />
                           </button>
@@ -1127,7 +1201,7 @@ export default function TenantSettingsPage() {
                           <button
                             type="button"
                             aria-label="Bag weight drift help"
-                            className="inline-flex h-5 w-5 items-center justify-center rounded-full border border-slate-200 text-slate-500 hover:text-slate-700"
+                            className="inline-flex h-5 w-5 items-center justify-center rounded-full border border-border/70 bg-white/70 text-muted-foreground hover:text-foreground"
                           >
                             <Info className="h-3 w-3" />
                           </button>
@@ -1154,7 +1228,7 @@ export default function TenantSettingsPage() {
                           <button
                             type="button"
                             aria-label="Minimum kgs help"
-                            className="inline-flex h-5 w-5 items-center justify-center rounded-full border border-slate-200 text-slate-500 hover:text-slate-700"
+                            className="inline-flex h-5 w-5 items-center justify-center rounded-full border border-border/70 bg-white/70 text-muted-foreground hover:text-foreground"
                           >
                             <Info className="h-3 w-3" />
                           </button>
@@ -1185,7 +1259,7 @@ export default function TenantSettingsPage() {
                             <button
                               type="button"
                               aria-label="Target yield help"
-                              className="inline-flex h-5 w-5 items-center justify-center rounded-full border border-slate-200 text-slate-500 hover:text-slate-700"
+                              className="inline-flex h-5 w-5 items-center justify-center rounded-full border border-border/70 bg-white/70 text-muted-foreground hover:text-foreground"
                             >
                               <Info className="h-3 w-3" />
                             </button>
@@ -1212,7 +1286,7 @@ export default function TenantSettingsPage() {
                             <button
                               type="button"
                               aria-label="Target loss help"
-                              className="inline-flex h-5 w-5 items-center justify-center rounded-full border border-slate-200 text-slate-500 hover:text-slate-700"
+                              className="inline-flex h-5 w-5 items-center justify-center rounded-full border border-border/70 bg-white/70 text-muted-foreground hover:text-foreground"
                             >
                               <Info className="h-3 w-3" />
                             </button>
@@ -1239,7 +1313,7 @@ export default function TenantSettingsPage() {
                             <button
                               type="button"
                               aria-label="Target price help"
-                              className="inline-flex h-5 w-5 items-center justify-center rounded-full border border-slate-200 text-slate-500 hover:text-slate-700"
+                              className="inline-flex h-5 w-5 items-center justify-center rounded-full border border-border/70 bg-white/70 text-muted-foreground hover:text-foreground"
                             >
                               <Info className="h-3 w-3" />
                             </button>
@@ -1266,7 +1340,7 @@ export default function TenantSettingsPage() {
                             <button
                               type="button"
                               aria-label="Target float rate help"
-                              className="inline-flex h-5 w-5 items-center justify-center rounded-full border border-slate-200 text-slate-500 hover:text-slate-700"
+                              className="inline-flex h-5 w-5 items-center justify-center rounded-full border border-border/70 bg-white/70 text-muted-foreground hover:text-foreground"
                             >
                               <Info className="h-3 w-3" />
                             </button>
@@ -1295,7 +1369,7 @@ export default function TenantSettingsPage() {
         </CardContent>
       </Card>
 
-      <Card>
+      <Card className="border-border/70 bg-white/85">
         <CardHeader>
           <CardTitle>Locations</CardTitle>
           <CardDescription>Add or edit estate locations (HF, MV, PG, etc.).</CardDescription>
@@ -1311,7 +1385,7 @@ export default function TenantSettingsPage() {
                       <button
                         type="button"
                         aria-label="Location name help"
-                        className="inline-flex h-5 w-5 items-center justify-center rounded-full border border-slate-200 text-slate-500 hover:text-slate-700"
+                        className="inline-flex h-5 w-5 items-center justify-center rounded-full border border-border/70 bg-white/70 text-muted-foreground hover:text-foreground"
                       >
                         <Info className="h-3 w-3" />
                       </button>
@@ -1336,7 +1410,7 @@ export default function TenantSettingsPage() {
                       <button
                         type="button"
                         aria-label="Location code help"
-                        className="inline-flex h-5 w-5 items-center justify-center rounded-full border border-slate-200 text-slate-500 hover:text-slate-700"
+                        className="inline-flex h-5 w-5 items-center justify-center rounded-full border border-border/70 bg-white/70 text-muted-foreground hover:text-foreground"
                       >
                         <Info className="h-3 w-3" />
                       </button>
@@ -1359,7 +1433,7 @@ export default function TenantSettingsPage() {
             </div>
           </div>
 
-          <div className="rounded-md border">
+          <div className="rounded-lg border border-border/60 bg-white/80">
             <Table>
               <TableHeader>
                 <TableRow>
@@ -1428,7 +1502,7 @@ export default function TenantSettingsPage() {
       </Card>
 
       {isOwner && (
-        <Card>
+        <Card className="border-border/70 bg-white/85">
           <CardHeader>
             <CardTitle>Tenant Modules</CardTitle>
             <CardDescription>
@@ -1436,9 +1510,30 @@ export default function TenantSettingsPage() {
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
+            <div className="space-y-3 rounded-lg border border-border/60 bg-muted/30 p-4">
+              <div>
+                <p className="text-sm font-medium text-foreground">Module bundles</p>
+                <p className="text-xs text-muted-foreground">
+                  Start from a preset and then fine-tune the checklist below.
+                </p>
+              </div>
+              <div className="grid gap-3 md:grid-cols-2">
+                {MODULE_BUNDLES.map((bundle) => (
+                  <button
+                    key={bundle.id}
+                    type="button"
+                    onClick={() => applyModuleBundle(bundle)}
+                    className="rounded-lg border border-border/60 bg-white/80 p-3 text-left transition hover:border-emerald-200 hover:bg-emerald-50/40"
+                  >
+                    <p className="text-sm font-medium text-foreground">{bundle.label}</p>
+                    <p className="text-xs text-muted-foreground">{bundle.description}</p>
+                  </button>
+                ))}
+              </div>
+            </div>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
               {modulePermissions.map((module) => (
-                <label key={module.id} className="flex items-center gap-2 border rounded-md p-3">
+                <label key={module.id} className="flex items-center gap-2 rounded-lg border border-border/60 bg-white/80 p-3">
                   <input
                     type="checkbox"
                     checked={module.enabled}
@@ -1455,7 +1550,7 @@ export default function TenantSettingsPage() {
         </Card>
       )}
 
-      <Card>
+      <Card className="border-border/70 bg-white/85">
         <CardHeader>
           <CardTitle>Tenant Users</CardTitle>
           <CardDescription>Invite admins or users and manage roles.</CardDescription>
@@ -1492,7 +1587,7 @@ export default function TenantSettingsPage() {
             Create User
           </Button>
 
-          <div className="rounded-md border">
+          <div className="rounded-lg border border-border/60 bg-white/80">
             <Table>
               <TableHeader>
                 <TableRow>
@@ -1533,7 +1628,7 @@ export default function TenantSettingsPage() {
                           </Select>
                         )}
                         {isOwnerUser && (
-                          <p className="mt-1 text-xs text-muted-foreground">Super Admin role cannot be modified.</p>
+                          <p className="mt-1 text-xs text-muted-foreground">Platform Owner role cannot be modified.</p>
                         )}
                       </TableCell>
                       <TableCell>{formatDateOnly(u.created_at)}</TableCell>
@@ -1569,7 +1664,7 @@ export default function TenantSettingsPage() {
         </CardContent>
       </Card>
 
-      <Card>
+      <Card className="border-border/70 bg-white/85">
         <CardHeader>
           <CardTitle>User Module Overrides</CardTitle>
           <CardDescription>Override tenant defaults for a single user.</CardDescription>
@@ -1602,7 +1697,7 @@ export default function TenantSettingsPage() {
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
             {userModulePermissions.map((module) => (
-              <label key={module.id} className="flex items-center gap-2 border rounded-md p-3">
+              <label key={module.id} className="flex items-center gap-2 rounded-lg border border-border/60 bg-white/80 p-3">
                 <input
                   type="checkbox"
                   checked={module.enabled}
@@ -1626,7 +1721,7 @@ export default function TenantSettingsPage() {
       </Card>
 
       {mfaFeatureEnabled && (user?.role === "admin" || user?.role === "owner") && (
-        <Card>
+        <Card className="border-border/70 bg-white/85">
           <CardHeader>
             <CardTitle>Admin Security (MFA)</CardTitle>
             <CardDescription>Admins must enroll in MFA to access sensitive settings and admin APIs.</CardDescription>
@@ -1636,7 +1731,7 @@ export default function TenantSettingsPage() {
             {isMfaLoading ? (
               <div>Loading MFA status...</div>
             ) : (
-              <div className="rounded-md border bg-white/80 p-4 space-y-3">
+              <div className="rounded-lg border border-border/60 bg-white/80 p-4 space-y-3">
                 <div className="flex items-center justify-between">
                   <div>
                     <p className="text-sm font-medium text-foreground">MFA status</p>
@@ -1680,7 +1775,7 @@ export default function TenantSettingsPage() {
         </Card>
       )}
 
-      <Card>
+      <Card className="border-border/70 bg-white/85">
         <CardHeader>
           <CardTitle>Privacy & DPDP</CardTitle>
           <CardDescription>Manage personal data rights, notices, and consent settings.</CardDescription>
@@ -1690,7 +1785,7 @@ export default function TenantSettingsPage() {
           {isPrivacyLoading ? (
             <div>Loading privacy status...</div>
           ) : (
-            <div className="rounded-md border bg-white/80 p-4 space-y-2">
+            <div className="rounded-lg border border-border/60 bg-white/80 p-4 space-y-2">
               <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                 <div>
                   <p className="text-sm font-medium text-foreground">Privacy notice</p>
@@ -1727,7 +1822,7 @@ export default function TenantSettingsPage() {
           )}
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div className="rounded-md border bg-white/80 p-4 space-y-3">
+            <div className="rounded-lg border border-border/60 bg-white/80 p-4 space-y-3">
               <div>
                 <p className="text-sm font-medium text-foreground">Export my data</p>
                 <p>Download a JSON export of your personal data across FarmFlow.</p>
@@ -1736,7 +1831,7 @@ export default function TenantSettingsPage() {
                 {isExportingPersonalData ? "Preparing..." : "Download export"}
               </Button>
             </div>
-            <div className="rounded-md border bg-white/80 p-4 space-y-3">
+            <div className="rounded-lg border border-border/60 bg-white/80 p-4 space-y-3">
               <div>
                 <p className="text-sm font-medium text-foreground">Correct my username</p>
                 <p>Update the username used across logs and records.</p>
@@ -1773,7 +1868,7 @@ export default function TenantSettingsPage() {
       </Card>
 
       {isOwner && (
-        <Card>
+        <Card className="border-border/70 bg-white/85">
           <CardHeader>
             <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
               <div>
@@ -1811,7 +1906,7 @@ export default function TenantSettingsPage() {
             ) : auditLogs.length === 0 ? (
               <div className="text-sm text-muted-foreground">No audit events yet.</div>
             ) : (
-              <div className="rounded-md border">
+              <div className="rounded-lg border border-border/60 bg-white/80">
                 <Table>
                   <TableHeader>
                     <TableRow>

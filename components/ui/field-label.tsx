@@ -26,7 +26,7 @@ export function FieldLabel({ htmlFor, label, tooltip, className, labelClassName 
               <button
                 type="button"
                 aria-label={`${label} help`}
-                className="inline-flex h-5 w-5 items-center justify-center rounded-full border border-slate-200 text-slate-500 hover:text-slate-700"
+                className="inline-flex h-5 w-5 items-center justify-center rounded-full border border-border/70 bg-white/70 text-muted-foreground shadow-sm transition-colors hover:text-foreground"
               >
                 <Info className="h-3 w-3" />
               </button>
