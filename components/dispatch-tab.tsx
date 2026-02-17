@@ -94,8 +94,15 @@ export default function DispatchTab() {
     robusta_dry_parchment_bags: 0,
     robusta_dry_cherry_bags: 0,
   })
+  const [formBagTotals, setFormBagTotals] = useState<BagTotals>({
+    arabica_dry_parchment_bags: 0,
+    arabica_dry_cherry_bags: 0,
+    robusta_dry_parchment_bags: 0,
+    robusta_dry_cherry_bags: 0,
+  })
   const [dispatchRecords, setDispatchRecords] = useState<DispatchRecord[]>([])
   const [dispatchSummary, setDispatchSummary] = useState<DispatchSummaryRow[]>([])
+  const [formDispatchSummary, setFormDispatchSummary] = useState<DispatchSummaryRow[]>([])
   const [dispatchTotalCount, setDispatchTotalCount] = useState(0)
   const [dispatchPage, setDispatchPage] = useState(0)
   const [dispatchHasMore, setDispatchHasMore] = useState(false)
@@ -198,8 +205,47 @@ export default function DispatchTab() {
     return totals
   }, [dispatchRecords, dispatchSummary])
 
+  const formDispatchedTotals = useMemo(() => {
+    const totals = {
+      arabica_dry_parchment: 0,
+      arabica_dry_cherry: 0,
+      robusta_dry_parchment: 0,
+      robusta_dry_cherry: 0,
+    }
+
+    if (formDispatchSummary.length > 0) {
+      formDispatchSummary.forEach((row) => {
+        const coffeeKey = String(row.coffee_type || "").toLowerCase()
+        const bagKey = normalizeBagTypeKey(String(row.bag_type || ""))
+        const key = `${coffeeKey}_${bagKey}` as keyof typeof totals
+        if (totals[key] !== undefined) {
+          totals[key] += Number(row.bags_dispatched) || 0
+        }
+      })
+      return totals
+    }
+
+    if (!selectedLocationId) {
+      return totals
+    }
+
+    dispatchRecords.forEach((record) => {
+      const recordLocationId =
+        record.location_id ||
+        resolveLocationIdFromLabel(record.location_name || record.location_code || record.estate)
+      if (recordLocationId !== selectedLocationId) return
+      const bagKey = normalizeBagTypeKey(record.bag_type)
+      const key = `${record.coffee_type.toLowerCase()}_${bagKey}` as keyof typeof totals
+      if (totals[key] !== undefined) {
+        totals[key] += Number(record.bags_dispatched)
+      }
+    })
+
+    return totals
+  }, [dispatchRecords, formDispatchSummary, resolveLocationIdFromLabel, selectedLocationId])
+
   // Fetch bag totals from processing data across all locations
-  const fetchBagTotals = useCallback(async () => {
+  const fetchBagTotals = useCallback(async (locationId: string | null, setter: (totals: BagTotals) => void) => {
     try {
       const { startDate, endDate } = getFiscalYearDateRange(selectedFiscalYear)
       const params = new URLSearchParams({
@@ -207,8 +253,9 @@ export default function DispatchTab() {
         fiscalYearStart: startDate,
         fiscalYearEnd: endDate,
       })
-      if (selectedLocationId) {
-        params.set("locationId", selectedLocationId)
+      const resolvedLocation = locationId ? locationId.trim() : ""
+      if (resolvedLocation) {
+        params.set("locationId", resolvedLocation)
       }
       const response = await fetch(`/api/processing-records?${params.toString()}`)
       const data = await response.json()
@@ -233,7 +280,7 @@ export default function DispatchTab() {
         }
       }
 
-      setBagTotals({
+      setter({
         arabica_dry_parchment_bags: Number(arabicaDryParchment.toFixed(2)),
         arabica_dry_cherry_bags: Number(arabicaDryCherry.toFixed(2)),
         robusta_dry_parchment_bags: Number(robustaDryParchment.toFixed(2)),
@@ -242,9 +289,9 @@ export default function DispatchTab() {
     } catch (error) {
       console.error("Error fetching bag totals:", error)
     }
-  }, [selectedFiscalYear, selectedLocationId])
+  }, [selectedFiscalYear])
 
-  const fetchDispatchSummary = useCallback(async () => {
+  const fetchDispatchSummary = useCallback(async (locationId: string | null, setter: (rows: DispatchSummaryRow[]) => void) => {
     try {
       const { startDate, endDate } = getFiscalYearDateRange(selectedFiscalYear)
       const params = new URLSearchParams({
@@ -252,18 +299,19 @@ export default function DispatchTab() {
         endDate,
         summaryOnly: "true",
       })
-      if (selectedLocationId) {
-        params.set("locationId", selectedLocationId)
+      const resolvedLocation = locationId ? locationId.trim() : ""
+      if (resolvedLocation) {
+        params.set("locationId", resolvedLocation)
       }
       const response = await fetch(`/api/dispatch?${params.toString()}`)
       const data = await response.json()
       if (data.success) {
-        setDispatchSummary(Array.isArray(data.totalsByType) ? data.totalsByType : [])
+        setter(Array.isArray(data.totalsByType) ? data.totalsByType : [])
       }
     } catch (error) {
       console.error("Error fetching dispatch summary:", error)
     }
-  }, [selectedFiscalYear, selectedLocationId])
+  }, [selectedFiscalYear])
 
   // Fetch dispatch records
   const fetchDispatchRecords = useCallback(async (pageIndex = 0, append = false) => {
@@ -307,10 +355,28 @@ export default function DispatchTab() {
 
   useEffect(() => {
     loadLocations()
-    fetchBagTotals()
-    fetchDispatchSummary()
     fetchDispatchRecords(0, false)
-  }, [fetchBagTotals, fetchDispatchRecords, fetchDispatchSummary, loadLocations])
+  }, [fetchDispatchRecords, loadLocations])
+
+  useEffect(() => {
+    fetchBagTotals(null, setBagTotals)
+    fetchDispatchSummary(null, setDispatchSummary)
+  }, [fetchBagTotals, fetchDispatchSummary])
+
+  useEffect(() => {
+    if (!selectedLocationId) {
+      setFormBagTotals({
+        arabica_dry_parchment_bags: 0,
+        arabica_dry_cherry_bags: 0,
+        robusta_dry_parchment_bags: 0,
+        robusta_dry_cherry_bags: 0,
+      })
+      setFormDispatchSummary([])
+      return
+    }
+    fetchBagTotals(selectedLocationId, setFormBagTotals)
+    fetchDispatchSummary(selectedLocationId, setFormDispatchSummary)
+  }, [fetchBagTotals, fetchDispatchSummary, selectedLocationId])
 
   const handleSave = async () => {
     if (!selectedLocationId) {
@@ -384,8 +450,12 @@ export default function DispatchTab() {
         resetForm()
         // Refresh records
         fetchDispatchRecords(0, false)
-        fetchDispatchSummary()
-        fetchBagTotals()
+        fetchDispatchSummary(null, setDispatchSummary)
+        fetchBagTotals(null, setBagTotals)
+        if (selectedLocationId) {
+          fetchDispatchSummary(selectedLocationId, setFormDispatchSummary)
+          fetchBagTotals(selectedLocationId, setFormBagTotals)
+        }
       } else {
         toast({
           title: "Error",
@@ -444,8 +514,12 @@ export default function DispatchTab() {
           description: "Record deleted successfully",
         })
         fetchDispatchRecords(0, false)
-        fetchDispatchSummary()
-        fetchBagTotals()
+        fetchDispatchSummary(null, setDispatchSummary)
+        fetchBagTotals(null, setBagTotals)
+        if (selectedLocationId) {
+          fetchDispatchSummary(selectedLocationId, setFormDispatchSummary)
+          fetchBagTotals(selectedLocationId, setFormBagTotals)
+        }
       } else {
         toast({
           title: "Error",
@@ -525,17 +599,30 @@ export default function DispatchTab() {
   }
 
   // Calculate balance
-  const balanceArabicaDryParchment = bagTotals.arabica_dry_parchment_bags - dispatchedTotals.arabica_dry_parchment
-  const balanceArabicaDryCherry = bagTotals.arabica_dry_cherry_bags - dispatchedTotals.arabica_dry_cherry
-  const balanceRobustaDryParchment = bagTotals.robusta_dry_parchment_bags - dispatchedTotals.robusta_dry_parchment
-  const balanceRobustaDryCherry = bagTotals.robusta_dry_cherry_bags - dispatchedTotals.robusta_dry_cherry
+  const summaryBalanceArabicaDryParchment =
+    bagTotals.arabica_dry_parchment_bags - dispatchedTotals.arabica_dry_parchment
+  const summaryBalanceArabicaDryCherry =
+    bagTotals.arabica_dry_cherry_bags - dispatchedTotals.arabica_dry_cherry
+  const summaryBalanceRobustaDryParchment =
+    bagTotals.robusta_dry_parchment_bags - dispatchedTotals.robusta_dry_parchment
+  const summaryBalanceRobustaDryCherry =
+    bagTotals.robusta_dry_cherry_bags - dispatchedTotals.robusta_dry_cherry
+
+  const availabilityBalanceArabicaDryParchment =
+    formBagTotals.arabica_dry_parchment_bags - formDispatchedTotals.arabica_dry_parchment
+  const availabilityBalanceArabicaDryCherry =
+    formBagTotals.arabica_dry_cherry_bags - formDispatchedTotals.arabica_dry_cherry
+  const availabilityBalanceRobustaDryParchment =
+    formBagTotals.robusta_dry_parchment_bags - formDispatchedTotals.robusta_dry_parchment
+  const availabilityBalanceRobustaDryCherry =
+    formBagTotals.robusta_dry_cherry_bags - formDispatchedTotals.robusta_dry_cherry
 
   // Get current selected balance
   const getBalanceForSelection = () => {
-    if (coffeeType === "Arabica" && bagType === "Dry Parchment") return balanceArabicaDryParchment
-    if (coffeeType === "Arabica" && bagType === "Dry Cherry") return balanceArabicaDryCherry
-    if (coffeeType === "Robusta" && bagType === "Dry Parchment") return balanceRobustaDryParchment
-    if (coffeeType === "Robusta" && bagType === "Dry Cherry") return balanceRobustaDryCherry
+    if (coffeeType === "Arabica" && bagType === "Dry Parchment") return availabilityBalanceArabicaDryParchment
+    if (coffeeType === "Arabica" && bagType === "Dry Cherry") return availabilityBalanceArabicaDryCherry
+    if (coffeeType === "Robusta" && bagType === "Dry Parchment") return availabilityBalanceRobustaDryParchment
+    if (coffeeType === "Robusta" && bagType === "Dry Cherry") return availabilityBalanceRobustaDryCherry
     return 0
   }
   const editAllowance = useMemo(() => {
@@ -611,10 +698,10 @@ export default function DispatchTab() {
             <div
               className={cn(
                 "text-sm font-medium mt-1",
-                balanceArabicaDryParchment < 0 ? "text-red-600" : "text-green-600",
+                summaryBalanceArabicaDryParchment < 0 ? "text-red-600" : "text-green-600",
               )}
             >
-              Balance: {formatNumber(balanceArabicaDryParchment)}
+              Balance: {formatNumber(summaryBalanceArabicaDryParchment)}
             </div>
           </CardContent>
         </Card>
@@ -629,8 +716,13 @@ export default function DispatchTab() {
             <div className="text-sm text-muted-foreground mt-1">
               Dispatched: {formatNumber(dispatchedTotals.arabica_dry_cherry)}
             </div>
-            <div className={cn("text-sm font-medium mt-1", balanceArabicaDryCherry < 0 ? "text-red-600" : "text-green-600")}>
-              Balance: {formatNumber(balanceArabicaDryCherry)}
+            <div
+              className={cn(
+                "text-sm font-medium mt-1",
+                summaryBalanceArabicaDryCherry < 0 ? "text-red-600" : "text-green-600",
+              )}
+            >
+              Balance: {formatNumber(summaryBalanceArabicaDryCherry)}
             </div>
           </CardContent>
         </Card>
@@ -648,10 +740,10 @@ export default function DispatchTab() {
             <div
               className={cn(
                 "text-sm font-medium mt-1",
-                balanceRobustaDryParchment < 0 ? "text-red-600" : "text-green-600",
+                summaryBalanceRobustaDryParchment < 0 ? "text-red-600" : "text-green-600",
               )}
             >
-              Balance: {formatNumber(balanceRobustaDryParchment)}
+              Balance: {formatNumber(summaryBalanceRobustaDryParchment)}
             </div>
           </CardContent>
         </Card>
@@ -666,8 +758,13 @@ export default function DispatchTab() {
             <div className="text-sm text-muted-foreground mt-1">
               Dispatched: {formatNumber(dispatchedTotals.robusta_dry_cherry)}
             </div>
-            <div className={cn("text-sm font-medium mt-1", balanceRobustaDryCherry < 0 ? "text-red-600" : "text-green-600")}>
-              Balance: {formatNumber(balanceRobustaDryCherry)}
+            <div
+              className={cn(
+                "text-sm font-medium mt-1",
+                summaryBalanceRobustaDryCherry < 0 ? "text-red-600" : "text-green-600",
+              )}
+            >
+              Balance: {formatNumber(summaryBalanceRobustaDryCherry)}
             </div>
           </CardContent>
         </Card>
