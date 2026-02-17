@@ -341,7 +341,7 @@ export default function DispatchTab() {
     }
 
     // Check if we have enough bags available from processing
-    const balance = getBalanceForSelection()
+    const balance = allowedBalance
     if (bagsValue > balance) {
       toast({
         title: "Insufficient Inventory",
@@ -538,7 +538,29 @@ export default function DispatchTab() {
     if (coffeeType === "Robusta" && bagType === "Dry Cherry") return balanceRobustaDryCherry
     return 0
   }
+  const editAllowance = useMemo(() => {
+    if (!editingRecord) {
+      return { allowance: 0, matchesSelection: false }
+    }
+    const editLocationId =
+      editingRecord.location_id ||
+      resolveLocationIdFromLabel(editingRecord.location_name || editingRecord.location_code || editingRecord.estate)
+    const matchesLocation = editLocationId && editLocationId === selectedLocationId
+    const matchesCoffee =
+      String(editingRecord.coffee_type || "").toLowerCase() === String(coffeeType || "").toLowerCase()
+    const matchesBag =
+      normalizeBagTypeKey(String(editingRecord.bag_type || "")) === normalizeBagTypeKey(String(bagType || ""))
+    if (matchesLocation && matchesCoffee && matchesBag) {
+      return { allowance: Number(editingRecord.bags_dispatched) || 0, matchesSelection: true }
+    }
+    return { allowance: 0, matchesSelection: false }
+  }, [bagType, coffeeType, editingRecord, resolveLocationIdFromLabel, selectedLocationId])
+
   const currentBalance = getBalanceForSelection()
+  const availableBalance = currentBalance + editAllowance.allowance
+  const allowedBalance = editAllowance.matchesSelection
+    ? Math.max(availableBalance, editAllowance.allowance)
+    : availableBalance
   const resolvedCountLabel =
     dispatchTotalCount > dispatchRecords.length
       ? `Showing ${dispatchRecords.length} of ${dispatchTotalCount}`
@@ -751,12 +773,19 @@ export default function DispatchTab() {
                   ))}
                 </SelectContent>
               </Select>
-              <p className={cn(
-                "text-xs",
-                currentBalance > 0 ? "text-green-600" : "text-red-600"
-              )}>
-                Available: {formatNumber(currentBalance)} bags
+              <p
+                className={cn(
+                  "text-xs",
+                  availableBalance > 0 ? "text-green-600" : "text-red-600",
+                )}
+              >
+                Available: {formatNumber(availableBalance)} bags
               </p>
+              {editAllowance.matchesSelection && (
+                <p className="text-[11px] text-muted-foreground">
+                  This record already accounts for {formatNumber(editAllowance.allowance)} bags.
+                </p>
+              )}
             </div>
 
             {/* Bags Dispatched */}
@@ -773,9 +802,9 @@ export default function DispatchTab() {
                 value={bagsDispatched}
                 onKeyDown={blockInvalidNumberKey}
                 onChange={handleNonNegativeChange(setBagsDispatched)}
-                max={currentBalance}
+                max={Math.max(0, allowedBalance)}
               />
-              {bagsDispatched && Number(bagsDispatched) > currentBalance && (
+              {bagsDispatched && Number(bagsDispatched) > allowedBalance && (
                 <p className="text-xs text-red-600">
                   Exceeds available inventory from processing!
                 </p>
