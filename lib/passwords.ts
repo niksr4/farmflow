@@ -28,25 +28,47 @@ export function verifyPassword(password: string, storedHash: string): VerifyResu
   }
 
   if (storedHash.startsWith(`${SCRYPT_PREFIX}$`)) {
-    const parts = storedHash.split("$")
-    if (parts.length !== 3) {
+    try {
+      const parts = storedHash.split("$")
+      if (parts.length !== 3) {
+        return { matches: false, needsRehash: false }
+      }
+
+      const saltHex = parts[1]
+      const hashHex = parts[2]
+      if (!saltHex || !hashHex) {
+        return { matches: false, needsRehash: false }
+      }
+
+      const expected = Buffer.from(hashHex, "hex")
+      if (expected.length === 0) {
+        return { matches: false, needsRehash: false }
+      }
+
+      const actual = scryptSync(password, saltHex, expected.length) as Buffer
+      return { matches: safeEqual(actual, expected), needsRehash: false }
+    } catch {
       return { matches: false, needsRehash: false }
     }
-
-    const saltHex = parts[1]
-    const hashHex = parts[2]
-    if (!saltHex || !hashHex) {
-      return { matches: false, needsRehash: false }
-    }
-
-    const expected = Buffer.from(hashHex, "hex")
-    const actual = scryptSync(password, saltHex, expected.length) as Buffer
-    return { matches: safeEqual(actual, expected), needsRehash: false }
   }
 
+  const normalizedStored = String(storedHash).trim()
   const legacyHash = createHash("sha256").update(password).digest("hex")
-  const matches = safeEqual(Buffer.from(storedHash), Buffer.from(legacyHash))
-  return { matches, needsRehash: matches }
+
+  // Legacy compatibility:
+  // 1) SHA-256 hex records (case-insensitive)
+  // 2) historical plain-text records (rehash on successful login)
+  const shaMatches = normalizedStored.toLowerCase() === legacyHash
+  if (shaMatches) {
+    return { matches: true, needsRehash: true }
+  }
+
+  const plaintextMatches = safeEqual(Buffer.from(normalizedStored), Buffer.from(password))
+  if (plaintextMatches) {
+    return { matches: true, needsRehash: true }
+  }
+
+  return { matches: false, needsRehash: false }
 }
 
 export function generateTemporaryPassword(length = 12) {
