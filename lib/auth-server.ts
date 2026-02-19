@@ -5,6 +5,12 @@ import { authOptions } from "@/lib/auth"
 import { sql } from "@/lib/server/db"
 import { normalizeTenantContext, runTenantQuery } from "@/lib/server/tenant-db"
 
+const isMissingPasswordResetColumnError = (error: unknown) => {
+  const code = String((error as any)?.code || "")
+  const message = String((error as any)?.message || "")
+  return code === "42703" || message.includes('column "password_reset_required" does not exist')
+}
+
 export type SessionUser = {
   username: string
   role: "admin" | "user" | "owner"
@@ -29,16 +35,34 @@ export async function requireSessionUser(): Promise<SessionUser> {
 
   if (user?.name && sql) {
     const ownerContext = normalizeTenantContext(undefined, "owner")
-    const rows = await runTenantQuery(
-      sql,
-      ownerContext,
-      sql`
-        SELECT role, tenant_id, password_reset_required
-        FROM users
-        WHERE username = ${String(user.name)}
-        LIMIT 1
-      `,
-    )
+    let rows: any[] = []
+    try {
+      rows = await runTenantQuery(
+        sql,
+        ownerContext,
+        sql`
+          SELECT role, tenant_id, password_reset_required
+          FROM users
+          WHERE username = ${String(user.name)}
+          LIMIT 1
+        `,
+      )
+    } catch (error) {
+      if (!isMissingPasswordResetColumnError(error)) {
+        throw error
+      }
+      rows = await runTenantQuery(
+        sql,
+        ownerContext,
+        sql`
+          SELECT role, tenant_id
+          FROM users
+          WHERE username = ${String(user.name)}
+          LIMIT 1
+        `,
+      )
+      rows = rows.map((row) => ({ ...row, password_reset_required: false }))
+    }
     if (rows.length) {
       return {
         username: String(user.name || ""),

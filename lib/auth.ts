@@ -6,6 +6,13 @@ import { sql } from "@/lib/server/db"
 import { normalizeTenantContext, runTenantQuery } from "@/lib/server/tenant-db"
 import { hashPassword, verifyPassword } from "@/lib/passwords"
 import { logSecurityEvent } from "@/lib/server/security-events"
+
+const isMissingPasswordResetColumnError = (error: unknown) => {
+  const code = String((error as any)?.code || "")
+  const message = String((error as any)?.message || "")
+  return code === "42703" || message.includes('column "password_reset_required" does not exist')
+}
+
 export const authOptions: NextAuthOptions = {
   session: {
     strategy: "jwt",
@@ -37,20 +44,43 @@ export const authOptions: NextAuthOptions = {
         }
 
         const ownerContext = normalizeTenantContext(undefined, "owner")
-        const users = await runTenantQuery(
-          sql,
-          ownerContext,
-          sql`
-            SELECT id, username, role, tenant_id, password_hash, password_reset_required
-            FROM users
-            WHERE LOWER(username) = LOWER(${username})
-            ORDER BY
-              CASE WHEN username = ${username} THEN 0 ELSE 1 END,
-              CASE role WHEN 'owner' THEN 0 WHEN 'admin' THEN 1 ELSE 2 END,
-              created_at ASC
-            LIMIT 1
-          `,
-        )
+        let users: any[] = []
+        try {
+          users = await runTenantQuery(
+            sql,
+            ownerContext,
+            sql`
+              SELECT id, username, role, tenant_id, password_hash, password_reset_required
+              FROM users
+              WHERE LOWER(username) = LOWER(${username})
+              ORDER BY
+                CASE WHEN username = ${username} THEN 0 ELSE 1 END,
+                CASE role WHEN 'owner' THEN 0 WHEN 'admin' THEN 1 ELSE 2 END,
+                created_at ASC
+              LIMIT 1
+            `,
+          )
+        } catch (error) {
+          if (!isMissingPasswordResetColumnError(error)) {
+            throw error
+          }
+          // Backward compatibility for databases that haven't run password rotation migration yet.
+          users = await runTenantQuery(
+            sql,
+            ownerContext,
+            sql`
+              SELECT id, username, role, tenant_id, password_hash
+              FROM users
+              WHERE LOWER(username) = LOWER(${username})
+              ORDER BY
+                CASE WHEN username = ${username} THEN 0 ELSE 1 END,
+                CASE role WHEN 'owner' THEN 0 WHEN 'admin' THEN 1 ELSE 2 END,
+                created_at ASC
+              LIMIT 1
+            `,
+          )
+          users = users.map((row) => ({ ...row, password_reset_required: false }))
+        }
 
         if (!users || users.length === 0) {
           await logSecurityEvent({

@@ -5,7 +5,6 @@ import Link from "next/link"
 import Image from "next/image"
 import { Fraunces, Manrope } from "next/font/google"
 import { ArrowRight, CheckCircle2, Leaf, Shield, Sparkles, Truck, MessageCircle, Send, X, Droplets, Sprout, Coffee, TrendingUp, Package, Cloudy } from "lucide-react"
-import { motion, useReducedMotion, useScroll, useTransform } from "framer-motion"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
@@ -17,59 +16,59 @@ const body = Manrope({ subsets: ["latin"], weight: ["400", "500", "600", "700"] 
 
 const HIGHLIGHTS = [
   {
-    title: "Lot-to-Buyer Traceability",
-    description: "Link every lot from intake to buyer shipment with a verified trail that protects farmer value.",
+    title: "End-to-End Lot Traceability",
+    description: "Track every lot from field intake to buyer shipment with a complete, auditable chain.",
     icon: Shield,
   },
   {
     title: "Inventory & Loss Control",
-    description: "Spot shrinkage early and protect lot value with live stock signals.",
+    description: "Detect shrinkage and stock drift early before margin leaks.",
     icon: Leaf,
   },
   {
     title: "Processing Yield Clarity",
-    description: "Track moisture, conversion, and quality notes by lot before it hits the P&L.",
+    description: "Monitor processing throughput, moisture, and conversion lot by lot in real time.",
     icon: Sparkles,
   },
   {
     title: "Dispatch + Sales Reconciliation",
-    description: "Reconcile gate-out, receipts, and cash so every bag is accounted for.",
+    description: "Reconcile dispatch, received weight, and invoicing so every bag has a financial trail.",
     icon: Truck,
   },
   {
-    title: "Rainfall + Weather Context",
-    description: "Log rainfall and view weather signals alongside drying and harvest data.",
+    title: "Rainfall + Weather Intelligence",
+    description: "Combine rainfall logs and live forecasts to plan harvest and drying with confidence.",
     icon: Droplets,
   },
   {
-    title: "Quality + Curing Records",
-    description: "Capture grading, drying, and defect notes across the season.",
-    icon: Sprout,
+    title: "Labor + Consumables Tracking",
+    description: "Track worker output, wages, fuel, fertilizer, and processing consumables across locations.",
+    icon: Package,
   },
 ]
 
 const BULLETS = [
-  "Daily intake → processing → dispatch reconciliation",
-  "Moisture, defect, and quality notes by lot",
-  "Rainfall + weather context for drying",
-  "Buyer-ready traceability exports",
+  "Capture intake, processing, labor, consumables, dispatch, and sales in one live ledger",
+  "Track labor productivity, wages, and input usage by location",
+  "Plan field and drying decisions with rainfall + weather context",
+  "Add curing and grading notes when your workflow needs them",
 ]
 
 const CONTROL_SIGNALS = [
   {
-    label: "Processing loss (sample)",
+    label: "Processing loss trend",
     value: "2.9%",
-    description: "Shrinkage flagged by stage and lot.",
+    description: "Shrinkage detected by stage and lot.",
   },
   {
-    label: "Yield conversion (sample)",
+    label: "Yield conversion rate",
     value: "46.4%",
-    description: "Ripe to dry output, tracked weekly.",
+    description: "Ripe-to-dry output monitored weekly.",
   },
   {
-    label: "Receivables aging (sample)",
+    label: "Receivables exposure",
     value: "₹16.2L",
-    description: "Cash at risk across buyers.",
+    description: "Outstanding buyer cash currently at risk.",
   },
 ]
 
@@ -82,20 +81,20 @@ const LIVE_METRICS = [
 
 const LIVE_UPDATES = [
   {
-    title: "Wet parchment moisture trending higher",
-    detail: "Drying schedule adjusted and lot flagged for follow-up.",
+    title: "Moisture variance detected in wet parchment",
+    detail: "Drying plan adjusted automatically and lot flagged for supervisor follow-up.",
   },
   {
-    title: "Dispatch unconfirmed for 3 days",
-    detail: "Reminder sent to logistics team and buyer.",
+    title: "Dispatch confirmation pending for 3 days",
+    detail: "Escalation reminder sent to logistics and buyer contacts.",
   },
   {
-    title: "Arabica yield down vs last week",
-    detail: "Conversion review triggered for wet parchment output.",
+    title: "Labor allocation shifted for processing peak",
+    detail: "Supervisor reassigned workers to high-throughput lots for faster turn-around.",
   },
   {
-    title: "Rainfall spike logged",
-    detail: "Drying plans updated for the week ahead.",
+    title: "Consumables threshold reached at primary location",
+    detail: "Fuel and processing input replenishment request generated.",
   },
 ]
 
@@ -103,74 +102,92 @@ const ROLE_VALUE_CARDS = [
   {
     title: "Estate Owner",
     icon: TrendingUp,
-    outcome: "See weekly yield, loss, cash, and buyer exposure in one command view.",
-    points: ["Season View KPIs", "Receivables and cash signal", "Cross-tab reconciliation"],
+    outcome: "Run the estate from one command view for processing output, labor cost, consumables burn, and cash flow.",
+    points: ["Season KPI command center", "Labor + consumable cost signals", "Cross-module reconciliation"],
   },
   {
     title: "Operations Lead",
     icon: Truck,
-    outcome: "Run day-to-day processing, dispatch, and stock without spreadsheet drift.",
-    points: ["Lot-based processing records", "Dispatch vs received checks", "Location-level availability"],
+    outcome: "Execute daily processing, labor rosters, dispatch, and stock movement without spreadsheet drift.",
+    points: ["Lot-level processing records", "Labor shifts + output tracking", "Consumables issue vs stock"],
   },
   {
     title: "Admin & Finance",
     icon: Shield,
-    outcome: "Control user access and preserve a clean audit trail for every change.",
-    points: ["Role + module controls", "User overrides", "Audit event history"],
+    outcome: "Manage access, accountability, and governance with clear controls and audit evidence.",
+    points: ["Role and module permissions", "User-level overrides", "Full activity log history"],
+  },
+]
+
+const MODULE_PATHWAYS = [
+  {
+    title: "Estate Owner Command",
+    description: "Best for estates running full operations with processing, labor, consumables, and revenue in one system.",
+    modules: ["Inventory", "Processing", "Dispatch", "Sales", "Season View", "Accounts", "Activity Log"],
+  },
+  {
+    title: "Estate + Curing Extension",
+    description: "Add curing and grading as secondary modules when your estate also runs post-processing workflows.",
+    modules: ["Processing", "Curing", "Quality", "Rainfall", "Weather", "Dispatch", "Sales"],
+  },
+  {
+    title: "Inventory + Accounts Essentials",
+    description: "Start simple with stock and finance control, then expand modules as operations mature.",
+    modules: ["Inventory", "Accounts", "Transaction History"],
   },
 ]
 
 const WEEK_ONE_PLAN = [
   {
     day: "Day 1",
-    title: "Configure tenant",
-    detail: "Set locations, module access, and experience profile for your estate.",
+    title: "Set up your workspace",
+    detail: "Configure locations, user roles, and module access for your estate team.",
   },
   {
     day: "Day 2-3",
-    title: "Load baseline data",
-    detail: "Import inventory, processing, dispatch, sales, and quality starting balances.",
+    title: "Import baseline data",
+    detail: "Load inventory, consumables, processing, dispatch, and sales opening balances.",
   },
   {
     day: "Day 4-5",
-    title: "Run live operations",
-    detail: "Record daily intake, processing outputs, dispatches, and sales.",
+    title: "Run daily operations",
+    detail: "Start recording intake, processing outputs, labor logs, consumable issues, dispatches, and sales.",
   },
   {
     day: "Day 6-7",
-    title: "Close weekly review",
-    detail: "Use Season View and exception alerts to reconcile yield, loss, and cash.",
+    title: "Close your first review",
+    detail: "Use Season View and exceptions to reconcile yield, stock movement, and cash.",
   },
 ]
 
 const ASSURANCE_POINTS = [
-  "Tenant-isolated data with role-based access",
-  "Audit logs for create, update, and delete actions",
-  "Module-by-module rollout so teams adopt gradually",
+  "Tenant-isolated architecture with role-based access control",
+  "Audit logs for every create, update, and delete action",
+  "Phased module rollout so teams adopt with minimal disruption",
 ]
 
 const ESTATE_JOURNEY = [
   {
     title: "Harvest intake",
-    description: "Record crop intake and sorting splits (ripe, green, float).",
+    description: "Capture cherry intake and sort split by ripe, green, and float.",
     image: "/images/estate-journey-harvest.jpg",
     alt: "Coffee harvest scene at an estate",
   },
   {
     title: "Washed or natural processing",
-    description: "Track wet parchment or dry cherry outputs with moisture notes.",
+    description: "Track wet parchment or dry cherry output with moisture observations.",
     image: "/images/estate-journey-processing.jpg",
     alt: "Coffee processing scene with beans and equipment",
   },
   {
     title: "Curing + quality",
-    description: "Log drying days, grades, defects, and quality evidence.",
+    description: "Record drying time, grade outcomes, defects, and quality evidence.",
     image: "/images/estate-journey-curing.jpg",
     alt: "Coffee beans drying during curing",
   },
   {
     title: "Dispatch + sales",
-    description: "Ship bags, reconcile receipts, and close the revenue loop.",
+    description: "Dispatch confidently, reconcile receipts, and close the revenue loop.",
     image: "/images/estate-journey-dispatch.jpg",
     alt: "Coffee delivery transport ready for dispatch",
   },
@@ -178,18 +195,18 @@ const ESTATE_JOURNEY = [
 
 const IMPACT_PILLARS = [
   {
-    title: "Waste & loss visibility",
-    description: "Spot shrinkage early and protect farmer value before it leaks.",
+    title: "Loss visibility that protects margin",
+    description: "Catch shrinkage and variance early before value is lost.",
     icon: TrendingUp,
   },
   {
-    title: "Climate-aware decisions",
-    description: "Rainfall logs and forecasts help plan drying and harvest activity.",
+    title: "Climate-aware operating decisions",
+    description: "Use rainfall logs and forecasts to plan drying, harvest, and processing windows.",
     icon: Droplets,
   },
   {
-    title: "Evidence for buyers",
-    description: "Moisture, defect, and quality notes strengthen buyer trust.",
+    title: "Buyer confidence through evidence",
+    description: "Moisture, defect, and quality records strengthen pricing conversations.",
     icon: Shield,
   },
 ]
@@ -199,25 +216,25 @@ const CHATBOT_FAQS = [
     id: "capabilities",
     question: "What can FarmFlow track?",
     answer:
-      "Inventory, processing, dispatch, sales, labor, rainfall, and audits across locations. It supports Arabica/Robusta and parchment/cherry outputs with quality notes.",
+      "FarmFlow tracks inventory, processing, dispatch, sales, labor, rainfall, and audit events across locations. It supports Arabica/Robusta and parchment/cherry outputs with quality notes.",
   },
   {
     id: "pricing",
     question: "How does pricing work?",
     answer:
-      "Commercial plans are being finalized. Use the Register Interest form on this page and we will contact you with rollout details.",
+      "Commercial plans are being finalized. Share your details in Register Interest and our team will contact you with rollout options.",
   },
   {
     id: "onboarding",
     question: "How fast can we get started?",
     answer:
-      "Most coffee estates go live in a day: add locations, load inventory, record processing, then start dispatch/sales. We include guided onboarding.",
+      "Most estates can start in a day: set locations, load opening balances, then begin processing, dispatch, and sales with guided onboarding.",
   },
   {
     id: "sustainability",
     question: "Does FarmFlow track sustainability?",
     answer:
-      "FarmFlow documents operational evidence like rainfall, moisture, and quality notes with full traceability. Carbon or water accounting is not built-in yet.",
+      "FarmFlow captures operational sustainability evidence like rainfall, moisture, and quality notes with lot traceability. Carbon and water accounting are planned.",
   },
   {
     id: "security",
@@ -254,16 +271,13 @@ const getChatbotReply = (input: string) => {
   const faq = CHATBOT_FAQS.find((item) => item.id === match?.id)
   if (faq) return faq.answer
 
-  return "I can help with features, onboarding, security, exports, and commercial rollout. Ask me anything about FarmFlow."
+  return "I can help with capabilities, onboarding, security, exports, and plans. Ask me anything about FarmFlow."
 }
 
 export default function LandingPage() {
   const beanLayerRef = useRef<HTMLDivElement | null>(null)
   const chatEndRef = useRef<HTMLDivElement | null>(null)
-  const journeyRef = useRef<HTMLDivElement | null>(null)
   const messageIdRef = useRef(0)
-  const MotionDiv = motion.div as any
-  const prefersReducedMotion = useReducedMotion()
   const [isChatOpen, setIsChatOpen] = useState(false)
   const [draftMessage, setDraftMessage] = useState("")
   const [activeUpdateIndex, setActiveUpdateIndex] = useState(0)
@@ -282,16 +296,9 @@ export default function LandingPage() {
     {
       id: "welcome",
       role: "bot" as const,
-      text: "Hi! Ask me about FarmFlow features, onboarding, commercial rollout, and data security.",
+      text: "Welcome to FarmFlow. Ask me about modules, onboarding, plans, and data security.",
     },
   ])
-
-  const { scrollYProgress: journeyProgress } = useScroll({
-    target: journeyRef as any,
-    offset: ["start 0.2", "end 0.8"],
-  })
-  const timelineScale = useTransform(journeyProgress, [0, 1], [0, 1])
-  const timelineGlow = useTransform(journeyProgress, [0, 0.4, 1], [0.1, 0.7, 1])
 
   useEffect(() => {
     if (typeof window === "undefined") return
@@ -493,17 +500,20 @@ export default function LandingPage() {
             </div>
             <div className="hidden md:flex items-center gap-6 text-sm text-muted-foreground">
               <a href="#roles" className="hover:text-foreground">
-                Who It Is For
+                Solutions
+              </a>
+              <a href="#modules" className="hover:text-foreground">
+                Module Paths
               </a>
               <a href="#onboarding" className="hover:text-foreground">
-                Onboarding
+                Go Live
               </a>
               <a href="#features" className="hover:text-foreground">
-                Features
+                Capabilities
               </a>
-              <a href="#journey" className="hover:text-foreground">
+              <Link href="/journey" className="hover:text-foreground">
                 Journey
-              </a>
+              </Link>
               <a href="#traceability" className="hover:text-foreground">
                 Traceability
               </a>
@@ -511,7 +521,7 @@ export default function LandingPage() {
                 Impact
               </a>
               <a href="#pricing" className="hover:text-foreground">
-                Plans
+                Early Access
               </a>
             </div>
             <div className="flex items-center gap-2">
@@ -519,25 +529,26 @@ export default function LandingPage() {
                 <Link href="/login">Login</Link>
               </Button>
               <Button asChild>
-                <Link href="/signup">Sign Up</Link>
+                <Link href="/signup">Request Access</Link>
               </Button>
             </div>
           </nav>
           <div className="mx-auto mt-3 flex w-full max-w-6xl gap-2 overflow-x-auto no-scrollbar md:hidden">
             {[
-              { id: "roles", label: "Who It Is For" },
-              { id: "onboarding", label: "Onboarding" },
-              { id: "features", label: "Features" },
-              { id: "journey", label: "Journey" },
-              { id: "pricing", label: "Plans" },
+              { href: "#roles", label: "Solutions" },
+              { href: "#modules", label: "Module Paths" },
+              { href: "#onboarding", label: "Go Live" },
+              { href: "#features", label: "Capabilities" },
+              { href: "/journey", label: "Journey" },
+              { href: "#pricing", label: "Early Access" },
             ].map((item) => (
-              <a
-                key={item.id}
-                href={`#${item.id}`}
+              <Link
+                key={item.label}
+                href={item.href}
                 className="shrink-0 rounded-full border border-white/60 bg-white/80 px-3 py-1.5 text-xs text-slate-700"
               >
                 {item.label}
-              </a>
+              </Link>
             ))}
           </div>
         </header>
@@ -557,16 +568,16 @@ export default function LandingPage() {
                 <div className="space-y-6 rise-in">
                   <Badge className="border-white/30 bg-white/20 text-white backdrop-blur-md">
                     <Coffee className="mr-2 h-3.5 w-3.5" />
-                    Built for coffee estates, grower collectives, and mill teams
+                    Built for coffee estates managing processing, labor, and inputs daily
                   </Badge>
                   
                   <h1 className={`${display.className} text-4xl md:text-5xl lg:text-6xl font-bold leading-tight text-white text-balance`}>
-                    Run a farmer-first coffee estate with complete lot traceability
+                    The operating system for profitable, traceable coffee estates
                   </h1>
                   
                   <p className="text-lg text-white/90 leading-relaxed">
-                    FarmFlow is a coffee operations system built for real estate workflows, not generic ERP screens.
-                    Capture intake, processing, dispatch, sales, and quality in one ledger so every kilogram is traceable.
+                    We built FarmFlow for coffee estate operations, not generic ERP screens.
+                    Run intake, processing, labor tracking, consumables issuance, dispatch, and sales from one command center.
                   </p>
 
                   <div className="grid gap-2 sm:grid-cols-2">
@@ -581,7 +592,7 @@ export default function LandingPage() {
                   <div className="flex flex-wrap items-center gap-4">
                     <Button size="lg" className="bg-white text-[#0f6f66] hover:bg-white/90 font-semibold group shadow-[0_20px_40px_-20px_rgba(255,255,255,0.5)]">
                       <Link href="/signup" className="flex items-center">
-                        Launch your estate workspace <ArrowRight className="ml-2 h-4 w-4 group-hover:translate-x-1 transition-transform" />
+                        Request Early Access <ArrowRight className="ml-2 h-4 w-4 group-hover:translate-x-1 transition-transform" />
                       </Link>
                     </Button>
                     <Button size="lg" variant="outline" className="border-white/30 bg-white/10 text-white hover:bg-white/20 backdrop-blur-sm">
@@ -610,10 +621,10 @@ export default function LandingPage() {
                         <Package className="h-4 w-4 text-white/70" />
                         <p className={`${display.className} text-2xl font-bold text-white`}>100%</p>
                       </div>
-                      <p className="text-xs text-white/70">Traceable</p>
+                      <p className="text-xs text-white/70">Fully traceable</p>
                     </div>
                   </div>
-                  <p className="text-xs text-white/60">Illustrative metrics for demo purposes.</p>
+                  <p className="text-xs text-white/60">Illustrative metrics shown for product demonstration.</p>
                 </div>
 
                 {/* Right side - Enhanced coffee estate visual */}
@@ -629,11 +640,11 @@ export default function LandingPage() {
                             </div>
                             <div>
                               <CardTitle className={`${display.className} text-xl`}>Estate Dashboard</CardTitle>
-                              <CardDescription>Demo estate · Western Ghats</CardDescription>
+                              <CardDescription>Representative estate · Western Ghats</CardDescription>
                             </div>
                           </div>
                           <Badge className="bg-emerald-100 text-emerald-700 border-emerald-200">
-                            Sample data
+                            Live demo snapshot
                           </Badge>
                         </div>
                       </CardHeader>
@@ -646,6 +657,7 @@ export default function LandingPage() {
                           </div>
                           <p className={`${display.className} text-3xl font-bold text-amber-900`}>2,840 kg</p>
                           <p className="text-xs text-amber-700 mt-1">Arabica cherry → parchment</p>
+                          <p className="text-[10px] text-amber-700 mt-1">Labor today: 42 workers · Fuel issued: 180 L</p>
                           <div className="mt-3 h-2 rounded-full bg-amber-200/50 overflow-hidden">
                             <div className="h-full w-[68%] rounded-full bg-gradient-to-r from-amber-400 to-orange-500 animate-pulse" />
                           </div>
@@ -663,11 +675,11 @@ export default function LandingPage() {
                           </div>
                           <div className="rounded-xl border border-blue-200/70 bg-gradient-to-br from-blue-50/80 to-sky-50/50 p-3">
                             <div className="flex items-center gap-1.5 mb-1">
-                              <Shield className="h-3.5 w-3.5 text-blue-600" />
-                              <p className="text-[10px] font-medium text-blue-900">Quality Checks</p>
+                              <Package className="h-3.5 w-3.5 text-blue-600" />
+                              <p className="text-[10px] font-medium text-blue-900">Labor + Consumables</p>
                             </div>
-                            <p className={`${display.className} text-xl font-bold text-blue-900`}>38</p>
-                            <p className="text-[10px] text-blue-700">grading entries logged</p>
+                            <p className={`${display.className} text-xl font-bold text-blue-900`}>42</p>
+                            <p className="text-[10px] text-blue-700">workers today · ₹1.8L issued this month</p>
                           </div>
                         </div>
 
@@ -703,9 +715,9 @@ export default function LandingPage() {
 
           <section id="roles" className="mx-auto mt-12 w-full max-w-6xl space-y-6 scroll-mt-24">
             <div className="space-y-2">
-              <h2 className={`${display.className} text-3xl font-semibold`}>Designed for each role on the estate</h2>
+              <h2 className={`${display.className} text-3xl font-semibold`}>Purpose-built for every estate role</h2>
               <p className="text-muted-foreground">
-                Different teams see different jobs. FarmFlow keeps them aligned on the same source of truth.
+                Every team works differently. FarmFlow keeps everyone aligned to one live source of truth.
               </p>
             </div>
             <div className="grid gap-4 lg:grid-cols-3">
@@ -731,12 +743,38 @@ export default function LandingPage() {
             </div>
           </section>
 
+          <section id="modules" className="mx-auto mt-12 w-full max-w-6xl space-y-6 scroll-mt-24">
+            <div className="space-y-2">
+              <h2 className={`${display.className} text-3xl font-semibold`}>Choose the module path that fits your business model</h2>
+              <p className="text-muted-foreground">
+                Start with essentials or run full operations with processing, labor, consumables, dispatch, and sales.
+              </p>
+            </div>
+            <div className="grid gap-4 lg:grid-cols-3">
+              {MODULE_PATHWAYS.map((pathway) => (
+                <Card key={pathway.title} className="border border-white/70 bg-white/85 backdrop-blur-md">
+                  <CardHeader className="space-y-3">
+                    <CardTitle className={`${display.className} text-xl`}>{pathway.title}</CardTitle>
+                    <CardDescription>{pathway.description}</CardDescription>
+                  </CardHeader>
+                  <CardContent className="flex flex-wrap gap-2">
+                    {pathway.modules.map((moduleName) => (
+                      <Badge key={moduleName} variant="secondary" className="bg-emerald-50 text-emerald-800 border-emerald-200">
+                        {moduleName}
+                      </Badge>
+                    ))}
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          </section>
+
           <section id="onboarding" className="mx-auto mt-12 w-full max-w-6xl space-y-4 scroll-mt-24">
             <Card className="border border-emerald-200/70 bg-gradient-to-br from-emerald-50/70 to-white/90 backdrop-blur-md">
               <CardHeader>
-                <CardTitle className={`${display.className} text-2xl`}>Go live in the first 7 days</CardTitle>
+                <CardTitle className={`${display.className} text-2xl`}>Launch in 7 days, not 7 months</CardTitle>
                 <CardDescription>
-                  A practical rollout path for estates moving off spreadsheets and WhatsApp-only records.
+                  A practical rollout for estates moving from spreadsheets and chat threads to one reliable system.
                 </CardDescription>
               </CardHeader>
               <CardContent className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
@@ -781,7 +819,7 @@ export default function LandingPage() {
             <Card className="border border-white/70 bg-white/80 backdrop-blur-md signal-scan">
               <CardHeader>
                 <CardTitle className={`${display.className} text-2xl`}>Live Operations Pulse</CardTitle>
-                <CardDescription>What estate leads see before it impacts quality or revenue.</CardDescription>
+                <CardDescription>The signals your team sees before issues impact quality, inventory, or cash.</CardDescription>
               </CardHeader>
               <CardContent className="grid gap-4 sm:grid-cols-2">
                 {LIVE_METRICS.map((metric, index) => (
@@ -791,7 +829,7 @@ export default function LandingPage() {
                       {metricValues[index]}
                       {metric.suffix}
                     </p>
-                    <p className="text-xs text-muted-foreground">This season snapshot</p>
+                    <p className="text-xs text-muted-foreground">Current season snapshot</p>
                   </div>
                 ))}
               </CardContent>
@@ -818,7 +856,7 @@ export default function LandingPage() {
           <div className="text-center space-y-3">
             <h2 className={`${display.className} text-3xl font-semibold`}>Field Signals & Climate Context</h2>
             <p className="text-muted-foreground max-w-2xl mx-auto">
-              Log rainfall, monitor weather, and track quality checkpoints alongside daily operations.
+              Connect field conditions to operational decisions with rainfall, weather, labor, and consumable activity.
             </p>
           </div>
           <div className="grid gap-6 md:grid-cols-3">
@@ -857,15 +895,15 @@ export default function LandingPage() {
             <Card className="border border-amber-200/70 bg-gradient-to-br from-amber-50/80 to-white/80 backdrop-blur-md">
               <CardHeader>
                 <div className="h-12 w-12 rounded-xl bg-amber-100 text-amber-700 flex items-center justify-center mb-2">
-                  <Sparkles className="h-6 w-6" />
+                  <Package className="h-6 w-6" />
                 </div>
-                <CardTitle className={`${display.className} text-xl`}>Quality Checkpoints</CardTitle>
-                <CardDescription>Grading, curing, and defect notes captured per lot</CardDescription>
+                <CardTitle className={`${display.className} text-xl`}>Labor & Input Logs</CardTitle>
+                <CardDescription>Track labor attendance, fuel, fertilizers, and processing consumables</CardDescription>
               </CardHeader>
               <CardContent>
                 <div className="rounded-xl border border-amber-200 bg-white/70 p-4">
                   <p className="text-2xl font-semibold text-amber-700">Logged</p>
-                  <p className="text-xs text-muted-foreground mt-1">With moisture and defect tracking</p>
+                  <p className="text-xs text-muted-foreground mt-1">Curing and grading can be enabled as secondary records</p>
                 </div>
               </CardContent>
             </Card>
@@ -875,9 +913,9 @@ export default function LandingPage() {
         <section id="features" className="mx-auto mt-16 w-full max-w-6xl space-y-6 scroll-mt-24 sm:mt-20">
           <div className="flex items-center justify-between">
             <div>
-              <h2 className={`${display.className} text-3xl font-semibold`}>Everything your coffee estate needs, in one system</h2>
+              <h2 className={`${display.className} text-3xl font-semibold`}>One platform for processing, labor, stock, and cash</h2>
               <p className="text-muted-foreground mt-2">
-                Built for day-to-day operations, compliance, and buyer transparency.
+                Run daily workflows, control cost leakage, and improve buyer confidence.
               </p>
             </div>
           </div>
@@ -901,100 +939,32 @@ export default function LandingPage() {
           </div>
         </section>
 
-        <section
-          id="journey"
-          data-reveal
-          className="mx-auto mt-16 w-full max-w-6xl space-y-6 scroll-mt-24 sm:mt-20"
-        >
-          <div className="text-center space-y-3">
-            <h2 className={`${display.className} text-3xl font-semibold`}>Estate journey, from cherry to buyer</h2>
-            <p className="text-muted-foreground max-w-2xl mx-auto">
-              Document every step so quality decisions are visible to managers, buyers, and farmers.
-            </p>
-          </div>
-          <div ref={journeyRef} className="relative mt-10 space-y-12">
-            <div className="pointer-events-none absolute left-4 top-0 h-full w-[2px] bg-emerald-100/80 md:left-1/2 md:-translate-x-1/2" />
-            <MotionDiv
-              className="pointer-events-none absolute left-4 top-0 h-full w-[3px] origin-top bg-gradient-to-b from-emerald-500 via-emerald-400 to-transparent md:left-1/2 md:-translate-x-1/2"
-              style={{
-                scaleY: prefersReducedMotion ? 1 : timelineScale,
-                opacity: prefersReducedMotion ? 1 : timelineGlow,
-              }}
-            />
-            <div className="space-y-10 md:space-y-14">
-              {ESTATE_JOURNEY.map((step, index) => {
-                const isLeft = index % 2 === 0
-                return (
-                  <MotionDiv
-                    key={step.title}
-                    initial={
-                      prefersReducedMotion
-                        ? { opacity: 1, y: 0, x: 0 }
-                        : { opacity: 0, y: 32, x: isLeft ? -24 : 24 }
-                    }
-                    whileInView={{ opacity: 1, y: 0, x: 0 }}
-                    viewport={{ once: true, amount: 0.35 }}
-                    transition={{ duration: 0.6, ease: "easeOut" }}
-                    className={`relative flex ${isLeft ? "md:justify-start" : "md:justify-end"}`}
-                  >
-                    <div className={`relative w-full md:w-[calc(50%-3rem)] ${isLeft ? "md:pr-10" : "md:pl-10"} pl-10 md:pl-0`}>
-                      <span
-                        className={`absolute top-7 left-[10px] h-3 w-3 rounded-full bg-emerald-500 shadow-[0_0_18px_rgba(16,185,129,0.55)] md:left-auto ${
-                          isLeft ? "md:right-[-3rem]" : "md:left-[-3rem]"
-                        }`}
-                      />
-                      <Card className="border border-white/70 bg-white/85 backdrop-blur-md shadow-[0_20px_45px_-35px_rgba(16,185,129,0.35)]">
-                        <div className="relative h-36 w-full overflow-hidden rounded-t-xl border-b border-emerald-100/60 bg-emerald-50/40">
-                          <Image
-                            src={step.image}
-                            alt={step.alt}
-                            fill
-                            sizes="(min-width: 768px) 480px, 100vw"
-                            className="object-cover"
-                          />
-                        </div>
-                        <CardHeader className="space-y-2">
-                          <p className="text-xs uppercase tracking-[0.35em] text-emerald-700/70">Step {index + 1}</p>
-                          <CardTitle className={`${display.className} text-xl`}>{step.title}</CardTitle>
-                          <CardDescription>{step.description}</CardDescription>
-                        </CardHeader>
-                      </Card>
-                    </div>
-                  </MotionDiv>
-                )
-              })}
+        <section id="journey-preview" data-reveal className="mx-auto mt-16 w-full max-w-6xl space-y-6 scroll-mt-24 sm:mt-20">
+          <div className="flex flex-wrap items-end justify-between gap-4">
+            <div className="space-y-2">
+              <h2 className={`${display.className} text-3xl font-semibold`}>Estate journey, from cherry to buyer</h2>
+              <p className="text-muted-foreground max-w-2xl">
+                Explore the full workflow on a dedicated page with phase-by-phase guidance and module mapping.
+              </p>
             </div>
+            <Button asChild>
+              <Link href="/journey">Explore Full Journey</Link>
+            </Button>
           </div>
-
-          <Card className="border border-emerald-200/70 bg-emerald-50/70">
-            <CardHeader>
-              <CardTitle className={`${display.className} text-xl`}>Buyer trust pack</CardTitle>
-              <CardDescription>Evidence you can export when audits or buyers ask.</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4 text-sm text-emerald-800">
-              <div className="flex items-start gap-2">
-                <CheckCircle2 className="mt-0.5 h-4 w-4 text-emerald-600" />
-                <div>
-                  <p className="font-medium">Lot ID + processing timeline</p>
-                  <p className="text-xs text-emerald-700/80">From intake through curing and dispatch.</p>
+          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+            {ESTATE_JOURNEY.map((step, index) => (
+              <Card key={step.title} className="border border-white/70 bg-white/85 backdrop-blur-md">
+                <div className="relative h-28 w-full overflow-hidden rounded-t-xl border-b border-emerald-100/60 bg-emerald-50/40">
+                  <Image src={step.image} alt={step.alt} fill sizes="(min-width: 1280px) 280px, (min-width: 768px) 50vw, 100vw" className="object-cover" />
                 </div>
-              </div>
-              <div className="flex items-start gap-2">
-                <CheckCircle2 className="mt-0.5 h-4 w-4 text-emerald-600" />
-                <div>
-                  <p className="font-medium">Moisture, grade, and defect notes</p>
-                  <p className="text-xs text-emerald-700/80">Quality evidence tied to each lot.</p>
-                </div>
-              </div>
-              <div className="flex items-start gap-2">
-                <CheckCircle2 className="mt-0.5 h-4 w-4 text-emerald-600" />
-                <div>
-                  <p className="font-medium">Dispatch + sales reconciliation</p>
-                  <p className="text-xs text-emerald-700/80">Every bag is accounted for and auditable.</p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
+                <CardHeader className="space-y-2">
+                  <p className="text-xs uppercase tracking-[0.25em] text-emerald-700/70">Step {index + 1}</p>
+                  <CardTitle className={`${display.className} text-lg`}>{step.title}</CardTitle>
+                  <CardDescription>{step.description}</CardDescription>
+                </CardHeader>
+              </Card>
+            ))}
+          </div>
         </section>
 
         <section
@@ -1003,29 +973,29 @@ export default function LandingPage() {
         >
           <Card className="border border-white/50 bg-white/75 backdrop-blur-md">
             <CardHeader>
-              <CardTitle className={`${display.className} text-2xl`}>Traceability that earns trust</CardTitle>
+              <CardTitle className={`${display.className} text-2xl`}>Traceability that wins buyer confidence</CardTitle>
               <CardDescription>
-                Provide buyers and auditors a clean, searchable history for every lot and movement.
+                Give buyers and auditors a clear, searchable record for every lot and stock movement.
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-3 text-sm text-muted-foreground">
               <p>
-                Record harvest intake, processing outputs, moisture readings, dispatch notes, and sales receipts in one workflow.
+                Capture harvest intake, processing output, labor logs, consumables usage, dispatch notes, and sales in one workflow.
               </p>
               <p>
-                Create a verifiable chain from estate to buyer with timestamps, user logs, and audit-ready evidence for farmer-first pricing.
+                Create a verifiable chain from estate to buyer with timestamps, user logs, and audit-ready evidence.
               </p>
             </CardContent>
           </Card>
 
           <div className="space-y-4">
             <div className="rounded-2xl border border-emerald-200/60 bg-emerald-50/70 p-5">
-              <p className="text-xs text-emerald-700">Traceability Score</p>
+              <p className="text-xs text-emerald-700">Traceability Readiness</p>
               <p className="text-3xl font-semibold text-emerald-700">A+</p>
               <p className="text-xs text-emerald-600">Batch-level audit readiness</p>
             </div>
             <div className="rounded-2xl border border-white/50 bg-white/70 p-5 text-sm text-muted-foreground">
-              Export compliance-ready reports in one click and share with buyers instantly.
+              Export compliance-ready reports in one click and share with buyers in seconds.
             </div>
           </div>
         </section>
@@ -1036,10 +1006,9 @@ export default function LandingPage() {
           className="mx-auto mt-16 w-full max-w-6xl space-y-6 scroll-mt-24 sm:mt-20"
         >
           <div className="text-center space-y-3">
-            <h2 className={`${display.className} text-3xl font-semibold`}>Sustainability that is actually measurable</h2>
+            <h2 className={`${display.className} text-3xl font-semibold`}>Prove impact with operational evidence</h2>
             <p className="text-muted-foreground max-w-2xl mx-auto">
-              FarmFlow focuses on the operational evidence you already collect so farmer-first practices are visible
-              without greenwashing.
+              FarmFlow turns the operational data you already collect into measurable, decision-ready impact signals.
             </p>
           </div>
           <div className="grid gap-6 md:grid-cols-3">
@@ -1064,17 +1033,17 @@ export default function LandingPage() {
           <Card className="border border-emerald-200/70 bg-gradient-to-br from-emerald-50/70 to-white/90 backdrop-blur-md">
             <CardHeader>
               <Badge className="w-fit border-amber-200 bg-amber-100 text-amber-800">Coming soon</Badge>
-              <CardTitle className={`${display.className} text-3xl font-semibold`}>Commercial plans are on the way</CardTitle>
+              <CardTitle className={`${display.className} text-3xl font-semibold`}>Plans are launching soon</CardTitle>
               <CardDescription>
-                We are finalizing rollout packages by estate size and module mix. Register your interest and we will contact
-                you with early access options.
+                We are finalizing rollout packages by estate size and module mix. Register interest and our team will
+                contact you with early access options.
               </CardDescription>
             </CardHeader>
             <CardContent className="grid gap-6 lg:grid-cols-[1fr_1.1fr]">
               <div className="space-y-3 text-sm text-muted-foreground">
                 <p>
-                  FarmFlow can be deployed with just core operations first, then expanded as your team adopts more modules.
-                  Early registrants get priority onboarding support and migration planning.
+                  Deploy FarmFlow with core operations first, then expand modules as your team scales adoption.
+                  Early registrants receive priority onboarding and migration planning support.
                 </p>
                 <div className="space-y-2">
                   <div className="flex items-center gap-2">
@@ -1158,7 +1127,7 @@ export default function LandingPage() {
                 </div>
                 {interestState === "success" && (
                   <p className="rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-700">
-                    Thanks. Interest registered successfully.
+                    Thanks, your interest has been registered.
                   </p>
                 )}
                 {interestState === "error" && (
@@ -1167,7 +1136,7 @@ export default function LandingPage() {
                   </p>
                 )}
                 <Button type="submit" className="w-full" disabled={interestState === "submitting"}>
-                  {interestState === "submitting" ? "Submitting..." : "Register Interest"}
+                  {interestState === "submitting" ? "Submitting..." : "Request Early Access"}
                 </Button>
               </form>
             </CardContent>
@@ -1177,18 +1146,18 @@ export default function LandingPage() {
         <section id="results" className="mx-auto mt-16 w-full max-w-6xl scroll-mt-24 sm:mt-20">
           <Card className="border border-white/50 bg-white/80 backdrop-blur-md">
             <CardHeader>
-              <CardTitle className={`${display.className} text-2xl`}>Ready to run a farmer-first coffee estate?</CardTitle>
+              <CardTitle className={`${display.className} text-2xl`}>Ready to modernize your estate operations?</CardTitle>
               <CardDescription>
-                Start with one estate, expand to every location, and keep every KG traceable.
+                Start with one estate, scale across locations, and keep every kilogram traceable.
               </CardDescription>
             </CardHeader>
             <CardContent className="flex flex-wrap gap-4 items-center justify-between">
               <div className="text-sm text-muted-foreground">
-                You will get guided onboarding, module setup, and a dedicated tenant in minutes.
+                Get guided onboarding, module setup, and a dedicated workspace in minutes.
               </div>
               <div className="flex gap-3">
                 <Button asChild>
-                  <Link href="/signup">Create your coffee estate</Link>
+                  <Link href="/signup">Request Access</Link>
                 </Button>
                 <Button variant="outline" asChild>
                   <Link href="/login">Sign in</Link>
@@ -1200,9 +1169,9 @@ export default function LandingPage() {
 
         <section className="mx-auto mt-16 w-full max-w-6xl space-y-6 sm:mt-20">
           <div>
-            <h2 className={`${display.className} text-3xl font-semibold`}>Mission & Vision</h2>
+            <h2 className={`${display.className} text-3xl font-semibold`}>What we stand for</h2>
             <p className="text-muted-foreground mt-2">
-              The operating principles that keep FarmFlow focused on farmers, quality, and resilience.
+              The principles guiding how we build FarmFlow for estates, operators, and buyers.
             </p>
           </div>
           <div className="grid gap-6 lg:grid-cols-2">
@@ -1210,23 +1179,22 @@ export default function LandingPage() {
               <CardHeader>
                 <CardTitle className={`${display.className} text-xl`}>Mission</CardTitle>
               <CardDescription>
-                  Help coffee estates protect quality and build trust with farmers and buyers through traceability.
+                  Help coffee estates improve margins, protect quality, and build durable buyer trust through traceability.
               </CardDescription>
             </CardHeader>
             <CardContent className="text-sm text-muted-foreground">
-                FarmFlow replaces spreadsheets with a live operating system that reconciles every bag, lot, and cost
-                across the season. Estates make faster decisions, protect lot value, and document the practices that
-                reward farmers.
+                FarmFlow replaces fragmented tools with one operating system that reconciles every bag, lot, and cost.
+                Teams move faster, reduce leakage, and document the practices that reward quality.
             </CardContent>
             </Card>
             <Card id="vision" className="scroll-mt-24 border border-white/50 bg-white/80 backdrop-blur-md">
               <CardHeader>
               <CardTitle className={`${display.className} text-xl`}>Vision</CardTitle>
-              <CardDescription>Transparent supply chains that reward quality for farmers and buyers.</CardDescription>
+              <CardDescription>Transparent coffee supply chains where quality and discipline are rewarded.</CardDescription>
             </CardHeader>
             <CardContent className="text-sm text-muted-foreground">
-                We want every coffee estate to run with real-time tracking, verified quality, and instant visibility for
-                managers, buyers, and auditors—so good practices are visible and rewarded.
+                We are building a future where every estate runs with real-time tracking, verified quality, and instant
+                visibility for managers, buyers, and auditors.
             </CardContent>
             </Card>
           </div>
@@ -1234,30 +1202,30 @@ export default function LandingPage() {
 
         <section className="mx-auto mt-16 w-full max-w-6xl space-y-6 sm:mt-20">
           <div>
-            <h2 className={`${display.className} text-3xl font-semibold`}>Privacy & Terms</h2>
-            <p className="text-muted-foreground mt-2">Clear commitments for data, access, and accountability.</p>
+            <h2 className={`${display.className} text-3xl font-semibold`}>Trust, Privacy & Governance</h2>
+            <p className="text-muted-foreground mt-2">Clear commitments for data ownership, access control, and accountability.</p>
           </div>
           <div className="grid gap-6 lg:grid-cols-2">
             <Card id="privacy" className="scroll-mt-24 border border-white/50 bg-white/80 backdrop-blur-md">
               <CardHeader>
                 <CardTitle className={`${display.className} text-xl`}>Privacy</CardTitle>
-                <CardDescription>Coffee estate data stays private and tenant-isolated.</CardDescription>
+                <CardDescription>Your estate data stays private, isolated, and under your control.</CardDescription>
               </CardHeader>
               <CardContent className="text-sm text-muted-foreground space-y-3">
-                <p>We never sell your operational data. Each coffee estate runs in a separated tenant space.</p>
-                <p>Access is role-based, with audit logs to show who changed what and when.</p>
-                <p>Exports and backups stay under your control, and you can revoke users any time.</p>
+                <p>We do not sell operational data. Every estate runs in its own tenant-isolated workspace.</p>
+                <p>Access is role-based with audit trails showing who changed what and when.</p>
+                <p>Exports and backups remain under your control, and user access can be revoked at any time.</p>
               </CardContent>
             </Card>
             <Card id="terms" className="scroll-mt-24 border border-white/50 bg-white/80 backdrop-blur-md">
               <CardHeader>
                 <CardTitle className={`${display.className} text-xl`}>Terms</CardTitle>
-                <CardDescription>Transparent usage with clear responsibility.</CardDescription>
+                <CardDescription>Transparent usage with clear responsibilities for both sides.</CardDescription>
               </CardHeader>
               <CardContent className="text-sm text-muted-foreground space-y-3">
-                <p>FarmFlow provides operational tooling and reporting, not financial advice or guarantees.</p>
-                <p>Admins are responsible for data accuracy and user access within their coffee estate.</p>
-                <p>Service updates are communicated in advance and designed to protect existing data.</p>
+                <p>FarmFlow provides operational tooling and reporting, not financial or legal advice.</p>
+                <p>Tenant admins are responsible for data quality and user access inside their estate workspace.</p>
+                <p>Service updates are communicated in advance and designed to preserve data continuity.</p>
               </CardContent>
             </Card>
           </div>
@@ -1269,30 +1237,33 @@ export default function LandingPage() {
             <div className="space-y-2">
               <p className="text-sm font-semibold">FarmFlow</p>
               <p className="text-xs text-muted-foreground">
-                Built for coffee estates today, adaptable to tea, cocoa, and specialty crops tomorrow.
+                Built for coffee estates today, and extensible to other specialty crops tomorrow.
               </p>
             </div>
             <div className="flex flex-wrap gap-4 text-sm text-muted-foreground">
               <a href="#roles" className="hover:text-foreground">
-                Who It Is For
+                Solutions
               </a>
               <a href="#onboarding" className="hover:text-foreground">
-                Onboarding
+                Go Live
               </a>
               <a href="#field-signals" className="hover:text-foreground">
                 Field Signals
               </a>
               <a href="#features" className="hover:text-foreground">
-                Features
+                Capabilities
               </a>
-              <a href="#journey" className="hover:text-foreground">
+              <a href="#modules" className="hover:text-foreground">
+                Module Paths
+              </a>
+              <Link href="/journey" className="hover:text-foreground">
                 Journey
-              </a>
+              </Link>
               <a href="#impact" className="hover:text-foreground">
                 Impact
               </a>
               <a href="#pricing" className="hover:text-foreground">
-                Plans
+                Early Access
               </a>
               <a href="#mission" className="hover:text-foreground">
                 Mission
@@ -1332,7 +1303,7 @@ export default function LandingPage() {
             <div className="flex items-center justify-between border-b border-slate-200/60 px-4 py-3">
               <div>
                 <p className="text-sm font-semibold">FarmFlow Concierge</p>
-                <p className="text-xs text-muted-foreground">Ask about features, plans, or onboarding.</p>
+                <p className="text-xs text-muted-foreground">Ask about modules, onboarding, plans, or security.</p>
               </div>
               <Button variant="ghost" size="icon" onClick={() => setIsChatOpen(false)}>
                 <X className="h-4 w-4" />
@@ -1373,7 +1344,7 @@ export default function LandingPage() {
                 <input
                   value={draftMessage}
                   onChange={(event) => setDraftMessage(event.target.value)}
-                  placeholder="Ask about plans, onboarding, exports..."
+                  placeholder="Ask about modules, plans, onboarding..."
                   className="flex-1 rounded-full border border-slate-200/70 bg-white px-4 py-2 text-sm outline-none focus:border-[color:var(--copper)]"
                 />
                 <Button size="icon" type="submit">
