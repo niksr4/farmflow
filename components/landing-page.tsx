@@ -27,12 +27,12 @@ const HIGHLIGHTS = [
   },
   {
     title: "Processing Yield Clarity",
-    description: "Monitor processing throughput, moisture, and conversion lot by lot in real time.",
+    description: "Monitor Arabica and Robusta throughput, moisture, and Cherry-to-Parchment conversion lot by lot in real time.",
     icon: Sparkles,
   },
   {
     title: "Dispatch + Sales Reconciliation",
-    description: "Reconcile dispatch, received weight, and invoicing so every bag has a financial trail.",
+    description: "Reconcile coffee dispatch, received weight, and invoicing so every Arabica/Robusta bag has a financial trail.",
     icon: Truck,
   },
   {
@@ -48,7 +48,7 @@ const HIGHLIGHTS = [
 ]
 
 const BULLETS = [
-  "Capture intake, processing, labor, consumables, dispatch, and sales in one live ledger",
+  "Capture Arabica and Robusta intake, Cherry and Parchment processing, labor, consumables, dispatch, and sales in one live ledger",
   "Track labor productivity, wages, and input usage by location",
   "Plan field and drying decisions with rainfall + weather context",
   "Add curing and grading notes when your workflow needs them",
@@ -122,12 +122,12 @@ const ROLE_VALUE_CARDS = [
 const MODULE_PATHWAYS = [
   {
     title: "Estate Owner Command",
-    description: "Best for estates running full operations with processing, labor, consumables, and revenue in one system.",
+    description: "Best for estates running full coffee operations with Arabica/Robusta processing, labor, consumables, and revenue in one system.",
     modules: ["Inventory", "Processing", "Dispatch", "Sales", "Season View", "Accounts", "Activity Log"],
   },
   {
     title: "Estate + Curing Extension",
-    description: "Add curing and grading as secondary modules when your estate also runs post-processing workflows.",
+    description: "Add curing and grading as secondary modules when your coffee estate also runs post-processing workflows for Cherry and Parchment lots.",
     modules: ["Processing", "Curing", "Quality", "Rainfall", "Weather", "Dispatch", "Sales"],
   },
   {
@@ -146,7 +146,7 @@ const WEEK_ONE_PLAN = [
   {
     day: "Day 2-3",
     title: "Import baseline data",
-    detail: "Load inventory, consumables, processing, dispatch, and sales opening balances.",
+    detail: "Load inventory, consumables, Arabica/Robusta processing, Cherry/Parchment outputs, dispatch, and sales opening balances.",
   },
   {
     day: "Day 4-5",
@@ -169,13 +169,13 @@ const ASSURANCE_POINTS = [
 const ESTATE_JOURNEY = [
   {
     title: "Harvest intake",
-    description: "Capture cherry intake and sort split by ripe, green, and float.",
+    description: "Capture Coffee Cherry intake and sort split by ripe, green, and float.",
     image: "/images/estate-journey-harvest.jpg",
     alt: "Coffee harvest scene at an estate",
   },
   {
     title: "Washed or natural processing",
-    description: "Track wet parchment or dry cherry output with moisture observations.",
+    description: "Track wet Parchment or dry Cherry output for Arabica and Robusta with moisture observations.",
     image: "/images/estate-journey-processing.jpg",
     alt: "Coffee processing scene with beans and equipment",
   },
@@ -187,7 +187,7 @@ const ESTATE_JOURNEY = [
   },
   {
     title: "Dispatch + sales",
-    description: "Dispatch confidently, reconcile receipts, and close the revenue loop.",
+    description: "Dispatch coffee confidently, reconcile receipts, and close the revenue loop.",
     image: "/images/estate-journey-dispatch.jpg",
     alt: "Coffee delivery transport ready for dispatch",
   },
@@ -568,7 +568,7 @@ export default function LandingPage() {
                 <div className="space-y-6 rise-in">
                   <Badge className="border-white/30 bg-white/20 text-white backdrop-blur-md">
                     <Coffee className="mr-2 h-3.5 w-3.5" />
-                    Built for coffee estates managing processing, labor, and inputs daily
+                    Built for Arabica and Robusta coffee estates managing processing, labor, and inputs daily
                   </Badge>
                   
                   <h1 className={`${display.className} text-4xl md:text-5xl lg:text-6xl font-bold leading-tight text-white text-balance`}>
@@ -577,7 +577,7 @@ export default function LandingPage() {
                   
                   <p className="text-lg text-white/90 leading-relaxed">
                     We built FarmFlow for coffee estate operations, not generic ERP screens.
-                    Run intake, processing, labor tracking, consumables issuance, dispatch, and sales from one command center.
+                    Run intake, Cherry-to-Parchment processing, labor tracking, consumables issuance, dispatch, and sales from one command center.
                   </p>
 
                   <div className="grid gap-2 sm:grid-cols-2">
@@ -656,7 +656,7 @@ export default function LandingPage() {
                             <Sparkles className="h-4 w-4 text-amber-600" />
                           </div>
                           <p className={`${display.className} text-3xl font-bold text-amber-900`}>2,840 kg</p>
-                          <p className="text-xs text-amber-700 mt-1">Arabica cherry → parchment</p>
+                          <p className="text-xs text-amber-700 mt-1">Arabica Cherry → Parchment · Robusta Cherry → Parchment</p>
                           <p className="text-[10px] text-amber-700 mt-1">Labor today: 42 workers · Fuel issued: 180 L</p>
                           <div className="mt-3 h-2 rounded-full bg-amber-200/50 overflow-hidden">
                             <div className="h-full w-[68%] rounded-full bg-gradient-to-r from-amber-400 to-orange-500 animate-pulse" />
@@ -915,7 +915,7 @@ export default function LandingPage() {
             <div>
               <h2 className={`${display.className} text-3xl font-semibold`}>One platform for processing, labor, stock, and cash</h2>
               <p className="text-muted-foreground mt-2">
-                Run daily workflows, control cost leakage, and improve buyer confidence.
+                Run daily coffee workflows, control cost leakage, and improve buyer confidence across Arabica, Robusta, Cherry, and Parchment lots.
               </p>
             </div>
           </div>
@@ -975,12 +975,12 @@ export default function LandingPage() {
             <CardHeader>
               <CardTitle className={`${display.className} text-2xl`}>Traceability that wins buyer confidence</CardTitle>
               <CardDescription>
-                Give buyers and auditors a clear, searchable record for every lot and stock movement.
+                Give buyers and auditors a clear, searchable record for every Coffee lot and stock movement.
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-3 text-sm text-muted-foreground">
               <p>
-                Capture harvest intake, processing output, labor logs, consumables usage, dispatch notes, and sales in one workflow.
+                Capture Coffee harvest intake, Arabica/Robusta processing output, Cherry/Parchment records, labor logs, consumables usage, dispatch notes, and sales in one workflow.
               </p>
               <p>
                 Create a verifiable chain from estate to buyer with timestamps, user logs, and audit-ready evidence.
@@ -1148,7 +1148,7 @@ export default function LandingPage() {
             <CardHeader>
               <CardTitle className={`${display.className} text-2xl`}>Ready to modernize your estate operations?</CardTitle>
               <CardDescription>
-                Start with one estate, scale across locations, and keep every kilogram traceable.
+                Start with one estate, scale across locations, and keep every Arabica and Robusta kilogram traceable from Cherry to Parchment.
               </CardDescription>
             </CardHeader>
             <CardContent className="flex flex-wrap gap-4 items-center justify-between">
@@ -1179,7 +1179,7 @@ export default function LandingPage() {
               <CardHeader>
                 <CardTitle className={`${display.className} text-xl`}>Mission</CardTitle>
               <CardDescription>
-                  Help coffee estates improve margins, protect quality, and build durable buyer trust through traceability.
+                  Help coffee estates improve margins, protect quality, and build durable buyer trust through Arabica/Robusta and Cherry/Parchment traceability.
               </CardDescription>
             </CardHeader>
             <CardContent className="text-sm text-muted-foreground">
