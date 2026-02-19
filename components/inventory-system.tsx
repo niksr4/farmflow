@@ -5,6 +5,7 @@ import {
   Check,
   Download,
   List,
+  Home,
   LogOut,
   Edit,
   Trash2,
@@ -91,6 +92,27 @@ const LOCATION_ALL = "all"
 const LOCATION_UNASSIGNED = "unassigned"
 const UNASSIGNED_LABEL = "Unassigned (legacy)"
 const PREVIEW_TENANT_COOKIE = "farmflow_preview_tenant"
+const DEFAULT_DASHBOARD_TAB_PRIORITY = [
+  "home",
+  "processing",
+  "dispatch",
+  "sales",
+  "season",
+  "accounts",
+  "transactions",
+  "balance-sheet",
+  "receivables",
+  "billing",
+  "rainfall",
+  "journal",
+  "resources",
+  "ai-analysis",
+  "news",
+  "pepper",
+  "curing",
+  "quality",
+  "inventory",
+]
 
 interface LocationOption {
   id: string
@@ -166,7 +188,7 @@ export default function InventorySystem() {
   // UI / paging
   const [currentPage, setCurrentPage] = useState(1)
   const itemsPerPage = 10
-  const [activeTab, setActiveTab] = useState("inventory")
+  const [activeTab, setActiveTab] = useState("home")
   const [enabledModules, setEnabledModules] = useState<string[] | null>(null)
   const [isModulesLoading, setIsModulesLoading] = useState(false)
 
@@ -332,6 +354,7 @@ export default function InventorySystem() {
   const hideEmptyMetrics = Boolean(tenantSettings.uiPreferences?.hideEmptyMetrics)
   const isAdmin = effectiveRole === "admin"
   const isOwner = effectiveRole === "owner"
+  const showFinancialHomeCards = isAdmin || isOwner
   const canManageData = !isPreviewMode && (isAdmin || isOwner)
   const isTenantLoading = status === "loading"
   const preventNegativeKey = (event: React.KeyboardEvent<HTMLInputElement>) => {
@@ -1477,6 +1500,14 @@ export default function InventorySystem() {
     ]
 
     switch (activeTab) {
+      case "home":
+        return {
+          badge: "Home Screen",
+          title: "Estate command center",
+          description: "See key highlights first, then open the module you want to work in.",
+          chips: chipsInventory,
+          stats: inventoryStats,
+        }
       case "transactions":
         return {
           badge: "Traceability Log",
@@ -2267,7 +2298,7 @@ export default function InventorySystem() {
   ])
   const visibleCommandStripItems = commandStripItems.filter((item) => item.visible)
   const visibleTabs = useMemo(() => {
-    const tabs: string[] = []
+    const tabs: string[] = ["home"]
     if (canShowInventory) tabs.push("inventory")
     if (showTransactionHistory) tabs.push("transactions")
     if (canShowAccounts) tabs.push("accounts")
@@ -2309,6 +2340,10 @@ export default function InventorySystem() {
     canShowSeason,
     showTransactionHistory,
   ])
+  const getPreferredDefaultTab = useCallback(
+    (tabs: string[]) => DEFAULT_DASHBOARD_TAB_PRIORITY.find((tab) => tabs.includes(tab)) || tabs[0],
+    [],
+  )
 
   useEffect(() => {
     if (!tenantId || !canShowProcessing) return
@@ -2845,10 +2880,12 @@ export default function InventorySystem() {
     }
     if (visibleTabs.length && !visibleTabs.includes(activeTab)) {
       const fallbackTab =
-        activeTab === "weather" && visibleTabs.includes("rainfall") ? "rainfall" : visibleTabs[0]
+        activeTab === "weather" && visibleTabs.includes("rainfall")
+          ? "rainfall"
+          : getPreferredDefaultTab(visibleTabs)
       setActiveTab(fallbackTab)
     }
-  }, [activeTab, isModulesLoading, visibleTabs])
+  }, [activeTab, getPreferredDefaultTab, isModulesLoading, visibleTabs])
 
   useEffect(() => {
     if (!tabParam) return
@@ -3523,6 +3560,15 @@ export default function InventorySystem() {
         )}
         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full space-y-4">
           <TabsList className="sticky top-2 z-20 flex h-auto w-full flex-wrap items-start gap-3 rounded-2xl border border-black/5 bg-white/85 p-3 shadow-sm backdrop-blur">
+            <div className="flex items-center gap-2">
+              <TabsTrigger value="home">
+                <Home className="h-3.5 w-3.5 mr-1.5" />
+                Home
+              </TabsTrigger>
+            </div>
+            {(showOperationsTabs || showFinanceTabs || showInsightsTabs) && (
+              <div aria-hidden className="h-px w-full bg-black/10 lg:h-7 lg:w-px lg:self-center" />
+            )}
             {showOperationsTabs && (
               <div className="flex flex-wrap items-center gap-2">
                 <span className="rounded-full border border-black/5 bg-neutral-100/70 px-2 py-0.5 text-[9px] font-medium uppercase tracking-[0.26em] text-neutral-500">
@@ -3645,6 +3691,135 @@ export default function InventorySystem() {
               </div>
             )}
           </TabsList>
+
+          <TabsContent value="home" className="space-y-6">
+            <div className={cn("grid grid-cols-1 gap-4 sm:grid-cols-2", showFinancialHomeCards ? "xl:grid-cols-4" : "xl:grid-cols-2")}>
+              <Card className="border-black/5 bg-white/90">
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-sm font-medium text-neutral-600">Processing Output</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <p className="text-2xl font-semibold tabular-nums text-neutral-900">
+                    {formatNumber(processingTotals.arabicaKg + processingTotals.robustaKg, 0)} kg
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    {currentFiscalYear.label}
+                  </p>
+                </CardContent>
+              </Card>
+              <Card className="border-black/5 bg-white/90">
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-sm font-medium text-neutral-600">Dispatched</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <p className="text-2xl font-semibold tabular-nums text-neutral-900">
+                    {formatNumber(dispatchHeroTotals.arabicaBags + dispatchHeroTotals.robustaBags, 0)} bags
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    {formatCount(dispatchHeroTotals.totalDispatches)} records
+                  </p>
+                </CardContent>
+              </Card>
+              {showFinancialHomeCards && (
+                <>
+                  <Card className="border-black/5 bg-white/90">
+                    <CardHeader className="pb-2">
+                      <CardTitle className="text-sm font-medium text-neutral-600">Sales Revenue</CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <p className="text-2xl font-semibold tabular-nums text-neutral-900">
+                        {formatCurrency(salesHeroTotals.totalRevenue, 0)}
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        {formatCount(salesHeroTotals.totalSales)} sales entries
+                      </p>
+                    </CardContent>
+                  </Card>
+                  <Card className="border-black/5 bg-white/90">
+                    <CardHeader className="pb-2">
+                      <CardTitle className="text-sm font-medium text-neutral-600">Live Position</CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <p className="text-2xl font-semibold tabular-nums text-neutral-900">
+                        {formatCurrency(
+                          salesHeroTotals.totalRevenue - accountsTotals.grandTotal + receivablesHeroTotals.totalOutstanding,
+                          0,
+                        )}
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        Booked net + receivables
+                      </p>
+                    </CardContent>
+                  </Card>
+                </>
+              )}
+            </div>
+
+            <Card className="border-black/5 bg-white/90">
+              <CardHeader>
+                <CardTitle>Quick Open</CardTitle>
+                <CardDescription>Start from a dashboard summary, then jump into the module you need.</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="flex flex-wrap gap-2">
+                  {canShowProcessing && (
+                    <Button variant="outline" onClick={() => setActiveTab("processing")} className="bg-white">
+                      Open Processing
+                    </Button>
+                  )}
+                  {canShowDispatch && (
+                    <Button variant="outline" onClick={() => setActiveTab("dispatch")} className="bg-white">
+                      Open Dispatch
+                    </Button>
+                  )}
+                  {canShowSales && (
+                    <Button variant="outline" onClick={() => setActiveTab("sales")} className="bg-white">
+                      Open Sales
+                    </Button>
+                  )}
+                  {canShowInventory && (
+                    <Button variant="outline" onClick={() => setActiveTab("inventory")} className="bg-white">
+                      Open Inventory
+                    </Button>
+                  )}
+                  {canShowAccounts && (
+                    <Button variant="outline" onClick={() => setActiveTab("accounts")} className="bg-white">
+                      Open Accounts
+                    </Button>
+                  )}
+                  {showTransactionHistory && (
+                    <Button variant="outline" onClick={() => setActiveTab("transactions")} className="bg-white">
+                      Open Transaction History
+                    </Button>
+                  )}
+                  {canShowSeason && (
+                    <Button variant="outline" onClick={() => setActiveTab("season")} className="bg-white">
+                      Open Season View
+                    </Button>
+                  )}
+                  {canShowBalanceSheet && (
+                    <Button variant="outline" onClick={() => setActiveTab("balance-sheet")} className="bg-white">
+                      Open Balance Sheet
+                    </Button>
+                  )}
+                </div>
+                <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+                  <div className="rounded-xl border border-black/5 bg-white p-3">
+                    <p className="text-xs uppercase tracking-[0.18em] text-neutral-500">Active Locations</p>
+                    <p className="mt-1 text-lg font-semibold tabular-nums text-neutral-900">{formatCount(estateMetrics.locationCount)}</p>
+                  </div>
+                  <div className="rounded-xl border border-black/5 bg-white p-3">
+                    <p className="text-xs uppercase tracking-[0.18em] text-neutral-500">Traceability Coverage</p>
+                    <p className="mt-1 text-lg font-semibold tabular-nums text-neutral-900">{formatNumber(estateMetrics.traceabilityCoverage, 0)}%</p>
+                  </div>
+                  <div className="rounded-xl border border-black/5 bg-white p-3">
+                    <p className="text-xs uppercase tracking-[0.18em] text-neutral-500">Open Alerts</p>
+                    <p className="mt-1 text-lg font-semibold tabular-nums text-neutral-900">{formatCount(exceptionsSummary.count)}</p>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          </TabsContent>
 
           {canShowInventory && (
             <TabsContent value="inventory" className="space-y-6">
