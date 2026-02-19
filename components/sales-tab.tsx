@@ -193,13 +193,10 @@ export default function SalesTab() {
       if (!selectedLocationId && loaded.length > 0) {
         setSelectedLocationId(loaded[0].id)
       }
-      if (salesFilterLocationId === LOCATION_ALL && loaded.length > 0) {
-        setSalesFilterLocationId(loaded[0].id)
-      }
     } catch (error) {
       console.error("Error loading locations:", error)
     }
-  }, [salesFilterLocationId, selectedLocationId])
+  }, [selectedLocationId])
 
   const resolveLocationIdFromLabel = useCallback(
     (label?: string | null) => {
@@ -308,65 +305,53 @@ export default function SalesTab() {
   }, [salesFilterLocationId, salesPageSize, selectedFiscalYear])
 
   const fetchDispatchSummary = useCallback(async () => {
-    if (!selectedLocationId) {
-      setDispatchSummary([])
-      setDispatchSummaryScope("all")
-      return
-    }
     try {
       const params = new URLSearchParams({
         summaryOnly: "true",
         startDate: selectedFiscalRange.startDate,
         endDate: selectedFiscalRange.endDate,
       })
-      params.set("locationId", selectedLocationId)
       const response = await fetch(`/api/dispatch?${params.toString()}`, { cache: "no-store" })
       const data = await response.json()
 
       if (data.success) {
         setDispatchSummary(Array.isArray(data.totalsByType) ? data.totalsByType : [])
-        const scope = data.locationScope === "legacy_pool" ? "legacy_pool" : "location"
+        const scope = data.locationScope === "legacy_pool" ? "legacy_pool" : "all"
         setDispatchSummaryScope(scope)
       } else {
         setDispatchSummary([])
-        setDispatchSummaryScope("location")
+        setDispatchSummaryScope("all")
       }
     } catch (error) {
       console.error("Error fetching dispatch records:", error)
       setDispatchSummary([])
-      setDispatchSummaryScope("location")
+      setDispatchSummaryScope("all")
     }
-  }, [selectedFiscalRange.endDate, selectedFiscalRange.startDate, selectedLocationId])
+  }, [selectedFiscalRange.endDate, selectedFiscalRange.startDate])
 
   const fetchSalesSummary = useCallback(async () => {
-    if (!selectedLocationId) {
-      setSalesSummary([])
-      setSalesSummaryScope("all")
-      return
-    }
     try {
       const params = new URLSearchParams({
         summaryOnly: "true",
         startDate: selectedFiscalRange.startDate,
         endDate: selectedFiscalRange.endDate,
       })
-      params.set("locationId", selectedLocationId)
       const response = await fetch(`/api/sales?${params.toString()}`, { cache: "no-store" })
       const data = await response.json()
 
       if (data.success) {
         setSalesSummary(Array.isArray(data.totalsByType) ? data.totalsByType : [])
-        setSalesSummaryScope(data.locationScope === "legacy_pool" ? "legacy_pool" : "location")
+        setSalesSummaryScope(data.locationScope === "legacy_pool" ? "legacy_pool" : "all")
       } else {
         setSalesSummary([])
-        setSalesSummaryScope("location")
+        setSalesSummaryScope("all")
       }
     } catch (error) {
       console.error("Error fetching sales summary:", error)
       setSalesSummary([])
-      setSalesSummaryScope("location")
+      setSalesSummaryScope("all")
     }
-  }, [selectedFiscalRange.endDate, selectedFiscalRange.startDate, selectedLocationId])
+  }, [selectedFiscalRange.endDate, selectedFiscalRange.startDate])
 
   const fetchOverviewDispatchSummary = useCallback(async () => {
     try {
@@ -376,9 +361,6 @@ export default function SalesTab() {
         endDate,
         summaryOnly: "true",
       })
-      if (selectedLocationId) {
-        params.set("locationId", selectedLocationId)
-      }
       const response = await fetch(`/api/dispatch?${params.toString()}`, { cache: "no-store" })
       const data = await response.json()
 
@@ -391,7 +373,7 @@ export default function SalesTab() {
       console.error("Error fetching dispatch summary:", error)
       setOverviewDispatchSummary([])
     }
-  }, [selectedFiscalYear, selectedLocationId])
+  }, [selectedFiscalYear])
 
   const fetchOverviewSalesSummary = useCallback(async () => {
     try {
@@ -401,9 +383,6 @@ export default function SalesTab() {
         endDate,
         summaryOnly: "true",
       })
-      if (selectedLocationId) {
-        params.set("locationId", selectedLocationId)
-      }
       const response = await fetch(`/api/sales?${params.toString()}`, { cache: "no-store" })
       const data = await response.json()
 
@@ -416,7 +395,7 @@ export default function SalesTab() {
       console.error("Error fetching sales overview:", error)
       setOverviewSalesSummary([])
     }
-  }, [selectedFiscalYear, selectedLocationId])
+  }, [selectedFiscalYear])
 
   useEffect(() => {
     loadLocations()
@@ -609,30 +588,16 @@ export default function SalesTab() {
     if (!editingRecord) {
       return { allowanceKgs: 0, matchesSelection: false }
     }
-    const editLocationId =
-      editingRecord.location_id ||
-      resolveLocationIdFromLabel(editingRecord.location_name || editingRecord.location_code || editingRecord.estate)
-    const matchesLocation = isLegacyPooledAvailability
-      ? !editLocationId || editLocationId === selectedLocationId
-      : Boolean(editLocationId) && editLocationId === selectedLocationId
     const matchesCoffee = normalizeCoffeeType(editingRecord.coffee_type) === normalizeCoffeeType(coffeeType)
     const matchesBag = normalizeBagType(editingRecord.bag_type) === normalizeBagType(bagType)
-    if (matchesLocation && matchesCoffee && matchesBag) {
+    if (matchesCoffee && matchesBag) {
       return {
         allowanceKgs: resolveSalesRecordKgs(editingRecord, bagWeightKg),
         matchesSelection: true,
       }
     }
     return { allowanceKgs: 0, matchesSelection: false }
-  }, [
-    bagType,
-    bagWeightKg,
-    coffeeType,
-    editingRecord,
-    isLegacyPooledAvailability,
-    resolveLocationIdFromLabel,
-    selectedLocationId,
-  ])
+  }, [bagType, bagWeightKg, coffeeType, editingRecord])
 
   const handleSave = async () => {
     const wasEditing = Boolean(editingRecord)
@@ -973,8 +938,7 @@ export default function SalesTab() {
     availableKgs: baseSelectionAvailability.availableKgs + editAllowance.allowanceKgs,
     availableBags: (baseSelectionAvailability.availableKgs + editAllowance.allowanceKgs) / bagWeightKg,
   }
-  const selectedLocationLabel = selectedLocation?.name || selectedLocation?.code || "No location selected"
-  const selectionScopeLabel = isLegacyPooledAvailability ? "estate pooled scope" : selectedLocationLabel
+  const selectionScopeLabel = "estate-wide scope"
   const hasOtherTypeAvailability =
     selectionAvailability.availableKgs <= 0 && selectionScopeAvailabilityTotals.totalAvailable > 0
   const exceedsAvailability = kgsSoldValue > selectionAvailability.availableKgs + STOCK_EPSILON
@@ -1001,9 +965,7 @@ export default function SalesTab() {
   if (isSaving) saveBlockers.push("Saving in progress.")
   const canSubmitSale =
     saveBlockers.length === 0
-  const overviewScopeLabel = selectedLocationId
-    ? (isLegacyPooledAvailability ? `pooled legacy + ${selectedLocationLabel}` : selectedLocationLabel)
-    : "all locations in the selected fiscal year"
+  const overviewScopeLabel = "all locations in the selected fiscal year"
   const selectedSalesKgs = selectedSalesRecord ? resolveSalesRecordKgs(selectedSalesRecord, bagWeightKg) : 0
   const selectedSalesBags = Number(selectedSalesRecord?.bags_sold) || 0
   const selectedSalesPricePerBag = Number(selectedSalesRecord?.price_per_bag) || 0
@@ -1052,7 +1014,7 @@ export default function SalesTab() {
         <CardHeader className="pb-3">
           <CardTitle className="text-xs uppercase tracking-[0.2em] text-muted-foreground">Selection Pre-Check</CardTitle>
           <CardDescription>
-            Guardrail before save: this checks one strict slot only (location + coffee type + bag type).
+            Guardrail before save: this checks one strict slot only (coffee type + bag type), not estate totals.
           </CardDescription>
           <p className="text-xs text-muted-foreground">
             Selection: {selectionScopeLabel} · {coffeeType} · {bagType} · {selectedFiscalYear.label}
@@ -1061,7 +1023,7 @@ export default function SalesTab() {
             Available for this selection is strict stock for this exact slot. All coffee types in this scope is broader context only.
           </p>
           <p className="text-xs text-muted-foreground">
-            Note: validation uses stock in the selected fiscal year and selected location to match the availability cards below.
+            Note: validation uses stock in the selected fiscal year scope to match the availability cards below.
           </p>
           {isLegacyPooledAvailability && (
             <p className="text-xs font-medium text-amber-700">
@@ -1083,7 +1045,7 @@ export default function SalesTab() {
         <CardContent className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-6">
           <div className="rounded-lg border border-border/60 bg-white/80 p-3">
             <p className="text-xs text-muted-foreground">Scope</p>
-            <p className="mt-1 text-sm font-semibold text-foreground">{selectionScopeLabel}</p>
+            <p className="mt-1 text-sm font-semibold text-foreground">Estate-wide</p>
             <p className="mt-1 text-xs text-muted-foreground">{coffeeType} · {bagType}</p>
           </div>
           <div className="rounded-lg border border-border/60 bg-white/80 p-3">
@@ -1291,7 +1253,7 @@ export default function SalesTab() {
           <CardDescription>
             {editingRecord
               ? "Update the sales record"
-              : "Record sales for a location (availability follows dispatch received KGs for this location, coffee type, and bag type)."}
+              : "Record sales for a location (availability follows dispatch received KGs by coffee type and bag type)."}
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -1361,7 +1323,7 @@ export default function SalesTab() {
               <p className="text-xs text-muted-foreground">
                 {isLegacyPooledAvailability
                   ? "Legacy pooled mode is active for this estate; availability is estate-wide."
-                  : "Totals and availability follow this location."}
+                  : "Location is captured for traceability; availability is checked estate-wide."}
               </p>
             </div>
 
