@@ -35,7 +35,7 @@ const isMissingRelation = (error: unknown) => {
   return message.includes("does not exist") && message.includes("relation")
 }
 
-type NeonSql = NeonQueryFunction<boolean, boolean>
+type NeonSql = NeonQueryFunction<any, any>
 
 const ensureSql = (): NeonSql => {
   if (!sql) {
@@ -77,13 +77,13 @@ export async function ensurePrivacySchema(sessionUser: SessionUser): Promise<Pri
   }
 }
 
-const safeQuery = async <T>(
-  query: NeonQueryPromise<T>,
+const safeQuery = async <T = any>(
+  query: NeonQueryPromise<any, any, any>,
   tenantContext: { tenantId: string; role: string },
-  fallback: T,
-): Promise<T> => {
+  fallback: T[],
+): Promise<T[]> => {
   try {
-    return (await runTenantQuery(ensureSql(), tenantContext, query)) as T
+    return (await runTenantQuery(ensureSql(), tenantContext, query)) as T[]
   } catch (error) {
     if (isMissingRelation(error)) {
       return fallback
@@ -92,7 +92,10 @@ const safeQuery = async <T>(
   }
 }
 
-const safeExec = async (query: NeonQueryPromise<any>, tenantContext: { tenantId: string; role: string }) => {
+const safeExec = async (
+  query: NeonQueryPromise<any, any, any>,
+  tenantContext: { tenantId: string; role: string },
+) => {
   try {
     await runTenantQuery(ensureSql(), tenantContext, query)
   } catch (error) {
@@ -557,7 +560,7 @@ export async function listImpactUsers(
   endDate: string,
 ): Promise<{ username: string }[]> {
   const tenantContext = normalizeTenantContext(sessionUser.tenantId, sessionUser.role)
-  return safeQuery(
+  return safeQuery<{ username: string }>(
     ensureSql()`
       SELECT DISTINCT username
       FROM audit_logs

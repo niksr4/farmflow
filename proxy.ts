@@ -5,7 +5,7 @@ import { getToken } from "next-auth/jwt"
 export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl
 
-  if (pathname.startsWith("/api/auth")) {
+  if (pathname.startsWith("/api/auth") || pathname.startsWith("/api/register-interest")) {
     return NextResponse.next()
   }
 
@@ -20,7 +20,21 @@ export async function proxy(request: NextRequest) {
       return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 })
     }
     const url = request.nextUrl.clone()
-    url.pathname = "/login"
+    url.pathname = "/"
+    return NextResponse.redirect(url)
+  }
+
+  const passwordResetRequired = Boolean((token as any).passwordResetRequired)
+  if (passwordResetRequired) {
+    if (pathname === "/settings/reset-password" || pathname.startsWith("/api/account/password")) {
+      return NextResponse.next()
+    }
+    if (pathname.startsWith("/api/")) {
+      return NextResponse.json({ success: false, error: "Password reset required" }, { status: 403 })
+    }
+
+    const url = request.nextUrl.clone()
+    url.pathname = "/settings/reset-password"
     return NextResponse.redirect(url)
   }
 
@@ -28,5 +42,5 @@ export async function proxy(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/dashboard/:path*", "/api/:path*"],
+  matcher: ["/dashboard/:path*", "/settings/:path*", "/admin/:path*", "/api/:path*"],
 }

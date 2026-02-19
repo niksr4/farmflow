@@ -129,6 +129,7 @@ export default function SalesTab() {
   const [bankAccount, setBankAccount] = useState<string>("")
   const [notes, setNotes] = useState<string>("")
   const [buyerSuggestions, setBuyerSuggestions] = useState<string[]>([])
+  const asOfDate = useMemo(() => format(date, "yyyy-MM-dd"), [date])
   
   const kgsSoldValue = Number(kgsSold) || 0
   const pricePerBagValue = Number(pricePerBag) || 0
@@ -293,11 +294,9 @@ export default function SalesTab() {
 
   const fetchDispatchSummary = useCallback(async () => {
     try {
-      const { startDate, endDate } = getFiscalYearDateRange(selectedFiscalYear)
       const params = new URLSearchParams({
-        startDate,
-        endDate,
         summaryOnly: "true",
+        endDate: asOfDate,
       })
       if (selectedLocationId) {
         params.set("locationId", selectedLocationId)
@@ -318,7 +317,7 @@ export default function SalesTab() {
       setDispatchSummary([])
       setDispatchSummaryScope(selectedLocationId ? "location" : "all")
     }
-  }, [selectedFiscalYear, selectedLocationId])
+  }, [asOfDate, selectedLocationId])
 
   const fetchSalesSummary = useCallback(async () => {
     if (!selectedLocationId) {
@@ -327,11 +326,9 @@ export default function SalesTab() {
       return
     }
     try {
-      const { startDate, endDate } = getFiscalYearDateRange(selectedFiscalYear)
       const params = new URLSearchParams({
-        startDate,
-        endDate,
         summaryOnly: "true",
+        endDate: asOfDate,
       })
       params.set("locationId", selectedLocationId)
       const response = await fetch(`/api/sales?${params.toString()}`)
@@ -349,7 +346,7 @@ export default function SalesTab() {
       setSalesSummary([])
       setSalesSummaryScope("location")
     }
-  }, [selectedFiscalYear, selectedLocationId])
+  }, [asOfDate, selectedLocationId])
 
   const fetchOverviewDispatchSummary = useCallback(async () => {
     try {
@@ -519,6 +516,10 @@ export default function SalesTab() {
     () => buildAvailability(overviewDispatchSummary, overviewSalesSummary),
     [buildAvailability, overviewDispatchSummary, overviewSalesSummary],
   )
+  const selectionScopeAvailabilityTotals = useMemo(
+    () => buildAvailability(dispatchSummary, salesSummary),
+    [buildAvailability, dispatchSummary, salesSummary],
+  )
 
   const getAvailableForSelection = () => {
     const normalizedCoffee = coffeeType.toLowerCase()
@@ -571,6 +572,15 @@ export default function SalesTab() {
   }, [bagType, bagWeightKg, coffeeType, editingRecord, resolveLocationIdFromLabel, selectedLocationId])
 
   const handleSave = async () => {
+    const editingId = editingRecord?.id != null ? Number(editingRecord.id) : null
+    if (editingRecord && (!Number.isFinite(editingId) || (editingId ?? 0) <= 0)) {
+      toast({
+        title: "Invalid record",
+        description: "This sale record is missing a valid ID. Refresh and try again.",
+        variant: "destructive",
+      })
+      return
+    }
     if (!selectedLocationId) {
       toast({
         title: "Location required",
@@ -600,8 +610,13 @@ export default function SalesTab() {
     }
 
     const { availableKgs } = getAvailableForSelection()
+    const currentRecordKgs = editingRecord ? resolveSalesRecordKgs(editingRecord, bagWeightKg) : 0
+    const isEditWithoutInventoryChange =
+      Boolean(editingRecord) &&
+      editAllowance.matchesSelection &&
+      Math.abs(currentRecordKgs - kgsValue) < 0.0001
     const effectiveAvailableKgs = availableKgs + editAllowance.allowanceKgs
-    if (kgsValue > effectiveAvailableKgs) {
+    if (!isEditWithoutInventoryChange && kgsValue > effectiveAvailableKgs) {
       toast({
         title: "Insufficient Inventory",
         description: `Only ${effectiveAvailableKgs.toFixed(2)} KGs of ${coffeeType} ${bagType} available based on received inventory.`,
@@ -618,7 +633,7 @@ export default function SalesTab() {
         method,
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          id: editingRecord?.id,
+          id: editingId,
           sale_date: format(date, "yyyy-MM-dd"),
           batch_no: batchNo || null,
           lot_id: lotId || null,
@@ -635,9 +650,9 @@ export default function SalesTab() {
         }),
       })
 
-      const data = await response.json()
+      const data = await response.json().catch(() => ({}))
 
-      if (data.success) {
+      if (response.ok && data.success) {
         toast({
           title: "Success",
           description: editingRecord ? "Sales record updated successfully" : "Sales record saved successfully",
@@ -654,7 +669,7 @@ export default function SalesTab() {
       } else {
         toast({
           title: "Error",
-          description: data.error || "Failed to save sales record",
+          description: data.error || `Failed to save sales record (HTTP ${response.status})`,
           variant: "destructive",
         })
       }
@@ -755,7 +770,7 @@ export default function SalesTab() {
 
       const headers = [
         "Date",
-        "B&L Batch No",
+        "Batch Reference",
         "Lot ID",
         "Location",
         "Coffee Type",
@@ -837,10 +852,10 @@ export default function SalesTab() {
     }
 
     return {
-      ap: getPrice("arabica_parchment"),
-      ac: getPrice("arabica_cherry"),
-      rp: getPrice("robusta_parchment"),
-      rc: getPrice("robusta_cherry"),
+      arabicaParchment: getPrice("arabica_parchment"),
+      arabicaCherry: getPrice("arabica_cherry"),
+      robustaParchment: getPrice("robusta_parchment"),
+      robustaCherry: getPrice("robusta_cherry"),
     }
   }, [overviewSalesSummary])
   const resolvedSalesCount = salesTotalCount || salesRecords.length
@@ -857,19 +872,39 @@ export default function SalesTab() {
   }
   const isLegacyPooledAvailability = dispatchSummaryScope === "legacy_pool" || salesSummaryScope === "legacy_pool"
   const selectedLocationLabel = selectedLocation?.name || selectedLocation?.code || "No location selected"
+  const selectionScopeLabel = isLegacyPooledAvailability ? "estate pooled scope" : selectedLocationLabel
+  const hasOtherTypeAvailability =
+    selectionAvailability.availableKgs <= 0 && selectionScopeAvailabilityTotals.totalAvailable > 0
   const exceedsAvailability = kgsSoldValue > selectionAvailability.availableKgs
   const excessKgs = Math.max(0, kgsSoldValue - selectionAvailability.availableKgs)
   const projectedRemainingKgs = Math.max(0, selectionAvailability.availableKgs - kgsSoldValue)
   const projectedRemainingBags = projectedRemainingKgs / bagWeightKg
+  const entryUsagePct =
+    selectionAvailability.availableKgs > 0
+      ? Math.min(100, (kgsSoldValue / selectionAvailability.availableKgs) * 100)
+      : 0
+  const selectionShareOfScopePct =
+    selectionScopeAvailabilityTotals.totalAvailable > 0
+      ? (selectionAvailability.availableKgs / selectionScopeAvailabilityTotals.totalAvailable) * 100
+      : 0
+  const contextGapKgs = Math.max(0, selectionScopeAvailabilityTotals.totalAvailable - selectionAvailability.availableKgs)
+  const contextGapBags = contextGapKgs / bagWeightKg
   const canSubmitSale =
     Boolean(selectedLocationId) &&
     kgsSoldValue > 0 &&
     pricePerBagValue > 0 &&
     !exceedsAvailability &&
     !isSaving
+  const overviewLocation = locations.find((loc) => loc.id === salesFilterLocationId)
+  const overviewScopeLabel =
+    salesFilterLocationId === LOCATION_ALL
+      ? "all locations in the selected fiscal year"
+      : overviewLocation?.name ||
+        overviewLocation?.code ||
+        "selected location filter"
 
   return (
-    <div className="space-y-8">
+    <div className="flex flex-col gap-8">
       {/* Fiscal Year Selector */}
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
@@ -903,15 +938,21 @@ export default function SalesTab() {
 
       <Card
         className={cn(
-          "bg-white/90",
+          "order-2 bg-white/90",
           exceedsAvailability ? "border-rose-200/80" : "border-emerald-200/80",
         )}
       >
         <CardHeader className="pb-3">
-          <CardTitle className="text-xs uppercase tracking-[0.2em] text-muted-foreground">Sale Pre-Check</CardTitle>
+          <CardTitle className="text-xs uppercase tracking-[0.2em] text-muted-foreground">Selection Pre-Check</CardTitle>
           <CardDescription>
-            Validate quantity and revenue before saving.
+            Guardrail before save: this checks one strict slot only (location + coffee type + bag type), not estate totals.
           </CardDescription>
+          <p className="text-xs text-muted-foreground">
+            Selection: {selectionScopeLabel} · {coffeeType} · {bagType} · as of {asOfDate}
+          </p>
+          <p className="text-xs text-muted-foreground">
+            Available for this selection is strict stock for this exact slot. All coffee types in this scope is broader context only.
+          </p>
           {isLegacyPooledAvailability && (
             <p className="text-xs font-medium text-amber-700">
               Legacy pooled stock mode: availability is estate-wide to preserve pre-location history.
@@ -922,19 +963,28 @@ export default function SalesTab() {
               Edit allowance applied: {formatNumber(editAllowance.allowanceKgs)} KGs from this record.
             </p>
           )}
+          {hasOtherTypeAvailability && (
+            <p className="text-xs font-medium text-amber-700">
+              No stock for this exact selection. Other coffee or bag types in this scope still have
+              {" "}{formatNumber(selectionScopeAvailabilityTotals.totalAvailable)} KGs available.
+            </p>
+          )}
         </CardHeader>
-        <CardContent className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-5">
+        <CardContent className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-6">
           <div className="rounded-lg border border-border/60 bg-white/80 p-3">
-            <p className="text-xs text-muted-foreground">Location</p>
-            <p className="mt-1 text-sm font-semibold text-foreground">{selectedLocationLabel}</p>
+            <p className="text-xs text-muted-foreground">Strict selection</p>
+            <p className="mt-1 text-sm font-semibold text-foreground">{selectionScopeLabel}</p>
             <p className="mt-1 text-xs text-muted-foreground">{coffeeType} · {bagType}</p>
           </div>
           <div className="rounded-lg border border-border/60 bg-white/80 p-3">
-            <p className="text-xs text-muted-foreground">Available now</p>
+            <p className="text-xs text-muted-foreground">Available for this selection</p>
             <p className="mt-1 text-sm font-semibold text-foreground">
               {formatNumber(selectionAvailability.availableKgs)} KGs
             </p>
             <p className="mt-1 text-xs text-muted-foreground">{formatNumber(selectionAvailability.availableBags)} bags</p>
+            <p className="mt-1 text-xs text-muted-foreground">
+              {formatNumber(selectionShareOfScopePct, 0)}% of all coffee currently available in this scope
+            </p>
             {netSelectionOverdrawnKgs > 0 && (
               <p className="mt-1 text-xs text-rose-600">
                 Overdrawn: {formatNumber(netSelectionOverdrawnKgs)} KGs ({formatNumber(netSelectionOverdrawnBags)} bags)
@@ -947,6 +997,14 @@ export default function SalesTab() {
               {formatNumber(kgsSoldValue)} KGs
             </p>
             <p className="mt-1 text-xs text-muted-foreground">{formatNumber(bagsSoldValue)} bags</p>
+            {selectionAvailability.availableKgs > 0 && (
+              <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-muted">
+                <div
+                  className={cn("h-full transition-all", exceedsAvailability ? "bg-rose-500" : "bg-emerald-600")}
+                  style={{ width: `${Math.min(100, entryUsagePct)}%` }}
+                />
+              </div>
+            )}
           </div>
           <div className="rounded-lg border border-border/60 bg-white/80 p-3">
             <p className="text-xs text-muted-foreground">Projected balance</p>
@@ -958,16 +1016,28 @@ export default function SalesTab() {
             <p className="mt-1 text-sm font-semibold text-emerald-700">{formatCurrency(calculatedRevenue)}</p>
             <p className="mt-1 text-xs text-muted-foreground">Price: {formatCurrency(pricePerBagValue)}</p>
           </div>
+          <div className="rounded-lg border border-border/60 bg-white/80 p-3">
+            <p className="text-xs text-muted-foreground">All coffee types in this scope</p>
+            <p className="mt-1 text-sm font-semibold text-foreground">
+              {formatNumber(selectionScopeAvailabilityTotals.totalAvailable)} KGs
+            </p>
+            <p className="mt-1 text-xs text-muted-foreground">
+              {formatNumber(selectionScopeAvailabilityTotals.totalAvailableBags)} bags
+            </p>
+            <p className="mt-1 text-xs text-muted-foreground">
+              Outside this exact selection: {formatNumber(contextGapKgs)} KGs ({formatNumber(contextGapBags)} bags)
+            </p>
+          </div>
         </CardContent>
       </Card>
 
-      <Card className="border-border/70 bg-white/85">
+      <Card className="order-3 border-border/70 bg-white/85">
         <CardHeader className="pb-3">
           <CardTitle className="text-xs uppercase tracking-[0.2em] text-muted-foreground">
             Inventory Available for Sale
           </CardTitle>
           <CardDescription>
-            Based on dispatch received KGs (falls back to nominal bags x bag weight only when KGs are missing).
+            Scope: {overviewScopeLabel}. Based on dispatch received KGs (falls back to nominal bags x bag weight only when KGs are missing).
           </CardDescription>
         </CardHeader>
         <CardContent className="grid grid-cols-1 lg:grid-cols-3 gap-4">
@@ -1025,7 +1095,7 @@ export default function SalesTab() {
       </Card>
 
       {/* Summary Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="order-4 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         {/* Total Revenue */}
         <Card className="border-border/60 bg-white/85">
           <CardHeader className="pb-2">
@@ -1073,34 +1143,36 @@ export default function SalesTab() {
         {/* Price per bag by coffee + form */}
         <Card className="border-border/60 bg-white/85">
           <CardHeader className="pb-2">
-            <CardTitle className="text-xs uppercase tracking-[0.2em] text-muted-foreground">Price/Bag by Type</CardTitle>
+            <CardTitle className="text-xs uppercase tracking-[0.2em] text-muted-foreground">
+              Average Price Per Bag
+            </CardTitle>
           </CardHeader>
           <CardContent>
             <div className="grid grid-cols-2 gap-3 text-sm">
               <div className="rounded-lg border border-border/60 bg-white/80 p-2">
-                <div className="text-xs text-muted-foreground">AP</div>
-                <div className="text-lg font-semibold">{formatCurrency(pricePerBagByType.ap)}</div>
+                <div className="text-xs text-muted-foreground">Arabica · Parchment</div>
+                <div className="text-lg font-semibold">{formatCurrency(pricePerBagByType.arabicaParchment)}</div>
               </div>
               <div className="rounded-lg border border-border/60 bg-white/80 p-2">
-                <div className="text-xs text-muted-foreground">AC</div>
-                <div className="text-lg font-semibold">{formatCurrency(pricePerBagByType.ac)}</div>
+                <div className="text-xs text-muted-foreground">Arabica · Cherry</div>
+                <div className="text-lg font-semibold">{formatCurrency(pricePerBagByType.arabicaCherry)}</div>
               </div>
               <div className="rounded-lg border border-border/60 bg-white/80 p-2">
-                <div className="text-xs text-muted-foreground">RP</div>
-                <div className="text-lg font-semibold">{formatCurrency(pricePerBagByType.rp)}</div>
+                <div className="text-xs text-muted-foreground">Robusta · Parchment</div>
+                <div className="text-lg font-semibold">{formatCurrency(pricePerBagByType.robustaParchment)}</div>
               </div>
               <div className="rounded-lg border border-border/60 bg-white/80 p-2">
-                <div className="text-xs text-muted-foreground">RC</div>
-                <div className="text-lg font-semibold">{formatCurrency(pricePerBagByType.rc)}</div>
+                <div className="text-xs text-muted-foreground">Robusta · Cherry</div>
+                <div className="text-lg font-semibold">{formatCurrency(pricePerBagByType.robustaCherry)}</div>
               </div>
             </div>
-            <div className="text-xs text-muted-foreground mt-2">AP/AC/RP/RC = Arabica/Robusta · Parchment/Cherry</div>
+            <div className="text-xs text-muted-foreground mt-2">Weighted by bags sold in the selected fiscal year.</div>
           </CardContent>
         </Card>
       </div>
 
       {/* Add/Edit Sale Form */}
-      <Card className="border-border/70 bg-white/85">
+      <Card className="order-1 border-border/70 bg-white/85">
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <IndianRupee className="h-5 w-5" />
@@ -1133,15 +1205,15 @@ export default function SalesTab() {
               </Popover>
             </div>
 
-            {/* B&L Batch No */}
+            {/* Batch Reference */}
             <div className="space-y-2">
               <FieldLabel
-                label="B&L Batch No"
-                tooltip="Internal batch or ledger reference (optional but helps reconciliation)."
+                label="Batch Reference"
+                tooltip="Internal batch or ledger reference (optional, helps reconciliation)."
               />
               <Input
                 type="text"
-                placeholder="e.g., hfa, hfb, hfc, mv"
+                placeholder="e.g., HF-A1, MV-07"
                 value={batchNo}
                 onChange={(e) => setBatchNo(e.target.value)}
               />
@@ -1372,7 +1444,7 @@ export default function SalesTab() {
       </Card>
 
       {/* Sales Records Table */}
-      <Card className="border-border/70 bg-white/85">
+      <Card className="order-5 border-border/70 bg-white/85">
         <CardHeader>
           <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
             <div>
@@ -1423,7 +1495,7 @@ export default function SalesTab() {
                   <TableHeader>
                     <TableRow>
                       <TableHead className="sticky top-0 bg-muted/70 backdrop-blur">Date</TableHead>
-                      <TableHead className="sticky top-0 bg-muted/70 backdrop-blur">B&L Batch No</TableHead>
+                      <TableHead className="sticky top-0 bg-muted/70 backdrop-blur">Batch Reference</TableHead>
                       <TableHead className="sticky top-0 bg-muted/70 backdrop-blur">Lot ID</TableHead>
                       <TableHead className="sticky top-0 bg-muted/70 backdrop-blur">Location</TableHead>
                       <TableHead className="sticky top-0 bg-muted/70 backdrop-blur">Coffee Type</TableHead>

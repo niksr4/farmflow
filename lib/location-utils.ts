@@ -3,7 +3,7 @@ import "server-only"
 import type { NeonQueryFunction } from "@neondatabase/serverless"
 import { runTenantQuery } from "@/lib/server/tenant-db"
 
-type NeonSql = NeonQueryFunction<boolean, boolean>
+type NeonSql = NeonQueryFunction<any, any>
 
 export type LocationInfo = { id: string; name: string; code: string }
 

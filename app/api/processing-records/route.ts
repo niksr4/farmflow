@@ -112,9 +112,13 @@ export async function GET(request: NextRequest) {
       const isLegacyPooledScope = Boolean(locationId && useLegacyLocationScope && legacyLocationCutover)
       const locationScope = isLegacyPooledScope ? "legacy_pool" : locationId ? "location" : "all"
 
-      if (fiscalYearStart && fiscalYearEnd) {
-        params.push(fiscalYearStart, fiscalYearEnd)
-        whereClause += ` AND pr.process_date >= $${params.length - 1}::date AND pr.process_date <= $${params.length}::date`
+      if (fiscalYearStart) {
+        params.push(fiscalYearStart)
+        whereClause += ` AND pr.process_date >= $${params.length}::date`
+      }
+      if (fiscalYearEnd) {
+        params.push(fiscalYearEnd)
+        whereClause += ` AND pr.process_date <= $${params.length}::date`
       }
 
       if (locationId && !isLegacyPooledScope) {

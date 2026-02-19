@@ -10,6 +10,7 @@ export type SessionUser = {
   role: "admin" | "user" | "owner"
   tenantId: string
   mfaVerified?: boolean
+  passwordResetRequired?: boolean
 }
 
 export async function requireSessionUser(): Promise<SessionUser> {
@@ -22,6 +23,7 @@ export async function requireSessionUser(): Promise<SessionUser> {
       role: user.role,
       tenantId: String(user.tenantId),
       mfaVerified: Boolean((user as any).mfaVerified),
+      passwordResetRequired: Boolean((user as any).passwordResetRequired),
     }
   }
 
@@ -31,7 +33,7 @@ export async function requireSessionUser(): Promise<SessionUser> {
       sql,
       ownerContext,
       sql`
-        SELECT role, tenant_id
+        SELECT role, tenant_id, password_reset_required
         FROM users
         WHERE username = ${String(user.name)}
         LIMIT 1
@@ -43,6 +45,7 @@ export async function requireSessionUser(): Promise<SessionUser> {
         role: String(rows[0].role) as SessionUser["role"],
         tenantId: String(rows[0].tenant_id),
         mfaVerified: Boolean((user as any)?.mfaVerified),
+        passwordResetRequired: Boolean(rows[0].password_reset_required),
       }
     }
   }

@@ -52,10 +52,11 @@ import {
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import { useMediaQuery } from "@/hooks/use-media-query"
 import { useAuth } from "@/hooks/use-auth"
-import { useTenantSettings } from "@/hooks/use-tenant-settings"
+import { useTenantExperience } from "@/hooks/use-tenant-experience"
 import { useRouter, useSearchParams } from "next/navigation"
 import AiAnalysisCharts from "@/components/ai-analysis-charts"
 import AccountsPage from "@/components/accounts-page"
+import ActivityLogTab from "@/components/activity-log-tab"
 import DispatchTab from "@/components/dispatch-tab"
 import ProcessingTab from "@/components/processing-tab"
 import RainfallWeatherTab from "@/components/rainfall-weather-tab"
@@ -87,6 +88,7 @@ const API_INVENTORY = "/api/inventory-neon"
 const LOCATION_ALL = "all"
 const LOCATION_UNASSIGNED = "unassigned"
 const UNASSIGNED_LABEL = "Unassigned (legacy)"
+const PREVIEW_TENANT_COOKIE = "farmflow_preview_tenant"
 
 interface LocationOption {
   id: string
@@ -196,6 +198,46 @@ export default function InventorySystem() {
     loading: false,
     error: null as string | null,
   })
+  const [curingHeroTotals, setCuringHeroTotals] = useState({
+    totalRecords: 0,
+    totalOutputKg: 0,
+    avgDryingDays: 0,
+    avgMoistureDrop: 0,
+    loading: false,
+    error: null as string | null,
+  })
+  const [qualityHeroTotals, setQualityHeroTotals] = useState({
+    totalRecords: 0,
+    avgCupScore: 0,
+    avgOutturnPct: 0,
+    avgDefects: 0,
+    loading: false,
+    error: null as string | null,
+  })
+  const [pepperHeroTotals, setPepperHeroTotals] = useState({
+    totalRecords: 0,
+    totalPickedKg: 0,
+    totalDryKg: 0,
+    avgDryPercent: 0,
+    loading: false,
+    error: null as string | null,
+  })
+  const [rainfallHeroTotals, setRainfallHeroTotals] = useState({
+    totalRecords: 0,
+    totalInches: 0,
+    latestDate: null as string | null,
+    loading: false,
+    error: null as string | null,
+  })
+  const [receivablesHeroTotals, setReceivablesHeroTotals] = useState({
+    totalInvoiced: 0,
+    totalOutstanding: 0,
+    totalOverdue: 0,
+    totalPaid: 0,
+    totalCount: 0,
+    loading: false,
+    error: null as string | null,
+  })
   const [locations, setLocations] = useState<LocationOption[]>([])
   const [selectedLocationId, setSelectedLocationId] = useState<string>(LOCATION_ALL)
   const [transactionLocationId, setTransactionLocationId] = useState<string>(LOCATION_UNASSIGNED)
@@ -266,15 +308,29 @@ export default function InventorySystem() {
 
   // auth + router
   const { user, logout, status } = useAuth()
-  const { settings: tenantSettings } = useTenantSettings()
-  const tenantId = user?.tenantId || null
-  const hideEmptyMetrics = Boolean(tenantSettings.uiPreferences?.hideEmptyMetrics)
-  const isAdmin = !!user?.role && user.role.toLowerCase() === "admin"
-  const isOwner = !!user?.role && user.role.toLowerCase() === "owner"
-  const canManageData = isAdmin || isOwner
-  const isTenantLoading = status === "loading"
+  const { settings: tenantSettings, isFeatureEnabled } = useTenantExperience()
   const router = useRouter()
   const searchParams = useSearchParams()
+  const tenantId = user?.tenantId || null
+  const previewTenantId = (searchParams.get("previewTenantId") || "").trim()
+  const previewTenantName = (searchParams.get("previewTenantName") || "").trim()
+  const previewRoleParam = (searchParams.get("previewRole") || "").toLowerCase()
+  const previewRole = previewRoleParam === "admin" || previewRoleParam === "user" ? previewRoleParam : null
+  const isPlatformOwner = !!user?.role && user.role.toLowerCase() === "owner"
+  const isPreviewMode = Boolean(isPlatformOwner && previewTenantId && previewRole)
+  const effectiveRole = isPreviewMode ? previewRole : user?.role?.toLowerCase() || ""
+  const roleBadgeLabel = isPreviewMode ? `Preview: ${roleLabel(effectiveRole)}` : roleLabel(user?.role)
+  const tenantLabel = isPreviewMode
+    ? previewTenantName || `Tenant ${previewTenantId.slice(0, 8)}`
+    : tenantSettings.estateName
+      ? `Estate: ${tenantSettings.estateName}`
+      : "Estate: add a name in Settings"
+  const activityTenantId = isPreviewMode ? previewTenantId : tenantId
+  const hideEmptyMetrics = Boolean(tenantSettings.uiPreferences?.hideEmptyMetrics)
+  const isAdmin = effectiveRole === "admin"
+  const isOwner = effectiveRole === "owner"
+  const canManageData = !isPreviewMode && (isAdmin || isOwner)
+  const isTenantLoading = status === "loading"
   const preventNegativeKey = (event: React.KeyboardEvent<HTMLInputElement>) => {
     if (event.key === "-" || event.key === "e" || event.key === "E") {
       event.preventDefault()
@@ -287,7 +343,7 @@ export default function InventorySystem() {
   }
   const isModuleEnabled = useCallback(
     (moduleId: string) => {
-      if (isOwner) {
+      if (isOwner && !isPreviewMode) {
         return true
       }
       if (!enabledModules) {
@@ -295,7 +351,7 @@ export default function InventorySystem() {
       }
       return enabledModules.includes(moduleId)
     },
-    [enabledModules, isOwner],
+    [enabledModules, isOwner, isPreviewMode],
   )
 
   // helpers
@@ -326,8 +382,47 @@ export default function InventorySystem() {
     }
   }, [user, router])
 
+  useEffect(() => {
+    if (typeof document === "undefined") return
+    if (isPreviewMode && previewTenantId) {
+      document.cookie = `${PREVIEW_TENANT_COOKIE}=${encodeURIComponent(previewTenantId)}; path=/; SameSite=Lax`
+      return
+    }
+    document.cookie = `${PREVIEW_TENANT_COOKIE}=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT; SameSite=Lax`
+  }, [isPreviewMode, previewTenantId])
+
   const loadTenantModules = useCallback(async () => {
+    if (isPreviewMode) {
+      setIsModulesLoading(true)
+      try {
+        const response = await fetch(`/api/admin/tenant-modules?tenantId=${encodeURIComponent(previewTenantId)}`, {
+          cache: "no-store",
+        })
+        const data = await response.json()
+        if (!response.ok || !data.success) {
+          throw new Error(data.error || "Failed to load tenant modules")
+        }
+        if (Array.isArray(data.modules)) {
+          const moduleIds = data.modules
+            .filter((module: any) => {
+              if (typeof module === "string") return true
+              return Boolean(module?.enabled)
+            })
+            .map((module: any) => (typeof module === "string" ? module : String(module.id)))
+          setEnabledModules(moduleIds)
+        } else {
+          setEnabledModules(null)
+        }
+      } catch (error) {
+        console.error("Failed to load preview tenant modules:", error)
+        setEnabledModules(null)
+      } finally {
+        setIsModulesLoading(false)
+      }
+      return
+    }
     if (!tenantId || isOwner) {
+      setEnabledModules(null)
       return
     }
     setIsModulesLoading(true)
@@ -348,7 +443,7 @@ export default function InventorySystem() {
     } finally {
       setIsModulesLoading(false)
     }
-  }, [isOwner, tenantId])
+  }, [isOwner, isPreviewMode, previewTenantId, tenantId])
 
   useEffect(() => {
     loadTenantModules()
@@ -357,14 +452,18 @@ export default function InventorySystem() {
   const loadLocations = useCallback(async () => {
     if (!tenantId) return
     try {
-      const response = await fetch("/api/locations")
+      const endpoint =
+        isPreviewMode && previewTenantId
+          ? `/api/locations?tenantId=${encodeURIComponent(previewTenantId)}`
+          : "/api/locations"
+      const response = await fetch(endpoint)
       const data = await response.json()
       const loaded = Array.isArray(data.locations) ? data.locations : []
       setLocations(loaded)
     } catch (error) {
       console.error("Failed to load locations:", error)
     }
-  }, [tenantId])
+  }, [isPreviewMode, previewTenantId, tenantId])
 
   useEffect(() => {
     loadLocations()
@@ -498,8 +597,12 @@ export default function InventorySystem() {
     setIsOnboardingLoading(true)
     setOnboardingError(null)
     try {
+      const locationsEndpoint =
+        isPreviewMode && previewTenantId
+          ? `/api/locations?tenantId=${encodeURIComponent(previewTenantId)}`
+          : "/api/locations"
       const results = await Promise.allSettled([
-        fetch("/api/locations"),
+        fetch(locationsEndpoint),
         fetch("/api/inventory-neon"),
         fetch("/api/processing-records?limit=1&offset=0"),
         fetch("/api/dispatch?limit=1&offset=0"),
@@ -555,7 +658,7 @@ export default function InventorySystem() {
     } finally {
       setIsOnboardingLoading(false)
     }
-  }, [tenantId, isOwner])
+  }, [isOwner, isPreviewMode, previewTenantId, tenantId])
 
   useEffect(() => {
     if (!tenantId || isOwner) return
@@ -607,6 +710,9 @@ export default function InventorySystem() {
   }
 
   const handleLogout = async () => {
+    if (typeof document !== "undefined") {
+      document.cookie = `${PREVIEW_TENANT_COOKIE}=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT; SameSite=Lax`
+    }
     await logout()
     router.push("/")
   }
@@ -839,9 +945,141 @@ export default function InventorySystem() {
       activeLocationsStat,
     ]
 
-    const processingMetaStats: HeroStat[] = [
-      bagWeightStat,
-      traceabilityStat,
+    const curingStats: HeroStat[] = [
+      {
+        label: "Curing output",
+        value: curingHeroTotals.loading
+          ? "Loading..."
+          : curingHeroTotals.error
+            ? "Unavailable"
+            : `${formatNumber(curingHeroTotals.totalOutputKg, 0)} kg`,
+        metricValue: curingHeroTotals.loading || curingHeroTotals.error ? null : curingHeroTotals.totalOutputKg,
+      },
+      {
+        label: "Avg drying days",
+        value: curingHeroTotals.loading
+          ? "Loading..."
+          : curingHeroTotals.error
+            ? "Unavailable"
+            : formatNumber(curingHeroTotals.avgDryingDays, 1),
+        metricValue: curingHeroTotals.loading || curingHeroTotals.error ? null : curingHeroTotals.avgDryingDays,
+      },
+      {
+        label: "Avg moisture drop",
+        value: curingHeroTotals.loading
+          ? "Loading..."
+          : curingHeroTotals.error
+            ? "Unavailable"
+            : `${formatNumber(curingHeroTotals.avgMoistureDrop, 1)}%`,
+        metricValue: curingHeroTotals.loading || curingHeroTotals.error ? null : curingHeroTotals.avgMoistureDrop,
+      },
+    ]
+
+    const qualityStats: HeroStat[] = [
+      {
+        label: "Lots graded",
+        value: qualityHeroTotals.loading
+          ? "Loading..."
+          : qualityHeroTotals.error
+            ? "Unavailable"
+            : formatCount(qualityHeroTotals.totalRecords),
+        metricValue: qualityHeroTotals.loading || qualityHeroTotals.error ? null : qualityHeroTotals.totalRecords,
+      },
+      {
+        label: "Avg cup score",
+        value: qualityHeroTotals.loading
+          ? "Loading..."
+          : qualityHeroTotals.error
+            ? "Unavailable"
+            : formatNumber(qualityHeroTotals.avgCupScore, 1),
+        metricValue: qualityHeroTotals.loading || qualityHeroTotals.error ? null : qualityHeroTotals.avgCupScore,
+      },
+      {
+        label: "Avg outturn",
+        value: qualityHeroTotals.loading
+          ? "Loading..."
+          : qualityHeroTotals.error
+            ? "Unavailable"
+            : `${formatNumber(qualityHeroTotals.avgOutturnPct, 1)}%`,
+        metricValue: qualityHeroTotals.loading || qualityHeroTotals.error ? null : qualityHeroTotals.avgOutturnPct,
+      },
+    ]
+
+    const pepperConversionPct = pepperHeroTotals.totalPickedKg > 0
+      ? (pepperHeroTotals.totalDryKg / pepperHeroTotals.totalPickedKg) * 100
+      : 0
+    const pepperDryPercent = pepperHeroTotals.avgDryPercent > 0 ? pepperHeroTotals.avgDryPercent : pepperConversionPct
+    const pepperStats: HeroStat[] = [
+      {
+        label: "Picked weight",
+        value: pepperHeroTotals.loading
+          ? "Loading..."
+          : pepperHeroTotals.error
+            ? "Unavailable"
+            : `${formatNumber(pepperHeroTotals.totalPickedKg, 0)} kg`,
+        metricValue: pepperHeroTotals.loading || pepperHeroTotals.error ? null : pepperHeroTotals.totalPickedKg,
+      },
+      {
+        label: "Dry pepper",
+        value: pepperHeroTotals.loading
+          ? "Loading..."
+          : pepperHeroTotals.error
+            ? "Unavailable"
+            : `${formatNumber(pepperHeroTotals.totalDryKg, 0)} kg`,
+        metricValue: pepperHeroTotals.loading || pepperHeroTotals.error ? null : pepperHeroTotals.totalDryKg,
+      },
+      {
+        label: "Dry conversion",
+        value: pepperHeroTotals.loading
+          ? "Loading..."
+          : pepperHeroTotals.error
+            ? "Unavailable"
+            : `${formatNumber(pepperDryPercent, 1)}%`,
+        metricValue: pepperHeroTotals.loading || pepperHeroTotals.error ? null : pepperDryPercent,
+      },
+    ]
+
+    const showRainfallMetrics = isModuleEnabled("rainfall")
+    const latestRainLabel = rainfallHeroTotals.latestDate ? formatDate(rainfallHeroTotals.latestDate) : "No logs"
+    const rainfallStats: HeroStat[] = showRainfallMetrics
+      ? [
+          {
+            label: `Rainfall (${currentFiscalYear.label})`,
+            value: rainfallHeroTotals.loading
+              ? "Loading..."
+              : rainfallHeroTotals.error
+                ? "Unavailable"
+                : `${formatNumber(rainfallHeroTotals.totalInches, 2)} in`,
+            metricValue: rainfallHeroTotals.loading || rainfallHeroTotals.error ? null : rainfallHeroTotals.totalInches,
+          },
+          {
+            label: "Rain logs",
+            value: rainfallHeroTotals.loading
+              ? "Loading..."
+              : rainfallHeroTotals.error
+                ? "Unavailable"
+                : formatCount(rainfallHeroTotals.totalRecords),
+            metricValue: rainfallHeroTotals.loading || rainfallHeroTotals.error ? null : rainfallHeroTotals.totalRecords,
+          },
+          {
+            label: "Latest rain log",
+            value: rainfallHeroTotals.loading ? "Loading..." : rainfallHeroTotals.error ? "Unavailable" : latestRainLabel,
+            metricValue: rainfallHeroTotals.loading || rainfallHeroTotals.error ? null : rainfallHeroTotals.totalRecords,
+          },
+        ]
+      : [
+          { label: "Forecast horizon", value: "8 days", metricValue: 8 },
+          activeLocationsStat,
+          traceabilityStat,
+        ]
+
+    const weatherStats: HeroStat[] = [
+      { label: "Forecast horizon", value: "8 days", metricValue: 8 },
+      {
+        label: "Rain logs (FY)",
+        value: showRainfallMetrics ? formatCount(rainfallHeroTotals.totalRecords) : "Unavailable",
+        metricValue: showRainfallMetrics ? rainfallHeroTotals.totalRecords : null,
+      },
       activeLocationsStat,
     ]
 
@@ -933,6 +1171,38 @@ export default function InventorySystem() {
       },
     ]
 
+    const receivablesStats: HeroStat[] = [
+      {
+        label: "Total invoiced",
+        value: receivablesHeroTotals.loading
+          ? "Loading..."
+          : receivablesHeroTotals.error
+            ? "Unavailable"
+            : formatCurrency(receivablesHeroTotals.totalInvoiced, 0),
+        metricValue:
+          receivablesHeroTotals.loading || receivablesHeroTotals.error ? null : receivablesHeroTotals.totalInvoiced,
+      },
+      {
+        label: "Outstanding",
+        value: receivablesHeroTotals.loading
+          ? "Loading..."
+          : receivablesHeroTotals.error
+            ? "Unavailable"
+            : formatCurrency(receivablesHeroTotals.totalOutstanding, 0),
+        metricValue:
+          receivablesHeroTotals.loading || receivablesHeroTotals.error ? null : receivablesHeroTotals.totalOutstanding,
+      },
+      {
+        label: "Overdue",
+        value: receivablesHeroTotals.loading
+          ? "Loading..."
+          : receivablesHeroTotals.error
+            ? "Unavailable"
+            : formatCurrency(receivablesHeroTotals.totalOverdue, 0),
+        metricValue: receivablesHeroTotals.loading || receivablesHeroTotals.error ? null : receivablesHeroTotals.totalOverdue,
+      },
+    ]
+
     const chipsInventory: HeroChip[] = [
       { icon: Leaf, label: bagWeightLabel, metricValue: bagWeightValue },
       { icon: CheckCircle2, label: traceabilityLabel, metricValue: estateMetrics.traceabilityCoverage },
@@ -971,6 +1241,48 @@ export default function InventorySystem() {
       { icon: CheckCircle2, label: traceabilityLabel, metricValue: estateMetrics.traceabilityCoverage },
     ]
 
+    const chipsCuring: HeroChip[] = [
+      {
+        icon: Factory,
+        label: curingHeroTotals.loading
+          ? "Curing totals loading..."
+          : curingHeroTotals.error
+            ? "Curing totals unavailable"
+            : `Curing entries: ${formatCount(curingHeroTotals.totalRecords)}`,
+        metricValue: curingHeroTotals.loading || curingHeroTotals.error ? null : curingHeroTotals.totalRecords,
+      },
+      {
+        icon: CheckCircle2,
+        label: curingHeroTotals.loading
+          ? "Moisture trend loading..."
+          : curingHeroTotals.error
+            ? "Moisture trend unavailable"
+            : `Avg moisture drop: ${formatNumber(curingHeroTotals.avgMoistureDrop, 1)}%`,
+        metricValue: curingHeroTotals.loading || curingHeroTotals.error ? null : curingHeroTotals.avgMoistureDrop,
+      },
+    ]
+
+    const chipsQuality: HeroChip[] = [
+      {
+        icon: CheckCircle2,
+        label: qualityHeroTotals.loading
+          ? "Quality totals loading..."
+          : qualityHeroTotals.error
+            ? "Quality totals unavailable"
+            : `Quality entries: ${formatCount(qualityHeroTotals.totalRecords)}`,
+        metricValue: qualityHeroTotals.loading || qualityHeroTotals.error ? null : qualityHeroTotals.totalRecords,
+      },
+      {
+        icon: AlertTriangle,
+        label: qualityHeroTotals.loading
+          ? "Defect trend loading..."
+          : qualityHeroTotals.error
+            ? "Defect trend unavailable"
+            : `Avg defects: ${formatNumber(qualityHeroTotals.avgDefects, 1)}`,
+        metricValue: qualityHeroTotals.loading || qualityHeroTotals.error ? null : qualityHeroTotals.avgDefects,
+      },
+    ]
+
     const chipsDispatch: HeroChip[] = [
       {
         icon: Truck,
@@ -992,9 +1304,77 @@ export default function InventorySystem() {
       },
     ]
 
+    const chipsRainfall: HeroChip[] = showRainfallMetrics
+      ? [
+          {
+            icon: CloudRain,
+            label: rainfallHeroTotals.loading
+              ? "Rainfall totals loading..."
+              : rainfallHeroTotals.error
+                ? "Rainfall totals unavailable"
+                : `Rain logs: ${formatCount(rainfallHeroTotals.totalRecords)}`,
+            metricValue: rainfallHeroTotals.loading || rainfallHeroTotals.error ? null : rainfallHeroTotals.totalRecords,
+          },
+          {
+            icon: CloudRain,
+            label: rainfallHeroTotals.loading
+              ? "Latest rain loading..."
+              : rainfallHeroTotals.error
+                ? "Latest rain unavailable"
+                : `Latest log: ${latestRainLabel}`,
+            metricValue: rainfallHeroTotals.loading || rainfallHeroTotals.error ? null : rainfallHeroTotals.totalRecords,
+          },
+        ]
+      : [
+          { icon: CloudRain, label: "Forecast source: Weather API", metricValue: null },
+          { icon: Leaf, label: "Use weather context for field planning", metricValue: null },
+        ]
+
+    const chipsPepper: HeroChip[] = [
+      {
+        icon: Leaf,
+        label: pepperHeroTotals.loading
+          ? "Pepper totals loading..."
+          : pepperHeroTotals.error
+            ? "Pepper totals unavailable"
+            : `Pepper entries: ${formatCount(pepperHeroTotals.totalRecords)}`,
+        metricValue: pepperHeroTotals.loading || pepperHeroTotals.error ? null : pepperHeroTotals.totalRecords,
+      },
+      {
+        icon: TrendingUp,
+        label: pepperHeroTotals.loading
+          ? "Conversion loading..."
+          : pepperHeroTotals.error
+            ? "Conversion unavailable"
+            : `Dry conversion: ${formatNumber(pepperDryPercent, 1)}%`,
+        metricValue: pepperHeroTotals.loading || pepperHeroTotals.error ? null : pepperDryPercent,
+      },
+    ]
+
     const chipsAccounts: HeroChip[] = [
       { icon: Users, label: "Labor + expense logs stay audit-ready", metricValue: null },
       { icon: Receipt, label: `Tracking ${currentFiscalYear.label}`, metricValue: null },
+    ]
+
+    const chipsReceivables: HeroChip[] = [
+      {
+        icon: Receipt,
+        label: receivablesHeroTotals.loading
+          ? "Receivables totals loading..."
+          : receivablesHeroTotals.error
+            ? "Receivables totals unavailable"
+            : `Open invoices: ${formatCount(receivablesHeroTotals.totalCount)}`,
+        metricValue: receivablesHeroTotals.loading || receivablesHeroTotals.error ? null : receivablesHeroTotals.totalCount,
+      },
+      {
+        icon: AlertTriangle,
+        label: receivablesHeroTotals.loading
+          ? "Overdue balance loading..."
+          : receivablesHeroTotals.error
+            ? "Overdue balance unavailable"
+            : `Overdue: ${formatCurrency(receivablesHeroTotals.totalOverdue, 0)}`,
+        metricValue: receivablesHeroTotals.loading || receivablesHeroTotals.error ? null : receivablesHeroTotals.totalOverdue,
+      },
     ]
 
     const journalStats: HeroStat[] = [
@@ -1006,6 +1386,17 @@ export default function InventorySystem() {
     const chipsJournal: HeroChip[] = [
       { icon: NotebookPen, label: "Daily notes stay searchable", metricValue: null },
       { icon: Leaf, label: "Fertilizer + spray history", metricValue: null },
+    ]
+
+    const activityStats: HeroStat[] = [
+      exceptionsStat,
+      recentActivityStat,
+      activeLocationsStat,
+    ]
+
+    const chipsActivity: HeroChip[] = [
+      { icon: History, label: "Tracks create, update, and delete events across modules", metricValue: null },
+      { icon: CheckCircle2, label: "Use this before month-end reconciliation", metricValue: null },
     ]
 
     switch (activeTab) {
@@ -1046,32 +1437,34 @@ export default function InventorySystem() {
           badge: "Curing & Drying",
           title: "Moisture drop and outturn in focus",
           description: "Track drying progress and protect quality.",
-          chips: chipsProcessing,
-          stats: processingMetaStats,
+          chips: chipsCuring,
+          stats: curingStats,
         }
       case "quality":
         return {
           badge: "Quality Checks",
           title: "Grading and defect signals",
           description: "Keep quality scores tied to each lot.",
-          chips: chipsProcessing,
-          stats: processingMetaStats,
+          chips: chipsQuality,
+          stats: qualityStats,
         }
       case "rainfall":
         return {
-          badge: "Rainfall Signals",
-          title: "Weather context for yield swings",
-          description: "Link rainfall to processing and drying outcomes.",
-          chips: chipsInventory,
-          stats: processingMetaStats,
+          badge: showRainfallMetrics ? "Rainfall Signals" : "Weather Signals",
+          title: showRainfallMetrics ? "Weather context for yield swings" : "Forecast context for field planning",
+          description: showRainfallMetrics
+            ? "Link rainfall to processing and drying outcomes."
+            : "Use short-term forecast context to plan drying and field operations.",
+          chips: chipsRainfall,
+          stats: rainfallStats,
         }
       case "pepper":
         return {
           badge: "Pepper Notes",
           title: "Pepper harvest and conversion",
           description: "Track green-to-dry conversion by location.",
-          chips: chipsInventory,
-          stats: processingMetaStats,
+          chips: chipsPepper,
+          stats: pepperStats,
         }
       case "journal":
         return {
@@ -1080,6 +1473,14 @@ export default function InventorySystem() {
           description: "Log fertilizers, sprays, irrigation, and observations.",
           chips: chipsJournal,
           stats: journalStats,
+        }
+      case "activity-log":
+        return {
+          badge: "Activity Log",
+          title: "Who changed what, and when",
+          description: "Cross-module timeline of create, update, and delete events.",
+          chips: chipsActivity,
+          stats: activityStats,
         }
       case "accounts":
         return {
@@ -1094,8 +1495,8 @@ export default function InventorySystem() {
           badge: "Receivables Tracker",
           title: "Invoices, dues, and collections",
           description: "Stay on top of buyer payments and balances.",
-          chips: chipsAccounts,
-          stats: accountsStats,
+          chips: chipsReceivables,
+          stats: receivablesStats,
         }
       case "ai-analysis":
         return {
@@ -1118,8 +1519,8 @@ export default function InventorySystem() {
           badge: "Weather Context",
           title: "Rainfall, drying, and readiness",
           description: "Daily signals that impact operations.",
-          chips: chipsInventory,
-          stats: processingStats,
+          chips: chipsRainfall,
+          stats: weatherStats,
         }
       case "billing":
         return {
@@ -1147,6 +1548,12 @@ export default function InventorySystem() {
     bagWeightLabel,
     bagWeightValue,
     currentFiscalYear.label,
+    curingHeroTotals.avgDryingDays,
+    curingHeroTotals.avgMoistureDrop,
+    curingHeroTotals.error,
+    curingHeroTotals.loading,
+    curingHeroTotals.totalOutputKg,
+    curingHeroTotals.totalRecords,
     dispatchHeroTotals.arabicaBags,
     dispatchHeroTotals.error,
     dispatchHeroTotals.loading,
@@ -1159,11 +1566,35 @@ export default function InventorySystem() {
     filteredInventoryTotals.totalQuantity,
     filteredInventoryTotals.unitLabel,
     formatCount,
+    isModuleEnabled,
     processingTotals.arabicaKg,
     processingTotals.arabicaBags,
     processingTotals.loading,
     processingTotals.robustaKg,
     processingTotals.robustaBags,
+    pepperHeroTotals.avgDryPercent,
+    pepperHeroTotals.error,
+    pepperHeroTotals.loading,
+    pepperHeroTotals.totalDryKg,
+    pepperHeroTotals.totalPickedKg,
+    pepperHeroTotals.totalRecords,
+    qualityHeroTotals.avgCupScore,
+    qualityHeroTotals.avgDefects,
+    qualityHeroTotals.avgOutturnPct,
+    qualityHeroTotals.error,
+    qualityHeroTotals.loading,
+    qualityHeroTotals.totalRecords,
+    rainfallHeroTotals.error,
+    rainfallHeroTotals.latestDate,
+    rainfallHeroTotals.loading,
+    rainfallHeroTotals.totalInches,
+    rainfallHeroTotals.totalRecords,
+    receivablesHeroTotals.error,
+    receivablesHeroTotals.loading,
+    receivablesHeroTotals.totalCount,
+    receivablesHeroTotals.totalInvoiced,
+    receivablesHeroTotals.totalOutstanding,
+    receivablesHeroTotals.totalOverdue,
     recentActivityLabel,
     resolvedInventoryValue,
     salesHeroTotals.arabicaBags,
@@ -1666,21 +2097,80 @@ export default function InventorySystem() {
   const canShowNews = isModuleEnabled("news")
   const canShowWeather = isModuleEnabled("weather")
   const canShowSeason = isModuleEnabled("season")
+  const canShowActivityLog = (isAdmin || isOwner) && isFeatureEnabled("showActivityLogTab")
   const canShowReceivables = isModuleEnabled("receivables")
   const canShowBilling = isModuleEnabled("billing")
   const canShowJournal = isModuleEnabled("journal")
-  const canShowResources = isModuleEnabled("resources")
+  const canShowResources = isModuleEnabled("resources") && isFeatureEnabled("showResourcesTab")
+  const canShowWelcomeCard = isFeatureEnabled("showWelcomeCard")
   const canShowRainfallSection = canShowRainfall || canShowWeather
   const showOperationsTabs =
     canShowInventory || canShowProcessing || canShowCuring || canShowQuality || canShowDispatch || canShowSales || canShowPepper
   const showFinanceTabs = canShowAccounts || showTransactionHistory || canShowReceivables || canShowBilling
   const showInsightsTabs =
     canShowSeason ||
+    canShowActivityLog ||
     canShowRainfallSection ||
     canShowJournal ||
     canShowResources ||
     canShowAiAnalysis ||
     canShowNews
+  const commandStripItems = useMemo(() => {
+    const processingTotalKg = processingTotals.arabicaKg + processingTotals.robustaKg
+    const dispatchTotalBags = dispatchHeroTotals.arabicaBags + dispatchHeroTotals.robustaBags
+    const salesTotalBags = salesHeroTotals.arabicaBags + salesHeroTotals.robustaBags
+    const dispatchToSalesRate = dispatchTotalBags > 0 ? (salesTotalBags / dispatchTotalBags) * 100 : 0
+
+    return [
+      {
+        id: "processing-strip",
+        tab: "processing",
+        visible: canShowProcessing,
+        label: "Processing Output",
+        value: processingTotals.loading ? "Loading..." : `${formatNumber(processingTotalKg, 0)} kg`,
+        subValue: processingTotals.loading
+          ? "Updating totals"
+          : `Arabica ${formatNumber(processingTotals.arabicaKg, 0)} kg · Robusta ${formatNumber(processingTotals.robustaKg, 0)} kg`,
+      },
+      {
+        id: "dispatch-strip",
+        tab: "dispatch",
+        visible: canShowDispatch,
+        label: "Dispatch Movement",
+        value: dispatchHeroTotals.loading ? "Loading..." : `${formatNumber(dispatchTotalBags, 0)} bags`,
+        subValue: dispatchHeroTotals.loading
+          ? "Updating totals"
+          : `${formatCount(dispatchHeroTotals.totalDispatches)} entries this FY`,
+      },
+      {
+        id: "sales-strip",
+        tab: "sales",
+        visible: canShowSales,
+        label: "Sales Realization",
+        value: salesHeroTotals.loading ? "Loading..." : formatCurrency(salesHeroTotals.totalRevenue, 0),
+        subValue: salesHeroTotals.loading
+          ? "Updating totals"
+          : `${formatNumber(salesTotalBags, 0)} bags sold · ${formatNumber(dispatchToSalesRate, 0)}% of dispatched bags`,
+      },
+    ]
+  }, [
+    canShowDispatch,
+    canShowProcessing,
+    canShowSales,
+    dispatchHeroTotals.arabicaBags,
+    dispatchHeroTotals.loading,
+    dispatchHeroTotals.robustaBags,
+    dispatchHeroTotals.totalDispatches,
+    formatCount,
+    processingTotals.arabicaKg,
+    processingTotals.loading,
+    processingTotals.robustaKg,
+    salesHeroTotals.arabicaBags,
+    salesHeroTotals.loading,
+    salesHeroTotals.robustaBags,
+    salesHeroTotals.totalRevenue,
+  ])
+  const visibleCommandStripItems = commandStripItems.filter((item) => item.visible)
   const visibleTabs = useMemo(() => {
     const tabs: string[] = []
     if (canShowInventory) tabs.push("inventory")
@@ -1692,6 +2182,7 @@ export default function InventorySystem() {
     if (canShowCuring) tabs.push("curing")
     if (canShowQuality) tabs.push("quality")
     if (canShowSeason) tabs.push("season")
+    if (canShowActivityLog) tabs.push("activity-log")
     if (canShowRainfallSection) tabs.push("rainfall")
     if (canShowPepper) tabs.push("pepper")
     if (canShowJournal) tabs.push("journal")
@@ -1706,6 +2197,7 @@ export default function InventorySystem() {
     canShowAiAnalysis,
     canShowBilling,
     canShowDispatch,
+    canShowActivityLog,
     canShowInventory,
     canShowJournal,
     canShowResources,
@@ -1735,7 +2227,7 @@ export default function InventorySystem() {
         }
         const records = Array.isArray(json.records) ? json.records : []
         const totals = records.reduce(
-          (acc, record) => {
+          (acc: { arabicaKg: number; arabicaBags: number; robustaKg: number; robustaBags: number }, record: any) => {
             const type = String(record?.coffee_type || "").toLowerCase()
             const kg =
               (Number(record?.dry_parch_total) || 0) +
@@ -1792,7 +2284,7 @@ export default function InventorySystem() {
         }
         const totalsByType = Array.isArray(json?.totalsByType) ? json.totalsByType : []
         const totals = totalsByType.reduce(
-          (acc, row) => {
+          (acc: { arabicaBags: number; robustaBags: number }, row: any) => {
             const type = String(row?.coffee_type || "").toLowerCase()
             const bags = Number(row?.bags_dispatched) || 0
             if (type.includes("arab")) {
@@ -1843,7 +2335,7 @@ export default function InventorySystem() {
         }
         const totalsByType = Array.isArray(json?.totalsByType) ? json.totalsByType : []
         const totals = totalsByType.reduce(
-          (acc, row) => {
+          (acc: { arabicaBags: number; robustaBags: number }, row: any) => {
             const type = String(row?.coffee_type || "").toLowerCase()
             const bags = Number(row?.bags_sold) || 0
             if (type.includes("arab")) {
@@ -1880,6 +2372,335 @@ export default function InventorySystem() {
       ignore = true
     }
   }, [tenantId, canShowSales])
+
+  useEffect(() => {
+    if (!tenantId || !canShowReceivables) return
+    let ignore = false
+
+    const loadReceivablesHeroTotals = async () => {
+      setReceivablesHeroTotals((prev) => ({ ...prev, loading: true, error: null }))
+      try {
+        const params = new URLSearchParams()
+        if (isPreviewMode && previewTenantId) {
+          params.set("tenantId", previewTenantId)
+        }
+        const endpoint = params.toString() ? `/api/receivables?${params.toString()}` : "/api/receivables"
+        const res = await fetch(endpoint, { cache: "no-store" })
+        const json = await res.json().catch(() => ({}))
+        if (!res.ok || !json?.success) {
+          throw new Error(json?.error || "Failed to load receivables totals")
+        }
+        const payload = json?.summary || {}
+        if (!ignore) {
+          setReceivablesHeroTotals({
+            totalInvoiced: Number(payload.totalInvoiced) || 0,
+            totalOutstanding: Number(payload.totalOutstanding) || 0,
+            totalOverdue: Number(payload.totalOverdue) || 0,
+            totalPaid: Number(payload.totalPaid) || 0,
+            totalCount: Number(payload.totalCount) || 0,
+            loading: false,
+            error: null,
+          })
+        }
+      } catch (error: any) {
+        if (!ignore) {
+          setReceivablesHeroTotals((prev) => ({
+            ...prev,
+            loading: false,
+            error: error?.message || "Failed to load receivables totals",
+          }))
+        }
+      }
+    }
+
+    loadReceivablesHeroTotals()
+    return () => {
+      ignore = true
+    }
+  }, [canShowReceivables, isPreviewMode, previewTenantId, tenantId])
+
+  useEffect(() => {
+    if (!tenantId || !canShowCuring) return
+    let ignore = false
+
+    const loadCuringHeroTotals = async () => {
+      setCuringHeroTotals((prev) => ({ ...prev, loading: true, error: null }))
+      try {
+        const params = new URLSearchParams({
+          fiscalYearStart: currentFiscalYear.startDate,
+          fiscalYearEnd: currentFiscalYear.endDate,
+          all: "true",
+        })
+        const res = await fetch(`/api/curing-records?${params.toString()}`)
+        const json = await res.json().catch(() => ({}))
+        if (!res.ok || !json?.success) {
+          throw new Error(json?.error || "Failed to load curing totals")
+        }
+        const records = Array.isArray(json.records) ? json.records : []
+        const totals = records.reduce(
+          (
+            acc: {
+              outputKg: number
+              dryingDaysTotal: number
+              dryingDaysCount: number
+              moistureDropTotal: number
+              moistureDropCount: number
+            },
+            record: any,
+          ) => {
+            const outputKg = Number(record?.output_kg)
+            if (Number.isFinite(outputKg)) {
+              acc.outputKg += outputKg
+            }
+            const dryingDays = Number(record?.drying_days)
+            if (Number.isFinite(dryingDays)) {
+              acc.dryingDaysTotal += dryingDays
+              acc.dryingDaysCount += 1
+            }
+            const moistureStart = Number(record?.moisture_start_pct)
+            const moistureEnd = Number(record?.moisture_end_pct)
+            if (Number.isFinite(moistureStart) && Number.isFinite(moistureEnd)) {
+              acc.moistureDropTotal += moistureStart - moistureEnd
+              acc.moistureDropCount += 1
+            }
+            return acc
+          },
+          {
+            outputKg: 0,
+            dryingDaysTotal: 0,
+            dryingDaysCount: 0,
+            moistureDropTotal: 0,
+            moistureDropCount: 0,
+          },
+        )
+        if (!ignore) {
+          setCuringHeroTotals({
+            totalRecords: records.length,
+            totalOutputKg: totals.outputKg,
+            avgDryingDays: totals.dryingDaysCount ? totals.dryingDaysTotal / totals.dryingDaysCount : 0,
+            avgMoistureDrop: totals.moistureDropCount ? totals.moistureDropTotal / totals.moistureDropCount : 0,
+            loading: false,
+            error: null,
+          })
+        }
+      } catch (error: any) {
+        if (!ignore) {
+          setCuringHeroTotals((prev) => ({
+            ...prev,
+            loading: false,
+            error: error?.message || "Failed to load curing totals",
+          }))
+        }
+      }
+    }
+
+    loadCuringHeroTotals()
+    return () => {
+      ignore = true
+    }
+  }, [tenantId, canShowCuring, currentFiscalYear.endDate, currentFiscalYear.startDate])
+
+  useEffect(() => {
+    if (!tenantId || !canShowQuality) return
+    let ignore = false
+
+    const loadQualityHeroTotals = async () => {
+      setQualityHeroTotals((prev) => ({ ...prev, loading: true, error: null }))
+      try {
+        const params = new URLSearchParams({
+          fiscalYearStart: currentFiscalYear.startDate,
+          fiscalYearEnd: currentFiscalYear.endDate,
+          all: "true",
+        })
+        const res = await fetch(`/api/quality-grading-records?${params.toString()}`)
+        const json = await res.json().catch(() => ({}))
+        if (!res.ok || !json?.success) {
+          throw new Error(json?.error || "Failed to load quality totals")
+        }
+        const records = Array.isArray(json.records) ? json.records : []
+        const totals = records.reduce(
+          (
+            acc: {
+              cupScoreTotal: number
+              cupScoreCount: number
+              outturnTotal: number
+              outturnCount: number
+              defectsTotal: number
+              defectsCount: number
+            },
+            record: any,
+          ) => {
+            const cupScore = Number(record?.cup_score)
+            if (Number.isFinite(cupScore)) {
+              acc.cupScoreTotal += cupScore
+              acc.cupScoreCount += 1
+            }
+            const outturnPct = Number(record?.outturn_pct)
+            if (Number.isFinite(outturnPct)) {
+              acc.outturnTotal += outturnPct
+              acc.outturnCount += 1
+            }
+            const defectsCount = Number(record?.defects_count)
+            if (Number.isFinite(defectsCount)) {
+              acc.defectsTotal += defectsCount
+              acc.defectsCount += 1
+            }
+            return acc
+          },
+          {
+            cupScoreTotal: 0,
+            cupScoreCount: 0,
+            outturnTotal: 0,
+            outturnCount: 0,
+            defectsTotal: 0,
+            defectsCount: 0,
+          },
+        )
+        if (!ignore) {
+          setQualityHeroTotals({
+            totalRecords: records.length,
+            avgCupScore: totals.cupScoreCount ? totals.cupScoreTotal / totals.cupScoreCount : 0,
+            avgOutturnPct: totals.outturnCount ? totals.outturnTotal / totals.outturnCount : 0,
+            avgDefects: totals.defectsCount ? totals.defectsTotal / totals.defectsCount : 0,
+            loading: false,
+            error: null,
+          })
+        }
+      } catch (error: any) {
+        if (!ignore) {
+          setQualityHeroTotals((prev) => ({
+            ...prev,
+            loading: false,
+            error: error?.message || "Failed to load quality totals",
+          }))
+        }
+      }
+    }
+
+    loadQualityHeroTotals()
+    return () => {
+      ignore = true
+    }
+  }, [tenantId, canShowQuality, currentFiscalYear.endDate, currentFiscalYear.startDate])
+
+  useEffect(() => {
+    if (!tenantId || !canShowPepper) return
+    let ignore = false
+
+    const loadPepperHeroTotals = async () => {
+      setPepperHeroTotals((prev) => ({ ...prev, loading: true, error: null }))
+      try {
+        const params = new URLSearchParams({
+          fiscalYearStart: currentFiscalYear.startDate,
+          fiscalYearEnd: currentFiscalYear.endDate,
+        })
+        const res = await fetch(`/api/pepper-records?${params.toString()}`)
+        const json = await res.json().catch(() => ({}))
+        if (!res.ok || !json?.success) {
+          throw new Error(json?.error || "Failed to load pepper totals")
+        }
+        const records = Array.isArray(json.records) ? json.records : []
+        const totals = records.reduce(
+          (acc: { picked: number; dry: number; dryPctTotal: number; dryPctCount: number }, record: any) => {
+            const pickedKg = Number(record?.kg_picked)
+            if (Number.isFinite(pickedKg)) {
+              acc.picked += pickedKg
+            }
+            const dryKg = Number(record?.dry_pepper)
+            if (Number.isFinite(dryKg)) {
+              acc.dry += dryKg
+            }
+            const dryPct = Number(record?.dry_pepper_percent)
+            if (Number.isFinite(dryPct)) {
+              acc.dryPctTotal += dryPct
+              acc.dryPctCount += 1
+            }
+            return acc
+          },
+          { picked: 0, dry: 0, dryPctTotal: 0, dryPctCount: 0 },
+        )
+        if (!ignore) {
+          setPepperHeroTotals({
+            totalRecords: records.length,
+            totalPickedKg: totals.picked,
+            totalDryKg: totals.dry,
+            avgDryPercent: totals.dryPctCount ? totals.dryPctTotal / totals.dryPctCount : 0,
+            loading: false,
+            error: null,
+          })
+        }
+      } catch (error: any) {
+        if (!ignore) {
+          setPepperHeroTotals((prev) => ({
+            ...prev,
+            loading: false,
+            error: error?.message || "Failed to load pepper totals",
+          }))
+        }
+      }
+    }
+
+    loadPepperHeroTotals()
+    return () => {
+      ignore = true
+    }
+  }, [tenantId, canShowPepper, currentFiscalYear.endDate, currentFiscalYear.startDate])
+
+  useEffect(() => {
+    if (!tenantId || !canShowRainfall) return
+    let ignore = false
+
+    const loadRainfallHeroTotals = async () => {
+      setRainfallHeroTotals((prev) => ({ ...prev, loading: true, error: null }))
+      try {
+        const res = await fetch("/api/rainfall")
+        const json = await res.json().catch(() => ({}))
+        if (!res.ok || !json?.success) {
+          throw new Error(json?.error || "Failed to load rainfall totals")
+        }
+        const records = Array.isArray(json.records) ? json.records : []
+        const startDate = new Date(`${currentFiscalYear.startDate}T00:00:00`)
+        const endDate = new Date(`${currentFiscalYear.endDate}T23:59:59`)
+        let totalInches = 0
+        let totalRecords = 0
+        let latestDate: string | null = null
+        for (const record of records) {
+          const recordDate = new Date(record?.record_date)
+          if (Number.isNaN(recordDate.getTime())) continue
+          if (recordDate < startDate || recordDate > endDate) continue
+          const inches = Number(record?.inches) || 0
+          const cents = Number(record?.cents) || 0
+          totalInches += inches + cents / 100
+          totalRecords += 1
+          if (!latestDate || recordDate > new Date(latestDate)) {
+            latestDate = String(record?.record_date || "")
+          }
+        }
+        if (!ignore) {
+          setRainfallHeroTotals({
+            totalRecords,
+            totalInches,
+            latestDate,
+            loading: false,
+            error: null,
+          })
+        }
+      } catch (error: any) {
+        if (!ignore) {
+          setRainfallHeroTotals((prev) => ({
+            ...prev,
+            loading: false,
+            error: error?.message || "Failed to load rainfall totals",
+          }))
+        }
+      }
+    }
+
+    loadRainfallHeroTotals()
+    return () => {
+      ignore = true
+    }
+  }, [tenantId, canShowRainfall, currentFiscalYear.endDate, currentFiscalYear.startDate])
 
   useEffect(() => {
     if (!canShowSeason) return
@@ -1941,7 +2762,11 @@ export default function InventorySystem() {
   }, [activeTab, tabParam, visibleTabs])
 
   useEffect(() => {
-    if (!user || !tenantId || isOwner) return
+    if (!user || !tenantId || isOwner || isPreviewMode) return
+    if (!canShowWelcomeCard) {
+      setShowWelcome(false)
+      return
+    }
     if (WELCOME_SKIP_TENANTS.has(tenantId)) {
       setShowWelcome(false)
       return
@@ -1955,7 +2780,7 @@ export default function InventorySystem() {
     } catch (error) {
       console.warn("Unable to read welcome flag", error)
     }
-  }, [WELCOME_SKIP_TENANTS, isOwner, tenantId, user])
+  }, [WELCOME_SKIP_TENANTS, canShowWelcomeCard, isOwner, isPreviewMode, tenantId, user])
 
   const dismissWelcome = () => {
     if (!user || !tenantId) {
@@ -1970,6 +2795,18 @@ export default function InventorySystem() {
     }
     setShowWelcome(false)
   }
+
+  const exitPreviewMode = useCallback(() => {
+    if (typeof document !== "undefined") {
+      document.cookie = `${PREVIEW_TENANT_COOKIE}=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT; SameSite=Lax`
+    }
+    const params = new URLSearchParams(searchParams.toString())
+    params.delete("previewTenantId")
+    params.delete("previewRole")
+    params.delete("previewTenantName")
+    const nextQuery = params.toString()
+    router.push(nextQuery ? `/dashboard?${nextQuery}` : "/dashboard")
+  }, [router, searchParams])
 
   // UI render: simplified, mirrors your original layout and components
   if (!user) return null
@@ -2282,7 +3119,7 @@ export default function InventorySystem() {
               <div className="flex flex-wrap items-center gap-3 text-sm text-muted-foreground">
                 <span className="inline-flex items-center gap-2 rounded-full border border-emerald-100 bg-white/80 px-3 py-1 text-xs text-emerald-700">
                   <Leaf className="h-3.5 w-3.5" />
-                  {tenantSettings.estateName ? `Estate: ${tenantSettings.estateName}` : "Estate: add a name in Settings"}
+                  {tenantLabel}
                 </span>
                 <span className="text-xs text-emerald-700/70">Live operations with traceability</span>
               </div>
@@ -2290,7 +3127,7 @@ export default function InventorySystem() {
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
               <div className="flex items-center gap-2 rounded-full border border-emerald-100 bg-white/80 px-3 py-2">
                 <Badge variant="outline" className="bg-emerald-100 text-emerald-700 border-emerald-200">
-                  {roleLabel(user.role)}
+                  {roleBadgeLabel}
                 </Badge>
                 <span className="text-sm text-slate-700">{user.username}</span>
               </div>
@@ -2354,6 +3191,31 @@ export default function InventorySystem() {
             </div>
           </div>
         </header>
+
+        {isPreviewMode && (
+          <Card className="mb-6 border-amber-200 bg-amber-50/70">
+            <CardHeader className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <CardTitle className="text-base">Tenant Preview Mode</CardTitle>
+                <CardDescription>
+                  Showing tab access for {tenantLabel} as {roleLabel(effectiveRole)}. This is for UI/module preview without re-login.
+                </CardDescription>
+              </div>
+              <Badge variant="outline" className="border-amber-300 bg-white text-amber-700">
+                Preview
+              </Badge>
+            </CardHeader>
+            <CardContent className="flex flex-wrap items-center gap-2 text-sm text-amber-900">
+              <span>Use this to validate what new tenants will see in navigation and module visibility.</span>
+              <Button size="sm" variant="outline" className="bg-white" onClick={exitPreviewMode}>
+                Exit preview
+              </Button>
+              <Button size="sm" variant="ghost" asChild>
+                <Link href="/admin/tenants">Back to Owner Console</Link>
+              </Button>
+            </CardContent>
+          </Card>
+        )}
 
         {showWelcome && (
           <Card className="mb-6 border-emerald-100 bg-emerald-50/70">
@@ -2434,6 +3296,31 @@ export default function InventorySystem() {
             </div>
           </div>
         </div>
+
+        {visibleCommandStripItems.length > 0 && (
+          <div className="mb-5 grid grid-cols-1 gap-3 lg:grid-cols-3">
+            {visibleCommandStripItems.map((item) => {
+              const isActive = activeTab === item.tab
+              return (
+                <button
+                  key={item.id}
+                  type="button"
+                  onClick={() => setActiveTab(item.tab)}
+                  className={cn(
+                    "rounded-2xl border bg-white p-4 text-left transition",
+                    isActive
+                      ? "border-emerald-300 shadow-sm ring-2 ring-emerald-100"
+                      : "border-black/5 hover:border-emerald-200 hover:shadow-sm",
+                  )}
+                >
+                  <p className="text-[11px] uppercase tracking-[0.2em] text-neutral-500">{item.label}</p>
+                  <p className="mt-2 text-xl font-semibold text-neutral-900 tabular-nums">{item.value}</p>
+                  <p className="mt-1 text-xs text-neutral-500">{item.subValue}</p>
+                </button>
+              )
+            })}
+          </div>
+        )}
 
         <div className="mb-5 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
           <div className="inline-flex items-center gap-2 rounded-full border border-black/10 bg-white/80 px-3 py-1.5 text-xs text-slate-600">
@@ -2526,7 +3413,7 @@ export default function InventorySystem() {
               completedCount={onboardingCompletedCount}
               totalCount={onboardingTotalCount}
               steps={onboardingSteps}
-              canCreateLocation={isAdmin}
+              canCreateLocation={isAdmin && !isPreviewMode}
               locationName={newLocationName}
               locationCode={newLocationCode}
               onLocationNameChange={setNewLocationName}
@@ -2538,110 +3425,122 @@ export default function InventorySystem() {
           </div>
         )}
         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full space-y-4">
-          <TabsList className="grid w-full gap-3 rounded-2xl border border-black/5 bg-white/70 p-3 shadow-sm lg:grid-cols-3">
-              {showOperationsTabs && (
-                <div className="flex flex-wrap items-center gap-2">
-                  <span className="rounded-full border border-black/5 bg-neutral-100/70 px-2 py-0.5 text-[9px] font-medium uppercase tracking-[0.26em] text-neutral-500">
-                    Operations
-                  </span>
-                  {canShowInventory && <TabsTrigger value="inventory">Inventory</TabsTrigger>}
-                  {canShowProcessing && (
-                    <TabsTrigger value="processing">
-                      <Factory className="h-3.5 w-3.5 mr-1.5" />
-                      Processing
-                    </TabsTrigger>
-                  )}
-                  {canShowCuring && (
-                    <TabsTrigger value="curing">
-                      <Factory className="h-3.5 w-3.5 mr-1.5" />
-                      Curing
-                    </TabsTrigger>
-                  )}
-                  {canShowQuality && (
-                    <TabsTrigger value="quality">
-                      <CheckCircle2 className="h-3.5 w-3.5 mr-1.5" />
-                      Quality
-                    </TabsTrigger>
-                  )}
-                  {canShowDispatch && (
-                    <TabsTrigger value="dispatch">
-                      <Truck className="h-3.5 w-3.5 mr-1.5" />
-                      Dispatch
-                    </TabsTrigger>
-                  )}
-                  {canShowSales && (
-                    <TabsTrigger value="sales">
-                      <TrendingUp className="h-3.5 w-3.5 mr-1.5" />
-                      Sales
-                    </TabsTrigger>
-                  )}
-                  {canShowPepper && (
-                    <TabsTrigger value="pepper" className="flex items-center gap-2">
-                      <Leaf className="h-3.5 w-3.5" />
-                      Pepper
-                    </TabsTrigger>
-                  )}
-                </div>
-              )}
-              {showFinanceTabs && (
-                <div className="flex flex-wrap items-center gap-2">
-                  <span className="rounded-full border border-black/5 bg-neutral-100/70 px-2 py-0.5 text-[9px] font-medium uppercase tracking-[0.26em] text-neutral-500">
-                    Finance
-                  </span>
-                  {canShowAccounts && (
-                    <TabsTrigger value="accounts">
-                      <Users className="h-3.5 w-3.5 mr-1.5" />
-                      Accounts
-                    </TabsTrigger>
-                  )}
-                  {showTransactionHistory && <TabsTrigger value="transactions">Transaction History</TabsTrigger>}
-                  {canShowReceivables && <TabsTrigger value="receivables">Receivables</TabsTrigger>}
-                  {canShowBilling && (
-                    <TabsTrigger value="billing">
-                      <Receipt className="h-3.5 w-3.5 mr-1.5" />
-                      Billing
-                    </TabsTrigger>
-                  )}
-                </div>
-              )}
-              {showInsightsTabs && (
-                <div className="flex flex-wrap items-center gap-2">
-                  <span className="rounded-full border border-black/5 bg-neutral-100/70 px-2 py-0.5 text-[9px] font-medium uppercase tracking-[0.26em] text-neutral-500">
-                    Insights
-                  </span>
-                  {canShowSeason && <TabsTrigger value="season">Season View</TabsTrigger>}
-                  {canShowRainfallSection && (
-                    <TabsTrigger value="rainfall">
-                      <CloudRain className="h-3.5 w-3.5 mr-1.5" />
-                      Rainfall
-                    </TabsTrigger>
-                  )}
-                  {canShowJournal && (
-                    <TabsTrigger value="journal" className="flex items-center gap-2">
-                      <NotebookPen className="h-3.5 w-3.5" />
-                      Journal
-                    </TabsTrigger>
-                  )}
-                  {canShowResources && (
-                    <TabsTrigger value="resources" className="flex items-center gap-2">
-                      <BookOpen className="h-3.5 w-3.5" />
-                      Resources
-                    </TabsTrigger>
-                  )}
-                  {canShowAiAnalysis && (
-                    <TabsTrigger value="ai-analysis">
-                      <Brain className="h-3.5 w-3.5 mr-1.5" />
-                      AI Analysis
-                    </TabsTrigger>
-                  )}
-                  {canShowNews && (
-                    <TabsTrigger value="news">
-                      <Newspaper className="h-3.5 w-3.5 mr-1.5" />
-                      News
-                    </TabsTrigger>
-                  )}
-                </div>
-              )}
+          <TabsList className="sticky top-2 z-20 flex h-auto w-full flex-wrap items-start gap-3 rounded-2xl border border-black/5 bg-white/85 p-3 shadow-sm backdrop-blur">
+            {showOperationsTabs && (
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="rounded-full border border-black/5 bg-neutral-100/70 px-2 py-0.5 text-[9px] font-medium uppercase tracking-[0.26em] text-neutral-500">
+                  Operations
+                </span>
+                {canShowInventory && <TabsTrigger value="inventory">Inventory</TabsTrigger>}
+                {canShowProcessing && (
+                  <TabsTrigger value="processing">
+                    <Factory className="h-3.5 w-3.5 mr-1.5" />
+                    Processing
+                  </TabsTrigger>
+                )}
+                {canShowCuring && (
+                  <TabsTrigger value="curing">
+                    <Factory className="h-3.5 w-3.5 mr-1.5" />
+                    Curing
+                  </TabsTrigger>
+                )}
+                {canShowQuality && (
+                  <TabsTrigger value="quality">
+                    <CheckCircle2 className="h-3.5 w-3.5 mr-1.5" />
+                    Quality
+                  </TabsTrigger>
+                )}
+                {canShowDispatch && (
+                  <TabsTrigger value="dispatch">
+                    <Truck className="h-3.5 w-3.5 mr-1.5" />
+                    Dispatch
+                  </TabsTrigger>
+                )}
+                {canShowSales && (
+                  <TabsTrigger value="sales">
+                    <TrendingUp className="h-3.5 w-3.5 mr-1.5" />
+                    Sales
+                  </TabsTrigger>
+                )}
+                {canShowPepper && (
+                  <TabsTrigger value="pepper" className="flex items-center gap-2">
+                    <Leaf className="h-3.5 w-3.5" />
+                    Pepper
+                  </TabsTrigger>
+                )}
+              </div>
+            )}
+            {showOperationsTabs && (showFinanceTabs || showInsightsTabs) && (
+              <div aria-hidden className="h-px w-full bg-black/10 lg:h-7 lg:w-px lg:self-center" />
+            )}
+            {showFinanceTabs && (
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="rounded-full border border-black/5 bg-neutral-100/70 px-2 py-0.5 text-[9px] font-medium uppercase tracking-[0.26em] text-neutral-500">
+                  Finance
+                </span>
+                {canShowAccounts && (
+                  <TabsTrigger value="accounts">
+                    <Users className="h-3.5 w-3.5 mr-1.5" />
+                    Accounts
+                  </TabsTrigger>
+                )}
+                {showTransactionHistory && <TabsTrigger value="transactions">Transaction History</TabsTrigger>}
+                {canShowReceivables && <TabsTrigger value="receivables">Receivables</TabsTrigger>}
+                {canShowBilling && (
+                  <TabsTrigger value="billing">
+                    <Receipt className="h-3.5 w-3.5 mr-1.5" />
+                    Billing
+                  </TabsTrigger>
+                )}
+              </div>
+            )}
+            {showFinanceTabs && showInsightsTabs && (
+              <div aria-hidden className="h-px w-full bg-black/10 lg:h-7 lg:w-px lg:self-center" />
+            )}
+            {showInsightsTabs && (
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="rounded-full border border-black/5 bg-neutral-100/70 px-2 py-0.5 text-[9px] font-medium uppercase tracking-[0.26em] text-neutral-500">
+                  Insights
+                </span>
+                {canShowSeason && <TabsTrigger value="season">Season View</TabsTrigger>}
+                {canShowActivityLog && (
+                  <TabsTrigger value="activity-log">
+                    <History className="h-3.5 w-3.5 mr-1.5" />
+                    Activity Log
+                  </TabsTrigger>
+                )}
+                {canShowRainfallSection && (
+                  <TabsTrigger value="rainfall">
+                    <CloudRain className="h-3.5 w-3.5 mr-1.5" />
+                    Rainfall
+                  </TabsTrigger>
+                )}
+                {canShowJournal && (
+                  <TabsTrigger value="journal" className="flex items-center gap-2">
+                    <NotebookPen className="h-3.5 w-3.5" />
+                    Journal
+                  </TabsTrigger>
+                )}
+                {canShowResources && (
+                  <TabsTrigger value="resources" className="flex items-center gap-2">
+                    <BookOpen className="h-3.5 w-3.5" />
+                    Resources
+                  </TabsTrigger>
+                )}
+                {canShowAiAnalysis && (
+                  <TabsTrigger value="ai-analysis">
+                    <Brain className="h-3.5 w-3.5 mr-1.5" />
+                    AI Analysis
+                  </TabsTrigger>
+                )}
+                {canShowNews && (
+                  <TabsTrigger value="news">
+                    <Newspaper className="h-3.5 w-3.5 mr-1.5" />
+                    News
+                  </TabsTrigger>
+                )}
+              </div>
+            )}
           </TabsList>
 
           {canShowInventory && (
@@ -3150,6 +4049,11 @@ export default function InventorySystem() {
           {canShowSeason && (
             <TabsContent value="season" className="space-y-6">
               <SeasonDashboard />
+            </TabsContent>
+          )}
+          {canShowActivityLog && (
+            <TabsContent value="activity-log" className="space-y-6">
+              <ActivityLogTab tenantId={activityTenantId} />
             </TabsContent>
           )}
           {canShowRainfallSection && (

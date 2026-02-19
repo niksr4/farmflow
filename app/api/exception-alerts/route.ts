@@ -44,12 +44,17 @@ const safeDivide = (num: number, den: number) => (den > 0 ? num / den : 0)
 
 const formatPercent = (value: number, digits = 1) => `${(value * 100).toFixed(digits)}%`
 
+const resolveDispatchReceivedKgs = (row: any, bagWeightKg: number) => {
+  const received = Number(row.kgs_received) || 0
+  if (received > 0) return received
+  const bags = Number(row.bags_dispatched) || 0
+  return bags * bagWeightKg
+}
+
 const resolveSalesKgs = (row: any, bagWeightKg: number) => {
-  const direct =
-    Number(row.kgs) ||
-    Number(row.weight_kgs) ||
-    Number(row.kgs_sent) ||
-    Number(row.kgs_received)
+  const precomputed = Number(row.sold_kgs) || 0
+  if (precomputed > 0) return precomputed
+  const direct = Number(row.kgs) || Number(row.weight_kgs) || Number(row.kgs_sent) || Number(row.kgs_received)
   if (direct > 0) return direct
   const bags = Number(row.bags_sold) || 0
   return bags * bagWeightKg
@@ -221,7 +226,7 @@ export async function GET() {
             dr.coffee_type,
             dr.bag_type,
             COALESCE(SUM(dr.bags_dispatched), 0) AS bags_dispatched,
-            COALESCE(SUM(dr.kgs_received), 0) AS kgs_received
+            COALESCE(SUM(COALESCE(NULLIF(dr.kgs_received, 0), dr.bags_dispatched * ${bagWeightKg})), 0) AS kgs_received
           FROM dispatch_records dr
           LEFT JOIN locations l ON l.id = dr.location_id
           WHERE dr.tenant_id = $1
@@ -239,7 +244,7 @@ export async function GET() {
             dr.coffee_type,
             dr.bag_type,
             COALESCE(SUM(dr.bags_dispatched), 0) AS bags_dispatched,
-            COALESCE(SUM(dr.kgs_received), 0) AS kgs_received
+            COALESCE(SUM(COALESCE(NULLIF(dr.kgs_received, 0), dr.bags_dispatched * ${bagWeightKg})), 0) AS kgs_received
           FROM dispatch_records dr
           LEFT JOIN locations l ON l.id = dr.location_id
           WHERE dr.tenant_id = $1
@@ -257,10 +262,10 @@ export async function GET() {
             sr.coffee_type,
             sr.bag_type,
             COALESCE(SUM(sr.bags_sold), 0) AS bags_sold,
-            COALESCE(SUM(sr.kgs), 0) AS kgs,
-            COALESCE(SUM(sr.weight_kgs), 0) AS weight_kgs,
-            COALESCE(SUM(sr.kgs_sent), 0) AS kgs_sent,
-            COALESCE(SUM(sr.kgs_received), 0) AS kgs_received,
+            COALESCE(
+              SUM(COALESCE(NULLIF(sr.kgs_received, 0), NULLIF(sr.kgs, 0), NULLIF(sr.weight_kgs, 0), NULLIF(sr.kgs_sent, 0), sr.bags_sold * ${bagWeightKg})),
+              0
+            ) AS sold_kgs,
             COALESCE(SUM(sr.revenue), 0) AS revenue
           FROM sales_records sr
           LEFT JOIN locations l ON l.id = sr.location_id
@@ -279,10 +284,10 @@ export async function GET() {
             sr.coffee_type,
             sr.bag_type,
             COALESCE(SUM(sr.bags_sold), 0) AS bags_sold,
-            COALESCE(SUM(sr.kgs), 0) AS kgs,
-            COALESCE(SUM(sr.weight_kgs), 0) AS weight_kgs,
-            COALESCE(SUM(sr.kgs_sent), 0) AS kgs_sent,
-            COALESCE(SUM(sr.kgs_received), 0) AS kgs_received,
+            COALESCE(
+              SUM(COALESCE(NULLIF(sr.kgs_received, 0), NULLIF(sr.kgs, 0), NULLIF(sr.weight_kgs, 0), NULLIF(sr.kgs_sent, 0), sr.bags_sold * ${bagWeightKg})),
+              0
+            ) AS sold_kgs,
             COALESCE(SUM(sr.revenue), 0) AS revenue
           FROM sales_records sr
           LEFT JOIN locations l ON l.id = sr.location_id
@@ -360,7 +365,7 @@ export async function GET() {
           SELECT
             dispatch_date,
             COALESCE(SUM(bags_dispatched), 0) AS bags_dispatched,
-            COALESCE(SUM(kgs_received), 0) AS kgs_received
+            COALESCE(SUM(COALESCE(NULLIF(kgs_received, 0), bags_dispatched * ${bagWeightKg})), 0) AS kgs_received
           FROM dispatch_records
           WHERE tenant_id = $1
             AND dispatch_date >= $2::date
@@ -375,10 +380,10 @@ export async function GET() {
           SELECT
             sale_date,
             COALESCE(SUM(bags_sold), 0) AS bags_sold,
-            COALESCE(SUM(kgs), 0) AS kgs,
-            COALESCE(SUM(weight_kgs), 0) AS weight_kgs,
-            COALESCE(SUM(kgs_sent), 0) AS kgs_sent,
-            COALESCE(SUM(kgs_received), 0) AS kgs_received,
+            COALESCE(
+              SUM(COALESCE(NULLIF(kgs_received, 0), NULLIF(kgs, 0), NULLIF(weight_kgs, 0), NULLIF(kgs_sent, 0), bags_sold * ${bagWeightKg})),
+              0
+            ) AS sold_kgs,
             COALESCE(SUM(revenue), 0) AS revenue
           FROM sales_records
           WHERE tenant_id = $1
@@ -423,7 +428,7 @@ export async function GET() {
         `
           SELECT
             COALESCE(SUM(bags_dispatched), 0) AS bags_dispatched,
-            COALESCE(SUM(kgs_received), 0) AS kgs_received
+            COALESCE(SUM(COALESCE(NULLIF(kgs_received, 0), bags_dispatched * ${bagWeightKg})), 0) AS kgs_received
           FROM dispatch_records
           WHERE tenant_id = $1
             AND dispatch_date >= $2::date
@@ -435,7 +440,7 @@ export async function GET() {
         `
           SELECT
             COALESCE(SUM(bags_dispatched), 0) AS bags_dispatched,
-            COALESCE(SUM(kgs_received), 0) AS kgs_received
+            COALESCE(SUM(COALESCE(NULLIF(kgs_received, 0), bags_dispatched * ${bagWeightKg})), 0) AS kgs_received
           FROM dispatch_records
           WHERE tenant_id = $1
             AND dispatch_date >= $2::date
@@ -451,10 +456,10 @@ export async function GET() {
         `
           SELECT
             COALESCE(SUM(bags_sold), 0) AS bags_sold,
-            COALESCE(SUM(kgs), 0) AS kgs,
-            COALESCE(SUM(weight_kgs), 0) AS weight_kgs,
-            COALESCE(SUM(kgs_sent), 0) AS kgs_sent,
-            COALESCE(SUM(kgs_received), 0) AS kgs_received,
+            COALESCE(
+              SUM(COALESCE(NULLIF(kgs_received, 0), NULLIF(kgs, 0), NULLIF(weight_kgs, 0), NULLIF(kgs_sent, 0), bags_sold * ${bagWeightKg})),
+              0
+            ) AS sold_kgs,
             COALESCE(SUM(revenue), 0) AS revenue
           FROM sales_records
           WHERE tenant_id = $1
@@ -467,10 +472,10 @@ export async function GET() {
         `
           SELECT
             COALESCE(SUM(bags_sold), 0) AS bags_sold,
-            COALESCE(SUM(kgs), 0) AS kgs,
-            COALESCE(SUM(weight_kgs), 0) AS weight_kgs,
-            COALESCE(SUM(kgs_sent), 0) AS kgs_sent,
-            COALESCE(SUM(kgs_received), 0) AS kgs_received,
+            COALESCE(
+              SUM(COALESCE(NULLIF(kgs_received, 0), NULLIF(kgs, 0), NULLIF(weight_kgs, 0), NULLIF(kgs_sent, 0), bags_sold * ${bagWeightKg})),
+              0
+            ) AS sold_kgs,
             COALESCE(SUM(revenue), 0) AS revenue
           FROM sales_records
           WHERE tenant_id = $1
@@ -611,8 +616,10 @@ export async function GET() {
       const priorDispatchedKgs = (Number(prior.bags_dispatched) || 0) * bagWeightKg
       if (currentDispatchedKgs <= 0 || priorDispatchedKgs <= 0) return
 
-      const currentLossPct = safeDivide(currentDispatchedKgs - (Number(row.kgs_received) || 0), currentDispatchedKgs)
-      const priorLossPct = safeDivide(priorDispatchedKgs - (Number(prior.kgs_received) || 0), priorDispatchedKgs)
+      const currentReceivedKgs = resolveDispatchReceivedKgs(row, bagWeightKg)
+      const priorReceivedKgs = resolveDispatchReceivedKgs(prior, bagWeightKg)
+      const currentLossPct = safeDivide(currentDispatchedKgs - currentReceivedKgs, currentDispatchedKgs)
+      const priorLossPct = safeDivide(priorDispatchedKgs - priorReceivedKgs, priorDispatchedKgs)
 
       const exceedsAbs = currentLossPct > priorLossPct + thresholds.lossSpikeAbsPct
       const exceedsRel = currentLossPct > priorLossPct * (1 + thresholds.lossSpikeRelPct)
@@ -750,7 +757,7 @@ export async function GET() {
     const weekDispatchTotals = (dispatchCurrentRows || []).reduce(
       (acc: any, row: any) => {
         acc.dispatchedKgs += (Number(row.bags_dispatched) || 0) * bagWeightKg
-        acc.receivedKgs += Number(row.kgs_received) || 0
+        acc.receivedKgs += resolveDispatchReceivedKgs(row, bagWeightKg)
         return acc
       },
       { dispatchedKgs: 0, receivedKgs: 0 },
@@ -759,7 +766,7 @@ export async function GET() {
     const priorDispatchTotals = (dispatchPriorRows || []).reduce(
       (acc: any, row: any) => {
         acc.dispatchedKgs += (Number(row.bags_dispatched) || 0) * bagWeightKg
-        acc.receivedKgs += Number(row.kgs_received) || 0
+        acc.receivedKgs += resolveDispatchReceivedKgs(row, bagWeightKg)
         return acc
       },
       { dispatchedKgs: 0, receivedKgs: 0 },
@@ -797,7 +804,7 @@ export async function GET() {
       dryParch: Number(monthProcessing.dry_parch_kgs) || 0,
       dryCherry: Number(monthProcessing.dry_cherry_kgs) || 0,
       dispatchedKgs: (Number(monthDispatch.bags_dispatched) || 0) * bagWeightKg,
-      receivedKgs: Number(monthDispatch.kgs_received) || 0,
+      receivedKgs: resolveDispatchReceivedKgs(monthDispatch, bagWeightKg),
       soldKgs: resolveSalesKgs(monthSales, bagWeightKg),
       revenue: Number(monthSales.revenue) || 0,
     }
@@ -807,7 +814,7 @@ export async function GET() {
       dryParch: Number(monthProcessingLastYear.dry_parch_kgs) || 0,
       dryCherry: Number(monthProcessingLastYear.dry_cherry_kgs) || 0,
       dispatchedKgs: (Number(monthDispatchLastYear.bags_dispatched) || 0) * bagWeightKg,
-      receivedKgs: Number(monthDispatchLastYear.kgs_received) || 0,
+      receivedKgs: resolveDispatchReceivedKgs(monthDispatchLastYear, bagWeightKg),
       soldKgs: resolveSalesKgs(monthSalesLastYear, bagWeightKg),
       revenue: Number(monthSalesLastYear.revenue) || 0,
     }
@@ -877,7 +884,7 @@ export async function GET() {
       const float = Number(proc.float_kgs) || 0
       const green = Number(proc.green_kgs) || 0
       const dispatchedKgs = (Number(disp.bags_dispatched) || 0) * bagWeightKg
-      const receivedKgs = Number(disp.kgs_received) || 0
+      const receivedKgs = resolveDispatchReceivedKgs(disp, bagWeightKg)
       const soldKgs = resolveSalesKgs(sales, bagWeightKg)
       const revenue = Number(sales.revenue) || 0
       return {

@@ -41,9 +41,13 @@ export const authOptions: NextAuthOptions = {
           sql,
           ownerContext,
           sql`
-            SELECT id, username, role, tenant_id, password_hash
+            SELECT id, username, role, tenant_id, password_hash, password_reset_required
             FROM users
-            WHERE username = ${username}
+            WHERE LOWER(username) = LOWER(${username})
+            ORDER BY
+              CASE WHEN username = ${username} THEN 0 ELSE 1 END,
+              CASE role WHEN 'owner' THEN 0 WHEN 'admin' THEN 1 ELSE 2 END,
+              created_at ASC
             LIMIT 1
           `,
         )
@@ -82,6 +86,7 @@ export const authOptions: NextAuthOptions = {
 
         const mfaEnabled = false
         const mfaVerified = false
+        const passwordResetRequired = Boolean(user.password_reset_required)
 
         if (needsRehash) {
           try {
@@ -119,6 +124,7 @@ export const authOptions: NextAuthOptions = {
           tenantId: String(user.tenant_id),
           mfaVerified,
           mfaEnabled,
+          passwordResetRequired,
         } as any
       },
     }),
@@ -130,6 +136,7 @@ export const authOptions: NextAuthOptions = {
         token.tenantId = (user as any).tenantId
         token.mfaVerified = (user as any).mfaVerified || false
         token.mfaEnabled = (user as any).mfaEnabled || false
+        token.passwordResetRequired = (user as any).passwordResetRequired || false
       }
       return token
     },
@@ -139,6 +146,7 @@ export const authOptions: NextAuthOptions = {
         ;(session.user as any).tenantId = token.tenantId
         ;(session.user as any).mfaVerified = Boolean(token.mfaVerified)
         ;(session.user as any).mfaEnabled = Boolean(token.mfaEnabled)
+        ;(session.user as any).passwordResetRequired = Boolean((token as any).passwordResetRequired)
       }
       return session
     },

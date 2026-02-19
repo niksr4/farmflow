@@ -16,7 +16,7 @@ const isRestockType = (value: string) => {
 }
 
 async function recalculateInventoryForLocation(
-  sql: NeonQueryFunction<boolean, boolean>,
+  sql: NeonQueryFunction<any, any>,
   tenantContext: TenantContext,
   itemType: string,
   locationId: LocationScope,
@@ -110,7 +110,7 @@ async function recalculateInventoryForLocation(
 }
 
 export async function recalculateInventoryForItem(
-  sql: NeonQueryFunction<boolean, boolean>,
+  sql: NeonQueryFunction<any, any>,
   tenantContext: TenantContext,
   itemType: string,
   locationId?: LocationScope,

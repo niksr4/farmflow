@@ -5,7 +5,7 @@ import { runTenantQuery } from "@/lib/server/tenant-db"
 
 export type ProcessingTenantContext = { tenantId: string; role: string }
 
-type NeonSql = NeonQueryFunction<boolean, boolean>
+type NeonSql = NeonQueryFunction<any, any>
 
 export async function resolveBagWeightKg(sql: NeonSql, tenantContext: ProcessingTenantContext) {
   const rows = await runTenantQuery(

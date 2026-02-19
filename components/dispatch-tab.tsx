@@ -119,6 +119,7 @@ export default function DispatchTab() {
   const [isSaving, setIsSaving] = useState(false)
   const { toast } = useToast()
   const dispatchPageSize = 25
+  const asOfDate = useMemo(() => format(date, "yyyy-MM-dd"), [date])
   const blockInvalidNumberKey = (event: KeyboardEvent<HTMLInputElement>) => {
     if (isBlockedNumericKey(event.key)) {
       event.preventDefault()
@@ -288,16 +289,21 @@ export default function DispatchTab() {
       locationId: string | null,
       setter: (totals: BagTotals) => void,
       scopeSetter?: (scope: LocationScope) => void,
+      options?: { asOfDate?: string },
     ) => {
       const resolvedLocation = locationId ? locationId.trim() : ""
       const fallbackScope: LocationScope = resolvedLocation ? "location" : "all"
       try {
-        const { startDate, endDate } = getFiscalYearDateRange(selectedFiscalYear)
         const params = new URLSearchParams({
           summary: "bagTotals",
-          fiscalYearStart: startDate,
-          fiscalYearEnd: endDate,
         })
+        if (options?.asOfDate) {
+          params.set("fiscalYearEnd", options.asOfDate)
+        } else {
+          const { startDate, endDate } = getFiscalYearDateRange(selectedFiscalYear)
+          params.set("fiscalYearStart", startDate)
+          params.set("fiscalYearEnd", endDate)
+        }
         if (resolvedLocation) {
           params.set("locationId", resolvedLocation)
         }
@@ -347,16 +353,21 @@ export default function DispatchTab() {
       locationId: string | null,
       setter: (rows: DispatchSummaryRow[]) => void,
       scopeSetter?: (scope: LocationScope) => void,
+      options?: { asOfDate?: string },
     ) => {
       const resolvedLocation = locationId ? locationId.trim() : ""
       const fallbackScope: LocationScope = resolvedLocation ? "location" : "all"
       try {
-        const { startDate, endDate } = getFiscalYearDateRange(selectedFiscalYear)
         const params = new URLSearchParams({
-          startDate,
-          endDate,
           summaryOnly: "true",
         })
+        if (options?.asOfDate) {
+          params.set("endDate", options.asOfDate)
+        } else {
+          const { startDate, endDate } = getFiscalYearDateRange(selectedFiscalYear)
+          params.set("startDate", startDate)
+          params.set("endDate", endDate)
+        }
         if (resolvedLocation) {
           params.set("locationId", resolvedLocation)
         }
@@ -436,9 +447,9 @@ export default function DispatchTab() {
       setFormDispatchScope("all")
       return
     }
-    fetchBagTotals(selectedLocationId, setFormBagTotals, setFormBagTotalsScope)
-    fetchDispatchSummary(selectedLocationId, setFormDispatchSummary, setFormDispatchScope)
-  }, [fetchBagTotals, fetchDispatchSummary, selectedLocationId])
+    fetchBagTotals(selectedLocationId, setFormBagTotals, setFormBagTotalsScope, { asOfDate })
+    fetchDispatchSummary(selectedLocationId, setFormDispatchSummary, setFormDispatchScope, { asOfDate })
+  }, [asOfDate, fetchBagTotals, fetchDispatchSummary, selectedLocationId])
 
   const handleSave = async () => {
     if (!selectedLocationId) {
@@ -515,8 +526,8 @@ export default function DispatchTab() {
         fetchDispatchSummary(null, setDispatchSummary)
         fetchBagTotals(null, setBagTotals, setBagTotalsScope)
         if (selectedLocationId) {
-          fetchDispatchSummary(selectedLocationId, setFormDispatchSummary, setFormDispatchScope)
-          fetchBagTotals(selectedLocationId, setFormBagTotals, setFormBagTotalsScope)
+          fetchDispatchSummary(selectedLocationId, setFormDispatchSummary, setFormDispatchScope, { asOfDate })
+          fetchBagTotals(selectedLocationId, setFormBagTotals, setFormBagTotalsScope, { asOfDate })
         }
       } else {
         toast({
@@ -579,8 +590,8 @@ export default function DispatchTab() {
         fetchDispatchSummary(null, setDispatchSummary)
         fetchBagTotals(null, setBagTotals, setBagTotalsScope)
         if (selectedLocationId) {
-          fetchDispatchSummary(selectedLocationId, setFormDispatchSummary, setFormDispatchScope)
-          fetchBagTotals(selectedLocationId, setFormBagTotals, setFormBagTotalsScope)
+          fetchDispatchSummary(selectedLocationId, setFormDispatchSummary, setFormDispatchScope, { asOfDate })
+          fetchBagTotals(selectedLocationId, setFormBagTotals, setFormBagTotalsScope, { asOfDate })
         }
       } else {
         toast({
@@ -725,7 +736,7 @@ export default function DispatchTab() {
       : `${dispatchRecords.length} record(s)`
 
   return (
-    <div className="space-y-8">
+    <div className="flex flex-col gap-8">
       {/* Fiscal Year Selector */}
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
@@ -758,16 +769,16 @@ export default function DispatchTab() {
       </div>
 
       {bagTotalsScope === "legacy_pool" && (
-        <p className="text-xs text-amber-700">
+        <p className="order-2 text-xs text-amber-700">
           Summary totals include pooled pre-location records for this legacy estate.
         </p>
       )}
-      <p className="text-xs text-muted-foreground">
+      <p className="order-3 text-xs text-muted-foreground">
         Bags are logistics units; received KGs feed downstream sales availability.
       </p>
 
       {/* Summary Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="order-4 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         {/* Arabica Dry Parchment */}
         <Card className="border-border/60 bg-white/85">
           <CardHeader className="pb-2">
@@ -910,7 +921,7 @@ export default function DispatchTab() {
       </div>
 
       {/* Add Dispatch Form */}
-      <Card className="border-border/70 bg-white/85">
+      <Card className="order-1 border-border/70 bg-white/85">
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <Truck className="h-5 w-5" />
@@ -1113,7 +1124,7 @@ export default function DispatchTab() {
       </Card>
 
       {/* Dispatch Records Table */}
-      <Card className="border-border/70 bg-white/85">
+      <Card className="order-5 border-border/70 bg-white/85">
         <CardHeader>
           <div className="flex items-center justify-between">
             <div>

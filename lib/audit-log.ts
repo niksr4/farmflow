@@ -30,7 +30,7 @@ const serializeAuditPayload = (payload: unknown) => {
 }
 
 export async function logAuditEvent(
-  client: NeonQueryFunction<boolean, boolean> | null | undefined,
+  client: NeonQueryFunction<any, any> | null | undefined,
   sessionUser: SessionUser,
   event: AuditEvent,
 ) {

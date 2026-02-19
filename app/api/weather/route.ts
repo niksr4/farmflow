@@ -2,9 +2,21 @@ import { type NextRequest, NextResponse } from "next/server"
 import { requireModuleAccess, isModuleAccessError } from "@/lib/server/module-access"
 import { buildRateLimitHeaders, checkRateLimit } from "@/lib/rate-limit"
 
-// Default location if no region is provided.
-const LOCATION = "Kodagu, India"
+// Default location if no region is provided (Madikeri, Kodagu).
+const LOCATION = "12.4244,75.7382"
 const FORECAST_DAYS = "8"
+
+// Backward-compatible aliases for older clients that still send text labels.
+const REGION_ALIASES: Record<string, string> = {
+  "kodagu, india": "12.4244,75.7382",
+  "coorg, india": "12.4244,75.7382",
+  "chikmagalur, india": "13.3153,75.7754",
+  "wayanad, india": "11.6854,76.1320",
+  "idukki, india": "9.8499,76.9730",
+  "nilgiris, india": "11.4064,76.6932",
+  "araku, india": "18.3270,82.8772",
+  "bababudangiri, india": "13.3902,75.7215",
+}
 
 export async function GET(request: NextRequest) {
   try {
@@ -23,7 +35,8 @@ export async function GET(request: NextRequest) {
 
     const { searchParams } = new URL(request.url)
     const requestedRegion = (searchParams.get("region") || searchParams.get("q") || "").trim()
-    const locationQuery = requestedRegion.length > 0 ? requestedRegion : LOCATION
+    const normalizedRequestedRegion = requestedRegion.toLowerCase()
+    const locationQuery = requestedRegion.length > 0 ? (REGION_ALIASES[normalizedRequestedRegion] ?? requestedRegion) : LOCATION
 
     if (locationQuery.length > 80) {
       return NextResponse.json({ error: "Region query too long." }, { status: 400, headers: rateHeaders })

@@ -1,9 +1,18 @@
 import { NextResponse } from "next/server"
 import { sql } from "@/lib/server/db"
 import { requireSessionUser } from "@/lib/server/auth"
+import { resolveScopedSessionUser } from "@/lib/server/module-access"
 import { normalizeTenantContext, runTenantQuery } from "@/lib/server/tenant-db"
 import { requireAdminRole } from "@/lib/permissions"
 import { logAuditEvent } from "@/lib/server/audit-log"
+import { loadTenantExperienceColumnStatus, parseJsonObject } from "@/lib/server/tenant-experience-db"
+import {
+  DEFAULT_TENANT_FEATURE_FLAGS,
+  DEFAULT_TENANT_UI_VARIANT,
+  mergeTenantFeatureFlags,
+  sanitizeTenantFeatureFlags,
+  sanitizeTenantUiVariant,
+} from "@/lib/tenant-experience"
 
 const DEFAULT_BAG_WEIGHT_KG = 50
 const MIN_BAG_WEIGHT_KG = 40
@@ -81,57 +90,58 @@ const sanitizeUiPreferences = (input: any) => {
   return Object.keys(cleaned).length > 0 ? cleaned : null
 }
 
-export async function GET() {
+export async function GET(request: Request) {
   try {
     if (!sql) {
       return NextResponse.json({ success: false, error: "Database not configured" }, { status: 500 })
     }
 
-    const sessionUser = await requireSessionUser()
-    const tenantContext = normalizeTenantContext(sessionUser.tenantId, sessionUser.role)
-    const rows = await runTenantQuery(
-      sql,
-      tenantContext,
-      sql`
-        SELECT name, bag_weight_kg, alert_thresholds, ui_preferences
-        FROM tenants
-        WHERE id = ${tenantContext.tenantId}
-        LIMIT 1
-      `,
-    )
+    const sessionUser = await resolveScopedSessionUser(await requireSessionUser())
+    const { searchParams } = new URL(request.url)
+    const requestedTenantId = String(searchParams.get("tenantId") || "").trim()
+    const tenantId = sessionUser.role === "owner" && requestedTenantId ? requestedTenantId : sessionUser.tenantId
+    const tenantContext = normalizeTenantContext(tenantId, sessionUser.role)
+    const columnStatus = await loadTenantExperienceColumnStatus(sql, tenantContext)
+    const rows = columnStatus.hasUiVariant && columnStatus.hasFeatureFlags
+      ? await runTenantQuery(
+          sql,
+          tenantContext,
+          sql`
+            SELECT name, bag_weight_kg, alert_thresholds, ui_preferences, ui_variant, feature_flags
+            FROM tenants
+            WHERE id = ${tenantId}
+            LIMIT 1
+          `,
+        )
+      : await runTenantQuery(
+          sql,
+          tenantContext,
+          sql`
+            SELECT name, bag_weight_kg, alert_thresholds, ui_preferences
+            FROM tenants
+            WHERE id = ${tenantId}
+            LIMIT 1
+          `,
+        )
 
     const bagWeightKg = Number(rows?.[0]?.bag_weight_kg) || DEFAULT_BAG_WEIGHT_KG
     const estateName = String(rows?.[0]?.name || "").trim()
-    const rawThresholds = rows?.[0]?.alert_thresholds
-    let parsedThresholds: any = null
-    if (rawThresholds) {
-      try {
-        parsedThresholds =
-          typeof rawThresholds === "string" ? JSON.parse(rawThresholds) : typeof rawThresholds === "object" ? rawThresholds : null
-      } catch (err) {
-        console.warn("Failed to parse alert thresholds JSON:", err)
-      }
-    }
+    const parsedThresholds = parseJsonObject(rows?.[0]?.alert_thresholds, "alert thresholds JSON")
     const alertThresholds = { ...DEFAULT_ALERT_THRESHOLDS, ...(parsedThresholds || {}) }
     if (parsedThresholds?.targets && typeof parsedThresholds.targets === "object") {
       alertThresholds.targets = { ...DEFAULT_ALERT_THRESHOLDS.targets, ...parsedThresholds.targets }
     }
-    const rawUiPreferences = rows?.[0]?.ui_preferences
-    let parsedUiPreferences: any = null
-    if (rawUiPreferences) {
-      try {
-        parsedUiPreferences =
-          typeof rawUiPreferences === "string"
-            ? JSON.parse(rawUiPreferences)
-            : typeof rawUiPreferences === "object"
-              ? rawUiPreferences
-              : null
-      } catch (err) {
-        console.warn("Failed to parse ui preferences JSON:", err)
-      }
-    }
+    const parsedUiPreferences = parseJsonObject(rows?.[0]?.ui_preferences, "ui preferences JSON")
     const uiPreferences = { ...DEFAULT_UI_PREFERENCES, ...(parsedUiPreferences || {}) }
-    return NextResponse.json({ success: true, settings: { bagWeightKg, estateName, alertThresholds, uiPreferences } })
+    const uiVariant = sanitizeTenantUiVariant(rows?.[0]?.ui_variant) || DEFAULT_TENANT_UI_VARIANT
+    const parsedFeatureFlags = sanitizeTenantFeatureFlags(
+      parseJsonObject(rows?.[0]?.feature_flags, "feature flags JSON"),
+    )
+    const featureFlags = mergeTenantFeatureFlags(parsedFeatureFlags || DEFAULT_TENANT_FEATURE_FLAGS)
+    return NextResponse.json({
+      success: true,
+      settings: { bagWeightKg, estateName, alertThresholds, uiPreferences, uiVariant, featureFlags },
+    })
   } catch (error: any) {
     console.error("Error loading tenant settings:", error)
     return NextResponse.json({ success: false, error: error.message || "Failed to load tenant settings" }, { status: 500 })
@@ -144,7 +154,7 @@ export async function PUT(request: Request) {
       return NextResponse.json({ success: false, error: "Database not configured" }, { status: 500 })
     }
 
-    const sessionUser = await requireSessionUser()
+    const sessionUser = await resolveScopedSessionUser(await requireSessionUser())
     try {
       requireAdminRole(sessionUser.role)
     } catch {
@@ -156,6 +166,8 @@ export async function PUT(request: Request) {
     const estateNameInput = typeof body.estateName === "string" ? body.estateName.trim() : null
     const alertThresholdsInput = sanitizeAlertThresholds(body.alertThresholds)
     const uiPreferencesInput = sanitizeUiPreferences(body.uiPreferences)
+    const uiVariantInput = body.uiVariant === undefined ? null : sanitizeTenantUiVariant(body.uiVariant)
+    const featureFlagsInput = body.featureFlags === undefined ? null : sanitizeTenantFeatureFlags(body.featureFlags)
 
     if (!Number.isFinite(bagWeightKg)) {
       return NextResponse.json({ success: false, error: "bagWeightKg must be a number" }, { status: 400 })
@@ -168,73 +180,100 @@ export async function PUT(request: Request) {
       )
     }
 
-    const tenantContext = normalizeTenantContext(sessionUser.tenantId, sessionUser.role)
+    if (body.uiVariant !== undefined && !uiVariantInput) {
+      return NextResponse.json({ success: false, error: "uiVariant is invalid" }, { status: 400 })
+    }
+
+    if (body.featureFlags !== undefined && !featureFlagsInput) {
+      return NextResponse.json({ success: false, error: "featureFlags are invalid" }, { status: 400 })
+    }
+
+    const requestedTenantId = String(body.tenantId || "").trim()
+    const tenantId = sessionUser.role === "owner" && requestedTenantId ? requestedTenantId : sessionUser.tenantId
+    const tenantContext = normalizeTenantContext(tenantId, sessionUser.role)
+    const columnStatus = await loadTenantExperienceColumnStatus(sql, tenantContext)
+    const hasExperienceUpdateInput = body.uiVariant !== undefined || body.featureFlags !== undefined
+    if (hasExperienceUpdateInput && (!columnStatus.hasUiVariant || !columnStatus.hasFeatureFlags)) {
+      return NextResponse.json(
+        { success: false, error: "Tenant experience schema missing. Run scripts/48-tenant-variants.sql." },
+        { status: 400 },
+      )
+    }
+
     if (estateNameInput !== null && !estateNameInput) {
       return NextResponse.json({ success: false, error: "estateName cannot be empty" }, { status: 400 })
     }
 
-    const beforeRows = await runTenantQuery(
-      sql,
-      tenantContext,
-      sql`
-        SELECT bag_weight_kg, name, alert_thresholds, ui_preferences
-        FROM tenants
-        WHERE id = ${tenantContext.tenantId}
-        LIMIT 1
-      `,
-    )
+    const beforeRows = columnStatus.hasUiVariant && columnStatus.hasFeatureFlags
+      ? await runTenantQuery(
+          sql,
+          tenantContext,
+          sql`
+            SELECT bag_weight_kg, name, alert_thresholds, ui_preferences, ui_variant, feature_flags
+            FROM tenants
+            WHERE id = ${tenantId}
+            LIMIT 1
+          `,
+        )
+      : await runTenantQuery(
+          sql,
+          tenantContext,
+          sql`
+            SELECT bag_weight_kg, name, alert_thresholds, ui_preferences
+            FROM tenants
+            WHERE id = ${tenantId}
+            LIMIT 1
+          `,
+        )
 
-    const rows = await runTenantQuery(
-      sql,
-      tenantContext,
-      sql`
-        UPDATE tenants
-        SET bag_weight_kg = ${bagWeightKg},
-            name = COALESCE(${estateNameInput}, name),
-            alert_thresholds = COALESCE(${alertThresholdsInput ? JSON.stringify(alertThresholdsInput) : null}::jsonb, alert_thresholds),
-            ui_preferences = COALESCE(${uiPreferencesInput ? JSON.stringify(uiPreferencesInput) : null}::jsonb, ui_preferences)
-        WHERE id = ${tenantContext.tenantId}
-        RETURNING bag_weight_kg, name, alert_thresholds, ui_preferences
-      `,
-    )
+    const rows = columnStatus.hasUiVariant && columnStatus.hasFeatureFlags
+      ? await runTenantQuery(
+          sql,
+          tenantContext,
+          sql`
+            UPDATE tenants
+            SET bag_weight_kg = ${bagWeightKg},
+                name = COALESCE(${estateNameInput}, name),
+                alert_thresholds = COALESCE(${alertThresholdsInput ? JSON.stringify(alertThresholdsInput) : null}::jsonb, alert_thresholds),
+                ui_preferences = COALESCE(${uiPreferencesInput ? JSON.stringify(uiPreferencesInput) : null}::jsonb, ui_preferences),
+                ui_variant = COALESCE(${uiVariantInput}, ui_variant),
+                feature_flags = COALESCE(${featureFlagsInput ? JSON.stringify(featureFlagsInput) : null}::jsonb, feature_flags)
+            WHERE id = ${tenantId}
+            RETURNING bag_weight_kg, name, alert_thresholds, ui_preferences, ui_variant, feature_flags
+          `,
+        )
+      : await runTenantQuery(
+          sql,
+          tenantContext,
+          sql`
+            UPDATE tenants
+            SET bag_weight_kg = ${bagWeightKg},
+                name = COALESCE(${estateNameInput}, name),
+                alert_thresholds = COALESCE(${alertThresholdsInput ? JSON.stringify(alertThresholdsInput) : null}::jsonb, alert_thresholds),
+                ui_preferences = COALESCE(${uiPreferencesInput ? JSON.stringify(uiPreferencesInput) : null}::jsonb, ui_preferences)
+            WHERE id = ${tenantId}
+            RETURNING bag_weight_kg, name, alert_thresholds, ui_preferences
+          `,
+        )
 
     const updated = Number(rows?.[0]?.bag_weight_kg) || bagWeightKg
     const estateName = String(rows?.[0]?.name || "").trim()
-    const storedThresholds = rows?.[0]?.alert_thresholds
-    let parsedThresholds: any = null
-    if (storedThresholds) {
-      try {
-        parsedThresholds =
-          typeof storedThresholds === "string"
-            ? JSON.parse(storedThresholds)
-            : typeof storedThresholds === "object"
-              ? storedThresholds
-              : null
-      } catch (err) {
-        console.warn("Failed to parse stored alert thresholds:", err)
-      }
-    }
+    const parsedThresholds = parseJsonObject(rows?.[0]?.alert_thresholds, "stored alert thresholds")
     const alertThresholds = { ...DEFAULT_ALERT_THRESHOLDS, ...(parsedThresholds || {}) }
     if (parsedThresholds?.targets && typeof parsedThresholds.targets === "object") {
       alertThresholds.targets = { ...DEFAULT_ALERT_THRESHOLDS.targets, ...parsedThresholds.targets }
     }
-    const storedUiPreferences = rows?.[0]?.ui_preferences
-    let parsedUiPreferences: any = null
-    if (storedUiPreferences) {
-      try {
-        parsedUiPreferences =
-          typeof storedUiPreferences === "string"
-            ? JSON.parse(storedUiPreferences)
-            : typeof storedUiPreferences === "object"
-              ? storedUiPreferences
-              : null
-      } catch (err) {
-        console.warn("Failed to parse stored ui preferences:", err)
-      }
-    }
+    const parsedUiPreferences = parseJsonObject(rows?.[0]?.ui_preferences, "stored ui preferences")
     const uiPreferences = { ...DEFAULT_UI_PREFERENCES, ...(parsedUiPreferences || {}) }
+    const uiVariant = sanitizeTenantUiVariant(rows?.[0]?.ui_variant) || DEFAULT_TENANT_UI_VARIANT
+    const parsedFeatureFlags = sanitizeTenantFeatureFlags(
+      parseJsonObject(rows?.[0]?.feature_flags, "stored feature flags"),
+    )
+    const featureFlags = mergeTenantFeatureFlags(parsedFeatureFlags || DEFAULT_TENANT_FEATURE_FLAGS)
 
-    await logAuditEvent(sql, sessionUser, {
+    const auditUser = tenantId === sessionUser.tenantId ? sessionUser : { ...sessionUser, tenantId }
+
+    await logAuditEvent(sql, auditUser, {
       action: "update",
       entityType: "tenants",
       entityId: tenantContext.tenantId,
@@ -242,7 +281,10 @@ export async function PUT(request: Request) {
       after: rows?.[0] ?? null,
     })
 
-    return NextResponse.json({ success: true, settings: { bagWeightKg: updated, estateName, alertThresholds, uiPreferences } })
+    return NextResponse.json({
+      success: true,
+      settings: { bagWeightKg: updated, estateName, alertThresholds, uiPreferences, uiVariant, featureFlags },
+    })
   } catch (error: any) {
     console.error("Error updating tenant settings:", error)
     return NextResponse.json({ success: false, error: error.message || "Failed to update tenant settings" }, { status: 500 })

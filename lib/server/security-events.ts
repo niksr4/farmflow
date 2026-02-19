@@ -25,7 +25,7 @@ const isMissingRelation = (error: unknown, relation: string) => {
 }
 
 const resolveActorId = async (
-  client: NeonQueryFunction<boolean, boolean>,
+  client: NeonQueryFunction<any, any>,
   tenantId: string,
   actorUsername?: string | null,
 ): Promise<string | null> => {

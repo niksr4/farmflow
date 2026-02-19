@@ -37,30 +37,34 @@ const resolveKgsSold = (bagsSold: number, bagWeightKg: number, explicitKgsSold?:
   return Number((bagsSold * bagWeightKg).toFixed(2))
 }
 
+const resolvePricePerKg = (revenue: number, kgsSold: number) => {
+  if (!Number.isFinite(revenue) || !Number.isFinite(kgsSold) || kgsSold <= 0) return 0
+  return Number((revenue / kgsSold).toFixed(4))
+}
+
 export async function GET(request: Request) {
   try {
     const sessionUser = await requireModuleAccess("sales")
     // Allow data entry for user/admin/owner; reserve destructive actions for admin/owner.
     const tenantContext = normalizeTenantContext(sessionUser.tenantId, sessionUser.role)
     const { searchParams } = new URL(request.url)
-    const startDate = searchParams.get("startDate")
-    const endDate = searchParams.get("endDate")
+    const startDate = searchParams.get("startDate")?.trim() || null
+    const endDate = searchParams.get("endDate")?.trim() || null
     const summaryOnly = searchParams.get("summaryOnly") === "true"
     const all = searchParams.get("all") === "true"
     const buyersOnly = searchParams.get("buyers") === "true"
-    const locationId = searchParams.get("locationId")
+    const locationId = searchParams.get("locationId")?.trim() || null
     const limitParam = searchParams.get("limit")
     const offsetParam = searchParams.get("offset")
     const limit = !all && limitParam ? Math.min(Math.max(Number.parseInt(limitParam, 10) || 0, 1), 500) : null
     const offset = !all && offsetParam ? Math.max(Number.parseInt(offsetParam, 10) || 0, 0) : 0
-    const useLegacyLocationScope = summaryOnly
     const locationCompatibility =
-      locationId && useLegacyLocationScope ? await resolveLocationCompatibility(sql, tenantContext) : null
+      locationId ? await resolveLocationCompatibility(sql, tenantContext) : null
     const legacyLocationCutover =
       locationCompatibility?.includeLegacyPreLocationRecords && locationCompatibility.firstLocationCreatedAt
         ? locationCompatibility.firstLocationCreatedAt
         : null
-    const isLegacyPooledScope = Boolean(locationId && useLegacyLocationScope && legacyLocationCutover)
+    const isLegacyPooledScope = Boolean(locationId && legacyLocationCutover)
     const locationScope = isLegacyPooledScope ? "legacy_pool" : locationId ? "location" : "all"
 
     if (buyersOnly) {
@@ -91,138 +95,92 @@ export async function GET(request: Request) {
       !locationId
         ? sql``
         : isLegacyPooledScope
-          ? sql``
+          ? sql` AND (location_id = ${locationId} OR created_at < ${legacyLocationCutover}::timestamp)`
           : sql` AND location_id = ${locationId}`
     const recordsLocationClause =
       !locationId
         ? sql``
-        : sql` AND sr.location_id = ${locationId}`
+        : isLegacyPooledScope
+          ? sql` AND (sr.location_id = ${locationId} OR sr.created_at < ${legacyLocationCutover}::timestamp)`
+          : sql` AND sr.location_id = ${locationId}`
+    const dateClause =
+      startDate && endDate
+        ? sql` AND sale_date >= ${startDate}::date AND sale_date <= ${endDate}::date`
+        : startDate
+          ? sql` AND sale_date >= ${startDate}::date`
+          : endDate
+            ? sql` AND sale_date <= ${endDate}::date`
+            : sql``
+    const recordsDateClause =
+      startDate && endDate
+        ? sql` AND sr.sale_date >= ${startDate}::date AND sr.sale_date <= ${endDate}::date`
+        : startDate
+          ? sql` AND sr.sale_date >= ${startDate}::date`
+          : endDate
+            ? sql` AND sr.sale_date <= ${endDate}::date`
+            : sql``
 
-    if (startDate && endDate) {
-      const queryList = [
-        sql`
-          SELECT COUNT(*)::int as count
-          FROM sales_records
-          WHERE sale_date >= ${startDate}::date
-            AND sale_date <= ${endDate}::date
-            AND tenant_id = ${tenantContext.tenantId}
-            ${locationClause}
-        `,
-        sql`
-          SELECT 
-            COALESCE(SUM(bags_sold), 0) as total_bags_sold,
-            COALESCE(SUM(COALESCE(NULLIF(kgs_received, 0), NULLIF(kgs, 0), bags_sold * ${bagWeightKg})), 0) as total_kgs_sold,
-            COALESCE(SUM(revenue), 0) as total_revenue
-          FROM sales_records
-          WHERE sale_date >= ${startDate}::date
-            AND sale_date <= ${endDate}::date
-            AND tenant_id = ${tenantContext.tenantId}
-            ${locationClause}
-        `,
-        sql`
-          SELECT 
-            coffee_type,
-            bag_type,
-            COALESCE(SUM(bags_sold), 0) as bags_sold,
-            COALESCE(SUM(COALESCE(NULLIF(kgs_received, 0), NULLIF(kgs, 0), bags_sold * ${bagWeightKg})), 0) as kgs_sold,
-            COALESCE(SUM(revenue), 0) as revenue
-          FROM sales_records
-          WHERE sale_date >= ${startDate}::date
-            AND sale_date <= ${endDate}::date
-            AND tenant_id = ${tenantContext.tenantId}
-            ${locationClause}
-          GROUP BY coffee_type, bag_type
-        `,
-      ]
-      if (!summaryOnly) {
-        queryList.push(
-          limit
-            ? sql`
-                SELECT sr.*, l.name AS location_name, l.code AS location_code
-                FROM sales_records sr
-                LEFT JOIN locations l ON l.id = sr.location_id
-                WHERE sr.sale_date >= ${startDate}::date 
-                  AND sr.sale_date <= ${endDate}::date
-                  AND sr.tenant_id = ${tenantContext.tenantId}
-                  ${recordsLocationClause}
-                ORDER BY sr.sale_date DESC, sr.created_at DESC
-                LIMIT ${limit} OFFSET ${offset}
-              `
-            : sql`
-                SELECT sr.*, l.name AS location_name, l.code AS location_code
-                FROM sales_records sr
-                LEFT JOIN locations l ON l.id = sr.location_id
-                WHERE sr.sale_date >= ${startDate}::date 
-                  AND sr.sale_date <= ${endDate}::date
-                  AND sr.tenant_id = ${tenantContext.tenantId}
-                  ${recordsLocationClause}
-                ORDER BY sr.sale_date DESC, sr.created_at DESC
-              `,
-        )
-      }
-      const [countRows, totalsRows, totalsByTypeRows, recordsRows] = await runTenantQueries(sql, tenantContext, queryList)
-      totalCountResult = countRows
-      totalsResult = totalsRows
-      totalsByTypeResult = totalsByTypeRows
-      records = summaryOnly ? [] : recordsRows || []
-    } else {
-      const queryList = [
-        sql`
-          SELECT COUNT(*)::int as count
-          FROM sales_records
-          WHERE tenant_id = ${tenantContext.tenantId}
-            ${locationClause}
-        `,
-        sql`
-          SELECT 
-            COALESCE(SUM(bags_sold), 0) as total_bags_sold,
-            COALESCE(SUM(COALESCE(NULLIF(kgs_received, 0), NULLIF(kgs, 0), bags_sold * ${bagWeightKg})), 0) as total_kgs_sold,
-            COALESCE(SUM(revenue), 0) as total_revenue
-          FROM sales_records
-          WHERE tenant_id = ${tenantContext.tenantId}
-            ${locationClause}
-        `,
-        sql`
-          SELECT 
-            coffee_type,
-            bag_type,
-            COALESCE(SUM(bags_sold), 0) as bags_sold,
-            COALESCE(SUM(COALESCE(NULLIF(kgs_received, 0), NULLIF(kgs, 0), bags_sold * ${bagWeightKg})), 0) as kgs_sold,
-            COALESCE(SUM(revenue), 0) as revenue
-          FROM sales_records
-          WHERE tenant_id = ${tenantContext.tenantId}
-            ${locationClause}
-          GROUP BY coffee_type, bag_type
-        `,
-      ]
-      if (!summaryOnly) {
-        queryList.push(
-          limit
-            ? sql`
-                SELECT sr.*, l.name AS location_name, l.code AS location_code
-                FROM sales_records sr
-                LEFT JOIN locations l ON l.id = sr.location_id
-                WHERE sr.tenant_id = ${tenantContext.tenantId}
-                  ${recordsLocationClause}
-                ORDER BY sr.sale_date DESC, sr.created_at DESC
-                LIMIT ${limit} OFFSET ${offset}
-              `
-            : sql`
-                SELECT sr.*, l.name AS location_name, l.code AS location_code
-                FROM sales_records sr
-                LEFT JOIN locations l ON l.id = sr.location_id
-                WHERE sr.tenant_id = ${tenantContext.tenantId}
-                  ${recordsLocationClause}
-                ORDER BY sr.sale_date DESC, sr.created_at DESC
-              `,
-        )
-      }
-      const [countRows, totalsRows, totalsByTypeRows, recordsRows] = await runTenantQueries(sql, tenantContext, queryList)
-      totalCountResult = countRows
-      totalsResult = totalsRows
-      totalsByTypeResult = totalsByTypeRows
-      records = summaryOnly ? [] : recordsRows || []
+    const queryList = [
+      sql`
+        SELECT COUNT(*)::int as count
+        FROM sales_records
+        WHERE tenant_id = ${tenantContext.tenantId}
+          ${dateClause}
+          ${locationClause}
+      `,
+      sql`
+        SELECT 
+          COALESCE(SUM(bags_sold), 0) as total_bags_sold,
+          COALESCE(SUM(COALESCE(NULLIF(kgs_received, 0), NULLIF(kgs, 0), bags_sold * ${bagWeightKg})), 0) as total_kgs_sold,
+          COALESCE(SUM(revenue), 0) as total_revenue
+        FROM sales_records
+        WHERE tenant_id = ${tenantContext.tenantId}
+          ${dateClause}
+          ${locationClause}
+      `,
+      sql`
+        SELECT 
+          coffee_type,
+          bag_type,
+          COALESCE(SUM(bags_sold), 0) as bags_sold,
+          COALESCE(SUM(COALESCE(NULLIF(kgs_received, 0), NULLIF(kgs, 0), bags_sold * ${bagWeightKg})), 0) as kgs_sold,
+          COALESCE(SUM(revenue), 0) as revenue
+        FROM sales_records
+        WHERE tenant_id = ${tenantContext.tenantId}
+          ${dateClause}
+          ${locationClause}
+        GROUP BY coffee_type, bag_type
+      `,
+    ]
+    if (!summaryOnly) {
+      queryList.push(
+        limit
+          ? sql`
+              SELECT sr.*, l.name AS location_name, l.code AS location_code
+              FROM sales_records sr
+              LEFT JOIN locations l ON l.id = sr.location_id
+              WHERE sr.tenant_id = ${tenantContext.tenantId}
+                ${recordsDateClause}
+                ${recordsLocationClause}
+              ORDER BY sr.sale_date DESC, sr.created_at DESC
+              LIMIT ${limit} OFFSET ${offset}
+            `
+          : sql`
+              SELECT sr.*, l.name AS location_name, l.code AS location_code
+              FROM sales_records sr
+              LEFT JOIN locations l ON l.id = sr.location_id
+              WHERE sr.tenant_id = ${tenantContext.tenantId}
+                ${recordsDateClause}
+                ${recordsLocationClause}
+              ORDER BY sr.sale_date DESC, sr.created_at DESC
+            `,
+      )
     }
+    const [countRows, totalsRows, totalsByTypeRows, recordsRows] = await runTenantQueries(sql, tenantContext, queryList)
+    totalCountResult = countRows
+    totalsResult = totalsRows
+    totalsByTypeResult = totalsByTypeRows
+    records = summaryOnly ? [] : recordsRows || []
 
     const totalCount = Number(totalCountResult?.[0]?.count) || 0
     const totalBagsSold = Number(totalsResult?.[0]?.total_bags_sold) || 0
@@ -285,6 +243,7 @@ export async function POST(request: Request) {
     const bagsSold = Number(payload.bags_sold) || 0
     const kgsSold = resolveKgsSold(bagsSold, bagWeightKg, payload.kgs_sold)
     const computedRevenue = Number((bagsSold * payload.price_per_bag).toFixed(2))
+    const computedPricePerKg = resolvePricePerKg(computedRevenue, kgsSold)
     const locationInfo = await resolveLocationInfo(sql, tenantContext, {
       locationId: payload.locationId,
       estate: payload.estate,
@@ -310,6 +269,9 @@ export async function POST(request: Request) {
         estate,
         coffee_type,
         bag_type,
+        weight_kgs,
+        price_per_kg,
+        total_revenue,
         buyer_name,
         bags_sent,
         kgs,
@@ -328,6 +290,9 @@ export async function POST(request: Request) {
         ${resolvedEstate},
         ${payload.coffee_type || null},
         ${payload.bag_type || null},
+        ${kgsSold},
+        ${computedPricePerKg},
+        ${computedRevenue},
         ${payload.buyer_name || null},
         ${bagsSold},
         ${kgsSold},
@@ -378,7 +343,7 @@ export async function PUT(request: Request) {
 
     const payload = z
       .object({
-        id: z.number().int().positive(),
+        id: z.coerce.number().int().positive(),
         sale_date: z.string().min(1),
         batch_no: z.string().nullable().optional(),
         lot_id: z.string().nullable().optional(),
@@ -386,9 +351,9 @@ export async function PUT(request: Request) {
         estate: z.string().nullable().optional(),
         coffee_type: z.string().nullable().optional(),
         bag_type: z.string().nullable().optional(),
-        bags_sold: z.number().positive(),
-        kgs_sold: z.number().positive().optional(),
-        price_per_bag: z.number().positive(),
+        bags_sold: z.coerce.number().positive(),
+        kgs_sold: z.coerce.number().positive().optional(),
+        price_per_bag: z.coerce.number().positive(),
         buyer_name: z.string().nullable().optional(),
         bank_account: z.string().nullable().optional(),
         notes: z.string().nullable().optional(),
@@ -399,6 +364,7 @@ export async function PUT(request: Request) {
     const bagsSold = Number(payload.bags_sold) || 0
     const kgsSold = resolveKgsSold(bagsSold, bagWeightKg, payload.kgs_sold)
     const computedRevenue = Number((bagsSold * payload.price_per_bag).toFixed(2))
+    const computedPricePerKg = resolvePricePerKg(computedRevenue, kgsSold)
     const locationInfo = await resolveLocationInfo(sql, tenantContext, {
       locationId: payload.locationId,
       estate: payload.estate,
@@ -424,6 +390,9 @@ export async function PUT(request: Request) {
         estate = ${resolvedEstate},
         coffee_type = ${payload.coffee_type || null},
         bag_type = ${payload.bag_type || null},
+        weight_kgs = ${kgsSold},
+        price_per_kg = ${computedPricePerKg},
+        total_revenue = ${computedRevenue},
         buyer_name = ${payload.buyer_name || null},
         bags_sent = ${bagsSold},
         kgs = ${kgsSold},
@@ -440,6 +409,13 @@ export async function PUT(request: Request) {
       RETURNING *
     `,
     )
+
+    if (!Array.isArray(result) || result.length === 0) {
+      return NextResponse.json(
+        { success: false, error: "Sales record not found for this tenant." },
+        { status: 404 },
+      )
+    }
 
     await logAuditEvent(sql, sessionUser, {
       action: "update",

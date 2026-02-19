@@ -153,19 +153,21 @@ Run these scripts (in order) on the target database:
 1. `20-tenant-schema.sql`
 2. `25-tenant-settings.sql` (bag weight per estate)
 3. `46-ui-preferences.sql` (optional, dashboard UI preferences like hiding empty metrics)
-4. `23-normalize-processing.sql`
-5. `32-normalize-dispatch-sales.sql` (adds `location_id` to dispatch + sales and backfills from estate labels)
-6. `26-lot-traceability.sql` (lot IDs for processing, dispatch, sales)
-7. `27-quality-metrics.sql` (moisture + quality fields on processing records)
-8. `28-audit-logs.sql` (audit trail table)
-9. `21-tenant-constraints.sql`
-10. `24-location-aware-inventory-accounts.sql` (optional, if you want inventory + accounts per location)
-11. `39-inventory-location-indexes.sql` (optional, enables location-aware inventory without backfilling legacy rows)
-12. `29-backfill-tenant-ids.sql` (set tenant_id on legacy rows before enabling RLS)
-13. `47-receivables.sql` (optional, add receivables tracking before enabling RLS)
-14. `22-enable-rls.sql` (enable row-level security after data is in place)
-15. `30-lock-legacy-tables.sql` (optional, prevent writes to deprecated legacy tables)
-16. `31-drop-legacy-tables.sql` (optional, permanently remove legacy tables after verification)
+4. `48-tenant-variants.sql` (optional, tenant UI variant + feature flags)
+5. `23-normalize-processing.sql`
+6. `32-normalize-dispatch-sales.sql` (adds `location_id` to dispatch + sales and backfills from estate labels)
+7. `26-lot-traceability.sql` (lot IDs for processing, dispatch, sales)
+8. `27-quality-metrics.sql` (moisture + quality fields on processing records)
+9. `28-audit-logs.sql` (audit trail table)
+10. `21-tenant-constraints.sql`
+11. `24-location-aware-inventory-accounts.sql` (optional, if you want inventory + accounts per location)
+12. `39-inventory-location-indexes.sql` (optional, enables location-aware inventory without backfilling legacy rows)
+13. `29-backfill-tenant-ids.sql` (set tenant_id on legacy rows before enabling RLS)
+14. `47-receivables.sql` (optional, add receivables tracking before enabling RLS)
+15. `22-enable-rls.sql` (enable row-level security after data is in place)
+16. `30-lock-legacy-tables.sql` (optional, prevent writes to deprecated legacy tables)
+17. `31-drop-legacy-tables.sql` (optional, permanently remove legacy tables after verification)
+18. `49-password-rotation.sql` (optional, required for forced password rotation after admin resets)
 
 New tables:
 - `locations`

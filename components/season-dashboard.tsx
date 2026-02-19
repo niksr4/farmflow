@@ -134,6 +134,35 @@ type SeasonSummary = {
     cashIn: number
     cashOut: number
     net: number
+    receivablesOutstanding?: number
+  }
+  moduleKpis?: {
+    receivables?: {
+      totalInvoiced: number
+      totalOutstanding: number
+      totalOverdue: number
+      totalPaid: number
+      totalCount: number
+    }
+    curing?: {
+      totalRecords: number
+      totalOutputKg: number
+      totalLossKg: number
+      avgDryingDays: number
+      avgMoistureDrop: number
+    }
+    quality?: {
+      totalRecords: number
+      avgCupScore: number
+      avgOutturnPct: number
+      avgDefects: number
+      avgMoisturePct: number
+    }
+    journal?: {
+      totalEntries: number
+      irrigationEntries: number
+      activeLocations: number
+    }
   }
   loss: {
     lossKgs: number
@@ -236,6 +265,14 @@ const formatCurrencyWithDecimals = (value: number, digits = 2) =>
     minimumFractionDigits: digits,
     maximumFractionDigits: digits,
   }).format(value || 0)
+
+const formatSignedCurrencyWithDecimals = (value: number, digits = 2) => {
+  const abs = Math.abs(value || 0)
+  const formatted = formatCurrencyWithDecimals(abs, digits)
+  if (value > 0) return `+${formatted}`
+  if (value < 0) return `-${formatted}`
+  return formatted
+}
 
 const getAlertTone = (severity: SeasonAlert["severity"]) => {
   if (severity === "high") return "destructive"
@@ -492,9 +529,64 @@ export default function SeasonDashboard() {
   const arabicaYield = yieldByType.find((item) => item.coffeeType.toLowerCase().includes("arabica"))
   const robustaYield = yieldByType.find((item) => item.coffeeType.toLowerCase().includes("robusta"))
   const processingKpis = summary?.processingKpis
+  const moduleKpis = summary?.moduleKpis
+  const receivablesOutstanding = summary?.cash.receivablesOutstanding || moduleKpis?.receivables?.totalOutstanding || 0
   const benchmarkData = weeklyExceptions?.benchmarks
   const sparklineData = weeklyExceptions?.sparklines
   const locationComparisons = weeklyExceptions?.locationComparisons || []
+  const soldKgs = summary?.totals.soldKgs || 0
+  const hasMarketSignal = soldKgs > 0.1
+  const realizedPricePerKg = summary?.loss.avgPricePerKg || 0
+  const breakEvenBasis: "sold" | "received" | "processed" | "none" = summary
+    ? summary.totals.soldKgs > 0.1
+      ? "sold"
+      : summary.totals.receivedKgs > 0.1
+        ? "received"
+        : summary.totals.processedKgs > 0.1
+          ? "processed"
+          : "none"
+    : "none"
+  const breakEvenPricePerKg =
+    breakEvenBasis === "sold"
+      ? summary?.unitCosts.costPerSoldKg || 0
+      : breakEvenBasis === "received"
+        ? summary?.unitCosts.costPerReceivedKg || 0
+        : breakEvenBasis === "processed"
+          ? summary?.unitCosts.costPerProcessedKg || 0
+          : 0
+  const breakEvenBasisLabel =
+    breakEvenBasis === "sold"
+      ? "Based on cost / sold KG"
+      : breakEvenBasis === "received"
+        ? "Based on cost / received KG"
+        : breakEvenBasis === "processed"
+          ? "Based on cost / processed KG"
+          : "No break-even basis yet"
+  const hasBreakEvenSignal = breakEvenPricePerKg > 0.1
+  const marginPerKg = hasMarketSignal && hasBreakEvenSignal ? realizedPricePerKg - breakEvenPricePerKg : 0
+  const marginPctOfPrice =
+    hasMarketSignal && realizedPricePerKg > 0 ? marginPerKg / realizedPricePerKg : 0
+  const coverageRatio =
+    hasMarketSignal && hasBreakEvenSignal ? realizedPricePerKg / breakEvenPricePerKg : null
+  const recommendedOfferFloorPerKg = hasBreakEvenSignal ? breakEvenPricePerKg * 1.08 : 0
+  const marketTrendDeltaPct =
+    benchmarkData && benchmarkData.lastWeek.avgPricePerKg > 0
+      ? ((benchmarkData.thisWeek.avgPricePerKg - benchmarkData.lastWeek.avgPricePerKg) /
+          Math.abs(benchmarkData.lastWeek.avgPricePerKg)) *
+        100
+      : null
+  const priceVolatilityPct = useMemo(() => {
+    const series = (sparklineData?.avgPricePerKg || []).filter((value) => Number.isFinite(value))
+    if (!series.length) return 0
+    const mean = series.reduce((sum, value) => sum + value, 0) / series.length
+    if (!Number.isFinite(mean) || mean <= 0) return 0
+    const variance =
+      series.reduce((sum, value) => {
+        const diff = value - mean
+        return sum + diff * diff
+      }, 0) / series.length
+    return Math.sqrt(Math.max(0, variance)) / mean
+  }, [sparklineData?.avgPricePerKg])
 
   type KpiTrendMap = {
     yieldRatio?: { label: string; current: number; prior: number }
@@ -1148,6 +1240,131 @@ export default function SeasonDashboard() {
             </CardContent>
           </Card>
 
+          <Card>
+            <CardHeader>
+              <CardTitle>Market Intelligence & Break-even</CardTitle>
+              <CardDescription>
+                Track realised selling price against your operating cost floor before negotiating buyer rates.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+                <div className="rounded-xl border border-slate-200/70 bg-white/70 p-3">
+                  <div className="text-xs text-muted-foreground">Realised avg price / KG</div>
+                  <div className="text-lg font-semibold">{formatCurrencyWithDecimals(realizedPricePerKg)}</div>
+                </div>
+                <div className="rounded-xl border border-slate-200/70 bg-white/70 p-3">
+                  <div className="text-xs text-muted-foreground">Break-even price / KG</div>
+                  <div className="text-lg font-semibold">{formatCurrencyWithDecimals(breakEvenPricePerKg)}</div>
+                  <div className="text-xs text-muted-foreground">{breakEvenBasisLabel}</div>
+                </div>
+                <div className="rounded-xl border border-slate-200/70 bg-white/70 p-3">
+                  <div className="text-xs text-muted-foreground">Margin / KG</div>
+                  <div
+                    className={`text-lg font-semibold ${
+                      !hasMarketSignal || !hasBreakEvenSignal
+                        ? "text-foreground"
+                        : marginPerKg >= 0
+                          ? "text-emerald-700"
+                          : "text-rose-700"
+                    }`}
+                  >
+                    {hasMarketSignal && hasBreakEvenSignal ? formatSignedCurrencyWithDecimals(marginPerKg) : "—"}
+                  </div>
+                  <div className="text-xs text-muted-foreground">
+                    {hasMarketSignal && hasBreakEvenSignal
+                      ? `${formatNumber(marginPctOfPrice * 100, 1)}% of realised price`
+                      : "Need sales + cost basis to estimate"}
+                  </div>
+                </div>
+                <div className="rounded-xl border border-slate-200/70 bg-white/70 p-3">
+                  <div className="text-xs text-muted-foreground">Cost coverage ratio</div>
+                  <div
+                    className={`text-lg font-semibold ${
+                      coverageRatio === null ? "text-foreground" : coverageRatio >= 1 ? "text-emerald-700" : "text-rose-700"
+                    }`}
+                  >
+                    {coverageRatio === null ? "—" : `${formatNumber(coverageRatio, 2)}x`}
+                  </div>
+                  <div className="text-xs text-muted-foreground">Realised price ÷ break-even</div>
+                </div>
+              </div>
+
+              <div className="grid gap-3 md:grid-cols-2">
+                <div className="rounded-xl border border-slate-200/70 bg-white/70 p-3 text-sm">
+                  <div className="font-medium text-foreground">Commercial signal</div>
+                  <div className="mt-1 text-muted-foreground">
+                    {!hasMarketSignal
+                      ? "No sold KG yet in this fiscal period, so market signals are still forming."
+                      : !hasBreakEvenSignal
+                        ? "Insufficient cost basis to compute break-even; add more operating records."
+                      : (coverageRatio ?? 0) >= 1.1
+                        ? "Current pricing is comfortably above break-even."
+                        : (coverageRatio ?? 0) >= 1
+                          ? "Pricing is above break-even but with a thin buffer."
+                          : "Pricing is below break-even; review contracts or cost controls."}
+                  </div>
+                  <div className="mt-2 text-xs text-muted-foreground">
+                    {hasBreakEvenSignal
+                      ? `Suggested minimum offer floor: ${formatCurrencyWithDecimals(recommendedOfferFloorPerKg)} / KG`
+                      : "Suggested minimum offer floor will appear once cost basis is available."}
+                  </div>
+                </div>
+                <div className="rounded-xl border border-slate-200/70 bg-white/70 p-3 text-sm">
+                  <div className="font-medium text-foreground">Market movement (weekly)</div>
+                  <div className="mt-1 text-muted-foreground">
+                    {marketTrendDeltaPct === null
+                      ? "Not enough weekly price baseline yet."
+                      : `Avg price is ${marketTrendDeltaPct >= 0 ? "up" : "down"} ${formatNumber(Math.abs(marketTrendDeltaPct), 1)}% vs last week.`}
+                  </div>
+                  <div className="mt-2 text-xs text-muted-foreground">
+                    Price volatility index: {formatNumber(priceVolatilityPct * 100, 1)}%
+                  </div>
+                </div>
+              </div>
+
+              {summary.priceByProcess && summary.priceByProcess.length > 0 && (
+                <div className="rounded-md border border-slate-200/70">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Process</TableHead>
+                        <TableHead className="text-right">Avg Price / KG</TableHead>
+                        <TableHead className="text-right">Margin / KG</TableHead>
+                        <TableHead className="text-right">Revenue</TableHead>
+                        <TableHead className="text-right">Sold KGs</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {summary.priceByProcess.map((row) => {
+                        const processMargin = hasBreakEvenSignal ? row.avgPricePerKg - breakEvenPricePerKg : null
+                        return (
+                          <TableRow key={row.bagType}>
+                            <TableCell className="font-medium">{row.bagType}</TableCell>
+                            <TableCell className="text-right">{formatCurrencyWithDecimals(row.avgPricePerKg)}</TableCell>
+                            <TableCell
+                              className={`text-right ${
+                                processMargin === null
+                                  ? ""
+                                  : processMargin >= 0
+                                    ? "text-emerald-700"
+                                    : "text-rose-700"
+                              }`}
+                            >
+                              {processMargin === null ? "—" : formatSignedCurrencyWithDecimals(processMargin)}
+                            </TableCell>
+                            <TableCell className="text-right">{formatCurrency(row.revenue)}</TableCell>
+                            <TableCell className="text-right">{formatNumber(row.soldKgs)}</TableCell>
+                          </TableRow>
+                        )
+                      })}
+                    </TableBody>
+                  </Table>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
           <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
             <Card>
               <CardHeader className="pb-2">
@@ -1218,7 +1435,12 @@ export default function SeasonDashboard() {
               <CardContent className="text-xs text-muted-foreground space-y-1">
                 <div>Cash in: {formatCurrency(summary.cash.cashIn)}</div>
                 <div>Cash out: {formatCurrency(summary.cash.cashOut)}</div>
-                <div>Receivables: Not tracked yet</div>
+                <div>Receivables outstanding: {formatCurrency(receivablesOutstanding)}</div>
+                {moduleKpis?.receivables && (
+                  <div>
+                    Overdue receivables: {formatCurrency(moduleKpis.receivables.totalOverdue)}
+                  </div>
+                )}
               </CardContent>
             </Card>
             <Card>
@@ -1251,6 +1473,54 @@ export default function SeasonDashboard() {
               </CardContent>
             </Card>
           </div>
+
+          {(moduleKpis?.curing || moduleKpis?.quality || moduleKpis?.journal || moduleKpis?.receivables) && (
+            <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+              <Card className="border-indigo-200/70">
+                <CardHeader className="pb-2">
+                  <CardDescription>Curing KPIs</CardDescription>
+                  <CardTitle className="text-xl">{formatNumber(moduleKpis?.curing?.totalOutputKg || 0)} KGs</CardTitle>
+                </CardHeader>
+                <CardContent className="text-xs text-muted-foreground space-y-1">
+                  <div>Records: {formatNumber(moduleKpis?.curing?.totalRecords || 0, 0)}</div>
+                  <div>Avg drying days: {formatNumber(moduleKpis?.curing?.avgDryingDays || 0, 1)}</div>
+                  <div>Avg moisture drop: {formatNumber(moduleKpis?.curing?.avgMoistureDrop || 0, 1)}%</div>
+                </CardContent>
+              </Card>
+              <Card className="border-violet-200/70">
+                <CardHeader className="pb-2">
+                  <CardDescription>Quality KPIs</CardDescription>
+                  <CardTitle className="text-xl">{formatNumber(moduleKpis?.quality?.avgCupScore || 0, 1)}</CardTitle>
+                </CardHeader>
+                <CardContent className="text-xs text-muted-foreground space-y-1">
+                  <div>Grading records: {formatNumber(moduleKpis?.quality?.totalRecords || 0, 0)}</div>
+                  <div>Avg outturn: {formatNumber(moduleKpis?.quality?.avgOutturnPct || 0, 1)}%</div>
+                  <div>Avg defects: {formatNumber(moduleKpis?.quality?.avgDefects || 0, 1)}</div>
+                </CardContent>
+              </Card>
+              <Card className="border-teal-200/70">
+                <CardHeader className="pb-2">
+                  <CardDescription>Journal Coverage</CardDescription>
+                  <CardTitle className="text-xl">{formatNumber(moduleKpis?.journal?.totalEntries || 0, 0)} entries</CardTitle>
+                </CardHeader>
+                <CardContent className="text-xs text-muted-foreground space-y-1">
+                  <div>Irrigation logs: {formatNumber(moduleKpis?.journal?.irrigationEntries || 0, 0)}</div>
+                  <div>Active locations: {formatNumber(moduleKpis?.journal?.activeLocations || 0, 0)}</div>
+                </CardContent>
+              </Card>
+              <Card className="border-amber-200/70">
+                <CardHeader className="pb-2">
+                  <CardDescription>Receivables</CardDescription>
+                  <CardTitle className="text-xl">{formatCurrency(moduleKpis?.receivables?.totalOutstanding || 0)}</CardTitle>
+                </CardHeader>
+                <CardContent className="text-xs text-muted-foreground space-y-1">
+                  <div>Invoiced (FY): {formatCurrency(moduleKpis?.receivables?.totalInvoiced || 0)}</div>
+                  <div>Overdue: {formatCurrency(moduleKpis?.receivables?.totalOverdue || 0)}</div>
+                  <div>Invoices: {formatNumber(moduleKpis?.receivables?.totalCount || 0, 0)}</div>
+                </CardContent>
+              </Card>
+            </div>
+          )}
 
           {summary.valueKpis && (
             <div className="grid gap-4 md:grid-cols-3">
@@ -1320,39 +1590,6 @@ export default function SeasonDashboard() {
                           <TableCell className="text-right">
                             {formatCurrencyWithDecimals(row.avgPricePerKg)}
                           </TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                </div>
-              </CardContent>
-            </Card>
-          )}
-
-          {summary.priceByProcess && summary.priceByProcess.length > 0 && (
-            <Card>
-              <CardHeader>
-                <CardTitle>Price by Process Type</CardTitle>
-                <CardDescription>Average realised price per KG for dry parchment vs dry cherry.</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="rounded-md border">
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Process</TableHead>
-                        <TableHead className="text-right">Sold KGs</TableHead>
-                        <TableHead className="text-right">Revenue</TableHead>
-                        <TableHead className="text-right">Avg Price / KG</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {summary.priceByProcess.map((row) => (
-                        <TableRow key={row.bagType}>
-                          <TableCell className="font-medium">{row.bagType}</TableCell>
-                          <TableCell className="text-right">{formatNumber(row.soldKgs)}</TableCell>
-                          <TableCell className="text-right">{formatCurrency(row.revenue)}</TableCell>
-                          <TableCell className="text-right">{formatCurrencyWithDecimals(row.avgPricePerKg)}</TableCell>
                         </TableRow>
                       ))}
                     </TableBody>

@@ -16,14 +16,17 @@ const updateSchema = z.object({
   notes: z.string().optional().nullable(),
 })
 
-export async function GET(_: Request, context: { params: { id: string } }) {
+type RouteContext = { params: Promise<{ id: string }> }
+
+export async function GET(_: Request, context: RouteContext) {
   try {
     const sessionUser = await requireModuleAccess("billing")
     if (!sql) {
       return NextResponse.json({ success: false, error: "Database not configured" }, { status: 500 })
     }
 
-    const invoiceId = String(context.params.id)
+    const { id } = await context.params
+    const invoiceId = String(id)
     const tenantContext = normalizeTenantContext(sessionUser.tenantId, sessionUser.role)
 
     const invoiceRows = await runTenantQuery(
@@ -59,7 +62,7 @@ export async function GET(_: Request, context: { params: { id: string } }) {
   }
 }
 
-export async function PATCH(request: Request, context: { params: { id: string } }) {
+export async function PATCH(request: Request, context: RouteContext) {
   try {
     const sessionUser = await requireModuleAccess("billing")
     if (!sql) {
@@ -70,7 +73,8 @@ export async function PATCH(request: Request, context: { params: { id: string } 
       return NextResponse.json({ success: false, error: "Insufficient permissions" }, { status: 403 })
     }
 
-    const invoiceId = String(context.params.id)
+    const { id } = await context.params
+    const invoiceId = String(id)
     const payload = updateSchema.parse(await request.json())
     const tenantContext = normalizeTenantContext(sessionUser.tenantId, sessionUser.role)
 

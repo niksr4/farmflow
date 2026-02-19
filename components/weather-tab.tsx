@@ -1,12 +1,12 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef } from "react"
 import Image from "next/image"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Wind, Droplets, Thermometer, AlertTriangle, Cloudy } from "lucide-react"
+import { Wind, Droplets, Thermometer, AlertTriangle, Cloudy, Loader2 } from "lucide-react"
 import { formatDateOnly } from "@/lib/date-utils"
 
 // Type definitions for the WeatherAPI.com response
@@ -43,28 +43,49 @@ interface WeatherApiData {
   }
 }
 
+type WeatherRegion = {
+  id: string
+  label: string
+  query: string
+}
+
+// Use fixed coordinates for ambiguous place names that WeatherAPI resolves incorrectly.
+const WEATHER_REGIONS: WeatherRegion[] = [
+  { id: "kodagu", label: "Kodagu (Coorg)", query: "12.4244,75.7382" },
+  { id: "chikmagalur", label: "Chikmagalur", query: "13.3153,75.7754" },
+  { id: "wayanad", label: "Wayanad", query: "11.6854,76.1320" },
+  { id: "idukki", label: "Idukki", query: "9.8499,76.9730" },
+  { id: "nilgiris", label: "Nilgiris", query: "11.4064,76.6932" },
+  { id: "araku", label: "Araku", query: "18.3270,82.8772" },
+  { id: "bababudangiri", label: "Bababudangiri", query: "13.3902,75.7215" },
+]
+
 export default function WeatherTab() {
   const [weatherData, setWeatherData] = useState<WeatherApiData | null>(null)
   const [loading, setLoading] = useState(true)
+  const [isRefreshing, setIsRefreshing] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const regions = [
-    { label: "Kodagu (Coorg)", query: "Kodagu, India" },
-    { label: "Chikmagalur", query: "Chikmagalur, India" },
-    { label: "Wayanad", query: "Wayanad, India" },
-    { label: "Idukki", query: "Idukki, India" },
-    { label: "Nilgiris", query: "Nilgiris, India" },
-    { label: "Araku", query: "Araku, India" },
-    { label: "Bababudangiri", query: "Bababudangiri, India" },
-  ]
-  const [selectedRegion, setSelectedRegion] = useState(regions[0]?.query ?? "Kodagu, India")
-  const selectedRegionLabel = regions.find((region) => region.query === selectedRegion)?.label ?? selectedRegion
+  const [selectedRegionId, setSelectedRegionId] = useState(WEATHER_REGIONS[0]?.id ?? "kodagu")
+  const hasLoadedOnceRef = useRef(false)
+  const selectedRegion = WEATHER_REGIONS.find((region) => region.id === selectedRegionId) ?? WEATHER_REGIONS[0]
+  const selectedRegionLabel = selectedRegion?.label ?? "Kodagu (Coorg)"
+  const selectedRegionQuery = selectedRegion?.query ?? WEATHER_REGIONS[0].query
 
   useEffect(() => {
+    const controller = new AbortController()
+
     const fetchWeather = async () => {
       try {
-        setLoading(true)
+        if (hasLoadedOnceRef.current) {
+          setIsRefreshing(true)
+        } else {
+          setLoading(true)
+        }
         setError(null)
-        const response = await fetch(`/api/weather?region=${encodeURIComponent(selectedRegion)}`)
+        const response = await fetch(`/api/weather?region=${encodeURIComponent(selectedRegionQuery)}`, {
+          signal: controller.signal,
+          cache: "no-store",
+        })
         const data = await response.json()
 
         if (!response.ok) {
@@ -72,7 +93,9 @@ export default function WeatherTab() {
         }
 
         setWeatherData(data)
+        hasLoadedOnceRef.current = true
       } catch (err) {
+        if (err instanceof DOMException && err.name === "AbortError") return
         if (err instanceof Error) {
           setError(err.message)
         } else {
@@ -80,11 +103,13 @@ export default function WeatherTab() {
         }
       } finally {
         setLoading(false)
+        setIsRefreshing(false)
       }
     }
 
     fetchWeather()
-  }, [selectedRegion])
+    return () => controller.abort()
+  }, [selectedRegionQuery])
 
   if (loading) {
     return <WeatherSkeleton />
@@ -139,6 +164,7 @@ export default function WeatherTab() {
 
   const { location, current, forecast } = weatherData
   const locationLabel = [location.name, location.region, location.country].filter(Boolean).join(", ")
+  const hasProviderMismatch = Boolean(location.country) && String(location.country || "").toLowerCase() !== "india"
 
   return (
     <div className="space-y-6">
@@ -146,28 +172,44 @@ export default function WeatherTab() {
         <CardHeader>
           <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
             <div>
-              <CardTitle>Current Weather in {locationLabel || selectedRegionLabel}</CardTitle>
+              <CardTitle>Current Weather in {selectedRegionLabel}</CardTitle>
               <CardDescription>
+                {locationLabel ? `Provider location: ${locationLabel} · ` : ""}
                 Last updated: {new Date(location.localtime_epoch * 1000).toLocaleTimeString("en-IN")}
               </CardDescription>
             </div>
             <div className="w-full sm:w-[220px]">
-              <Select value={selectedRegion} onValueChange={setSelectedRegion}>
+              <Select value={selectedRegionId} onValueChange={setSelectedRegionId}>
                 <SelectTrigger>
                   <SelectValue placeholder="Select region" />
                 </SelectTrigger>
                 <SelectContent>
-                  {regions.map((region) => (
-                    <SelectItem key={region.query} value={region.query}>
+                  {WEATHER_REGIONS.map((region) => (
+                    <SelectItem key={region.id} value={region.id}>
                       {region.label}
                     </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
+              {isRefreshing && (
+                <p className="mt-2 flex items-center gap-1 text-xs text-muted-foreground">
+                  <Loader2 className="h-3 w-3 animate-spin" />
+                  Updating weather for {selectedRegionLabel}...
+                </p>
+              )}
             </div>
           </div>
         </CardHeader>
         <CardContent className="grid gap-6 md:grid-cols-2">
+          {hasProviderMismatch && (
+            <Alert className="md:col-span-2 border-amber-200 bg-amber-50 text-amber-900">
+              <AlertTriangle className="h-4 w-4 text-amber-700" />
+              <AlertTitle>Provider location mismatch</AlertTitle>
+              <AlertDescription>
+                Selected region is {selectedRegionLabel}, but provider resolved to {locationLabel}. Data may be inaccurate for this estate.
+              </AlertDescription>
+            </Alert>
+          )}
           <div className="flex items-center space-x-6">
             <Image
               src={`https:${current.condition.icon}`}
@@ -205,7 +247,7 @@ export default function WeatherTab() {
       <Card>
         <CardHeader>
           <CardTitle>{forecast.forecastday.length}-Day Forecast</CardTitle>
-          <CardDescription>Weather forecast for the upcoming week in {locationLabel || selectedRegionLabel}.</CardDescription>
+          <CardDescription>Weather forecast for the upcoming week in {selectedRegionLabel}.</CardDescription>
         </CardHeader>
         <CardContent>
           <div className="space-y-4">

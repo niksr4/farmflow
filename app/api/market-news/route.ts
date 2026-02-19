@@ -1,15 +1,24 @@
 import { type NextRequest, NextResponse } from "next/server"
-import { requireModuleAccess, isModuleAccessError } from "@/lib/module-access"
+import { requireModuleAccess, isModuleAccessError } from "@/lib/server/module-access"
+import { buildRateLimitHeaders, checkRateLimit } from "@/lib/rate-limit"
 
 export const dynamic = "force-dynamic"
 
 export async function GET(request: NextRequest) {
+  let rateHeaders: HeadersInit | undefined
+
   try {
-    await requireModuleAccess("news")
+    const sessionUser = await requireModuleAccess("news")
+    const rateLimit = await checkRateLimit("news", sessionUser.tenantId)
+    rateHeaders = buildRateLimitHeaders(rateLimit)
+    if (!rateLimit.success) {
+      return NextResponse.json({ error: "Rate limit exceeded" }, { status: 429, headers: rateHeaders })
+    }
   } catch (error) {
     if (isModuleAccessError(error)) {
       return NextResponse.json({ error: "Module access disabled" }, { status: 403 })
     }
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
   }
   const weatherApiKey = process.env.WEATHERAPI_API_KEY
   const newsApiKey = process.env.NEWS_API_KEY // New API key for news
@@ -88,5 +97,5 @@ export async function GET(request: NextRequest) {
   return NextResponse.json({
     brazilWeather: formattedWeather,
     marketNews: marketNews,
-  })
+  }, rateHeaders ? { headers: rateHeaders } : undefined)
 }

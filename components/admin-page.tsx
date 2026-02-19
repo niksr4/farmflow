@@ -10,6 +10,14 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { useToast } from "@/hooks/use-toast"
 import { useAuth } from "@/hooks/use-auth"
 import { MODULES, MODULE_BUNDLES, type ModuleBundle } from "@/lib/modules"
+import {
+  DEFAULT_TENANT_FEATURE_FLAGS,
+  DEFAULT_TENANT_UI_VARIANT,
+  TENANT_FEATURE_FLAG_DEFINITIONS,
+  TENANT_UI_VARIANTS,
+  type TenantFeatureFlags,
+  type TenantUiVariant,
+} from "@/lib/tenant-experience"
 import { formatDateForDisplay, formatDateOnly } from "@/lib/date-utils"
 import { formatCurrency } from "@/lib/format"
 import { roleLabel } from "@/lib/roles"
@@ -71,6 +79,11 @@ interface WeeklySummaryResponse {
   compareSummary: WeeklySummary | null
   range: WeeklySummaryRange | null
   compareRange: WeeklySummaryRange | null
+}
+
+interface TenantProfile {
+  uiVariant: TenantUiVariant
+  featureFlags: TenantFeatureFlags
 }
 
 const AUDIT_ENTITY_TYPES = [
@@ -176,6 +189,7 @@ export default function AdminPage() {
 
   const [tenants, setTenants] = useState<Tenant[]>([])
   const [selectedTenantId, setSelectedTenantId] = useState<string>("")
+  const [previewRole, setPreviewRole] = useState<"admin" | "user">("admin")
   const [newTenantName, setNewTenantName] = useState("")
 
   const [users, setUsers] = useState<User[]>([])
@@ -184,10 +198,17 @@ export default function AdminPage() {
   const [newRole, setNewRole] = useState("user")
 
   const [modulePermissions, setModulePermissions] = useState<ModulePermission[]>([])
+  const [tenantProfileDraft, setTenantProfileDraft] = useState<TenantProfile>({
+    uiVariant: DEFAULT_TENANT_UI_VARIANT,
+    featureFlags: DEFAULT_TENANT_FEATURE_FLAGS,
+  })
+  const [isTenantProfileLoading, setIsTenantProfileLoading] = useState(false)
+  const [isSavingTenantProfile, setIsSavingTenantProfile] = useState(false)
   const [isSeeding, setIsSeeding] = useState(false)
   const [userRoleDrafts, setUserRoleDrafts] = useState<Record<string, string>>({})
   const [isUpdatingUserId, setIsUpdatingUserId] = useState<string | null>(null)
   const [isDeletingUserId, setIsDeletingUserId] = useState<string | null>(null)
+  const [isResettingPasswordUserId, setIsResettingPasswordUserId] = useState<string | null>(null)
   const [isDeletingTenantId, setIsDeletingTenantId] = useState<string | null>(null)
   const [selectedUserId, setSelectedUserId] = useState("")
   const [userModulePermissions, setUserModulePermissions] = useState<ModulePermission[]>([])
@@ -211,6 +232,17 @@ export default function AdminPage() {
     () => tenants.find((tenant) => tenant.id === selectedTenantId) || null,
     [tenants, selectedTenantId],
   )
+  const tenantPreviewUrl = useMemo(() => {
+    if (!selectedTenantId) return "/dashboard"
+    const params = new URLSearchParams({
+      previewTenantId: selectedTenantId,
+      previewRole,
+    })
+    if (selectedTenant?.name) {
+      params.set("previewTenantName", selectedTenant.name)
+    }
+    return `/dashboard?${params.toString()}`
+  }, [previewRole, selectedTenant?.name, selectedTenantId])
   const enabledModuleLabels = useMemo(
     () => modulePermissions.filter((module) => module.enabled).map((module) => module.label),
     [modulePermissions],
@@ -267,6 +299,29 @@ export default function AdminPage() {
       setModulePermissions(data.modules || [])
     } catch (error: any) {
       toast({ title: "Error", description: error.message || "Failed to load tenant modules", variant: "destructive" })
+    }
+  }, [toast])
+
+  const loadTenantProfile = useCallback(async (tenantId: string) => {
+    setIsTenantProfileLoading(true)
+    try {
+      const response = await fetch(`/api/admin/tenant-profile?tenantId=${tenantId}`)
+      const data = await response.json()
+      if (!response.ok || !data.success) {
+        throw new Error(data.error || "Failed to load tenant profile")
+      }
+      setTenantProfileDraft({
+        uiVariant: (data.profile?.uiVariant || DEFAULT_TENANT_UI_VARIANT) as TenantUiVariant,
+        featureFlags: { ...DEFAULT_TENANT_FEATURE_FLAGS, ...(data.profile?.featureFlags || {}) },
+      })
+    } catch (error: any) {
+      toast({ title: "Error", description: error.message || "Failed to load tenant profile", variant: "destructive" })
+      setTenantProfileDraft({
+        uiVariant: DEFAULT_TENANT_UI_VARIANT,
+        featureFlags: DEFAULT_TENANT_FEATURE_FLAGS,
+      })
+    } finally {
+      setIsTenantProfileLoading(false)
     }
   }, [toast])
 
@@ -444,8 +499,11 @@ export default function AdminPage() {
       setSelectedUserId("")
       loadUsers(selectedTenantId)
       loadModules(selectedTenantId)
+      if (isOwner) {
+        loadTenantProfile(selectedTenantId)
+      }
     }
-  }, [selectedTenantId, loadModules, loadUsers])
+  }, [isOwner, selectedTenantId, loadModules, loadTenantProfile, loadUsers])
 
   useEffect(() => {
     if (selectedTenantId) {
@@ -652,6 +710,45 @@ export default function AdminPage() {
     }
   }
 
+  const handleSaveTenantProfile = async () => {
+    if (!isOwner) {
+      toast({ title: "Platform owner only", description: "Only platform owners can change tenant profile." })
+      return
+    }
+    if (!selectedTenantId) {
+      return
+    }
+
+    setIsSavingTenantProfile(true)
+    try {
+      const response = await fetch("/api/admin/tenant-profile", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          tenantId: selectedTenantId,
+          uiVariant: tenantProfileDraft.uiVariant,
+          featureFlags: tenantProfileDraft.featureFlags,
+        }),
+      })
+      const data = await response.json()
+      if (!response.ok || !data.success) {
+        throw new Error(data.error || "Failed to update tenant profile")
+      }
+      setTenantProfileDraft({
+        uiVariant: (data.profile?.uiVariant || DEFAULT_TENANT_UI_VARIANT) as TenantUiVariant,
+        featureFlags: { ...DEFAULT_TENANT_FEATURE_FLAGS, ...(data.profile?.featureFlags || {}) },
+      })
+      toast({
+        title: "Tenant profile saved",
+        description: "UI variant and feature flags updated for the selected tenant.",
+      })
+    } catch (error: any) {
+      toast({ title: "Error", description: error.message || "Failed to update tenant profile", variant: "destructive" })
+    } finally {
+      setIsSavingTenantProfile(false)
+    }
+  }
+
   const handleSaveUserModules = async () => {
     if (!selectedUserId) {
       return
@@ -731,6 +828,39 @@ export default function AdminPage() {
     }
   }
 
+  const handleResetUserPassword = async (user: User) => {
+    if (!window.confirm(`Reset password for ${user.username}? A temporary password will be generated.`)) {
+      return
+    }
+
+    setIsResettingPasswordUserId(user.id)
+    try {
+      const response = await fetch("/api/admin/users", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ userId: user.id }),
+      })
+      const data = await response.json()
+      if (!response.ok || !data.success) {
+        throw new Error(data.error || "Failed to reset password")
+      }
+
+      const tempPassword = String(data.temporaryPassword || "")
+      if (tempPassword) {
+        window.prompt(`Temporary password for ${user.username} (copy now):`, tempPassword)
+      }
+
+      toast({
+        title: "Password reset",
+        description: `${user.username} must rotate password at next login.`,
+      })
+    } catch (error: any) {
+      toast({ title: "Error", description: error.message || "Failed to reset password", variant: "destructive" })
+    } finally {
+      setIsResettingPasswordUserId(null)
+    }
+  }
+
   const handleResetUserModules = async () => {
     if (!selectedUserId) {
       return
@@ -756,24 +886,52 @@ export default function AdminPage() {
     if (!selectedTenantId) {
       return
     }
+    const confirmed = window.confirm(
+      "Reseed mock data for this tenant? Existing tenant transaction data will be replaced with fresh mock records.",
+    )
+    if (!confirmed) {
+      return
+    }
 
     setIsSeeding(true)
     try {
       const response = await fetch("/api/admin/seed-tenant", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ tenantId: selectedTenantId }),
+        body: JSON.stringify({ tenantId: selectedTenantId, resetExisting: true }),
       })
       const data = await response.json()
       if (!response.ok || !data.success) {
         throw new Error(data.error || "Failed to seed tenant data")
       }
-      toast({ title: "Mock data added", description: "Sample records are ready for this tenant." })
+      const seededCount =
+        Number(data?.counts?.inventoryTransactions || 0) +
+        Number(data?.counts?.laborTransactions || 0) +
+        Number(data?.counts?.expenseTransactions || 0) +
+        Number(data?.counts?.processingRecords || 0) +
+        Number(data?.counts?.dispatchRecords || 0) +
+        Number(data?.counts?.salesRecords || 0)
+      toast({
+        title: "Mock data reseeded",
+        description: `Sample records refreshed (${seededCount} core records + optional module data).`,
+      })
     } catch (error: any) {
       toast({ title: "Error", description: error.message || "Failed to seed tenant data", variant: "destructive" })
     } finally {
       setIsSeeding(false)
     }
+  }
+
+  const handleOpenTenantPreview = (openInNewTab = false) => {
+    if (!selectedTenantId) {
+      toast({ title: "Pick a tenant", description: "Select a tenant before opening preview." })
+      return
+    }
+    if (openInNewTab) {
+      window.open(tenantPreviewUrl, "_blank", "noopener,noreferrer")
+      return
+    }
+    window.location.assign(tenantPreviewUrl)
   }
 
   const weeklyPeriodDays = weeklySummaryRange?.totalDays || 7
@@ -803,11 +961,85 @@ export default function AdminPage() {
           expenseSpend: getDeltaMeta(weeklySummary.expenseSpend, weeklyCompareSummary.expenseSpend, true),
         }
       : null
+  const enabledModuleCount = modulePermissions.filter((module) => module.enabled).length
+  const ownerSectionLinks: Array<{ id: string; label: string }> = [
+    { id: "tenant-users", label: "Users" },
+    { id: "user-module-overrides", label: "User Access" },
+  ]
+  if (isOwner) {
+    ownerSectionLinks.unshift(
+      { id: "tenants", label: "Tenants" },
+      { id: "weekly-summary", label: "Weekly KPI" },
+      { id: "tenant-profile", label: "Profile" },
+      { id: "tenant-modules", label: "Modules" },
+      { id: "seed-data", label: "Seed Data" },
+      { id: "audit-log", label: "Audit" },
+    )
+  }
 
   return (
     <div className="space-y-6">
+      <Card
+        id="console-overview"
+        className="scroll-mt-24 border-emerald-200/80 bg-gradient-to-br from-emerald-50 via-white to-amber-50"
+      >
+        <CardHeader>
+          <CardTitle>{isOwner ? "Owner Console" : "Admin Console"}</CardTitle>
+          <CardDescription>
+            {isOwner
+              ? "Manage tenants, preview experiences, seed demo data, and control platform access."
+              : "Manage users and module access for your tenant."}
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
+            <div className="rounded-lg border border-emerald-100 bg-white/90 p-3">
+              <p className="text-xs uppercase tracking-wide text-emerald-700">Selected Tenant</p>
+              <p className="mt-1 text-sm font-semibold text-foreground">{selectedTenant?.name || "Not selected"}</p>
+            </div>
+            <div className="rounded-lg border border-emerald-100 bg-white/90 p-3">
+              <p className="text-xs uppercase tracking-wide text-emerald-700">Tenant ID</p>
+              <p className="mt-1 break-all font-mono text-xs text-foreground">{selectedTenantId || "Unavailable"}</p>
+            </div>
+            <div className="rounded-lg border border-emerald-100 bg-white/90 p-3">
+              <p className="text-xs uppercase tracking-wide text-emerald-700">Users Loaded</p>
+              <p className="mt-1 text-lg font-semibold text-foreground">{users.length}</p>
+            </div>
+            <div className="rounded-lg border border-emerald-100 bg-white/90 p-3">
+              <p className="text-xs uppercase tracking-wide text-emerald-700">Modules Enabled</p>
+              <p className="mt-1 text-lg font-semibold text-foreground">{enabledModuleCount}</p>
+            </div>
+            <div className="rounded-lg border border-emerald-100 bg-white/90 p-3">
+              <p className="text-xs uppercase tracking-wide text-emerald-700">{isOwner ? "Tenants" : "Audit Events"}</p>
+              <p className="mt-1 text-lg font-semibold text-foreground">{isOwner ? tenants.length : auditTotalCount}</p>
+            </div>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {ownerSectionLinks.map((section) => (
+              <a
+                key={section.id}
+                href={`#${section.id}`}
+                className="rounded-full border border-border/70 bg-white/90 px-3 py-1 text-xs text-foreground transition hover:border-emerald-200 hover:text-emerald-700"
+              >
+                {section.label}
+              </a>
+            ))}
+          </div>
+          {isOwner && selectedTenantId && (
+            <div className="flex flex-wrap gap-2">
+              <Button size="sm" onClick={() => handleOpenTenantPreview(false)}>
+                Preview as {previewRole === "admin" ? "Estate Admin" : "Estate User"}
+              </Button>
+              <Button size="sm" variant="outline" onClick={() => handleOpenTenantPreview(true)}>
+                Preview in new tab
+              </Button>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
       {isOwner && (
-        <Card className="border-border/70 bg-white/85">
+        <Card id="tenants" className="scroll-mt-24 border-border/70 bg-white/85">
           <CardHeader>
             <CardTitle>Tenants</CardTitle>
             <CardDescription>Create and manage estates/tenants.</CardDescription>
@@ -842,6 +1074,37 @@ export default function AdminPage() {
                   ))}
                 </SelectContent>
               </Select>
+            </div>
+
+            <div className="rounded-lg border border-emerald-100 bg-emerald-50/40 p-4 space-y-3">
+              <div>
+                <p className="text-sm font-medium text-emerald-900">Tenant Preview</p>
+                <p className="text-xs text-muted-foreground">
+                  Open dashboard in preview mode to see tabs as a tenant admin or user without logging out.
+                </p>
+              </div>
+              <div className="grid grid-cols-1 gap-3 md:grid-cols-[220px_1fr]">
+                <div className="space-y-2">
+                  <Label>Preview role</Label>
+                  <Select value={previewRole} onValueChange={(value) => setPreviewRole(value === "user" ? "user" : "admin")}>
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="admin">Estate Admin</SelectItem>
+                      <SelectItem value="user">Estate User</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="flex flex-wrap items-end gap-2">
+                  <Button onClick={() => handleOpenTenantPreview(false)} disabled={!selectedTenantId}>
+                    Open Dashboard Preview
+                  </Button>
+                  <Button variant="outline" className="bg-transparent" onClick={() => handleOpenTenantPreview(true)} disabled={!selectedTenantId}>
+                    Open in New Tab
+                  </Button>
+                </div>
+              </div>
             </div>
 
             <div className="rounded-lg border border-border/60 bg-white/80">
@@ -885,7 +1148,7 @@ export default function AdminPage() {
       )}
 
       {isOwner && (
-        <Card className="border-border/70 bg-white/85">
+        <Card id="weekly-summary" className="scroll-mt-24 border-border/70 bg-white/85">
           <CardHeader>
             <CardTitle>Weekly Summary</CardTitle>
             <CardDescription>Share a quick snapshot with owners or buyers.</CardDescription>
@@ -1039,7 +1302,86 @@ export default function AdminPage() {
       )}
 
       {isOwner && (
-        <Card className="border-border/70 bg-white/85">
+        <Card id="tenant-profile" className="scroll-mt-24 border-border/70 bg-white/85">
+          <CardHeader>
+            <CardTitle>Tenant Experience Profile</CardTitle>
+            <CardDescription>
+              Configure UI variant and feature flags for the selected tenant.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {!selectedTenantId ? (
+              <p className="text-sm text-muted-foreground">Select a tenant first.</p>
+            ) : (
+              <>
+                <div className="space-y-2">
+                  <Label>UI variant</Label>
+                  <Select
+                    value={tenantProfileDraft.uiVariant}
+                    onValueChange={(value) =>
+                      setTenantProfileDraft((prev) => ({
+                        ...prev,
+                        uiVariant: (value || DEFAULT_TENANT_UI_VARIANT) as TenantUiVariant,
+                      }))
+                    }
+                    disabled={isTenantProfileLoading}
+                  >
+                    <SelectTrigger className="w-full md:w-[320px]">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {TENANT_UI_VARIANTS.map((variant) => (
+                        <SelectItem key={variant.id} value={variant.id}>
+                          {variant.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <p className="text-xs text-muted-foreground">
+                    {TENANT_UI_VARIANTS.find((variant) => variant.id === tenantProfileDraft.uiVariant)?.description}
+                  </p>
+                </div>
+
+                <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+                  {TENANT_FEATURE_FLAG_DEFINITIONS.map((flag) => (
+                    <label
+                      key={flag.id}
+                      className="flex items-start gap-3 rounded-lg border border-border/60 bg-white/80 p-3"
+                    >
+                      <input
+                        type="checkbox"
+                        className="mt-1"
+                        checked={Boolean(tenantProfileDraft.featureFlags[flag.id])}
+                        disabled={isTenantProfileLoading}
+                        onChange={(event) =>
+                          setTenantProfileDraft((prev) => ({
+                            ...prev,
+                            featureFlags: {
+                              ...prev.featureFlags,
+                              [flag.id]: event.target.checked,
+                            },
+                          }))
+                        }
+                      />
+                      <div className="space-y-1">
+                        <p className="text-sm font-medium text-foreground">{flag.label}</p>
+                        <p className="text-xs text-muted-foreground">{flag.description}</p>
+                      </div>
+                    </label>
+                  ))}
+                </div>
+
+                <Button onClick={handleSaveTenantProfile} disabled={isTenantProfileLoading || isSavingTenantProfile}>
+                  {isSavingTenantProfile ? "Saving..." : isTenantProfileLoading ? "Loading..." : "Save Tenant Profile"}
+                </Button>
+              </>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
+      {isOwner && (
+        <Card id="tenant-modules" className="scroll-mt-24 border-border/70 bg-white/85">
           <CardHeader>
             <CardTitle>Tenant Modules</CardTitle>
             <CardDescription>Control which modules are available to users in this tenant.</CardDescription>
@@ -1103,23 +1445,25 @@ export default function AdminPage() {
       )}
 
       {isOwner && (
-        <Card className="border-border/70 bg-white/85">
+        <Card id="seed-data" className="scroll-mt-24 border-border/70 bg-white/85">
           <CardHeader>
             <CardTitle>Seed Tenant Data</CardTitle>
-            <CardDescription>Generate mock inventory, accounts, processing, dispatch, and sales records.</CardDescription>
+            <CardDescription>
+              Generate mock inventory, accounts, processing, dispatch, sales, curing, quality, receivables, and billing records.
+            </CardDescription>
           </CardHeader>
           <CardContent className="space-y-3">
             <Button onClick={handleSeedMockData} disabled={!selectedTenantId || isSeeding}>
               {isSeeding ? "Seeding..." : "Seed Mock Data"}
             </Button>
             <p className="text-sm text-muted-foreground">
-              Use this for demo tenants that should start with sample data.
+              Use this for demo tenants. Reseeding replaces existing tenant transaction data. HoneyFarm is intentionally blocked.
             </p>
           </CardContent>
         </Card>
       )}
 
-      <Card className="border-border/70 bg-white/85">
+      <Card id="tenant-users" className="scroll-mt-24 border-border/70 bg-white/85">
         <CardHeader>
           <CardTitle>Tenant Users</CardTitle>
           <CardDescription>
@@ -1234,6 +1578,14 @@ export default function AdminPage() {
                             </Button>
                             <Button
                               size="sm"
+                              variant="secondary"
+                              onClick={() => handleResetUserPassword(u)}
+                              disabled={isOwnerUser || isSystemUser || isResettingPasswordUserId === u.id}
+                            >
+                              {isResettingPasswordUserId === u.id ? "Resetting..." : "Reset Password"}
+                            </Button>
+                            <Button
+                              size="sm"
                               variant="destructive"
                               onClick={() => handleDeleteUser(u)}
                               disabled={isOwnerUser || isSystemUser || isDeletingUserId === u.id}
@@ -1252,7 +1604,7 @@ export default function AdminPage() {
         </CardContent>
       </Card>
 
-      <Card className="border-border/70 bg-white/85">
+      <Card id="user-module-overrides" className="scroll-mt-24 border-border/70 bg-white/85">
         <CardHeader>
           <CardTitle>User Module Overrides</CardTitle>
           <CardDescription>
@@ -1283,6 +1635,9 @@ export default function AdminPage() {
                 ? `Source: ${userModuleSource === "user" ? "User override" : userModuleSource === "tenant" ? "Tenant defaults" : "System defaults"}`
                 : "Source: System defaults"}
             </p>
+            <p className="text-xs text-muted-foreground">
+              Enabled for selected user: {userModulePermissions.filter((module) => module.enabled).length}
+            </p>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
@@ -1311,7 +1666,7 @@ export default function AdminPage() {
       </Card>
 
       {isOwner && (
-        <Card className="border-border/70 bg-white/85">
+        <Card id="audit-log" className="scroll-mt-24 border-border/70 bg-white/85">
           <CardHeader>
             <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
               <div>

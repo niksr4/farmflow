@@ -28,6 +28,7 @@ type ChartTransaction = {
   quantity: number
   transactionType: "Restocking" | "Depleting" | "Item Deleted" | "Unit Change" | string
   totalCost?: number
+  price?: number
   date: string
 }
 
@@ -134,6 +135,7 @@ export default function AiAnalysisCharts({ inventory, transactions }: AiAnalysis
               transactionType,
               date: t.transaction_date ? formatDateForDisplay(t.transaction_date) : "",
               totalCost: t.total_cost ? Number(t.total_cost) : undefined,
+              price: t.price ? Number(t.price) : undefined,
             }
           })
           setFallbackTransactions(mapped)
@@ -153,6 +155,7 @@ export default function AiAnalysisCharts({ inventory, transactions }: AiAnalysis
         const itemType = t.itemType ?? t.item_type
         const quantity = Number(t.quantity) || 0
         const totalCost = t.totalCost ?? t.total_cost
+        const price = t.price
         const date = t.date ?? t.transaction_date
         const rawType = String(t.transactionType ?? t.transaction_type ?? "").toLowerCase()
 
@@ -176,6 +179,7 @@ export default function AiAnalysisCharts({ inventory, transactions }: AiAnalysis
           quantity,
           transactionType,
           totalCost: totalCost ? Number(totalCost) : undefined,
+          price: price ? Number(price) : undefined,
           date: String(date),
         }
       })

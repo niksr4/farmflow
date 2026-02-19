@@ -1,5 +1,6 @@
 import "server-only"
 
+import { cookies } from "next/headers"
 import { sql } from "@/lib/server/db"
 import { MODULE_IDS, resolveEnabledModules } from "@/lib/modules"
 import { normalizeTenantContext, runTenantQuery } from "@/lib/server/tenant-db"
@@ -20,8 +21,42 @@ const isMissingRelation = (error: unknown, relation: string) => {
   return message.includes(`relation "${relation}" does not exist`)
 }
 
+const PREVIEW_TENANT_COOKIE = "farmflow_preview_tenant"
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
+
+export async function resolveScopedSessionUser(user: SessionUser): Promise<SessionUser> {
+  if (user.role !== "owner") return user
+
+  const cookieStore = await cookies()
+  const previewTenantId = String(cookieStore.get(PREVIEW_TENANT_COOKIE)?.value || "").trim()
+  if (!previewTenantId || !UUID_PATTERN.test(previewTenantId)) {
+    return user
+  }
+
+  if (!sql) return user
+
+  try {
+    const ownerContext = normalizeTenantContext(undefined, "owner")
+    const tenantRows = await runTenantQuery(
+      sql,
+      ownerContext,
+      sql`
+        SELECT id
+        FROM tenants
+        WHERE id = ${previewTenantId}
+        LIMIT 1
+      `,
+    )
+    if (!tenantRows?.length) return user
+    return { ...user, tenantId: previewTenantId }
+  } catch {
+    return user
+  }
+}
+
 export async function getEnabledModules(sessionUser?: SessionUser): Promise<string[]> {
-  const user = sessionUser ?? (await requireSessionUser())
+  const resolvedUser = sessionUser ?? (await requireSessionUser())
+  const user = await resolveScopedSessionUser(resolvedUser)
 
   if (user.role === "owner") {
     return MODULE_IDS
@@ -88,7 +123,8 @@ export async function getEnabledModules(sessionUser?: SessionUser): Promise<stri
 }
 
 export async function requireModuleAccess(moduleId: string, sessionUser?: SessionUser): Promise<SessionUser> {
-  const user = sessionUser ?? (await requireSessionUser())
+  const resolvedUser = sessionUser ?? (await requireSessionUser())
+  const user = await resolveScopedSessionUser(resolvedUser)
 
   if (user.role === "owner") {
     return user
@@ -106,7 +142,8 @@ export async function requireAnyModuleAccess(
   moduleIds: string[],
   sessionUser?: SessionUser,
 ): Promise<SessionUser> {
-  const user = sessionUser ?? (await requireSessionUser())
+  const resolvedUser = sessionUser ?? (await requireSessionUser())
+  const user = await resolveScopedSessionUser(resolvedUser)
 
   if (user.role === "owner") {
     return user

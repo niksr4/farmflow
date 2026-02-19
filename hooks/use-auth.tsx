@@ -9,6 +9,7 @@ interface User {
   tenantId: string
   mfaEnabled?: boolean
   mfaVerified?: boolean
+  passwordResetRequired?: boolean
 }
 
 interface AuthContextType {
@@ -33,6 +34,7 @@ export function useAuth(): AuthContextType {
         tenantId: String((session.user as any).tenantId || ""),
         mfaEnabled: Boolean((session.user as any).mfaEnabled),
         mfaVerified: Boolean((session.user as any).mfaVerified),
+        passwordResetRequired: Boolean((session.user as any).passwordResetRequired),
       }
     : null
 
@@ -47,7 +49,15 @@ export function useAuth(): AuthContextType {
       return { ok: true }
     }
 
-    return { ok: false, error: result?.error || "Invalid username or password" }
+    const rawError = String(result?.error || "")
+    const mappedError =
+      rawError === "CredentialsSignin"
+        ? "Invalid username or password"
+        : rawError === "Configuration"
+          ? "Authentication is temporarily unavailable"
+          : rawError || "Invalid username or password"
+
+    return { ok: false, error: mappedError }
   }
 
   const logout = () => {

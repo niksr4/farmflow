@@ -1,7 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server"
 import { sql } from "@/lib/server/db"
 import { requireModuleAccess, isModuleAccessError } from "@/lib/server/module-access"
-import { normalizeTenantContext, runTenantQueries } from "@/lib/server/tenant-db"
+import { normalizeTenantContext, runTenantQueries, runTenantQuery } from "@/lib/server/tenant-db"
 import { computeProcessingKpis, safeDivide } from "@/lib/kpi"
 
 const DEFAULT_BAG_WEIGHT_KG = 50
@@ -11,15 +11,25 @@ const COST_SPIKE_MULTIPLIER = 1.5
 const normalizeBagType = (value: string | null | undefined) =>
   String(value || "").toLowerCase().includes("cherry") ? "Dry Cherry" : "Dry Parchment"
 
+const resolveDispatchReceivedKgs = (row: any, bagWeightKg: number) => {
+  const received = Number(row.kgs_received) || 0
+  if (received > 0) return received
+  const bags = Number(row.bags_dispatched) || 0
+  return bags * bagWeightKg
+}
+
 const resolveSalesKgs = (row: any, bagWeightKg: number) => {
-  const direct =
-    Number(row.kgs) ||
-    Number(row.weight_kgs) ||
-    Number(row.kgs_sent) ||
-    Number(row.kgs_received)
+  const precomputed = Number(row.sold_kgs) || 0
+  if (precomputed > 0) return precomputed
+  const direct = Number(row.kgs) || Number(row.weight_kgs) || Number(row.kgs_sent) || Number(row.kgs_received)
   if (direct > 0) return direct
   const bags = Number(row.bags_sold) || 0
   return bags * bagWeightKg
+}
+
+const isMissingRelation = (error: unknown, relation: string) => {
+  const message = String((error as Error)?.message || error)
+  return message.includes(`relation "${relation}" does not exist`)
 }
 
 export async function GET(request: NextRequest) {
@@ -47,8 +57,20 @@ export async function GET(request: NextRequest) {
     recentStart.setDate(recentStart.getDate() - 30)
     const recentStartDate = recentStart.toISOString().slice(0, 10)
 
+    const tenantRows = await runTenantQuery(
+      sql,
+      tenantContext,
+      sql`
+        SELECT bag_weight_kg
+        FROM tenants
+        WHERE id = ${tenantContext.tenantId}
+        LIMIT 1
+      `,
+    )
+
+    const bagWeightKg = Number(tenantRows?.[0]?.bag_weight_kg) || DEFAULT_BAG_WEIGHT_KG
+
     const [
-      tenantRows,
       processingRows,
       dispatchRows,
       salesRows,
@@ -65,12 +87,6 @@ export async function GET(request: NextRequest) {
       dispatchLocationRows,
       salesLocationRows,
     ] = await runTenantQueries(sql, tenantContext, [
-      sql`
-        SELECT bag_weight_kg
-        FROM tenants
-        WHERE id = ${tenantContext.tenantId}
-        LIMIT 1
-      `,
       sql.query(
         `
         SELECT
@@ -97,7 +113,7 @@ export async function GET(request: NextRequest) {
           coffee_type,
           bag_type,
           COALESCE(SUM(bags_dispatched), 0) AS bags_dispatched,
-          COALESCE(SUM(kgs_received), 0) AS kgs_received
+          COALESCE(SUM(COALESCE(NULLIF(kgs_received, 0), bags_dispatched * ${bagWeightKg})), 0) AS kgs_received
         FROM dispatch_records
         WHERE tenant_id = $1
           AND dispatch_date >= $2::date
@@ -113,10 +129,10 @@ export async function GET(request: NextRequest) {
           coffee_type,
           bag_type,
           COALESCE(SUM(bags_sold), 0) AS bags_sold,
-          COALESCE(SUM(kgs), 0) AS kgs,
-          COALESCE(SUM(weight_kgs), 0) AS weight_kgs,
-          COALESCE(SUM(kgs_sent), 0) AS kgs_sent,
-          COALESCE(SUM(kgs_received), 0) AS kgs_received,
+          COALESCE(
+            SUM(COALESCE(NULLIF(kgs_received, 0), NULLIF(kgs, 0), NULLIF(weight_kgs, 0), NULLIF(kgs_sent, 0), bags_sold * ${bagWeightKg})),
+            0
+          ) AS sold_kgs,
           COALESCE(SUM(revenue), 0) AS revenue
         FROM sales_records
         WHERE tenant_id = $1
@@ -214,7 +230,7 @@ export async function GET(request: NextRequest) {
           coffee_type,
           bag_type,
           COALESCE(SUM(bags_dispatched), 0) AS bags_dispatched,
-          COALESCE(SUM(kgs_received), 0) AS kgs_received
+          COALESCE(SUM(COALESCE(NULLIF(kgs_received, 0), bags_dispatched * ${bagWeightKg})), 0) AS kgs_received
         FROM dispatch_records
         WHERE tenant_id = $1
           AND dispatch_date >= $2::date
@@ -233,10 +249,10 @@ export async function GET(request: NextRequest) {
           coffee_type,
           bag_type,
           COALESCE(SUM(bags_sold), 0) AS bags_sold,
-          COALESCE(SUM(kgs), 0) AS kgs,
-          COALESCE(SUM(weight_kgs), 0) AS weight_kgs,
-          COALESCE(SUM(kgs_sent), 0) AS kgs_sent,
-          COALESCE(SUM(kgs_received), 0) AS kgs_received,
+          COALESCE(
+            SUM(COALESCE(NULLIF(kgs_received, 0), NULLIF(kgs, 0), NULLIF(weight_kgs, 0), NULLIF(kgs_sent, 0), bags_sold * ${bagWeightKg})),
+            0
+          ) AS sold_kgs,
           COALESCE(SUM(revenue), 0) AS revenue
         FROM sales_records
         WHERE tenant_id = $1
@@ -273,7 +289,7 @@ export async function GET(request: NextRequest) {
           COALESCE(l.name, l.code, dr.estate, 'Unknown') AS location_name,
           COALESCE(l.code, '') AS location_code,
           COALESCE(SUM(dr.bags_dispatched), 0) AS bags_dispatched,
-          COALESCE(SUM(dr.kgs_received), 0) AS kgs_received
+          COALESCE(SUM(COALESCE(NULLIF(dr.kgs_received, 0), dr.bags_dispatched * ${bagWeightKg})), 0) AS kgs_received
         FROM dispatch_records dr
         LEFT JOIN locations l ON l.id = dr.location_id
         WHERE dr.tenant_id = $1
@@ -290,10 +306,10 @@ export async function GET(request: NextRequest) {
           COALESCE(l.name, l.code, sr.estate, 'Unknown') AS location_name,
           COALESCE(l.code, '') AS location_code,
           COALESCE(SUM(sr.bags_sold), 0) AS bags_sold,
-          COALESCE(SUM(sr.kgs), 0) AS kgs,
-          COALESCE(SUM(sr.weight_kgs), 0) AS weight_kgs,
-          COALESCE(SUM(sr.kgs_sent), 0) AS kgs_sent,
-          COALESCE(SUM(sr.kgs_received), 0) AS kgs_received,
+          COALESCE(
+            SUM(COALESCE(NULLIF(sr.kgs_received, 0), NULLIF(sr.kgs, 0), NULLIF(sr.weight_kgs, 0), NULLIF(sr.kgs_sent, 0), sr.bags_sold * ${bagWeightKg})),
+            0
+          ) AS sold_kgs,
           COALESCE(SUM(sr.revenue), 0) AS revenue
         FROM sales_records sr
         LEFT JOIN locations l ON l.id = sr.location_id
@@ -307,7 +323,163 @@ export async function GET(request: NextRequest) {
       ),
     ])
 
-    const bagWeightKg = Number(tenantRows?.[0]?.bag_weight_kg) || DEFAULT_BAG_WEIGHT_KG
+    const defaultReceivablesKpis = {
+      totalInvoiced: 0,
+      totalOutstanding: 0,
+      totalOverdue: 0,
+      totalPaid: 0,
+      totalCount: 0,
+    }
+    const defaultCuringKpis = {
+      totalRecords: 0,
+      totalOutputKg: 0,
+      totalLossKg: 0,
+      avgDryingDays: 0,
+      avgMoistureDrop: 0,
+    }
+    const defaultQualityKpis = {
+      totalRecords: 0,
+      avgCupScore: 0,
+      avgOutturnPct: 0,
+      avgDefects: 0,
+      avgMoisturePct: 0,
+    }
+    const defaultJournalKpis = {
+      totalEntries: 0,
+      irrigationEntries: 0,
+      activeLocations: 0,
+    }
+
+    let receivablesKpis = { ...defaultReceivablesKpis }
+    try {
+      const receivablesRows = await runTenantQuery(
+        sql,
+        tenantContext,
+        sql`
+          SELECT
+            COALESCE(SUM(amount), 0) AS total_invoiced,
+            COALESCE(SUM(CASE WHEN LOWER(status) = 'paid' THEN amount ELSE 0 END), 0) AS total_paid,
+            COALESCE(SUM(CASE WHEN LOWER(status) <> 'paid' THEN amount ELSE 0 END), 0) AS total_outstanding,
+            COALESCE(
+              SUM(
+                CASE
+                  WHEN LOWER(status) = 'overdue'
+                    OR (LOWER(status) <> 'paid' AND due_date IS NOT NULL AND due_date < CURRENT_DATE)
+                  THEN amount
+                  ELSE 0
+                END
+              ),
+              0
+            ) AS total_overdue,
+            COUNT(*)::int AS total_count
+          FROM receivables
+          WHERE tenant_id = ${tenantContext.tenantId}
+            AND invoice_date >= ${fiscalYearStart}::date
+            AND invoice_date <= ${fiscalYearEnd}::date
+        `,
+      )
+      receivablesKpis = {
+        totalInvoiced: Number(receivablesRows?.[0]?.total_invoiced) || 0,
+        totalOutstanding: Number(receivablesRows?.[0]?.total_outstanding) || 0,
+        totalOverdue: Number(receivablesRows?.[0]?.total_overdue) || 0,
+        totalPaid: Number(receivablesRows?.[0]?.total_paid) || 0,
+        totalCount: Number(receivablesRows?.[0]?.total_count) || 0,
+      }
+    } catch (error) {
+      if (!isMissingRelation(error, "receivables")) throw error
+    }
+
+    let curingKpis = { ...defaultCuringKpis }
+    try {
+      const curingRows = await runTenantQuery(
+        sql,
+        tenantContext,
+        sql`
+          SELECT
+            COUNT(*)::int AS total_records,
+            COALESCE(SUM(output_kg), 0) AS total_output_kg,
+            COALESCE(SUM(loss_kg), 0) AS total_loss_kg,
+            COALESCE(AVG(drying_days), 0) AS avg_drying_days,
+            COALESCE(
+              AVG(
+                CASE
+                  WHEN moisture_start_pct IS NOT NULL AND moisture_end_pct IS NOT NULL
+                  THEN moisture_start_pct - moisture_end_pct
+                  ELSE NULL
+                END
+              ),
+              0
+            ) AS avg_moisture_drop
+          FROM curing_records
+          WHERE tenant_id = ${tenantContext.tenantId}
+            AND process_date >= ${fiscalYearStart}::date
+            AND process_date <= ${fiscalYearEnd}::date
+        `,
+      )
+      curingKpis = {
+        totalRecords: Number(curingRows?.[0]?.total_records) || 0,
+        totalOutputKg: Number(curingRows?.[0]?.total_output_kg) || 0,
+        totalLossKg: Number(curingRows?.[0]?.total_loss_kg) || 0,
+        avgDryingDays: Number(curingRows?.[0]?.avg_drying_days) || 0,
+        avgMoistureDrop: Number(curingRows?.[0]?.avg_moisture_drop) || 0,
+      }
+    } catch (error) {
+      if (!isMissingRelation(error, "curing_records")) throw error
+    }
+
+    let qualityKpis = { ...defaultQualityKpis }
+    try {
+      const qualityRows = await runTenantQuery(
+        sql,
+        tenantContext,
+        sql`
+          SELECT
+            COUNT(*)::int AS total_records,
+            COALESCE(AVG(cup_score), 0) AS avg_cup_score,
+            COALESCE(AVG(outturn_pct), 0) AS avg_outturn_pct,
+            COALESCE(AVG(defects_count), 0) AS avg_defects,
+            COALESCE(AVG(moisture_pct), 0) AS avg_moisture_pct
+          FROM quality_grading_records
+          WHERE tenant_id = ${tenantContext.tenantId}
+            AND grade_date >= ${fiscalYearStart}::date
+            AND grade_date <= ${fiscalYearEnd}::date
+        `,
+      )
+      qualityKpis = {
+        totalRecords: Number(qualityRows?.[0]?.total_records) || 0,
+        avgCupScore: Number(qualityRows?.[0]?.avg_cup_score) || 0,
+        avgOutturnPct: Number(qualityRows?.[0]?.avg_outturn_pct) || 0,
+        avgDefects: Number(qualityRows?.[0]?.avg_defects) || 0,
+        avgMoisturePct: Number(qualityRows?.[0]?.avg_moisture_pct) || 0,
+      }
+    } catch (error) {
+      if (!isMissingRelation(error, "quality_grading_records")) throw error
+    }
+
+    let journalKpis = { ...defaultJournalKpis }
+    try {
+      const journalRows = await runTenantQuery(
+        sql,
+        tenantContext,
+        sql`
+          SELECT
+            COUNT(*)::int AS total_entries,
+            COALESCE(SUM(CASE WHEN irrigation_done THEN 1 ELSE 0 END), 0)::int AS irrigation_entries,
+            COUNT(DISTINCT location_id)::int AS active_locations
+          FROM journal_entries
+          WHERE tenant_id = ${tenantContext.tenantId}
+            AND entry_date >= ${fiscalYearStart}::date
+            AND entry_date <= ${fiscalYearEnd}::date
+        `,
+      )
+      journalKpis = {
+        totalEntries: Number(journalRows?.[0]?.total_entries) || 0,
+        irrigationEntries: Number(journalRows?.[0]?.irrigation_entries) || 0,
+        activeLocations: Number(journalRows?.[0]?.active_locations) || 0,
+      }
+    } catch (error) {
+      if (!isMissingRelation(error, "journal_entries")) throw error
+    }
     const breakdownMap = new Map<string, any>()
 
     const ensureBreakdown = (coffeeType: string, bagType: string) => {
@@ -408,7 +580,7 @@ export async function GET(request: NextRequest) {
       const coffeeType = String(row.coffee_type || "Unknown")
       const bagType = normalizeBagType(row.bag_type)
       const dispatchedBags = Number(row.bags_dispatched) || 0
-      const receivedKgs = Number(row.kgs_received) || 0
+      const receivedKgs = resolveDispatchReceivedKgs(row, bagWeightKg)
       const record = ensureBreakdown(coffeeType, bagType)
       record.dispatchedBags += dispatchedBags
       record.dispatchedKgs += dispatchedBags * bagWeightKg
@@ -520,7 +692,7 @@ export async function GET(request: NextRequest) {
       const coffeeType = String(row.coffee_type || "Unknown")
       const bagType = normalizeBagType(row.bag_type)
       const dispatchedBags = Number(row.bags_dispatched) || 0
-      const receivedKgs = Number(row.kgs_received) || 0
+      const receivedKgs = resolveDispatchReceivedKgs(row, bagWeightKg)
       const record = ensureLot(lotId, coffeeType, bagType)
       record.dispatchedKgs += dispatchedBags * bagWeightKg
       record.receivedKgs += receivedKgs
@@ -650,7 +822,7 @@ export async function GET(request: NextRequest) {
     const transitLossByLocation = (dispatchLocationRows || [])
       .map((row: any) => {
         const dispatchedKgs = (Number(row.bags_dispatched) || 0) * bagWeightKg
-        const receivedKgs = Number(row.kgs_received) || 0
+        const receivedKgs = resolveDispatchReceivedKgs(row, bagWeightKg)
         const lossKgs = Math.max(0, dispatchedKgs - receivedKgs)
         return {
           location: row.location_name || row.location_code || "Unknown",
@@ -671,7 +843,7 @@ export async function GET(request: NextRequest) {
     const salesReconByLocation = (dispatchLocationRows || [])
       .map((row: any) => {
         const estate = row.location_name || row.location_code || "Unknown"
-        const receivedKgs = Number(row.kgs_received) || 0
+        const receivedKgs = resolveDispatchReceivedKgs(row, bagWeightKg)
         const soldKgs = salesByLocationMap.get(estate)?.soldKgs || 0
         const deltaKgs = receivedKgs - soldKgs
         return {
@@ -769,6 +941,13 @@ export async function GET(request: NextRequest) {
         cashIn: totals.revenue,
         cashOut: totalCost,
         net: totals.revenue - totalCost,
+        receivablesOutstanding: receivablesKpis.totalOutstanding,
+      },
+      moduleKpis: {
+        receivables: receivablesKpis,
+        curing: curingKpis,
+        quality: qualityKpis,
+        journal: journalKpis,
       },
       loss: {
         lossKgs,

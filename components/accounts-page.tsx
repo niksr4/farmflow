@@ -2,8 +2,7 @@
 
 import type React from "react"
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select"
-import { useMemo } from "react"
-import { useState, useEffect } from "react"
+import { useMemo, useState, useEffect } from "react"
 import { useAuth } from "@/hooks/use-auth"
 import { useLaborData, type LaborEntry, type LaborDeployment } from "@/hooks/use-labor-data"
 import { useConsumablesData, type ConsumableDeployment } from "@/hooks/use-consumables-data"
@@ -57,6 +56,19 @@ export default function AccountsPage() {
     grandTotal: 0,
   })
   const [summaryLoading, setSummaryLoading] = useState(true)
+  const exportDateRangeError = useMemo(() => {
+    if ((exportStartDate && !exportEndDate) || (!exportStartDate && exportEndDate)) {
+      return "Select both start and end date, or leave both empty."
+    }
+    if (exportStartDate && exportEndDate) {
+      const startDate = new Date(exportStartDate)
+      const endDate = new Date(exportEndDate)
+      if (startDate > endDate) {
+        return "Start date cannot be after end date."
+      }
+    }
+    return null
+  }, [exportEndDate, exportStartDate])
 
   useEffect(() => {
     fetchAllActivities()
@@ -237,27 +249,25 @@ export default function AccountsPage() {
       return null
     }
 
+    if (exportDateRangeError) {
+      toast.error(exportDateRangeError)
+      return null
+    }
+
     let deploymentsToExport = [...allDeployments]
     if (exportStartDate && exportEndDate) {
       const startDate = new Date(exportStartDate)
       startDate.setHours(0, 0, 0, 0)
       const endDate = new Date(exportEndDate)
       endDate.setHours(23, 59, 59, 999)
-      if (startDate > endDate) {
-        alert("Start date cannot be after end date.")
-        return null
-      }
       deploymentsToExport = deploymentsToExport.filter((d) => {
         const deploymentDate = new Date(d.date)
         return deploymentDate >= startDate && deploymentDate <= endDate
       })
-    } else if (exportStartDate || exportEndDate) {
-      alert("Please select both start and end date for filtering, or leave both empty to export all.")
-      return null
     }
 
     if (deploymentsToExport.length === 0) {
-      alert("No entries found for the selected date range.")
+      toast.error("No entries found for the selected date range.")
       return null
     }
     return deploymentsToExport
@@ -484,17 +494,10 @@ export default function AccountsPage() {
     document.body.removeChild(link)
   }
 
-  const formatDateForQIF = (dateString: string) => {
-    const date = new Date(dateString)
-    const day = date.getDate().toString().padStart(2, "0")
-    const month = (date.getMonth() + 1).toString().padStart(2, "0")
-    const year = date.getFullYear()
-    return `${year}${month}${day}`
-  }
-
   const totalEntries =
     (laborCount || laborDeployments.length) + (consumablesCount || consumableDeployments.length)
   const hasAnyData = totalEntries > 0
+  const canExport = hasAnyData && !summaryLoading && !laborLoading && !consumablesLoading && !exportDateRangeError
   const filteredLaborTotal = summaryTotals.laborTotal
   const filteredOtherExpensesTotal = summaryTotals.otherTotal
   const filteredGrandTotal = summaryTotals.grandTotal
@@ -591,7 +594,7 @@ export default function AccountsPage() {
               onClick={exportCombinedCSV}
               variant="outline"
               size="sm"
-              disabled={!hasAnyData || summaryLoading || laborLoading || consumablesLoading}
+              disabled={!canExport}
               className="w-full sm:w-auto bg-transparent"
             >
               <FileText className="mr-2 h-4 w-4" /> Export CSV
@@ -600,11 +603,18 @@ export default function AccountsPage() {
               onClick={exportQIF}
               variant="outline"
               size="sm"
-              disabled={!hasAnyData || summaryLoading || laborLoading || consumablesLoading}
+              disabled={!canExport}
               className="w-full sm:w-auto bg-transparent"
             >
               <Coins className="mr-2 h-4 w-4" /> Export QIF
             </Button>
+            {exportDateRangeError ? (
+              <p className="w-full text-xs text-rose-600">{exportDateRangeError}</p>
+            ) : (
+              <p className="w-full text-xs text-muted-foreground">
+                Optional date filter applies to both exports.
+              </p>
+            )}
           </CardContent>
         </Card>
       )}

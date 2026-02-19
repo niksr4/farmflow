@@ -48,9 +48,9 @@ export default function LaborDeploymentTab({ locationId }: { locationId?: string
   } = useLaborData(locationId)
 
   const [isAdding, setIsAdding] = useState(false)
-  const [editingId, setEditingId] = useState<number | null>(null)
+  const [editingId, setEditingId] = useState<string | null>(null)
   const [activities, setActivities] = useState<ActivityCode[]>([])
-  const [expandedRows, setExpandedRows] = useState<Set<number>>(new Set())
+  const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set())
   const [formData, setFormData] = useState<FormData>({
     date: new Date().toISOString().split("T")[0],
     code: "",
@@ -62,7 +62,7 @@ export default function LaborDeploymentTab({ locationId }: { locationId?: string
     notes: "",
   })
 
-  const formRef = useRef<HTMLDivElement>(null)
+  const formRef = useRef<HTMLFormElement>(null)
 
   const fetchActivities = useCallback(async () => {
     try {
@@ -177,7 +177,7 @@ export default function LaborDeploymentTab({ locationId }: { locationId?: string
     }, 100)
   }
 
-  const toggleRow = (id: number) => {
+  const toggleRow = (id: string) => {
     setExpandedRows((prev) => {
       const newSet = new Set(prev)
       if (newSet.has(id)) {

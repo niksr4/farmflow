@@ -27,10 +27,14 @@ INSERT INTO transaction_history (
   total_cost,
   tenant_id
 ) VALUES
-  ('Arabica Cherry', 1200, 'restock', 'Initial harvest intake', CURRENT_DATE - INTERVAL '10 days', 'seed', 40, 48000, :'tenant_id'),
-  ('Robusta Cherry', 900, 'restock', 'Initial harvest intake', CURRENT_DATE - INTERVAL '9 days', 'seed', 32, 28800, :'tenant_id'),
-  ('Arabica Cherry', 200, 'deplete', 'Processing loss', CURRENT_DATE - INTERVAL '5 days', 'seed', 0, 0, :'tenant_id'),
-  ('Dry Parchment', 300, 'restock', 'Drying output', CURRENT_DATE - INTERVAL '3 days', 'seed', 120, 36000, :'tenant_id');
+  ('Urea Fertilizer', 1500, 'restock', 'Pre-season stock received', CURRENT_DATE - INTERVAL '10 days', 'seed', 38, 57000, :'tenant_id'),
+  ('NPK 19-19-19', 900, 'restock', 'Nutrient blend stock', CURRENT_DATE - INTERVAL '9 days', 'seed', 62, 55800, :'tenant_id'),
+  ('Diesel (L)', 800, 'restock', 'Fuel for transport and generators', CURRENT_DATE - INTERVAL '8 days', 'seed', 95, 76000, :'tenant_id'),
+  ('Pesticide (L)', 120, 'restock', 'Pest and disease control stock', CURRENT_DATE - INTERVAL '7 days', 'seed', 480, 57600, :'tenant_id'),
+  ('Jute Bags', 400, 'restock', 'Packaging materials', CURRENT_DATE - INTERVAL '6 days', 'seed', 28, 11200, :'tenant_id'),
+  ('Urea Fertilizer', 220, 'deplete', 'Block A and B fertilizer application', CURRENT_DATE - INTERVAL '5 days', 'seed', 0, 0, :'tenant_id'),
+  ('Diesel (L)', 180, 'deplete', 'Harvest transport and dryer fuel usage', CURRENT_DATE - INTERVAL '3 days', 'seed', 0, 0, :'tenant_id'),
+  ('Pesticide (L)', 18, 'deplete', 'Spray cycle completed', CURRENT_DATE - INTERVAL '2 days', 'seed', 0, 0, :'tenant_id');
 
 -- Labor transactions
 INSERT INTO labor_transactions (

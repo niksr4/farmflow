@@ -4,7 +4,7 @@ import type { NeonQueryFunction, NeonQueryPromise } from "@neondatabase/serverle
 
 const FALLBACK_TENANT_ID = "00000000-0000-0000-0000-000000000000"
 
-type NeonSql = NeonQueryFunction<boolean, boolean>
+export type NeonSql = NeonQueryFunction<any, any>
 
 type TenantContext = {
   tenantId: string
@@ -21,8 +21,8 @@ export function normalizeTenantContext(tenantId?: string | null, role?: string |
 export async function runTenantQuery<T = any>(
   client: NeonSql,
   context: TenantContext,
-  query: NeonQueryPromise<T>,
-): Promise<T> {
+  query: NeonQueryPromise<any, any, any>,
+): Promise<T[]> {
   const results = await client.transaction([
     client`SELECT set_config('TimeZone', 'UTC', true)`,
     client`SELECT set_config('app.tenant_id', ${context.tenantId}, true)`,
@@ -30,14 +30,14 @@ export async function runTenantQuery<T = any>(
     query,
   ])
 
-  return results[3] as T
+  return results[3] as T[]
 }
 
 export async function runTenantQueries(
   client: NeonSql,
   context: TenantContext,
-  queries: NeonQueryPromise<any>[],
-): Promise<any[]> {
+  queries: NeonQueryPromise<any, any, any>[],
+): Promise<any[][]> {
   const results = await client.transaction([
     client`SELECT set_config('TimeZone', 'UTC', true)`,
     client`SELECT set_config('app.tenant_id', ${context.tenantId}, true)`,
@@ -45,5 +45,5 @@ export async function runTenantQueries(
     ...queries,
   ])
 
-  return results.slice(3)
+  return results.slice(3) as any[][]
 }

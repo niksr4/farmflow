@@ -29,143 +29,103 @@ export async function GET(request: Request) {
     // Allow data entry for user/admin/owner; reserve destructive actions for admin/owner.
     const tenantContext = normalizeTenantContext(sessionUser.tenantId, sessionUser.role)
     const { searchParams } = new URL(request.url)
-    const startDate = searchParams.get("startDate")
-    const endDate = searchParams.get("endDate")
+    const startDate = searchParams.get("startDate")?.trim() || null
+    const endDate = searchParams.get("endDate")?.trim() || null
     const summaryOnly = searchParams.get("summaryOnly") === "true"
     const all = searchParams.get("all") === "true"
-    const locationId = searchParams.get("locationId")
+    const locationId = searchParams.get("locationId")?.trim() || null
     const limitParam = searchParams.get("limit")
     const offsetParam = searchParams.get("offset")
     const limit = !all && limitParam ? Math.min(Math.max(Number.parseInt(limitParam, 10) || 0, 1), 500) : null
     const offset = !all && offsetParam ? Math.max(Number.parseInt(offsetParam, 10) || 0, 0) : 0
-    const useLegacyLocationScope = summaryOnly
     const locationCompatibility =
-      locationId && useLegacyLocationScope ? await resolveLocationCompatibility(sql, tenantContext) : null
+      locationId ? await resolveLocationCompatibility(sql, tenantContext) : null
     const legacyLocationCutover =
       locationCompatibility?.includeLegacyPreLocationRecords && locationCompatibility.firstLocationCreatedAt
         ? locationCompatibility.firstLocationCreatedAt
         : null
-    const isLegacyPooledScope = Boolean(locationId && useLegacyLocationScope && legacyLocationCutover)
+    const isLegacyPooledScope = Boolean(locationId && legacyLocationCutover)
     const locationScope = isLegacyPooledScope ? "legacy_pool" : locationId ? "location" : "all"
     const bagWeightKg = await resolveBagWeightKg(sessionUser.tenantId, sessionUser.role)
-
-    let totalCountResult
-    let totalsByTypeResult
-    let records = []
 
     const locationClause =
       !locationId
         ? sql``
         : isLegacyPooledScope
-          ? sql``
+          ? sql` AND (location_id = ${locationId} OR created_at < ${legacyLocationCutover}::timestamp)`
           : sql` AND location_id = ${locationId}`
     const recordsLocationClause =
       !locationId
         ? sql``
-        : sql` AND dr.location_id = ${locationId}`
+        : isLegacyPooledScope
+          ? sql` AND (dr.location_id = ${locationId} OR dr.created_at < ${legacyLocationCutover}::timestamp)`
+          : sql` AND dr.location_id = ${locationId}`
+    const dateClause =
+      startDate && endDate
+        ? sql` AND dispatch_date >= ${startDate}::date AND dispatch_date <= ${endDate}::date`
+        : startDate
+          ? sql` AND dispatch_date >= ${startDate}::date`
+          : endDate
+            ? sql` AND dispatch_date <= ${endDate}::date`
+            : sql``
+    const recordsDateClause =
+      startDate && endDate
+        ? sql` AND dr.dispatch_date >= ${startDate}::date AND dr.dispatch_date <= ${endDate}::date`
+        : startDate
+          ? sql` AND dr.dispatch_date >= ${startDate}::date`
+          : endDate
+            ? sql` AND dr.dispatch_date <= ${endDate}::date`
+            : sql``
 
-    if (startDate && endDate) {
-      const queryList = [
-        sql`
-          SELECT COUNT(*)::int as count
-          FROM dispatch_records
-          WHERE dispatch_date >= ${startDate}::date
-            AND dispatch_date <= ${endDate}::date
-            AND tenant_id = ${tenantContext.tenantId}
-            ${locationClause}
-        `,
-        sql`
-          SELECT 
-            coffee_type,
-            bag_type,
-            COALESCE(SUM(bags_dispatched), 0) as bags_dispatched,
-            COALESCE(SUM(COALESCE(NULLIF(kgs_received, 0), bags_dispatched * ${bagWeightKg})), 0) as kgs_received
-          FROM dispatch_records
-          WHERE dispatch_date >= ${startDate}::date
-            AND dispatch_date <= ${endDate}::date
-            AND tenant_id = ${tenantContext.tenantId}
-            ${locationClause}
-          GROUP BY coffee_type, bag_type
-        `,
-      ]
-      if (!summaryOnly) {
-        queryList.push(
-          limit
-            ? sql`
-                SELECT dr.*, l.name AS location_name, l.code AS location_code
-                FROM dispatch_records dr
-                LEFT JOIN locations l ON l.id = dr.location_id
-                WHERE dr.dispatch_date >= ${startDate}::date 
-                  AND dr.dispatch_date <= ${endDate}::date
-                  AND dr.tenant_id = ${tenantContext.tenantId}
-                  ${recordsLocationClause}
-                ORDER BY dr.dispatch_date DESC, dr.created_at DESC
-                LIMIT ${limit} OFFSET ${offset}
-              `
-            : sql`
-                SELECT dr.*, l.name AS location_name, l.code AS location_code
-                FROM dispatch_records dr
-                LEFT JOIN locations l ON l.id = dr.location_id
-                WHERE dr.dispatch_date >= ${startDate}::date 
-                  AND dr.dispatch_date <= ${endDate}::date
-                  AND dr.tenant_id = ${tenantContext.tenantId}
-                  ${recordsLocationClause}
-                ORDER BY dr.dispatch_date DESC, dr.created_at DESC
-              `,
-        )
-      }
+    const queryList = [
+      sql`
+        SELECT COUNT(*)::int as count
+        FROM dispatch_records
+        WHERE tenant_id = ${tenantContext.tenantId}
+          ${dateClause}
+          ${locationClause}
+      `,
+      sql`
+        SELECT 
+          coffee_type,
+          bag_type,
+          COALESCE(SUM(bags_dispatched), 0) as bags_dispatched,
+          COALESCE(SUM(COALESCE(NULLIF(kgs_received, 0), bags_dispatched * ${bagWeightKg})), 0) as kgs_received
+        FROM dispatch_records
+        WHERE tenant_id = ${tenantContext.tenantId}
+          ${dateClause}
+          ${locationClause}
+        GROUP BY coffee_type, bag_type
+      `,
+    ]
 
-      const [countRows, totalsRows, recordsRows] = await runTenantQueries(sql, tenantContext, queryList)
-      totalCountResult = countRows
-      totalsByTypeResult = totalsRows
-      records = summaryOnly ? [] : recordsRows || []
-    } else {
-      const queryList = [
-        sql`
-          SELECT COUNT(*)::int as count
-          FROM dispatch_records
-          WHERE tenant_id = ${tenantContext.tenantId}
-            ${locationClause}
-        `,
-        sql`
-          SELECT 
-            coffee_type,
-            bag_type,
-            COALESCE(SUM(bags_dispatched), 0) as bags_dispatched,
-            COALESCE(SUM(COALESCE(NULLIF(kgs_received, 0), bags_dispatched * ${bagWeightKg})), 0) as kgs_received
-          FROM dispatch_records
-          WHERE tenant_id = ${tenantContext.tenantId}
-            ${locationClause}
-          GROUP BY coffee_type, bag_type
-        `,
-      ]
-      if (!summaryOnly) {
-        queryList.push(
-          limit
-            ? sql`
-                SELECT dr.*, l.name AS location_name, l.code AS location_code
-                FROM dispatch_records dr
-                LEFT JOIN locations l ON l.id = dr.location_id
-                WHERE dr.tenant_id = ${tenantContext.tenantId}
-                  ${recordsLocationClause}
-                ORDER BY dr.dispatch_date DESC, dr.created_at DESC
-                LIMIT ${limit} OFFSET ${offset}
-              `
-            : sql`
-                SELECT dr.*, l.name AS location_name, l.code AS location_code
-                FROM dispatch_records dr
-                LEFT JOIN locations l ON l.id = dr.location_id
-                WHERE dr.tenant_id = ${tenantContext.tenantId}
-                  ${recordsLocationClause}
-                ORDER BY dr.dispatch_date DESC, dr.created_at DESC
-              `,
-        )
-      }
-      const [countRows, totalsRows, recordsRows] = await runTenantQueries(sql, tenantContext, queryList)
-      totalCountResult = countRows
-      totalsByTypeResult = totalsRows
-      records = summaryOnly ? [] : recordsRows || []
+    if (!summaryOnly) {
+      queryList.push(
+        limit
+          ? sql`
+              SELECT dr.*, l.name AS location_name, l.code AS location_code
+              FROM dispatch_records dr
+              LEFT JOIN locations l ON l.id = dr.location_id
+              WHERE dr.tenant_id = ${tenantContext.tenantId}
+                ${recordsDateClause}
+                ${recordsLocationClause}
+              ORDER BY dr.dispatch_date DESC, dr.created_at DESC
+              LIMIT ${limit} OFFSET ${offset}
+            `
+          : sql`
+              SELECT dr.*, l.name AS location_name, l.code AS location_code
+              FROM dispatch_records dr
+              LEFT JOIN locations l ON l.id = dr.location_id
+              WHERE dr.tenant_id = ${tenantContext.tenantId}
+                ${recordsDateClause}
+                ${recordsLocationClause}
+              ORDER BY dr.dispatch_date DESC, dr.created_at DESC
+            `,
+      )
     }
+
+    const [totalCountResult, totalsByTypeResult, recordsRows] = await runTenantQueries(sql, tenantContext, queryList)
+    const records = summaryOnly ? [] : recordsRows || []
 
     const totalCount = Number(totalCountResult?.[0]?.count) || 0
     const totalsByType = (totalsByTypeResult || []).map((row: any) => ({

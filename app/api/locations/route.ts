@@ -28,8 +28,7 @@ function normalizeCode(value: string) {
 
 export async function GET(request: Request) {
   try {
-    const sessionUser = await requireSessionUser()
-    await requireAnyModuleAccess(LOCATION_MODULES, sessionUser)
+    const sessionUser = await requireAnyModuleAccess(LOCATION_MODULES, await requireSessionUser())
     const { searchParams } = new URL(request.url)
     const requestedTenantId = searchParams.get("tenantId")
     const tenantId = sessionUser.role === "owner" && requestedTenantId ? requestedTenantId : sessionUser.tenantId
@@ -58,8 +57,7 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   try {
-    const sessionUser = await requireSessionUser()
-    await requireAnyModuleAccess(LOCATION_MODULES, sessionUser)
+    const sessionUser = await requireAnyModuleAccess(LOCATION_MODULES, await requireSessionUser())
     try {
       requireAdminRole(sessionUser.role)
     } catch {
@@ -111,8 +109,7 @@ export async function POST(request: Request) {
 
 export async function PATCH(request: Request) {
   try {
-    const sessionUser = await requireSessionUser()
-    await requireAnyModuleAccess(LOCATION_MODULES, sessionUser)
+    const sessionUser = await requireAnyModuleAccess(LOCATION_MODULES, await requireSessionUser())
     try {
       requireAdminRole(sessionUser.role)
     } catch {

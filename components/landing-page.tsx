@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useRef, useState } from "react"
+import { useEffect, useRef, useState, type FormEvent } from "react"
 import Link from "next/link"
 import Image from "next/image"
 import { Fraunces, Manrope } from "next/font/google"
@@ -9,6 +9,8 @@ import { motion, useReducedMotion, useScroll, useTransform } from "framer-motion
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
+import { Input } from "@/components/ui/input"
+import { Textarea } from "@/components/ui/textarea"
 
 const display = Fraunces({ subsets: ["latin"], weight: ["600", "700", "800"] })
 const body = Manrope({ subsets: ["latin"], weight: ["400", "500", "600", "700"] })
@@ -97,6 +99,56 @@ const LIVE_UPDATES = [
   },
 ]
 
+const ROLE_VALUE_CARDS = [
+  {
+    title: "Estate Owner",
+    icon: TrendingUp,
+    outcome: "See weekly yield, loss, cash, and buyer exposure in one command view.",
+    points: ["Season View KPIs", "Receivables and cash signal", "Cross-tab reconciliation"],
+  },
+  {
+    title: "Operations Lead",
+    icon: Truck,
+    outcome: "Run day-to-day processing, dispatch, and stock without spreadsheet drift.",
+    points: ["Lot-based processing records", "Dispatch vs received checks", "Location-level availability"],
+  },
+  {
+    title: "Admin & Finance",
+    icon: Shield,
+    outcome: "Control user access and preserve a clean audit trail for every change.",
+    points: ["Role + module controls", "User overrides", "Audit event history"],
+  },
+]
+
+const WEEK_ONE_PLAN = [
+  {
+    day: "Day 1",
+    title: "Configure tenant",
+    detail: "Set locations, module access, and experience profile for your estate.",
+  },
+  {
+    day: "Day 2-3",
+    title: "Load baseline data",
+    detail: "Import inventory, processing, dispatch, sales, and quality starting balances.",
+  },
+  {
+    day: "Day 4-5",
+    title: "Run live operations",
+    detail: "Record daily intake, processing outputs, dispatches, and sales.",
+  },
+  {
+    day: "Day 6-7",
+    title: "Close weekly review",
+    detail: "Use Season View and exception alerts to reconcile yield, loss, and cash.",
+  },
+]
+
+const ASSURANCE_POINTS = [
+  "Tenant-isolated data with role-based access",
+  "Audit logs for create, update, and delete actions",
+  "Module-by-module rollout so teams adopt gradually",
+]
+
 const ESTATE_JOURNEY = [
   {
     title: "Harvest intake",
@@ -142,30 +194,6 @@ const IMPACT_PILLARS = [
   },
 ]
 
-const PRICING_TIERS = [
-  {
-    name: "Core",
-    price: "₹9,900",
-    description: "For a single coffee estate that needs daily control and traceable, farmer-first reporting.",
-    modules: ["Inventory", "Transactions", "Accounts", "Processing"],
-    highlight: "Best for first estate",
-  },
-  {
-    name: "Operations",
-    price: "₹18,900",
-    description: "Add dispatch + sales reconciliation for multi-location operations.",
-    modules: ["Core +", "Dispatch", "Sales", "Rainfall", "Pepper", "Quality & Curing"],
-    highlight: "Most chosen",
-  },
-  {
-    name: "Enterprise",
-    price: "Custom",
-    description: "Multi-estate governance with custom workflows and analytics.",
-    modules: ["Operations +", "Analytics", "Weather", "News", "Custom Modules"],
-    highlight: "Estate network",
-  },
-]
-
 const CHATBOT_FAQS = [
   {
     id: "capabilities",
@@ -177,7 +205,7 @@ const CHATBOT_FAQS = [
     id: "pricing",
     question: "How does pricing work?",
     answer:
-      "Pricing is modular: start with Core, add Dispatch/Sales, then scale to Enterprise for multi-estate governance.",
+      "Commercial plans are being finalized. Use the Register Interest form on this page and we will contact you with rollout details.",
   },
   {
     id: "onboarding",
@@ -226,7 +254,7 @@ const getChatbotReply = (input: string) => {
   const faq = CHATBOT_FAQS.find((item) => item.id === match?.id)
   if (faq) return faq.answer
 
-  return "I can help with features, pricing, onboarding, sustainability evidence, data isolation, exports, and mobile access. Ask me anything about FarmFlow."
+  return "I can help with features, onboarding, security, exports, and commercial rollout. Ask me anything about FarmFlow."
 }
 
 export default function LandingPage() {
@@ -234,21 +262,32 @@ export default function LandingPage() {
   const chatEndRef = useRef<HTMLDivElement | null>(null)
   const journeyRef = useRef<HTMLDivElement | null>(null)
   const messageIdRef = useRef(0)
+  const MotionDiv = motion.div as any
   const prefersReducedMotion = useReducedMotion()
   const [isChatOpen, setIsChatOpen] = useState(false)
   const [draftMessage, setDraftMessage] = useState("")
   const [activeUpdateIndex, setActiveUpdateIndex] = useState(0)
   const [metricValues, setMetricValues] = useState<number[]>(() => LIVE_METRICS.map(() => 0))
-  const [messages, setMessages] = useState([
+  const [interestForm, setInterestForm] = useState({
+    name: "",
+    email: "",
+    organization: "",
+    estateSize: "",
+    notes: "",
+  })
+  const [interestState, setInterestState] = useState<"idle" | "submitting" | "success" | "error">("idle")
+  const [interestError, setInterestError] = useState("")
+  type ChatMessage = { id: string; role: "bot" | "user"; text: string }
+  const [messages, setMessages] = useState<ChatMessage[]>([
     {
       id: "welcome",
       role: "bot" as const,
-      text: "Hi! Ask me about FarmFlow features, pricing, onboarding, and data security.",
+      text: "Hi! Ask me about FarmFlow features, onboarding, commercial rollout, and data security.",
     },
   ])
 
   const { scrollYProgress: journeyProgress } = useScroll({
-    target: journeyRef,
+    target: journeyRef as any,
     offset: ["start 0.2", "end 0.8"],
   })
   const timelineScale = useTransform(journeyProgress, [0, 1], [0, 1])
@@ -396,6 +435,34 @@ export default function LandingPage() {
     setDraftMessage("")
   }
 
+  const handleInterestSubmit = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault()
+    setInterestError("")
+    setInterestState("submitting")
+    try {
+      const response = await fetch("/api/register-interest", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(interestForm),
+      })
+      const data = await response.json()
+      if (!response.ok || !data.success) {
+        throw new Error(data.error || "Failed to submit interest")
+      }
+      setInterestState("success")
+      setInterestForm({
+        name: "",
+        email: "",
+        organization: "",
+        estateSize: "",
+        notes: "",
+      })
+    } catch (error: any) {
+      setInterestState("error")
+      setInterestError(error.message || "Failed to submit interest")
+    }
+  }
+
   return (
     <div
       className={`${body.className} relative min-h-[100svh] overflow-x-hidden text-slate-900`}
@@ -425,8 +492,11 @@ export default function LandingPage() {
               </div>
             </div>
             <div className="hidden md:flex items-center gap-6 text-sm text-muted-foreground">
-              <a href="#field-signals" className="hover:text-foreground">
-                Field Signals
+              <a href="#roles" className="hover:text-foreground">
+                Who It Is For
+              </a>
+              <a href="#onboarding" className="hover:text-foreground">
+                Onboarding
               </a>
               <a href="#features" className="hover:text-foreground">
                 Features
@@ -441,7 +511,7 @@ export default function LandingPage() {
                 Impact
               </a>
               <a href="#pricing" className="hover:text-foreground">
-                Pricing
+                Plans
               </a>
             </div>
             <div className="flex items-center gap-2">
@@ -453,6 +523,23 @@ export default function LandingPage() {
               </Button>
             </div>
           </nav>
+          <div className="mx-auto mt-3 flex w-full max-w-6xl gap-2 overflow-x-auto no-scrollbar md:hidden">
+            {[
+              { id: "roles", label: "Who It Is For" },
+              { id: "onboarding", label: "Onboarding" },
+              { id: "features", label: "Features" },
+              { id: "journey", label: "Journey" },
+              { id: "pricing", label: "Plans" },
+            ].map((item) => (
+              <a
+                key={item.id}
+                href={`#${item.id}`}
+                className="shrink-0 rounded-full border border-white/60 bg-white/80 px-3 py-1.5 text-xs text-slate-700"
+              >
+                {item.label}
+              </a>
+            ))}
+          </div>
         </header>
 
         <main className="px-6 pb-20">
@@ -478,9 +565,18 @@ export default function LandingPage() {
                   </h1>
                   
                   <p className="text-lg text-white/90 leading-relaxed">
-                    FarmFlow is the operations OS for coffee estates. Track Arabica and Robusta from cherry intake to buyer
-                    shipment with clean traceability, yield insights, and documented quality decisions that protect farmer value.
+                    FarmFlow is a coffee operations system built for real estate workflows, not generic ERP screens.
+                    Capture intake, processing, dispatch, sales, and quality in one ledger so every kilogram is traceable.
                   </p>
+
+                  <div className="grid gap-2 sm:grid-cols-2">
+                    {BULLETS.map((bullet) => (
+                      <div key={bullet} className="flex items-start gap-2 text-sm text-white/85">
+                        <CheckCircle2 className="mt-0.5 h-4 w-4 text-emerald-200" />
+                        <span>{bullet}</span>
+                      </div>
+                    ))}
+                  </div>
 
                   <div className="flex flex-wrap items-center gap-4">
                     <Button size="lg" className="bg-white text-[#0f6f66] hover:bg-white/90 font-semibold group shadow-[0_20px_40px_-20px_rgba(255,255,255,0.5)]">
@@ -489,7 +585,7 @@ export default function LandingPage() {
                       </Link>
                     </Button>
                     <Button size="lg" variant="outline" className="border-white/30 bg-white/10 text-white hover:bg-white/20 backdrop-blur-sm">
-                      <Link href="/login">View live demo</Link>
+                      <Link href="/login">Sign in to your workspace</Link>
                     </Button>
                   </div>
 
@@ -602,6 +698,69 @@ export default function LandingPage() {
                   </div>
                 </div>
               </div>
+            </div>
+          </section>
+
+          <section id="roles" className="mx-auto mt-12 w-full max-w-6xl space-y-6 scroll-mt-24">
+            <div className="space-y-2">
+              <h2 className={`${display.className} text-3xl font-semibold`}>Designed for each role on the estate</h2>
+              <p className="text-muted-foreground">
+                Different teams see different jobs. FarmFlow keeps them aligned on the same source of truth.
+              </p>
+            </div>
+            <div className="grid gap-4 lg:grid-cols-3">
+              {ROLE_VALUE_CARDS.map((card) => (
+                <Card key={card.title} className="border border-white/70 bg-white/85 backdrop-blur-md">
+                  <CardHeader className="space-y-3">
+                    <div className="h-10 w-10 rounded-xl bg-emerald-100 text-emerald-700 flex items-center justify-center">
+                      <card.icon className="h-5 w-5" />
+                    </div>
+                    <CardTitle className={`${display.className} text-xl`}>{card.title}</CardTitle>
+                    <CardDescription>{card.outcome}</CardDescription>
+                  </CardHeader>
+                  <CardContent className="space-y-2 text-sm text-muted-foreground">
+                    {card.points.map((point) => (
+                      <div key={point} className="flex items-center gap-2">
+                        <CheckCircle2 className="h-4 w-4 text-emerald-600" />
+                        <span>{point}</span>
+                      </div>
+                    ))}
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          </section>
+
+          <section id="onboarding" className="mx-auto mt-12 w-full max-w-6xl space-y-4 scroll-mt-24">
+            <Card className="border border-emerald-200/70 bg-gradient-to-br from-emerald-50/70 to-white/90 backdrop-blur-md">
+              <CardHeader>
+                <CardTitle className={`${display.className} text-2xl`}>Go live in the first 7 days</CardTitle>
+                <CardDescription>
+                  A practical rollout path for estates moving off spreadsheets and WhatsApp-only records.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+                {WEEK_ONE_PLAN.map((step) => (
+                  <div key={step.day} className="rounded-xl border border-emerald-200/60 bg-white/85 p-4">
+                    <p className="text-xs uppercase tracking-[0.2em] text-emerald-700">{step.day}</p>
+                    <p className="mt-1 font-semibold text-slate-900">{step.title}</p>
+                    <p className="mt-1 text-xs text-muted-foreground">{step.detail}</p>
+                  </div>
+                ))}
+              </CardContent>
+            </Card>
+            <div className="grid gap-3 md:grid-cols-3">
+              {ASSURANCE_POINTS.map((item) => (
+                <div
+                  key={item}
+                  className="rounded-xl border border-white/70 bg-white/80 px-4 py-3 text-sm text-slate-700 shadow-[0_20px_45px_-35px_rgba(15,23,42,0.5)]"
+                >
+                  <div className="flex items-start gap-2">
+                    <CheckCircle2 className="mt-0.5 h-4 w-4 text-emerald-600" />
+                    <span>{item}</span>
+                  </div>
+                </div>
+              ))}
             </div>
           </section>
 
@@ -755,7 +914,7 @@ export default function LandingPage() {
           </div>
           <div ref={journeyRef} className="relative mt-10 space-y-12">
             <div className="pointer-events-none absolute left-4 top-0 h-full w-[2px] bg-emerald-100/80 md:left-1/2 md:-translate-x-1/2" />
-            <motion.div
+            <MotionDiv
               className="pointer-events-none absolute left-4 top-0 h-full w-[3px] origin-top bg-gradient-to-b from-emerald-500 via-emerald-400 to-transparent md:left-1/2 md:-translate-x-1/2"
               style={{
                 scaleY: prefersReducedMotion ? 1 : timelineScale,
@@ -766,7 +925,7 @@ export default function LandingPage() {
               {ESTATE_JOURNEY.map((step, index) => {
                 const isLeft = index % 2 === 0
                 return (
-                  <motion.div
+                  <MotionDiv
                     key={step.title}
                     initial={
                       prefersReducedMotion
@@ -801,7 +960,7 @@ export default function LandingPage() {
                         </CardHeader>
                       </Card>
                     </div>
-                  </motion.div>
+                  </MotionDiv>
                 )
               })}
             </div>
@@ -902,46 +1061,117 @@ export default function LandingPage() {
         </section>
 
         <section id="pricing" className="mx-auto mt-16 w-full max-w-6xl space-y-6 scroll-mt-24 sm:mt-20">
-          <div className="flex items-center justify-between">
-            <div>
-              <h2 className={`${display.className} text-3xl font-semibold`}>Pricing by modules</h2>
-              <p className="text-muted-foreground mt-2">
-                Start lean, add modules as your estate scales.
-              </p>
-            </div>
-          </div>
-          <div className="grid gap-6 lg:grid-cols-3">
-            {PRICING_TIERS.map((tier) => (
-              <Card
-                key={tier.name}
-                className="border border-white/50 bg-white/80 backdrop-blur-md shadow-[0_24px_50px_-40px_rgba(15,23,42,0.8)]"
-              >
-                <CardHeader className="space-y-2">
-                  <div className="flex items-center justify-between">
-                    <CardTitle className={`${display.className} text-xl`}>{tier.name}</CardTitle>
-                    <Badge className="bg-emerald-100 text-emerald-700 border-emerald-200">
-                      {tier.highlight}
-                    </Badge>
+          <Card className="border border-emerald-200/70 bg-gradient-to-br from-emerald-50/70 to-white/90 backdrop-blur-md">
+            <CardHeader>
+              <Badge className="w-fit border-amber-200 bg-amber-100 text-amber-800">Coming soon</Badge>
+              <CardTitle className={`${display.className} text-3xl font-semibold`}>Commercial plans are on the way</CardTitle>
+              <CardDescription>
+                We are finalizing rollout packages by estate size and module mix. Register your interest and we will contact
+                you with early access options.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="grid gap-6 lg:grid-cols-[1fr_1.1fr]">
+              <div className="space-y-3 text-sm text-muted-foreground">
+                <p>
+                  FarmFlow can be deployed with just core operations first, then expanded as your team adopts more modules.
+                  Early registrants get priority onboarding support and migration planning.
+                </p>
+                <div className="space-y-2">
+                  <div className="flex items-center gap-2">
+                    <CheckCircle2 className="h-4 w-4 text-emerald-600" />
+                    <span>Priority onboarding call</span>
                   </div>
-                  <p className="text-3xl font-semibold">{tier.price}</p>
-                  <CardDescription>{tier.description}</CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  <div className="space-y-2 text-sm">
-                    {tier.modules.map((module) => (
-                      <div key={module} className="flex items-center gap-2">
-                        <CheckCircle2 className="h-4 w-4 text-emerald-600" />
-                        <span>{module}</span>
-                      </div>
-                    ))}
+                  <div className="flex items-center gap-2">
+                    <CheckCircle2 className="h-4 w-4 text-emerald-600" />
+                    <span>Guidance on module mix for your estate</span>
                   </div>
-                  <Button className="w-full" asChild>
-                    <Link href="/signup">Choose {tier.name}</Link>
-                  </Button>
-                </CardContent>
-              </Card>
-            ))}
-          </div>
+                  <div className="flex items-center gap-2">
+                    <CheckCircle2 className="h-4 w-4 text-emerald-600" />
+                    <span>Data migration readiness checklist</span>
+                  </div>
+                </div>
+              </div>
+
+              <form onSubmit={handleInterestSubmit} className="rounded-2xl border border-white/80 bg-white/90 p-4 space-y-3">
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <div className="space-y-1.5">
+                    <label htmlFor="interest-name" className="text-xs uppercase tracking-wide text-muted-foreground">
+                      Full name
+                    </label>
+                    <Input
+                      id="interest-name"
+                      value={interestForm.name}
+                      onChange={(event) => setInterestForm((prev) => ({ ...prev, name: event.target.value }))}
+                      placeholder="Your name"
+                      required
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <label htmlFor="interest-email" className="text-xs uppercase tracking-wide text-muted-foreground">
+                      Work email
+                    </label>
+                    <Input
+                      id="interest-email"
+                      type="email"
+                      value={interestForm.email}
+                      onChange={(event) => setInterestForm((prev) => ({ ...prev, email: event.target.value }))}
+                      placeholder="name@estate.com"
+                      required
+                    />
+                  </div>
+                </div>
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <div className="space-y-1.5">
+                    <label htmlFor="interest-org" className="text-xs uppercase tracking-wide text-muted-foreground">
+                      Estate / company
+                    </label>
+                    <Input
+                      id="interest-org"
+                      value={interestForm.organization}
+                      onChange={(event) => setInterestForm((prev) => ({ ...prev, organization: event.target.value }))}
+                      placeholder="HoneyFarm Estate"
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <label htmlFor="interest-size" className="text-xs uppercase tracking-wide text-muted-foreground">
+                      Approx. estate size
+                    </label>
+                    <Input
+                      id="interest-size"
+                      value={interestForm.estateSize}
+                      onChange={(event) => setInterestForm((prev) => ({ ...prev, estateSize: event.target.value }))}
+                      placeholder="Single estate / Multi-estate"
+                    />
+                  </div>
+                </div>
+                <div className="space-y-1.5">
+                  <label htmlFor="interest-notes" className="text-xs uppercase tracking-wide text-muted-foreground">
+                    Notes
+                  </label>
+                  <Textarea
+                    id="interest-notes"
+                    value={interestForm.notes}
+                    onChange={(event) => setInterestForm((prev) => ({ ...prev, notes: event.target.value }))}
+                    placeholder="What modules do you want first?"
+                    className="min-h-[90px]"
+                  />
+                </div>
+                {interestState === "success" && (
+                  <p className="rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-700">
+                    Thanks. Interest registered successfully.
+                  </p>
+                )}
+                {interestState === "error" && (
+                  <p className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+                    {interestError || "Failed to submit interest."}
+                  </p>
+                )}
+                <Button type="submit" className="w-full" disabled={interestState === "submitting"}>
+                  {interestState === "submitting" ? "Submitting..." : "Register Interest"}
+                </Button>
+              </form>
+            </CardContent>
+          </Card>
         </section>
 
         <section id="results" className="mx-auto mt-16 w-full max-w-6xl scroll-mt-24 sm:mt-20">
@@ -1043,6 +1273,12 @@ export default function LandingPage() {
               </p>
             </div>
             <div className="flex flex-wrap gap-4 text-sm text-muted-foreground">
+              <a href="#roles" className="hover:text-foreground">
+                Who It Is For
+              </a>
+              <a href="#onboarding" className="hover:text-foreground">
+                Onboarding
+              </a>
               <a href="#field-signals" className="hover:text-foreground">
                 Field Signals
               </a>
@@ -1056,7 +1292,7 @@ export default function LandingPage() {
                 Impact
               </a>
               <a href="#pricing" className="hover:text-foreground">
-                Pricing
+                Plans
               </a>
               <a href="#mission" className="hover:text-foreground">
                 Mission
@@ -1096,7 +1332,7 @@ export default function LandingPage() {
             <div className="flex items-center justify-between border-b border-slate-200/60 px-4 py-3">
               <div>
                 <p className="text-sm font-semibold">FarmFlow Concierge</p>
-                <p className="text-xs text-muted-foreground">Ask about features, pricing, or onboarding.</p>
+                <p className="text-xs text-muted-foreground">Ask about features, plans, or onboarding.</p>
               </div>
               <Button variant="ghost" size="icon" onClick={() => setIsChatOpen(false)}>
                 <X className="h-4 w-4" />
@@ -1137,7 +1373,7 @@ export default function LandingPage() {
                 <input
                   value={draftMessage}
                   onChange={(event) => setDraftMessage(event.target.value)}
-                  placeholder="Ask about pricing, onboarding, exports..."
+                  placeholder="Ask about plans, onboarding, exports..."
                   className="flex-1 rounded-full border border-slate-200/70 bg-white px-4 py-2 text-sm outline-none focus:border-[color:var(--copper)]"
                 />
                 <Button size="icon" type="submit">

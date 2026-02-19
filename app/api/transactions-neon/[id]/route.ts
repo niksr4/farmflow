@@ -8,14 +8,17 @@ import { logAuditEvent } from "@/lib/server/audit-log"
 
 export const dynamic = "force-dynamic"
 
-export async function DELETE(_request: NextRequest, context: { params: { id: string } }) {
+type RouteContext = { params: Promise<{ id: string }> }
+
+export async function DELETE(_request: NextRequest, context: RouteContext) {
   try {
     const sessionUser = await requireModuleAccess("transactions")
     if (!canDeleteModule(sessionUser.role, "transactions")) {
       return NextResponse.json({ success: false, message: "Insufficient role" }, { status: 403 })
     }
     const tenantContext = normalizeTenantContext(sessionUser.tenantId, sessionUser.role)
-    const id = Number(context.params.id)
+    const { id: idParam } = await context.params
+    const id = Number(idParam)
 
     if (!id || Number.isNaN(id)) {
       return NextResponse.json({ success: false, message: "Invalid transaction id" }, { status: 400 })

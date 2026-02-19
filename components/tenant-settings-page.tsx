@@ -13,6 +13,14 @@ import { useToast } from "@/hooks/use-toast"
 import { useAuth } from "@/hooks/use-auth"
 import { AlertThresholds, useTenantSettings } from "@/hooks/use-tenant-settings"
 import { MODULES, MODULE_BUNDLES, type ModuleBundle } from "@/lib/modules"
+import {
+  DEFAULT_TENANT_FEATURE_FLAGS,
+  DEFAULT_TENANT_UI_VARIANT,
+  TENANT_FEATURE_FLAG_DEFINITIONS,
+  TENANT_UI_VARIANTS,
+  type TenantFeatureFlags,
+  type TenantUiVariant,
+} from "@/lib/tenant-experience"
 import { formatDateForDisplay, formatDateOnly } from "@/lib/date-utils"
 import { roleLabel } from "@/lib/roles"
 import { Info } from "lucide-react"
@@ -97,6 +105,9 @@ export default function TenantSettingsPage() {
   const [isSavingModules, setIsSavingModules] = useState(false)
   const [uiPreferencesDraft, setUiPreferencesDraft] = useState({ hideEmptyMetrics: false })
   const [isSavingUiPreferences, setIsSavingUiPreferences] = useState(false)
+  const [uiVariantDraft, setUiVariantDraft] = useState<TenantUiVariant>(DEFAULT_TENANT_UI_VARIANT)
+  const [featureFlagsDraft, setFeatureFlagsDraft] = useState<TenantFeatureFlags>(DEFAULT_TENANT_FEATURE_FLAGS)
+  const [isSavingTenantExperience, setIsSavingTenantExperience] = useState(false)
 
   const [selectedUserId, setSelectedUserId] = useState("")
   const [userModulePermissions, setUserModulePermissions] = useState<ModulePermission[]>([])
@@ -147,6 +158,7 @@ export default function TenantSettingsPage() {
 
   const isOwner = user?.role === "owner"
   const isAdminOrOwner = user?.role === "admin" || user?.role === "owner"
+  const privacyFeatureEnabled = false
   const mfaFeatureEnabled = false
   const mfaEnabled = mfaFeatureEnabled ? Boolean(mfaStatus?.enabled) : false
   const mfaVerified = mfaFeatureEnabled ? Boolean(user?.mfaVerified) : true
@@ -162,8 +174,16 @@ export default function TenantSettingsPage() {
     })
   }, [settings.uiPreferences?.hideEmptyMetrics])
 
+  useEffect(() => {
+    setUiVariantDraft(settings.uiVariant || DEFAULT_TENANT_UI_VARIANT)
+  }, [settings.uiVariant])
+
+  useEffect(() => {
+    setFeatureFlagsDraft({ ...DEFAULT_TENANT_FEATURE_FLAGS, ...(settings.featureFlags || {}) })
+  }, [settings.featureFlags])
+
   const loadPrivacyStatus = useCallback(async () => {
-    if (!tenantId) return
+    if (!privacyFeatureEnabled || !tenantId) return
     setIsPrivacyLoading(true)
     setPrivacyError(null)
     try {
@@ -178,11 +198,12 @@ export default function TenantSettingsPage() {
     } finally {
       setIsPrivacyLoading(false)
     }
-  }, [tenantId])
+  }, [tenantId, privacyFeatureEnabled])
 
   useEffect(() => {
+    if (!privacyFeatureEnabled) return
     loadPrivacyStatus()
-  }, [loadPrivacyStatus])
+  }, [loadPrivacyStatus, privacyFeatureEnabled])
 
   const handleAcceptNotice = async () => {
     setIsAcceptingNotice(true)
@@ -528,13 +549,16 @@ export default function TenantSettingsPage() {
     if (mfaGate) {
       return
     }
+    if (!isOwner) {
+      return
+    }
     if (selectedUserId) {
       loadUserModules(selectedUserId)
       return
     }
     setUserModulePermissions(MODULES.map((module) => ({ ...module, enabled: module.defaultEnabled !== false })))
     setUserModuleSource("default")
-  }, [selectedUserId, loadUserModules, mfaGate])
+  }, [selectedUserId, loadUserModules, mfaGate, isOwner])
 
   const handleCreateUser = async () => {
     if (mfaGate) {
@@ -723,6 +747,28 @@ export default function TenantSettingsPage() {
     }
   }
 
+  const handleSaveTenantExperience = async () => {
+    setIsSavingTenantExperience(true)
+    try {
+      await updateSettings({
+        uiVariant: uiVariantDraft,
+        featureFlags: featureFlagsDraft,
+      })
+      toast({
+        title: "Experience profile updated",
+        description: "Tenant variant and feature flags were saved.",
+      })
+    } catch (error: any) {
+      toast({
+        title: "Save failed",
+        description: error.message || "Unable to update tenant experience profile.",
+        variant: "destructive",
+      })
+    } finally {
+      setIsSavingTenantExperience(false)
+    }
+  }
+
   const handleSaveUserModules = async () => {
     if (mfaGate) {
       toast({
@@ -908,23 +954,84 @@ export default function TenantSettingsPage() {
     }
   }
 
+  const enabledTenantModuleCount = modulePermissions.filter((module) => module.enabled).length
+  const enabledUserModuleCount = userModulePermissions.filter((module) => module.enabled).length
+  const sectionLinks: Array<{ id: string; label: string }> = [
+    { id: "estate-identity", label: "Estate" },
+    { id: "display-preferences", label: "Display" },
+    { id: "tenant-experience", label: "Experience" },
+    { id: "data-import", label: "Import" },
+    { id: "thresholds", label: "Thresholds" },
+    { id: "locations", label: "Locations" },
+    { id: "tenant-users", label: "Users" },
+  ]
+  if (isOwner) {
+    sectionLinks.push({ id: "tenant-modules", label: "Modules" })
+    sectionLinks.push({ id: "user-module-overrides", label: "User Access" })
+    sectionLinks.push({ id: "audit-log", label: "Audit" })
+  }
+  if (mfaFeatureEnabled && isAdminOrOwner) {
+    sectionLinks.push({ id: "admin-security", label: "Security" })
+  }
+  if (privacyFeatureEnabled) {
+    sectionLinks.push({ id: "privacy-dpdp", label: "Privacy" })
+  }
+
   return (
     <div className="space-y-8">
-      <Card className="border-border/70 bg-white/85">
+      <Card
+        id="settings-overview"
+        className="scroll-mt-24 border-emerald-200/80 bg-gradient-to-br from-emerald-50 via-white to-amber-50"
+      >
         <CardHeader>
           <CardTitle className="flex items-baseline gap-3">
             Tenant Settings
             <span className="text-xs uppercase tracking-[0.3em] text-muted-foreground">FarmFlow</span>
           </CardTitle>
-          <CardDescription>Manage users, access, locations, and audits for this estate.</CardDescription>
+          <CardDescription>Manage users, access, locations, thresholds, and tenant behavior in one place.</CardDescription>
         </CardHeader>
-        <CardContent className="text-sm text-muted-foreground">
-          Tenant ID: <span className="font-mono text-foreground">{tenantId || "Unavailable"}</span>
+        <CardContent className="space-y-4">
+          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+            <div className="rounded-lg border border-emerald-100 bg-white/90 p-3">
+              <p className="text-xs uppercase tracking-wide text-emerald-700">Tenant ID</p>
+              <p className="mt-1 break-all font-mono text-xs text-foreground">{tenantId || "Unavailable"}</p>
+            </div>
+            <div className="rounded-lg border border-emerald-100 bg-white/90 p-3">
+              <p className="text-xs uppercase tracking-wide text-emerald-700">Users</p>
+              <p className="mt-1 text-lg font-semibold text-foreground">{users.length}</p>
+            </div>
+            <div className="rounded-lg border border-emerald-100 bg-white/90 p-3">
+              <p className="text-xs uppercase tracking-wide text-emerald-700">Locations</p>
+              <p className="mt-1 text-lg font-semibold text-foreground">{locations.length}</p>
+            </div>
+            <div className="rounded-lg border border-emerald-100 bg-white/90 p-3">
+              <p className="text-xs uppercase tracking-wide text-emerald-700">
+                {isOwner ? "Modules Enabled" : "Your Role"}
+              </p>
+              <p className="mt-1 text-lg font-semibold text-foreground">
+                {isOwner ? enabledTenantModuleCount : roleLabel(user?.role || "user")}
+              </p>
+            </div>
+          </div>
+          <div className="space-y-2">
+            <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground">Quick jump</p>
+            <div className="flex flex-wrap gap-2">
+              {sectionLinks.map((section) => (
+                <a
+                  key={section.id}
+                  href={`#${section.id}`}
+                  className="rounded-full border border-border/70 bg-white/90 px-3 py-1 text-xs text-foreground transition hover:border-emerald-200 hover:text-emerald-700"
+                >
+                  {section.label}
+                </a>
+              ))}
+            </div>
+          </div>
         </CardContent>
       </Card>
 
       {user?.role === "owner" && (
-        <Card className="border-emerald-200/70 bg-emerald-50/60">
+        <Card id="owner-tools" className="scroll-mt-24 border-emerald-200/70 bg-emerald-50/60">
           <CardHeader>
             <CardTitle>Platform Owner Tools</CardTitle>
             <CardDescription>Tenant management and platform controls now live in a dedicated owner view.</CardDescription>
@@ -957,7 +1064,7 @@ export default function TenantSettingsPage() {
         </Card>
       )}
 
-      <Card className="border-border/70 bg-white/85">
+      <Card id="estate-identity" className="scroll-mt-24 border-border/70 bg-white/85">
         <CardHeader>
           <CardTitle>Estate Identity</CardTitle>
           <CardDescription>
@@ -1004,7 +1111,7 @@ export default function TenantSettingsPage() {
       </Card>
 
       {isAdminOrOwner && (
-        <Card className="border-border/70 bg-white/85">
+        <Card id="display-preferences" className="scroll-mt-24 border-border/70 bg-white/85">
           <CardHeader>
             <CardTitle>Dashboard Preferences</CardTitle>
             <CardDescription>Trim empty highlights for a cleaner estate view.</CardDescription>
@@ -1036,7 +1143,70 @@ export default function TenantSettingsPage() {
         </Card>
       )}
 
-      <Card className="border-border/70 bg-white/85">
+      {isAdminOrOwner && (
+        <Card id="tenant-experience" className="scroll-mt-24 border-border/70 bg-white/85">
+          <CardHeader>
+            <CardTitle>Tenant Experience Profile</CardTitle>
+            <CardDescription>
+              Choose a UI variant and tenant-level feature flags for this estate.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="space-y-2">
+              <Label>UI variant</Label>
+              <Select
+                value={uiVariantDraft}
+                onValueChange={(value) => setUiVariantDraft((value || DEFAULT_TENANT_UI_VARIANT) as TenantUiVariant)}
+              >
+                <SelectTrigger className="w-full md:w-[320px]">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {TENANT_UI_VARIANTS.map((variant) => (
+                    <SelectItem key={variant.id} value={variant.id}>
+                      {variant.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-muted-foreground">
+                {TENANT_UI_VARIANTS.find((variant) => variant.id === uiVariantDraft)?.description}
+              </p>
+            </div>
+
+            <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+              {TENANT_FEATURE_FLAG_DEFINITIONS.map((flag) => (
+                <label
+                  key={flag.id}
+                  className="flex items-start gap-3 rounded-lg border border-border/60 bg-white/80 p-3"
+                >
+                  <input
+                    type="checkbox"
+                    className="mt-1"
+                    checked={Boolean(featureFlagsDraft[flag.id])}
+                    onChange={(event) =>
+                      setFeatureFlagsDraft((prev) => ({
+                        ...prev,
+                        [flag.id]: event.target.checked,
+                      }))
+                    }
+                  />
+                  <div className="space-y-1">
+                    <p className="text-sm font-medium text-foreground">{flag.label}</p>
+                    <p className="text-xs text-muted-foreground">{flag.description}</p>
+                  </div>
+                </label>
+              ))}
+            </div>
+
+            <Button onClick={handleSaveTenantExperience} disabled={isSavingTenantExperience || settingsLoading}>
+              {isSavingTenantExperience ? "Saving..." : "Save Experience Profile"}
+            </Button>
+          </CardContent>
+        </Card>
+      )}
+
+      <Card id="data-import" className="scroll-mt-24 border-border/70 bg-white/85">
         <CardHeader>
           <CardTitle>Data Import</CardTitle>
           <CardDescription>Upload CSVs to onboard a new tenant faster.</CardDescription>
@@ -1051,7 +1221,7 @@ export default function TenantSettingsPage() {
         </CardContent>
       </Card>
 
-      <Card className="border-border/70 bg-white/85">
+      <Card id="thresholds" className="scroll-mt-24 border-border/70 bg-white/85">
         <CardHeader>
           <CardTitle>Exception Thresholds & Targets</CardTitle>
           <CardDescription>
@@ -1369,7 +1539,7 @@ export default function TenantSettingsPage() {
         </CardContent>
       </Card>
 
-      <Card className="border-border/70 bg-white/85">
+      <Card id="locations" className="scroll-mt-24 border-border/70 bg-white/85">
         <CardHeader>
           <CardTitle>Locations</CardTitle>
           <CardDescription>Add or edit estate locations (HF, MV, PG, etc.).</CardDescription>
@@ -1502,7 +1672,7 @@ export default function TenantSettingsPage() {
       </Card>
 
       {isOwner && (
-        <Card className="border-border/70 bg-white/85">
+        <Card id="tenant-modules" className="scroll-mt-24 border-border/70 bg-white/85">
           <CardHeader>
             <CardTitle>Tenant Modules</CardTitle>
             <CardDescription>
@@ -1550,7 +1720,7 @@ export default function TenantSettingsPage() {
         </Card>
       )}
 
-      <Card className="border-border/70 bg-white/85">
+      <Card id="tenant-users" className="scroll-mt-24 border-border/70 bg-white/85">
         <CardHeader>
           <CardTitle>Tenant Users</CardTitle>
           <CardDescription>Invite admins or users and manage roles.</CardDescription>
@@ -1664,64 +1834,70 @@ export default function TenantSettingsPage() {
         </CardContent>
       </Card>
 
-      <Card className="border-border/70 bg-white/85">
-        <CardHeader>
-          <CardTitle>User Module Overrides</CardTitle>
-          <CardDescription>Override tenant defaults for a single user.</CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="space-y-2">
-            <Label>Select User</Label>
-            <Select
-              value={selectedUserId}
-              onValueChange={setSelectedUserId}
-              disabled={!tenantId || users.length === 0}
-            >
-              <SelectTrigger>
-                <SelectValue placeholder={users.length ? "Choose a user" : "No users available"} />
-              </SelectTrigger>
-              <SelectContent>
-                {users.map((u) => (
-                  <SelectItem key={u.id} value={u.id}>
-                    {u.username} ({roleLabel(u.role)})
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            <p className="text-xs text-muted-foreground">
-              {userModuleSource
-                ? `Source: ${userModuleSource === "user" ? "User override" : userModuleSource === "tenant" ? "Tenant defaults" : "System defaults"}`
-                : "Source: System defaults"}
-            </p>
-          </div>
+      {isOwner && (
+        <Card id="user-module-overrides" className="scroll-mt-24 border-border/70 bg-white/85">
+          <CardHeader>
+            <CardTitle>User Module Overrides</CardTitle>
+            <CardDescription>Override tenant defaults for a single user.</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="space-y-2">
+              <Label>Select User</Label>
+              <Select
+                value={selectedUserId}
+                onValueChange={setSelectedUserId}
+                disabled={!tenantId || users.length === 0}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder={users.length ? "Choose a user" : "No users available"} />
+                </SelectTrigger>
+                <SelectContent>
+                  {users.map((u) => (
+                    <SelectItem key={u.id} value={u.id}>
+                      {u.username} ({roleLabel(u.role)})
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-muted-foreground">
+                {userModuleSource
+                  ? `Source: ${userModuleSource === "user" ? "User override" : userModuleSource === "tenant" ? "Tenant defaults" : "System defaults"}`
+                  : "Source: System defaults"}
+              </p>
+              <p className="text-xs text-muted-foreground">Enabled for selected user: {enabledUserModuleCount}</p>
+            </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-            {userModulePermissions.map((module) => (
-              <label key={module.id} className="flex items-center gap-2 rounded-lg border border-border/60 bg-white/80 p-3">
-                <input
-                  type="checkbox"
-                  checked={module.enabled}
-                  onChange={() => toggleUserModule(module.id)}
-                  disabled={isUserModulesLoading}
-                />
-                <span>{module.label}</span>
-              </label>
-            ))}
-          </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              {userModulePermissions.map((module) => (
+                <label key={module.id} className="flex items-center gap-2 rounded-lg border border-border/60 bg-white/80 p-3">
+                  <input
+                    type="checkbox"
+                    checked={module.enabled}
+                    onChange={() => toggleUserModule(module.id)}
+                    disabled={isUserModulesLoading}
+                  />
+                  <span>{module.label}</span>
+                </label>
+              ))}
+            </div>
 
-          <div className="flex flex-col sm:flex-row gap-2">
-            <Button onClick={handleSaveUserModules} disabled={!selectedUserId || isUserModulesLoading || isSavingUserModules}>
-              {isSavingUserModules ? "Saving..." : "Save User Access"}
-            </Button>
-            <Button variant="outline" onClick={handleResetUserModules} disabled={!selectedUserId || isUserModulesLoading}>
-              Reset to Tenant Defaults
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
+            <div className="flex flex-col sm:flex-row gap-2">
+              <Button
+                onClick={handleSaveUserModules}
+                disabled={!selectedUserId || isUserModulesLoading || isSavingUserModules}
+              >
+                {isSavingUserModules ? "Saving..." : "Save User Access"}
+              </Button>
+              <Button variant="outline" onClick={handleResetUserModules} disabled={!selectedUserId || isUserModulesLoading}>
+                Reset to Tenant Defaults
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {mfaFeatureEnabled && (user?.role === "admin" || user?.role === "owner") && (
-        <Card className="border-border/70 bg-white/85">
+        <Card id="admin-security" className="scroll-mt-24 border-border/70 bg-white/85">
           <CardHeader>
             <CardTitle>Admin Security (MFA)</CardTitle>
             <CardDescription>Admins must enroll in MFA to access sensitive settings and admin APIs.</CardDescription>
@@ -1775,100 +1951,104 @@ export default function TenantSettingsPage() {
         </Card>
       )}
 
-      <Card className="border-border/70 bg-white/85">
-        <CardHeader>
-          <CardTitle>Privacy & DPDP</CardTitle>
-          <CardDescription>Manage personal data rights, notices, and consent settings.</CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4 text-sm text-muted-foreground">
-          {privacyError && <div className="rounded-md border border-red-200 bg-red-50 p-3 text-red-700">{privacyError}</div>}
-          {isPrivacyLoading ? (
-            <div>Loading privacy status...</div>
-          ) : (
-            <div className="rounded-lg border border-border/60 bg-white/80 p-4 space-y-2">
-              <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                <div>
-                  <p className="text-sm font-medium text-foreground">Privacy notice</p>
-                  <p>
-                    Version: {privacyStatus?.noticeVersion || "Not available"}{" "}
-                    {privacyStatus?.acceptedAt ? `· Accepted ${formatDateForDisplay(privacyStatus.acceptedAt)}` : "· Not accepted yet"}
-                  </p>
+      {privacyFeatureEnabled && (
+        <Card id="privacy-dpdp" className="scroll-mt-24 border-border/70 bg-white/85">
+          <CardHeader>
+            <CardTitle>Privacy & DPDP</CardTitle>
+            <CardDescription>Manage personal data rights, notices, and consent settings.</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4 text-sm text-muted-foreground">
+            {privacyError && <div className="rounded-md border border-red-200 bg-red-50 p-3 text-red-700">{privacyError}</div>}
+            {isPrivacyLoading ? (
+              <div>Loading privacy status...</div>
+            ) : (
+              <div className="rounded-lg border border-border/60 bg-white/80 p-4 space-y-2">
+                <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                  <div>
+                    <p className="text-sm font-medium text-foreground">Privacy notice</p>
+                    <p>
+                      Version: {privacyStatus?.noticeVersion || "Not available"}{" "}
+                      {privacyStatus?.acceptedAt
+                        ? `· Accepted ${formatDateForDisplay(privacyStatus.acceptedAt)}`
+                        : "· Not accepted yet"}
+                    </p>
+                  </div>
+                  <div className="flex gap-2">
+                    <Button variant="outline" asChild>
+                      <Link href="/privacy">View Notice</Link>
+                    </Button>
+                    <Button onClick={handleAcceptNotice} disabled={isAcceptingNotice || !tenantId}>
+                      {isAcceptingNotice ? "Saving..." : "Acknowledge"}
+                    </Button>
+                  </div>
                 </div>
-                <div className="flex gap-2">
-                  <Button variant="outline" asChild>
-                    <Link href="/privacy">View Notice</Link>
-                  </Button>
-                  <Button onClick={handleAcceptNotice} disabled={isAcceptingNotice || !tenantId}>
-                    {isAcceptingNotice ? "Saving..." : "Acknowledge"}
-                  </Button>
+                <div className="flex items-center justify-between border-t pt-3">
+                  <div>
+                    <p className="text-sm font-medium text-foreground">Optional product updates</p>
+                    <p>Allow FarmFlow to send product updates and training materials.</p>
+                  </div>
+                  <label className="flex items-center gap-2 text-sm">
+                    <input
+                      type="checkbox"
+                      checked={Boolean(privacyStatus?.consentMarketing)}
+                      onChange={(event) => handleConsentToggle(event.target.checked)}
+                      disabled={isUpdatingConsent || !tenantId}
+                    />
+                    {privacyStatus?.consentMarketing ? "Opted in" : "Opted out"}
+                  </label>
                 </div>
               </div>
-              <div className="flex items-center justify-between border-t pt-3">
-                <div>
-                  <p className="text-sm font-medium text-foreground">Optional product updates</p>
-                  <p>Allow FarmFlow to send product updates and training materials.</p>
-                </div>
-                <label className="flex items-center gap-2 text-sm">
-                  <input
-                    type="checkbox"
-                    checked={Boolean(privacyStatus?.consentMarketing)}
-                    onChange={(event) => handleConsentToggle(event.target.checked)}
-                    disabled={isUpdatingConsent || !tenantId}
-                  />
-                  {privacyStatus?.consentMarketing ? "Opted in" : "Opted out"}
-                </label>
-              </div>
-            </div>
-          )}
+            )}
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div className="rounded-lg border border-border/60 bg-white/80 p-4 space-y-3">
-              <div>
-                <p className="text-sm font-medium text-foreground">Export my data</p>
-                <p>Download a JSON export of your personal data across FarmFlow.</p>
-              </div>
-              <Button onClick={handleExportPersonalData} disabled={isExportingPersonalData || !tenantId}>
-                {isExportingPersonalData ? "Preparing..." : "Download export"}
-              </Button>
-            </div>
-            <div className="rounded-lg border border-border/60 bg-white/80 p-4 space-y-3">
-              <div>
-                <p className="text-sm font-medium text-foreground">Correct my username</p>
-                <p>Update the username used across logs and records.</p>
-              </div>
-              <div className="flex flex-col sm:flex-row gap-2">
-                <Input
-                  value={correctionUsername}
-                  onChange={(event) => setCorrectionUsername(event.target.value)}
-                  placeholder="New username"
-                />
-                <Button onClick={handleSubmitCorrection} disabled={isSubmittingCorrection || !tenantId}>
-                  {isSubmittingCorrection ? "Updating..." : "Update"}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="rounded-lg border border-border/60 bg-white/80 p-4 space-y-3">
+                <div>
+                  <p className="text-sm font-medium text-foreground">Export my data</p>
+                  <p>Download a JSON export of your personal data across FarmFlow.</p>
+                </div>
+                <Button onClick={handleExportPersonalData} disabled={isExportingPersonalData || !tenantId}>
+                  {isExportingPersonalData ? "Preparing..." : "Download export"}
                 </Button>
               </div>
+              <div className="rounded-lg border border-border/60 bg-white/80 p-4 space-y-3">
+                <div>
+                  <p className="text-sm font-medium text-foreground">Correct my username</p>
+                  <p>Update the username used across logs and records.</p>
+                </div>
+                <div className="flex flex-col sm:flex-row gap-2">
+                  <Input
+                    value={correctionUsername}
+                    onChange={(event) => setCorrectionUsername(event.target.value)}
+                    placeholder="New username"
+                  />
+                  <Button onClick={handleSubmitCorrection} disabled={isSubmittingCorrection || !tenantId}>
+                    {isSubmittingCorrection ? "Updating..." : "Update"}
+                  </Button>
+                </div>
+              </div>
             </div>
-          </div>
 
-          <div className="rounded-md border border-amber-200 bg-amber-50/60 p-4 space-y-2">
-            <p className="text-sm font-medium text-amber-900">Request deletion or anonymization</p>
-            <p>
-              We will remove or anonymize your personal data once the request is processed. Some records may be retained
-              when required by law.
-            </p>
-            {privacyStatus?.deletionRequestedAt && (
-              <p className="text-xs text-amber-900">
-                Request logged on {formatDateForDisplay(privacyStatus.deletionRequestedAt)}.
+            <div className="rounded-md border border-amber-200 bg-amber-50/60 p-4 space-y-2">
+              <p className="text-sm font-medium text-amber-900">Request deletion or anonymization</p>
+              <p>
+                We will remove or anonymize your personal data once the request is processed. Some records may be
+                retained when required by law.
               </p>
-            )}
-            <Button variant="destructive" onClick={handleRequestDeletion} disabled={isRequestingDeletion || !tenantId}>
-              {isRequestingDeletion ? "Submitting..." : "Request deletion"}
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
+              {privacyStatus?.deletionRequestedAt && (
+                <p className="text-xs text-amber-900">
+                  Request logged on {formatDateForDisplay(privacyStatus.deletionRequestedAt)}.
+                </p>
+              )}
+              <Button variant="destructive" onClick={handleRequestDeletion} disabled={isRequestingDeletion || !tenantId}>
+                {isRequestingDeletion ? "Submitting..." : "Request deletion"}
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {isOwner && (
-        <Card className="border-border/70 bg-white/85">
+        <Card id="audit-log" className="scroll-mt-24 border-border/70 bg-white/85">
           <CardHeader>
             <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
               <div>

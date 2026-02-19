@@ -9,6 +9,8 @@ CREATE TABLE IF NOT EXISTS tenants (
   bag_weight_kg NUMERIC NOT NULL DEFAULT 50,
   alert_thresholds JSONB DEFAULT '{}'::jsonb,
   ui_preferences JSONB DEFAULT '{}'::jsonb,
+  ui_variant TEXT NOT NULL DEFAULT 'standard',
+  feature_flags JSONB NOT NULL DEFAULT '{}'::jsonb,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -18,15 +20,41 @@ ALTER TABLE tenants
   ADD COLUMN IF NOT EXISTS alert_thresholds JSONB DEFAULT '{}'::jsonb;
 ALTER TABLE tenants
   ADD COLUMN IF NOT EXISTS ui_preferences JSONB DEFAULT '{}'::jsonb;
+ALTER TABLE tenants
+  ADD COLUMN IF NOT EXISTS ui_variant TEXT NOT NULL DEFAULT 'standard';
+ALTER TABLE tenants
+  ADD COLUMN IF NOT EXISTS feature_flags JSONB NOT NULL DEFAULT '{}'::jsonb;
+
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1
+    FROM pg_constraint
+    WHERE conname = 'tenants_ui_variant_check'
+      AND conrelid = 'tenants'::regclass
+  ) THEN
+    ALTER TABLE tenants
+      ADD CONSTRAINT tenants_ui_variant_check
+      CHECK (ui_variant IN ('standard', 'legacy-estate', 'ops-focused'));
+  END IF;
+END
+$$;
 
 CREATE TABLE IF NOT EXISTS users (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   username TEXT NOT NULL UNIQUE,
   password_hash TEXT NOT NULL,
+  password_reset_required BOOLEAN NOT NULL DEFAULT FALSE,
+  password_updated_at TIMESTAMP,
   role TEXT NOT NULL CHECK (role IN ('admin', 'user', 'owner')),
   tenant_id UUID,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
+
+ALTER TABLE users
+  ADD COLUMN IF NOT EXISTS password_reset_required BOOLEAN NOT NULL DEFAULT FALSE;
+ALTER TABLE users
+  ADD COLUMN IF NOT EXISTS password_updated_at TIMESTAMP;
 
 CREATE TABLE IF NOT EXISTS tenant_modules (
   id SERIAL PRIMARY KEY,
