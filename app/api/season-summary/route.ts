@@ -11,6 +11,28 @@ const COST_SPIKE_MULTIPLIER = 1.5
 const normalizeBagType = (value: string | null | undefined) =>
   String(value || "").toLowerCase().includes("cherry") ? "Dry Cherry" : "Dry Parchment"
 
+const toLocationBucket = (locationName?: string | null, locationCode?: string | null) => {
+  const rawCode = String(locationCode || "").trim()
+  const rawName = String(locationName || "").trim()
+  const base = rawCode || rawName
+  if (!base) return "Unknown"
+
+  const normalized = base.replace(/[_-]+/g, " ").replace(/\s+/g, " ").trim()
+  const tokens = normalized.split(" ")
+
+  // Roll up branch-like codes such as "HF A", "HF B", "HF C" into "HF"
+  if (tokens.length >= 2) {
+    const head = tokens[0]
+    const tail = tokens[1]
+    const looksLikeBranchCode = /^[A-Za-z]{2,5}$/.test(head) && /^[A-Za-z0-9]{1,5}$/.test(tail)
+    if (looksLikeBranchCode) {
+      return head.toUpperCase()
+    }
+  }
+
+  return rawCode || rawName
+}
+
 const resolveDispatchReceivedKgs = (row: any, bagWeightKg: number) => {
   const received = Number(row.kgs_received) || 0
   if (received > 0) return received
@@ -805,29 +827,47 @@ export async function GET(request: NextRequest) {
       salesReconPct,
     }
 
-    const processingLossByLocation = (processingLocationRows || [])
-      .map((row: any) => {
-        const ripe = Number(row.ripe_kgs) || 0
-        const dry = (Number(row.dry_parch_kgs) || 0) + (Number(row.dry_cherry_kgs) || 0)
-        const lossKgs = Math.max(0, ripe - dry)
+    const processingLossByLocationMap = new Map<string, { ripe: number; dry: number }>()
+    ;(processingLocationRows || []).forEach((row: any) => {
+      const bucket = toLocationBucket(row.location_name, row.location_code)
+      const ripe = Number(row.ripe_kgs) || 0
+      const dry = (Number(row.dry_parch_kgs) || 0) + (Number(row.dry_cherry_kgs) || 0)
+      const current = processingLossByLocationMap.get(bucket) || { ripe: 0, dry: 0 }
+      current.ripe += ripe
+      current.dry += dry
+      processingLossByLocationMap.set(bucket, current)
+    })
+
+    const processingLossByLocation = Array.from(processingLossByLocationMap.entries())
+      .map(([location, totalsByLocation]) => {
+        const lossKgs = Math.max(0, totalsByLocation.ripe - totalsByLocation.dry)
         return {
-          location: row.location_name || row.location_code || "Unknown",
+          location,
           lossKgs,
-          lossPct: safeDivide(lossKgs, ripe),
+          lossPct: safeDivide(lossKgs, totalsByLocation.ripe),
         }
       })
       .sort((a, b) => b.lossPct - a.lossPct)
       .slice(0, 5)
 
-    const transitLossByLocation = (dispatchLocationRows || [])
-      .map((row: any) => {
-        const dispatchedKgs = (Number(row.bags_dispatched) || 0) * bagWeightKg
-        const receivedKgs = resolveDispatchReceivedKgs(row, bagWeightKg)
-        const lossKgs = Math.max(0, dispatchedKgs - receivedKgs)
+    const transitLossByLocationMap = new Map<string, { dispatchedKgs: number; receivedKgs: number }>()
+    ;(dispatchLocationRows || []).forEach((row: any) => {
+      const bucket = toLocationBucket(row.location_name, row.location_code)
+      const dispatchedKgs = (Number(row.bags_dispatched) || 0) * bagWeightKg
+      const receivedKgs = resolveDispatchReceivedKgs(row, bagWeightKg)
+      const current = transitLossByLocationMap.get(bucket) || { dispatchedKgs: 0, receivedKgs: 0 }
+      current.dispatchedKgs += dispatchedKgs
+      current.receivedKgs += receivedKgs
+      transitLossByLocationMap.set(bucket, current)
+    })
+
+    const transitLossByLocation = Array.from(transitLossByLocationMap.entries())
+      .map(([location, totalsByLocation]) => {
+        const lossKgs = Math.max(0, totalsByLocation.dispatchedKgs - totalsByLocation.receivedKgs)
         return {
-          location: row.location_name || row.location_code || "Unknown",
+          location,
           lossKgs,
-          lossPct: safeDivide(lossKgs, dispatchedKgs),
+          lossPct: safeDivide(lossKgs, totalsByLocation.dispatchedKgs),
         }
       })
       .sort((a, b) => b.lossPct - a.lossPct)
@@ -835,15 +875,22 @@ export async function GET(request: NextRequest) {
 
     const salesByLocationMap = new Map<string, { soldKgs: number }>()
     ;(salesLocationRows || []).forEach((row: any) => {
-      const estate = row.location_name || row.location_code || "Unknown"
+      const estate = toLocationBucket(row.location_name, row.location_code)
       const soldKgs = resolveSalesKgs(row, bagWeightKg)
-      salesByLocationMap.set(estate, { soldKgs })
+      const current = salesByLocationMap.get(estate) || { soldKgs: 0 }
+      current.soldKgs += soldKgs
+      salesByLocationMap.set(estate, current)
     })
 
-    const salesReconByLocation = (dispatchLocationRows || [])
-      .map((row: any) => {
-        const estate = row.location_name || row.location_code || "Unknown"
-        const receivedKgs = resolveDispatchReceivedKgs(row, bagWeightKg)
+    const dispatchReceivedByLocationMap = new Map<string, number>()
+    ;(dispatchLocationRows || []).forEach((row: any) => {
+      const estate = toLocationBucket(row.location_name, row.location_code)
+      const receivedKgs = resolveDispatchReceivedKgs(row, bagWeightKg)
+      dispatchReceivedByLocationMap.set(estate, (dispatchReceivedByLocationMap.get(estate) || 0) + receivedKgs)
+    })
+
+    const salesReconByLocation = Array.from(dispatchReceivedByLocationMap.entries())
+      .map(([estate, receivedKgs]) => {
         const soldKgs = salesByLocationMap.get(estate)?.soldKgs || 0
         const deltaKgs = receivedKgs - soldKgs
         return {

@@ -31,6 +31,7 @@ import {
   Settings,
   Info,
   BookOpen,
+  Scale,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -67,6 +68,7 @@ import CuringTab from "@/components/curing-tab"
 import QualityGradingTab from "@/components/quality-grading-tab"
 import BillingTab from "@/components/billing-tab"
 import ReceivablesTab from "@/components/receivables-tab"
+import BalanceSheetTab from "@/components/balance-sheet-tab"
 import JournalTab from "@/components/journal-tab"
 import ResourcesTab from "@/components/resources-tab"
 import { PepperTab } from "./pepper-tab"
@@ -472,7 +474,7 @@ export default function InventorySystem() {
 
   useEffect(() => {
     if (!tenantId) return
-    if (activeTab !== "accounts" && activeTab !== "billing") {
+    if (activeTab !== "accounts" && activeTab !== "billing" && activeTab !== "balance-sheet") {
       setAccountsTotalsLoading(false)
       return
     }
@@ -1202,6 +1204,32 @@ export default function InventorySystem() {
       },
     ]
 
+    const balanceNetBooked = salesHeroTotals.totalRevenue - accountsTotals.grandTotal
+    const balanceLivePosition = balanceNetBooked + receivablesHeroTotals.totalOutstanding
+    const balanceSheetStats: HeroStat[] = [
+      {
+        label: "Booked inflow",
+        value: salesHeroTotals.loading ? "Loading..." : formatCurrency(salesHeroTotals.totalRevenue, 0),
+        metricValue: salesHeroTotals.loading || salesHeroTotals.error ? null : salesHeroTotals.totalRevenue,
+      },
+      {
+        label: "Booked outflow",
+        value: accountsTotalsLoading ? "Loading..." : formatCurrency(accountsTotals.grandTotal, 0),
+        metricValue: accountsTotalsLoading ? null : accountsTotals.grandTotal,
+      },
+      {
+        label: "Live position",
+        value:
+          accountsTotalsLoading || receivablesHeroTotals.loading || salesHeroTotals.loading
+            ? "Loading..."
+            : formatCurrency(balanceLivePosition, 0),
+        metricValue:
+          accountsTotalsLoading || receivablesHeroTotals.loading || salesHeroTotals.loading
+            ? null
+            : balanceLivePosition,
+      },
+    ]
+
     const receivablesStats: HeroStat[] = [
       {
         label: "Total invoiced",
@@ -1387,6 +1415,24 @@ export default function InventorySystem() {
       { icon: Receipt, label: `Tracking ${currentFiscalYear.label}`, metricValue: null },
     ]
 
+    const chipsBalanceSheet: HeroChip[] = [
+      {
+        icon: TrendingUp,
+        label:
+          salesHeroTotals.loading || accountsTotalsLoading
+            ? "Booked net loading..."
+            : `Booked net: ${formatCurrency(balanceNetBooked, 0)}`,
+        metricValue: salesHeroTotals.loading || accountsTotalsLoading ? null : balanceNetBooked,
+      },
+      {
+        icon: Receipt,
+        label: receivablesHeroTotals.loading
+          ? "Live receivables loading..."
+          : `Live receivables: ${formatCurrency(receivablesHeroTotals.totalOutstanding, 0)}`,
+        metricValue: receivablesHeroTotals.loading ? null : receivablesHeroTotals.totalOutstanding,
+      },
+    ]
+
     const chipsReceivables: HeroChip[] = [
       {
         icon: Receipt,
@@ -1520,6 +1566,14 @@ export default function InventorySystem() {
           description: "Keep cost tracking tight and audit-ready.",
           chips: chipsAccounts,
           stats: accountsStats,
+        }
+      case "balance-sheet":
+        return {
+          badge: "Live Balance Sheet",
+          title: "Estate cash position in one view",
+          description: "See booked inflow/outflow and receivable-backed live position.",
+          chips: chipsBalanceSheet,
+          stats: balanceSheetStats,
         }
       case "receivables":
         return {
@@ -2125,6 +2179,7 @@ export default function InventorySystem() {
   const showTransactionHistory = isModuleEnabled("transactions")
   const canShowInventory = isModuleEnabled("inventory")
   const canShowAccounts = isModuleEnabled("accounts")
+  const canShowBalanceSheet = isModuleEnabled("balance-sheet")
   const canShowProcessing = isModuleEnabled("processing")
   const canShowDispatch = isModuleEnabled("dispatch")
   const canShowSales = isModuleEnabled("sales")
@@ -2145,7 +2200,8 @@ export default function InventorySystem() {
   const canShowRainfallSection = canShowRainfall || canShowWeather
   const showOperationsTabs =
     canShowInventory || canShowProcessing || canShowCuring || canShowQuality || canShowDispatch || canShowSales || canShowPepper
-  const showFinanceTabs = canShowAccounts || showTransactionHistory || canShowReceivables || canShowBilling
+  const showFinanceTabs =
+    canShowAccounts || canShowBalanceSheet || showTransactionHistory || canShowReceivables || canShowBilling
   const showInsightsTabs =
     canShowSeason ||
     canShowActivityLog ||
@@ -2215,6 +2271,7 @@ export default function InventorySystem() {
     if (canShowInventory) tabs.push("inventory")
     if (showTransactionHistory) tabs.push("transactions")
     if (canShowAccounts) tabs.push("accounts")
+    if (canShowBalanceSheet) tabs.push("balance-sheet")
     if (canShowProcessing) tabs.push("processing")
     if (canShowDispatch) tabs.push("dispatch")
     if (canShowSales) tabs.push("sales")
@@ -2233,6 +2290,7 @@ export default function InventorySystem() {
     return tabs
   }, [
     canShowAccounts,
+    canShowBalanceSheet,
     canShowAiAnalysis,
     canShowBilling,
     canShowDispatch,
@@ -3523,6 +3581,12 @@ export default function InventorySystem() {
                     Accounts
                   </TabsTrigger>
                 )}
+                {canShowBalanceSheet && (
+                  <TabsTrigger value="balance-sheet">
+                    <Scale className="h-3.5 w-3.5 mr-1.5" />
+                    Balance Sheet
+                  </TabsTrigger>
+                )}
                 {showTransactionHistory && <TabsTrigger value="transactions">Transaction History</TabsTrigger>}
                 {canShowReceivables && <TabsTrigger value="receivables">Receivables</TabsTrigger>}
                 {canShowBilling && (
@@ -4166,6 +4230,12 @@ export default function InventorySystem() {
           {canShowAccounts && (
             <TabsContent value="accounts" className="space-y-6">
               <AccountsPage />
+            </TabsContent>
+          )}
+
+          {canShowBalanceSheet && (
+            <TabsContent value="balance-sheet" className="space-y-6">
+              <BalanceSheetTab />
             </TabsContent>
           )}
 
