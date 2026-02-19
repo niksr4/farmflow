@@ -57,7 +57,7 @@ export const authOptions: NextAuthOptions = {
                 CASE WHEN username = ${username} THEN 0 ELSE 1 END,
                 CASE role WHEN 'owner' THEN 0 WHEN 'admin' THEN 1 ELSE 2 END,
                 created_at ASC
-              LIMIT 1
+              LIMIT 25
             `,
           )
         } catch (error) {
@@ -76,7 +76,7 @@ export const authOptions: NextAuthOptions = {
                 CASE WHEN username = ${username} THEN 0 ELSE 1 END,
                 CASE role WHEN 'owner' THEN 0 WHEN 'admin' THEN 1 ELSE 2 END,
                 created_at ASC
-              LIMIT 1
+              LIMIT 25
             `,
           )
           users = users.map((row) => ({ ...row, password_reset_required: false }))
@@ -94,22 +94,26 @@ export const authOptions: NextAuthOptions = {
           return null
         }
 
-        const user = users[0]
-        const storedHash = String(user.password_hash || "")
-        const { matches, needsRehash } = verifyPassword(password, storedHash)
+        let user: any | null = null
+        let needsRehash = false
+        for (const candidate of users) {
+          const storedHash = String(candidate.password_hash || "")
+          const verifyResult = verifyPassword(password, storedHash)
+          if (verifyResult.matches) {
+            user = candidate
+            needsRehash = verifyResult.needsRehash
+            break
+          }
+        }
 
-        if (!matches) {
+        if (!user) {
           await logSecurityEvent({
-            tenantId: String(user.tenant_id),
-            actorUserId: String(user.id),
-            actorUsername: String(user.username),
-            actorRole: String(user.role),
             eventType: "auth_login_failure",
             severity: "warning",
             source: "next-auth",
             ipAddress,
             userAgent,
-            metadata: { username, reason: "invalid_password" },
+            metadata: { username, reason: "invalid_password", candidates: users.length },
           })
           return null
         }
