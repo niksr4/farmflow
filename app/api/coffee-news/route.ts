@@ -18,7 +18,7 @@ function scoreHeadline(text: string) {
 }
 
 function extractPriceMentions(text: string) {
-  const matches = text.match(/(₹|rs\\.?|inr|\\$|usd|eur)\\s?\\d+(?:[\\.,]\\d+)?/gi)
+  const matches = text.match(/(₹|rs\.?|inr|\$|usd|eur)\s?\d+(?:[\.,]\d+)?/gi)
   return matches ? matches.map((match) => match.trim()) : []
 }
 

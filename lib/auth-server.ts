@@ -15,6 +15,7 @@ export type SessionUser = {
   username: string
   role: "admin" | "user" | "owner"
   tenantId: string
+  mfaEnabled?: boolean
   mfaVerified?: boolean
   passwordResetRequired?: boolean
 }
@@ -28,6 +29,7 @@ export async function requireSessionUser(): Promise<SessionUser> {
       username: String(user.name || ""),
       role: user.role,
       tenantId: String(user.tenantId),
+      mfaEnabled: Boolean((user as any).mfaEnabled),
       mfaVerified: Boolean((user as any).mfaVerified),
       passwordResetRequired: Boolean((user as any).passwordResetRequired),
     }
@@ -68,6 +70,7 @@ export async function requireSessionUser(): Promise<SessionUser> {
         username: String(user.name || ""),
         role: String(rows[0].role) as SessionUser["role"],
         tenantId: String(rows[0].tenant_id),
+        mfaEnabled: Boolean((user as any)?.mfaEnabled),
         mfaVerified: Boolean((user as any)?.mfaVerified),
         passwordResetRequired: Boolean(rows[0].password_reset_required),
       }

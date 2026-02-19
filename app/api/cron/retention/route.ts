@@ -3,19 +3,24 @@ import { runRetentionCleanup } from "@/lib/server/privacy"
 
 export const dynamic = "force-dynamic"
 
-const requireCronSecret = () => {
+const getCronSecret = () => {
   const secret = process.env.CRON_SECRET
   return secret ? secret : null
 }
 
 export async function POST(request: Request) {
   try {
-    const secret = requireCronSecret()
-    if (secret) {
-      const authHeader = request.headers.get("authorization") || ""
-      if (authHeader !== `Bearer ${secret}`) {
-        return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 })
-      }
+    const secret = getCronSecret()
+    if (!secret) {
+      return NextResponse.json(
+        { success: false, error: "CRON_SECRET is not configured" },
+        { status: 503 },
+      )
+    }
+
+    const authHeader = request.headers.get("authorization") || ""
+    if (authHeader !== `Bearer ${secret}`) {
+      return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 })
     }
 
     await runRetentionCleanup()

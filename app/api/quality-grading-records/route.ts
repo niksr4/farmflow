@@ -164,7 +164,7 @@ export async function POST(request: Request) {
       outturn_pct: data.outturn_pct ?? null,
       cup_score: data.cup_score ?? null,
       buyer_reference: data.buyer_reference || null,
-      graded_by: data.graded_by || sessionUser.username || "system",
+      graded_by: sessionUser.username || "system",
       notes: data.notes || null,
     }
 

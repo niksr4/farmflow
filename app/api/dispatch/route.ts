@@ -198,8 +198,7 @@ export async function POST(request: Request) {
       bag_type, 
       bags_dispatched, 
       kgs_received,
-      notes, 
-      created_by 
+      notes
     } = body
 
     if (!dispatch_date || !coffee_type || !bag_type || bags_dispatched === undefined) {
@@ -257,7 +256,7 @@ export async function POST(request: Request) {
         kgs_received, notes, created_by, tenant_id
       ) VALUES (
         ${dispatch_date}::date, ${locationInfo.id}, ${resolvedEstate}, ${lot_id || null}, ${canonicalCoffeeType}, ${canonicalBagType}, ${Number(bags_dispatched)},
-        ${kgsValue}, ${notes || null}, ${created_by || 'unknown'}, ${tenantContext.tenantId}
+        ${kgsValue}, ${notes || null}, ${sessionUser.username || "system"}, ${tenantContext.tenantId}
       )
       RETURNING *
     `,
@@ -371,6 +370,13 @@ export async function PUT(request: Request) {
       RETURNING *
     `,
     )
+
+    if (!Array.isArray(result) || result.length === 0) {
+      return NextResponse.json(
+        { success: false, error: "Dispatch record not found for this tenant." },
+        { status: 404 },
+      )
+    }
 
     await logAuditEvent(sql, sessionUser, {
       action: "update",

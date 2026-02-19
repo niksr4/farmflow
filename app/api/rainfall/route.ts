@@ -36,7 +36,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: false, error: "Insufficient role" }, { status: 403 })
     }
     const tenantContext = normalizeTenantContext(sessionUser.tenantId, sessionUser.role)
-    const { record_date, inches, cents, notes, user_id } = await request.json()
+    const { record_date, inches, cents, notes } = await request.json()
 
     if (!record_date) {
       return NextResponse.json({ success: false, error: "Date is required" }, { status: 400 })
@@ -58,7 +58,14 @@ export async function POST(request: NextRequest) {
       tenantContext,
       sql`
         INSERT INTO rainfall_records (record_date, inches, cents, notes, user_id, tenant_id)
-        VALUES (${record_date}, ${inchesValue}, ${centsValue}, ${notes || ""}, ${user_id || "unknown"}, ${tenantContext.tenantId})
+        VALUES (
+          ${record_date},
+          ${inchesValue},
+          ${centsValue},
+          ${notes || ""},
+          ${sessionUser.username || "system"},
+          ${tenantContext.tenantId}
+        )
         RETURNING *
       `,
     )

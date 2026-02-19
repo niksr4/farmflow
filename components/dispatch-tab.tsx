@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useCallback, useMemo, type ChangeEvent, type KeyboardEvent } from "react"
+import { useState, useEffect, useCallback, useMemo, useRef, type ChangeEvent, type KeyboardEvent as ReactKeyboardEvent } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -10,6 +10,7 @@ import { Textarea } from "@/components/ui/textarea"
 import { Calendar } from "@/components/ui/calendar"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import { CalendarIcon, Loader2, Save, Trash2, Download, Package, Truck, Pencil } from "lucide-react"
 import { format } from "date-fns"
 import { cn } from "@/lib/utils"
@@ -65,6 +66,7 @@ type LocationScope = "all" | "location" | "legacy_pool"
 
 const COFFEE_TYPES = DEFAULT_COFFEE_VARIETIES
 const BAG_TYPES = ["Dry Parchment", "Dry Cherry"]
+const STOCK_EPSILON = 0.0001
 const emptyBagTotals: BagTotals = {
   arabica_dry_parchment_bags: 0,
   arabica_dry_cherry_bags: 0,
@@ -118,10 +120,12 @@ export default function DispatchTab() {
   const [isLoading, setIsLoading] = useState(false)
   const [isLoadingMore, setIsLoadingMore] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
+  const dispatchSaveStateRef = useRef({ canSubmitDispatch: false, isSaving: false })
+  const dispatchSaveHandlerRef = useRef<(() => Promise<void> | void) | null>(null)
   const { toast } = useToast()
   const dispatchPageSize = 25
   const asOfDate = useMemo(() => format(date, "yyyy-MM-dd"), [date])
-  const blockInvalidNumberKey = (event: KeyboardEvent<HTMLInputElement>) => {
+  const blockInvalidNumberKey = (event: ReactKeyboardEvent<HTMLInputElement>) => {
     if (isBlockedNumericKey(event.key)) {
       event.preventDefault()
     }
@@ -493,7 +497,7 @@ export default function DispatchTab() {
 
     // Check if we have enough bags available from processing
     const balance = allowedBalance
-    if (bagsValue > balance) {
+    if (bagsValue > balance + STOCK_EPSILON) {
       toast({
         title: "Insufficient Inventory",
         description: `Only ${formatNumber(balance)} ${coffeeType} ${bagType} bags available from processing. You are trying to dispatch ${bagsDispatched} bags.`,
@@ -734,7 +738,7 @@ export default function DispatchTab() {
     ? Math.max(availableBalance, editAllowance.allowance)
     : availableBalance
   const bagsDispatchedValue = Number(bagsDispatched) || 0
-  const exceedsAvailability = bagsDispatchedValue > allowedBalance
+  const exceedsAvailability = bagsDispatchedValue > allowedBalance + STOCK_EPSILON
   const excessBags = Math.max(0, bagsDispatchedValue - allowedBalance)
   const isLegacyPooledAvailability = formBagTotalsScope === "legacy_pool" || formDispatchScope === "legacy_pool"
   const canSubmitDispatch =
@@ -753,6 +757,38 @@ export default function DispatchTab() {
     ? (Number(selectedDispatchRecord.bags_dispatched) || 0) * bagWeightKg
     : 0
   const selectedDispatchVarianceKgs = selectedDispatchResolvedKgs - selectedDispatchNominalKgs
+  const processedNominalBagsTotal =
+    bagTotals.arabica_dry_parchment_bags +
+    bagTotals.arabica_dry_cherry_bags +
+    bagTotals.robusta_dry_parchment_bags +
+    bagTotals.robusta_dry_cherry_bags
+  const dispatchedNominalBagsTotal =
+    dispatchedTotals.arabica_dry_parchment +
+    dispatchedTotals.arabica_dry_cherry +
+    dispatchedTotals.robusta_dry_parchment +
+    dispatchedTotals.robusta_dry_cherry
+  const dispatchedReceivedKgsTotal =
+    dispatchReceivedKgsTotals.arabica_dry_parchment +
+    dispatchReceivedKgsTotals.arabica_dry_cherry +
+    dispatchReceivedKgsTotals.robusta_dry_parchment +
+    dispatchReceivedKgsTotals.robusta_dry_cherry
+  const pendingNominalBags = processedNominalBagsTotal - dispatchedNominalBagsTotal
+  const dispatchVarianceKgsTotal = dispatchedReceivedKgsTotal - dispatchedNominalBagsTotal * bagWeightKg
+  dispatchSaveStateRef.current = { canSubmitDispatch, isSaving }
+  dispatchSaveHandlerRef.current = handleSave
+
+  useEffect(() => {
+    const onKeyDown = (event: globalThis.KeyboardEvent) => {
+      if (!(event.metaKey || event.ctrlKey)) return
+      if (event.key.toLowerCase() !== "s") return
+      event.preventDefault()
+      if (dispatchSaveStateRef.current.canSubmitDispatch && !dispatchSaveStateRef.current.isSaving) {
+        void dispatchSaveHandlerRef.current?.()
+      }
+    }
+    window.addEventListener("keydown", onKeyDown)
+    return () => window.removeEventListener("keydown", onKeyDown)
+  }, [])
 
   return (
     <div className="flex flex-col gap-8">
@@ -796,8 +832,44 @@ export default function DispatchTab() {
         Bags are logistics units; received KGs feed downstream sales availability.
       </p>
 
+      <Card className="order-4 border-border/70 bg-white/85">
+        <CardHeader className="pb-3">
+          <CardTitle className="text-xs uppercase tracking-[0.2em] text-muted-foreground">Dispatch Reconciliation</CardTitle>
+          <CardDescription>Use received KGs for saleable stock, while keeping nominal bag movement visible.</CardDescription>
+        </CardHeader>
+        <CardContent className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
+          <div className="rounded-lg border border-border/60 bg-white/80 p-3">
+            <p className="text-xs text-muted-foreground">Processed nominal</p>
+            <p className="mt-1 text-sm font-semibold text-foreground">{formatNumber(processedNominalBagsTotal)} bags</p>
+            <p className="mt-1 text-xs text-muted-foreground">{formatNumber(processedNominalBagsTotal * bagWeightKg)} KGs</p>
+          </div>
+          <div className="rounded-lg border border-border/60 bg-white/80 p-3">
+            <p className="text-xs text-muted-foreground">Dispatched nominal</p>
+            <p className="mt-1 text-sm font-semibold text-foreground">{formatNumber(dispatchedNominalBagsTotal)} bags</p>
+            <p className="mt-1 text-xs text-muted-foreground">{formatNumber(dispatchedNominalBagsTotal * bagWeightKg)} KGs</p>
+          </div>
+          <div className="rounded-lg border border-border/60 bg-white/80 p-3">
+            <p className="text-xs text-muted-foreground">Received for sales</p>
+            <p className="mt-1 text-sm font-semibold text-foreground">{formatNumber(dispatchedReceivedKgsTotal)} KGs</p>
+            <p className={cn("mt-1 text-xs", dispatchVarianceKgsTotal >= 0 ? "text-emerald-700" : "text-rose-700")}>
+              Variance vs nominal dispatch: {dispatchVarianceKgsTotal >= 0 ? "+" : ""}
+              {formatNumber(dispatchVarianceKgsTotal)} KGs
+            </p>
+          </div>
+          <div className="rounded-lg border border-border/60 bg-white/80 p-3">
+            <p className="text-xs text-muted-foreground">Pending nominal bags</p>
+            <p className={cn("mt-1 text-sm font-semibold", pendingNominalBags < 0 ? "text-rose-700" : "text-foreground")}>
+              {formatNumber(Math.abs(pendingNominalBags))} bags
+            </p>
+            <p className="mt-1 text-xs text-muted-foreground">
+              {pendingNominalBags < 0 ? "Dispatched exceeds processed nominal" : "Still in processed stock"}
+            </p>
+          </div>
+        </CardContent>
+      </Card>
+
       {/* Summary Cards */}
-      <div className="order-4 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="order-5 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         {/* Arabica Dry Parchment */}
         <Card className="border-border/60 bg-white/85">
           <CardHeader className="pb-2">
@@ -1134,6 +1206,7 @@ export default function DispatchTab() {
               )}
             </Button>
           </div>
+          <p className="mt-2 text-xs text-muted-foreground">Tip: press Ctrl/Cmd + S to save quickly.</p>
           {!canSubmitDispatch && !isSaving && (
             <p className="mt-2 text-xs text-muted-foreground">
               Enter location and quantity. Quantity must be within available stock.
@@ -1143,7 +1216,7 @@ export default function DispatchTab() {
       </Card>
 
       {/* Dispatch Records Table */}
-      <Card className="order-5 border-border/70 bg-white/85">
+      <Card className="order-6 border-border/70 bg-white/85">
         <CardHeader>
           <div className="flex items-center justify-between">
             <div>
@@ -1241,33 +1314,47 @@ export default function DispatchTab() {
                         </TableCell>
                         <TableCell className="max-w-[200px] truncate">{record.notes || "-"}</TableCell>
                         <TableCell className="text-right">
-                          <div className="flex items-center justify-end gap-1">
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={(event) => {
-                                event.stopPropagation()
-                                setSelectedDispatchRecord(record)
-                                handleEdit(record)
-                              }}
-                              className="text-blue-600 hover:text-blue-700"
-                            >
-                              <Pencil className="h-4 w-4" />
-                            </Button>
-                            {canDelete && (
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                onClick={(event) => {
-                                  event.stopPropagation()
-                                  handleDelete(record.id!)
-                                }}
-                                className="text-red-600 hover:text-red-700"
-                              >
-                                <Trash2 className="h-4 w-4" />
-                              </Button>
-                            )}
-                          </div>
+                          <TooltipProvider>
+                            <div className="flex items-center justify-end gap-1">
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <Button
+                                    aria-label="Edit dispatch"
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={(event) => {
+                                      event.stopPropagation()
+                                      setSelectedDispatchRecord(record)
+                                      handleEdit(record)
+                                    }}
+                                    className="text-blue-600 hover:text-blue-700"
+                                  >
+                                    <Pencil className="h-4 w-4" />
+                                  </Button>
+                                </TooltipTrigger>
+                                <TooltipContent>Edit dispatch</TooltipContent>
+                              </Tooltip>
+                              {canDelete && (
+                                <Tooltip>
+                                  <TooltipTrigger asChild>
+                                    <Button
+                                      aria-label="Delete dispatch"
+                                      variant="ghost"
+                                      size="sm"
+                                      onClick={(event) => {
+                                        event.stopPropagation()
+                                        handleDelete(record.id!)
+                                      }}
+                                      className="text-red-600 hover:text-red-700"
+                                    >
+                                      <Trash2 className="h-4 w-4" />
+                                    </Button>
+                                  </TooltipTrigger>
+                                  <TooltipContent>Delete dispatch</TooltipContent>
+                                </Tooltip>
+                              )}
+                            </div>
+                          </TooltipProvider>
                         </TableCell>
                       </TableRow>
                     ))}

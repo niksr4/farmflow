@@ -265,7 +265,7 @@ export async function POST(request: NextRequest) {
     const tenantContext = normalizeTenantContext(sessionUser.tenantId, sessionUser.role)
     const body = await request.json()
 
-    const { item_type, quantity, transaction_type, notes, user_id, price, location_id } = body
+    const { item_type, quantity, transaction_type, notes, price, location_id } = body
 
     if (!item_type || !quantity || !transaction_type) {
       return NextResponse.json(
@@ -323,7 +323,7 @@ export async function POST(request: NextRequest) {
         ${quantityValue},
         ${normalizedType},
         ${notes || ""},
-        ${user_id || "system"},
+        ${sessionUser.username || "system"},
         ${priceValue},
         ${total_cost},
         ${tenantContext.tenantId},

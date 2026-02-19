@@ -172,7 +172,7 @@ export async function POST(request: Request) {
       dry_pepper: data.dry_pepper ?? 0,
       dry_pepper_percent: Number(data.dry_pepper_percent) || 0,
       notes: data.notes || "",
-      recorded_by: data.recorded_by || "",
+      recorded_by: sessionUser.username || "system",
     }
 
     const existing = await runTenantQuery(

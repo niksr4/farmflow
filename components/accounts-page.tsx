@@ -12,14 +12,14 @@ import { Label } from "@/components/ui/label"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { FileText, Coins, PlusCircle, Settings, Users, Receipt } from "lucide-react"
+import { FileText, Coins, PlusCircle, Settings, Users, Receipt, Loader2 } from "lucide-react"
 import { Skeleton } from "@/components/ui/skeleton"
 import LaborDeploymentTab from "./labor-deployment-tab"
 import OtherExpensesTab from "./other-expenses-tab"
 import { toast } from "sonner"
 import { getCurrentFiscalYear, getAvailableFiscalYears, type FiscalYear } from "@/lib/fiscal-year-utils"
 import { formatDateOnly } from "@/lib/date-utils"
-import { formatCurrency } from "@/lib/format"
+import { formatCurrency, formatNumber } from "@/lib/format"
 
 interface AccountActivity {
   code: string
@@ -29,6 +29,36 @@ interface AccountActivity {
 interface Activity {
   code: string
   reference: string
+}
+
+interface IntelligenceCodePattern {
+  code: string
+  reference: string
+  totalAmount: number
+  entryCount: number
+}
+
+interface IntelligenceDayPattern {
+  date: string
+  totalAmount: number
+  entryCount: number
+}
+
+interface AccountsIntelligence {
+  accountsPatterns: {
+    totalLabor: number
+    totalExpenses: number
+    totalSpend: number
+    laborSharePct: number
+    expenseSharePct: number
+    topCostCodes: IntelligenceCodePattern[]
+    mostFrequentCodes: IntelligenceCodePattern[]
+    highestLaborDays: IntelligenceDayPattern[]
+    highestExpenseDays: IntelligenceDayPattern[]
+    laborTrendPct: number | null
+    expenseTrendPct: number | null
+  } | null
+  highlights: string[]
 }
 
 export default function AccountsPage() {
@@ -56,6 +86,9 @@ export default function AccountsPage() {
     grandTotal: 0,
   })
   const [summaryLoading, setSummaryLoading] = useState(true)
+  const [accountsIntelligence, setAccountsIntelligence] = useState<AccountsIntelligence | null>(null)
+  const [accountsIntelligenceLoading, setAccountsIntelligenceLoading] = useState(false)
+  const [accountsIntelligenceError, setAccountsIntelligenceError] = useState<string | null>(null)
   const exportDateRangeError = useMemo(() => {
     if ((exportStartDate && !exportEndDate) || (!exportStartDate && exportEndDate)) {
       return "Select both start and end date, or leave both empty."
@@ -110,6 +143,51 @@ export default function AccountsPage() {
     }
 
     fetchTotals()
+  }, [selectedFiscalYear.endDate, selectedFiscalYear.startDate, user?.tenantId])
+
+  useEffect(() => {
+    if (!user?.tenantId) {
+      setAccountsIntelligence(null)
+      setAccountsIntelligenceError(null)
+      return
+    }
+
+    let ignore = false
+    const fetchIntelligence = async () => {
+      setAccountsIntelligenceLoading(true)
+      setAccountsIntelligenceError(null)
+      try {
+        const params = new URLSearchParams({
+          startDate: selectedFiscalYear.startDate,
+          endDate: selectedFiscalYear.endDate,
+        })
+        const response = await fetch(`/api/intelligence-brief?${params.toString()}`, { cache: "no-store" })
+        const data = await response.json().catch(() => ({}))
+        if (!response.ok || !data?.success) {
+          throw new Error(data?.error || "Failed to load accounts intelligence")
+        }
+        if (!ignore) {
+          setAccountsIntelligence({
+            accountsPatterns: data.accountsPatterns || null,
+            highlights: Array.isArray(data.highlights) ? data.highlights : [],
+          })
+        }
+      } catch (error: any) {
+        if (!ignore) {
+          setAccountsIntelligence(null)
+          setAccountsIntelligenceError(error?.message || "Failed to load accounts intelligence")
+        }
+      } finally {
+        if (!ignore) {
+          setAccountsIntelligenceLoading(false)
+        }
+      }
+    }
+
+    fetchIntelligence()
+    return () => {
+      ignore = true
+    }
   }, [selectedFiscalYear.endDate, selectedFiscalYear.startDate, user?.tenantId])
 
   const fetchAllActivities = async () => {
@@ -501,6 +579,14 @@ export default function AccountsPage() {
   const filteredLaborTotal = summaryTotals.laborTotal
   const filteredOtherExpensesTotal = summaryTotals.otherTotal
   const filteredGrandTotal = summaryTotals.grandTotal
+  const patterns = accountsIntelligence?.accountsPatterns
+  const topCostCode = patterns?.topCostCodes?.[0] || null
+  const mostFrequentCode = patterns?.mostFrequentCodes?.[0] || null
+  const highestLaborDay = patterns?.highestLaborDays?.[0] || null
+  const highestExpenseDay = patterns?.highestExpenseDays?.[0] || null
+  const topCostCodes = patterns?.topCostCodes?.slice(0, 5) || []
+  const topFrequencyCodes = patterns?.mostFrequentCodes?.slice(0, 5) || []
+  const topHighlights = (accountsIntelligence?.highlights || []).slice(0, 3)
 
   return (
     <div className="container mx-auto p-6 space-y-6">
@@ -538,6 +624,154 @@ export default function AccountsPage() {
               </Select>
             </div>
           </div>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Smart Cost Patterns</CardTitle>
+          <CardDescription>Frequency and highest-cost intelligence for labor and other expenses.</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {accountsIntelligenceLoading ? (
+            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+              <Loader2 className="h-4 w-4 animate-spin" />
+              Building accounts intelligence...
+            </div>
+          ) : accountsIntelligenceError ? (
+            <p className="text-sm text-rose-600">{accountsIntelligenceError}</p>
+          ) : !patterns ? (
+            <p className="text-sm text-muted-foreground">No pattern data yet for this fiscal year.</p>
+          ) : (
+            <>
+              <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
+                <div className="rounded-xl border bg-card p-3">
+                  <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">Highest Cost Code</p>
+                  <p className="mt-1 text-sm font-semibold">
+                    {topCostCode ? `${topCostCode.code} · ${topCostCode.reference}` : "No data"}
+                  </p>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    {topCostCode
+                      ? `${formatCurrency(topCostCode.totalAmount, 0)} across ${topCostCode.entryCount} entries`
+                      : "Add labor/expense entries"}
+                  </p>
+                </div>
+                <div className="rounded-xl border bg-card p-3">
+                  <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">Most Frequent Code</p>
+                  <p className="mt-1 text-sm font-semibold">
+                    {mostFrequentCode ? `${mostFrequentCode.code} · ${mostFrequentCode.reference}` : "No data"}
+                  </p>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    {mostFrequentCode
+                      ? `${formatNumber(mostFrequentCode.entryCount, 0)} entries · ${formatCurrency(mostFrequentCode.totalAmount, 0)}`
+                      : "Track recurring spend"}
+                  </p>
+                </div>
+                <div className="rounded-xl border bg-card p-3">
+                  <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">Peak Labor Day</p>
+                  <p className="mt-1 text-sm font-semibold">{highestLaborDay ? formatDateOnly(highestLaborDay.date) : "No data"}</p>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    {highestLaborDay
+                      ? `${formatCurrency(highestLaborDay.totalAmount, 0)} across ${highestLaborDay.entryCount} entries`
+                      : "No labor entries in range"}
+                  </p>
+                </div>
+                <div className="rounded-xl border bg-card p-3">
+                  <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">Peak Other Expense Day</p>
+                  <p className="mt-1 text-sm font-semibold">
+                    {highestExpenseDay ? formatDateOnly(highestExpenseDay.date) : "No data"}
+                  </p>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    {highestExpenseDay
+                      ? `${formatCurrency(highestExpenseDay.totalAmount, 0)} across ${highestExpenseDay.entryCount} entries`
+                      : "No expense entries in range"}
+                  </p>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+                <div className="rounded-xl border bg-card p-3">
+                  <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">Spend Mix</p>
+                  <p className="mt-1 text-sm text-foreground">
+                    Labor {formatNumber(patterns.laborSharePct, 0)}% · Other expenses {formatNumber(patterns.expenseSharePct, 0)}%
+                  </p>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    Total spend: {formatCurrency(patterns.totalSpend, 0)}
+                  </p>
+                </div>
+                <div className="rounded-xl border bg-card p-3">
+                  <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">Recent Cost Trend (30d vs prior 30d)</p>
+                  <p className="mt-1 text-sm text-foreground">
+                    Labor:{" "}
+                    {patterns.laborTrendPct === null
+                      ? "Not enough baseline"
+                      : `${patterns.laborTrendPct >= 0 ? "+" : ""}${formatNumber(patterns.laborTrendPct, 1)}%`}
+                  </p>
+                  <p className="mt-1 text-sm text-foreground">
+                    Other:{" "}
+                    {patterns.expenseTrendPct === null
+                      ? "Not enough baseline"
+                      : `${patterns.expenseTrendPct >= 0 ? "+" : ""}${formatNumber(patterns.expenseTrendPct, 1)}%`}
+                  </p>
+                </div>
+              </div>
+
+              {topHighlights.length > 0 && (
+                <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+                  {topHighlights.map((highlight, index) => (
+                    <div key={`${highlight}-${index}`} className="rounded-xl border bg-card p-3">
+                      <p className="text-[10px] uppercase tracking-[0.18em] text-muted-foreground">Insight {index + 1}</p>
+                      <p className="mt-1 text-sm text-foreground">{highlight}</p>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
+                <div className="rounded-xl border bg-card p-3">
+                  <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">Top Cost Codes</p>
+                  {topCostCodes.length === 0 ? (
+                    <p className="mt-2 text-xs text-muted-foreground">No cost ranking yet.</p>
+                  ) : (
+                    <div className="mt-2 space-y-2">
+                      {topCostCodes.map((row) => (
+                        <div key={`cost-${row.code}`} className="flex items-center justify-between gap-3 rounded-lg border p-2">
+                          <div className="min-w-0">
+                            <p className="truncate text-sm font-medium text-foreground">
+                              {row.code} · {row.reference}
+                            </p>
+                            <p className="text-xs text-muted-foreground">{formatNumber(row.entryCount, 0)} entries</p>
+                          </div>
+                          <p className="text-sm font-semibold tabular-nums text-foreground">{formatCurrency(row.totalAmount, 0)}</p>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                <div className="rounded-xl border bg-card p-3">
+                  <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">Most Frequent Codes</p>
+                  {topFrequencyCodes.length === 0 ? (
+                    <p className="mt-2 text-xs text-muted-foreground">No frequency ranking yet.</p>
+                  ) : (
+                    <div className="mt-2 space-y-2">
+                      {topFrequencyCodes.map((row) => (
+                        <div key={`freq-${row.code}`} className="flex items-center justify-between gap-3 rounded-lg border p-2">
+                          <div className="min-w-0">
+                            <p className="truncate text-sm font-medium text-foreground">
+                              {row.code} · {row.reference}
+                            </p>
+                            <p className="text-xs text-muted-foreground">{formatCurrency(row.totalAmount, 0)} total</p>
+                          </div>
+                          <p className="text-sm font-semibold tabular-nums text-foreground">{formatNumber(row.entryCount, 0)}x</p>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+            </>
+          )}
         </CardContent>
       </Card>
 

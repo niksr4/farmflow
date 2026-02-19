@@ -7,6 +7,7 @@ import { normalizeTenantContext, runTenantQueries, runTenantQuery } from "@/lib/
 import { resolveLocationInfo } from "@/lib/server/location-utils"
 import { logAuditEvent } from "@/lib/server/audit-log"
 import { resolveLocationCompatibility } from "@/lib/server/location-compatibility"
+import { computeRemainingKgs, hasSufficientStock } from "@/lib/sales-math"
 
 export const dynamic = "force-dynamic"
 export const revalidate = 0
@@ -85,10 +86,72 @@ const canonicalizeBagType = (value: string | null | undefined) => {
   return null
 }
 
+const coffeePatternFor = (coffeeType: string) =>
+  coffeeType === "Arabica" ? "%arabica%" : "%robusta%"
+
+const bagPatternFor = (bagType: string) =>
+  bagType === "Dry Cherry" ? "%cherry%" : "%parchment%"
+
+const isScopedUserRole = (role: string | null | undefined) => String(role || "").toLowerCase() === "user"
+
+async function resolveSlotStock(
+  db: typeof sql,
+  tenantContext: { tenantId: string; role: string },
+  input: {
+    coffeeType: string
+    bagType: string
+    bagWeightKg: number
+    excludeSaleId?: number
+  },
+) {
+  const coffeePattern = coffeePatternFor(input.coffeeType)
+  const bagPattern = bagPatternFor(input.bagType)
+  const excludeClause = input.excludeSaleId ? db` AND id <> ${input.excludeSaleId}` : db``
+
+  const [dispatchRows, salesRows] = await runTenantQueries(db, tenantContext, [
+    db`
+      SELECT
+        COALESCE(SUM(COALESCE(NULLIF(kgs_received, 0), bags_dispatched * ${input.bagWeightKg})), 0) AS received_kgs
+      FROM dispatch_records
+      WHERE tenant_id = ${tenantContext.tenantId}
+        AND lower(coffee_type) LIKE ${coffeePattern}
+        AND lower(bag_type) LIKE ${bagPattern}
+    `,
+    db`
+      SELECT
+        COALESCE(
+          SUM(
+            COALESCE(
+              NULLIF(kgs_received, 0),
+              NULLIF(kgs, 0),
+              NULLIF(weight_kgs, 0),
+              NULLIF(kgs_sent, 0),
+              bags_sold * ${input.bagWeightKg}
+            )
+          ),
+          0
+        ) AS sold_kgs
+      FROM sales_records
+      WHERE tenant_id = ${tenantContext.tenantId}
+        AND lower(coffee_type) LIKE ${coffeePattern}
+        AND lower(bag_type) LIKE ${bagPattern}
+        ${excludeClause}
+    `,
+  ])
+
+  const receivedKgs = Number(dispatchRows?.[0]?.received_kgs) || 0
+  const soldKgs = Number(salesRows?.[0]?.sold_kgs) || 0
+  const remainingKgs = computeRemainingKgs(receivedKgs, soldKgs)
+  return { receivedKgs, soldKgs, remainingKgs }
+}
+
 export async function GET(request: Request) {
   try {
     const sessionUser = await requireModuleAccess("sales")
-    // Allow data entry for user/admin/owner; reserve destructive actions for admin/owner.
+    if (isScopedUserRole(sessionUser.role)) {
+      return NextResponse.json({ success: false, error: "Sales access is restricted for this role." }, { status: 403 })
+    }
+    // Sales endpoints are restricted to admin/owner roles.
     const tenantContext = normalizeTenantContext(sessionUser.tenantId, sessionUser.role)
     const { searchParams } = new URL(request.url)
     const startDate = searchParams.get("startDate")?.trim() || null
@@ -265,10 +328,13 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
   try {
     const sessionUser = await requireModuleAccess("sales")
+    if (isScopedUserRole(sessionUser.role)) {
+      return NextResponse.json({ success: false, error: "Sales access is restricted for this role." }, { status: 403 })
+    }
     if (!canWriteModule(sessionUser.role, "sales")) {
       return NextResponse.json({ success: false, error: "Insufficient role" }, { status: 403 })
     }
-    // Allow data entry for user/admin/owner; reserve destructive actions for admin/owner.
+    // Sales endpoints are restricted to admin/owner roles.
     const tenantContext = normalizeTenantContext(sessionUser.tenantId, sessionUser.role)
     const body = await request.json()
 
@@ -322,6 +388,27 @@ export async function POST(request: Request) {
       )
     }
     const resolvedEstate = (locationInfo.name || locationInfo.code || payload.estate || null) as string | null
+    const slotStock = await resolveSlotStock(sql, tenantContext, {
+      coffeeType,
+      bagType,
+      bagWeightKg,
+    })
+    if (!hasSufficientStock(slotStock.receivedKgs, slotStock.soldKgs, kgsSold)) {
+      const remainingKgs = Math.max(0, slotStock.remainingKgs)
+      return NextResponse.json(
+        {
+          success: false,
+          error: `Insufficient stock for ${coffeeType} ${bagType}. Available ${remainingKgs.toFixed(2)} KGs, requested ${kgsSold.toFixed(2)} KGs.`,
+          stock: {
+            receivedKgs: slotStock.receivedKgs,
+            soldKgs: slotStock.soldKgs,
+            remainingKgs,
+            requestedKgs: kgsSold,
+          },
+        },
+        { status: 400 },
+      )
+    }
 
     const result = await runTenantQuery(
       sql,
@@ -401,6 +488,9 @@ export async function POST(request: Request) {
 export async function PUT(request: Request) {
   try {
     const sessionUser = await requireModuleAccess("sales")
+    if (isScopedUserRole(sessionUser.role)) {
+      return NextResponse.json({ success: false, error: "Sales access is restricted for this role." }, { status: 403 })
+    }
     if (!canWriteModule(sessionUser.role, "sales")) {
       return NextResponse.json({ success: false, error: "Insufficient role" }, { status: 403 })
     }
@@ -458,6 +548,28 @@ export async function PUT(request: Request) {
       )
     }
     const resolvedEstate = (locationInfo.name || locationInfo.code || payload.estate || null) as string | null
+    const slotStock = await resolveSlotStock(sql, tenantContext, {
+      coffeeType,
+      bagType,
+      bagWeightKg,
+      excludeSaleId: payload.id,
+    })
+    if (!hasSufficientStock(slotStock.receivedKgs, slotStock.soldKgs, kgsSold)) {
+      const remainingKgs = Math.max(0, slotStock.remainingKgs)
+      return NextResponse.json(
+        {
+          success: false,
+          error: `Insufficient stock for ${coffeeType} ${bagType}. Available ${remainingKgs.toFixed(2)} KGs, requested ${kgsSold.toFixed(2)} KGs.`,
+          stock: {
+            receivedKgs: slotStock.receivedKgs,
+            soldKgs: slotStock.soldKgs,
+            remainingKgs,
+            requestedKgs: kgsSold,
+          },
+        },
+        { status: 400 },
+      )
+    }
 
     const result = await runTenantQuery(
       sql,
@@ -527,6 +639,9 @@ export async function DELETE(request: Request) {
     const { searchParams } = new URL(request.url)
     const id = searchParams.get("id")
     const sessionUser = await requireModuleAccess("sales")
+    if (isScopedUserRole(sessionUser.role)) {
+      return NextResponse.json({ success: false, error: "Sales access is restricted for this role." }, { status: 403 })
+    }
     if (!canDeleteModule(sessionUser.role, "sales")) {
       return NextResponse.json({ success: false, error: "Insufficient role" }, { status: 403 })
     }

@@ -72,6 +72,7 @@ import ReceivablesTab from "@/components/receivables-tab"
 import BalanceSheetTab from "@/components/balance-sheet-tab"
 import JournalTab from "@/components/journal-tab"
 import ResourcesTab from "@/components/resources-tab"
+import YieldForecastTab from "@/components/yield-forecast-tab"
 import { PepperTab } from "./pepper-tab"
 import OnboardingChecklist, { type OnboardingStep } from "@/components/onboarding-checklist"
 import Link from "next/link"
@@ -98,6 +99,7 @@ const DEFAULT_DASHBOARD_TAB_PRIORITY = [
   "dispatch",
   "sales",
   "season",
+  "yield-forecast",
   "accounts",
   "transactions",
   "balance-sheet",
@@ -118,6 +120,56 @@ interface LocationOption {
   id: string
   name: string
   code?: string | null
+}
+
+interface IntelligenceCodePattern {
+  code: string
+  reference: string
+  totalAmount: number
+  entryCount: number
+}
+
+interface IntelligenceDayPattern {
+  date: string
+  totalAmount: number
+  entryCount: number
+}
+
+interface IntelligenceBrief {
+  dateRange: {
+    startDate: string
+    endDate: string
+  }
+  generatedAt: string
+  highlights: string[]
+  actions: Array<{
+    label: string
+    tab: string
+  }>
+  reconciliation: {
+    totalReceivedKgs: number
+    totalSoldKgs: number
+    saleableKgs: number
+    overdrawnKgs: number
+    overdrawnSlots: Array<{
+      coffeeType: string
+      bagType: string
+      overdrawnKgs: number
+    }>
+  } | null
+  accountsPatterns: {
+    totalLabor: number
+    totalExpenses: number
+    totalSpend: number
+    laborSharePct: number
+    expenseSharePct: number
+    topCostCodes: IntelligenceCodePattern[]
+    mostFrequentCodes: IntelligenceCodePattern[]
+    highestLaborDays: IntelligenceDayPattern[]
+    highestExpenseDays: IntelligenceDayPattern[]
+    laborTrendPct: number | null
+    expenseTrendPct: number | null
+  } | null
 }
 
 function parseCustomDateString(dateString: string | undefined | null): Date | null {
@@ -209,14 +261,18 @@ export default function InventorySystem() {
   })
   const [dispatchHeroTotals, setDispatchHeroTotals] = useState({
     arabicaBags: 0,
+    arabicaKgs: 0,
     robustaBags: 0,
+    robustaKgs: 0,
     totalDispatches: 0,
     loading: false,
     error: null as string | null,
   })
   const [salesHeroTotals, setSalesHeroTotals] = useState({
     arabicaBags: 0,
+    arabicaKgs: 0,
     robustaBags: 0,
+    robustaKgs: 0,
     totalSales: 0,
     totalRevenue: 0,
     loading: false,
@@ -318,6 +374,9 @@ export default function InventorySystem() {
   })
   const [exceptionsLoading, setExceptionsLoading] = useState(false)
   const [exceptionsError, setExceptionsError] = useState<string | null>(null)
+  const [intelligenceBrief, setIntelligenceBrief] = useState<IntelligenceBrief | null>(null)
+  const [intelligenceLoading, setIntelligenceLoading] = useState(false)
+  const [intelligenceError, setIntelligenceError] = useState<string | null>(null)
   const [onboardingStatus, setOnboardingStatus] = useState({
     locations: false,
     inventory: false,
@@ -354,6 +413,7 @@ export default function InventorySystem() {
   const hideEmptyMetrics = Boolean(tenantSettings.uiPreferences?.hideEmptyMetrics)
   const isAdmin = effectiveRole === "admin"
   const isOwner = effectiveRole === "owner"
+  const isScopedUser = effectiveRole === "user"
   const showFinancialHomeCards = isAdmin || isOwner
   const canManageData = !isPreviewMode && (isAdmin || isOwner)
   const isTenantLoading = status === "loading"
@@ -387,16 +447,11 @@ export default function InventorySystem() {
     const inventoryCount = inventory.length
     const locationCount = locations.length
     const recentActivity = transactions.filter((t) => isWithinLast24Hours(t.transaction_date)).length
-    const traceableCount = transactions.filter((t) => Boolean(t.location_id)).length
-    const traceabilityCoverage = transactions.length
-      ? Math.round((traceableCount / transactions.length) * 100)
-      : 0
 
     return {
       inventoryCount,
       locationCount,
       recentActivity,
-      traceabilityCoverage,
       inventoryValue: summary.total_inventory_value,
     }
   }, [inventory.length, locations.length, summary.total_inventory_value, transactions])
@@ -898,7 +953,6 @@ export default function InventorySystem() {
   const unassignedLabel = `Unassigned moves: ${formatCount(unassignedTransactions)}`
   const bagWeightValue = Number(tenantSettings.bagWeightKg || 50)
   const bagWeightLabel = `Standard bag weight: ${formatNumber(bagWeightValue, 0)} kg`
-  const traceabilityLabel = `Traceability coverage: ${estateMetrics.traceabilityCoverage}%`
   const recentActivityLabel = `24h activity: ${formatCount(estateMetrics.recentActivity)}`
 
   type HeroChip = { icon: React.ElementType; label: string; metricValue?: number | null }
@@ -950,11 +1004,6 @@ export default function InventorySystem() {
       label: "Bag weight (kg)",
       value: formatNumber(bagWeightValue, 0),
       metricValue: bagWeightValue,
-    }
-    const traceabilityStat: HeroStat = {
-      label: "Traceability",
-      value: `${estateMetrics.traceabilityCoverage}%`,
-      metricValue: estateMetrics.traceabilityCoverage,
     }
     const exceptionsStat: HeroStat = {
       label: "Exceptions",
@@ -1126,7 +1175,7 @@ export default function InventorySystem() {
       : [
           { label: "Forecast horizon", value: "8 days", metricValue: 8 },
           activeLocationsStat,
-          traceabilityStat,
+          recentActivityStat,
         ]
 
     const weatherStats: HeroStat[] = [
@@ -1143,21 +1192,27 @@ export default function InventorySystem() {
       ? "Loading..."
       : dispatchHeroTotals.error
         ? "Unavailable"
-        : `${formatNumber(dispatchHeroTotals.arabicaBags, 0)} bags`
+        : `${formatNumber(dispatchHeroTotals.arabicaKgs, 0)} kg`
     const dispatchRobustaValue = dispatchHeroTotals.loading
       ? "Loading..."
       : dispatchHeroTotals.error
         ? "Unavailable"
-        : `${formatNumber(dispatchHeroTotals.robustaBags, 0)} bags`
+        : `${formatNumber(dispatchHeroTotals.robustaKgs, 0)} kg`
+    const dispatchTotalReceivedKgs = dispatchHeroTotals.arabicaKgs + dispatchHeroTotals.robustaKgs
+    const salesTotalSoldKgs = salesHeroTotals.arabicaKgs + salesHeroTotals.robustaKgs
+    const saleableKgs = Math.max(0, dispatchTotalReceivedKgs - salesTotalSoldKgs)
+    const overdrawnKgs = Math.max(0, salesTotalSoldKgs - dispatchTotalReceivedKgs)
     const dispatchArabicaStat: HeroStat = {
-      label: "Arabica dispatched",
+      label: "Arabica received",
       value: dispatchArabicaValue,
-      metricValue: dispatchHeroTotals.loading || dispatchHeroTotals.error ? null : dispatchHeroTotals.arabicaBags,
+      subValue: dispatchHeroTotals.loading ? undefined : `${formatNumber(dispatchHeroTotals.arabicaBags, 0)} bags dispatched`,
+      metricValue: dispatchHeroTotals.loading || dispatchHeroTotals.error ? null : dispatchHeroTotals.arabicaKgs,
     }
     const dispatchRobustaStat: HeroStat = {
-      label: "Robusta dispatched",
+      label: "Robusta received",
       value: dispatchRobustaValue,
-      metricValue: dispatchHeroTotals.loading || dispatchHeroTotals.error ? null : dispatchHeroTotals.robustaBags,
+      subValue: dispatchHeroTotals.loading ? undefined : `${formatNumber(dispatchHeroTotals.robustaBags, 0)} bags dispatched`,
+      metricValue: dispatchHeroTotals.loading || dispatchHeroTotals.error ? null : dispatchHeroTotals.robustaKgs,
     }
     const dispatchEntriesStat: HeroStat = {
       label: "Dispatch entries",
@@ -1178,35 +1233,44 @@ export default function InventorySystem() {
       ? "Loading..."
       : salesHeroTotals.error
         ? "Unavailable"
-        : `${formatNumber(salesHeroTotals.arabicaBags, 0)} bags`
+        : `${formatNumber(salesHeroTotals.arabicaKgs, 0)} kg`
     const salesRobustaValue = salesHeroTotals.loading
       ? "Loading..."
       : salesHeroTotals.error
         ? "Unavailable"
-        : `${formatNumber(salesHeroTotals.robustaBags, 0)} bags`
+        : `${formatNumber(salesHeroTotals.robustaKgs, 0)} kg`
     const salesArabicaStat: HeroStat = {
       label: "Arabica sold",
       value: salesArabicaValue,
-      metricValue: salesHeroTotals.loading || salesHeroTotals.error ? null : salesHeroTotals.arabicaBags,
+      subValue: salesHeroTotals.loading ? undefined : `${formatNumber(salesHeroTotals.arabicaBags, 0)} bags sold`,
+      metricValue: salesHeroTotals.loading || salesHeroTotals.error ? null : salesHeroTotals.arabicaKgs,
     }
     const salesRobustaStat: HeroStat = {
       label: "Robusta sold",
       value: salesRobustaValue,
-      metricValue: salesHeroTotals.loading || salesHeroTotals.error ? null : salesHeroTotals.robustaBags,
+      subValue: salesHeroTotals.loading ? undefined : `${formatNumber(salesHeroTotals.robustaBags, 0)} bags sold`,
+      metricValue: salesHeroTotals.loading || salesHeroTotals.error ? null : salesHeroTotals.robustaKgs,
     }
-    const salesRevenueStat: HeroStat = {
-      label: "Sales revenue",
-      value: salesHeroTotals.loading
+    const salesAvailabilityStat: HeroStat = {
+      label: overdrawnKgs > 0 ? "Overdrawn" : "Saleable stock",
+      value: salesHeroTotals.loading || dispatchHeroTotals.loading
         ? "Loading..."
-        : salesHeroTotals.error
+        : salesHeroTotals.error || dispatchHeroTotals.error
           ? "Unavailable"
-          : formatCurrency(salesHeroTotals.totalRevenue, 0),
-      metricValue: salesHeroTotals.loading || salesHeroTotals.error ? null : salesHeroTotals.totalRevenue,
+          : `${formatNumber(overdrawnKgs > 0 ? overdrawnKgs : saleableKgs, 0)} kg`,
+      subValue:
+        salesHeroTotals.loading || dispatchHeroTotals.loading
+          ? undefined
+          : overdrawnKgs > 0
+            ? "Sold exceeds dispatch-received KGs"
+            : "Dispatch received KGs minus sold KGs",
+      metricValue:
+        salesHeroTotals.loading || dispatchHeroTotals.loading ? null : overdrawnKgs > 0 ? overdrawnKgs : saleableKgs,
     }
     const salesStats: HeroStat[] = [
       salesArabicaStat,
       salesRobustaStat,
-      salesRevenueStat,
+      salesAvailabilityStat,
     ]
 
     const accountsStats: HeroStat[] = [
@@ -1287,7 +1351,7 @@ export default function InventorySystem() {
 
     const chipsInventory: HeroChip[] = [
       { icon: Leaf, label: bagWeightLabel, metricValue: bagWeightValue },
-      { icon: CheckCircle2, label: traceabilityLabel, metricValue: estateMetrics.traceabilityCoverage },
+      { icon: History, label: recentActivityLabel, metricValue: estateMetrics.recentActivity },
     ]
 
     const chipsTransactions: HeroChip[] = [
@@ -1309,18 +1373,26 @@ export default function InventorySystem() {
       },
       {
         icon: Receipt,
-        label: salesHeroTotals.loading
-          ? "Bags sold loading..."
-          : salesHeroTotals.error
-            ? "Bags sold unavailable"
-            : `Bags sold: ${formatNumber(salesBagsTotal, 0)}`,
-        metricValue: salesHeroTotals.loading || salesHeroTotals.error ? null : salesBagsTotal,
+        label:
+          salesHeroTotals.loading || dispatchHeroTotals.loading
+            ? "Saleable stock loading..."
+            : salesHeroTotals.error || dispatchHeroTotals.error
+              ? "Saleable stock unavailable"
+              : overdrawnKgs > 0
+                ? `Overdrawn by ${formatNumber(overdrawnKgs, 0)} kg`
+                : `Saleable now: ${formatNumber(saleableKgs, 0)} kg`,
+        metricValue:
+          salesHeroTotals.loading || dispatchHeroTotals.loading || salesHeroTotals.error || dispatchHeroTotals.error
+            ? null
+            : overdrawnKgs > 0
+              ? overdrawnKgs
+              : saleableKgs,
       },
     ]
 
     const chipsProcessing: HeroChip[] = [
       { icon: Factory, label: "Processing keeps yields consistent", metricValue: null },
-      { icon: CheckCircle2, label: traceabilityLabel, metricValue: estateMetrics.traceabilityCoverage },
+      { icon: History, label: recentActivityLabel, metricValue: estateMetrics.recentActivity },
     ]
 
     const chipsCuring: HeroChip[] = [
@@ -1381,8 +1453,8 @@ export default function InventorySystem() {
           ? "Dispatch volume loading..."
           : dispatchHeroTotals.error
             ? "Dispatch volume unavailable"
-            : `Bags dispatched: ${formatNumber(dispatchBagsTotal, 0)}`,
-        metricValue: dispatchHeroTotals.loading || dispatchHeroTotals.error ? null : dispatchBagsTotal,
+            : `Received for sales: ${formatNumber(dispatchTotalReceivedKgs, 0)} kg`,
+        metricValue: dispatchHeroTotals.loading || dispatchHeroTotals.error ? null : dispatchTotalReceivedKgs,
       },
     ]
 
@@ -1479,7 +1551,7 @@ export default function InventorySystem() {
 
     const journalStats: HeroStat[] = [
       activeLocationsStat,
-      traceabilityStat,
+      unassignedStat,
       recentActivityStat,
     ]
 
@@ -1555,6 +1627,52 @@ export default function InventorySystem() {
           description: "Keep quality scores tied to each lot.",
           chips: chipsQuality,
           stats: qualityStats,
+        }
+      case "yield-forecast":
+        return {
+          badge: "Yield Forecast",
+          title: "Season forecast from trend + rainfall",
+          description: "Blend recent processing momentum with rainfall signals to project season-end dry output.",
+          chips: [
+            {
+              icon: TrendingUp,
+              label: processingTotals.loading
+                ? "Processing trend loading..."
+                : `Processing to date: ${formatNumber(processingTotals.arabicaKg + processingTotals.robustaKg, 0)} kg`,
+              metricValue: processingTotals.loading ? null : processingTotals.arabicaKg + processingTotals.robustaKg,
+            },
+            {
+              icon: CloudRain,
+              label: rainfallHeroTotals.loading
+                ? "Rainfall signal loading..."
+                : rainfallHeroTotals.error
+                  ? "Rainfall signal unavailable"
+                  : `Rainfall logs this FY: ${formatCount(rainfallHeroTotals.totalRecords)}`,
+              metricValue:
+                rainfallHeroTotals.loading || rainfallHeroTotals.error ? null : rainfallHeroTotals.totalRecords,
+            },
+          ],
+          stats: [
+            {
+              label: "Arabica processed",
+              value: processingTotals.loading ? "Loading..." : `${formatNumber(processingTotals.arabicaKg, 0)} kg`,
+              metricValue: processingTotals.loading ? null : processingTotals.arabicaKg,
+            },
+            {
+              label: "Robusta processed",
+              value: processingTotals.loading ? "Loading..." : `${formatNumber(processingTotals.robustaKg, 0)} kg`,
+              metricValue: processingTotals.loading ? null : processingTotals.robustaKg,
+            },
+            {
+              label: "Rainfall context",
+              value:
+                rainfallHeroTotals.loading || rainfallHeroTotals.error
+                  ? "Unavailable"
+                  : `${formatNumber(rainfallHeroTotals.totalInches, 2)} in`,
+              metricValue:
+                rainfallHeroTotals.loading || rainfallHeroTotals.error ? null : rainfallHeroTotals.totalInches,
+            },
+          ],
         }
       case "rainfall":
         return {
@@ -1671,13 +1789,14 @@ export default function InventorySystem() {
     curingHeroTotals.totalOutputKg,
     curingHeroTotals.totalRecords,
     dispatchHeroTotals.arabicaBags,
+    dispatchHeroTotals.arabicaKgs,
     dispatchHeroTotals.error,
     dispatchHeroTotals.loading,
     dispatchHeroTotals.robustaBags,
+    dispatchHeroTotals.robustaKgs,
     dispatchHeroTotals.totalDispatches,
     estateMetrics.locationCount,
     estateMetrics.recentActivity,
-    estateMetrics.traceabilityCoverage,
     exceptionsSummary.count,
     filteredInventoryTotals.totalQuantity,
     filteredInventoryTotals.unitLabel,
@@ -1714,13 +1833,14 @@ export default function InventorySystem() {
     recentActivityLabel,
     resolvedInventoryValue,
     salesHeroTotals.arabicaBags,
+    salesHeroTotals.arabicaKgs,
     salesHeroTotals.error,
     salesHeroTotals.loading,
     salesHeroTotals.robustaBags,
+    salesHeroTotals.robustaKgs,
     salesHeroTotals.totalRevenue,
     salesHeroTotals.totalSales,
     totalTransactions,
-    traceabilityLabel,
     unassignedLabel,
     unassignedTransactions,
   ])
@@ -2213,7 +2333,7 @@ export default function InventorySystem() {
   const canShowBalanceSheet = isModuleEnabled("balance-sheet")
   const canShowProcessing = isModuleEnabled("processing")
   const canShowDispatch = isModuleEnabled("dispatch")
-  const canShowSales = isModuleEnabled("sales")
+  const canShowSales = isModuleEnabled("sales") && !isScopedUser
   const canShowCuring = isModuleEnabled("curing")
   const canShowQuality = isModuleEnabled("quality")
   const canShowRainfall = isModuleEnabled("rainfall")
@@ -2222,6 +2342,7 @@ export default function InventorySystem() {
   const canShowNews = isModuleEnabled("news")
   const canShowWeather = isModuleEnabled("weather")
   const canShowSeason = isModuleEnabled("season")
+  const canShowYieldForecast = canShowSeason
   const canShowActivityLog = (isAdmin || isOwner) && isFeatureEnabled("showActivityLogTab")
   const canShowReceivables = isModuleEnabled("receivables")
   const canShowBilling = isModuleEnabled("billing")
@@ -2229,23 +2350,69 @@ export default function InventorySystem() {
   const canShowResources = isModuleEnabled("resources") && isFeatureEnabled("showResourcesTab")
   const canShowWelcomeCard = isFeatureEnabled("showWelcomeCard")
   const canShowRainfallSection = canShowRainfall || canShowWeather
+  const canShowIntelligence = !isScopedUser && (canShowDispatch || canShowSales || canShowAccounts || canShowSeason)
   const showOperationsTabs =
     canShowInventory || canShowProcessing || canShowCuring || canShowQuality || canShowDispatch || canShowSales || canShowPepper
   const showFinanceTabs =
     canShowAccounts || canShowBalanceSheet || showTransactionHistory || canShowReceivables || canShowBilling
   const showInsightsTabs =
     canShowSeason ||
+    canShowYieldForecast ||
     canShowActivityLog ||
     canShowRainfallSection ||
     canShowJournal ||
     canShowResources ||
     canShowAiAnalysis ||
     canShowNews
+
+  useEffect(() => {
+    if (!tenantId || !canShowIntelligence) {
+      setIntelligenceBrief(null)
+      setIntelligenceError(null)
+      return
+    }
+    let ignore = false
+
+    const loadIntelligenceBrief = async () => {
+      setIntelligenceLoading(true)
+      setIntelligenceError(null)
+      try {
+        const params = new URLSearchParams({
+          startDate: currentFiscalYear.startDate,
+          endDate: currentFiscalYear.endDate,
+        })
+        const response = await fetch(`/api/intelligence-brief?${params.toString()}`, { cache: "no-store" })
+        const data = await response.json().catch(() => ({}))
+        if (!response.ok || !data?.success) {
+          throw new Error(data?.error || "Failed to load intelligence brief")
+        }
+        if (!ignore) {
+          setIntelligenceBrief(data as IntelligenceBrief)
+        }
+      } catch (error: any) {
+        if (!ignore) {
+          setIntelligenceBrief(null)
+          setIntelligenceError(error?.message || "Failed to load intelligence brief")
+        }
+      } finally {
+        if (!ignore) {
+          setIntelligenceLoading(false)
+        }
+      }
+    }
+
+    loadIntelligenceBrief()
+    return () => {
+      ignore = true
+    }
+  }, [canShowIntelligence, currentFiscalYear.endDate, currentFiscalYear.startDate, tenantId])
+
   const commandStripItems = useMemo(() => {
     const processingTotalKg = processingTotals.arabicaKg + processingTotals.robustaKg
     const dispatchTotalBags = dispatchHeroTotals.arabicaBags + dispatchHeroTotals.robustaBags
-    const salesTotalBags = salesHeroTotals.arabicaBags + salesHeroTotals.robustaBags
-    const dispatchToSalesRate = dispatchTotalBags > 0 ? (salesTotalBags / dispatchTotalBags) * 100 : 0
+    const dispatchTotalKgs = dispatchHeroTotals.arabicaKgs + dispatchHeroTotals.robustaKgs
+    const salesTotalKgs = salesHeroTotals.arabicaKgs + salesHeroTotals.robustaKgs
+    const dispatchToSalesRate = dispatchTotalKgs > 0 ? (salesTotalKgs / dispatchTotalKgs) * 100 : 0
 
     return [
       {
@@ -2262,21 +2429,21 @@ export default function InventorySystem() {
         id: "dispatch-strip",
         tab: "dispatch",
         visible: canShowDispatch,
-        label: "Dispatch Movement",
-        value: dispatchHeroTotals.loading ? "Loading..." : `${formatNumber(dispatchTotalBags, 0)} bags`,
+        label: "Dispatch Received",
+        value: dispatchHeroTotals.loading ? "Loading..." : `${formatNumber(dispatchTotalKgs, 0)} kg`,
         subValue: dispatchHeroTotals.loading
           ? "Updating totals"
-          : `${formatCount(dispatchHeroTotals.totalDispatches)} entries this FY`,
+          : `${formatNumber(dispatchTotalBags, 0)} bags · ${formatCount(dispatchHeroTotals.totalDispatches)} entries`,
       },
       {
         id: "sales-strip",
         tab: "sales",
         visible: canShowSales,
-        label: "Sales Realization",
-        value: salesHeroTotals.loading ? "Loading..." : formatCurrency(salesHeroTotals.totalRevenue, 0),
+        label: "Sales Sold",
+        value: salesHeroTotals.loading ? "Loading..." : `${formatNumber(salesTotalKgs, 0)} kg`,
         subValue: salesHeroTotals.loading
           ? "Updating totals"
-          : `${formatNumber(salesTotalBags, 0)} bags sold · ${formatNumber(dispatchToSalesRate, 0)}% of dispatched bags`,
+          : `${formatNumber(dispatchToSalesRate, 0)}% of dispatch-received stock sold`,
       },
     ]
   }, [
@@ -2284,19 +2451,31 @@ export default function InventorySystem() {
     canShowProcessing,
     canShowSales,
     dispatchHeroTotals.arabicaBags,
+    dispatchHeroTotals.arabicaKgs,
     dispatchHeroTotals.loading,
     dispatchHeroTotals.robustaBags,
+    dispatchHeroTotals.robustaKgs,
     dispatchHeroTotals.totalDispatches,
     formatCount,
     processingTotals.arabicaKg,
     processingTotals.loading,
     processingTotals.robustaKg,
-    salesHeroTotals.arabicaBags,
+    salesHeroTotals.arabicaKgs,
     salesHeroTotals.loading,
-    salesHeroTotals.robustaBags,
-    salesHeroTotals.totalRevenue,
+    salesHeroTotals.robustaKgs,
   ])
   const visibleCommandStripItems = commandStripItems.filter((item) => item.visible)
+  const dispatchReceivedKgsTotal = dispatchHeroTotals.arabicaKgs + dispatchHeroTotals.robustaKgs
+  const salesSoldKgsTotal = salesHeroTotals.arabicaKgs + salesHeroTotals.robustaKgs
+  const saleableCoffeeKgs = Math.max(0, dispatchReceivedKgsTotal - salesSoldKgsTotal)
+  const overdrawnCoffeeKgs = Math.max(0, salesSoldKgsTotal - dispatchReceivedKgsTotal)
+  const reconciliationStatusLabel = overdrawnCoffeeKgs > 0 ? "Overdrawn" : "Healthy"
+  const reconciliationStatusTone =
+    overdrawnCoffeeKgs > 0 ? "text-rose-700 border-rose-200 bg-rose-50/70" : "text-emerald-700 border-emerald-200 bg-emerald-50/70"
+  const intelligenceHighlights = intelligenceBrief?.highlights || []
+  const intelligenceActions = intelligenceBrief?.actions || []
+  const intelligenceTopCostCode = intelligenceBrief?.accountsPatterns?.topCostCodes?.[0] || null
+  const intelligenceTopFrequencyCode = intelligenceBrief?.accountsPatterns?.mostFrequentCodes?.[0] || null
   const visibleTabs = useMemo(() => {
     const tabs: string[] = ["home"]
     if (canShowInventory) tabs.push("inventory")
@@ -2309,6 +2488,7 @@ export default function InventorySystem() {
     if (canShowCuring) tabs.push("curing")
     if (canShowQuality) tabs.push("quality")
     if (canShowSeason) tabs.push("season")
+    if (canShowYieldForecast) tabs.push("yield-forecast")
     if (canShowActivityLog) tabs.push("activity-log")
     if (canShowRainfallSection) tabs.push("rainfall")
     if (canShowPepper) tabs.push("pepper")
@@ -2338,6 +2518,7 @@ export default function InventorySystem() {
     canShowReceivables,
     canShowSales,
     canShowSeason,
+    canShowYieldForecast,
     showTransactionHistory,
   ])
   const getPreferredDefaultTab = useCallback(
@@ -2416,17 +2597,20 @@ export default function InventorySystem() {
         }
         const totalsByType = Array.isArray(json?.totalsByType) ? json.totalsByType : []
         const totals = totalsByType.reduce(
-          (acc: { arabicaBags: number; robustaBags: number }, row: any) => {
+          (acc: { arabicaBags: number; arabicaKgs: number; robustaBags: number; robustaKgs: number }, row: any) => {
             const type = String(row?.coffee_type || "").toLowerCase()
             const bags = Number(row?.bags_dispatched) || 0
+            const kgs = Number(row?.kgs_received) || 0
             if (type.includes("arab")) {
               acc.arabicaBags += bags
+              acc.arabicaKgs += kgs
             } else if (type.includes("rob")) {
               acc.robustaBags += bags
+              acc.robustaKgs += kgs
             }
             return acc
           },
-          { arabicaBags: 0, robustaBags: 0 },
+          { arabicaBags: 0, arabicaKgs: 0, robustaBags: 0, robustaKgs: 0 },
         )
         if (!ignore) {
           setDispatchHeroTotals({
@@ -2467,17 +2651,20 @@ export default function InventorySystem() {
         }
         const totalsByType = Array.isArray(json?.totalsByType) ? json.totalsByType : []
         const totals = totalsByType.reduce(
-          (acc: { arabicaBags: number; robustaBags: number }, row: any) => {
+          (acc: { arabicaBags: number; arabicaKgs: number; robustaBags: number; robustaKgs: number }, row: any) => {
             const type = String(row?.coffee_type || "").toLowerCase()
             const bags = Number(row?.bags_sold) || 0
+            const kgs = Number(row?.kgs_sold) || 0
             if (type.includes("arab")) {
               acc.arabicaBags += bags
+              acc.arabicaKgs += kgs
             } else if (type.includes("rob")) {
               acc.robustaBags += bags
+              acc.robustaKgs += kgs
             }
             return acc
           },
-          { arabicaBags: 0, robustaBags: 0 },
+          { arabicaBags: 0, arabicaKgs: 0, robustaBags: 0, robustaKgs: 0 },
         )
         if (!ignore) {
           setSalesHeroTotals({
@@ -2971,9 +3158,6 @@ export default function InventorySystem() {
     )
   }
 
-  const onboardingCompletedCount = Object.values(onboardingStatus).filter(Boolean).length
-  const onboardingTotalCount = Object.keys(onboardingStatus).length
-  const showOnboarding = !isOnboardingLoading && onboardingCompletedCount === 0
   const onboardingSteps: OnboardingStep[] = [
     {
       key: "locations",
@@ -3007,15 +3191,22 @@ export default function InventorySystem() {
       actionLabel: "Open Dispatch",
       onAction: () => setActiveTab("dispatch"),
     },
-    {
-      key: "sales",
-      title: "Record your first sale",
-      description: "Capture bags sold and pricing for revenue tracking.",
-      done: onboardingStatus.sales,
-      actionLabel: "Open Sales",
-      onAction: () => setActiveTab("sales"),
-    },
+    ...(canShowSales
+      ? [
+          {
+            key: "sales",
+            title: "Record your first sale",
+            description: "Capture bags sold and pricing for revenue tracking.",
+            done: onboardingStatus.sales,
+            actionLabel: "Open Sales",
+            onAction: () => setActiveTab("sales"),
+          } satisfies OnboardingStep,
+        ]
+      : []),
   ]
+  const onboardingCompletedCount = onboardingSteps.filter((step) => step.done).length
+  const onboardingTotalCount = onboardingSteps.length
+  const showOnboarding = onboardingTotalCount > 0 && !isOnboardingLoading && onboardingCompletedCount === 0
   const recordMovementPanel = (
     <div className="rounded-2xl border border-black/5 bg-white p-6 shadow-sm">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
@@ -3652,6 +3843,12 @@ export default function InventorySystem() {
                   Insights
                 </span>
                 {canShowSeason && <TabsTrigger value="season">Season View</TabsTrigger>}
+                {canShowYieldForecast && (
+                  <TabsTrigger value="yield-forecast">
+                    <TrendingUp className="h-3.5 w-3.5 mr-1.5" />
+                    Yield Forecast
+                  </TabsTrigger>
+                )}
                 {canShowActivityLog && (
                   <TabsTrigger value="activity-log">
                     <History className="h-3.5 w-3.5 mr-1.5" />
@@ -3693,7 +3890,12 @@ export default function InventorySystem() {
           </TabsList>
 
           <TabsContent value="home" className="space-y-6">
-            <div className={cn("grid grid-cols-1 gap-4 sm:grid-cols-2", showFinancialHomeCards ? "xl:grid-cols-4" : "xl:grid-cols-2")}>
+            <div
+              className={cn(
+                "grid grid-cols-1 gap-4 sm:grid-cols-2",
+                showFinancialHomeCards ? "xl:grid-cols-4 2xl:grid-cols-6" : "xl:grid-cols-4",
+              )}
+            >
               <Card className="border-black/5 bg-white/90">
                 <CardHeader className="pb-2">
                   <CardTitle className="text-sm font-medium text-neutral-600">Processing Output</CardTitle>
@@ -3702,24 +3904,51 @@ export default function InventorySystem() {
                   <p className="text-2xl font-semibold tabular-nums text-neutral-900">
                     {formatNumber(processingTotals.arabicaKg + processingTotals.robustaKg, 0)} kg
                   </p>
-                  <p className="text-xs text-muted-foreground">
-                    {currentFiscalYear.label}
-                  </p>
+                  <p className="text-xs text-muted-foreground">{currentFiscalYear.label}</p>
                 </CardContent>
               </Card>
               <Card className="border-black/5 bg-white/90">
                 <CardHeader className="pb-2">
-                  <CardTitle className="text-sm font-medium text-neutral-600">Dispatched</CardTitle>
+                  <CardTitle className="text-sm font-medium text-neutral-600">Dispatch Received</CardTitle>
                 </CardHeader>
                 <CardContent>
                   <p className="text-2xl font-semibold tabular-nums text-neutral-900">
-                    {formatNumber(dispatchHeroTotals.arabicaBags + dispatchHeroTotals.robustaBags, 0)} bags
+                    {formatNumber(dispatchReceivedKgsTotal, 0)} kg
                   </p>
                   <p className="text-xs text-muted-foreground">
+                    {formatNumber(dispatchHeroTotals.arabicaBags + dispatchHeroTotals.robustaBags, 0)} bags in{" "}
                     {formatCount(dispatchHeroTotals.totalDispatches)} records
                   </p>
                 </CardContent>
               </Card>
+              {canShowSales && (
+                <>
+                  <Card className="border-black/5 bg-white/90">
+                    <CardHeader className="pb-2">
+                      <CardTitle className="text-sm font-medium text-neutral-600">Sales Sold</CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <p className="text-2xl font-semibold tabular-nums text-neutral-900">{formatNumber(salesSoldKgsTotal, 0)} kg</p>
+                      <p className="text-xs text-muted-foreground">{formatCount(salesHeroTotals.totalSales)} sales entries</p>
+                    </CardContent>
+                  </Card>
+                  <Card className="border-black/5 bg-white/90">
+                    <CardHeader className="pb-2">
+                      <CardTitle className="text-sm font-medium text-neutral-600">Saleable Coffee</CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <p
+                        className={cn("text-2xl font-semibold tabular-nums", overdrawnCoffeeKgs > 0 ? "text-rose-700" : "text-neutral-900")}
+                      >
+                        {formatNumber(overdrawnCoffeeKgs > 0 ? overdrawnCoffeeKgs : saleableCoffeeKgs, 0)} kg
+                      </p>
+                      <p className={cn("text-xs", overdrawnCoffeeKgs > 0 ? "text-rose-700" : "text-muted-foreground")}>
+                        {overdrawnCoffeeKgs > 0 ? "Overdrawn (sold exceeds received)" : "Dispatch received minus sold"}
+                      </p>
+                    </CardContent>
+                  </Card>
+                </>
+              )}
               {showFinancialHomeCards && (
                 <>
                   <Card className="border-black/5 bg-white/90">
@@ -3727,12 +3956,8 @@ export default function InventorySystem() {
                       <CardTitle className="text-sm font-medium text-neutral-600">Sales Revenue</CardTitle>
                     </CardHeader>
                     <CardContent>
-                      <p className="text-2xl font-semibold tabular-nums text-neutral-900">
-                        {formatCurrency(salesHeroTotals.totalRevenue, 0)}
-                      </p>
-                      <p className="text-xs text-muted-foreground">
-                        {formatCount(salesHeroTotals.totalSales)} sales entries
-                      </p>
+                      <p className="text-2xl font-semibold tabular-nums text-neutral-900">{formatCurrency(salesHeroTotals.totalRevenue, 0)}</p>
+                      <p className="text-xs text-muted-foreground">{formatCount(salesHeroTotals.totalSales)} sales entries</p>
                     </CardContent>
                   </Card>
                   <Card className="border-black/5 bg-white/90">
@@ -3741,82 +3966,254 @@ export default function InventorySystem() {
                     </CardHeader>
                     <CardContent>
                       <p className="text-2xl font-semibold tabular-nums text-neutral-900">
-                        {formatCurrency(
-                          salesHeroTotals.totalRevenue - accountsTotals.grandTotal + receivablesHeroTotals.totalOutstanding,
-                          0,
-                        )}
+                        {formatCurrency(salesHeroTotals.totalRevenue - accountsTotals.grandTotal + receivablesHeroTotals.totalOutstanding, 0)}
                       </p>
-                      <p className="text-xs text-muted-foreground">
-                        Booked net + receivables
-                      </p>
+                      <p className="text-xs text-muted-foreground">Booked net + receivables</p>
                     </CardContent>
                   </Card>
                 </>
               )}
             </div>
 
+            <div className={cn("grid grid-cols-1 gap-4", canShowSales && "xl:grid-cols-2")}>
+              <Card className="border-black/5 bg-white/90">
+                <CardHeader>
+                  <CardTitle>Estate Snapshot</CardTitle>
+                  <CardDescription>Live operational context for this tenant.</CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+                    <div className="rounded-xl border border-black/5 bg-white p-3">
+                      <div className="flex items-center gap-1">
+                        <p className="text-xs uppercase tracking-[0.18em] text-neutral-500">Active Locations</p>
+                        <TooltipProvider>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <button
+                                type="button"
+                                aria-label="Active locations help"
+                                className="inline-flex h-4 w-4 items-center justify-center rounded-full border border-black/10 text-neutral-500 hover:text-neutral-700"
+                              >
+                                <Info className="h-2.5 w-2.5" />
+                              </button>
+                            </TooltipTrigger>
+                            <TooltipContent>
+                              Count of configured estate locations available for records.
+                            </TooltipContent>
+                          </Tooltip>
+                        </TooltipProvider>
+                      </div>
+                      <p className="mt-1 text-lg font-semibold tabular-nums text-neutral-900">{formatCount(estateMetrics.locationCount)}</p>
+                    </div>
+                    <div className="rounded-xl border border-black/5 bg-white p-3">
+                      <div className="flex items-center gap-1">
+                        <p className="text-xs uppercase tracking-[0.18em] text-neutral-500">24h Activity</p>
+                        <TooltipProvider>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <button
+                                type="button"
+                                aria-label="24h activity help"
+                                className="inline-flex h-4 w-4 items-center justify-center rounded-full border border-black/10 text-neutral-500 hover:text-neutral-700"
+                              >
+                                <Info className="h-2.5 w-2.5" />
+                              </button>
+                            </TooltipTrigger>
+                            <TooltipContent>
+                              Inventory transactions recorded in the last 24 hours.
+                            </TooltipContent>
+                          </Tooltip>
+                        </TooltipProvider>
+                      </div>
+                      <p className="mt-1 text-lg font-semibold tabular-nums text-neutral-900">{formatCount(estateMetrics.recentActivity)}</p>
+                    </div>
+                    <div className="rounded-xl border border-black/5 bg-white p-3">
+                      <div className="flex items-center gap-1">
+                        <p className="text-xs uppercase tracking-[0.18em] text-neutral-500">Open Alerts</p>
+                        <TooltipProvider>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <button
+                                type="button"
+                                aria-label="Open alerts help"
+                                className="inline-flex h-4 w-4 items-center justify-center rounded-full border border-black/10 text-neutral-500 hover:text-neutral-700"
+                              >
+                                <Info className="h-2.5 w-2.5" />
+                              </button>
+                            </TooltipTrigger>
+                            <TooltipContent>
+                              Active season exceptions requiring review or action.
+                            </TooltipContent>
+                          </Tooltip>
+                        </TooltipProvider>
+                      </div>
+                      <p className="mt-1 text-lg font-semibold tabular-nums text-neutral-900">{formatCount(exceptionsSummary.count)}</p>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+
+              {canShowSales && (
+                <Card className="border-black/5 bg-gradient-to-br from-emerald-50/60 to-white">
+                  <CardHeader>
+                    <CardTitle>Operational Confidence</CardTitle>
+                    <CardDescription>Single source logic used in cards, Dispatch, and Sales guardrails.</CardDescription>
+                  </CardHeader>
+                  <CardContent className="space-y-3">
+                    <div className={cn("inline-flex items-center rounded-full border px-3 py-1 text-xs font-medium", reconciliationStatusTone)}>
+                      Reconciliation: {reconciliationStatusLabel}
+                    </div>
+                    <div className="rounded-xl border border-black/5 bg-white/90 p-3">
+                      <p className="text-xs uppercase tracking-[0.18em] text-neutral-500">Formula</p>
+                      <p className="mt-1 text-sm text-neutral-700">
+                        Saleable KGs = Dispatch Received KGs - Sales Sold KGs
+                      </p>
+                      <p className="mt-2 text-sm text-neutral-700">
+                        {formatNumber(dispatchReceivedKgsTotal, 0)} - {formatNumber(salesSoldKgsTotal, 0)} ={" "}
+                        <span className={cn("font-semibold", overdrawnCoffeeKgs > 0 ? "text-rose-700" : "text-emerald-700")}>
+                          {overdrawnCoffeeKgs > 0 ? `-${formatNumber(overdrawnCoffeeKgs, 0)}` : formatNumber(saleableCoffeeKgs, 0)} kg
+                        </span>
+                      </p>
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      Sales validation checks coffee type + bag type stock first. Location is retained for traceability.
+                    </p>
+                    <div className="flex flex-wrap gap-2">
+                      {canShowDispatch && (
+                        <Button size="sm" variant="outline" onClick={() => setActiveTab("dispatch")} className="bg-white">
+                          Reconcile Dispatch
+                        </Button>
+                      )}
+                      {canShowSales && (
+                        <Button size="sm" variant="outline" onClick={() => setActiveTab("sales")} className="bg-white">
+                          Review Sales Guardrails
+                        </Button>
+                      )}
+                      {canShowActivityLog && (
+                        <Button size="sm" variant="outline" onClick={() => setActiveTab("activity-log")} className="bg-white">
+                          Open Activity Log
+                        </Button>
+                      )}
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
+            </div>
+
+            {!isScopedUser && (
+              <Card className="border-black/5 bg-white/90">
+                <CardHeader className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                  <div>
+                    <CardTitle>Today&apos;s Brief</CardTitle>
+                    <CardDescription>Pattern-aware summary from operations and accounts signals.</CardDescription>
+                  </div>
+                  <Badge variant="outline" className="w-fit bg-emerald-50 text-emerald-700 border-emerald-200">
+                    Smart Layer
+                  </Badge>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  {intelligenceLoading ? (
+                    <div className="flex items-center gap-2 text-sm text-neutral-500">
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      Building daily brief...
+                    </div>
+                  ) : intelligenceError ? (
+                    <p className="text-sm text-rose-600">{intelligenceError}</p>
+                  ) : intelligenceHighlights.length > 0 ? (
+                    <>
+                      <div className="grid gap-2 md:grid-cols-2">
+                        {intelligenceHighlights.slice(0, 4).map((highlight, index) => (
+                          <div key={`${highlight}-${index}`} className="rounded-xl border border-black/5 bg-white p-3">
+                            <p className="text-[10px] uppercase tracking-[0.2em] text-neutral-500">Insight {index + 1}</p>
+                            <p className="mt-1 text-sm text-neutral-800">{highlight}</p>
+                          </div>
+                        ))}
+                      </div>
+                      {(intelligenceTopCostCode || intelligenceTopFrequencyCode) && (
+                        <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+                          {intelligenceTopCostCode && (
+                            <div className="rounded-xl border border-black/5 bg-white p-3">
+                              <p className="text-xs uppercase tracking-[0.18em] text-neutral-500">Highest Cost Code</p>
+                              <p className="mt-1 text-sm font-semibold text-neutral-900">
+                                {intelligenceTopCostCode.code} · {intelligenceTopCostCode.reference}
+                              </p>
+                              <p className="mt-1 text-xs text-muted-foreground">
+                                ₹{formatNumber(intelligenceTopCostCode.totalAmount, 0)} across{" "}
+                                {formatCount(intelligenceTopCostCode.entryCount)} entries
+                              </p>
+                            </div>
+                          )}
+                          {intelligenceTopFrequencyCode && (
+                            <div className="rounded-xl border border-black/5 bg-white p-3">
+                              <p className="text-xs uppercase tracking-[0.18em] text-neutral-500">Most Frequent Code</p>
+                              <p className="mt-1 text-sm font-semibold text-neutral-900">
+                                {intelligenceTopFrequencyCode.code} · {intelligenceTopFrequencyCode.reference}
+                              </p>
+                              <p className="mt-1 text-xs text-muted-foreground">
+                                {formatCount(intelligenceTopFrequencyCode.entryCount)} entries · ₹
+                                {formatNumber(intelligenceTopFrequencyCode.totalAmount, 0)}
+                              </p>
+                            </div>
+                          )}
+                        </div>
+                      )}
+                      {intelligenceActions.length > 0 && (
+                        <div className="flex flex-wrap gap-2">
+                          {intelligenceActions
+                            .filter((action) => visibleTabs.includes(action.tab))
+                            .map((action) => (
+                              <Button
+                                key={`${action.tab}-${action.label}`}
+                                size="sm"
+                                variant="outline"
+                                onClick={() => setActiveTab(action.tab)}
+                                className="bg-white"
+                              >
+                                {action.label}
+                              </Button>
+                            ))}
+                        </div>
+                      )}
+                    </>
+                  ) : (
+                    <p className="text-sm text-muted-foreground">No insights yet. Add more operations data to activate the daily brief.</p>
+                  )}
+                </CardContent>
+              </Card>
+            )}
+
             <Card className="border-black/5 bg-white/90">
-              <CardHeader>
-                <CardTitle>Quick Open</CardTitle>
-                <CardDescription>Start from a dashboard summary, then jump into the module you need.</CardDescription>
+              <CardHeader className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  <CardTitle>Priority Alerts</CardTitle>
+                  <CardDescription>High-signal issues to clear before day-end close.</CardDescription>
+                </div>
+                {canShowSeason && (
+                  <Button size="sm" variant="outline" onClick={() => setActiveTab("season")} className="bg-white">
+                    Open Season Alerts
+                  </Button>
+                )}
               </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="flex flex-wrap gap-2">
-                  {canShowProcessing && (
-                    <Button variant="outline" onClick={() => setActiveTab("processing")} className="bg-white">
-                      Open Processing
-                    </Button>
-                  )}
-                  {canShowDispatch && (
-                    <Button variant="outline" onClick={() => setActiveTab("dispatch")} className="bg-white">
-                      Open Dispatch
-                    </Button>
-                  )}
-                  {canShowSales && (
-                    <Button variant="outline" onClick={() => setActiveTab("sales")} className="bg-white">
-                      Open Sales
-                    </Button>
-                  )}
-                  {canShowInventory && (
-                    <Button variant="outline" onClick={() => setActiveTab("inventory")} className="bg-white">
-                      Open Inventory
-                    </Button>
-                  )}
-                  {canShowAccounts && (
-                    <Button variant="outline" onClick={() => setActiveTab("accounts")} className="bg-white">
-                      Open Accounts
-                    </Button>
-                  )}
-                  {showTransactionHistory && (
-                    <Button variant="outline" onClick={() => setActiveTab("transactions")} className="bg-white">
-                      Open Transaction History
-                    </Button>
-                  )}
-                  {canShowSeason && (
-                    <Button variant="outline" onClick={() => setActiveTab("season")} className="bg-white">
-                      Open Season View
-                    </Button>
-                  )}
-                  {canShowBalanceSheet && (
-                    <Button variant="outline" onClick={() => setActiveTab("balance-sheet")} className="bg-white">
-                      Open Balance Sheet
-                    </Button>
-                  )}
-                </div>
-                <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
-                  <div className="rounded-xl border border-black/5 bg-white p-3">
-                    <p className="text-xs uppercase tracking-[0.18em] text-neutral-500">Active Locations</p>
-                    <p className="mt-1 text-lg font-semibold tabular-nums text-neutral-900">{formatCount(estateMetrics.locationCount)}</p>
+              <CardContent>
+                {exceptionsLoading ? (
+                  <div className="flex items-center gap-2 text-sm text-neutral-500">
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    Loading alerts...
                   </div>
-                  <div className="rounded-xl border border-black/5 bg-white p-3">
-                    <p className="text-xs uppercase tracking-[0.18em] text-neutral-500">Traceability Coverage</p>
-                    <p className="mt-1 text-lg font-semibold tabular-nums text-neutral-900">{formatNumber(estateMetrics.traceabilityCoverage, 0)}%</p>
+                ) : exceptionsError ? (
+                  <p className="text-sm text-rose-600">{exceptionsError}</p>
+                ) : exceptionsSummary.count === 0 ? (
+                  <p className="text-sm text-emerald-700">No active alerts right now.</p>
+                ) : (
+                  <div className="grid gap-3 md:grid-cols-3">
+                    {(exceptionsSummary.highlights || []).slice(0, 3).map((item, index) => (
+                      <div key={`${item}-${index}`} className="rounded-xl border border-amber-100 bg-amber-50/70 p-3">
+                        <p className="text-[10px] uppercase tracking-[0.2em] text-amber-700">Alert {index + 1}</p>
+                        <p className="mt-1 text-sm text-amber-900">{item}</p>
+                      </div>
+                    ))}
                   </div>
-                  <div className="rounded-xl border border-black/5 bg-white p-3">
-                    <p className="text-xs uppercase tracking-[0.18em] text-neutral-500">Open Alerts</p>
-                    <p className="mt-1 text-lg font-semibold tabular-nums text-neutral-900">{formatCount(exceptionsSummary.count)}</p>
-                  </div>
-                </div>
+                )}
               </CardContent>
             </Card>
           </TabsContent>
@@ -4448,6 +4845,11 @@ export default function InventorySystem() {
           {canShowSeason && (
             <TabsContent value="season" className="space-y-6">
               <SeasonDashboard />
+            </TabsContent>
+          )}
+          {canShowYieldForecast && (
+            <TabsContent value="yield-forecast" className="space-y-6">
+              <YieldForecastTab />
             </TabsContent>
           )}
           {canShowActivityLog && (

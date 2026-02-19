@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useCallback, useMemo, type ChangeEvent, type KeyboardEvent } from "react"
+import { useState, useEffect, useCallback, useMemo, useRef, type ChangeEvent, type KeyboardEvent as ReactKeyboardEvent } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -162,10 +162,12 @@ export default function SalesTab() {
   const [editingRecord, setEditingRecord] = useState<SalesRecord | null>(null)
   const [isLoading, setIsLoading] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
+  const salesSaveStateRef = useRef({ canSubmitSale: false, isSaving: false })
+  const salesSaveHandlerRef = useRef<(() => Promise<void> | void) | null>(null)
   const [saveFeedback, setSaveFeedback] = useState<{ type: "success" | "error"; message: string } | null>(null)
   const { toast } = useToast()
   const salesPageSize = 25
-  const blockInvalidNumberKey = (event: KeyboardEvent<HTMLInputElement>) => {
+  const blockInvalidNumberKey = (event: ReactKeyboardEvent<HTMLInputElement>) => {
     if (isBlockedNumericKey(event.key)) {
       event.preventDefault()
     }
@@ -579,7 +581,7 @@ export default function SalesTab() {
     const availableBags = availableKgs / bagWeightKg
     const overdrawnKgs = Math.max(0, -netKgs)
     const overdrawnBags = overdrawnKgs / bagWeightKg
-    return { availableKgs, availableBags, overdrawnKgs, overdrawnBags }
+    return { receivedKgs, soldKgs, availableKgs, availableBags, overdrawnKgs, overdrawnBags }
   }
 
   const isLegacyPooledAvailability = dispatchSummaryScope === "legacy_pool" || salesSummaryScope === "legacy_pool"
@@ -963,8 +965,23 @@ export default function SalesTab() {
     saveBlockers.push(`KGs sold exceeds available stock by ${formatNumber(excessKgs)} KGs.`)
   }
   if (isSaving) saveBlockers.push("Saving in progress.")
-  const canSubmitSale =
-    saveBlockers.length === 0
+  const canSubmitSale = saveBlockers.length === 0
+  salesSaveStateRef.current = { canSubmitSale, isSaving }
+  salesSaveHandlerRef.current = handleSave
+
+  useEffect(() => {
+    const onKeyDown = (event: globalThis.KeyboardEvent) => {
+      if (!(event.metaKey || event.ctrlKey)) return
+      if (event.key.toLowerCase() !== "s") return
+      event.preventDefault()
+      if (salesSaveStateRef.current.canSubmitSale && !salesSaveStateRef.current.isSaving) {
+        void salesSaveHandlerRef.current?.()
+      }
+    }
+    window.addEventListener("keydown", onKeyDown)
+    return () => window.removeEventListener("keydown", onKeyDown)
+  }, [])
+
   const overviewScopeLabel = "all locations in the selected fiscal year"
   const selectedSalesKgs = selectedSalesRecord ? resolveSalesRecordKgs(selectedSalesRecord, bagWeightKg) : 0
   const selectedSalesBags = Number(selectedSalesRecord?.bags_sold) || 0
@@ -1054,6 +1071,9 @@ export default function SalesTab() {
               {formatNumber(selectionAvailability.availableKgs)} KGs
             </p>
             <p className="mt-1 text-xs text-muted-foreground">{formatNumber(selectionAvailability.availableBags)} bags</p>
+            <p className="mt-1 text-xs text-muted-foreground">
+              Received {formatNumber(baseSelectionAvailability.receivedKgs)} - Sold {formatNumber(baseSelectionAvailability.soldKgs)}
+            </p>
             <p className="mt-1 text-xs text-muted-foreground">
               {formatNumber(selectionShareOfScopePct, 0)}% of all coffee currently available in this scope
             </p>
@@ -1507,6 +1527,7 @@ export default function SalesTab() {
               )}
             </Button>
           </div>
+          <p className="mt-2 text-xs text-muted-foreground">Tip: press Ctrl/Cmd + S to save quickly.</p>
           {!canSubmitSale && !isSaving && (
             <p className="mt-2 text-xs text-muted-foreground">
               Save blocked: {saveBlockers[0]}

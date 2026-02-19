@@ -165,5 +165,8 @@ export async function requireAdminSession() {
   if (!["owner", "admin"].includes(sessionUser.role)) {
     throw new Error("Admin role required")
   }
+  if (sessionUser.mfaEnabled && !sessionUser.mfaVerified) {
+    throw new Error("MFA required")
+  }
   return sessionUser
 }

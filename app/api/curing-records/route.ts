@@ -171,7 +171,7 @@ export async function POST(request: Request) {
       output_bags: Number(data.output_bags) || 0,
       loss_kg: computedLoss,
       storage_bin: data.storage_bin || null,
-      recorded_by: data.recorded_by || sessionUser.username || "system",
+      recorded_by: sessionUser.username || "system",
       notes: data.notes || null,
     }
 
