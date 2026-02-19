@@ -7,6 +7,11 @@ import { logAuditEvent } from "@/lib/server/audit-log"
 import { logSecurityEvent } from "@/lib/server/security-events"
 
 type ModuleState = { id: string; label: string; enabled: boolean }
+const MODULE_LABEL_BY_ID = new Map(MODULES.map((module) => [module.id, module.label]))
+const USER_ROLE_DISABLED_MODULES = new Set(["balance-sheet"])
+
+const applyUserRoleModulePolicy = (role: string, moduleId: string, enabled: boolean) =>
+  role === "user" && USER_ROLE_DISABLED_MODULES.has(moduleId) ? false : enabled
 
 const adminErrorResponse = (error: any, fallback: string) => {
   const message = error?.message || fallback
@@ -34,7 +39,7 @@ export async function GET(request: Request) {
     )
     const [userRows, userModules, tenantModules] = await runTenantQueries(sql, lookupContext, [
       sql`
-        SELECT id, tenant_id
+        SELECT id, tenant_id, role
         FROM users
         WHERE id = ${userId}
         LIMIT 1
@@ -58,6 +63,7 @@ export async function GET(request: Request) {
     }
 
     const targetTenantId = String(userRows[0].tenant_id)
+    const targetRole = String(userRows[0].role || "")
     if (sessionUser.role !== "owner" && targetTenantId !== sessionUser.tenantId) {
       return NextResponse.json({ success: false, error: "Forbidden" }, { status: 403 })
     }
@@ -71,9 +77,12 @@ export async function GET(request: Request) {
         : null
     const modules: ModuleState[] = resolveModuleStates(sourceRows).map((module) => ({
       ...module,
-      enabled:
+      enabled: applyUserRoleModulePolicy(
+        targetRole,
+        module.id,
         tenantEnabled.includes(module.id) &&
-        (userMap ? (userMap.has(module.id) ? Boolean(userMap.get(module.id)) : true) : module.enabled),
+          (userMap ? (userMap.has(module.id) ? Boolean(userMap.get(module.id)) : true) : module.enabled),
+      ),
     }))
 
     return NextResponse.json({ success: true, modules, source })
@@ -106,7 +115,7 @@ export async function PUT(request: Request) {
       sql,
       lookupContext,
       sql`
-        SELECT id, tenant_id
+        SELECT id, tenant_id, role
         FROM users
         WHERE id = ${userId}
         LIMIT 1
@@ -118,6 +127,7 @@ export async function PUT(request: Request) {
     }
 
     const tenantId = String(userRows[0].tenant_id)
+    const targetRole = String(userRows[0].role || "")
     if (sessionUser.role !== "owner" && tenantId !== sessionUser.tenantId) {
       return NextResponse.json({ success: false, error: "Forbidden" }, { status: 403 })
     }
@@ -143,9 +153,16 @@ export async function PUT(request: Request) {
       `,
     )
 
+    const effectiveModules: ModuleState[] = []
     for (const moduleId of MODULE_IDS) {
       const requested = Boolean(modules.find((m: any) => m.id === moduleId)?.enabled)
-      const enabled = tenantEnabled.includes(moduleId) && requested
+      const enabled =
+        tenantEnabled.includes(moduleId) && applyUserRoleModulePolicy(targetRole, moduleId, requested)
+      effectiveModules.push({
+        id: moduleId,
+        label: MODULE_LABEL_BY_ID.get(moduleId) || moduleId,
+        enabled,
+      })
       await runTenantQuery(
         sql,
         normalizeTenantContext(tenantId, sessionUser.role),
@@ -163,7 +180,7 @@ export async function PUT(request: Request) {
       entityType: "user_modules",
       entityId: userId,
       before: beforeModules ?? null,
-      after: modules,
+      after: effectiveModules,
     })
 
     await logSecurityEvent({

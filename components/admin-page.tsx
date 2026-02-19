@@ -962,6 +962,8 @@ export default function AdminPage() {
         }
       : null
   const enabledModuleCount = modulePermissions.filter((module) => module.enabled).length
+  const selectedUser = users.find((u) => u.id === selectedUserId) || null
+  const isSelectedUserRoleUser = selectedUser?.role === "user"
   const ownerSectionLinks: Array<{ id: string; label: string }> = [
     { id: "tenant-users", label: "Users" },
     { id: "user-module-overrides", label: "User Access" },
@@ -1641,18 +1643,27 @@ export default function AdminPage() {
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-            {userModulePermissions.map((module) => (
-              <label key={module.id} className="flex items-center gap-2 rounded-lg border border-border/60 bg-white/80 p-3">
-                <input
-                  type="checkbox"
-                  checked={module.enabled}
-                  onChange={() => toggleUserModule(module.id)}
-                  disabled={isUserModulesLoading}
-                />
-                <span>{module.label}</span>
-              </label>
-            ))}
+            {userModulePermissions.map((module) => {
+              const isLockedForRole = isSelectedUserRoleUser && module.id === "balance-sheet"
+              return (
+                <label key={module.id} className="flex items-center gap-2 rounded-lg border border-border/60 bg-white/80 p-3">
+                  <input
+                    type="checkbox"
+                    checked={module.enabled}
+                    onChange={() => toggleUserModule(module.id)}
+                    disabled={isUserModulesLoading || isLockedForRole}
+                  />
+                  <span>{module.label}</span>
+                  {isLockedForRole && <span className="ml-auto text-xs text-muted-foreground">Admin only</span>}
+                </label>
+              )
+            })}
           </div>
+          {isSelectedUserRoleUser && (
+            <p className="text-xs text-muted-foreground">
+              Live Balance Sheet is admin-only and remains disabled for users.
+            </p>
+          )}
 
           <div className="flex flex-col sm:flex-row gap-2">
             <Button onClick={handleSaveUserModules} disabled={!selectedUserId || isUserModulesLoading || isSavingUserModules}>

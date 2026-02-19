@@ -549,7 +549,7 @@ export default function TenantSettingsPage() {
     if (mfaGate) {
       return
     }
-    if (!isOwner) {
+    if (!isAdminOrOwner) {
       return
     }
     if (selectedUserId) {
@@ -558,7 +558,7 @@ export default function TenantSettingsPage() {
     }
     setUserModulePermissions(MODULES.map((module) => ({ ...module, enabled: module.defaultEnabled !== false })))
     setUserModuleSource("default")
-  }, [selectedUserId, loadUserModules, mfaGate, isOwner])
+  }, [selectedUserId, loadUserModules, mfaGate, isAdminOrOwner])
 
   const handleCreateUser = async () => {
     if (mfaGate) {
@@ -956,6 +956,8 @@ export default function TenantSettingsPage() {
 
   const enabledTenantModuleCount = modulePermissions.filter((module) => module.enabled).length
   const enabledUserModuleCount = userModulePermissions.filter((module) => module.enabled).length
+  const selectedUser = users.find((u) => u.id === selectedUserId) || null
+  const isSelectedUserRoleUser = selectedUser?.role === "user"
   const sectionLinks: Array<{ id: string; label: string }> = [
     { id: "estate-identity", label: "Estate" },
     { id: "display-preferences", label: "Display" },
@@ -1842,7 +1844,7 @@ export default function TenantSettingsPage() {
         </CardContent>
       </Card>
 
-      {isOwner && (
+      {isAdminOrOwner && (
         <Card id="user-module-overrides" className="scroll-mt-24 border-border/70 bg-white/85">
           <CardHeader>
             <CardTitle>User Module Overrides</CardTitle>
@@ -1876,18 +1878,27 @@ export default function TenantSettingsPage() {
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-              {userModulePermissions.map((module) => (
-                <label key={module.id} className="flex items-center gap-2 rounded-lg border border-border/60 bg-white/80 p-3">
-                  <input
-                    type="checkbox"
-                    checked={module.enabled}
-                    onChange={() => toggleUserModule(module.id)}
-                    disabled={isUserModulesLoading}
-                  />
-                  <span>{module.label}</span>
-                </label>
-              ))}
+              {userModulePermissions.map((module) => {
+                const isLockedForRole = isSelectedUserRoleUser && module.id === "balance-sheet"
+                return (
+                  <label key={module.id} className="flex items-center gap-2 rounded-lg border border-border/60 bg-white/80 p-3">
+                    <input
+                      type="checkbox"
+                      checked={module.enabled}
+                      onChange={() => toggleUserModule(module.id)}
+                      disabled={isUserModulesLoading || isLockedForRole}
+                    />
+                    <span>{module.label}</span>
+                    {isLockedForRole && <span className="ml-auto text-xs text-muted-foreground">Admin only</span>}
+                  </label>
+                )
+              })}
             </div>
+            {isSelectedUserRoleUser && (
+              <p className="text-xs text-muted-foreground">
+                Live Balance Sheet is admin-only and remains disabled for users.
+              </p>
+            )}
 
             <div className="flex flex-col sm:flex-row gap-2">
               <Button

@@ -23,6 +23,10 @@ const isMissingRelation = (error: unknown, relation: string) => {
 
 const PREVIEW_TENANT_COOKIE = "farmflow_preview_tenant"
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
+const USER_ROLE_BLOCKED_MODULES = new Set<string>(["balance-sheet"])
+
+const filterUserBlockedModules = (modules: string[]) =>
+  modules.filter((moduleId) => !USER_ROLE_BLOCKED_MODULES.has(moduleId))
 
 export async function resolveScopedSessionUser(user: SessionUser): Promise<SessionUser> {
   if (user.role !== "owner") return user
@@ -108,8 +112,8 @@ export async function getEnabledModules(sessionUser?: SessionUser): Promise<stri
       )
       if (userModules?.length) {
         const userMap = new Map(userModules.map((row: any) => [String(row.module), Boolean(row.enabled)]))
-        return tenantEnabled.filter((moduleId) =>
-          userMap.has(moduleId) ? Boolean(userMap.get(moduleId)) : true,
+        return filterUserBlockedModules(
+          tenantEnabled.filter((moduleId) => (userMap.has(moduleId) ? Boolean(userMap.get(moduleId)) : true)),
         )
       }
     } catch (error) {
@@ -119,7 +123,7 @@ export async function getEnabledModules(sessionUser?: SessionUser): Promise<stri
     }
   }
 
-  return tenantEnabled
+  return filterUserBlockedModules(tenantEnabled)
 }
 
 export async function requireModuleAccess(moduleId: string, sessionUser?: SessionUser): Promise<SessionUser> {
