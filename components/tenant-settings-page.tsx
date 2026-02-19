@@ -23,7 +23,7 @@ import {
 } from "@/lib/tenant-experience"
 import { formatDateForDisplay, formatDateOnly } from "@/lib/date-utils"
 import { roleLabel } from "@/lib/roles"
-import { Info } from "lucide-react"
+import { ArrowLeft, Info } from "lucide-react"
 
 interface User {
   id: string
@@ -979,6 +979,14 @@ export default function TenantSettingsPage() {
 
   return (
     <div className="space-y-8">
+      <div className="flex items-center justify-start">
+        <Button asChild variant="outline" size="sm" className="bg-white/80">
+          <Link href="/dashboard" className="inline-flex items-center gap-2">
+            <ArrowLeft className="h-4 w-4" />
+            Back to Dashboard
+          </Link>
+        </Button>
+      </div>
       <Card
         id="settings-overview"
         className="scroll-mt-24 border-emerald-200/80 bg-gradient-to-br from-emerald-50 via-white to-amber-50"

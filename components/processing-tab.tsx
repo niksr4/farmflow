@@ -130,6 +130,7 @@ export default function ProcessingTab() {
   const [hasExistingRecord, setHasExistingRecord] = useState(false)
   const [previousRecord, setPreviousRecord] = useState<ProcessingRecord | null>(null)
   const [recentRecords, setRecentRecords] = useState<ProcessingRecord[]>([])
+  const [selectedRecentRecord, setSelectedRecentRecord] = useState<ProcessingRecord | null>(null)
   const [isLoading, setIsLoading] = useState(false)
   const [isLoadingRecords, setIsLoadingRecords] = useState(false)
   const [isLoadingMoreRecords, setIsLoadingMoreRecords] = useState(false)
@@ -516,6 +517,21 @@ export default function ProcessingTab() {
       loadRecentRecords(0, false)
     }
   }, [selectedLocationId, loadRecentRecords])
+
+  useEffect(() => {
+    if (!recentRecords.length) {
+      setSelectedRecentRecord(null)
+      return
+    }
+    setSelectedRecentRecord((prev) => {
+      if (!prev) return recentRecords[0]
+      return (
+        recentRecords.find(
+          (recordItem) => recordItem.id === prev.id && recordItem.process_date === prev.process_date,
+        ) || recentRecords[0]
+      )
+    })
+  }, [recentRecords])
 
   useEffect(() => {
     if (selectedLocationId) {
@@ -1414,12 +1430,51 @@ export default function ProcessingTab() {
             </div>
           ) : (
             <div className="space-y-2">
+              {selectedRecentRecord && (
+                <div className="rounded-xl border border-emerald-100 bg-emerald-50/50 p-3 text-sm">
+                  <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+                    <div>
+                      <p className="text-xs uppercase tracking-[0.2em] text-emerald-700">Record Drill-Down</p>
+                      <p className="font-medium text-foreground">
+                        {formatDateOnly(selectedRecentRecord.process_date)}
+                        {selectedRecentRecord.lot_id ? ` · Lot ${selectedRecentRecord.lot_id}` : ""}
+                      </p>
+                    </div>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => setDate(new Date(selectedRecentRecord.process_date))}
+                      className="bg-white"
+                    >
+                      Open in Form
+                    </Button>
+                  </div>
+                  <div className="mt-2 grid gap-2 text-xs text-muted-foreground sm:grid-cols-2 lg:grid-cols-4">
+                    <p>Crop: {formatNumber(Number(selectedRecentRecord.crop_today) || 0)} kg</p>
+                    <p>Ripe: {formatNumber(Number(selectedRecentRecord.ripe_today) || 0)} kg</p>
+                    <p>Dry Parchment: {formatNumber(Number(selectedRecentRecord.dry_parch) || 0)} kg</p>
+                    <p>Dry Cherry: {formatNumber(Number(selectedRecentRecord.dry_cherry) || 0)} kg</p>
+                  </div>
+                  <div className="mt-1 grid gap-2 text-xs text-muted-foreground sm:grid-cols-2 lg:grid-cols-4">
+                    <p>DP Bags: {formatNumber(Number(selectedRecentRecord.dry_p_bags) || 0)}</p>
+                    <p>Cherry Bags: {formatNumber(Number(selectedRecentRecord.dry_cherry_bags) || 0)}</p>
+                    <p>Moisture: {selectedRecentRecord.moisture_pct != null ? `${formatNumber(Number(selectedRecentRecord.moisture_pct), 2)}%` : "-"}</p>
+                    <p>Quality: {selectedRecentRecord.quality_grade || "-"}</p>
+                  </div>
+                </div>
+              )}
               {recentRecords.map((rec) => (
                 <Button
                   key={rec.id}
                   variant="outline"
-                  className="w-full justify-start border-border/60 bg-white/70 text-left hover:bg-muted/40"
+                  className={cn(
+                    "w-full justify-start border-border/60 bg-white/70 text-left hover:bg-muted/40",
+                    selectedRecentRecord?.id === rec.id && selectedRecentRecord?.process_date === rec.process_date
+                      ? "border-emerald-200 bg-emerald-50/60"
+                      : "",
+                  )}
                   onClick={() => {
+                    setSelectedRecentRecord(rec)
                     setDate(new Date(rec.process_date))
                   }}
                 >

@@ -8,7 +8,7 @@ CREATE TABLE IF NOT EXISTS sales_records (
     sale_date DATE NOT NULL,
     batch_no VARCHAR(100),
     estate VARCHAR(100),
-    bags_sent INTEGER NOT NULL DEFAULT 0,
+    bags_sent DECIMAL(10,2) NOT NULL DEFAULT 0,
     kgs DECIMAL(10,2) NOT NULL DEFAULT 0,
     bags_sold DECIMAL(10,2) NOT NULL DEFAULT 0,
     price_per_bag DECIMAL(10,2) NOT NULL DEFAULT 0,

@@ -19,6 +19,7 @@ import { useToast } from "@/hooks/use-toast"
 import { useAuth } from "@/hooks/use-auth"
 import { getAvailableFiscalYears, getCurrentFiscalYear, type FiscalYear } from "@/lib/fiscal-year-utils"
 import { canAcceptNonNegative, isBlockedNumericKey } from "@/lib/number-input"
+import { cn } from "@/lib/utils"
 
 interface LocationOption {
   id: string
@@ -73,6 +74,7 @@ export default function CuringTab() {
   const [hasExistingRecord, setHasExistingRecord] = useState(false)
 
   const [recentRecords, setRecentRecords] = useState<CuringRecord[]>([])
+  const [selectedCuringRecord, setSelectedCuringRecord] = useState<CuringRecord | null>(null)
   const [loading, setLoading] = useState(false)
   const [saving, setSaving] = useState(false)
   const blockInvalidNumberKey = (event: KeyboardEvent<HTMLInputElement>) => {
@@ -192,6 +194,17 @@ export default function CuringTab() {
   }, [fetchRecentRecords])
 
   useEffect(() => {
+    if (!recentRecords.length) {
+      setSelectedCuringRecord(null)
+      return
+    }
+    setSelectedCuringRecord((prev) => {
+      if (!prev) return recentRecords[0]
+      return recentRecords.find((record) => record.id === prev.id) || recentRecords[0]
+    })
+  }, [recentRecords])
+
+  useEffect(() => {
     if (!lotId.trim()) {
       resetForm()
       return
@@ -264,6 +277,7 @@ export default function CuringTab() {
   }
 
   const loadRecord = (record: CuringRecord) => {
+    setSelectedCuringRecord(record)
     setSelectedDate(new Date(record.process_date))
     setLotId(record.lot_id || "")
     setCoffeeType(record.coffee_type || "")
@@ -500,6 +514,34 @@ export default function CuringTab() {
           <CardDescription>Latest curing entries for {selectedLocation?.name || "estate"}</CardDescription>
         </CardHeader>
         <CardContent>
+          {selectedCuringRecord && (
+            <div className="mb-4 rounded-xl border border-emerald-100 bg-emerald-50/50 p-3 text-sm">
+              <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+                <div>
+                  <p className="text-xs uppercase tracking-[0.2em] text-emerald-700">Curing Drill-Down</p>
+                  <p className="font-medium text-foreground">
+                    {selectedCuringRecord.process_date} · {selectedCuringRecord.lot_id || "No lot"} ·{" "}
+                    {selectedLocation?.name || selectedLocation?.code || "Location"}
+                  </p>
+                </div>
+                <Button size="sm" variant="outline" className="bg-white" onClick={() => loadRecord(selectedCuringRecord)}>
+                  Open in Form
+                </Button>
+              </div>
+              <div className="mt-2 grid gap-2 text-xs text-muted-foreground sm:grid-cols-2 lg:grid-cols-4">
+                <p>Input: {selectedCuringRecord.intake_kg ?? 0} KG</p>
+                <p>Output: {selectedCuringRecord.output_kg ?? 0} KG</p>
+                <p>Loss: {selectedCuringRecord.loss_kg ?? 0} KG</p>
+                <p>Drying Days: {selectedCuringRecord.drying_days ?? 0}</p>
+              </div>
+              <div className="mt-1 grid gap-2 text-xs text-muted-foreground sm:grid-cols-2 lg:grid-cols-4">
+                <p>Moisture Start: {selectedCuringRecord.moisture_start_pct ?? "-"}%</p>
+                <p>Moisture End: {selectedCuringRecord.moisture_end_pct ?? "-"}%</p>
+                <p>Storage: {selectedCuringRecord.storage_bin || "-"}</p>
+                <p>Process: {selectedCuringRecord.process_type || "-"}</p>
+              </div>
+            </div>
+          )}
           {loading ? (
             <div className="flex items-center gap-2 text-sm text-muted-foreground">
               <Loader2 className="h-4 w-4 animate-spin" />
@@ -523,7 +565,14 @@ export default function CuringTab() {
                 </TableHeader>
                 <TableBody>
                   {recentRecords.map((record) => (
-                    <TableRow key={record.id}>
+                    <TableRow
+                      key={record.id}
+                      className={cn(
+                        "cursor-pointer",
+                        selectedCuringRecord?.id === record.id ? "bg-emerald-50/60" : "",
+                      )}
+                      onClick={() => setSelectedCuringRecord(record)}
+                    >
                       <TableCell>{record.process_date}</TableCell>
                       <TableCell>{record.lot_id || "-"}</TableCell>
                       <TableCell>{record.intake_kg ?? "-"}</TableCell>
@@ -531,14 +580,28 @@ export default function CuringTab() {
                       <TableCell>{record.moisture_end_pct ?? "-"}</TableCell>
                       <TableCell>{record.loss_kg ?? "-"}</TableCell>
                       <TableCell className="flex gap-2">
-                        <Button variant="outline" size="sm" onClick={() => loadRecord(record)}>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={(event) => {
+                            event.stopPropagation()
+                            loadRecord(record)
+                          }}
+                        >
                           Edit
                         </Button>
                         {isAdmin && (
                           <TooltipProvider>
                             <Tooltip>
                               <TooltipTrigger asChild>
-                                <Button variant="ghost" size="icon" onClick={() => handleDelete(record.id)}>
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  onClick={(event) => {
+                                    event.stopPropagation()
+                                    handleDelete(record.id)
+                                  }}
+                                >
                                   <Trash2 className="h-4 w-4" />
                                 </Button>
                               </TooltipTrigger>

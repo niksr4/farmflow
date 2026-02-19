@@ -57,6 +57,7 @@ export function PepperTab() {
   const [dryPepper, setDryPepper] = useState("")
   const [notes, setNotes] = useState("")
   const [recentRecords, setRecentRecords] = useState<PepperRecord[]>([])
+  const [selectedPepperRecord, setSelectedPepperRecord] = useState<PepperRecord | null>(null)
   const [loading, setLoading] = useState(false)
   const [saving, setSaving] = useState(false)
   const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null)
@@ -156,6 +157,17 @@ export function PepperTab() {
     fetchRecentRecords()
   }, [fetchRecentRecords])
 
+  useEffect(() => {
+    if (!recentRecords.length) {
+      setSelectedPepperRecord(null)
+      return
+    }
+    setSelectedPepperRecord((prev) => {
+      if (!prev) return recentRecords[0]
+      return recentRecords.find((record) => record.id === prev.id) || recentRecords[0]
+    })
+  }, [recentRecords])
+
   // Load record when date changes
   useEffect(() => {
     fetchRecordForDate(selectedDate)
@@ -246,6 +258,7 @@ export function PepperTab() {
   }
 
   const loadRecord = (record: PepperRecord) => {
+    setSelectedPepperRecord(record)
     if (record.location_id && (selectedLocationId === LOCATION_ALL || selectedLocationId === LOCATION_UNASSIGNED)) {
       setSelectedLocationId(record.location_id)
     }
@@ -454,6 +467,30 @@ export function PepperTab() {
           <CardDescription>Click a row to edit that record</CardDescription>
         </CardHeader>
         <CardContent>
+          {selectedPepperRecord && (
+            <div className="mb-4 rounded-xl border border-emerald-100 bg-emerald-50/50 p-3 text-sm">
+              <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+                <div>
+                  <p className="text-xs uppercase tracking-[0.2em] text-emerald-700">Pepper Drill-Down</p>
+                  <p className="font-medium text-foreground">
+                    {formatDateOnly(selectedPepperRecord.process_date)} ·{" "}
+                    {selectedPepperRecord.location_name ||
+                      selectedPepperRecord.location_code ||
+                      (selectedPepperRecord.location_id ? "Unknown" : UNASSIGNED_LABEL)}
+                  </p>
+                </div>
+                <Button size="sm" variant="outline" className="bg-white" onClick={() => loadRecord(selectedPepperRecord)}>
+                  Open in Form
+                </Button>
+              </div>
+              <div className="mt-2 grid gap-2 text-xs text-muted-foreground sm:grid-cols-2 lg:grid-cols-4">
+                <p>Picked: {formatNumber(selectedPepperRecord.kg_picked)} KG</p>
+                <p>Green: {formatNumber(selectedPepperRecord.green_pepper)} KG</p>
+                <p>Dry: {formatNumber(selectedPepperRecord.dry_pepper)} KG</p>
+                <p>Dry Yield: {formatNumber(selectedPepperRecord.dry_pepper_percent)}%</p>
+              </div>
+            </div>
+          )}
           {loading ? (
             <div className="flex items-center justify-center py-8">
               <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
@@ -482,7 +519,11 @@ export function PepperTab() {
                   {recentRecords.map((record, index) => (
                     <TableRow
                       key={record.id}
-                      className={`cursor-pointer hover:bg-muted/50 ${index % 2 === 0 ? "bg-white" : "bg-muted/20"}`}
+                      className={cn(
+                        "cursor-pointer hover:bg-muted/50",
+                        index % 2 === 0 ? "bg-white" : "bg-muted/20",
+                        selectedPepperRecord?.id === record.id ? "border-emerald-200 bg-emerald-50/60" : "",
+                      )}
                       onClick={() => loadRecord(record)}
                     >
                       {showLocationColumn && (

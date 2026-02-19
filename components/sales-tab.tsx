@@ -75,6 +75,7 @@ type InventoryBreakdown = { cherry: InventoryTotals; parchment: InventoryTotals;
 const COFFEE_TYPES = DEFAULT_COFFEE_VARIETIES
 const BAG_TYPES = ["Dry Parchment", "Dry Cherry"]
 const LOCATION_ALL = "all"
+const STOCK_EPSILON = 0.0001
 const normalizeBagType = (value: string | null | undefined) =>
   String(value || "").toLowerCase().includes("cherry") ? "cherry" : "parchment"
 const formatBagTypeLabel = (value: string | null | undefined) =>
@@ -84,6 +85,15 @@ const normalizeCoffeeType = (value: string | null | undefined) => {
   if (normalized.includes("arabica")) return "arabica"
   if (normalized.includes("robusta")) return "robusta"
   return "other"
+}
+const ARABICA_LABEL = COFFEE_TYPES.find((type) => String(type || "").toLowerCase().includes("arabica")) || "Arabica"
+const ROBUSTA_LABEL = COFFEE_TYPES.find((type) => String(type || "").toLowerCase().includes("robusta")) || "Robusta"
+const toCanonicalCoffeeLabel = (value: string | null | undefined) => {
+  const normalized = normalizeCoffeeType(value)
+  if (normalized === "arabica") return ARABICA_LABEL
+  if (normalized === "robusta") return ROBUSTA_LABEL
+  const raw = String(value || "").trim()
+  return raw || "Unknown"
 }
 
 const resolveDispatchReceivedKgs = (
@@ -129,7 +139,7 @@ export default function SalesTab() {
   const [bankAccount, setBankAccount] = useState<string>("")
   const [notes, setNotes] = useState<string>("")
   const [buyerSuggestions, setBuyerSuggestions] = useState<string[]>([])
-  const asOfDate = useMemo(() => format(date, "yyyy-MM-dd"), [date])
+  const selectedFiscalRange = useMemo(() => getFiscalYearDateRange(selectedFiscalYear), [selectedFiscalYear])
   
   const kgsSoldValue = Number(kgsSold) || 0
   const pricePerBagValue = Number(pricePerBag) || 0
@@ -148,9 +158,11 @@ export default function SalesTab() {
   const [salesPage, setSalesPage] = useState(0)
   const [salesHasMore, setSalesHasMore] = useState(false)
   const [isLoadingMore, setIsLoadingMore] = useState(false)
+  const [selectedSalesRecord, setSelectedSalesRecord] = useState<SalesRecord | null>(null)
   const [editingRecord, setEditingRecord] = useState<SalesRecord | null>(null)
   const [isLoading, setIsLoading] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
+  const [saveFeedback, setSaveFeedback] = useState<{ type: "success" | "error"; message: string } | null>(null)
   const { toast } = useToast()
   const salesPageSize = 25
   const blockInvalidNumberKey = (event: KeyboardEvent<HTMLInputElement>) => {
@@ -171,7 +183,7 @@ export default function SalesTab() {
 
   const loadLocations = useCallback(async () => {
     try {
-      const response = await fetch("/api/locations")
+      const response = await fetch("/api/locations", { cache: "no-store" })
       const data = await response.json()
       if (!response.ok || !data.success) {
         return
@@ -181,10 +193,13 @@ export default function SalesTab() {
       if (!selectedLocationId && loaded.length > 0) {
         setSelectedLocationId(loaded[0].id)
       }
+      if (salesFilterLocationId === LOCATION_ALL && loaded.length > 0) {
+        setSalesFilterLocationId(loaded[0].id)
+      }
     } catch (error) {
       console.error("Error loading locations:", error)
     }
-  }, [selectedLocationId])
+  }, [salesFilterLocationId, selectedLocationId])
 
   const resolveLocationIdFromLabel = useCallback(
     (label?: string | null) => {
@@ -217,7 +232,7 @@ export default function SalesTab() {
 
   const loadBuyerSuggestions = useCallback(async () => {
     try {
-      const response = await fetch("/api/sales?buyers=true")
+      const response = await fetch("/api/sales?buyers=true", { cache: "no-store" })
       const data = await response.json()
       if (!response.ok || !data.success) return
       const buyers = Array.isArray(data.buyers) ? data.buyers : []
@@ -262,7 +277,7 @@ export default function SalesTab() {
       if (salesFilterLocationId && salesFilterLocationId !== LOCATION_ALL) {
         params.set("locationId", salesFilterLocationId)
       }
-      const response = await fetch(`/api/sales?${params.toString()}`)
+      const response = await fetch(`/api/sales?${params.toString()}`, { cache: "no-store" })
       const data = await response.json()
       
       if (data.success) {
@@ -293,31 +308,35 @@ export default function SalesTab() {
   }, [salesFilterLocationId, salesPageSize, selectedFiscalYear])
 
   const fetchDispatchSummary = useCallback(async () => {
+    if (!selectedLocationId) {
+      setDispatchSummary([])
+      setDispatchSummaryScope("all")
+      return
+    }
     try {
       const params = new URLSearchParams({
         summaryOnly: "true",
-        endDate: asOfDate,
+        startDate: selectedFiscalRange.startDate,
+        endDate: selectedFiscalRange.endDate,
       })
-      if (selectedLocationId) {
-        params.set("locationId", selectedLocationId)
-      }
-      const response = await fetch(`/api/dispatch?${params.toString()}`)
+      params.set("locationId", selectedLocationId)
+      const response = await fetch(`/api/dispatch?${params.toString()}`, { cache: "no-store" })
       const data = await response.json()
 
       if (data.success) {
         setDispatchSummary(Array.isArray(data.totalsByType) ? data.totalsByType : [])
-        const scope = data.locationScope === "legacy_pool" ? "legacy_pool" : selectedLocationId ? "location" : "all"
+        const scope = data.locationScope === "legacy_pool" ? "legacy_pool" : "location"
         setDispatchSummaryScope(scope)
       } else {
         setDispatchSummary([])
-        setDispatchSummaryScope(selectedLocationId ? "location" : "all")
+        setDispatchSummaryScope("location")
       }
     } catch (error) {
       console.error("Error fetching dispatch records:", error)
       setDispatchSummary([])
-      setDispatchSummaryScope(selectedLocationId ? "location" : "all")
+      setDispatchSummaryScope("location")
     }
-  }, [asOfDate, selectedLocationId])
+  }, [selectedFiscalRange.endDate, selectedFiscalRange.startDate, selectedLocationId])
 
   const fetchSalesSummary = useCallback(async () => {
     if (!selectedLocationId) {
@@ -328,10 +347,11 @@ export default function SalesTab() {
     try {
       const params = new URLSearchParams({
         summaryOnly: "true",
-        endDate: asOfDate,
+        startDate: selectedFiscalRange.startDate,
+        endDate: selectedFiscalRange.endDate,
       })
       params.set("locationId", selectedLocationId)
-      const response = await fetch(`/api/sales?${params.toString()}`)
+      const response = await fetch(`/api/sales?${params.toString()}`, { cache: "no-store" })
       const data = await response.json()
 
       if (data.success) {
@@ -346,7 +366,7 @@ export default function SalesTab() {
       setSalesSummary([])
       setSalesSummaryScope("location")
     }
-  }, [asOfDate, selectedLocationId])
+  }, [selectedFiscalRange.endDate, selectedFiscalRange.startDate, selectedLocationId])
 
   const fetchOverviewDispatchSummary = useCallback(async () => {
     try {
@@ -356,10 +376,10 @@ export default function SalesTab() {
         endDate,
         summaryOnly: "true",
       })
-      if (salesFilterLocationId && salesFilterLocationId !== LOCATION_ALL) {
-        params.set("locationId", salesFilterLocationId)
+      if (selectedLocationId) {
+        params.set("locationId", selectedLocationId)
       }
-      const response = await fetch(`/api/dispatch?${params.toString()}`)
+      const response = await fetch(`/api/dispatch?${params.toString()}`, { cache: "no-store" })
       const data = await response.json()
 
       if (data.success) {
@@ -371,7 +391,7 @@ export default function SalesTab() {
       console.error("Error fetching dispatch summary:", error)
       setOverviewDispatchSummary([])
     }
-  }, [salesFilterLocationId, selectedFiscalYear])
+  }, [selectedFiscalYear, selectedLocationId])
 
   const fetchOverviewSalesSummary = useCallback(async () => {
     try {
@@ -381,10 +401,10 @@ export default function SalesTab() {
         endDate,
         summaryOnly: "true",
       })
-      if (salesFilterLocationId && salesFilterLocationId !== LOCATION_ALL) {
-        params.set("locationId", salesFilterLocationId)
+      if (selectedLocationId) {
+        params.set("locationId", selectedLocationId)
       }
-      const response = await fetch(`/api/sales?${params.toString()}`)
+      const response = await fetch(`/api/sales?${params.toString()}`, { cache: "no-store" })
       const data = await response.json()
 
       if (data.success) {
@@ -396,7 +416,7 @@ export default function SalesTab() {
       console.error("Error fetching sales overview:", error)
       setOverviewSalesSummary([])
     }
-  }, [salesFilterLocationId, selectedFiscalYear])
+  }, [selectedFiscalYear, selectedLocationId])
 
   useEffect(() => {
     loadLocations()
@@ -406,6 +426,17 @@ export default function SalesTab() {
   useEffect(() => {
     fetchSalesRecords(0, false)
   }, [fetchSalesRecords])
+
+  useEffect(() => {
+    if (!salesRecords.length) {
+      setSelectedSalesRecord(null)
+      return
+    }
+    setSelectedSalesRecord((prev) => {
+      if (!prev) return salesRecords[0]
+      return salesRecords.find((record) => record.id === prev.id) || salesRecords[0]
+    })
+  }, [salesRecords])
 
   useEffect(() => {
     fetchDispatchSummary()
@@ -445,7 +476,7 @@ export default function SalesTab() {
       )
 
       dispatchRows.forEach((record) => {
-        const type = record.coffee_type || "Unknown"
+        const type = toCanonicalCoffeeLabel(record.coffee_type)
         if (!receivedTotals[type]) {
           receivedTotals[type] = createBreakdown()
         }
@@ -459,7 +490,7 @@ export default function SalesTab() {
       })
 
       salesRows.forEach((record) => {
-        const type = record.coffee_type || "Unknown"
+        const type = toCanonicalCoffeeLabel(record.coffee_type)
         if (!soldTotals[type]) {
           soldTotals[type] = createBreakdown()
         }
@@ -473,27 +504,48 @@ export default function SalesTab() {
         soldTotals[type].total.kgs += kgsSoldCount
       })
 
-      const availableTotals = Object.keys(receivedTotals).reduce((acc, type) => {
+      const allCoffeeTypes = Array.from(new Set([...Object.keys(receivedTotals), ...Object.keys(soldTotals)]))
+      allCoffeeTypes.forEach((type) => {
+        if (!receivedTotals[type]) {
+          receivedTotals[type] = createBreakdown()
+        }
+        if (!soldTotals[type]) {
+          soldTotals[type] = createBreakdown()
+        }
+      })
+
+      const availableTotals = allCoffeeTypes.reduce((acc, type) => {
         acc[type] = createBreakdown()
-        acc[type].cherry.bags = Math.max(0, receivedTotals[type].cherry.bags - (soldTotals[type]?.cherry.bags || 0))
-        acc[type].cherry.kgs = Math.max(0, receivedTotals[type].cherry.kgs - (soldTotals[type]?.cherry.kgs || 0))
-        acc[type].parchment.bags = Math.max(0, receivedTotals[type].parchment.bags - (soldTotals[type]?.parchment.bags || 0))
-        acc[type].parchment.kgs = Math.max(0, receivedTotals[type].parchment.kgs - (soldTotals[type]?.parchment.kgs || 0))
-        acc[type].total.bags = Math.max(0, receivedTotals[type].total.bags - (soldTotals[type]?.total.bags || 0))
-        acc[type].total.kgs = Math.max(0, receivedTotals[type].total.kgs - (soldTotals[type]?.total.kgs || 0))
+        const cherryNetBags = receivedTotals[type].cherry.bags - (soldTotals[type]?.cherry.bags || 0)
+        const cherryNetKgs = receivedTotals[type].cherry.kgs - (soldTotals[type]?.cherry.kgs || 0)
+        const parchmentNetBags = receivedTotals[type].parchment.bags - (soldTotals[type]?.parchment.bags || 0)
+        const parchmentNetKgs = receivedTotals[type].parchment.kgs - (soldTotals[type]?.parchment.kgs || 0)
+        acc[type].cherry.bags = Math.max(0, cherryNetBags)
+        acc[type].cherry.kgs = Math.max(0, cherryNetKgs)
+        acc[type].parchment.bags = Math.max(0, parchmentNetBags)
+        acc[type].parchment.kgs = Math.max(0, parchmentNetKgs)
+        // Keep slot math strict: type total is the sum of positive bag-type availability, not cross-offset net.
+        acc[type].total.bags = acc[type].cherry.bags + acc[type].parchment.bags
+        acc[type].total.kgs = acc[type].cherry.kgs + acc[type].parchment.kgs
         return acc
       }, {} as Record<string, InventoryBreakdown>)
 
-      const totalReceived = COFFEE_TYPES.reduce((sum, type) => sum + (receivedTotals[type]?.total.kgs || 0), 0)
-      const totalReceivedBags = COFFEE_TYPES.reduce((sum, type) => sum + (receivedTotals[type]?.total.bags || 0), 0)
-      const totalSold = COFFEE_TYPES.reduce((sum, type) => sum + (soldTotals[type]?.total.kgs || 0), 0)
-      const totalSoldBags = COFFEE_TYPES.reduce((sum, type) => sum + (soldTotals[type]?.total.bags || 0), 0)
-      const totalNetKgs = totalReceived - totalSold
-      const totalNetBags = totalReceivedBags - totalSoldBags
-      const totalAvailable = Math.max(0, totalNetKgs)
-      const totalAvailableBags = Math.max(0, totalNetBags)
-      const totalOverdrawn = Math.max(0, -totalNetKgs)
-      const totalOverdrawnBags = Math.max(0, -totalNetBags)
+      const totalReceived = allCoffeeTypes.reduce((sum, type) => sum + (receivedTotals[type]?.total.kgs || 0), 0)
+      const totalReceivedBags = allCoffeeTypes.reduce((sum, type) => sum + (receivedTotals[type]?.total.bags || 0), 0)
+      const totalSold = allCoffeeTypes.reduce((sum, type) => sum + (soldTotals[type]?.total.kgs || 0), 0)
+      const totalSoldBags = allCoffeeTypes.reduce((sum, type) => sum + (soldTotals[type]?.total.bags || 0), 0)
+      const totalAvailable = allCoffeeTypes.reduce((sum, type) => sum + (availableTotals[type]?.total.kgs || 0), 0)
+      const totalAvailableBags = allCoffeeTypes.reduce((sum, type) => sum + (availableTotals[type]?.total.bags || 0), 0)
+      const totalOverdrawn = allCoffeeTypes.reduce((sum, type) => {
+        const cherryNet = (receivedTotals[type]?.cherry.kgs || 0) - (soldTotals[type]?.cherry.kgs || 0)
+        const parchmentNet = (receivedTotals[type]?.parchment.kgs || 0) - (soldTotals[type]?.parchment.kgs || 0)
+        return sum + Math.max(0, -cherryNet) + Math.max(0, -parchmentNet)
+      }, 0)
+      const totalOverdrawnBags = allCoffeeTypes.reduce((sum, type) => {
+        const cherryNet = (receivedTotals[type]?.cherry.bags || 0) - (soldTotals[type]?.cherry.bags || 0)
+        const parchmentNet = (receivedTotals[type]?.parchment.bags || 0) - (soldTotals[type]?.parchment.bags || 0)
+        return sum + Math.max(0, -cherryNet) + Math.max(0, -parchmentNet)
+      }, 0)
 
       return {
         receivedTotals,
@@ -522,20 +574,20 @@ export default function SalesTab() {
   )
 
   const getAvailableForSelection = () => {
-    const normalizedCoffee = coffeeType.toLowerCase()
+    const normalizedCoffee = normalizeCoffeeType(coffeeType)
     const normalizedBag = normalizeBagType(bagType)
     let receivedKgs = 0
     let soldKgs = 0
 
     dispatchSummary.forEach((row) => {
-      const recordCoffee = String(row.coffee_type || "").toLowerCase()
+      const recordCoffee = normalizeCoffeeType(row.coffee_type)
       if (recordCoffee !== normalizedCoffee) return
       if (normalizeBagType(row.bag_type) !== normalizedBag) return
       receivedKgs += resolveDispatchReceivedKgs(row, bagWeightKg)
     })
 
     salesSummary.forEach((row) => {
-      const recordCoffee = String(row.coffee_type || "").toLowerCase()
+      const recordCoffee = normalizeCoffeeType(row.coffee_type)
       if (recordCoffee !== normalizedCoffee) return
       if (normalizeBagType(row.bag_type) !== normalizedBag) return
       const bagsSoldCount = Number(row.bags_sold) || 0
@@ -551,6 +603,8 @@ export default function SalesTab() {
     return { availableKgs, availableBags, overdrawnKgs, overdrawnBags }
   }
 
+  const isLegacyPooledAvailability = dispatchSummaryScope === "legacy_pool" || salesSummaryScope === "legacy_pool"
+
   const editAllowance = useMemo(() => {
     if (!editingRecord) {
       return { allowanceKgs: 0, matchesSelection: false }
@@ -558,9 +612,10 @@ export default function SalesTab() {
     const editLocationId =
       editingRecord.location_id ||
       resolveLocationIdFromLabel(editingRecord.location_name || editingRecord.location_code || editingRecord.estate)
-    const matchesLocation = Boolean(editLocationId) && editLocationId === selectedLocationId
-    const matchesCoffee =
-      String(editingRecord.coffee_type || "").toLowerCase() === String(coffeeType || "").toLowerCase()
+    const matchesLocation = isLegacyPooledAvailability
+      ? !editLocationId || editLocationId === selectedLocationId
+      : Boolean(editLocationId) && editLocationId === selectedLocationId
+    const matchesCoffee = normalizeCoffeeType(editingRecord.coffee_type) === normalizeCoffeeType(coffeeType)
     const matchesBag = normalizeBagType(editingRecord.bag_type) === normalizeBagType(bagType)
     if (matchesLocation && matchesCoffee && matchesBag) {
       return {
@@ -569,9 +624,19 @@ export default function SalesTab() {
       }
     }
     return { allowanceKgs: 0, matchesSelection: false }
-  }, [bagType, bagWeightKg, coffeeType, editingRecord, resolveLocationIdFromLabel, selectedLocationId])
+  }, [
+    bagType,
+    bagWeightKg,
+    coffeeType,
+    editingRecord,
+    isLegacyPooledAvailability,
+    resolveLocationIdFromLabel,
+    selectedLocationId,
+  ])
 
   const handleSave = async () => {
+    const wasEditing = Boolean(editingRecord)
+    const editingRecordId = editingRecord?.id
     const editingId = editingRecord?.id != null ? Number(editingRecord.id) : null
     if (editingRecord && (!Number.isFinite(editingId) || (editingId ?? 0) <= 0)) {
       toast({
@@ -616,7 +681,7 @@ export default function SalesTab() {
       editAllowance.matchesSelection &&
       Math.abs(currentRecordKgs - kgsValue) < 0.0001
     const effectiveAvailableKgs = availableKgs + editAllowance.allowanceKgs
-    if (!isEditWithoutInventoryChange && kgsValue > effectiveAvailableKgs) {
+    if (!isEditWithoutInventoryChange && kgsValue > effectiveAvailableKgs + STOCK_EPSILON) {
       toast({
         title: "Insufficient Inventory",
         description: `Only ${effectiveAvailableKgs.toFixed(2)} KGs of ${coffeeType} ${bagType} available based on received inventory.`,
@@ -625,6 +690,7 @@ export default function SalesTab() {
       return
     }
 
+    setSaveFeedback(null)
     setIsSaving(true)
     try {
       const locationLabel = selectedLocation?.name || selectedLocation?.code || ""
@@ -653,20 +719,52 @@ export default function SalesTab() {
       const data = await response.json().catch(() => ({}))
 
       if (response.ok && data.success) {
+        const updatedRecord = data.record as SalesRecord | undefined
+        if (updatedRecord && updatedRecord.id != null) {
+          setSalesRecords((prev) => {
+            if (wasEditing) {
+              return prev.map((record) =>
+                String(record.id) === String(updatedRecord.id) ? { ...record, ...updatedRecord } : record,
+              )
+            }
+            return [updatedRecord, ...prev]
+          })
+          setSelectedSalesRecord((prev) => {
+            if (String(prev?.id || "") === String(updatedRecord.id) || !prev) return updatedRecord
+            return prev
+          })
+        } else if (wasEditing && editingRecordId != null) {
+          // Fallback in case API omits RETURNING payload.
+          fetchSalesRecords(0, false)
+        }
         toast({
           title: "Success",
           description: editingRecord ? "Sales record updated successfully" : "Sales record saved successfully",
+        })
+        setSaveFeedback({
+          type: "success",
+          message: `Saved ${formatNumber(kgsValue)} KGs at ${formatCurrency(priceValue)} per bag.`,
         })
         if (buyerName.trim()) {
           setBuyerSuggestions((prev) => Array.from(new Set([buyerName.trim(), ...prev])))
         }
         // Reset form
         resetForm()
-        // Refresh records
-        fetchSalesRecords(0, false)
+        // Keep local edit result immediately; perform delayed sync to avoid stale read overwrite.
+        if (!wasEditing) {
+          fetchSalesRecords(0, false)
+        } else {
+          window.setTimeout(() => {
+            fetchSalesRecords(0, false)
+          }, 1200)
+        }
         fetchDispatchSummary()
         fetchSalesSummary()
       } else {
+        setSaveFeedback({
+          type: "error",
+          message: data.error || `Failed to save sales record (HTTP ${response.status})`,
+        })
         toast({
           title: "Error",
           description: data.error || `Failed to save sales record (HTTP ${response.status})`,
@@ -674,6 +772,10 @@ export default function SalesTab() {
         })
       }
     } catch (error) {
+      setSaveFeedback({
+        type: "error",
+        message: "Failed to save sales record",
+      })
       toast({
         title: "Error",
         description: "Failed to save sales record",
@@ -761,7 +863,8 @@ export default function SalesTab() {
         params.set("locationId", salesFilterLocationId)
       }
       const response = await fetch(`/api/sales?${params.toString()}`, {
-              })
+        cache: "no-store",
+      })
       const data = await response.json()
 
       if (!data.success || !Array.isArray(data.records)) {
@@ -870,12 +973,11 @@ export default function SalesTab() {
     availableKgs: baseSelectionAvailability.availableKgs + editAllowance.allowanceKgs,
     availableBags: (baseSelectionAvailability.availableKgs + editAllowance.allowanceKgs) / bagWeightKg,
   }
-  const isLegacyPooledAvailability = dispatchSummaryScope === "legacy_pool" || salesSummaryScope === "legacy_pool"
   const selectedLocationLabel = selectedLocation?.name || selectedLocation?.code || "No location selected"
   const selectionScopeLabel = isLegacyPooledAvailability ? "estate pooled scope" : selectedLocationLabel
   const hasOtherTypeAvailability =
     selectionAvailability.availableKgs <= 0 && selectionScopeAvailabilityTotals.totalAvailable > 0
-  const exceedsAvailability = kgsSoldValue > selectionAvailability.availableKgs
+  const exceedsAvailability = kgsSoldValue > selectionAvailability.availableKgs + STOCK_EPSILON
   const excessKgs = Math.max(0, kgsSoldValue - selectionAvailability.availableKgs)
   const projectedRemainingKgs = Math.max(0, selectionAvailability.availableKgs - kgsSoldValue)
   const projectedRemainingBags = projectedRemainingKgs / bagWeightKg
@@ -889,19 +991,24 @@ export default function SalesTab() {
       : 0
   const contextGapKgs = Math.max(0, selectionScopeAvailabilityTotals.totalAvailable - selectionAvailability.availableKgs)
   const contextGapBags = contextGapKgs / bagWeightKg
+  const saveBlockers: string[] = []
+  if (!selectedLocationId) saveBlockers.push("Select a location.")
+  if (!(kgsSoldValue > 0)) saveBlockers.push("Enter KGs sold greater than 0.")
+  if (!(pricePerBagValue > 0)) saveBlockers.push("Enter price per bag greater than 0.")
+  if (exceedsAvailability) {
+    saveBlockers.push(`KGs sold exceeds available stock by ${formatNumber(excessKgs)} KGs.`)
+  }
+  if (isSaving) saveBlockers.push("Saving in progress.")
   const canSubmitSale =
-    Boolean(selectedLocationId) &&
-    kgsSoldValue > 0 &&
-    pricePerBagValue > 0 &&
-    !exceedsAvailability &&
-    !isSaving
-  const overviewLocation = locations.find((loc) => loc.id === salesFilterLocationId)
-  const overviewScopeLabel =
-    salesFilterLocationId === LOCATION_ALL
-      ? "all locations in the selected fiscal year"
-      : overviewLocation?.name ||
-        overviewLocation?.code ||
-        "selected location filter"
+    saveBlockers.length === 0
+  const overviewScopeLabel = selectedLocationId
+    ? (isLegacyPooledAvailability ? `pooled legacy + ${selectedLocationLabel}` : selectedLocationLabel)
+    : "all locations in the selected fiscal year"
+  const selectedSalesKgs = selectedSalesRecord ? resolveSalesRecordKgs(selectedSalesRecord, bagWeightKg) : 0
+  const selectedSalesBags = Number(selectedSalesRecord?.bags_sold) || 0
+  const selectedSalesPricePerBag = Number(selectedSalesRecord?.price_per_bag) || 0
+  const selectedSalesPricePerKg = selectedSalesKgs > 0 ? (selectedSalesPricePerBag * selectedSalesBags) / selectedSalesKgs : 0
+  const selectedSalesRevenue = Number(selectedSalesRecord?.revenue) || 0
 
   return (
     <div className="flex flex-col gap-8">
@@ -945,13 +1052,16 @@ export default function SalesTab() {
         <CardHeader className="pb-3">
           <CardTitle className="text-xs uppercase tracking-[0.2em] text-muted-foreground">Selection Pre-Check</CardTitle>
           <CardDescription>
-            Guardrail before save: this checks one strict slot only (location + coffee type + bag type), not estate totals.
+            Guardrail before save: this checks one strict slot only (location + coffee type + bag type).
           </CardDescription>
           <p className="text-xs text-muted-foreground">
-            Selection: {selectionScopeLabel} · {coffeeType} · {bagType} · as of {asOfDate}
+            Selection: {selectionScopeLabel} · {coffeeType} · {bagType} · {selectedFiscalYear.label}
           </p>
           <p className="text-xs text-muted-foreground">
             Available for this selection is strict stock for this exact slot. All coffee types in this scope is broader context only.
+          </p>
+          <p className="text-xs text-muted-foreground">
+            Note: validation uses stock in the selected fiscal year and selected location to match the availability cards below.
           </p>
           {isLegacyPooledAvailability && (
             <p className="text-xs font-medium text-amber-700">
@@ -972,7 +1082,7 @@ export default function SalesTab() {
         </CardHeader>
         <CardContent className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-6">
           <div className="rounded-lg border border-border/60 bg-white/80 p-3">
-            <p className="text-xs text-muted-foreground">Strict selection</p>
+            <p className="text-xs text-muted-foreground">Scope</p>
             <p className="mt-1 text-sm font-semibold text-foreground">{selectionScopeLabel}</p>
             <p className="mt-1 text-xs text-muted-foreground">{coffeeType} · {bagType}</p>
           </div>
@@ -1181,7 +1291,7 @@ export default function SalesTab() {
           <CardDescription>
             {editingRecord
               ? "Update the sales record"
-              : "Record sales for the selected location (availability follows dispatch receipts)."}
+              : "Record sales for a location (availability follows dispatch received KGs for this location, coffee type, and bag type)."}
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -1313,7 +1423,7 @@ export default function SalesTab() {
                 </p>
               ) : (
                 <p className="text-xs text-muted-foreground">
-                  Available: {selectionAvailability.availableKgs.toFixed(2)} KGs ({selectionAvailability.availableBags.toFixed(2)} bags)
+                  Available in fiscal year: {selectionAvailability.availableKgs.toFixed(2)} KGs ({selectionAvailability.availableBags.toFixed(2)} bags)
                 </p>
               )}
               {editAllowance.matchesSelection && (
@@ -1437,7 +1547,17 @@ export default function SalesTab() {
           </div>
           {!canSubmitSale && !isSaving && (
             <p className="mt-2 text-xs text-muted-foreground">
-              Enter location, quantity, and price. Quantity must be within available stock.
+              Save blocked: {saveBlockers[0]}
+            </p>
+          )}
+          {saveFeedback && (
+            <p
+              className={cn(
+                "mt-2 text-xs",
+                saveFeedback.type === "success" ? "text-emerald-700" : "text-rose-600",
+              )}
+            >
+              {saveFeedback.message}
             </p>
           )}
         </CardContent>
@@ -1479,6 +1599,39 @@ export default function SalesTab() {
           </div>
         </CardHeader>
         <CardContent>
+          {selectedSalesRecord && (
+            <div className="mb-4 rounded-xl border border-emerald-100 bg-emerald-50/50 p-3 text-sm">
+              <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+                <div>
+                  <p className="text-xs uppercase tracking-[0.2em] text-emerald-700">Sale Drill-Down</p>
+                  <p className="font-medium text-foreground">
+                    {formatDateOnly(selectedSalesRecord.sale_date)} · {selectedSalesRecord.buyer_name || "Buyer TBD"}
+                    {selectedSalesRecord.batch_no ? ` · Batch ${selectedSalesRecord.batch_no}` : ""}
+                  </p>
+                </div>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="bg-white"
+                  onClick={() => handleEdit(selectedSalesRecord)}
+                >
+                  Open for Edit
+                </Button>
+              </div>
+              <div className="mt-2 grid gap-2 text-xs text-muted-foreground sm:grid-cols-2 lg:grid-cols-4">
+                <p>Location: {getLocationLabel(selectedSalesRecord)}</p>
+                <p>Coffee: {selectedSalesRecord.coffee_type || "-"}</p>
+                <p>Type: {formatBagTypeLabel(selectedSalesRecord.bag_type)}</p>
+                <p>Lot: {selectedSalesRecord.lot_id || "-"}</p>
+              </div>
+              <div className="mt-1 grid gap-2 text-xs text-muted-foreground sm:grid-cols-2 lg:grid-cols-4">
+                <p>Bags: {formatNumber(selectedSalesBags)}</p>
+                <p>KGs: {formatNumber(selectedSalesKgs)}</p>
+                <p>Price/KG: {formatCurrency(selectedSalesPricePerKg)}</p>
+                <p className="font-medium text-emerald-700">Revenue: {formatCurrency(selectedSalesRevenue, 0)}</p>
+              </div>
+            </div>
+          )}
           {isLoading ? (
             <div className="flex items-center justify-center py-8">
               <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
@@ -1512,7 +1665,14 @@ export default function SalesTab() {
                   </TableHeader>
                   <TableBody>
                     {salesRecords.map((record) => (
-                      <TableRow key={record.id}>
+                      <TableRow
+                        key={record.id}
+                        className={cn(
+                          "cursor-pointer",
+                          selectedSalesRecord?.id === record.id ? "bg-emerald-50/60" : "",
+                        )}
+                        onClick={() => setSelectedSalesRecord(record)}
+                      >
                         <TableCell>{formatDateOnly(record.sale_date)}</TableCell>
                         <TableCell>{record.batch_no || "-"}</TableCell>
                         <TableCell>{record.lot_id || "-"}</TableCell>
@@ -1538,7 +1698,11 @@ export default function SalesTab() {
                                   <Button
                                     variant="ghost"
                                     size="sm"
-                                    onClick={() => handleEdit(record)}
+                                    onClick={(event) => {
+                                      event.stopPropagation()
+                                      setSelectedSalesRecord(record)
+                                      handleEdit(record)
+                                    }}
                                     className="text-blue-600 hover:text-blue-700"
                                   >
                                     <Pencil className="h-4 w-4" />
@@ -1552,7 +1716,10 @@ export default function SalesTab() {
                                     <Button
                                       variant="ghost"
                                       size="sm"
-                                      onClick={() => handleDelete(record.id!)}
+                                      onClick={(event) => {
+                                        event.stopPropagation()
+                                        handleDelete(record.id!)
+                                      }}
                                       className="text-red-600 hover:text-red-700"
                                     >
                                       <Trash2 className="h-4 w-4" />

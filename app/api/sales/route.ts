@@ -8,6 +8,9 @@ import { resolveLocationInfo } from "@/lib/server/location-utils"
 import { logAuditEvent } from "@/lib/server/audit-log"
 import { resolveLocationCompatibility } from "@/lib/server/location-compatibility"
 
+export const dynamic = "force-dynamic"
+export const revalidate = 0
+
 async function resolveBagWeightKg(db: typeof sql, tenantContext: { tenantId: string; role: string }) {
   const rows = await runTenantQuery(
     db,
@@ -20,6 +23,30 @@ async function resolveBagWeightKg(db: typeof sql, tenantContext: { tenantId: str
     `,
   )
   return Number(rows?.[0]?.bag_weight_kg) || 50
+}
+
+async function resolveBagsSentValue(
+  db: typeof sql,
+  tenantContext: { tenantId: string; role: string },
+  bagsSold: number,
+) {
+  const rows = await runTenantQuery(
+    db,
+    tenantContext,
+    db`
+      SELECT data_type
+      FROM information_schema.columns
+      WHERE table_schema = 'public'
+        AND table_name = 'sales_records'
+        AND column_name = 'bags_sent'
+      LIMIT 1
+    `,
+  )
+  const dataType = String(rows?.[0]?.data_type || "").toLowerCase()
+  if (dataType === "integer" || dataType === "smallint" || dataType === "bigint") {
+    return Math.round(bagsSold)
+  }
+  return Number(bagsSold.toFixed(2))
 }
 
 const getZodErrorMessage = (error: unknown) => {
@@ -40,6 +67,22 @@ const resolveKgsSold = (bagsSold: number, bagWeightKg: number, explicitKgsSold?:
 const resolvePricePerKg = (revenue: number, kgsSold: number) => {
   if (!Number.isFinite(revenue) || !Number.isFinite(kgsSold) || kgsSold <= 0) return 0
   return Number((revenue / kgsSold).toFixed(4))
+}
+
+const canonicalizeCoffeeType = (value: string | null | undefined) => {
+  const normalized = String(value || "").trim().toLowerCase()
+  if (!normalized) return null
+  if (normalized.includes("arabica")) return "Arabica"
+  if (normalized.includes("robusta")) return "Robusta"
+  return null
+}
+
+const canonicalizeBagType = (value: string | null | undefined) => {
+  const normalized = String(value || "").trim().toLowerCase()
+  if (!normalized) return null
+  if (normalized.includes("cherry")) return "Dry Cherry"
+  if (normalized.includes("parchment")) return "Dry Parchment"
+  return null
 }
 
 export async function GET(request: Request) {
@@ -140,8 +183,16 @@ export async function GET(request: Request) {
       `,
       sql`
         SELECT 
-          coffee_type,
-          bag_type,
+          CASE
+            WHEN lower(coffee_type) LIKE '%arabica%' THEN 'Arabica'
+            WHEN lower(coffee_type) LIKE '%robusta%' THEN 'Robusta'
+            ELSE COALESCE(NULLIF(trim(coffee_type), ''), 'Unknown')
+          END as coffee_type,
+          CASE
+            WHEN lower(bag_type) LIKE '%cherry%' THEN 'Dry Cherry'
+            WHEN lower(bag_type) LIKE '%parchment%' THEN 'Dry Parchment'
+            ELSE COALESCE(NULLIF(trim(bag_type), ''), 'Unknown')
+          END as bag_type,
           COALESCE(SUM(bags_sold), 0) as bags_sold,
           COALESCE(SUM(COALESCE(NULLIF(kgs_received, 0), NULLIF(kgs, 0), bags_sold * ${bagWeightKg})), 0) as kgs_sold,
           COALESCE(SUM(revenue), 0) as revenue
@@ -149,7 +200,7 @@ export async function GET(request: Request) {
         WHERE tenant_id = ${tenantContext.tenantId}
           ${dateClause}
           ${locationClause}
-        GROUP BY coffee_type, bag_type
+        GROUP BY 1, 2
       `,
     ]
     if (!summaryOnly) {
@@ -240,7 +291,22 @@ export async function POST(request: Request) {
       .parse(body)
 
     const bagWeightKg = await resolveBagWeightKg(sql, tenantContext)
+    const coffeeType = canonicalizeCoffeeType(payload.coffee_type)
+    const bagType = canonicalizeBagType(payload.bag_type)
+    if (!coffeeType) {
+      return NextResponse.json(
+        { success: false, error: "Coffee type must be Arabica or Robusta" },
+        { status: 400 },
+      )
+    }
+    if (!bagType) {
+      return NextResponse.json(
+        { success: false, error: "Bag type must be Dry Cherry or Dry Parchment" },
+        { status: 400 },
+      )
+    }
     const bagsSold = Number(payload.bags_sold) || 0
+    const bagsSent = await resolveBagsSentValue(sql, tenantContext, bagsSold)
     const kgsSold = resolveKgsSold(bagsSold, bagWeightKg, payload.kgs_sold)
     const computedRevenue = Number((bagsSold * payload.price_per_bag).toFixed(2))
     const computedPricePerKg = resolvePricePerKg(computedRevenue, kgsSold)
@@ -288,13 +354,13 @@ export async function POST(request: Request) {
         ${payload.lot_id || null},
         ${locationInfo.id},
         ${resolvedEstate},
-        ${payload.coffee_type || null},
-        ${payload.bag_type || null},
+        ${coffeeType},
+        ${bagType},
         ${kgsSold},
         ${computedPricePerKg},
         ${computedRevenue},
         ${payload.buyer_name || null},
-        ${bagsSold},
+        ${bagsSent},
         ${kgsSold},
         ${kgsSold},
         ${bagsSold},
@@ -361,7 +427,22 @@ export async function PUT(request: Request) {
       .parse(body)
 
     const bagWeightKg = await resolveBagWeightKg(sql, tenantContext)
+    const coffeeType = canonicalizeCoffeeType(payload.coffee_type)
+    const bagType = canonicalizeBagType(payload.bag_type)
+    if (!coffeeType) {
+      return NextResponse.json(
+        { success: false, error: "Coffee type must be Arabica or Robusta" },
+        { status: 400 },
+      )
+    }
+    if (!bagType) {
+      return NextResponse.json(
+        { success: false, error: "Bag type must be Dry Cherry or Dry Parchment" },
+        { status: 400 },
+      )
+    }
     const bagsSold = Number(payload.bags_sold) || 0
+    const bagsSent = await resolveBagsSentValue(sql, tenantContext, bagsSold)
     const kgsSold = resolveKgsSold(bagsSold, bagWeightKg, payload.kgs_sold)
     const computedRevenue = Number((bagsSold * payload.price_per_bag).toFixed(2))
     const computedPricePerKg = resolvePricePerKg(computedRevenue, kgsSold)
@@ -388,13 +469,13 @@ export async function PUT(request: Request) {
         lot_id = ${payload.lot_id || null},
         location_id = ${locationInfo.id},
         estate = ${resolvedEstate},
-        coffee_type = ${payload.coffee_type || null},
-        bag_type = ${payload.bag_type || null},
+        coffee_type = ${coffeeType},
+        bag_type = ${bagType},
         weight_kgs = ${kgsSold},
         price_per_kg = ${computedPricePerKg},
         total_revenue = ${computedRevenue},
         buyer_name = ${payload.buyer_name || null},
-        bags_sent = ${bagsSold},
+        bags_sent = ${bagsSent},
         kgs = ${kgsSold},
         kgs_received = ${kgsSold},
         bags_sold = ${bagsSold},

@@ -8,6 +8,9 @@ import { logAuditEvent } from "@/lib/server/audit-log"
 import { requirePositiveNumber, toNonNegativeNumber } from "@/lib/number-input"
 import { resolveLocationCompatibility } from "@/lib/server/location-compatibility"
 
+export const dynamic = "force-dynamic"
+export const revalidate = 0
+
 async function resolveBagWeightKg(tenantId: string, role: string) {
   const tenantContext = normalizeTenantContext(tenantId, role)
   const rows = await runTenantQuery(
@@ -21,6 +24,22 @@ async function resolveBagWeightKg(tenantId: string, role: string) {
     `,
   )
   return Number(rows?.[0]?.bag_weight_kg) || 50
+}
+
+const canonicalizeCoffeeType = (value: string | null | undefined) => {
+  const normalized = String(value || "").trim().toLowerCase()
+  if (!normalized) return null
+  if (normalized.includes("arabica")) return "Arabica"
+  if (normalized.includes("robusta")) return "Robusta"
+  return null
+}
+
+const canonicalizeBagType = (value: string | null | undefined) => {
+  const normalized = String(value || "").trim().toLowerCase()
+  if (!normalized) return null
+  if (normalized.includes("cherry")) return "Dry Cherry"
+  if (normalized.includes("parchment")) return "Dry Parchment"
+  return null
 }
 
 export async function GET(request: Request) {
@@ -87,15 +106,23 @@ export async function GET(request: Request) {
       `,
       sql`
         SELECT 
-          coffee_type,
-          bag_type,
+          CASE
+            WHEN lower(coffee_type) LIKE '%arabica%' THEN 'Arabica'
+            WHEN lower(coffee_type) LIKE '%robusta%' THEN 'Robusta'
+            ELSE COALESCE(NULLIF(trim(coffee_type), ''), 'Unknown')
+          END as coffee_type,
+          CASE
+            WHEN lower(bag_type) LIKE '%cherry%' THEN 'Dry Cherry'
+            WHEN lower(bag_type) LIKE '%parchment%' THEN 'Dry Parchment'
+            ELSE COALESCE(NULLIF(trim(bag_type), ''), 'Unknown')
+          END as bag_type,
           COALESCE(SUM(bags_dispatched), 0) as bags_dispatched,
           COALESCE(SUM(COALESCE(NULLIF(kgs_received, 0), bags_dispatched * ${bagWeightKg})), 0) as kgs_received
         FROM dispatch_records
         WHERE tenant_id = ${tenantContext.tenantId}
           ${dateClause}
           ${locationClause}
-        GROUP BY coffee_type, bag_type
+        GROUP BY 1, 2
       `,
     ]
 
@@ -181,6 +208,20 @@ export async function POST(request: Request) {
         { status: 400 }
       )
     }
+    const canonicalCoffeeType = canonicalizeCoffeeType(coffee_type)
+    const canonicalBagType = canonicalizeBagType(bag_type)
+    if (!canonicalCoffeeType) {
+      return NextResponse.json(
+        { success: false, error: "Coffee type must be Arabica or Robusta" },
+        { status: 400 },
+      )
+    }
+    if (!canonicalBagType) {
+      return NextResponse.json(
+        { success: false, error: "Bag type must be Dry Cherry or Dry Parchment" },
+        { status: 400 },
+      )
+    }
     if (!requirePositiveNumber(bags_dispatched)) {
       return NextResponse.json(
         { success: false, error: "Bags dispatched must be a positive number" },
@@ -215,7 +256,7 @@ export async function POST(request: Request) {
         dispatch_date, location_id, estate, lot_id, coffee_type, bag_type, bags_dispatched, 
         kgs_received, notes, created_by, tenant_id
       ) VALUES (
-        ${dispatch_date}::date, ${locationInfo.id}, ${resolvedEstate}, ${lot_id || null}, ${coffee_type}, ${bag_type}, ${Number(bags_dispatched)},
+        ${dispatch_date}::date, ${locationInfo.id}, ${resolvedEstate}, ${lot_id || null}, ${canonicalCoffeeType}, ${canonicalBagType}, ${Number(bags_dispatched)},
         ${kgsValue}, ${notes || null}, ${created_by || 'unknown'}, ${tenantContext.tenantId}
       )
       RETURNING *
@@ -269,6 +310,20 @@ export async function PUT(request: Request) {
         { status: 400 }
       )
     }
+    const canonicalCoffeeType = canonicalizeCoffeeType(coffee_type)
+    const canonicalBagType = canonicalizeBagType(bag_type)
+    if (!canonicalCoffeeType) {
+      return NextResponse.json(
+        { success: false, error: "Coffee type must be Arabica or Robusta" },
+        { status: 400 },
+      )
+    }
+    if (!canonicalBagType) {
+      return NextResponse.json(
+        { success: false, error: "Bag type must be Dry Cherry or Dry Parchment" },
+        { status: 400 },
+      )
+    }
     if (!requirePositiveNumber(bags_dispatched)) {
       return NextResponse.json(
         { success: false, error: "Bags dispatched must be a positive number" },
@@ -304,8 +359,8 @@ export async function PUT(request: Request) {
         location_id = ${locationInfo.id},
         estate = ${resolvedEstate},
         lot_id = ${lot_id || null},
-        coffee_type = ${coffee_type},
-        bag_type = ${bag_type},
+        coffee_type = ${canonicalCoffeeType},
+        bag_type = ${canonicalBagType},
         bags_dispatched = ${Number(bags_dispatched)},
         kgs_received = ${kgsValue},
         notes = ${notes || null},

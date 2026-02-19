@@ -1,6 +1,7 @@
 "use client"
 
 import { useMemo, useState } from "react"
+import Link from "next/link"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Label } from "@/components/ui/label"
@@ -10,6 +11,7 @@ import { useToast } from "@/hooks/use-toast"
 import { useAuth } from "@/hooks/use-auth"
 import { parseCsv } from "@/lib/csv"
 import { apiRequest } from "@/lib/api-client"
+import { ArrowLeft } from "lucide-react"
 
 const DATASETS = [
   {
@@ -181,6 +183,14 @@ export default function ImportPage() {
 
   return (
     <div className="space-y-6">
+      <div className="flex items-center justify-start">
+        <Button asChild variant="outline" size="sm" className="bg-white/80">
+          <Link href="/dashboard" className="inline-flex items-center gap-2">
+            <ArrowLeft className="h-4 w-4" />
+            Back to Dashboard
+          </Link>
+        </Button>
+      </div>
       <Card>
         <CardHeader>
           <CardTitle>Data Import</CardTitle>

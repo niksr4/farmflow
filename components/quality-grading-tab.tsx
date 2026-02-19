@@ -19,6 +19,7 @@ import { useToast } from "@/hooks/use-toast"
 import { useAuth } from "@/hooks/use-auth"
 import { getAvailableFiscalYears, getCurrentFiscalYear, type FiscalYear } from "@/lib/fiscal-year-utils"
 import { canAcceptNonNegative, isBlockedNumericKey } from "@/lib/number-input"
+import { cn } from "@/lib/utils"
 
 interface LocationOption {
   id: string
@@ -73,6 +74,7 @@ export default function QualityGradingTab() {
   const [hasExistingRecord, setHasExistingRecord] = useState(false)
 
   const [recentRecords, setRecentRecords] = useState<QualityRecord[]>([])
+  const [selectedQualityRecord, setSelectedQualityRecord] = useState<QualityRecord | null>(null)
   const [loading, setLoading] = useState(false)
   const [saving, setSaving] = useState(false)
   const blockInvalidNumberKey = (event: KeyboardEvent<HTMLInputElement>) => {
@@ -183,6 +185,17 @@ export default function QualityGradingTab() {
   }, [fetchRecentRecords])
 
   useEffect(() => {
+    if (!recentRecords.length) {
+      setSelectedQualityRecord(null)
+      return
+    }
+    setSelectedQualityRecord((prev) => {
+      if (!prev) return recentRecords[0]
+      return recentRecords.find((record) => record.id === prev.id) || recentRecords[0]
+    })
+  }, [recentRecords])
+
+  useEffect(() => {
     if (!lotId.trim()) {
       resetForm()
       return
@@ -254,6 +267,7 @@ export default function QualityGradingTab() {
   }
 
   const loadRecord = (record: QualityRecord) => {
+    setSelectedQualityRecord(record)
     setSelectedDate(new Date(record.grade_date))
     setLotId(record.lot_id || "")
     setCoffeeType(record.coffee_type || "")
@@ -474,6 +488,34 @@ export default function QualityGradingTab() {
           <CardDescription>Latest grading entries for the selected location.</CardDescription>
         </CardHeader>
         <CardContent>
+          {selectedQualityRecord && (
+            <div className="mb-4 rounded-xl border border-emerald-100 bg-emerald-50/50 p-3 text-sm">
+              <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+                <div>
+                  <p className="text-xs uppercase tracking-[0.2em] text-emerald-700">Quality Drill-Down</p>
+                  <p className="font-medium text-foreground">
+                    {selectedQualityRecord.grade_date} · {selectedQualityRecord.lot_id || "No lot"} · Grade{" "}
+                    {selectedQualityRecord.grade || "-"}
+                  </p>
+                </div>
+                <Button size="sm" variant="outline" className="bg-white" onClick={() => loadRecord(selectedQualityRecord)}>
+                  Open in Form
+                </Button>
+              </div>
+              <div className="mt-2 grid gap-2 text-xs text-muted-foreground sm:grid-cols-2 lg:grid-cols-4">
+                <p>Moisture: {selectedQualityRecord.moisture_pct ?? "-"}%</p>
+                <p>Defects: {selectedQualityRecord.defects_count ?? "-"}</p>
+                <p>Outturn: {selectedQualityRecord.outturn_pct ?? "-"}%</p>
+                <p>Cup Score: {selectedQualityRecord.cup_score ?? "-"}</p>
+              </div>
+              <div className="mt-1 grid gap-2 text-xs text-muted-foreground sm:grid-cols-2 lg:grid-cols-4">
+                <p>Screen Size: {selectedQualityRecord.screen_size || "-"}</p>
+                <p>Process: {selectedQualityRecord.process_type || "-"}</p>
+                <p>Graded By: {selectedQualityRecord.graded_by || "-"}</p>
+                <p>Buyer Ref: {selectedQualityRecord.buyer_reference || "-"}</p>
+              </div>
+            </div>
+          )}
           {loading ? (
             <div className="flex items-center gap-2 text-sm text-muted-foreground">
               <Loader2 className="h-4 w-4 animate-spin" />
@@ -496,21 +538,42 @@ export default function QualityGradingTab() {
                 </TableHeader>
                 <TableBody>
                   {recentRecords.map((record) => (
-                    <TableRow key={record.id}>
+                    <TableRow
+                      key={record.id}
+                      className={cn(
+                        "cursor-pointer",
+                        selectedQualityRecord?.id === record.id ? "bg-emerald-50/60" : "",
+                      )}
+                      onClick={() => setSelectedQualityRecord(record)}
+                    >
                       <TableCell>{record.grade_date}</TableCell>
                       <TableCell>{record.lot_id || "-"}</TableCell>
                       <TableCell>{record.grade || "-"}</TableCell>
                       <TableCell>{record.moisture_pct ?? "-"}</TableCell>
                       <TableCell>{record.defects_count ?? "-"}</TableCell>
                       <TableCell className="flex gap-2">
-                        <Button variant="outline" size="sm" onClick={() => loadRecord(record)}>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={(event) => {
+                            event.stopPropagation()
+                            loadRecord(record)
+                          }}
+                        >
                           Edit
                         </Button>
                         {isAdmin && (
                           <TooltipProvider>
                             <Tooltip>
                               <TooltipTrigger asChild>
-                                <Button variant="ghost" size="icon" onClick={() => handleDelete(record.id)}>
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  onClick={(event) => {
+                                    event.stopPropagation()
+                                    handleDelete(record.id)
+                                  }}
+                                >
                                   <Trash2 className="h-4 w-4" />
                                 </Button>
                               </TooltipTrigger>

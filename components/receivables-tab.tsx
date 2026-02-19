@@ -13,6 +13,7 @@ import { useToast } from "@/hooks/use-toast"
 import { useAuth } from "@/hooks/use-auth"
 import { formatDateOnly } from "@/lib/date-utils"
 import { formatCurrency } from "@/lib/format"
+import { cn } from "@/lib/utils"
 
 const STATUS_OPTIONS = [
   { value: "unpaid", label: "Unpaid" },
@@ -148,6 +149,7 @@ export default function ReceivablesTab() {
   const [statusFilter, setStatusFilter] = useState("all")
   const [locationFilter, setLocationFilter] = useState(LOCATION_ALL_VALUE)
   const [searchQuery, setSearchQuery] = useState("")
+  const [selectedReceivable, setSelectedReceivable] = useState<ReceivableRecord | null>(null)
   const [form, setForm] = useState({ ...emptyForm })
 
   const tenantPreviewQuery = useMemo(() => {
@@ -236,6 +238,17 @@ export default function ReceivablesTab() {
 
   const filteredTotal = useMemo(() => {
     return filteredRecords.reduce((sum, record) => sum + (Number(record.amount) || 0), 0)
+  }, [filteredRecords])
+
+  useEffect(() => {
+    if (!filteredRecords.length) {
+      setSelectedReceivable(null)
+      return
+    }
+    setSelectedReceivable((prev) => {
+      if (!prev) return filteredRecords[0]
+      return filteredRecords.find((record) => record.id === prev.id) || filteredRecords[0]
+    })
   }, [filteredRecords])
 
   const handleChange = (field: keyof typeof form) => (event: ChangeEvent<HTMLInputElement>) => {
@@ -553,71 +566,145 @@ export default function ReceivablesTab() {
               No receivables match your filters. Clear filters or add a new invoice.
             </div>
           ) : (
-            <div className="rounded-lg border overflow-x-auto">
-              <Table>
-                <TableHeader>
-                  <TableRow className="bg-muted/50">
-                    <TableHead>Invoice Date</TableHead>
-                    <TableHead>Due</TableHead>
-                    <TableHead>Buyer</TableHead>
-                    <TableHead>Invoice</TableHead>
-                    <TableHead>Location</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead className="text-right">Amount</TableHead>
-                    <TableHead className="text-right">Actions</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {filteredRecords.map((record) => {
-                    const effectiveStatus = getEffectiveStatus(record)
-                    const dueContext = getDueContext(record)
-                    return (
-                      <TableRow key={record.id}>
-                        <TableCell>{formatDateOnly(record.invoice_date)}</TableCell>
-                        <TableCell>
-                          <div className="space-y-1">
-                            <div>{record.due_date ? formatDateOnly(record.due_date) : "-"}</div>
-                            <div className="text-xs text-muted-foreground">{dueContext}</div>
-                          </div>
-                        </TableCell>
-                        <TableCell className="font-medium">{record.buyer_name}</TableCell>
-                        <TableCell>{record.invoice_no || "-"}</TableCell>
-                        <TableCell>{resolveLocationLabel(record)}</TableCell>
-                        <TableCell>
-                          <Badge variant="outline" className={getStatusClassName(effectiveStatus)}>
-                            {getStatusLabel(effectiveStatus)}
-                          </Badge>
-                        </TableCell>
-                        <TableCell className="text-right">{formatCurrency(Number(record.amount) || 0)}</TableCell>
-                        <TableCell className="text-right">
-                          <div className="flex justify-end gap-2">
-                            {canEdit && (
+            <div className="space-y-4">
+              {selectedReceivable && (
+                <div className="rounded-xl border border-emerald-100 bg-emerald-50/50 p-3 text-sm">
+                  <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+                    <div>
+                      <p className="text-xs uppercase tracking-[0.2em] text-emerald-700">Invoice Drill-Down</p>
+                      <p className="font-medium text-foreground">
+                        {selectedReceivable.buyer_name} · {selectedReceivable.invoice_no || "No invoice #"}
+                      </p>
+                    </div>
+                    <div className="flex gap-2">
+                      {canEdit && (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="bg-white"
+                          onClick={() =>
+                            handleQuickStatus(
+                              selectedReceivable,
+                              getEffectiveStatus(selectedReceivable) === "paid" ? "unpaid" : "paid",
+                            )
+                          }
+                          disabled={updatingStatusId === selectedReceivable.id}
+                        >
+                          {getEffectiveStatus(selectedReceivable) === "paid" ? "Reopen" : "Mark paid"}
+                        </Button>
+                      )}
+                      <Button size="sm" variant="outline" className="bg-white" onClick={() => handleEdit(selectedReceivable)} disabled={!canEdit}>
+                        Open in Form
+                      </Button>
+                    </div>
+                  </div>
+                  <div className="mt-2 grid gap-2 text-xs text-muted-foreground sm:grid-cols-2 lg:grid-cols-4">
+                    <p>Invoice date: {formatDateOnly(selectedReceivable.invoice_date)}</p>
+                    <p>Due: {selectedReceivable.due_date ? formatDateOnly(selectedReceivable.due_date) : "-"}</p>
+                    <p>Status: {getStatusLabel(getEffectiveStatus(selectedReceivable))}</p>
+                    <p>Amount: {formatCurrency(Number(selectedReceivable.amount) || 0)}</p>
+                  </div>
+                  <div className="mt-1 grid gap-2 text-xs text-muted-foreground sm:grid-cols-2 lg:grid-cols-4">
+                    <p>Location: {resolveLocationLabel(selectedReceivable)}</p>
+                    <p>Due context: {getDueContext(selectedReceivable)}</p>
+                    <p className="sm:col-span-2 lg:col-span-2">Notes: {selectedReceivable.notes || "-"}</p>
+                  </div>
+                </div>
+              )}
+
+              <div className="rounded-lg border overflow-x-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow className="bg-muted/50">
+                      <TableHead>Invoice Date</TableHead>
+                      <TableHead>Due</TableHead>
+                      <TableHead>Buyer</TableHead>
+                      <TableHead>Invoice</TableHead>
+                      <TableHead>Location</TableHead>
+                      <TableHead>Status</TableHead>
+                      <TableHead className="text-right">Amount</TableHead>
+                      <TableHead className="text-right">Actions</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {filteredRecords.map((record) => {
+                      const effectiveStatus = getEffectiveStatus(record)
+                      const dueContext = getDueContext(record)
+                      return (
+                        <TableRow
+                          key={record.id}
+                          className={cn(
+                            "cursor-pointer",
+                            selectedReceivable?.id === record.id ? "bg-emerald-50/60" : "",
+                          )}
+                          onClick={() => setSelectedReceivable(record)}
+                        >
+                          <TableCell>{formatDateOnly(record.invoice_date)}</TableCell>
+                          <TableCell>
+                            <div className="space-y-1">
+                              <div>{record.due_date ? formatDateOnly(record.due_date) : "-"}</div>
+                              <div className="text-xs text-muted-foreground">{dueContext}</div>
+                            </div>
+                          </TableCell>
+                          <TableCell className="font-medium">{record.buyer_name}</TableCell>
+                          <TableCell>{record.invoice_no || "-"}</TableCell>
+                          <TableCell>{resolveLocationLabel(record)}</TableCell>
+                          <TableCell>
+                            <Badge variant="outline" className={getStatusClassName(effectiveStatus)}>
+                              {getStatusLabel(effectiveStatus)}
+                            </Badge>
+                          </TableCell>
+                          <TableCell className="text-right">{formatCurrency(Number(record.amount) || 0)}</TableCell>
+                          <TableCell className="text-right">
+                            <div className="flex justify-end gap-2">
+                              {canEdit && (
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={(event) => {
+                                    event.stopPropagation()
+                                    handleQuickStatus(record, effectiveStatus === "paid" ? "unpaid" : "paid")
+                                  }}
+                                  disabled={updatingStatusId === record.id}
+                                >
+                                  {updatingStatusId === record.id
+                                    ? "Saving..."
+                                    : effectiveStatus === "paid"
+                                      ? "Reopen"
+                                      : "Mark paid"}
+                                </Button>
+                              )}
                               <Button
                                 size="sm"
                                 variant="outline"
-                                onClick={() => handleQuickStatus(record, effectiveStatus === "paid" ? "unpaid" : "paid")}
-                                disabled={updatingStatusId === record.id}
+                                onClick={(event) => {
+                                  event.stopPropagation()
+                                  setSelectedReceivable(record)
+                                  handleEdit(record)
+                                }}
+                                disabled={!canEdit}
                               >
-                                {updatingStatusId === record.id
-                                  ? "Saving..."
-                                  : effectiveStatus === "paid"
-                                    ? "Reopen"
-                                    : "Mark paid"}
+                                Edit
                               </Button>
-                            )}
-                            <Button size="sm" variant="outline" onClick={() => handleEdit(record)} disabled={!canEdit}>
-                              Edit
-                            </Button>
-                            <Button size="sm" variant="destructive" onClick={() => handleDelete(record)} disabled={!canEdit}>
-                              Delete
-                            </Button>
-                          </div>
-                        </TableCell>
-                      </TableRow>
-                    )
-                  })}
-                </TableBody>
-              </Table>
+                              <Button
+                                size="sm"
+                                variant="destructive"
+                                onClick={(event) => {
+                                  event.stopPropagation()
+                                  handleDelete(record)
+                                }}
+                                disabled={!canEdit}
+                              >
+                                Delete
+                              </Button>
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      )
+                    })}
+                  </TableBody>
+                </Table>
+              </div>
             </div>
           )}
         </CardContent>

@@ -13,7 +13,11 @@ ADD COLUMN IF NOT EXISTS bank_account VARCHAR(255);
 
 -- Make sure bags_sent exists (it should from previous migration)
 ALTER TABLE sales_records 
-ADD COLUMN IF NOT EXISTS bags_sent INTEGER DEFAULT 0;
+ADD COLUMN IF NOT EXISTS bags_sent DECIMAL(10,2) DEFAULT 0;
+
+-- Ensure decimal bags are supported even if older schemas created this as INTEGER.
+ALTER TABLE sales_records
+ALTER COLUMN bags_sent TYPE DECIMAL(10,2) USING COALESCE(bags_sent, 0)::numeric;
 
 -- Ensure notes column exists
 ALTER TABLE sales_records 

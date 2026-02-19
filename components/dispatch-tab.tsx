@@ -113,6 +113,7 @@ export default function DispatchTab() {
   const [dispatchTotalCount, setDispatchTotalCount] = useState(0)
   const [dispatchPage, setDispatchPage] = useState(0)
   const [dispatchHasMore, setDispatchHasMore] = useState(false)
+  const [selectedDispatchRecord, setSelectedDispatchRecord] = useState<DispatchRecord | null>(null)
   const [editingRecord, setEditingRecord] = useState<DispatchRecord | null>(null)
   const [isLoading, setIsLoading] = useState(false)
   const [isLoadingMore, setIsLoadingMore] = useState(false)
@@ -435,6 +436,17 @@ export default function DispatchTab() {
   }, [fetchDispatchRecords, loadLocations])
 
   useEffect(() => {
+    if (!dispatchRecords.length) {
+      setSelectedDispatchRecord(null)
+      return
+    }
+    setSelectedDispatchRecord((prev) => {
+      if (!prev) return dispatchRecords[0]
+      return dispatchRecords.find((record) => record.id === prev.id) || dispatchRecords[0]
+    })
+  }, [dispatchRecords])
+
+  useEffect(() => {
     fetchBagTotals(null, setBagTotals, setBagTotalsScope)
     fetchDispatchSummary(null, setDispatchSummary)
   }, [fetchBagTotals, fetchDispatchSummary])
@@ -734,6 +746,13 @@ export default function DispatchTab() {
     dispatchTotalCount > dispatchRecords.length
       ? `Showing ${dispatchRecords.length} of ${dispatchTotalCount}`
       : `${dispatchRecords.length} record(s)`
+  const selectedDispatchResolvedKgs = selectedDispatchRecord
+    ? resolveDispatchRecordReceivedKgs(selectedDispatchRecord, bagWeightKg)
+    : 0
+  const selectedDispatchNominalKgs = selectedDispatchRecord
+    ? (Number(selectedDispatchRecord.bags_dispatched) || 0) * bagWeightKg
+    : 0
+  const selectedDispatchVarianceKgs = selectedDispatchResolvedKgs - selectedDispatchNominalKgs
 
   return (
     <div className="flex flex-col gap-8">
@@ -1141,6 +1160,40 @@ export default function DispatchTab() {
           </div>
         </CardHeader>
         <CardContent>
+          {selectedDispatchRecord && (
+            <div className="mb-4 rounded-xl border border-emerald-100 bg-emerald-50/50 p-3 text-sm">
+              <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+                <div>
+                  <p className="text-xs uppercase tracking-[0.2em] text-emerald-700">Dispatch Drill-Down</p>
+                  <p className="font-medium text-foreground">
+                    {formatDateOnly(selectedDispatchRecord.dispatch_date)} · {getLocationLabel(selectedDispatchRecord)}
+                    {selectedDispatchRecord.lot_id ? ` · Lot ${selectedDispatchRecord.lot_id}` : ""}
+                  </p>
+                </div>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="bg-white"
+                  onClick={() => handleEdit(selectedDispatchRecord)}
+                >
+                  Open for Edit
+                </Button>
+              </div>
+              <div className="mt-2 grid gap-2 text-xs text-muted-foreground sm:grid-cols-2 lg:grid-cols-4">
+                <p>Coffee: {selectedDispatchRecord.coffee_type}</p>
+                <p>Bag Type: {formatBagTypeLabel(selectedDispatchRecord.bag_type)}</p>
+                <p>Bags: {formatNumber(Number(selectedDispatchRecord.bags_dispatched) || 0)}</p>
+                <p>Resolved KGs: {formatNumber(selectedDispatchResolvedKgs)}</p>
+              </div>
+              <div className="mt-1 text-xs text-muted-foreground">
+                Nominal KGs: {formatNumber(selectedDispatchNominalKgs)} · Variance:{" "}
+                <span className={cn(selectedDispatchVarianceKgs >= 0 ? "text-emerald-700" : "text-rose-700")}>
+                  {selectedDispatchVarianceKgs >= 0 ? "+" : ""}
+                  {formatNumber(selectedDispatchVarianceKgs)} KGs
+                </span>
+              </div>
+            </div>
+          )}
           {isLoading ? (
             <div className="flex items-center justify-center py-8">
               <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
@@ -1169,7 +1222,14 @@ export default function DispatchTab() {
                   </TableHeader>
                   <TableBody>
                     {dispatchRecords.map((record) => (
-                      <TableRow key={record.id}>
+                      <TableRow
+                        key={record.id}
+                        className={cn(
+                          "cursor-pointer",
+                          selectedDispatchRecord?.id === record.id ? "bg-emerald-50/60" : "",
+                        )}
+                        onClick={() => setSelectedDispatchRecord(record)}
+                      >
                         <TableCell>{formatDateOnly(record.dispatch_date)}</TableCell>
                         <TableCell>{getLocationLabel(record)}</TableCell>
                         <TableCell>{record.lot_id || "-"}</TableCell>
@@ -1185,7 +1245,11 @@ export default function DispatchTab() {
                             <Button
                               variant="ghost"
                               size="sm"
-                              onClick={() => handleEdit(record)}
+                              onClick={(event) => {
+                                event.stopPropagation()
+                                setSelectedDispatchRecord(record)
+                                handleEdit(record)
+                              }}
                               className="text-blue-600 hover:text-blue-700"
                             >
                               <Pencil className="h-4 w-4" />
@@ -1194,7 +1258,10 @@ export default function DispatchTab() {
                               <Button
                                 variant="ghost"
                                 size="sm"
-                                onClick={() => handleDelete(record.id!)}
+                                onClick={(event) => {
+                                  event.stopPropagation()
+                                  handleDelete(record.id!)
+                                }}
                                 className="text-red-600 hover:text-red-700"
                               >
                                 <Trash2 className="h-4 w-4" />

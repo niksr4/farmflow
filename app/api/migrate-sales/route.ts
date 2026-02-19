@@ -27,7 +27,8 @@ export async function POST() {
     await sql`ALTER TABLE sales_records ADD COLUMN IF NOT EXISTS price_per_bag DECIMAL(10,2) DEFAULT 0`
     await sql`ALTER TABLE sales_records ADD COLUMN IF NOT EXISTS revenue DECIMAL(12,2) DEFAULT 0`
     await sql`ALTER TABLE sales_records ADD COLUMN IF NOT EXISTS bank_account VARCHAR(255)`
-    await sql`ALTER TABLE sales_records ADD COLUMN IF NOT EXISTS bags_sent INTEGER DEFAULT 0`
+    await sql`ALTER TABLE sales_records ADD COLUMN IF NOT EXISTS bags_sent NUMERIC(10,2) DEFAULT 0`
+    await sql`ALTER TABLE sales_records ALTER COLUMN bags_sent TYPE NUMERIC(10,2) USING COALESCE(bags_sent, 0)::numeric`
     await sql`ALTER TABLE sales_records ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP`
 
     // Add updated_at to dispatch_records
