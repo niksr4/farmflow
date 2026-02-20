@@ -1688,7 +1688,7 @@ export default function AdminPage() {
                 <div className="space-y-1">
                   <Label>Filter</Label>
                   <Select value={auditEntityType} onValueChange={setAuditEntityType}>
-                    <SelectTrigger className="w-[180px]">
+                    <SelectTrigger className="w-full sm:w-[180px]">
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>

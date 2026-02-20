@@ -5,6 +5,7 @@ import type React from "react"
 import { useState } from "react"
 import { useRouter } from "next/navigation"
 import Link from "next/link"
+import Image from "next/image"
 import { User, Lock, Info, CheckCircle2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -36,14 +37,16 @@ export default function LoginPage() {
 
   return (
     <div className="relative min-h-screen overflow-hidden px-6 py-10">
-      <div className="pointer-events-none absolute inset-0">
+      <div className="pointer-events-none absolute inset-0 overflow-hidden">
         <div className="absolute -top-28 left-[-6%] h-[320px] w-[320px] rounded-full bg-[radial-gradient(circle_at_center,rgba(152,85,42,0.35),transparent_70%)] blur-[120px]" />
         <div className="absolute bottom-[-18%] right-[10%] h-[320px] w-[320px] rounded-full bg-[radial-gradient(circle_at_center,rgba(70,120,90,0.3),transparent_70%)] blur-[120px]" />
       </div>
 
       <div className="relative z-10 mx-auto grid w-full max-w-5xl gap-10 lg:grid-cols-[1.05fr_0.95fr] items-center">
         <div className="space-y-6">
-          <p className="text-xs uppercase tracking-[0.4em] text-emerald-700/80">FarmFlow</p>
+          <div className="inline-flex rounded-2xl border border-white/60 bg-white/75 px-3 py-2 shadow-sm backdrop-blur">
+            <Image src="/brand-logo.svg" alt="FarmFlow" width={220} height={86} className="h-14 w-auto" priority />
+          </div>
           <h1 className="font-display text-3xl sm:text-4xl text-slate-900">
             Welcome back to your estate workspace
           </h1>

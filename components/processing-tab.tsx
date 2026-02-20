@@ -850,7 +850,7 @@ export default function ProcessingTab() {
               if (fy) setSelectedFiscalYear(fy)
             }}
           >
-            <SelectTrigger className="w-[200px]">
+            <SelectTrigger className="w-full sm:w-[200px]">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
@@ -1060,7 +1060,7 @@ export default function ProcessingTab() {
                 <CardHeader>
                   <CardTitle className="text-lg">Ripe Cherry</CardTitle>
                 </CardHeader>
-                <CardContent className="grid grid-cols-3 gap-4">
+                <CardContent className="grid grid-cols-1 gap-4 md:grid-cols-3">
                   <div>
                     <FieldLabel
                       label="Ripe Today (kg)"
@@ -1105,7 +1105,7 @@ export default function ProcessingTab() {
                 <CardHeader>
                   <CardTitle className="text-lg">Green Cherry</CardTitle>
                 </CardHeader>
-                <CardContent className="grid grid-cols-3 gap-4">
+                <CardContent className="grid grid-cols-1 gap-4 md:grid-cols-3">
                   <div>
                     <FieldLabel
                       label="Green Today (kg)"
@@ -1150,7 +1150,7 @@ export default function ProcessingTab() {
                 <CardHeader>
                   <CardTitle className="text-lg">Float</CardTitle>
                 </CardHeader>
-                <CardContent className="grid grid-cols-3 gap-4">
+                <CardContent className="grid grid-cols-1 gap-4 md:grid-cols-3">
                   <div>
                     <FieldLabel
                       label="Float Today (kg)"
@@ -1195,7 +1195,7 @@ export default function ProcessingTab() {
                 <CardHeader>
                   <CardTitle className="text-lg">Wet Parchment</CardTitle>
                 </CardHeader>
-                <CardContent className="grid grid-cols-2 gap-4">
+                <CardContent className="grid grid-cols-1 gap-4 md:grid-cols-2">
                   <div>
                     <FieldLabel
                       label="Wet Parchment (kg)"
@@ -1229,7 +1229,7 @@ export default function ProcessingTab() {
                 <CardHeader>
                   <CardTitle className="text-lg">Dry Parchment</CardTitle>
                 </CardHeader>
-                <CardContent className="grid grid-cols-3 gap-4">
+                <CardContent className="grid grid-cols-1 gap-4 md:grid-cols-3">
                   <div>
                     <FieldLabel
                       label="Dry Parchment (kg)"
@@ -1274,7 +1274,7 @@ export default function ProcessingTab() {
                 <CardHeader>
                   <CardTitle className="text-lg">Dry Cherry</CardTitle>
                 </CardHeader>
-                <CardContent className="grid grid-cols-3 gap-4">
+                <CardContent className="grid grid-cols-1 gap-4 md:grid-cols-3">
                   <div>
                     <FieldLabel
                       label="Dry Cherry (kg)"

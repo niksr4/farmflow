@@ -29,7 +29,7 @@ export default function RainfallWeatherTab({
 
   return (
     <Tabs defaultValue={defaultTab} className="space-y-4">
-      <TabsList className="w-fit rounded-full border border-white/80 bg-white/90 p-1 shadow-sm">
+      <TabsList className="w-full sm:w-fit rounded-full border border-white/80 bg-white/90 p-1 shadow-sm">
         {hasRainfall && <TabsTrigger value="rainfall">Rainfall</TabsTrigger>}
         {hasWeather && <TabsTrigger value="weather">Weather</TabsTrigger>}
       </TabsList>

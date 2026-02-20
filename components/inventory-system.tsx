@@ -76,6 +76,7 @@ import YieldForecastTab from "@/components/yield-forecast-tab"
 import { PepperTab } from "./pepper-tab"
 import OnboardingChecklist, { type OnboardingStep } from "@/components/onboarding-checklist"
 import Link from "next/link"
+import Image from "next/image"
 import { formatDateForDisplay, generateTimestamp, isWithinLast24Hours } from "@/lib/date-utils"
 import { formatCurrency, formatNumber } from "@/lib/format"
 import { getCurrentFiscalYear } from "@/lib/fiscal-year-utils"
@@ -3430,11 +3431,14 @@ export default function InventorySystem() {
           <div className="flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between">
             <div className="space-y-3">
               <div className="flex flex-wrap items-center gap-3">
-                <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-emerald-100 text-emerald-700 shadow-sm">
-                  <Leaf className="h-5 w-5" />
-                </div>
+                <Image
+                  src="/brand-logo.svg"
+                  alt="FarmFlow"
+                  width={220}
+                  height={86}
+                  className="h-11 w-auto rounded-xl border border-emerald-100/80 bg-white/90 px-2 py-1 shadow-sm"
+                />
                 <div>
-                  <p className="text-xs uppercase tracking-[0.35em] text-emerald-700/80">FarmFlow</p>
                   <h1 className="text-2xl font-display font-semibold text-[color:var(--foreground)]">
                     Inventory Command
                   </h1>
@@ -3638,7 +3642,7 @@ export default function InventorySystem() {
                       : "border-black/5 hover:border-emerald-200 hover:shadow-sm",
                   )}
                 >
-                  <p className="text-[11px] uppercase tracking-[0.2em] text-neutral-500">{item.label}</p>
+                  <p className="text-xs uppercase tracking-[0.18em] text-neutral-500">{item.label}</p>
                   <p className="mt-2 text-xl font-semibold text-neutral-900 tabular-nums">{item.value}</p>
                   <p className="mt-1 text-xs text-neutral-500">{item.subValue}</p>
                 </button>
@@ -3762,7 +3766,7 @@ export default function InventorySystem() {
             )}
             {showOperationsTabs && (
               <div className="flex flex-wrap items-center gap-2">
-                <span className="rounded-full border border-black/5 bg-neutral-100/70 px-2 py-0.5 text-[9px] font-medium uppercase tracking-[0.26em] text-neutral-500">
+                <span className="rounded-full border border-black/5 bg-neutral-100/70 px-2 py-0.5 text-[11px] font-medium uppercase tracking-[0.22em] text-neutral-500">
                   Operations
                 </span>
                 {canShowInventory && <TabsTrigger value="inventory">Inventory</TabsTrigger>}
@@ -3809,7 +3813,7 @@ export default function InventorySystem() {
             )}
             {showFinanceTabs && (
               <div className="flex flex-wrap items-center gap-2">
-                <span className="rounded-full border border-black/5 bg-neutral-100/70 px-2 py-0.5 text-[9px] font-medium uppercase tracking-[0.26em] text-neutral-500">
+                <span className="rounded-full border border-black/5 bg-neutral-100/70 px-2 py-0.5 text-[11px] font-medium uppercase tracking-[0.22em] text-neutral-500">
                   Finance
                 </span>
                 {canShowAccounts && (
@@ -3839,7 +3843,7 @@ export default function InventorySystem() {
             )}
             {showInsightsTabs && (
               <div className="flex flex-wrap items-center gap-2">
-                <span className="rounded-full border border-black/5 bg-neutral-100/70 px-2 py-0.5 text-[9px] font-medium uppercase tracking-[0.26em] text-neutral-500">
+                <span className="rounded-full border border-black/5 bg-neutral-100/70 px-2 py-0.5 text-[11px] font-medium uppercase tracking-[0.22em] text-neutral-500">
                   Insights
                 </span>
                 {canShowSeason && <TabsTrigger value="season">Season View</TabsTrigger>}
@@ -4124,7 +4128,7 @@ export default function InventorySystem() {
                       <div className="grid gap-2 md:grid-cols-2">
                         {intelligenceHighlights.slice(0, 4).map((highlight, index) => (
                           <div key={`${highlight}-${index}`} className="rounded-xl border border-black/5 bg-white p-3">
-                            <p className="text-[10px] uppercase tracking-[0.2em] text-neutral-500">Insight {index + 1}</p>
+                            <p className="text-xs uppercase tracking-[0.16em] text-neutral-500">Insight {index + 1}</p>
                             <p className="mt-1 text-sm text-neutral-800">{highlight}</p>
                           </div>
                         ))}
@@ -4208,7 +4212,7 @@ export default function InventorySystem() {
                   <div className="grid gap-3 md:grid-cols-3">
                     {(exceptionsSummary.highlights || []).slice(0, 3).map((item, index) => (
                       <div key={`${item}-${index}`} className="rounded-xl border border-amber-100 bg-amber-50/70 p-3">
-                        <p className="text-[10px] uppercase tracking-[0.2em] text-amber-700">Alert {index + 1}</p>
+                        <p className="text-xs uppercase tracking-[0.16em] text-amber-700">Alert {index + 1}</p>
                         <p className="mt-1 text-sm text-amber-900">{item}</p>
                       </div>
                     ))}
@@ -4267,7 +4271,7 @@ export default function InventorySystem() {
                                   key={`${item}-${index}`}
                                   className="rounded-2xl border border-amber-100 bg-amber-50/70 p-3"
                                 >
-                                  <p className="text-[10px] uppercase tracking-[0.2em] text-amber-700">
+                                  <p className="text-xs uppercase tracking-[0.16em] text-amber-700">
                                     Alert {index + 1}
                                   </p>
                                   <p className="mt-2 text-sm text-amber-900">{item}</p>
@@ -4496,7 +4500,7 @@ export default function InventorySystem() {
                                   {selectedInventoryDrilldownItem.unit || "unit"} on hand
                                 </p>
                               </div>
-                              <Badge variant="outline" className="text-[10px] uppercase tracking-[0.12em]">
+                              <Badge variant="outline" className="text-xs uppercase tracking-[0.1em]">
                                 {selectedLocationLabel}
                               </Badge>
                             </div>
@@ -4715,7 +4719,7 @@ export default function InventorySystem() {
                 <div className="border border-border/60 rounded-lg overflow-x-auto bg-white/80">
                   <table className="min-w-full">
                     <thead>
-                      <tr className="bg-muted/60 text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground/80 border-b sticky top-0 backdrop-blur">
+                      <tr className="bg-muted/60 text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground/80 border-b sticky top-0 backdrop-blur">
                         <th className="py-4 px-4 text-left">Date</th>
                         <th className="py-4 px-4 text-left">Location</th>
                         <th className="py-4 px-4 text-left">Item Type</th>

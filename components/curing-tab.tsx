@@ -310,7 +310,7 @@ export default function CuringTab() {
               if (fy) setSelectedFiscalYear(fy)
             }}
           >
-            <SelectTrigger className="w-[200px]">
+            <SelectTrigger className="w-full sm:w-[200px]">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>

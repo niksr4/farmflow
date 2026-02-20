@@ -1,0 +1,49 @@
+<svg width="760" height="300" viewBox="0 0 760 300" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <circle cx="380" cy="86" r="58" fill="#D9C66B" />
+  <circle cx="407" cy="77" r="27" fill="#F2EFE5" />
+
+  <path
+    d="M325 112C304 108 287 124 287 147C304 151 322 144 335 126"
+    fill="#9FAE4D"
+    stroke="#5B6A33"
+    stroke-width="6"
+    stroke-linecap="round"
+    stroke-linejoin="round"
+  />
+  <path
+    d="M435 112C456 108 473 124 473 147C456 151 438 144 425 126"
+    fill="#9FAE4D"
+    stroke="#5B6A33"
+    stroke-width="6"
+    stroke-linecap="round"
+    stroke-linejoin="round"
+  />
+
+  <ellipse cx="380" cy="125" rx="36" ry="48" fill="#B68D5C" stroke="#6C4A2A" stroke-width="7" />
+  <path
+    d="M373 84C361 96 360 113 367 129C372 141 381 151 392 161"
+    stroke="#6C4A2A"
+    stroke-width="5"
+    stroke-linecap="round"
+    stroke-linejoin="round"
+  />
+  <path
+    d="M354 170C367 171 393 171 406 170"
+    stroke="#6C4A2A"
+    stroke-width="5"
+    stroke-linecap="round"
+    stroke-linejoin="round"
+  />
+
+  <text
+    x="380"
+    y="262"
+    text-anchor="middle"
+    fill="#6C4A2A"
+    font-size="90"
+    letter-spacing="12"
+    font-family="Georgia, 'Times New Roman', serif"
+  >
+    FARMFLOW
+  </text>
+</svg>

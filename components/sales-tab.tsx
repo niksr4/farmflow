@@ -1008,7 +1008,7 @@ export default function SalesTab() {
               if (fy) setSelectedFiscalYear(fy)
             }}
           >
-            <SelectTrigger className="w-[140px]">
+            <SelectTrigger className="w-full sm:w-[140px]">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>

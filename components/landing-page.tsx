@@ -41,6 +41,11 @@ const HIGHLIGHTS = [
     icon: Droplets,
   },
   {
+    title: "Operational Intelligence + Pattern Alerts",
+    description: "Detect recurring yield dips, delay patterns, and cost spikes early with weekly pattern signals.",
+    icon: TrendingUp,
+  },
+  {
     title: "Labor + Consumables Tracking",
     description: "Track worker output, wages, fuel, fertilizer, and processing consumables across locations.",
     icon: Package,
@@ -50,6 +55,7 @@ const HIGHLIGHTS = [
 const BULLETS = [
   "Capture Arabica and Robusta intake, Cherry and Parchment processing, labor, consumables, dispatch, and sales in one live ledger",
   "Track labor productivity, wages, and input usage by location",
+  "Spot recurring patterns in yield, delays, and spend before they become losses",
   "Plan field and drying decisions with rainfall + weather context",
   "Add curing and grading notes when your workflow needs them",
 ]
@@ -58,17 +64,17 @@ const CONTROL_SIGNALS = [
   {
     label: "Processing loss trend",
     value: "2.9%",
-    description: "Shrinkage detected by stage and lot.",
+    description: "Shrinkage and repeat variance detected by stage and lot.",
   },
   {
     label: "Yield conversion rate",
     value: "46.4%",
-    description: "Ripe-to-dry output monitored weekly.",
+    description: "Ripe-to-dry output monitored weekly with baseline drift checks.",
   },
   {
     label: "Receivables exposure",
     value: "₹16.2L",
-    description: "Outstanding buyer cash currently at risk.",
+    description: "Outstanding buyer cash at risk, with follow-up delay patterns flagged.",
   },
 ]
 
@@ -480,47 +486,42 @@ export default function LandingPage() {
         ["--ink" as any]: "#1b1a17",
       }}
     >
-      <div className="pointer-events-none absolute inset-0">
+      <div className="pointer-events-none absolute inset-0 overflow-hidden">
         <div className="absolute -top-28 right-[-6%] h-[460px] w-[460px] rounded-full bg-[radial-gradient(circle_at_center,rgba(15,111,102,0.45),transparent_70%)] blur-[120px] glow-pulse" />
         <div className="absolute top-[18%] left-[-8%] h-[380px] w-[380px] rounded-full bg-[radial-gradient(circle_at_center,rgba(31,107,93,0.35),transparent_70%)] blur-[140px] soft-shift" />
         <div className="absolute bottom-[-18%] right-[8%] h-[420px] w-[420px] rounded-full bg-[radial-gradient(circle_at_center,rgba(232,246,243,0.8),transparent_70%)] blur-[140px]" />
       </div>
       <div ref={beanLayerRef} className="pointer-events-none absolute inset-0 z-30 overflow-hidden" />
       <div className="relative z-10">
-        <header className="px-6 pt-4 sm:pt-6">
-          <nav className="mx-auto flex w-full max-w-6xl flex-col gap-3 rounded-2xl border border-white/60 bg-white/75 px-3 py-3 backdrop-blur-md shadow-[0_24px_50px_-32px_rgba(15,23,42,0.6)] dark:border-white/10 dark:bg-slate-900/70 sm:flex-row sm:items-center sm:justify-between sm:px-4">
-            <div className="flex items-center gap-2">
-              <div className="h-9 w-9 rounded-xl bg-[color:var(--sand)] text-[color:var(--copper)] flex items-center justify-center shadow-[0_0_25px_rgba(15,111,102,0.35)]">
-                <Leaf className="h-5 w-5" />
-              </div>
-              <div>
-                <p className="text-sm font-semibold">FarmFlow</p>
-                <p className="text-xs text-muted-foreground">Operations OS</p>
-              </div>
+        <header className="px-4 pt-4 sm:px-6 sm:pt-6">
+          <nav className="mx-auto flex w-full max-w-[1400px] flex-col gap-3 rounded-2xl border border-white/60 bg-white/75 px-3 py-3 backdrop-blur-md shadow-[0_24px_50px_-32px_rgba(15,23,42,0.6)] dark:border-white/10 dark:bg-slate-900/70 sm:flex-row sm:items-center sm:justify-between sm:px-4">
+            <div className="flex items-center gap-3">
+              <Image src="/brand-logo.svg" alt="FarmFlow" width={220} height={86} className="h-12 w-auto" priority />
+              <p className="hidden text-xs text-muted-foreground sm:block">Operations OS</p>
             </div>
-            <div className="hidden md:flex items-center gap-6 text-sm text-muted-foreground">
-              <a href="#roles" className="hover:text-foreground">
+            <div className="hidden lg:flex items-center gap-5 whitespace-nowrap text-sm text-muted-foreground">
+              <a href="#roles" className="whitespace-nowrap hover:text-foreground">
                 Solutions
               </a>
-              <a href="#modules" className="hover:text-foreground">
+              <a href="#modules" className="whitespace-nowrap hover:text-foreground">
                 Module Paths
               </a>
-              <a href="#onboarding" className="hover:text-foreground">
+              <a href="#onboarding" className="whitespace-nowrap hover:text-foreground">
                 Go Live
               </a>
-              <a href="#features" className="hover:text-foreground">
+              <a href="#features" className="whitespace-nowrap hover:text-foreground">
                 Capabilities
               </a>
-              <Link href="/journey" className="hover:text-foreground">
+              <Link href="/journey" className="whitespace-nowrap hover:text-foreground">
                 Journey
               </Link>
-              <a href="#traceability" className="hover:text-foreground">
+              <a href="#traceability" className="whitespace-nowrap hover:text-foreground">
                 Traceability
               </a>
-              <a href="#impact" className="hover:text-foreground">
+              <a href="#impact" className="whitespace-nowrap hover:text-foreground">
                 Impact
               </a>
-              <a href="#pricing" className="hover:text-foreground">
+              <a href="#pricing" className="whitespace-nowrap hover:text-foreground">
                 Early Access
               </a>
             </div>
@@ -533,7 +534,7 @@ export default function LandingPage() {
               </Button>
             </div>
           </nav>
-          <div className="mx-auto mt-3 flex w-full max-w-6xl gap-2 overflow-x-auto no-scrollbar md:hidden">
+          <div className="mx-auto mt-3 flex w-full max-w-[1400px] gap-2 overflow-x-auto no-scrollbar lg:hidden">
             {[
               { href: "#roles", label: "Solutions" },
               { href: "#modules", label: "Module Paths" },
@@ -553,9 +554,9 @@ export default function LandingPage() {
           </div>
         </header>
 
-        <main className="px-6 pb-20">
-          <section className="mx-auto mt-10 w-full max-w-7xl sm:mt-16">
-            <div className="relative overflow-hidden rounded-3xl border border-white/40 bg-gradient-to-br from-[#0f6f66] via-[#0b4f49] to-[#083730] p-8 md:p-12 lg:p-16 shadow-[0_40px_100px_-40px_rgba(15,111,102,0.7)] grain">
+        <main className="px-4 pb-16 sm:px-6 sm:pb-20">
+          <section className="mx-auto mt-8 w-full max-w-7xl sm:mt-16">
+            <div className="relative overflow-hidden rounded-3xl border border-white/40 bg-gradient-to-br from-[#0f6f66] via-[#0b4f49] to-[#083730] p-5 sm:p-8 md:p-12 lg:p-16 shadow-[0_40px_100px_-40px_rgba(15,111,102,0.7)] grain">
               {/* Coffee bean background pattern */}
               <div className="pointer-events-none absolute inset-0 opacity-10">
                 <div className="absolute top-10 left-10 h-20 w-20 rounded-full bg-[color:var(--sand)]" />
@@ -564,18 +565,18 @@ export default function LandingPage() {
                 <div className="absolute bottom-32 right-16 h-24 w-24 rounded-full bg-[color:var(--sand)]" />
               </div>
 
-              <div className="relative z-10 grid gap-12 lg:grid-cols-2 items-center">
+              <div className="relative z-10 grid gap-8 sm:gap-12 lg:grid-cols-2 items-center">
                 <div className="space-y-6 rise-in">
                   <Badge className="border-white/30 bg-white/20 text-white backdrop-blur-md">
                     <Coffee className="mr-2 h-3.5 w-3.5" />
                     Built for Arabica and Robusta coffee estates managing processing, labor, and inputs daily
                   </Badge>
                   
-                  <h1 className={`${display.className} text-4xl md:text-5xl lg:text-6xl font-bold leading-tight text-white text-balance`}>
+                  <h1 className={`${display.className} text-3xl sm:text-4xl md:text-5xl lg:text-6xl font-bold leading-tight text-white text-balance`}>
                     The operating system for profitable, traceable coffee estates
                   </h1>
                   
-                  <p className="text-lg text-white/90 leading-relaxed">
+                  <p className="text-base sm:text-lg text-white/90 leading-relaxed">
                     We built FarmFlow for coffee estate operations, not generic ERP screens.
                     Run intake, Cherry-to-Parchment processing, labor tracking, consumables issuance, dispatch, and sales from one command center.
                   </p>
@@ -589,19 +590,19 @@ export default function LandingPage() {
                     ))}
                   </div>
 
-                  <div className="flex flex-wrap items-center gap-4">
-                    <Button size="lg" className="bg-white text-[#0f6f66] hover:bg-white/90 font-semibold group shadow-[0_20px_40px_-20px_rgba(255,255,255,0.5)]">
+                  <div className="flex flex-col items-stretch gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:gap-4">
+                    <Button size="lg" className="w-full bg-white text-[#0f6f66] hover:bg-white/90 font-semibold group shadow-[0_20px_40px_-20px_rgba(255,255,255,0.5)] sm:w-auto">
                       <Link href="/signup" className="flex items-center">
                         Request Early Access <ArrowRight className="ml-2 h-4 w-4 group-hover:translate-x-1 transition-transform" />
                       </Link>
                     </Button>
-                    <Button size="lg" variant="outline" className="border-white/30 bg-white/10 text-white hover:bg-white/20 backdrop-blur-sm">
+                    <Button size="lg" variant="outline" className="w-full border-white/30 bg-white/10 text-white hover:bg-white/20 backdrop-blur-sm sm:w-auto">
                       <Link href="/login">Sign in to your workspace</Link>
                     </Button>
                   </div>
 
                   {/* Quick stats */}
-                  <div className="grid grid-cols-3 gap-4 pt-4">
+                  <div className="grid grid-cols-1 gap-3 pt-4 sm:grid-cols-3 sm:gap-4">
                     <div className="space-y-1">
                       <div className="flex items-center gap-1.5">
                         <Coffee className="h-4 w-4 text-white/70" />
@@ -633,7 +634,7 @@ export default function LandingPage() {
                     {/* Main card with coffee estate data */}
                     <Card className="relative border-white/30 bg-white/95 backdrop-blur-xl shadow-[0_40px_90px_-50px_rgba(0,0,0,0.9)] sheen">
                       <CardHeader className="pb-3">
-                        <div className="flex items-center justify-between">
+                        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                           <div className="flex items-center gap-3">
                             <div className="h-12 w-12 rounded-xl bg-gradient-to-br from-[#0f6f66] to-[#0b4f49] flex items-center justify-center">
                               <Coffee className="h-6 w-6 text-white" />
@@ -643,7 +644,7 @@ export default function LandingPage() {
                               <CardDescription>Representative estate · Western Ghats</CardDescription>
                             </div>
                           </div>
-                          <Badge className="bg-emerald-100 text-emerald-700 border-emerald-200">
+                          <Badge className="w-fit bg-emerald-100 text-emerald-700 border-emerald-200">
                             Live demo snapshot
                           </Badge>
                         </div>
@@ -657,7 +658,7 @@ export default function LandingPage() {
                           </div>
                           <p className={`${display.className} text-3xl font-bold text-amber-900`}>2,840 kg</p>
                           <p className="text-xs text-amber-700 mt-1">Arabica Cherry → Parchment · Robusta Cherry → Parchment</p>
-                          <p className="text-[10px] text-amber-700 mt-1">Labor today: 42 workers · Fuel issued: 180 L</p>
+                          <p className="text-xs text-amber-700 mt-1">Labor today: 42 workers · Fuel issued: 180 L</p>
                           <div className="mt-3 h-2 rounded-full bg-amber-200/50 overflow-hidden">
                             <div className="h-full w-[68%] rounded-full bg-gradient-to-r from-amber-400 to-orange-500 animate-pulse" />
                           </div>
@@ -668,18 +669,18 @@ export default function LandingPage() {
                           <div className="rounded-xl border border-emerald-200/70 bg-gradient-to-br from-emerald-50/80 to-green-50/50 p-3">
                             <div className="flex items-center gap-1.5 mb-1">
                               <Droplets className="h-3.5 w-3.5 text-emerald-600" />
-                              <p className="text-[10px] font-medium text-emerald-900">Rainfall Logs</p>
+                              <p className="text-xs font-medium text-emerald-900">Rainfall Logs</p>
                             </div>
                             <p className={`${display.className} text-xl font-bold text-emerald-900`}>12</p>
-                            <p className="text-[10px] text-emerald-700">entries this month</p>
+                            <p className="text-xs text-emerald-700">entries this month</p>
                           </div>
                           <div className="rounded-xl border border-blue-200/70 bg-gradient-to-br from-blue-50/80 to-sky-50/50 p-3">
                             <div className="flex items-center gap-1.5 mb-1">
                               <Package className="h-3.5 w-3.5 text-blue-600" />
-                              <p className="text-[10px] font-medium text-blue-900">Labor + Consumables</p>
+                              <p className="text-xs font-medium text-blue-900">Labor + Consumables</p>
                             </div>
                             <p className={`${display.className} text-xl font-bold text-blue-900`}>42</p>
-                            <p className="text-[10px] text-blue-700">workers today · ₹1.8L issued this month</p>
+                            <p className="text-xs text-blue-700">workers today · ₹1.8L issued this month</p>
                           </div>
                         </div>
 
@@ -703,7 +704,7 @@ export default function LandingPage() {
                         </div>
                         <div>
                           <p className="text-xs font-semibold text-slate-900">Yield alert</p>
-                          <p className="text-[10px] text-slate-600 mt-0.5">Lot MV-847 below target by 3.2%</p>
+                          <p className="text-xs text-slate-600 mt-0.5">Lot MV-847 below target by 3.2%</p>
                         </div>
                       </div>
                     </div>
@@ -916,6 +917,9 @@ export default function LandingPage() {
               <h2 className={`${display.className} text-3xl font-semibold`}>One platform for processing, labor, stock, and cash</h2>
               <p className="text-muted-foreground mt-2">
                 Run daily coffee workflows, control cost leakage, and improve buyer confidence across Arabica, Robusta, Cherry, and Parchment lots.
+              </p>
+              <p className="text-muted-foreground mt-1">
+                FarmFlow Intelligence continuously surfaces patterns, anomalies, and trend shifts so teams act before losses compound.
               </p>
             </div>
           </div>
@@ -1297,9 +1301,9 @@ export default function LandingPage() {
         </footer>
       </div>
 
-      <div className="fixed bottom-6 right-6 z-50 flex flex-col items-end gap-3">
+      <div className="fixed bottom-4 right-4 z-50 flex flex-col items-end gap-3 sm:bottom-6 sm:right-6">
         {isChatOpen && (
-          <div className="w-[320px] sm:w-[360px] rounded-2xl border border-white/60 bg-white/90 shadow-[0_30px_60px_-40px_rgba(15,23,42,0.7)] backdrop-blur-xl">
+          <div className="w-[min(92vw,360px)] rounded-2xl border border-white/60 bg-white/90 shadow-[0_30px_60px_-40px_rgba(15,23,42,0.7)] backdrop-blur-xl">
             <div className="flex items-center justify-between border-b border-slate-200/60 px-4 py-3">
               <div>
                 <p className="text-sm font-semibold">FarmFlow Concierge</p>
@@ -1328,7 +1332,7 @@ export default function LandingPage() {
                   <button
                     key={faq.id}
                     onClick={() => sendMessage(faq.question)}
-                    className="rounded-full border border-slate-200/70 bg-white px-3 py-1 text-xs text-slate-600 hover:border-slate-300"
+                    className="rounded-full border border-slate-200/70 bg-white px-3 py-1.5 text-xs text-slate-600 hover:border-slate-300"
                   >
                     {faq.question}
                   </button>

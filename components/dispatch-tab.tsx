@@ -809,7 +809,7 @@ export default function DispatchTab() {
               if (fy) setSelectedFiscalYear(fy)
             }}
           >
-            <SelectTrigger className="w-[140px]">
+            <SelectTrigger className="w-full sm:w-[140px]">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
@@ -1119,7 +1119,7 @@ export default function DispatchTab() {
                 Available: {formatNumber(allowedBalance)} bags ({formatNumber(allowedBalance * bagWeightKg)} KGs)
               </p>
               {editAllowance.matchesSelection && (
-                <p className="text-[11px] text-muted-foreground">
+                <p className="text-xs text-muted-foreground">
                   This record already accounts for {formatNumber(editAllowance.allowance)} bags.
                 </p>
               )}

@@ -308,6 +308,7 @@ type KpiExplain = {
   causes: string[]
   checks: string[]
   ask: string
+  targetPct?: string
 }
 
 const KPI_EXPLANATIONS: Record<string, KpiExplain> = {
@@ -325,6 +326,7 @@ const KPI_EXPLANATIONS: Record<string, KpiExplain> = {
       "Inspect plot-level maturity and compare to last week",
     ],
     ask: "Did any block change picking rules or cadence this week?",
+    targetPct: ">= 85%",
   },
   float_rate_green: {
     title: "Float % of green",
@@ -340,6 +342,7 @@ const KPI_EXPLANATIONS: Record<string, KpiExplain> = {
       "Inspect recent lots for insect damage",
     ],
     ask: "Was there a delay between picking and pulping?",
+    targetPct: "<= 10%",
   },
   float_rate_green_plus: {
     title: "Float % of (green + float)",
@@ -355,6 +358,7 @@ const KPI_EXPLANATIONS: Record<string, KpiExplain> = {
       "Check if new plots were added",
     ],
     ask: "Did the intake mix change (new plots or contractors)?",
+    targetPct: "<= 8%",
   },
   wet_parch_yield: {
     title: "Wet parchment yield (WP / Ripe)",
@@ -370,6 +374,7 @@ const KPI_EXPLANATIONS: Record<string, KpiExplain> = {
       "Verify ripe input accuracy",
     ],
     ask: "Were any pulpers serviced or adjusted recently?",
+    targetPct: ">= 55%",
   },
   dry_parch_wp: {
     title: "Dry parchment yield (Dry Parch / WP)",
@@ -385,6 +390,7 @@ const KPI_EXPLANATIONS: Record<string, KpiExplain> = {
       "Compare moisture % trend week over week",
     ],
     ask: "Any drying bed changes or equipment issues?",
+    targetPct: ">= 50%",
   },
   dry_parch_ripe: {
     title: "Dry parchment from ripe (Dry Parch / Ripe)",
@@ -400,6 +406,7 @@ const KPI_EXPLANATIONS: Record<string, KpiExplain> = {
       "Audit recent batch reconciliations",
     ],
     ask: "Are float rates or drying losses rising in the same window?",
+    targetPct: ">= 30%",
   },
   dry_parch_crop: {
     title: "Dry parchment from crop (Dry Parch / Crop)",
@@ -415,6 +422,7 @@ const KPI_EXPLANATIONS: Record<string, KpiExplain> = {
       "Review lots missing from processing logs",
     ],
     ask: "Any blocks with missing crop-to-date entries?",
+    targetPct: ">= 25%",
   },
   dry_cherry_ripe: {
     title: "Dry cherry yield (Dry Cherry / Ripe)",
@@ -430,6 +438,7 @@ const KPI_EXPLANATIONS: Record<string, KpiExplain> = {
       "Review natural lot losses",
     ],
     ask: "Was more volume diverted to naturals this week?",
+    targetPct: "10-25%",
   },
   washed_share: {
     title: "Washed share (Dry Parch / Total Dry)",
@@ -445,6 +454,7 @@ const KPI_EXPLANATIONS: Record<string, KpiExplain> = {
       "Validate dry cherry inventory flow",
     ],
     ask: "Is the current mix aligned with the season plan?",
+    targetPct: "60-80% (strategy dependent)",
   },
   natural_share: {
     title: "Natural share (Dry Cherry / Total Dry)",
@@ -460,6 +470,25 @@ const KPI_EXPLANATIONS: Record<string, KpiExplain> = {
       "Check for backlogs at wet mill",
     ],
     ask: "Any wet mill constraints pushing naturals higher?",
+    targetPct: "20-40% (strategy dependent)",
+  },
+}
+
+type KpiMetricId = keyof typeof KPI_EXPLANATIONS
+
+const TENANT_KPI_BASELINE_TARGETS: Record<string, Partial<Record<KpiMetricId, number>>> = {
+  // HoneyFarm baseline from live tenant aggregates.
+  "41b4b10c-428c-4155-882f-1cc7f6e89a78": {
+    ripe_pick_rate: 0.8178770828118368,
+    float_rate_green: 0.43584023338624567,
+    float_rate_green_plus: 0.3035436835185849,
+    wet_parch_yield: 0.4366125963086668,
+    dry_parch_wp: 0.5523909664441803,
+    dry_parch_ripe: 0.24118085403664719,
+    dry_parch_crop: 0.1972562933295604,
+    dry_cherry_ripe: 0.09301520978323065,
+    washed_share: 0.7216747297378009,
+    natural_share: 0.2783252702621991,
   },
 }
 
@@ -609,9 +638,33 @@ export default function SeasonDashboard() {
     }
   }, [benchmarkData])
 
+  const resolveKpiTargetPctLabel = useCallback(
+    (metricId: string, defaultTargetPct?: string) => {
+      if (metricId === "dry_parch_ripe" && benchmarkData?.targets?.dryParchYieldFromRipe != null) {
+        return `>= ${formatPercent(benchmarkData.targets.dryParchYieldFromRipe)} (tenant target)`
+      }
+      if (
+        (metricId === "float_rate_green" || metricId === "float_rate_green_plus") &&
+        benchmarkData?.targets?.floatRate != null
+      ) {
+        return `<= ${formatPercent(benchmarkData.targets.floatRate)} (tenant target)`
+      }
+      const tenantTarget =
+        user?.tenantId && TENANT_KPI_BASELINE_TARGETS[user.tenantId]
+          ? TENANT_KPI_BASELINE_TARGETS[user.tenantId][metricId as KpiMetricId]
+          : null
+      if (tenantTarget != null) {
+        return `${formatPercent(tenantTarget, 2)} (HoneyFarm baseline)`
+      }
+      return defaultTargetPct || null
+    },
+    [benchmarkData?.targets?.dryParchYieldFromRipe, benchmarkData?.targets?.floatRate, user?.tenantId],
+  )
+
   const renderKpiExplainPopover = (metricId: string, currentValue: number, trendKey?: keyof KpiTrendMap) => {
     const explain = KPI_EXPLANATIONS[metricId]
     if (!explain) return null
+    const targetPctLabel = resolveKpiTargetPctLabel(metricId, explain.targetPct)
     const trend = trendKey ? kpiTrends[trendKey] : undefined
     const trendDelta =
       trend && Number.isFinite(trend.prior) && trend.prior !== 0
@@ -628,6 +681,7 @@ export default function SeasonDashboard() {
         <PopoverContent className="w-80 text-xs">
           <div className="text-sm font-semibold">{explain.title}</div>
           <div className="mt-1 text-muted-foreground">Current: {formatPercent(currentValue)}</div>
+          {targetPctLabel && <div className="text-muted-foreground">Target %: {targetPctLabel}</div>}
           {trend && trendDelta !== null && (
             <div className="text-muted-foreground">
               {trend.label}: {formatPercent(trend.current)} ({trendDelta >= 0 ? "+" : ""}
@@ -926,7 +980,7 @@ export default function SeasonDashboard() {
                 if (fy) setSelectedFiscalYear(fy)
               }}
             >
-              <SelectTrigger className="w-[140px]">
+              <SelectTrigger className="w-full sm:w-[140px]">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -949,7 +1003,7 @@ export default function SeasonDashboard() {
                   min="40"
                   max="70"
                   step="0.5"
-                  className="w-[140px]"
+                  className="w-full sm:w-[140px]"
                 />
               </div>
               <Button size="sm" onClick={handleSaveBagWeight} disabled={isSaving}>
@@ -1090,7 +1144,7 @@ export default function SeasonDashboard() {
                 </CardTitle>
                 <CardDescription>Compare KPIs week over week, month over month, or against targets.</CardDescription>
               </div>
-              <div className="w-[220px]">
+              <div className="w-full sm:w-[220px]">
                 <Select value={benchmarkMode} onValueChange={(value) => setBenchmarkMode(value as any)}>
                   <SelectTrigger>
                     <SelectValue />

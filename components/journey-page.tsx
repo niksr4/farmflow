@@ -4,7 +4,7 @@ import { useRef } from "react"
 import Link from "next/link"
 import Image from "next/image"
 import { Fraunces, Manrope } from "next/font/google"
-import { ArrowLeft, CheckCircle2, Leaf } from "lucide-react"
+import { ArrowLeft, CheckCircle2 } from "lucide-react"
 import { motion, useReducedMotion, useScroll, useTransform } from "framer-motion"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -95,22 +95,17 @@ export default function JourneyPage() {
         ["--ink" as any]: "#1b1a17",
       }}
     >
-      <div className="pointer-events-none absolute inset-0">
+      <div className="pointer-events-none absolute inset-0 overflow-hidden">
         <div className="absolute -top-28 right-[-6%] h-[460px] w-[460px] rounded-full bg-[radial-gradient(circle_at_center,rgba(15,111,102,0.45),transparent_70%)] blur-[120px]" />
         <div className="absolute top-[18%] left-[-8%] h-[380px] w-[380px] rounded-full bg-[radial-gradient(circle_at_center,rgba(31,107,93,0.35),transparent_70%)] blur-[140px]" />
       </div>
 
       <div className="relative z-10">
-        <header className="px-6 pt-4 sm:pt-6">
+        <header className="px-4 pt-4 sm:px-6 sm:pt-6">
           <nav className="mx-auto flex w-full max-w-6xl flex-col gap-3 rounded-2xl border border-white/60 bg-white/75 px-3 py-3 backdrop-blur-md shadow-[0_24px_50px_-32px_rgba(15,23,42,0.6)] sm:flex-row sm:items-center sm:justify-between sm:px-4">
-            <div className="flex items-center gap-2">
-              <div className="h-9 w-9 rounded-xl bg-[color:var(--sand)] text-[color:var(--copper)] flex items-center justify-center shadow-[0_0_25px_rgba(15,111,102,0.35)]">
-                <Leaf className="h-5 w-5" />
-              </div>
-              <div>
-                <p className="text-sm font-semibold">FarmFlow</p>
-                <p className="text-xs text-muted-foreground">Estate Workflow Journey</p>
-              </div>
+            <div className="flex items-center gap-3">
+              <Image src="/brand-logo.svg" alt="FarmFlow" width={210} height={82} className="h-11 w-auto" priority />
+              <p className="hidden text-xs text-muted-foreground sm:block">Estate Workflow Journey</p>
             </div>
             <div className="flex flex-wrap items-center gap-2">
               <Button variant="ghost" asChild>
@@ -129,10 +124,10 @@ export default function JourneyPage() {
           </nav>
         </header>
 
-        <main className="px-6 pb-20">
-          <section className="mx-auto mt-10 w-full max-w-6xl rounded-3xl border border-white/40 bg-gradient-to-br from-[#0f6f66] via-[#0b4f49] to-[#083730] p-8 shadow-[0_40px_100px_-40px_rgba(15,111,102,0.7)] sm:mt-16 sm:p-12">
+        <main className="px-4 pb-16 sm:px-6 sm:pb-20">
+          <section className="mx-auto mt-8 w-full max-w-6xl rounded-3xl border border-white/40 bg-gradient-to-br from-[#0f6f66] via-[#0b4f49] to-[#083730] p-5 shadow-[0_40px_100px_-40px_rgba(15,111,102,0.7)] sm:mt-16 sm:p-12">
             <Badge className="border-white/30 bg-white/20 text-white backdrop-blur-md">From cherry to buyer</Badge>
-            <h1 className={`${display.className} mt-4 text-4xl font-bold leading-tight text-white md:text-5xl`}>
+            <h1 className={`${display.className} mt-4 text-3xl font-bold leading-tight text-white md:text-5xl`}>
               The coffee workflow, mapped end to end
             </h1>
             <p className="mt-4 max-w-3xl text-white/90">

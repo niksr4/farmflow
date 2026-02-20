@@ -589,7 +589,7 @@ export default function AccountsPage() {
   const topHighlights = (accountsIntelligence?.highlights || []).slice(0, 3)
 
   return (
-    <div className="container mx-auto p-6 space-y-6">
+    <div className="container mx-auto space-y-6 px-4 py-6 sm:p-6">
       <div>
         <h1 className="text-3xl font-bold">Accounts Management</h1>
         <p className="text-muted-foreground">Track labor deployments and expense records</p>
@@ -611,7 +611,7 @@ export default function AccountsPage() {
                   if (fy) setSelectedFiscalYear(fy)
                 }}
               >
-                <SelectTrigger className="w-[200px]">
+                <SelectTrigger className="w-full sm:w-[200px]">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>

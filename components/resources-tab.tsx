@@ -1,9 +1,24 @@
 "use client"
 
+import { useMemo, useState } from "react"
 import Image from "next/image"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
-import { BookOpen, Leaf, Droplets, Sprout, SunMedium, CheckCircle2, ArrowRight } from "lucide-react"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { BookOpen, Leaf, Droplets, Sprout, SunMedium, CheckCircle2, ArrowRight, FlaskConical, Wheat, ClipboardList } from "lucide-react"
+import {
+  COFFEE_STAGE_OPTIONS,
+  COFFEE_VARIETY_OPTIONS,
+  DRAINAGE_OPTIONS,
+  LEAF_CONDITION_OPTIONS,
+  RAINFALL_PATTERN_OPTIONS,
+  DEFAULT_AGRONOMY_ADVISOR_INPUT,
+  getAgronomyRecommendations,
+  type AgronomyAdvisorInput,
+  type RecommendationPriority,
+} from "@/lib/agronomy-playbook"
 
 const highlightCards = [
   {
@@ -220,6 +235,8 @@ const climateNotes = [
 ]
 
 const resourceSections = [
+  { id: "agronomy-advisor", label: "Agronomy advisor" },
+  { id: "nutrition-program", label: "Nutrition guide" },
   { id: "coffee-lifecycle", label: "Lifecycle" },
   { id: "processing-flow", label: "Post-harvest flow" },
   { id: "visual-library", label: "Visual library" },
@@ -233,10 +250,70 @@ const playbookHighlights = [
   { label: "Lifecycle phases", value: String(lifecyclePhases.length) },
   { label: "Training visuals", value: String(infographicCards.length) },
   { label: "Ops checklists", value: String(checklistItems.length) },
+  { label: "Advisor rules", value: "10+" },
   { label: "Flow steps", value: String(postHarvestFlow.length) },
 ]
 
+const nutritionProgramRows = [
+  {
+    stage: "Flowering",
+    objective: "Protect flower retention and early fruit set",
+    nutritionFocus: "Balanced N + K, with micronutrients only when deficiency is confirmed.",
+    fieldPractice: "Keep moisture stable and avoid heavy stress operations during active bloom.",
+  },
+  {
+    stage: "Fruit development",
+    objective: "Maximize bean fill and density",
+    nutritionFocus: "Split feed program so uptake remains steady through fruit expansion.",
+    fieldPractice: "Combine nutrient splits with pest scouting in the same weekly round.",
+  },
+  {
+    stage: "Maturation",
+    objective: "Maintain quality while fruit colors evenly",
+    nutritionFocus: "Avoid late excessive N; prioritize balance to support ripening consistency.",
+    fieldPractice: "Train teams on selective picking and separate under-ripe lots.",
+  },
+  {
+    stage: "Harvest + post-harvest",
+    objective: "Protect lot quality and reduce rejection risk",
+    nutritionFocus: "Focus shifts from feeding to rapid intake, clean processing, and drying control.",
+    fieldPractice: "Run intake-to-drying SOPs with moisture checkpoints for each lot.",
+  },
+]
+
+const priorityBadgeClassByLevel: Record<RecommendationPriority, string> = {
+  high: "border-red-200 bg-red-50 text-red-700",
+  medium: "border-amber-200 bg-amber-50 text-amber-700",
+  low: "border-sky-200 bg-sky-50 text-sky-700",
+}
+
 export default function ResourcesTab() {
+  const [advisorInput, setAdvisorInput] = useState<AgronomyAdvisorInput>(DEFAULT_AGRONOMY_ADVISOR_INPUT)
+
+  const advisorRecommendations = useMemo(() => getAgronomyRecommendations(advisorInput), [advisorInput])
+
+  const highPriorityCount = useMemo(
+    () => advisorRecommendations.filter((item) => item.priority === "high").length,
+    [advisorRecommendations],
+  )
+  const mediumPriorityCount = useMemo(
+    () => advisorRecommendations.filter((item) => item.priority === "medium").length,
+    [advisorRecommendations],
+  )
+  const lowPriorityCount = useMemo(
+    () => advisorRecommendations.filter((item) => item.priority === "low").length,
+    [advisorRecommendations],
+  )
+
+  const updateNumberField = (
+    key: "soilPH" | "organicMatterPct" | "targetYieldGainPct",
+    rawValue: string,
+  ) => {
+    const parsed = Number(rawValue)
+    const value = Number.isFinite(parsed) ? parsed : 0
+    setAdvisorInput((previous) => ({ ...previous, [key]: value }))
+  }
+
   return (
     <div className="space-y-6 pb-4">
       <Card id="overview" className="scroll-mt-24 overflow-hidden border-emerald-200 bg-gradient-to-br from-emerald-50 via-white to-amber-50 shadow-sm">
@@ -259,7 +336,7 @@ export default function ResourcesTab() {
             Use this page as an operating playbook while entering records in Processing, Dispatch, Sales, and Journal. Keep guidance
             estate-specific by defining your own ripeness cues, moisture thresholds, and handling SOPs.
           </div>
-          <div className="grid grid-cols-2 gap-2">
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
             {playbookHighlights.map((item) => (
               <div key={item.label} className="rounded-lg border border-emerald-100 bg-white/90 px-3 py-2">
                 <p className="text-xs uppercase tracking-wide text-emerald-700">{item.label}</p>
@@ -284,6 +361,306 @@ export default function ResourcesTab() {
               {section.label}
             </a>
           ))}
+        </CardContent>
+      </Card>
+
+      <Card id="agronomy-advisor" className="scroll-mt-24 border-emerald-100 bg-white/95 shadow-sm">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2 text-lg">
+            <FlaskConical className="h-4 w-4 text-emerald-700" />
+            Agronomy Advisor (Phase 1)
+          </CardTitle>
+          <CardDescription>
+            Rule-based guidance to decide what to do this week for fertilizer planning, plant health, and yield protection.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-5">
+          <div className="grid gap-4 xl:grid-cols-[1.2fr_1fr]">
+            <div className="grid gap-4 rounded-2xl border border-emerald-100 bg-emerald-50/40 p-4 sm:grid-cols-2">
+              <div className="space-y-2">
+                <Label className="text-xs uppercase tracking-[0.16em] text-slate-600">Lifecycle stage</Label>
+                <Select
+                  value={advisorInput.stage}
+                  onValueChange={(value) =>
+                    setAdvisorInput((previous) => ({ ...previous, stage: value as AgronomyAdvisorInput["stage"] }))
+                  }
+                >
+                  <SelectTrigger className="bg-white">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {COFFEE_STAGE_OPTIONS.map((option) => (
+                      <SelectItem key={option.value} value={option.value}>
+                        {option.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-2">
+                <Label className="text-xs uppercase tracking-[0.16em] text-slate-600">Coffee focus</Label>
+                <Select
+                  value={advisorInput.variety}
+                  onValueChange={(value) =>
+                    setAdvisorInput((previous) => ({ ...previous, variety: value as AgronomyAdvisorInput["variety"] }))
+                  }
+                >
+                  <SelectTrigger className="bg-white">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {COFFEE_VARIETY_OPTIONS.map((option) => (
+                      <SelectItem key={option.value} value={option.value}>
+                        {option.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-2">
+                <Label className="text-xs uppercase tracking-[0.16em] text-slate-600">Rain pattern</Label>
+                <Select
+                  value={advisorInput.rainfallPattern}
+                  onValueChange={(value) =>
+                    setAdvisorInput((previous) => ({
+                      ...previous,
+                      rainfallPattern: value as AgronomyAdvisorInput["rainfallPattern"],
+                    }))
+                  }
+                >
+                  <SelectTrigger className="bg-white">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {RAINFALL_PATTERN_OPTIONS.map((option) => (
+                      <SelectItem key={option.value} value={option.value}>
+                        {option.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-2">
+                <Label className="text-xs uppercase tracking-[0.16em] text-slate-600">Leaf condition</Label>
+                <Select
+                  value={advisorInput.leafCondition}
+                  onValueChange={(value) =>
+                    setAdvisorInput((previous) => ({
+                      ...previous,
+                      leafCondition: value as AgronomyAdvisorInput["leafCondition"],
+                    }))
+                  }
+                >
+                  <SelectTrigger className="bg-white">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {LEAF_CONDITION_OPTIONS.map((option) => (
+                      <SelectItem key={option.value} value={option.value}>
+                        {option.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-2">
+                <Label className="text-xs uppercase tracking-[0.16em] text-slate-600">Soil drainage</Label>
+                <Select
+                  value={advisorInput.soilDrainage}
+                  onValueChange={(value) =>
+                    setAdvisorInput((previous) => ({
+                      ...previous,
+                      soilDrainage: value as AgronomyAdvisorInput["soilDrainage"],
+                    }))
+                  }
+                >
+                  <SelectTrigger className="bg-white">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {DRAINAGE_OPTIONS.map((option) => (
+                      <SelectItem key={option.value} value={option.value}>
+                        {option.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-2">
+                <Label className="text-xs uppercase tracking-[0.16em] text-slate-600">Recent cherry drop</Label>
+                <Select
+                  value={advisorInput.recentCherryDrop ? "yes" : "no"}
+                  onValueChange={(value) =>
+                    setAdvisorInput((previous) => ({ ...previous, recentCherryDrop: value === "yes" }))
+                  }
+                >
+                  <SelectTrigger className="bg-white">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="no">No</SelectItem>
+                    <SelectItem value="yes">Yes</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-2">
+                <Label className="text-xs uppercase tracking-[0.16em] text-slate-600">Soil pH</Label>
+                <Input
+                  type="number"
+                  step="0.1"
+                  min="3.5"
+                  max="8.5"
+                  value={advisorInput.soilPH}
+                  onChange={(event) => updateNumberField("soilPH", event.target.value)}
+                  className="bg-white"
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label className="text-xs uppercase tracking-[0.16em] text-slate-600">Organic matter %</Label>
+                <Input
+                  type="number"
+                  step="0.1"
+                  min="0"
+                  max="8"
+                  value={advisorInput.organicMatterPct}
+                  onChange={(event) => updateNumberField("organicMatterPct", event.target.value)}
+                  className="bg-white"
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label className="text-xs uppercase tracking-[0.16em] text-slate-600">Pest pressure this week</Label>
+                <Select
+                  value={advisorInput.recentPestPressure ? "yes" : "no"}
+                  onValueChange={(value) =>
+                    setAdvisorInput((previous) => ({ ...previous, recentPestPressure: value === "yes" }))
+                  }
+                >
+                  <SelectTrigger className="bg-white">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="no">No</SelectItem>
+                    <SelectItem value="yes">Yes</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-2">
+                <Label className="text-xs uppercase tracking-[0.16em] text-slate-600">Target yield gain %</Label>
+                <Input
+                  type="number"
+                  step="1"
+                  min="0"
+                  max="40"
+                  value={advisorInput.targetYieldGainPct}
+                  onChange={(event) => updateNumberField("targetYieldGainPct", event.target.value)}
+                  className="bg-white"
+                />
+              </div>
+            </div>
+
+            <div className="space-y-3 rounded-2xl border border-slate-200 bg-white p-4">
+              <p className="text-xs uppercase tracking-[0.16em] text-slate-600">Plan snapshot</p>
+              <div className="grid grid-cols-3 gap-2">
+                <div className="rounded-lg border border-red-100 bg-red-50 px-2 py-2">
+                  <p className="text-[11px] uppercase tracking-wide text-red-700">High</p>
+                  <p className="text-lg font-semibold text-red-700">{highPriorityCount}</p>
+                </div>
+                <div className="rounded-lg border border-amber-100 bg-amber-50 px-2 py-2">
+                  <p className="text-[11px] uppercase tracking-wide text-amber-700">Medium</p>
+                  <p className="text-lg font-semibold text-amber-700">{mediumPriorityCount}</p>
+                </div>
+                <div className="rounded-lg border border-sky-100 bg-sky-50 px-2 py-2">
+                  <p className="text-[11px] uppercase tracking-wide text-sky-700">Low</p>
+                  <p className="text-lg font-semibold text-sky-700">{lowPriorityCount}</p>
+                </div>
+              </div>
+              <div className="rounded-xl border border-slate-100 bg-slate-50/70 p-3 text-sm text-slate-700">
+                Use this plan as a weekly field brief, then log the actual actions in Journal, Inventory, and Accounts.
+              </div>
+              <div className="rounded-xl border border-emerald-100 bg-emerald-50/60 p-3 text-xs text-emerald-900">
+                Guidance is decision support only. Use local agronomist and lab results before final fertilizer dosing.
+              </div>
+            </div>
+          </div>
+
+          <div className="space-y-3">
+            {advisorRecommendations.map((recommendation) => (
+              <div
+                key={recommendation.id}
+                className="rounded-xl border border-slate-200 bg-white p-4 transition hover:border-emerald-200 hover:shadow-sm"
+              >
+                <div className="flex flex-wrap items-center gap-2">
+                  <Badge variant="outline" className={priorityBadgeClassByLevel[recommendation.priority]}>
+                    {recommendation.priority.toUpperCase()}
+                  </Badge>
+                  <p className="font-semibold text-slate-900">{recommendation.title}</p>
+                </div>
+                <p className="mt-2 text-sm text-slate-700">
+                  <span className="font-medium">Action: </span>
+                  {recommendation.action}
+                </p>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  <span className="font-medium text-slate-700">Why: </span>
+                  {recommendation.why}
+                </p>
+                <p className="mt-1 text-sm text-emerald-700">
+                  <span className="font-medium">Expected impact: </span>
+                  {recommendation.expectedImpact}
+                </p>
+                <div className="mt-2 flex flex-wrap gap-1.5">
+                  {recommendation.modulesToTrack.map((moduleName) => (
+                    <Badge key={`${recommendation.id}-${moduleName}`} variant="outline" className="border-slate-200 bg-slate-50 text-slate-600">
+                      {moduleName}
+                    </Badge>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card id="nutrition-program" className="scroll-mt-24 border-slate-200 bg-white/95 shadow-sm">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2 text-base">
+            <Wheat className="h-4 w-4 text-emerald-700" />
+            Coffee nutrition and field-practice guide
+          </CardTitle>
+          <CardDescription>
+            Teaching table for deciding what to prioritize by stage before you schedule fertilizer or field labor.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          {nutritionProgramRows.map((row) => (
+            <div key={row.stage} className="rounded-xl border border-slate-200 bg-white p-4">
+              <div className="flex flex-wrap items-center gap-2">
+                <Badge variant="outline" className="border-emerald-200 bg-emerald-50 text-emerald-700">
+                  {row.stage}
+                </Badge>
+                <p className="font-medium text-slate-900">{row.objective}</p>
+              </div>
+              <p className="mt-2 text-sm text-slate-700">
+                <span className="font-medium">Nutrition focus: </span>
+                {row.nutritionFocus}
+              </p>
+              <p className="mt-1 text-sm text-muted-foreground">
+                <span className="font-medium text-slate-700">Field practice: </span>
+                {row.fieldPractice}
+              </p>
+            </div>
+          ))}
+          <div className="rounded-xl border border-amber-100 bg-amber-50/70 p-3 text-xs text-amber-900">
+            Use soil and leaf testing as the source of truth. This guide helps structure decisions, not replace agronomy diagnosis.
+          </div>
         </CardContent>
       </Card>
 
@@ -447,7 +824,10 @@ export default function ResourcesTab() {
 
       <div id="operational-checklists" className="scroll-mt-24 space-y-3">
         <div>
-          <h3 className="text-base font-semibold text-slate-900">Operational Checklists</h3>
+          <h3 className="flex items-center gap-2 text-base font-semibold text-slate-900">
+            <ClipboardList className="h-4 w-4 text-emerald-700" />
+            Operational Checklists
+          </h3>
           <p className="text-sm text-muted-foreground">Capture these inputs consistently so your season analysis stays reliable.</p>
         </div>
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
