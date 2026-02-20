@@ -7,6 +7,16 @@ import { logAuditEvent } from "@/lib/server/audit-log"
 
 export const dynamic = "force-dynamic"
 
+const isInventoryUnderflowError = (error: unknown) => {
+  const code = String((error as any)?.code || "")
+  const constraint = String((error as any)?.constraint || "")
+  const message = String((error as any)?.message || "")
+  return (
+    code === "23514" &&
+    (constraint === "check_non_negative_quantity" || message.toLowerCase().includes("check_non_negative_quantity"))
+  )
+}
+
 export async function GET(request: NextRequest) {
   try {
     const sessionUser = await requireModuleAccess("transactions")
@@ -265,7 +275,7 @@ export async function POST(request: NextRequest) {
     const tenantContext = normalizeTenantContext(sessionUser.tenantId, sessionUser.role)
     const body = await request.json()
 
-    const { item_type, quantity, transaction_type, notes, price, location_id } = body
+    const { item_type, quantity, transaction_type, notes, price, location_id, unit } = body
 
     if (!item_type || !quantity || !transaction_type) {
       return NextResponse.json(
@@ -288,6 +298,25 @@ export async function POST(request: NextRequest) {
 
     const resolvedLocationId = typeof location_id === "string" ? location_id.trim() : ""
     const locationValue = resolvedLocationId && resolvedLocationId !== "unassigned" ? resolvedLocationId : null
+    const providedUnit = typeof unit === "string" ? unit.trim() : ""
+    let unitValue = providedUnit || "kg"
+    if (!providedUnit) {
+      const unitRows = await runTenantQuery(
+        inventorySql,
+        tenantContext,
+        inventorySql`
+          SELECT unit
+          FROM current_inventory
+          WHERE tenant_id = ${tenantContext.tenantId}
+            AND item_type = ${item_type}
+            AND location_id IS NOT DISTINCT FROM ${locationValue}
+          LIMIT 1
+        `,
+      )
+      if (unitRows?.[0]?.unit) {
+        unitValue = String(unitRows[0].unit)
+      }
+    }
 
     const priceValue = Number(price) || 0
     const quantityValue = Number(quantity)
@@ -316,7 +345,8 @@ export async function POST(request: NextRequest) {
         price, 
         total_cost,
         tenant_id,
-        location_id
+        location_id,
+        unit
       )
       VALUES (
         ${item_type},
@@ -327,7 +357,8 @@ export async function POST(request: NextRequest) {
         ${priceValue},
         ${total_cost},
         ${tenantContext.tenantId},
-        ${locationValue}
+        ${locationValue},
+        ${unitValue}
       )
       RETURNING 
         id,
@@ -339,7 +370,8 @@ export async function POST(request: NextRequest) {
         user_id,
         price,
         total_cost,
-        location_id
+        location_id,
+        unit
     `,
     )
 
@@ -360,6 +392,16 @@ export async function POST(request: NextRequest) {
     console.error("[SERVER] ❌ Error adding transaction:", error)
     if (isModuleAccessError(error)) {
       return NextResponse.json({ success: false, message: "Module access disabled" }, { status: 403 })
+    }
+    if (isInventoryUnderflowError(error)) {
+      return NextResponse.json(
+        {
+          success: false,
+          message:
+            "Insufficient stock in the selected location. Choose the stocked location (or Unassigned for legacy stock) or restock first.",
+        },
+        { status: 409 },
+      )
     }
     return NextResponse.json(
       {

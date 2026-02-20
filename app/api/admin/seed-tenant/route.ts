@@ -368,7 +368,8 @@ export async function POST(request: Request) {
             price,
             total_cost,
             tenant_id,
-            location_id
+            location_id,
+            unit
           )
           VALUES (
             ${tx.item_type},
@@ -380,7 +381,8 @@ export async function POST(request: Request) {
             ${tx.price},
             ${tx.total_cost},
             ${tenantId},
-            ${tx.locationId}
+            ${tx.locationId},
+            ${seededInventoryUnits[tx.item_type] || "kg"}
           )
         `,
       )

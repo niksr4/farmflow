@@ -632,6 +632,7 @@ export async function POST(request: Request) {
         const quantity = parseNumber(getField(row, ["quantity", "qty"]))
         const price = parseNumber(getField(row, ["price", "unit_price", "price_per_unit"])) || 0
         const unit = getField(row, ["unit"]) || ""
+        const unitValue = unit || "kg"
 
         if (!transactionDate || !itemType || quantity === null || quantity === undefined) {
           errors.push({ row: rowNumber, message: "Missing transaction_date, item_type, or quantity" })
@@ -675,11 +676,11 @@ export async function POST(request: Request) {
           sql.query(
             `
             INSERT INTO transaction_history (
-              item_type, quantity, transaction_type, notes, user_id, price, total_cost, transaction_date, tenant_id${
+              item_type, quantity, transaction_type, notes, user_id, price, total_cost, transaction_date, tenant_id, unit${
                 locationId ? ", location_id" : ""
               }
             ) VALUES (
-              $1,$2,$3,$4,$5,$6,$7,$8,$9${locationId ? ", $10" : ""}
+              $1,$2,$3,$4,$5,$6,$7,$8,$9,$10${locationId ? ", $11" : ""}
             )
             `,
             locationId
@@ -693,9 +694,10 @@ export async function POST(request: Request) {
                   totalCost,
                   transactionDate,
                   tenantContext.tenantId,
+                  unitValue,
                   locationId,
                 ]
-              : [itemType, quantity, transactionType, notes, userId, price, totalCost, transactionDate, tenantContext.tenantId],
+              : [itemType, quantity, transactionType, notes, userId, price, totalCost, transactionDate, tenantContext.tenantId, unitValue],
           ),
         )
 
@@ -773,9 +775,9 @@ export async function POST(request: Request) {
             tenantContext,
             sql`
               INSERT INTO transaction_history (
-                item_type, quantity, transaction_type, notes, user_id, price, total_cost, tenant_id, location_id
+                item_type, quantity, transaction_type, notes, user_id, price, total_cost, tenant_id, location_id, unit
               ) VALUES (
-                ${itemType}, ${quantity}, 'restock', ${notes || "Imported opening balance"}, ${sessionUser.username || "system"}, ${price}, ${totalCost}, ${tenantContext.tenantId}, ${locationId}
+                ${itemType}, ${quantity}, 'restock', ${notes || "Imported opening balance"}, ${sessionUser.username || "system"}, ${price}, ${totalCost}, ${tenantContext.tenantId}, ${locationId}, ${unit || "kg"}
               )
             `,
           )

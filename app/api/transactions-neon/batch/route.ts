@@ -65,7 +65,7 @@ export async function POST(request: NextRequest) {
           INSERT INTO transaction_history (
             item_type, quantity, transaction_type, notes,
             transaction_date, user_id, price, total_cost,
-            tenant_id, location_id
+            tenant_id, location_id, unit
           )
           VALUES (
             ${txn.item_type},
@@ -77,7 +77,8 @@ export async function POST(request: NextRequest) {
             ${txn.price || 0},
             ${txn.total_cost || 0},
             ${tenantContext.tenantId},
-            ${locationValue}
+            ${locationValue},
+            ${txn.unit || "kg"}
           )
         `,
       )

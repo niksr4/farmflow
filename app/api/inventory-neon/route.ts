@@ -230,7 +230,8 @@ export async function POST(request: NextRequest) {
             price,
             total_cost,
             tenant_id,
-            location_id
+            location_id,
+            unit
           )
           VALUES (
             ${item_type},
@@ -241,7 +242,8 @@ export async function POST(request: NextRequest) {
             ${priceValue},
             ${total_cost},
             ${tenantContext.tenantId},
-            ${locationValue}
+            ${locationValue},
+            ${unit}
           )
         `,
       )
@@ -372,7 +374,8 @@ export async function DELETE(request: NextRequest) {
             price,
             total_cost,
             tenant_id,
-            location_id
+            location_id,
+            unit
           )
           VALUES (
             ${itemType},
@@ -383,7 +386,8 @@ export async function DELETE(request: NextRequest) {
             0,
             0,
             ${tenantContext.tenantId},
-            ${row.location_id ?? null}
+            ${row.location_id ?? null},
+            ${row.unit || "kg"}
           )
         `,
       )
