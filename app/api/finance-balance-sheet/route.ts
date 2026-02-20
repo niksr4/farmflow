@@ -125,6 +125,7 @@ export async function GET(request: Request) {
 
     const [
       salesResult,
+      otherSalesResult,
       laborResult,
       expenseResult,
       inventoryResult,
@@ -143,6 +144,18 @@ export async function GET(request: Request) {
             ${salesDateClause}
         `,
         ["sales_records"],
+      ),
+      runOptionalQuery<{ total_revenue: number; total_count: number }>(
+        tenantContext,
+        sql`
+          SELECT
+            COALESCE(SUM(revenue), 0) AS total_revenue,
+            COUNT(*)::int AS total_count
+          FROM other_sales_records
+          WHERE tenant_id = ${tenantContext.tenantId}
+            ${salesDateClause}
+        `,
+        ["other_sales_records"],
       ),
       runOptionalQuery<{ total_cost: number; total_count: number }>(
         tenantContext,
@@ -267,6 +280,7 @@ export async function GET(request: Request) {
     ])
 
     const salesRow = salesResult.rows?.[0] || {}
+    const otherSalesRow = otherSalesResult.rows?.[0] || {}
     const laborRow = laborResult.rows?.[0] || {}
     const expenseRow = expenseResult.rows?.[0] || {}
     const inventoryRow = inventoryResult.rows?.[0] || {}
@@ -275,6 +289,8 @@ export async function GET(request: Request) {
     const billingRow = billingResult.rows?.[0] || {}
 
     const salesRevenue = toAmount((salesRow as any).total_revenue)
+    const otherSalesRevenue = toAmount((otherSalesRow as any).total_revenue)
+    const totalRevenueBooked = salesRevenue + otherSalesRevenue
     const laborCost = toAmount((laborRow as any).total_cost)
     const expenseCost = toAmount((expenseRow as any).total_amount)
     const inventoryRestockOutflow = toAmount((inventoryRow as any).restock_outflow)
@@ -287,7 +303,7 @@ export async function GET(request: Request) {
     const billingInvoiced = toAmount((billingRow as any).total_invoiced)
 
     const totalOutflow = laborCost + expenseCost + inventoryRestockOutflow
-    const netBooked = salesRevenue - totalOutflow
+    const netBooked = totalRevenueBooked - totalOutflow
     const liveNetPosition = netBooked + receivablesOutstandingLive
 
     const modules = [
@@ -301,6 +317,17 @@ export async function GET(request: Request) {
         includedInBookedNet: true,
         status: salesResult.available ? "available" : "missing",
         note: "Recorded buyer sales from Sales tab.",
+      },
+      {
+        id: "other_sales_revenue",
+        label: "Other sales revenue (booked)",
+        tab: "Other Sales",
+        direction: "inflow",
+        amount: otherSalesRevenue,
+        records: toCount((otherSalesRow as any).total_count),
+        includedInBookedNet: true,
+        status: otherSalesResult.available ? "available" : "missing",
+        note: "Recorded side-crop sales and contracts from Other Sales tab.",
       },
       {
         id: "labor_cost",
@@ -378,7 +405,7 @@ export async function GET(request: Request) {
         isFiltered: Boolean(startDate || endDate),
       },
       totals: {
-        inflowBooked: salesRevenue,
+        inflowBooked: totalRevenueBooked,
         outflowBooked: totalOutflow,
         netBooked,
         liveNetPosition,

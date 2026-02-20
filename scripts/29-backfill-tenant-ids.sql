@@ -23,6 +23,7 @@ DECLARE
     'rainfall_records',
     'dispatch_records',
     'sales_records',
+    'other_sales_records',
     'hf_arabica',
     'hf_robusta',
     'mv_robusta',

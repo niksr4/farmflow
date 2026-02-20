@@ -2,11 +2,36 @@ import { type NextRequest, NextResponse } from "next/server"
 import { inventorySql } from "@/lib/server/db"
 import { requireModuleAccess, isModuleAccessError } from "@/lib/server/module-access"
 import { normalizeTenantContext, runTenantQuery } from "@/lib/server/tenant-db"
+import { resolveLocationCompatibility } from "@/lib/server/location-compatibility"
 import { recalculateInventoryForItem } from "@/lib/server/inventory-recalc"
 import { canWriteModule } from "@/lib/permissions"
 import { logAuditEvent } from "@/lib/server/audit-log"
 
 export const dynamic = "force-dynamic"
+
+const USAGE_LOCATION_TAG_REGEX = /\[usage_location:([^\]]+)\]/i
+const ALL_USAGE_LOCATION_TAGS_REGEX = /\s*\[usage_location:[^\]]+\]\s*/gi
+
+const extractUsageLocationId = (notes: string | null | undefined) => {
+  const raw = String(notes || "")
+  const match = raw.match(USAGE_LOCATION_TAG_REGEX)
+  return match?.[1]?.trim() || null
+}
+
+const stripUsageLocationTag = (notes: string | null | undefined) => {
+  return String(notes || "").replace(ALL_USAGE_LOCATION_TAGS_REGEX, " ").trim()
+}
+
+const appendUsageLocationTag = (notes: string | null | undefined, usageLocationId: string) => {
+  const base = stripUsageLocationTag(notes)
+  const tag = `[usage_location:${usageLocationId}]`
+  return base ? `${base} ${tag}` : tag
+}
+
+const isDepleteType = (value: string | null | undefined) => {
+  const normalized = String(value || "").toLowerCase()
+  return normalized === "deplete" || normalized === "depleting"
+}
 
 export async function PUT(request: NextRequest) {
   try {
@@ -60,13 +85,26 @@ export async function PUT(request: NextRequest) {
       normalizedType = "deplete"
     }
 
+    const existingRow = existing[0]
+    const existingStockLocationId = existingRow?.location_id ? String(existingRow.location_id) : null
+    const existingUsageLocationId = extractUsageLocationId(existingRow?.notes ? String(existingRow.notes) : "")
     const resolvedLocationId = typeof location_id === "string" ? location_id.trim() : ""
-    const nextLocationId =
+    const requestedUsageLocationId =
       location_id === undefined
-        ? (existing[0]?.location_id ? String(existing[0].location_id) : null)
+        ? existingStockLocationId || existingUsageLocationId || null
         : resolvedLocationId && resolvedLocationId !== "unassigned"
           ? resolvedLocationId
           : null
+
+    let nextStockLocationId =
+      location_id === undefined
+        ? existingStockLocationId
+        : resolvedLocationId && resolvedLocationId !== "unassigned"
+          ? resolvedLocationId
+          : null
+
+    let notesValue =
+      notes === undefined ? stripUsageLocationTag(existingRow?.notes ? String(existingRow.notes) : "") : String(notes || "")
 
     const priceValue = Number(price) || 0
     const quantityValue = Number(quantity)
@@ -81,6 +119,73 @@ export async function PUT(request: NextRequest) {
     }
     const total_cost = quantityValue * priceValue
 
+    if (normalizedType === "deplete" && requestedUsageLocationId) {
+      let allowLegacyPooledFallback = false
+      try {
+        const compatibility = await resolveLocationCompatibility(inventorySql, tenantContext)
+        allowLegacyPooledFallback = Boolean(compatibility.includeLegacyPreLocationRecords)
+      } catch {
+        allowLegacyPooledFallback = false
+      }
+
+      if (allowLegacyPooledFallback) {
+        const selectedSlotRows = await runTenantQuery(
+          inventorySql,
+          tenantContext,
+          inventorySql`
+            SELECT COALESCE(quantity, 0) AS quantity
+            FROM current_inventory
+            WHERE tenant_id = ${tenantContext.tenantId}
+              AND item_type = ${item_type}
+              AND location_id = ${requestedUsageLocationId}
+            LIMIT 1
+          `,
+        )
+        const pooledRows = await runTenantQuery(
+          inventorySql,
+          tenantContext,
+          inventorySql`
+            SELECT COALESCE(quantity, 0) AS quantity
+            FROM current_inventory
+            WHERE tenant_id = ${tenantContext.tenantId}
+              AND item_type = ${item_type}
+              AND location_id IS NULL
+            LIMIT 1
+          `,
+        )
+
+        const existingIsDeplete = isDepleteType(String(existingRow?.transaction_type || ""))
+        const existingItemType = String(existingRow?.item_type || "")
+        const existingQty = Number(existingRow?.quantity) || 0
+        const selectedEditAllowance =
+          existingIsDeplete &&
+          existingItemType === item_type &&
+          existingStockLocationId === requestedUsageLocationId
+            ? existingQty
+            : 0
+        const pooledEditAllowance =
+          existingIsDeplete &&
+          existingItemType === item_type &&
+          existingStockLocationId === null
+            ? existingQty
+            : 0
+
+        const selectedSlotQty = (Number(selectedSlotRows?.[0]?.quantity) || 0) + selectedEditAllowance
+        const pooledQty = (Number(pooledRows?.[0]?.quantity) || 0) + pooledEditAllowance
+
+        if (selectedSlotQty + 0.0001 < quantityValue && pooledQty + 0.0001 >= quantityValue) {
+          nextStockLocationId = null
+          notesValue = appendUsageLocationTag(notesValue, requestedUsageLocationId)
+        }
+      }
+    } else {
+      notesValue = stripUsageLocationTag(notesValue)
+    }
+
+    if (nextStockLocationId !== null) {
+      notesValue = stripUsageLocationTag(notesValue)
+    }
+
     const result = await runTenantQuery(
       inventorySql,
       tenantContext,
@@ -90,10 +195,10 @@ export async function PUT(request: NextRequest) {
           item_type = ${item_type},
           quantity = ${quantityValue},
           transaction_type = ${normalizedType},
-          notes = ${notes || ""},
+          notes = ${notesValue || ""},
           price = ${priceValue},
           total_cost = ${total_cost},
-          location_id = ${nextLocationId},
+          location_id = ${nextStockLocationId},
           tenant_id = ${tenantContext.tenantId}
         WHERE id = ${Number(id)}
           AND tenant_id = ${tenantContext.tenantId}
@@ -118,7 +223,7 @@ export async function PUT(request: NextRequest) {
       affectedPairs.add(`${existingItem}::${existingLocation ?? "null"}`)
     }
     if (item_type) {
-      affectedPairs.add(`${item_type}::${nextLocationId ?? "null"}`)
+      affectedPairs.add(`${item_type}::${nextStockLocationId ?? "null"}`)
     }
 
     for (const key of affectedPairs) {
@@ -145,6 +250,8 @@ export async function PUT(request: NextRequest) {
       success: true,
       transaction: result[0],
       message: "Transaction updated successfully",
+      usage_location_id: nextStockLocationId ? nextStockLocationId : requestedUsageLocationId,
+      stock_location_id: nextStockLocationId,
     })
   } catch (error: any) {
     console.error("[SERVER] ❌ Error updating transaction:", error)

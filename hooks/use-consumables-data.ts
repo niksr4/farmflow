@@ -123,11 +123,14 @@ export function useConsumablesData(locationId?: string, options: ConsumablesData
 
       if (data.success) {
         await fetchDeployments(0, false) // Refresh the list
+        return true
       } else {
         console.error("❌ Failed to add deployment:", data)
+        return false
       }
     } catch (error) {
       console.error("❌ Error adding deployment:", error)
+      return false
     }
   }
 
@@ -144,11 +147,14 @@ export function useConsumablesData(locationId?: string, options: ConsumablesData
 
       if (data.success) {
         await fetchDeployments(0, false) // Refresh the list
+        return true
       } else {
         console.error("❌ Failed to update deployment:", data)
+        return false
       }
     } catch (error) {
       console.error("❌ Error updating deployment:", error)
+      return false
     }
   }
 
@@ -163,11 +169,14 @@ export function useConsumablesData(locationId?: string, options: ConsumablesData
 
       if (data.success) {
         await fetchDeployments(0, false) // Refresh the list
+        return true
       } else {
         console.error("❌ Failed to delete deployment:", data)
+        return false
       }
     } catch (error) {
       console.error("❌ Error deleting deployment:", error)
+      return false
     }
   }
 

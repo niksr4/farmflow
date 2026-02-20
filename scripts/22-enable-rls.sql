@@ -26,6 +26,7 @@ DECLARE
     'journal_entries',
     'dispatch_records',
     'sales_records',
+    'other_sales_records',
     'billing_invoices',
     'billing_invoice_items',
     'receivables',

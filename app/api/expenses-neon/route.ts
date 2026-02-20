@@ -5,6 +5,12 @@ import { normalizeTenantContext, runTenantQueries, runTenantQuery } from "@/lib/
 import { canDeleteModule, canWriteModule } from "@/lib/permissions"
 import { logAuditEvent } from "@/lib/server/audit-log"
 
+const isMissingColumnError = (error: unknown, columnName: string) => {
+  const code = String((error as any)?.code || "")
+  const message = String((error as any)?.message || "")
+  return code === "42703" || message.includes(`column "${columnName}" does not exist`)
+}
+
 export async function GET(request: Request) {
   try {
     const sessionUser = await requireModuleAccess("accounts")
@@ -113,6 +119,37 @@ export async function POST(request: Request) {
     const body = await request.json()
     const { date, code, reference, amount, notes, user } = body
 
+    // De-dupe accidental rapid double-submit from UI (same payload within the last 90 seconds).
+    try {
+      const duplicateRows = await runTenantQuery(
+        accountsSql,
+        tenantContext,
+        accountsSql`
+          SELECT id
+          FROM expense_transactions
+          WHERE tenant_id = ${tenantContext.tenantId}
+            AND entry_date::date = ${date}::date
+            AND code = ${code}
+            AND COALESCE(total_amount, 0) = ${amount}
+            AND COALESCE(notes, '') = ${notes || ""}
+            AND created_at >= (CURRENT_TIMESTAMP - INTERVAL '90 seconds')
+          ORDER BY id DESC
+          LIMIT 1
+        `,
+      )
+      if (duplicateRows?.length) {
+        return NextResponse.json({
+          success: true,
+          id: duplicateRows[0].id,
+          deduped: true,
+          message: "Duplicate submission detected and ignored.",
+        })
+      }
+    } catch (dedupeError) {
+      if (!isMissingColumnError(dedupeError, "created_at")) {
+        throw dedupeError
+      }
+    }
 
     const result = await runTenantQuery(
       accountsSql,

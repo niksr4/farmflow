@@ -15,6 +15,7 @@ const LOCATION_MODULES = [
   "quality",
   "dispatch",
   "sales",
+  "other-sales",
   "rainfall",
   "pepper",
   "journal",

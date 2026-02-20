@@ -38,6 +38,7 @@ export default function OtherExpensesTab({ locationId }: { locationId?: string }
 
   const [isAdding, setIsAdding] = useState(false)
   const [editingId, setEditingId] = useState<number | null>(null)
+  const [isSubmitting, setIsSubmitting] = useState(false)
   const [activities, setActivities] = useState<ActivityCode[]>([])
   const [expandedRows, setExpandedRows] = useState<Set<number>>(new Set())
 
@@ -95,6 +96,8 @@ export default function OtherExpensesTab({ locationId }: { locationId?: string }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
+    if (isSubmitting) return
+    setIsSubmitting(true)
 
     const deployment = {
       date: formData.date,
@@ -105,13 +108,14 @@ export default function OtherExpensesTab({ locationId }: { locationId?: string }
       user: "admin",
     }
 
-    if (editingId) {
-      await updateDeployment(editingId, deployment)
-    } else {
-      await addDeployment(deployment)
+    try {
+      const success = editingId ? await updateDeployment(editingId, deployment) : await addDeployment(deployment)
+      if (success) {
+        resetForm()
+      }
+    } finally {
+      setIsSubmitting(false)
     }
-
-    resetForm()
   }
 
   const startEdit = (deployment: any) => {
@@ -254,11 +258,17 @@ export default function OtherExpensesTab({ locationId }: { locationId?: string }
               </div>
 
               <div className="flex flex-col sm:flex-row gap-2">
-                <Button type="submit" className="flex-1 h-12 text-base">
+                <Button type="submit" className="flex-1 h-12 text-base" disabled={isSubmitting}>
                   <Save className="mr-2 h-5 w-5" />
-                  {editingId ? "Update" : "Save"} Expense
+                  {isSubmitting ? "Saving..." : `${editingId ? "Update" : "Save"} Expense`}
                 </Button>
-                <Button type="button" variant="outline" onClick={resetForm} className="h-12 text-base bg-transparent">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={resetForm}
+                  className="h-12 text-base bg-transparent"
+                  disabled={isSubmitting}
+                >
                   <X className="mr-2 h-5 w-5" /> Cancel
                 </Button>
               </div>

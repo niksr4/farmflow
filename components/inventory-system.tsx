@@ -63,6 +63,7 @@ import DispatchTab from "@/components/dispatch-tab"
 import ProcessingTab from "@/components/processing-tab"
 import RainfallWeatherTab from "@/components/rainfall-weather-tab"
 import SalesTab from "@/components/sales-tab"
+import OtherSalesTab from "@/components/other-sales-tab"
 import NewsTab from "@/components/news-tab"
 import SeasonDashboard from "@/components/season-dashboard"
 import CuringTab from "@/components/curing-tab"
@@ -99,6 +100,7 @@ const DEFAULT_DASHBOARD_TAB_PRIORITY = [
   "processing",
   "dispatch",
   "sales",
+  "other-sales",
   "season",
   "yield-forecast",
   "accounts",
@@ -1613,6 +1615,17 @@ export default function InventorySystem() {
           chips: chipsSales,
           stats: salesStats,
         }
+      case "other-sales":
+        return {
+          badge: "Other Sales",
+          title: "Side-crop revenue and contracts",
+          description: "Track Pepper, Arecanut, Avocado, Coconut, and contract-based estate sales.",
+          chips: [
+            { icon: Leaf, label: "Use per-kg mode for PG/MV daily sales", metricValue: null },
+            { icon: Receipt, label: "Use contract mode for lease or season contracts", metricValue: null },
+          ],
+          stats: [activeLocationsStat, recentActivityStat, unassignedStat],
+        }
       case "curing":
         return {
           badge: "Curing & Drying",
@@ -2335,6 +2348,7 @@ export default function InventorySystem() {
   const canShowProcessing = isModuleEnabled("processing")
   const canShowDispatch = isModuleEnabled("dispatch")
   const canShowSales = isModuleEnabled("sales") && !isScopedUser
+  const canShowOtherSales = isModuleEnabled("other-sales") && !isScopedUser
   const canShowCuring = isModuleEnabled("curing")
   const canShowQuality = isModuleEnabled("quality")
   const canShowRainfall = isModuleEnabled("rainfall")
@@ -2353,7 +2367,14 @@ export default function InventorySystem() {
   const canShowRainfallSection = canShowRainfall || canShowWeather
   const canShowIntelligence = !isScopedUser && (canShowDispatch || canShowSales || canShowAccounts || canShowSeason)
   const showOperationsTabs =
-    canShowInventory || canShowProcessing || canShowCuring || canShowQuality || canShowDispatch || canShowSales || canShowPepper
+    canShowInventory ||
+    canShowProcessing ||
+    canShowCuring ||
+    canShowQuality ||
+    canShowDispatch ||
+    canShowSales ||
+    canShowOtherSales ||
+    canShowPepper
   const showFinanceTabs =
     canShowAccounts || canShowBalanceSheet || showTransactionHistory || canShowReceivables || canShowBilling
   const showInsightsTabs =
@@ -2486,6 +2507,7 @@ export default function InventorySystem() {
     if (canShowProcessing) tabs.push("processing")
     if (canShowDispatch) tabs.push("dispatch")
     if (canShowSales) tabs.push("sales")
+    if (canShowOtherSales) tabs.push("other-sales")
     if (canShowCuring) tabs.push("curing")
     if (canShowQuality) tabs.push("quality")
     if (canShowSeason) tabs.push("season")
@@ -2506,6 +2528,7 @@ export default function InventorySystem() {
     canShowAiAnalysis,
     canShowBilling,
     canShowDispatch,
+    canShowOtherSales,
     canShowActivityLog,
     canShowInventory,
     canShowJournal,
@@ -3800,6 +3823,12 @@ export default function InventorySystem() {
                     Sales
                   </TabsTrigger>
                 )}
+                {canShowOtherSales && (
+                  <TabsTrigger value="other-sales">
+                    <TrendingUp className="h-3.5 w-3.5 mr-1.5" />
+                    Other Sales
+                  </TabsTrigger>
+                )}
                 {canShowPepper && (
                   <TabsTrigger value="pepper" className="flex items-center gap-2">
                     <Leaf className="h-3.5 w-3.5" />
@@ -4834,6 +4863,11 @@ export default function InventorySystem() {
           {canShowSales && (
             <TabsContent value="sales" className="space-y-6">
               <SalesTab />
+            </TabsContent>
+          )}
+          {canShowOtherSales && (
+            <TabsContent value="other-sales" className="space-y-6">
+              <OtherSalesTab />
             </TabsContent>
           )}
           {canShowCuring && (

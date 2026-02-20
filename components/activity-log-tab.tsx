@@ -37,6 +37,7 @@ const ENTITY_LABELS: Record<string, string> = {
   processing_records: "Processing",
   dispatch_records: "Dispatch",
   sales_records: "Sales",
+  other_sales_records: "Other Sales",
   pepper_records: "Pepper",
   curing_records: "Curing",
   quality_grading_records: "Quality",

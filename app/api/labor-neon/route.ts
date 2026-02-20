@@ -5,6 +5,12 @@ import { normalizeTenantContext, runTenantQueries, runTenantQuery } from "@/lib/
 import { canDeleteModule, canWriteModule } from "@/lib/permissions"
 import { logAuditEvent } from "@/lib/server/audit-log"
 
+const isMissingColumnError = (error: unknown, columnName: string) => {
+  const code = String((error as any)?.code || "")
+  const message = String((error as any)?.message || "")
+  return code === "42703" || message.includes(`column "${columnName}" does not exist`)
+}
+
 export async function GET(request: Request) {
   try {
     const sessionUser = await requireModuleAccess("accounts")
@@ -169,6 +175,43 @@ export async function POST(request: Request) {
     const outsideLaborers = Number(outsideEntry?.laborCount) || 0
     const outsideCostPer = Number(outsideEntry?.costPerLabor) || 0
     const computedTotalCost = hfLaborers * hfCostPer + outsideLaborers * outsideCostPer
+
+    // De-dupe accidental rapid double-submit from UI (same payload within the last 90 seconds).
+    try {
+      const duplicateRows = await runTenantQuery(
+        accountsSql,
+        tenantContext,
+        accountsSql`
+          SELECT id
+          FROM labor_transactions
+          WHERE tenant_id = ${tenantContext.tenantId}
+            AND deployment_date::date = ${date}::date
+            AND code = ${code}
+            AND COALESCE(hf_laborers, 0) = ${hfLaborers}
+            AND COALESCE(hf_cost_per_laborer, 0) = ${hfCostPer}
+            AND COALESCE(outside_laborers, 0) = ${outsideLaborers}
+            AND COALESCE(outside_cost_per_laborer, 0) = ${outsideCostPer}
+            AND COALESCE(total_cost, 0) = ${computedTotalCost}
+            AND COALESCE(notes, '') = ${notes || ""}
+            AND created_at >= (CURRENT_TIMESTAMP - INTERVAL '90 seconds')
+          ORDER BY id DESC
+          LIMIT 1
+        `,
+      )
+
+      if (duplicateRows?.length) {
+        return NextResponse.json({
+          success: true,
+          id: duplicateRows[0].id,
+          deduped: true,
+          message: "Duplicate submission detected and ignored.",
+        })
+      }
+    } catch (dedupeError) {
+      if (!isMissingColumnError(dedupeError, "created_at")) {
+        throw dedupeError
+      }
+    }
 
     const result = await runTenantQuery(
       accountsSql,

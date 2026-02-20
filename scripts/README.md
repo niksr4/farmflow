@@ -164,10 +164,11 @@ Run these scripts (in order) on the target database:
 12. `39-inventory-location-indexes.sql` (optional, enables location-aware inventory without backfilling legacy rows)
 13. `29-backfill-tenant-ids.sql` (set tenant_id on legacy rows before enabling RLS)
 14. `47-receivables.sql` (optional, add receivables tracking before enabling RLS)
-15. `22-enable-rls.sql` (enable row-level security after data is in place)
-16. `30-lock-legacy-tables.sql` (optional, prevent writes to deprecated legacy tables)
-17. `31-drop-legacy-tables.sql` (optional, permanently remove legacy tables after verification)
-18. `49-password-rotation.sql` (optional, required for forced password rotation after admin resets)
+15. `51-other-sales.sql` (optional, add side-crop sales tab support)
+16. `22-enable-rls.sql` (enable row-level security after data is in place)
+17. `30-lock-legacy-tables.sql` (optional, prevent writes to deprecated legacy tables)
+18. `31-drop-legacy-tables.sql` (optional, permanently remove legacy tables after verification)
+19. `49-password-rotation.sql` (optional, required for forced password rotation after admin resets)
 
 New tables:
 - `locations`

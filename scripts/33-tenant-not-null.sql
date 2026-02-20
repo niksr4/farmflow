@@ -23,6 +23,7 @@ DECLARE
     'quality_grading_records',
     'rainfall_records',
     'sales_records',
+    'other_sales_records',
     'security_events',
     'tenant_modules',
     'tenants',
