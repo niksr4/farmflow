@@ -957,7 +957,7 @@ export default function TenantSettingsPage() {
   const enabledTenantModuleCount = modulePermissions.filter((module) => module.enabled).length
   const enabledUserModuleCount = userModulePermissions.filter((module) => module.enabled).length
   const selectedUser = users.find((u) => u.id === selectedUserId) || null
-  const isSelectedUserRoleUser = selectedUser?.role === "user"
+  const isSelectedUserRoleScoped = selectedUser?.role === "user" || selectedUser?.role === "viewer"
   const sectionLinks: Array<{ id: string; label: string }> = [
     { id: "estate-identity", label: "Estate" },
     { id: "display-preferences", label: "Display" },
@@ -1759,6 +1759,7 @@ export default function TenantSettingsPage() {
                 <SelectContent>
                   <SelectItem value="admin">Admin</SelectItem>
                   <SelectItem value="user">User</SelectItem>
+                  <SelectItem value="viewer">Viewer (Read-only)</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -1804,6 +1805,7 @@ export default function TenantSettingsPage() {
                             <SelectContent>
                               <SelectItem value="admin">Admin</SelectItem>
                               <SelectItem value="user">User</SelectItem>
+                              <SelectItem value="viewer">Viewer (Read-only)</SelectItem>
                             </SelectContent>
                           </Select>
                         )}
@@ -1879,7 +1881,7 @@ export default function TenantSettingsPage() {
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
               {userModulePermissions.map((module) => {
-                const isLockedForRole = isSelectedUserRoleUser && module.id === "balance-sheet"
+                const isLockedForRole = isSelectedUserRoleScoped && module.id === "balance-sheet"
                 return (
                   <label key={module.id} className="flex items-center gap-2 rounded-lg border border-border/60 bg-white/80 p-3">
                     <input
@@ -1894,9 +1896,9 @@ export default function TenantSettingsPage() {
                 )
               })}
             </div>
-            {isSelectedUserRoleUser && (
+            {isSelectedUserRoleScoped && (
               <p className="text-xs text-muted-foreground">
-                Live Balance Sheet is admin-only and remains disabled for users.
+                Live Balance Sheet is admin-only and remains disabled for user/viewer roles.
               </p>
             )}
 

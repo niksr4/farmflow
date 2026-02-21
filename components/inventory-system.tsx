@@ -2545,6 +2545,55 @@ export default function InventorySystem() {
     canShowYieldForecast,
     showTransactionHistory,
   ])
+  const tabMeta = useMemo(
+    () =>
+      ({
+        home: { label: "Home", icon: Home },
+        inventory: { label: "Inventory", icon: List },
+        processing: { label: "Processing", icon: Factory },
+        dispatch: { label: "Dispatch", icon: Truck },
+        sales: { label: "Sales", icon: TrendingUp },
+        "other-sales": { label: "Other Sales", icon: TrendingUp },
+        pepper: { label: "Pepper", icon: Leaf },
+        accounts: { label: "Accounts", icon: Users },
+        "balance-sheet": { label: "Balance Sheet", icon: Scale },
+        transactions: { label: "Transactions", icon: History },
+        receivables: { label: "Receivables", icon: Receipt },
+        billing: { label: "Billing", icon: Receipt },
+        season: { label: "Season", icon: BarChart3 },
+        "yield-forecast": { label: "Yield Forecast", icon: TrendingUp },
+        "activity-log": { label: "Activity Log", icon: History },
+        rainfall: { label: "Rainfall", icon: CloudRain },
+        journal: { label: "Journal", icon: NotebookPen },
+        resources: { label: "Resources", icon: BookOpen },
+        "ai-analysis": { label: "AI Analysis", icon: Brain },
+        news: { label: "News", icon: Newspaper },
+        curing: { label: "Curing", icon: Factory },
+        quality: { label: "Quality", icon: CheckCircle2 },
+      }) as Record<string, { label: string; icon: React.ComponentType<{ className?: string }> }>,
+    [],
+  )
+  const mobileHomeQuickActions = useMemo(() => {
+    const preferred = [
+      "processing",
+      "dispatch",
+      "sales",
+      "inventory",
+      "accounts",
+      "transactions",
+      "season",
+      "rainfall",
+      "resources",
+    ]
+    return preferred
+      .filter((tab) => visibleTabs.includes(tab))
+      .slice(0, 6)
+      .map((tab) => ({
+        tab,
+        label: tabMeta[tab]?.label || tab,
+        icon: tabMeta[tab]?.icon || Home,
+      }))
+  }, [tabMeta, visibleTabs])
   const getPreferredDefaultTab = useCallback(
     (tabs: string[]) => DEFAULT_DASHBOARD_TAB_PRIORITY.find((tab) => tabs.includes(tab)) || tabs[0],
     [],
@@ -3230,7 +3279,62 @@ export default function InventorySystem() {
   ]
   const onboardingCompletedCount = onboardingSteps.filter((step) => step.done).length
   const onboardingTotalCount = onboardingSteps.length
-  const showOnboarding = onboardingTotalCount > 0 && !isOnboardingLoading && onboardingCompletedCount === 0
+  const onboardingPendingSteps = onboardingSteps.filter((step) => !step.done)
+  const onboardingProgressPct =
+    onboardingTotalCount > 0 ? Math.round((onboardingCompletedCount / onboardingTotalCount) * 100) : 100
+  const setupHealthLabel =
+    onboardingProgressPct >= 90
+      ? "Launch-ready"
+      : onboardingProgressPct >= 60
+        ? "In progress"
+        : "Needs setup"
+  const setupHealthTone =
+    onboardingProgressPct >= 90
+      ? "text-emerald-700 border-emerald-200 bg-emerald-50/70"
+      : onboardingProgressPct >= 60
+        ? "text-amber-700 border-amber-200 bg-amber-50/70"
+        : "text-rose-700 border-rose-200 bg-rose-50/70"
+  const launchGuidePhases = [
+    {
+      id: "phase-1",
+      label: "Week 1",
+      title: "Foundation setup",
+      detail: "Configure locations and inventory masters before daily records begin.",
+      done: onboardingStatus.locations && onboardingStatus.inventory,
+      actionLabel: onboardingStatus.locations ? "Open Inventory" : "Add Locations",
+      onAction: () => setActiveTab(onboardingStatus.locations ? "inventory" : "processing"),
+    },
+    {
+      id: "phase-2",
+      label: "Week 2",
+      title: "Daily processing rhythm",
+      detail: "Capture Arabica/Robusta outputs every day with consistent lot notes.",
+      done: onboardingStatus.processing,
+      actionLabel: "Open Processing",
+      onAction: () => setActiveTab("processing"),
+    },
+    {
+      id: "phase-3",
+      label: "Week 3",
+      title: "Dispatch discipline",
+      detail: "Record bags dispatched and KGs received so sales stock is reliable.",
+      done: onboardingStatus.dispatch,
+      actionLabel: "Open Dispatch",
+      onAction: () => setActiveTab("dispatch"),
+    },
+    {
+      id: "phase-4",
+      label: "Week 4",
+      title: "Sales and finance close",
+      detail: "Close the loop with sales entries and account activity code hygiene.",
+      done: canShowSales ? onboardingStatus.sales : true,
+      actionLabel: canShowSales ? "Open Sales" : "Open Accounts",
+      onAction: () => setActiveTab(canShowSales ? "sales" : "accounts"),
+    },
+  ]
+  const showOnboarding =
+    !isOwner && onboardingTotalCount > 0 && onboardingCompletedCount < onboardingTotalCount
+  const showLaunchGuide = showOnboarding
   const recordMovementPanel = (
     <div className="rounded-2xl border border-black/5 bg-white p-6 shadow-sm">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
@@ -3777,7 +3881,14 @@ export default function InventorySystem() {
           </div>
         )}
         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full space-y-4">
-          <TabsList className="sticky top-2 z-20 flex h-auto w-full flex-wrap items-start gap-3 rounded-2xl border border-black/5 bg-white/85 p-3 shadow-sm backdrop-blur">
+          <TabsList
+            className={cn(
+              "sticky top-2 z-20 flex h-auto w-full rounded-2xl border border-black/5 bg-white/85 shadow-sm backdrop-blur",
+              isMobile
+                ? "flex-nowrap items-center gap-2 overflow-x-auto whitespace-nowrap px-2 py-2 [&>*]:shrink-0"
+                : "flex-wrap items-start gap-3 p-3",
+            )}
+          >
             <div className="flex items-center gap-2">
               <TabsTrigger value="home">
                 <Home className="h-3.5 w-3.5 mr-1.5" />
@@ -3785,10 +3896,10 @@ export default function InventorySystem() {
               </TabsTrigger>
             </div>
             {(showOperationsTabs || showFinanceTabs || showInsightsTabs) && (
-              <div aria-hidden className="h-px w-full bg-black/10 lg:h-7 lg:w-px lg:self-center" />
+              <div aria-hidden className="hidden lg:block h-px w-full bg-black/10 lg:h-7 lg:w-px lg:self-center" />
             )}
             {showOperationsTabs && (
-              <div className="flex flex-wrap items-center gap-2">
+              <div className={cn("flex items-center gap-2", !isMobile && "flex-wrap")}>
                 <span className="rounded-full border border-black/5 bg-neutral-100/70 px-2 py-0.5 text-[11px] font-medium uppercase tracking-[0.22em] text-neutral-500">
                   Operations
                 </span>
@@ -3838,10 +3949,10 @@ export default function InventorySystem() {
               </div>
             )}
             {showOperationsTabs && (showFinanceTabs || showInsightsTabs) && (
-              <div aria-hidden className="h-px w-full bg-black/10 lg:h-7 lg:w-px lg:self-center" />
+              <div aria-hidden className="hidden lg:block h-px w-full bg-black/10 lg:h-7 lg:w-px lg:self-center" />
             )}
             {showFinanceTabs && (
-              <div className="flex flex-wrap items-center gap-2">
+              <div className={cn("flex items-center gap-2", !isMobile && "flex-wrap")}>
                 <span className="rounded-full border border-black/5 bg-neutral-100/70 px-2 py-0.5 text-[11px] font-medium uppercase tracking-[0.22em] text-neutral-500">
                   Finance
                 </span>
@@ -3868,10 +3979,10 @@ export default function InventorySystem() {
               </div>
             )}
             {showFinanceTabs && showInsightsTabs && (
-              <div aria-hidden className="h-px w-full bg-black/10 lg:h-7 lg:w-px lg:self-center" />
+              <div aria-hidden className="hidden lg:block h-px w-full bg-black/10 lg:h-7 lg:w-px lg:self-center" />
             )}
             {showInsightsTabs && (
-              <div className="flex flex-wrap items-center gap-2">
+              <div className={cn("flex items-center gap-2", !isMobile && "flex-wrap")}>
                 <span className="rounded-full border border-black/5 bg-neutral-100/70 px-2 py-0.5 text-[11px] font-medium uppercase tracking-[0.22em] text-neutral-500">
                   Insights
                 </span>
@@ -4007,6 +4118,123 @@ export default function InventorySystem() {
                 </>
               )}
             </div>
+
+            {showLaunchGuide && (
+              <div className="grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(0,1.4fr)]">
+                <Card className="border-black/5 bg-white/90">
+                  <CardHeader>
+                    <CardTitle>Setup Health</CardTitle>
+                    <CardDescription>
+                      Track onboarding completion so operations, dispatch, and sales stay aligned from week one.
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <Badge className={cn("border", setupHealthTone)}>{setupHealthLabel}</Badge>
+                      <span className="text-sm text-muted-foreground">
+                        {onboardingCompletedCount}/{onboardingTotalCount} setup steps complete
+                      </span>
+                    </div>
+                    <div className="space-y-2">
+                      <div className="h-2 rounded-full bg-neutral-100">
+                        <div
+                          className={cn(
+                            "h-2 rounded-full transition-[width]",
+                            onboardingProgressPct >= 90
+                              ? "bg-emerald-600"
+                              : onboardingProgressPct >= 60
+                                ? "bg-amber-500"
+                                : "bg-rose-500",
+                          )}
+                          style={{ width: `${onboardingProgressPct}%` }}
+                        />
+                      </div>
+                      <p className="text-xs text-muted-foreground">{onboardingProgressPct}% complete</p>
+                    </div>
+                    {onboardingPendingSteps[0] && (
+                      <div className="rounded-xl border border-black/5 bg-neutral-50/80 p-3">
+                        <p className="text-xs uppercase tracking-[0.16em] text-neutral-500">Next recommended step</p>
+                        <p className="mt-1 text-sm font-medium text-neutral-900">{onboardingPendingSteps[0].title}</p>
+                        <p className="mt-1 text-xs text-muted-foreground">{onboardingPendingSteps[0].description}</p>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="mt-3 bg-white"
+                          onClick={onboardingPendingSteps[0].onAction}
+                        >
+                          {onboardingPendingSteps[0].actionLabel}
+                        </Button>
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+
+                <Card className="border-black/5 bg-white/90">
+                  <CardHeader>
+                    <CardTitle>First 30 Days</CardTitle>
+                    <CardDescription>
+                      A practical rollout path for new estates with clear weekly checkpoints.
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent className="space-y-3">
+                    {launchGuidePhases.map((phase) => (
+                      <div key={phase.id} className="rounded-xl border border-black/5 bg-white p-3">
+                        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                          <div>
+                            <p className="text-xs uppercase tracking-[0.16em] text-neutral-500">{phase.label}</p>
+                            <p className="text-sm font-semibold text-neutral-900">{phase.title}</p>
+                          </div>
+                          <Badge
+                            variant="outline"
+                            className={cn(
+                              "w-fit",
+                              phase.done
+                                ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+                                : "border-amber-200 bg-amber-50 text-amber-700",
+                            )}
+                          >
+                            {phase.done ? "Done" : "Pending"}
+                          </Badge>
+                        </div>
+                        <p className="mt-1 text-xs text-muted-foreground">{phase.detail}</p>
+                        {!phase.done && (
+                          <Button size="sm" variant="outline" className="mt-3 bg-white" onClick={phase.onAction}>
+                            {phase.actionLabel}
+                          </Button>
+                        )}
+                      </div>
+                    ))}
+                  </CardContent>
+                </Card>
+              </div>
+            )}
+
+            {isMobile && mobileHomeQuickActions.length > 0 && (
+              <Card className="border-black/5 bg-white/90">
+                <CardHeader className="pb-3">
+                  <CardTitle>Quick Actions</CardTitle>
+                  <CardDescription>Open common tasks faster on phone.</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <div className="grid grid-cols-2 gap-2">
+                    {mobileHomeQuickActions.map((action) => {
+                      const ActionIcon = action.icon
+                      return (
+                        <Button
+                          key={action.tab}
+                          variant="outline"
+                          className="h-11 justify-start gap-2 bg-white text-sm"
+                          onClick={() => setActiveTab(action.tab)}
+                        >
+                          <ActionIcon className="h-4 w-4 text-emerald-700" />
+                          {action.label}
+                        </Button>
+                      )
+                    })}
+                  </div>
+                </CardContent>
+              </Card>
+            )}
 
             <div className={cn("grid grid-cols-1 gap-4", canShowSales && "xl:grid-cols-2")}>
               <Card className="border-black/5 bg-white/90">

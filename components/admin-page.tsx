@@ -963,7 +963,7 @@ export default function AdminPage() {
       : null
   const enabledModuleCount = modulePermissions.filter((module) => module.enabled).length
   const selectedUser = users.find((u) => u.id === selectedUserId) || null
-  const isSelectedUserRoleUser = selectedUser?.role === "user"
+  const isSelectedUserRoleScoped = selectedUser?.role === "user" || selectedUser?.role === "viewer"
   const ownerSectionLinks: Array<{ id: string; label: string }> = [
     { id: "tenant-users", label: "Users" },
     { id: "user-module-overrides", label: "User Access" },
@@ -1500,6 +1500,7 @@ export default function AdminPage() {
                 <SelectContent>
                   <SelectItem value="admin">Admin</SelectItem>
                   <SelectItem value="user">User</SelectItem>
+                  <SelectItem value="viewer">Viewer (Read-only)</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -1552,6 +1553,7 @@ export default function AdminPage() {
                               <SelectContent>
                                 <SelectItem value="admin">Admin</SelectItem>
                                 <SelectItem value="user">User</SelectItem>
+                                <SelectItem value="viewer">Viewer (Read-only)</SelectItem>
                               </SelectContent>
                             </Select>
                           )}
@@ -1644,7 +1646,7 @@ export default function AdminPage() {
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
             {userModulePermissions.map((module) => {
-              const isLockedForRole = isSelectedUserRoleUser && module.id === "balance-sheet"
+              const isLockedForRole = isSelectedUserRoleScoped && module.id === "balance-sheet"
               return (
                 <label key={module.id} className="flex items-center gap-2 rounded-lg border border-border/60 bg-white/80 p-3">
                   <input
@@ -1659,9 +1661,9 @@ export default function AdminPage() {
               )
             })}
           </div>
-          {isSelectedUserRoleUser && (
+          {isSelectedUserRoleScoped && (
             <p className="text-xs text-muted-foreground">
-              Live Balance Sheet is admin-only and remains disabled for users.
+              Live Balance Sheet is admin-only and remains disabled for user/viewer roles.
             </p>
           )}
 

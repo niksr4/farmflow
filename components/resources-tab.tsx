@@ -189,6 +189,13 @@ const infographicCards = [
     sourceUrl: "https://commons.wikimedia.org/wiki/File:Coffee_cherries_on_bush_at_Fairview_Estate,_Kiambu,_KE.jpg",
     license: "CC BY-SA 4.0",
   },
+  {title: "Lifecycle of Coffee",
+    image: "/resources/coffee-lifecycle.jpg",
+    alt: "Coffee lifecycle infographic",
+    sourceLabel: "Visual Capitalist",
+    sourceUrl: "https://www.visualcapitalist.com/from-bean-to-brew-the-coffee-supply-chain/",
+    license: "CC BY-SA 4.0",
+  }
 ]
 
 const checklistItems = [

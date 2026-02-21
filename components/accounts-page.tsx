@@ -12,7 +12,7 @@ import { Label } from "@/components/ui/label"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { FileText, Coins, PlusCircle, Settings, Users, Receipt, Loader2 } from "lucide-react"
+import { FileText, Coins, PlusCircle, Settings, Users, Receipt, Loader2, Pencil, Trash2, Check, X } from "lucide-react"
 import { Skeleton } from "@/components/ui/skeleton"
 import LaborDeploymentTab from "./labor-deployment-tab"
 import OtherExpensesTab from "./other-expenses-tab"
@@ -24,6 +24,8 @@ import { formatCurrency, formatNumber } from "@/lib/format"
 interface AccountActivity {
   code: string
   reference: string
+  labor_count?: number
+  expense_count?: number
 }
 
 interface Activity {
@@ -63,6 +65,7 @@ interface AccountsIntelligence {
 
 export default function AccountsPage() {
   const { isAdmin, user } = useAuth()
+  const canManageActivities = isAdmin || user?.role === "owner"
   const { deployments: laborDeployments, loading: laborLoading, totalCount: laborCount } = useLaborData()
   const { deployments: consumableDeployments, loading: consumablesLoading, totalCount: consumablesCount } =
     useConsumablesData()
@@ -80,6 +83,11 @@ export default function AccountsPage() {
   const [newActivityCode, setNewActivityCode] = useState("")
   const [newActivityReference, setNewActivityReference] = useState("")
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [editingActivityCode, setEditingActivityCode] = useState<string | null>(null)
+  const [editingActivityNextCode, setEditingActivityNextCode] = useState("")
+  const [editingActivityReference, setEditingActivityReference] = useState("")
+  const [isUpdatingActivity, setIsUpdatingActivity] = useState(false)
+  const [isDeletingActivityCode, setIsDeletingActivityCode] = useState<string | null>(null)
   const [summaryTotals, setSummaryTotals] = useState({
     laborTotal: 0,
     otherTotal: 0,
@@ -200,7 +208,7 @@ export default function AccountsPage() {
         // Map 'activity' field to 'reference' for display
         const mappedActivities = data.activities.map((item: any) => ({
           code: item.code,
-          reference: item.activity,
+          reference: item.reference || item.activity || "",
         }))
         setActivities(mappedActivities)
       }
@@ -217,7 +225,13 @@ export default function AccountsPage() {
       const response = await fetch("/api/get-activity")
       const data = await response.json()
       if (data.success && data.activities) {
-        setAccountActivities(data.activities)
+        const normalized = (data.activities || []).map((activity: any) => ({
+          code: String(activity.code || ""),
+          reference: String(activity.reference || activity.activity || ""),
+          labor_count: Number(activity.labor_count) || 0,
+          expense_count: Number(activity.expense_count) || 0,
+        }))
+        setAccountActivities(normalized)
       }
     } catch (error) {
       console.error("Error fetching account activities:", error)
@@ -228,6 +242,11 @@ export default function AccountsPage() {
 
   const handleAddActivity = async (e: React.FormEvent) => {
     e.preventDefault()
+
+    if (!canManageActivities) {
+      toast.error("Only admin or owner can add activity codes")
+      return
+    }
 
     if (!newActivityCode.trim() || !newActivityReference.trim()) {
       toast.error("Please fill in both code and reference")
@@ -265,6 +284,95 @@ export default function AccountsPage() {
       toast.error("Failed to add activity")
     } finally {
       setIsSubmitting(false)
+    }
+  }
+
+  const startEditingActivity = (activity: AccountActivity) => {
+    if (!canManageActivities) {
+      toast.error("Only admin or owner can edit activity codes")
+      return
+    }
+    setEditingActivityCode(activity.code)
+    setEditingActivityNextCode(activity.code)
+    setEditingActivityReference(activity.reference)
+  }
+
+  const cancelEditingActivity = () => {
+    setEditingActivityCode(null)
+    setEditingActivityNextCode("")
+    setEditingActivityReference("")
+  }
+
+  const handleUpdateActivity = async () => {
+    if (!editingActivityCode) return
+    const nextCode = editingActivityNextCode.trim().toUpperCase()
+    const nextReference = editingActivityReference.trim()
+
+    if (!nextCode || !nextReference) {
+      toast.error("Code and reference are required")
+      return
+    }
+
+    setIsUpdatingActivity(true)
+    try {
+      const response = await fetch("/api/get-activity", {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          code: editingActivityCode,
+          nextCode,
+          reference: nextReference,
+        }),
+      })
+      const data = await response.json()
+      if (!response.ok || !data.success) {
+        throw new Error(data.error || "Failed to update activity")
+      }
+
+      toast.success("Activity updated")
+      cancelEditingActivity()
+      await fetchAccountActivities()
+      await fetchAllActivities()
+    } catch (error: any) {
+      console.error("Error updating activity:", error)
+      toast.error(error?.message || "Failed to update activity")
+    } finally {
+      setIsUpdatingActivity(false)
+    }
+  }
+
+  const handleDeleteActivity = async (code: string) => {
+    if (!canManageActivities) {
+      toast.error("Only admin or owner can delete activity codes")
+      return
+    }
+    if (!window.confirm(`Delete activity code ${code}?`)) {
+      return
+    }
+
+    setIsDeletingActivityCode(code)
+    try {
+      const response = await fetch(`/api/get-activity?code=${encodeURIComponent(code)}`, {
+        method: "DELETE",
+      })
+      const data = await response.json()
+      if (!response.ok || !data.success) {
+        throw new Error(data.error || "Failed to delete activity")
+      }
+
+      toast.success("Activity deleted")
+      if (editingActivityCode === code) {
+        cancelEditingActivity()
+      }
+      await fetchAccountActivities()
+      await fetchAllActivities()
+    } catch (error: any) {
+      console.error("Error deleting activity:", error)
+      toast.error(error?.message || "Failed to delete activity")
+    } finally {
+      setIsDeletingActivityCode(null)
     }
   }
 
@@ -880,25 +988,27 @@ export default function AccountsPage() {
         <TabsContent value="activities">
           <Card>
             <CardHeader>
-              <CardTitle>Add New Activity</CardTitle>
-              <CardDescription>Create a new activity category for tracking labor and expenses</CardDescription>
+              <CardTitle>Account Activity Codes</CardTitle>
+              <CardDescription>
+                Define tenant-specific labor and expense codes, then edit them as your accounting structure evolves.
+              </CardDescription>
             </CardHeader>
-            <CardContent>
+            <CardContent className="space-y-4">
               {!isAddingActivity ? (
-                <Button onClick={() => setIsAddingActivity(true)} className="w-full">
+                <Button onClick={() => setIsAddingActivity(true)} className="w-full" disabled={!canManageActivities}>
                   <PlusCircle className="mr-2 h-4 w-4" /> Add Category
                 </Button>
               ) : (
                 <form onSubmit={handleAddActivity} className="space-y-4 border rounded-lg p-4 bg-muted/50">
-                  <div className="grid grid-cols-2 gap-4">
+                  <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                     <div className="space-y-2">
                       <Label htmlFor="code">Activity Code</Label>
                       <Input
                         id="code"
                         placeholder="e.g., 555"
                         value={newActivityCode}
-                        onChange={(e) => setNewActivityCode(e.target.value)}
-                        disabled={isSubmitting}
+                        onChange={(e) => setNewActivityCode(e.target.value.toUpperCase())}
+                        disabled={isSubmitting || !canManageActivities}
                       />
                     </div>
                     <div className="space-y-2">
@@ -908,37 +1018,214 @@ export default function AccountsPage() {
                         placeholder="e.g., Solar Fence"
                         value={newActivityReference}
                         onChange={(e) => setNewActivityReference(e.target.value)}
-                        disabled={isSubmitting}
+                        disabled={isSubmitting || !canManageActivities}
                       />
                     </div>
                   </div>
-                  <Button type="submit" disabled={isSubmitting}>
+                  <Button type="submit" disabled={isSubmitting || !canManageActivities}>
                     {isSubmitting ? "Adding..." : "Add Activity"}
                   </Button>
                 </form>
               )}
 
+              {!canManageActivities && (
+                <p className="text-xs text-muted-foreground">
+                  You have read-only access to activity codes. Ask an admin/owner to manage this list.
+                </p>
+              )}
+
               {loadingActivities ? (
                 <div className="text-center py-8 text-muted-foreground">Loading account activities...</div>
               ) : accountActivities.length > 0 ? (
-                <div className="rounded-md border">
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead className="w-[150px]">Code</TableHead>
-                        <TableHead>Reference</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {accountActivities.map((activity) => (
-                        <TableRow key={activity.code}>
-                          <TableCell className="font-medium">{activity.code}</TableCell>
-                          <TableCell>{activity.reference}</TableCell>
+                <>
+                  <div className="rounded-md border hidden md:block">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead className="w-[160px]">Code</TableHead>
+                          <TableHead>Reference</TableHead>
+                          <TableHead className="w-[190px]">Usage</TableHead>
+                          <TableHead className="w-[180px] text-right">Actions</TableHead>
                         </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                </div>
+                      </TableHeader>
+                      <TableBody>
+                        {accountActivities.map((activity) => {
+                          const isEditing = editingActivityCode === activity.code
+                          const usageCount = (activity.labor_count || 0) + (activity.expense_count || 0)
+                          const canDelete = canManageActivities && usageCount === 0
+                          return (
+                            <TableRow key={activity.code}>
+                              <TableCell className="font-medium">
+                                {isEditing ? (
+                                  <Input
+                                    value={editingActivityNextCode}
+                                    onChange={(event) => setEditingActivityNextCode(event.target.value.toUpperCase())}
+                                    disabled={isUpdatingActivity}
+                                    className="h-8"
+                                  />
+                                ) : (
+                                  activity.code
+                                )}
+                              </TableCell>
+                              <TableCell>
+                                {isEditing ? (
+                                  <Input
+                                    value={editingActivityReference}
+                                    onChange={(event) => setEditingActivityReference(event.target.value)}
+                                    disabled={isUpdatingActivity}
+                                    className="h-8"
+                                  />
+                                ) : (
+                                  activity.reference
+                                )}
+                              </TableCell>
+                              <TableCell className="text-xs text-muted-foreground">
+                                {usageCount > 0
+                                  ? `${usageCount} records (${activity.labor_count || 0} labor, ${activity.expense_count || 0} expense)`
+                                  : "Unused"}
+                              </TableCell>
+                              <TableCell>
+                                <div className="flex justify-end gap-1">
+                                  {isEditing ? (
+                                    <>
+                                      <Button
+                                        size="icon"
+                                        variant="ghost"
+                                        onClick={handleUpdateActivity}
+                                        disabled={isUpdatingActivity}
+                                        aria-label="Save activity"
+                                      >
+                                        <Check className="h-4 w-4 text-emerald-700" />
+                                      </Button>
+                                      <Button
+                                        size="icon"
+                                        variant="ghost"
+                                        onClick={cancelEditingActivity}
+                                        disabled={isUpdatingActivity}
+                                        aria-label="Cancel activity edit"
+                                      >
+                                        <X className="h-4 w-4" />
+                                      </Button>
+                                    </>
+                                  ) : (
+                                    <>
+                                      <Button
+                                        size="icon"
+                                        variant="ghost"
+                                        onClick={() => startEditingActivity(activity)}
+                                        disabled={!canManageActivities}
+                                        aria-label="Edit activity"
+                                      >
+                                        <Pencil className="h-4 w-4 text-amber-700" />
+                                      </Button>
+                                      <Button
+                                        size="icon"
+                                        variant="ghost"
+                                        onClick={() => handleDeleteActivity(activity.code)}
+                                        disabled={!canDelete || isDeletingActivityCode === activity.code}
+                                        aria-label="Delete activity"
+                                      >
+                                        <Trash2 className="h-4 w-4 text-rose-700" />
+                                      </Button>
+                                    </>
+                                  )}
+                                </div>
+                              </TableCell>
+                            </TableRow>
+                          )
+                        })}
+                      </TableBody>
+                    </Table>
+                  </div>
+
+                  <div className="space-y-3 md:hidden">
+                    {accountActivities.map((activity) => {
+                      const isEditing = editingActivityCode === activity.code
+                      const usageCount = (activity.labor_count || 0) + (activity.expense_count || 0)
+                      const canDelete = canManageActivities && usageCount === 0
+                      return (
+                        <Card key={activity.code} className="border-border/60">
+                          <CardContent className="space-y-3 p-3">
+                            <div className="space-y-1">
+                              <Label className="text-xs text-muted-foreground">Code</Label>
+                              {isEditing ? (
+                                <Input
+                                  value={editingActivityNextCode}
+                                  onChange={(event) => setEditingActivityNextCode(event.target.value.toUpperCase())}
+                                  disabled={isUpdatingActivity}
+                                  className="h-9"
+                                />
+                              ) : (
+                                <p className="text-sm font-medium">{activity.code}</p>
+                              )}
+                            </div>
+                            <div className="space-y-1">
+                              <Label className="text-xs text-muted-foreground">Reference</Label>
+                              {isEditing ? (
+                                <Input
+                                  value={editingActivityReference}
+                                  onChange={(event) => setEditingActivityReference(event.target.value)}
+                                  disabled={isUpdatingActivity}
+                                  className="h-9"
+                                />
+                              ) : (
+                                <p className="text-sm">{activity.reference}</p>
+                              )}
+                            </div>
+                            <p className="text-xs text-muted-foreground">
+                              {usageCount > 0
+                                ? `${usageCount} linked records (${activity.labor_count || 0} labor, ${activity.expense_count || 0} expense)`
+                                : "No linked records"}
+                            </p>
+                            <div className="flex gap-2">
+                              {isEditing ? (
+                                <>
+                                  <Button size="sm" onClick={handleUpdateActivity} disabled={isUpdatingActivity} className="flex-1">
+                                    <Check className="mr-1.5 h-4 w-4" />
+                                    Save
+                                  </Button>
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    onClick={cancelEditingActivity}
+                                    disabled={isUpdatingActivity}
+                                    className="flex-1"
+                                  >
+                                    <X className="mr-1.5 h-4 w-4" />
+                                    Cancel
+                                  </Button>
+                                </>
+                              ) : (
+                                <>
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    onClick={() => startEditingActivity(activity)}
+                                    disabled={!canManageActivities}
+                                    className="flex-1"
+                                  >
+                                    <Pencil className="mr-1.5 h-4 w-4" />
+                                    Edit
+                                  </Button>
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    onClick={() => handleDeleteActivity(activity.code)}
+                                    disabled={!canDelete || isDeletingActivityCode === activity.code}
+                                    className="flex-1"
+                                  >
+                                    <Trash2 className="mr-1.5 h-4 w-4" />
+                                    Delete
+                                  </Button>
+                                </>
+                              )}
+                            </div>
+                          </CardContent>
+                        </Card>
+                      )
+                    })}
+                  </div>
+                </>
               ) : (
                 <div className="text-center py-8 text-gray-500">
                   <p>No account activities yet</p>

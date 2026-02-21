@@ -1,4 +1,4 @@
-export type UserRole = "owner" | "admin" | "user"
+export type UserRole = "owner" | "admin" | "user" | "viewer"
 
 const USER_WRITE_MODULES = new Set<string>([
   "inventory",

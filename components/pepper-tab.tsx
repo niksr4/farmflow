@@ -178,8 +178,9 @@ export function PepperTab() {
       setMessage({ type: "error", text: "Select a specific location to save a record" })
       return
     }
-    if (!kgPicked || !greenPepper || !dryPepper) {
-      setMessage({ type: "error", text: "Please fill in all required fields" })
+    // Require only KG Picked and Green Pepper; dry weight can be entered later
+    if (!kgPicked || !greenPepper) {
+      setMessage({ type: "error", text: "Please fill in required fields: KG Picked and Green Pepper" })
       return
     }
 
@@ -196,8 +197,9 @@ export function PepperTab() {
           kg_picked: Number.parseFloat(kgPicked),
           green_pepper: Number.parseFloat(greenPepper),
           green_pepper_percent: Number.parseFloat(greenPepperPercent),
-          dry_pepper: Number.parseFloat(dryPepper),
-          dry_pepper_percent: Number.parseFloat(dryPepperPercent),
+          // dry weight is optional; send 0 when empty so backend keeps consistent numeric type
+          dry_pepper: dryPepper ? Number.parseFloat(dryPepper) : 0,
+          dry_pepper_percent: dryPepper ? Number.parseFloat(dryPepperPercent) : 0,
           notes,
           recorded_by: "user",
         }),
@@ -402,7 +404,7 @@ export function PepperTab() {
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="dryPepper">Dry Pepper (KG) *</Label>
+              <Label htmlFor="dryPepper">Dry Pepper (KG) (optional)</Label>
               <Input
                 id="dryPepper"
                 type="number"

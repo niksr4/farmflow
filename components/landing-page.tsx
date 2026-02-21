@@ -558,7 +558,7 @@ export default function LandingPage() {
           <section className="mx-auto mt-8 w-full max-w-7xl sm:mt-16">
             <div className="relative overflow-hidden rounded-3xl border border-white/40 bg-gradient-to-br from-[#0f6f66] via-[#0b4f49] to-[#083730] p-5 sm:p-8 md:p-12 lg:p-16 shadow-[0_40px_100px_-40px_rgba(15,111,102,0.7)] grain">
               {/* Coffee bean background pattern */}
-              <div className="pointer-events-none absolute inset-0 opacity-10">
+              <div className="pointer-events-none absolute inset-0 opacity-5">
                 <div className="absolute top-10 left-10 h-20 w-20 rounded-full bg-[color:var(--sand)]" />
                 <div className="absolute top-32 right-20 h-12 w-12 rounded-full bg-[color:var(--sand)]" />
                 <div className="absolute bottom-20 left-32 h-16 w-16 rounded-full bg-[color:var(--sand)]" />
@@ -567,7 +567,7 @@ export default function LandingPage() {
 
               <div className="relative z-10 grid gap-8 sm:gap-12 lg:grid-cols-2 items-center">
                 <div className="space-y-6 rise-in">
-                  <Badge className="border-white/30 bg-white/20 text-white backdrop-blur-md">
+                  <Badge className="border-white/30 bg-white/20 text-white text-sm sm:text-base backdrop-blur-md">
                     <Coffee className="mr-2 h-3.5 w-3.5" />
                     Built for Arabica and Robusta coffee estates managing processing, labor, and inputs daily
                   </Badge>
@@ -581,13 +581,20 @@ export default function LandingPage() {
                     Run intake, Cherry-to-Parchment processing, labor tracking, consumables issuance, dispatch, and sales from one command center.
                   </p>
 
-                  <div className="grid gap-2 sm:grid-cols-2">
+                  <div className="grid gap-4 sm:grid-cols-2 mt-2">
                     {BULLETS.map((bullet) => (
                       <div key={bullet} className="flex items-start gap-2 text-sm text-white/85">
                         <CheckCircle2 className="mt-0.5 h-4 w-4 text-emerald-200" />
                         <span>{bullet}</span>
                       </div>
                     ))}
+                  </div>
+
+                  {/* Trust / credibility line */}
+                  <div className="mt-3 text-sm text-white/75 flex flex-wrap items-center gap-3">
+                    <span className="inline-block rounded-full bg-white/10 px-3 py-1">Pilot running with a multi-crop estate (coffee + pepper)</span>
+                    <span className="inline-block rounded-full bg-white/10 px-3 py-1">Designed with estate managers in Karnataka</span>
+                    <span className="inline-block rounded-full bg-white/10 px-3 py-1">Built with estates in Kodagu</span>
                   </div>
 
                   <div className="flex flex-col items-stretch gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:gap-4">
@@ -641,7 +648,7 @@ export default function LandingPage() {
                             </div>
                             <div>
                               <CardTitle className={`${display.className} text-xl`}>Estate Dashboard</CardTitle>
-                              <CardDescription>Representative estate · Western Ghats</CardDescription>
+                              <CardDescription>Representative estate · Kodagu, India</CardDescription>
                             </div>
                           </div>
                           <Badge className="w-fit bg-emerald-100 text-emerald-700 border-emerald-200">
@@ -650,6 +657,25 @@ export default function LandingPage() {
                         </div>
                       </CardHeader>
                       <CardContent className="space-y-4">
+                        {/* Estate-specific quick indicators */}
+                        <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+                          <div className="rounded-xl border border-emerald-200/60 bg-white/95 p-3">
+                            <p className="text-xs font-medium text-emerald-800">Conversion (Cherry → Parchment)</p>
+                            <p className={`${display.className} text-2xl font-bold text-emerald-900`}>46.4%</p>
+                            <p className="text-xs text-muted-foreground">Lot-level conversion, updated daily</p>
+                          </div>
+                          <div className="rounded-xl border border-rose-200/60 bg-white/95 p-3">
+                            <p className="text-xs font-medium text-rose-800">Float / Quality Loss</p>
+                            <p className={`${display.className} text-2xl font-bold text-rose-900`}>3.2%</p>
+                            <p className="text-xs text-muted-foreground">Float % highlights suspect cherries</p>
+                          </div>
+                          <div className="rounded-xl border border-slate-200/60 bg-white/95 p-3">
+                            <p className="text-xs font-medium text-slate-700">Bags (Ready · Dispatched · Sold)</p>
+                            <p className={`${display.className} text-2xl font-bold text-slate-900`}>120 · 40 · 18</p>
+                            <p className="text-xs text-muted-foreground">Operational dispatch snapshot</p>
+                          </div>
+                        </div>
+
                         {/* Current processing */}
                         <div className="rounded-xl border border-amber-200/70 bg-gradient-to-br from-amber-50/80 to-orange-50/50 p-4">
                           <div className="flex items-center justify-between mb-2">
@@ -709,6 +735,47 @@ export default function LandingPage() {
                       </div>
                     </div>
                   </div>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          {/* Conversion extras: 3-step strip + Why it matters */}
+          <section id="conversion-extras" className="mx-auto mt-8 w-full max-w-6xl space-y-6 scroll-mt-24">
+            <div className="space-y-2">
+              <h2 className={`${display.className} text-2xl font-semibold`}>How it works — three simple steps</h2>
+              <p className="text-muted-foreground">Start with the daily record, run processing, and close the loop to dispatch and sales.</p>
+            </div>
+
+            <div className="grid gap-4 sm:grid-cols-3">
+              <div className="rounded-xl border border-white/70 bg-white/85 p-4">
+                <p className="text-xs font-medium text-foreground">1. Record daily intake + processing</p>
+                <p className="mt-2 text-sm text-muted-foreground">Capture lot intake, cherry splits, and processing outputs by location.</p>
+              </div>
+              <div className="rounded-xl border border-white/70 bg-white/85 p-4">
+                <p className="text-xs font-medium text-foreground">2. Track labour + consumables by location</p>
+                <p className="mt-2 text-sm text-muted-foreground">Associate wages, fuel, and input usage with lots to understand cost per kg.</p>
+              </div>
+              <div className="rounded-xl border border-white/70 bg-white/85 p-4">
+                <p className="text-xs font-medium text-foreground">3. Reconcile inventory → dispatch → sales automatically</p>
+                <p className="mt-2 text-sm text-muted-foreground">Close the financial and physical loop so every bag is accounted for.</p>
+              </div>
+            </div>
+
+            <div className="rounded-xl border border-emerald-200/60 bg-gradient-to-br from-emerald-50/70 to-white/90 p-4">
+              <h3 className={`${display.className} text-xl font-semibold`}>Why it matters</h3>
+              <div className="mt-3 grid gap-3 sm:grid-cols-3">
+                <div className="text-sm">
+                  <p className="font-medium">Fewer losses</p>
+                  <p className="text-muted-foreground text-xs">Detect shrinkage and process variance before margin is lost.</p>
+                </div>
+                <div className="text-sm">
+                  <p className="font-medium">Faster decisions in drying/processing</p>
+                  <p className="text-muted-foreground text-xs">Act on moisture and conversion signals to reduce quality drift.</p>
+                </div>
+                <div className="text-sm">
+                  <p className="font-medium">Cleaner books + traceability</p>
+                  <p className="text-muted-foreground text-xs">Automated reconciliation ties physical stock to invoices and payments.</p>
                 </div>
               </div>
             </div>

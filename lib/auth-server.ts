@@ -13,7 +13,7 @@ const isMissingPasswordResetColumnError = (error: unknown) => {
 
 export type SessionUser = {
   username: string
-  role: "admin" | "user" | "owner"
+  role: "admin" | "user" | "viewer" | "owner"
   tenantId: string
   mfaEnabled?: boolean
   mfaVerified?: boolean
