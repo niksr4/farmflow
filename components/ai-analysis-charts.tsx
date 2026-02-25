@@ -352,7 +352,7 @@ export default function AiAnalysisCharts({ inventory, transactions }: AiAnalysis
 
   const laborChartConfig: ChartConfig = {
     hfCost: {
-      label: "HF Labor",
+      label: "Estate Labor",
       color: LABOR_COLORS[0],
     },
     outsideCost: {
@@ -420,7 +420,7 @@ export default function AiAnalysisCharts({ inventory, transactions }: AiAnalysis
       <Card className="xl:col-span-1">
         <CardHeader>
           <CardTitle>Monthly Labor Costs</CardTitle>
-          <CardDescription>HF vs Outside labor costs over time.</CardDescription>
+          <CardDescription>Estate vs outside labor costs over time.</CardDescription>
         </CardHeader>
         <CardContent>
           {laborCostData.length > 0 ? (

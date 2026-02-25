@@ -12,7 +12,7 @@ const adminErrorResponse = (error: any, fallback: string) => {
   return NextResponse.json({ success: false, error: message }, { status })
 }
 
-export async function GET(request: Request) {
+export async function GET(_request: Request) {
   try {
     const sessionUser = await requireAdminSession()
     requireOwnerRole(sessionUser.role)

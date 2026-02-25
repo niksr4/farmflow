@@ -311,7 +311,7 @@ export default function JournalTab() {
               <div className="space-y-2">
                 <Label>Plot / Block</Label>
                 <Input
-                  placeholder="e.g., HF A"
+                  placeholder="e.g., Block A"
                   value={form.plot}
                   onChange={(event) => setForm((prev) => ({ ...prev, plot: event.target.value }))}
                 />

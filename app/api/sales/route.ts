@@ -237,7 +237,18 @@ export async function GET(request: Request) {
       sql`
         SELECT 
           COALESCE(SUM(bags_sold), 0) as total_bags_sold,
-          COALESCE(SUM(COALESCE(NULLIF(kgs_received, 0), NULLIF(kgs, 0), bags_sold * ${bagWeightKg})), 0) as total_kgs_sold,
+          COALESCE(
+            SUM(
+              COALESCE(
+                NULLIF(kgs_received, 0),
+                NULLIF(kgs, 0),
+                NULLIF(weight_kgs, 0),
+                NULLIF(kgs_sent, 0),
+                bags_sold * ${bagWeightKg}
+              )
+            ),
+            0
+          ) as total_kgs_sold,
           COALESCE(SUM(revenue), 0) as total_revenue
         FROM sales_records
         WHERE tenant_id = ${tenantContext.tenantId}
@@ -257,7 +268,18 @@ export async function GET(request: Request) {
             ELSE COALESCE(NULLIF(trim(bag_type), ''), 'Unknown')
           END as bag_type,
           COALESCE(SUM(bags_sold), 0) as bags_sold,
-          COALESCE(SUM(COALESCE(NULLIF(kgs_received, 0), NULLIF(kgs, 0), bags_sold * ${bagWeightKg})), 0) as kgs_sold,
+          COALESCE(
+            SUM(
+              COALESCE(
+                NULLIF(kgs_received, 0),
+                NULLIF(kgs, 0),
+                NULLIF(weight_kgs, 0),
+                NULLIF(kgs_sent, 0),
+                bags_sold * ${bagWeightKg}
+              )
+            ),
+            0
+          ) as kgs_sold,
           COALESCE(SUM(revenue), 0) as revenue
         FROM sales_records
         WHERE tenant_id = ${tenantContext.tenantId}

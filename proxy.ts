@@ -5,7 +5,12 @@ import { getToken } from "next-auth/jwt"
 export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl
 
-  if (pathname.startsWith("/api/auth") || pathname.startsWith("/api/register-interest")) {
+  if (
+    pathname.startsWith("/api/auth") ||
+    pathname.startsWith("/api/register-interest") ||
+    pathname.startsWith("/api/cron/") ||
+    pathname.startsWith("/api/ops/error-ingest")
+  ) {
     return NextResponse.next()
   }
 

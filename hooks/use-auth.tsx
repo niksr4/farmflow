@@ -5,7 +5,7 @@ import type { ReactNode } from "react"
 
 interface User {
   username: string
-  role: "admin" | "user" | "viewer" | "owner"
+  role: "admin" | "user" | "owner"
   tenantId: string
   mfaEnabled?: boolean
   mfaVerified?: boolean

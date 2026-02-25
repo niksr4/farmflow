@@ -86,6 +86,20 @@ interface TenantProfile {
   featureFlags: TenantFeatureFlags
 }
 
+interface SystemHealthCheck {
+  id: string
+  label: string
+  status: "healthy" | "warning" | "critical" | "unknown"
+  value: string
+  detail: string
+  actionPath?: string
+}
+
+interface SystemHealthResponse {
+  generatedAt: string
+  checks: SystemHealthCheck[]
+}
+
 const AUDIT_ENTITY_TYPES = [
   { id: "all", label: "All modules" },
   { id: "processing_records", label: "Processing" },
@@ -123,6 +137,29 @@ const formatDeltaText = (delta: number, currency = false) => {
   if (delta === 0) return "no change"
   const abs = currency ? formatCurrency(Math.abs(delta)) : formatCount(Math.abs(delta))
   return `${delta > 0 ? "+" : "-"}${abs}`
+}
+
+const SYSTEM_HEALTH_STATUS_META: Record<SystemHealthCheck["status"], { label: string; chipClass: string; cardClass: string }> = {
+  healthy: {
+    label: "Healthy",
+    chipClass: "border-emerald-200 bg-emerald-50 text-emerald-700",
+    cardClass: "border-emerald-100 bg-emerald-50/30",
+  },
+  warning: {
+    label: "Warning",
+    chipClass: "border-amber-200 bg-amber-50 text-amber-700",
+    cardClass: "border-amber-100 bg-amber-50/30",
+  },
+  critical: {
+    label: "Critical",
+    chipClass: "border-rose-200 bg-rose-50 text-rose-700",
+    cardClass: "border-rose-100 bg-rose-50/30",
+  },
+  unknown: {
+    label: "Unknown",
+    chipClass: "border-slate-200 bg-slate-50 text-slate-700",
+    cardClass: "border-slate-100 bg-slate-50/30",
+  },
 }
 
 const buildWeeklySummaryText = (
@@ -227,6 +264,10 @@ export default function AdminPage() {
   const [weeklyEndDate, setWeeklyEndDate] = useState(DEFAULT_WEEKLY_END)
   const [weeklyCompareMode, setWeeklyCompareMode] = useState<"none" | "previous">("previous")
   const [isWeeklyLoading, setIsWeeklyLoading] = useState(false)
+  const [isSendingWeeklyWhatsApp, setIsSendingWeeklyWhatsApp] = useState(false)
+  const [systemHealth, setSystemHealth] = useState<SystemHealthResponse | null>(null)
+  const [isSystemHealthLoading, setIsSystemHealthLoading] = useState(false)
+  const [systemHealthError, setSystemHealthError] = useState<string | null>(null)
 
   const selectedTenant = useMemo(
     () => tenants.find((tenant) => tenant.id === selectedTenantId) || null,
@@ -347,6 +388,30 @@ export default function AdminPage() {
       setIsAuditLoading(false)
     }
   }, [toast])
+
+  const loadSystemHealth = useCallback(async () => {
+    if (!isOwner) return
+    setIsSystemHealthLoading(true)
+    setSystemHealthError(null)
+    try {
+      const response = await fetch("/api/admin/system-health")
+      const data = await response.json()
+      if (!response.ok || !data.success) {
+        throw new Error(data.error || "Failed to load system health")
+      }
+      setSystemHealth({
+        generatedAt: String(data.generatedAt || ""),
+        checks: Array.isArray(data.checks) ? data.checks : [],
+      })
+    } catch (error: any) {
+      setSystemHealth(null)
+      const message = error.message || "Failed to load system health"
+      setSystemHealthError(message)
+      toast({ title: "System health unavailable", description: message, variant: "destructive" })
+    } finally {
+      setIsSystemHealthLoading(false)
+    }
+  }, [isOwner, toast])
 
   const loadWeeklySummary = useCallback(async (): Promise<WeeklySummaryResponse | null> => {
     if (!selectedTenantId) {
@@ -488,11 +553,68 @@ export default function AdminPage() {
     summaryWindow.print()
   }
 
+  const handleSendWeeklySummaryWhatsApp = async () => {
+    if (!selectedTenantId) return
+
+    let textToSend = weeklySummaryText
+    if (!textToSend) {
+      const payload = await loadWeeklySummary()
+      if (!payload) return
+      textToSend = buildWeeklySummaryText(
+        payload.summary,
+        selectedTenant?.name || "Tenant",
+        payload.range,
+        payload.compareSummary,
+        payload.compareRange,
+      )
+    }
+
+    setIsSendingWeeklyWhatsApp(true)
+    try {
+      const response = await fetch("/api/admin/weekly-summary/whatsapp", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          tenantId: selectedTenantId,
+          message: textToSend,
+        }),
+      })
+      const data = await response.json().catch(() => ({}))
+      if (!response.ok || !data.success) {
+        throw new Error(data.error || "Failed to send WhatsApp summary")
+      }
+
+      const recipients = Array.isArray(data.notification?.recipients) ? data.notification.recipients : []
+      const sentCount = recipients.filter((item: any) => item?.sent).length
+      toast({
+        title: "WhatsApp summary sent",
+        description: sentCount > 0 ? `Delivered to ${sentCount} recipient(s).` : "No deliveries were confirmed.",
+      })
+    } catch (error: any) {
+      toast({
+        title: "WhatsApp send failed",
+        description: error.message || "Unable to send WhatsApp summary.",
+        variant: "destructive",
+      })
+    } finally {
+      setIsSendingWeeklyWhatsApp(false)
+    }
+  }
+
   useEffect(() => {
     if (isOwner) {
       loadTenants()
     }
   }, [isOwner, loadTenants])
+
+  useEffect(() => {
+    if (!isOwner) {
+      setSystemHealth(null)
+      setSystemHealthError(null)
+      return
+    }
+    loadSystemHealth()
+  }, [isOwner, loadSystemHealth])
 
   useEffect(() => {
     if (selectedTenantId) {
@@ -963,7 +1085,27 @@ export default function AdminPage() {
       : null
   const enabledModuleCount = modulePermissions.filter((module) => module.enabled).length
   const selectedUser = users.find((u) => u.id === selectedUserId) || null
-  const isSelectedUserRoleScoped = selectedUser?.role === "user" || selectedUser?.role === "viewer"
+  const isSelectedUserRoleScoped = selectedUser?.role === "user"
+  const systemHealthGeneratedLabel = systemHealth?.generatedAt ? formatDateForDisplay(systemHealth.generatedAt) : null
+  const systemHealthCounts = useMemo(() => {
+    const counts = { healthy: 0, warning: 0, critical: 0, unknown: 0 }
+    ;(systemHealth?.checks || []).forEach((check) => {
+      if (check.status === "critical") counts.critical += 1
+      else if (check.status === "warning") counts.warning += 1
+      else if (check.status === "healthy") counts.healthy += 1
+      else counts.unknown += 1
+    })
+    return counts
+  }, [systemHealth?.checks])
+  const sortedSystemChecks = useMemo(() => {
+    const rank: Record<SystemHealthCheck["status"], number> = {
+      critical: 3,
+      warning: 2,
+      unknown: 1,
+      healthy: 0,
+    }
+    return [...(systemHealth?.checks || [])].sort((a, b) => (rank[b.status] || 0) - (rank[a.status] || 0))
+  }, [systemHealth?.checks])
   const ownerSectionLinks: Array<{ id: string; label: string }> = [
     { id: "tenant-users", label: "Users" },
     { id: "user-module-overrides", label: "User Access" },
@@ -972,6 +1114,7 @@ export default function AdminPage() {
     ownerSectionLinks.unshift(
       { id: "tenants", label: "Tenants" },
       { id: "weekly-summary", label: "Weekly KPI" },
+      { id: "system-health", label: "System Health" },
       { id: "tenant-profile", label: "Profile" },
       { id: "tenant-modules", label: "Modules" },
       { id: "seed-data", label: "Seed Data" },
@@ -1027,18 +1170,101 @@ export default function AdminPage() {
               </a>
             ))}
           </div>
-          {isOwner && selectedTenantId && (
+          {isOwner && (
             <div className="flex flex-wrap gap-2">
-              <Button size="sm" onClick={() => handleOpenTenantPreview(false)}>
-                Preview as {previewRole === "admin" ? "Estate Admin" : "Estate User"}
-              </Button>
-              <Button size="sm" variant="outline" onClick={() => handleOpenTenantPreview(true)}>
-                Preview in new tab
+              {selectedTenantId && (
+                <>
+                  <Button size="sm" onClick={() => handleOpenTenantPreview(false)}>
+                    Preview as {previewRole === "admin" ? "Estate Admin" : "Estate User"}
+                  </Button>
+                  <Button size="sm" variant="outline" onClick={() => handleOpenTenantPreview(true)}>
+                    Preview in new tab
+                  </Button>
+                </>
+              )}
+              <Button asChild size="sm" variant="outline">
+                <a href="/admin/register-interest">Request Access Inbox</a>
               </Button>
             </div>
           )}
         </CardContent>
       </Card>
+
+      {isOwner && (
+        <Card id="system-health" className="scroll-mt-24 border-border/70 bg-white/85">
+          <CardHeader className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+            <div>
+              <CardTitle>System Health</CardTitle>
+              <CardDescription>Daily checks from data-integrity, log-anomaly, imports, and error telemetry.</CardDescription>
+            </div>
+            <div className="flex items-center gap-2">
+              {systemHealthGeneratedLabel ? (
+                <span className="text-xs text-muted-foreground">Updated {systemHealthGeneratedLabel}</span>
+              ) : null}
+              <Button size="sm" variant="outline" className="bg-transparent" onClick={loadSystemHealth} disabled={isSystemHealthLoading}>
+                {isSystemHealthLoading ? "Refreshing..." : "Refresh"}
+              </Button>
+            </div>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            {isSystemHealthLoading && !systemHealth ? (
+              <p className="text-sm text-muted-foreground">Loading system health...</p>
+            ) : systemHealthError ? (
+              <p className="text-sm text-rose-600">{systemHealthError}</p>
+            ) : !systemHealth || systemHealth.checks.length === 0 ? (
+              <p className="text-sm text-muted-foreground">No health checks found yet.</p>
+            ) : (
+              <>
+                <div className="flex flex-wrap gap-2">
+                  <span className="rounded-full border border-rose-200 bg-rose-50 px-2.5 py-1 text-xs font-medium text-rose-700">
+                    Critical {systemHealthCounts.critical}
+                  </span>
+                  <span className="rounded-full border border-amber-200 bg-amber-50 px-2.5 py-1 text-xs font-medium text-amber-700">
+                    Warning {systemHealthCounts.warning}
+                  </span>
+                  <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-xs font-medium text-emerald-700">
+                    Healthy {systemHealthCounts.healthy}
+                  </span>
+                  <span className="rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-xs font-medium text-slate-700">
+                    Unknown {systemHealthCounts.unknown}
+                  </span>
+                </div>
+                <div className="grid gap-3 md:grid-cols-2">
+                {sortedSystemChecks.map((check) => {
+                  const meta = SYSTEM_HEALTH_STATUS_META[check.status] || SYSTEM_HEALTH_STATUS_META.unknown
+                  return (
+                    <div key={check.id} data-testid={`system-health-check-${check.id}`} className={`rounded-lg border p-3 ${meta.cardClass}`}>
+                      <div className="flex items-start justify-between gap-2">
+                        <div>
+                          <p className="text-sm font-semibold text-foreground">{check.label}</p>
+                          <p className="text-xs text-muted-foreground">{check.value}</p>
+                        </div>
+                        <span className={`rounded-full border px-2 py-0.5 text-[11px] font-medium ${meta.chipClass}`}>
+                          {meta.label}
+                        </span>
+                      </div>
+                      <p className="mt-2 text-xs text-muted-foreground">{check.detail}</p>
+                      {check.actionPath ? (
+                        <div className="mt-2">
+                          <a
+                            href={check.actionPath}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="text-xs font-medium text-emerald-700 hover:underline"
+                          >
+                            Open details
+                          </a>
+                        </div>
+                      ) : null}
+                    </div>
+                  )
+                })}
+                </div>
+              </>
+            )}
+          </CardContent>
+        </Card>
+      )}
 
       {isOwner && (
         <Card id="tenants" className="scroll-mt-24 border-border/70 bg-white/85">
@@ -1232,6 +1458,14 @@ export default function AdminPage() {
                 disabled={!selectedTenantId}
               >
                 Copy WhatsApp summary
+              </Button>
+              <Button
+                variant="outline"
+                className="w-full sm:w-auto"
+                onClick={handleSendWeeklySummaryWhatsApp}
+                disabled={!selectedTenantId || isSendingWeeklyWhatsApp}
+              >
+                {isSendingWeeklyWhatsApp ? "Sending WhatsApp..." : "Send to WhatsApp"}
               </Button>
               <Button
                 variant="outline"
@@ -1500,7 +1734,6 @@ export default function AdminPage() {
                 <SelectContent>
                   <SelectItem value="admin">Admin</SelectItem>
                   <SelectItem value="user">User</SelectItem>
-                  <SelectItem value="viewer">Viewer (Read-only)</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -1553,7 +1786,6 @@ export default function AdminPage() {
                               <SelectContent>
                                 <SelectItem value="admin">Admin</SelectItem>
                                 <SelectItem value="user">User</SelectItem>
-                                <SelectItem value="viewer">Viewer (Read-only)</SelectItem>
                               </SelectContent>
                             </Select>
                           )}
@@ -1663,7 +1895,7 @@ export default function AdminPage() {
           </div>
           {isSelectedUserRoleScoped && (
             <p className="text-xs text-muted-foreground">
-              Live Balance Sheet is admin-only and remains disabled for user/viewer roles.
+              Live Balance Sheet is admin-only and remains disabled for user roles.
             </p>
           )}
 

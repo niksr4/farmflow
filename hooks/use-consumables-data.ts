@@ -44,25 +44,29 @@ export function useConsumablesData(locationId?: string, options: ConsumablesData
           setLoading(true)
         }
 
-      const query = new URLSearchParams()
-      query.set("limit", pageSize.toString())
-      query.set("offset", String(pageIndex * pageSize))
+        const query = new URLSearchParams()
+        query.set("limit", pageSize.toString())
+        query.set("offset", String(pageIndex * pageSize))
         if (locationId) {
           query.set("locationId", locationId)
         }
 
-        const response = await fetch(`/api/expenses-neon?${query.toString()}`)
+        const response = await fetch(`/api/expenses-neon?${query.toString()}`, {
+          method: "GET",
+          cache: "no-store",
+        })
         if (!response.ok) {
           const errorText = await response.text()
           console.error("❌ Failed to load deployments:", errorText)
           setDeployments([])
           setHasMore(false)
+          setTotalCount(0)
+          setTotalAmount(0)
           return
         }
         const data = await response.json()
 
-
-        if (data.success && data.deployments) {
+        if (data.success && Array.isArray(data.deployments)) {
           const nextTotalCount = Number(data.totalCount) || 0
           const nextTotalAmount = Number(data.totalAmount) || 0
           setTotalCount(nextTotalCount)
@@ -83,11 +87,15 @@ export function useConsumablesData(locationId?: string, options: ConsumablesData
           console.error("❌ Failed to load deployments:", data)
           setDeployments([])
           setHasMore(false)
+          setTotalCount(0)
+          setTotalAmount(0)
         }
       } catch (error) {
         console.error("❌ Error fetching deployments:", error)
         setDeployments([])
         setHasMore(false)
+        setTotalCount(0)
+        setTotalAmount(0)
       } finally {
         if (append) {
           setLoadingMore(false)

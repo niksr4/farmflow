@@ -63,7 +63,11 @@ interface AccountsIntelligence {
   highlights: string[]
 }
 
-export default function AccountsPage() {
+type AccountsPageProps = {
+  showDataToolsControls?: boolean
+}
+
+export default function AccountsPage({ showDataToolsControls = false }: AccountsPageProps) {
   const { isAdmin, user } = useAuth()
   const canManageActivities = isAdmin || user?.role === "owner"
   const { deployments: laborDeployments, loading: laborLoading, totalCount: laborCount } = useLaborData()
@@ -77,7 +81,6 @@ export default function AccountsPage() {
   const [exportEndDate, setExportEndDate] = useState<string>("")
   const [accountActivities, setAccountActivities] = useState<AccountActivity[]>([])
   const [activities, setActivities] = useState<Activity[]>([])
-  const [isLoading, setIsLoading] = useState(true)
   const [loadingActivities, setLoadingActivities] = useState(false)
   const [isAddingActivity, setIsAddingActivity] = useState(false)
   const [newActivityCode, setNewActivityCode] = useState("")
@@ -200,7 +203,6 @@ export default function AccountsPage() {
 
   const fetchAllActivities = async () => {
     try {
-      setIsLoading(true)
       const response = await fetch("/api/get-activity")
       const data = await response.json()
 
@@ -214,8 +216,6 @@ export default function AccountsPage() {
       }
     } catch (error) {
       console.error("Error fetching activities:", error)
-    } finally {
-      setIsLoading(false)
     }
   }
 
@@ -481,7 +481,7 @@ export default function AccountsPage() {
       "Entry Type",
       "Code",
       "Reference",
-      "HF Labor Details",
+      "Estate Labor Details",
       "Outside Labor Details",
       "Total Expenditure (₹)",
       "Notes",
@@ -561,8 +561,8 @@ export default function AccountsPage() {
       "",
       "",
       "",
-      "Total HF Labor",
-      `HF: ${totalHfLaborCount.toFixed(1)} laborers`,
+      "Total Estate Labor",
+      `Estate: ${totalHfLaborCount.toFixed(1)} laborers`,
       "",
       totalHfLaborCost.toFixed(2),
       "",
@@ -641,7 +641,7 @@ export default function AccountsPage() {
 
           if (d.laborEntries && d.laborEntries.length > 0) {
             const hfDetail = d.laborEntries[0]
-              ? `HF: ${d.laborEntries[0].laborCount}@${d.laborEntries[0].costPerLabor.toFixed(2)}`
+              ? `Estate: ${d.laborEntries[0].laborCount}@${d.laborEntries[0].costPerLabor.toFixed(2)}`
               : ""
             const outsideDetails = d.laborEntries
               .slice(1)
@@ -883,7 +883,7 @@ export default function AccountsPage() {
         </CardContent>
       </Card>
 
-      {isAdmin && hasAnyData && (
+      {showDataToolsControls && isAdmin && hasAnyData && (
         <Card>
           <CardHeader>
             <div className="flex justify-between items-start">

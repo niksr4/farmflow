@@ -4,7 +4,7 @@ import { redirect } from "next/navigation"
 
 export default async function SettingsPage() {
   const sessionUser = await requireSessionUser()
-  if (sessionUser.role === "user" || sessionUser.role === "viewer") {
+  if (sessionUser.role === "user") {
     redirect("/dashboard")
   }
 

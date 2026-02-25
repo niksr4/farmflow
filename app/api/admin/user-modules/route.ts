@@ -11,7 +11,7 @@ const MODULE_LABEL_BY_ID = new Map(MODULES.map((module) => [module.id, module.la
 const SCOPED_ROLE_DISABLED_MODULES = new Set(["balance-sheet"])
 
 const applyUserRoleModulePolicy = (role: string, moduleId: string, enabled: boolean) =>
-  (role === "user" || role === "viewer") && SCOPED_ROLE_DISABLED_MODULES.has(moduleId) ? false : enabled
+  role === "user" && SCOPED_ROLE_DISABLED_MODULES.has(moduleId) ? false : enabled
 
 const adminErrorResponse = (error: any, fallback: string) => {
   const message = error?.message || fallback

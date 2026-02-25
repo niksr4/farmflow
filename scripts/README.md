@@ -165,11 +165,15 @@ Run these scripts (in order) on the target database:
 13. `29-backfill-tenant-ids.sql` (set tenant_id on legacy rows before enabling RLS)
 14. `47-receivables.sql` (optional, add receivables tracking before enabling RLS)
 15. `51-other-sales.sql` (optional, add side-crop sales tab support)
-16. `52-add-viewer-role.sql` (optional, add read-only `viewer` role)
-17. `22-enable-rls.sql` (enable row-level security after data is in place)
-18. `30-lock-legacy-tables.sql` (optional, prevent writes to deprecated legacy tables)
-19. `31-drop-legacy-tables.sql` (optional, permanently remove legacy tables after verification)
-20. `49-password-rotation.sql` (optional, required for forced password rotation after admin resets)
+16. `22-enable-rls.sql` (enable row-level security after data is in place)
+17. `30-lock-legacy-tables.sql` (optional, prevent writes to deprecated legacy tables)
+18. `31-drop-legacy-tables.sql` (optional, permanently remove legacy tables after verification)
+19. `49-password-rotation.sql` (optional, required for forced password rotation after admin resets)
+20. `53-processing-recompute-and-composite-indexes.sql` (optional, recompute processing totals from daily values and add tenant+location+date indexes)
+21. `54-agent-ops.sql` (optional, enables agent runs, anomaly clusters, and persisted data integrity exceptions)
+22. `55-document-records.sql` (optional, tenant-scoped document upload trail for invoices/dispatch/lab/weighbridge files)
+23. `56-import-jobs.sql` (optional, validate/commit CSV imports with audit-trail job tokens)
+24. `57-import-jobs-hardening.sql` (optional, adds requester-user FK support, tighter import job checks, and retention metadata)
 
 New tables:
 - `locations`
@@ -177,6 +181,8 @@ New tables:
 - `pepper_records`
 - `tenant_modules`
 - `user_modules` (per-user module overrides)
+- `document_records` (optional upload trail with tenant/location links)
+- `import_jobs` (optional import dry-run + commit audit trail)
 
 Legacy tables (`hf_arabica`, `hf_robusta`, `mv_robusta`, `pg_robusta`, `hf_pepper`, `mv_pepper`, `pg_pepper`) are kept for reference but should be treated as deprecated once migrated.
 Optional hardening: run `30-lock-legacy-tables.sql` to prevent writes to legacy tables after you confirm the app uses the normalized tables.

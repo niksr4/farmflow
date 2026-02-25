@@ -1,4 +1,4 @@
-export type UserRole = "owner" | "admin" | "user" | "viewer"
+export type UserRole = "owner" | "admin" | "user"
 
 const USER_WRITE_MODULES = new Set<string>([
   "inventory",
@@ -20,7 +20,7 @@ export const canWriteModule = (role: UserRole, moduleId: string) => {
   return role === "user" && USER_WRITE_MODULES.has(moduleId)
 }
 
-export const canDeleteModule = (role: UserRole, moduleId: string) => {
+export const canDeleteModule = (role: UserRole, _moduleId: string) => {
   if (isAdminRole(role)) return true
   return false
 }

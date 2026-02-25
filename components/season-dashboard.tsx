@@ -14,7 +14,7 @@ import { useAuth } from "@/hooks/use-auth"
 import { useTenantSettings } from "@/hooks/use-tenant-settings"
 import { useToast } from "@/hooks/use-toast"
 import { getAvailableFiscalYears, getCurrentFiscalYear, getFiscalYearDateRange, type FiscalYear } from "@/lib/fiscal-year-utils"
-import { useRouter } from "next/navigation"
+import { useRouter, useSearchParams } from "next/navigation"
 
 type SeasonBreakdown = {
   coffeeType: string
@@ -286,6 +286,8 @@ const formatKgAndBags = (kgs: number, bagWeightKg: number) => {
 }
 
 const formatPercent = (value: number, digits = 1) => `${formatNumber(value * 100, digits)}%`
+const DASHBOARD_SEASON_ALERT_ID_PARAM = "seasonAlertId"
+const DASHBOARD_SEASON_METRIC_PARAM = "seasonMetric"
 
 const buildSparkPath = (values: number[], width = 120, height = 32) => {
   if (!values.length) return ""
@@ -497,6 +499,9 @@ export default function SeasonDashboard() {
   const { toast } = useToast()
   const { settings, updateSettings, loading: settingsLoading } = useTenantSettings()
   const router = useRouter()
+  const searchParams = useSearchParams()
+  const focusedAlertId = (searchParams.get(DASHBOARD_SEASON_ALERT_ID_PARAM) || "").trim()
+  const focusedMetric = (searchParams.get(DASHBOARD_SEASON_METRIC_PARAM) || "").trim()
   const [selectedFiscalYear, setSelectedFiscalYear] = useState<FiscalYear>(getCurrentFiscalYear())
   const availableFiscalYears = useMemo(() => getAvailableFiscalYears(), [])
   const [summary, setSummary] = useState<SeasonSummary | null>(null)
@@ -803,6 +808,25 @@ export default function SeasonDashboard() {
     loadWeeklyExceptions()
   }, [loadWeeklyExceptions])
 
+  useEffect(() => {
+    if (typeof window === "undefined") return
+    if (!weeklyExceptions) return
+    if (!focusedAlertId && !focusedMetric) return
+
+    const normalizedAlertId = focusedAlertId.trim()
+    const normalizedMetric = focusedMetric.trim()
+    const focusTarget = normalizedAlertId
+      ? `season-alert-${normalizedAlertId}`
+      : normalizedMetric
+        ? `season-alert-metric-${normalizedMetric}`
+        : ""
+    if (!focusTarget) return
+    const target = document.getElementById(focusTarget)
+    if (target) {
+      target.scrollIntoView({ behavior: "smooth", block: "center" })
+    }
+  }, [focusedAlertId, focusedMetric, weeklyExceptions])
+
   const ownerBrief = useMemo(() => {
     if (!summary || !weeklyExceptions) return null
     const severityRank: Record<WeeklyExceptionAlert["severity"], number> = { high: 3, medium: 2, low: 1 }
@@ -916,7 +940,7 @@ export default function SeasonDashboard() {
       ...actions.map((line) => `- ${line}`),
     ].join("\n")
 
-    return { highlights, trends, actions, windowLabel, text }
+    return { highlights, trends, actions, topAlerts, windowLabel, text }
   }, [summary, weeklyExceptions])
 
   const handleCopyBrief = async () => {
@@ -1059,8 +1083,23 @@ export default function SeasonDashboard() {
                 </div>
               ) : (
                 <div className="space-y-2">
-                  {(weeklyExceptions?.alerts || []).map((alert) => (
-                    <Alert key={alert.id} variant={getAlertTone(alert.severity)}>
+                  {(weeklyExceptions?.alerts || []).map((alert) => {
+                    const isFocused =
+                      (focusedAlertId && String(alert.id) === focusedAlertId) ||
+                      (!focusedAlertId && Boolean(focusedMetric) && String(alert.metric || "") === focusedMetric)
+                    return (
+                    <Alert
+                      key={alert.id}
+                      id={
+                        isFocused
+                          ? focusedAlertId
+                            ? `season-alert-${focusedAlertId}`
+                            : `season-alert-metric-${focusedMetric}`
+                          : `season-alert-${alert.id}`
+                      }
+                      variant={getAlertTone(alert.severity)}
+                      className={isFocused ? "ring-2 ring-emerald-400 border-emerald-200 bg-emerald-50/50" : ""}
+                    >
                       <AlertTriangle className="h-4 w-4" />
                       <AlertTitle>{alert.title}</AlertTitle>
                       <AlertDescription className="flex flex-col gap-2">
@@ -1077,7 +1116,7 @@ export default function SeasonDashboard() {
                         )}
                       </AlertDescription>
                     </Alert>
-                  ))}
+                  )})}
                 </div>
               )}
               {weeklyExceptions?.window && (
@@ -1108,9 +1147,24 @@ export default function SeasonDashboard() {
                 <div className="space-y-2">
                   <div className="text-sm font-semibold">Highlights</div>
                   <div className="space-y-1 text-sm text-muted-foreground">
-                    {ownerBrief.highlights.map((line) => (
-                      <div key={line}>• {line}</div>
-                    ))}
+                    {ownerBrief.highlights.map((line, index) => {
+                      const sourceAlert = ownerBrief.topAlerts?.[index]
+                      const drilldownTab = resolveDrilldownTab(sourceAlert?.metric)
+                      if (!sourceAlert || !drilldownTab) {
+                        return <div key={line}>• {line}</div>
+                      }
+                      return (
+                        <button
+                          key={line}
+                          type="button"
+                          data-testid={`season-brief-highlight-${index + 1}`}
+                          className="block w-full rounded-md border border-transparent px-2 py-1 text-left transition-colors hover:border-emerald-100 hover:bg-emerald-50/50"
+                          onClick={() => handleDrilldown(sourceAlert.metric)}
+                        >
+                          • {line}
+                        </button>
+                      )
+                    })}
                   </div>
                 </div>
                 <div className="space-y-2">

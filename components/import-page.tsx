@@ -1,7 +1,9 @@
 "use client"
 
-import { useMemo, useState } from "react"
+import { useCallback, useEffect, useMemo, useState } from "react"
 import Link from "next/link"
+import { useSearchParams } from "next/navigation"
+import { ArrowLeft } from "lucide-react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Label } from "@/components/ui/label"
@@ -11,127 +13,63 @@ import { useToast } from "@/hooks/use-toast"
 import { useAuth } from "@/hooks/use-auth"
 import { parseCsv } from "@/lib/csv"
 import { apiRequest } from "@/lib/api-client"
-import { ArrowLeft } from "lucide-react"
+import { datasetTemplateCsv, IMPORT_DATASETS, IMPORT_DATASET_MAP, isImportDatasetId, type ImportDatasetId } from "@/lib/data-tools"
 
-const DATASETS = [
-  {
-    id: "processing",
-    label: "Processing Records",
-    description: "Import daily coffee processing by location.",
-    template: [
-      "process_date",
-      "location",
-      "coffee_type",
-      "crop_today",
-      "ripe_today",
-      "green_today",
-      "float_today",
-      "wet_parchment",
-      "dry_parch",
-      "dry_cherry",
-      "moisture_pct",
-      "lot_id",
-      "notes",
-    ],
-    tips: "Location can be HF/MV/PG or full name. Coffee type: Arabica/Robusta.",
-  },
-  {
-    id: "dispatch",
-    label: "Dispatch Records",
-    description: "Import dispatches (bags sent and KGs received).",
-    template: [
-      "dispatch_date",
-      "location",
-      "coffee_type",
-      "bag_type",
-      "bags_dispatched",
-      "kgs_received",
-      "lot_id",
-      "notes",
-    ],
-    tips: "Bag type: Dry Parchment or Dry Cherry.",
-  },
-  {
-    id: "sales",
-    label: "Sales Records",
-    description: "Import sales (bags sold and pricing).",
-    template: [
-      "sale_date",
-      "location",
-      "coffee_type",
-      "bag_type",
-      "bags_sold",
-      "price_per_bag",
-      "buyer_name",
-      "batch_no",
-      "lot_id",
-      "notes",
-    ],
-    tips: "You can use price_per_kg instead of price_per_bag.",
-  },
-  {
-    id: "pepper",
-    label: "Pepper Records",
-    description: "Import pepper processing by location.",
-    template: ["process_date", "location", "kg_picked", "green_pepper", "dry_pepper", "notes"],
-    tips: "If % columns are omitted, they are calculated from picked KGs.",
-  },
-  {
-    id: "rainfall",
-    label: "Rainfall Records",
-    description: "Import rainfall measurements.",
-    template: ["record_date", "inches", "notes"],
-    tips: "You can also use mm or millimeters columns.",
-  },
-  {
-    id: "transactions",
-    label: "Inventory Transactions",
-    description: "Import inventory transactions (restock/deplete).",
-    template: ["transaction_date", "item_type", "transaction_type", "quantity", "price", "notes"],
-    tips: "Transaction type can be restock or deplete.",
-  },
-  {
-    id: "inventory",
-    label: "Opening Inventory",
-    description: "Import opening inventory balances.",
-    template: ["item_type", "unit", "quantity", "price", "notes"],
-    tips: "Creates a restock transaction for each item.",
-  },
-  {
-    id: "labor",
-    label: "Labor Deployments",
-    description: "Import labor deployments and costs.",
-    template: [
-      "deployment_date",
-      "location",
-      "code",
-      "hf_laborers",
-      "hf_cost_per_laborer",
-      "outside_laborers",
-      "outside_cost_per_laborer",
-      "total_cost",
-      "notes",
-    ],
-    tips: "total_cost is optional and will be computed if missing.",
-  },
-  {
-    id: "expenses",
-    label: "Other Expenses",
-    description: "Import expense entries.",
-    template: ["entry_date", "location", "code", "total_amount", "notes"],
-    tips: "Use the account activity code for `code`.",
-  },
-]
+interface ImportIssue {
+  row: number
+  message: string
+}
+
+interface ImportBulkResponse {
+  success: boolean
+  mode: "validate" | "commit"
+  valid?: boolean
+  rowCount?: number
+  imported: number
+  skipped: number
+  errors?: ImportIssue[]
+  validationToken?: string | null
+  expiresAt?: string | null
+}
+
+const formatExpiry = (value: string | null) => {
+  if (!value) return null
+  const parsed = new Date(value)
+  if (Number.isNaN(parsed.getTime())) return value
+  return parsed.toLocaleString()
+}
 
 export default function ImportPage() {
   const { user } = useAuth()
   const { toast } = useToast()
-  const [dataset, setDataset] = useState<string>(DATASETS[0].id)
+  const searchParams = useSearchParams()
+  const [dataset, setDataset] = useState<ImportDatasetId>(IMPORT_DATASETS[0].id)
   const [csvText, setCsvText] = useState<string>("")
-  const [isImporting, setIsImporting] = useState(false)
-  const [result, setResult] = useState<any>(null)
+  const [isValidating, setIsValidating] = useState(false)
+  const [isCommitting, setIsCommitting] = useState(false)
+  const [validationResult, setValidationResult] = useState<ImportBulkResponse | null>(null)
+  const [commitResult, setCommitResult] = useState<ImportBulkResponse | null>(null)
+  const [validationToken, setValidationToken] = useState<string | null>(null)
+  const [validationExpiresAt, setValidationExpiresAt] = useState<string | null>(null)
+  const [validatedDataset, setValidatedDataset] = useState<ImportDatasetId | null>(null)
 
-  const datasetConfig = useMemo(() => DATASETS.find((item) => item.id === dataset) || DATASETS[0], [dataset])
+  const resetValidationState = useCallback(() => {
+    setValidationToken(null)
+    setValidationExpiresAt(null)
+    setValidationResult(null)
+    setCommitResult(null)
+    setValidatedDataset(null)
+  }, [])
+
+  useEffect(() => {
+    const requestedDataset = searchParams.get("dataset")
+    if (isImportDatasetId(requestedDataset)) {
+      setDataset(requestedDataset)
+      resetValidationState()
+    }
+  }, [resetValidationState, searchParams])
+
+  const datasetConfig = useMemo(() => IMPORT_DATASET_MAP[dataset] || IMPORT_DATASETS[0], [dataset])
   const preview = useMemo(() => {
     if (!csvText.trim()) return null
     try {
@@ -141,20 +79,23 @@ export default function ImportPage() {
     }
   }, [csvText])
 
-  const templateCsv = useMemo(() => `${datasetConfig.template.join(",")}` + "\n", [datasetConfig])
+  const templateCsv = useMemo(() => datasetTemplateCsv(dataset), [dataset])
+  const expiresAtLabel = useMemo(() => formatExpiry(validationExpiresAt), [validationExpiresAt])
+  const canCommit = Boolean(validationToken && validatedDataset === dataset && !isValidating && !isCommitting)
 
   const handleFile = (file?: File | null) => {
     if (!file) return
     const reader = new FileReader()
     reader.onload = () => {
       setCsvText(String(reader.result || ""))
+      resetValidationState()
     }
     reader.readAsText(file)
   }
 
-  const handleImport = async () => {
+  const handleValidate = async () => {
     if (!csvText.trim()) {
-      toast({ title: "CSV required", description: "Paste or upload CSV before importing." })
+      toast({ title: "CSV required", description: "Paste or upload CSV before validating." })
       return
     }
     if (!user) {
@@ -162,22 +103,68 @@ export default function ImportPage() {
       return
     }
 
-    setIsImporting(true)
-    setResult(null)
+    setIsValidating(true)
+    setCommitResult(null)
     try {
-      const data = await apiRequest<{ success: boolean; imported: number; skipped: number; errors?: any[] }>(
-        "/api/import-bulk",
-        {
-          method: "POST",
-          body: JSON.stringify({ dataset, csv: csvText }),
-        },
-      )
-      setResult(data)
+      const data = await apiRequest<ImportBulkResponse>("/api/import-bulk", {
+        method: "POST",
+        body: JSON.stringify({ dataset, csv: csvText, mode: "validate" }),
+      })
+
+      setValidationResult(data)
+      if (data.valid && data.validationToken) {
+        setValidationToken(data.validationToken)
+        setValidationExpiresAt(data.expiresAt || null)
+        setValidatedDataset(dataset)
+        toast({
+          title: "Validation passed",
+          description: `${data.rowCount || 0} rows are ready to import.`,
+        })
+      } else {
+        setValidationToken(null)
+        setValidationExpiresAt(null)
+        setValidatedDataset(null)
+        toast({
+          title: "Validation failed",
+          description: `${(data.errors || []).length} row(s) need fixes before import.`,
+          variant: "destructive",
+        })
+      }
+    } catch (error: any) {
+      setValidationToken(null)
+      setValidationExpiresAt(null)
+      setValidatedDataset(null)
+      toast({ title: "Validation failed", description: error.message || "Failed to validate CSV", variant: "destructive" })
+    } finally {
+      setIsValidating(false)
+    }
+  }
+
+  const handleCommit = async () => {
+    if (!canCommit || !validationToken) {
+      toast({ title: "Validate first", description: "Run CSV validation before committing import." })
+      return
+    }
+    if (!user) {
+      toast({ title: "Session missing", description: "Please sign in again." })
+      return
+    }
+
+    setIsCommitting(true)
+    try {
+      const data = await apiRequest<ImportBulkResponse>("/api/import-bulk", {
+        method: "POST",
+        body: JSON.stringify({ dataset, mode: "commit", validationToken }),
+      })
+      setCommitResult(data)
       toast({ title: "Import complete", description: `${data.imported || 0} rows imported.` })
+      setValidationToken(null)
+      setValidationExpiresAt(null)
+      setValidatedDataset(null)
     } catch (error: any) {
       toast({ title: "Import failed", description: error.message || "Failed to import CSV", variant: "destructive" })
     } finally {
-      setIsImporting(false)
+      setIsCommitting(false)
     }
   }
 
@@ -194,18 +181,26 @@ export default function ImportPage() {
       <Card>
         <CardHeader>
           <CardTitle>Data Import</CardTitle>
-          <CardDescription>Upload CSV data to onboard a new tenant faster.</CardDescription>
+          <CardDescription>Validate first, then commit to safely onboard tenant data.</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
-          <div className="grid grid-cols-1 md:grid-cols-[1fr_auto] gap-4 items-end">
+          <div className="grid grid-cols-1 items-end gap-4 md:grid-cols-[1fr_auto]">
             <div className="space-y-2">
               <Label>Dataset</Label>
-              <Select value={dataset} onValueChange={setDataset}>
+              <Select
+                value={dataset}
+                onValueChange={(value) => {
+                  if (isImportDatasetId(value)) {
+                    setDataset(value)
+                    resetValidationState()
+                  }
+                }}
+              >
                 <SelectTrigger>
                   <SelectValue placeholder="Choose dataset" />
                 </SelectTrigger>
                 <SelectContent>
-                  {DATASETS.map((item) => (
+                  {IMPORT_DATASETS.map((item) => (
                     <SelectItem key={item.id} value={item.id}>
                       {item.label}
                     </SelectItem>
@@ -216,19 +211,36 @@ export default function ImportPage() {
               <p className="text-xs text-muted-foreground">{datasetConfig.tips}</p>
             </div>
             <div className="flex items-end">
-              <Button
-                variant="outline"
-                onClick={() => {
-                  navigator.clipboard.writeText(templateCsv)
-                  toast({ title: "Template copied", description: "Paste it into Excel or Google Sheets." })
-                }}
-              >
-                Copy Template Headers
-              </Button>
+              <div className="flex flex-wrap gap-2">
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    navigator.clipboard.writeText(templateCsv)
+                    toast({ title: "Template copied", description: "Paste it into Excel or Google Sheets." })
+                  }}
+                >
+                  Copy Template Headers
+                </Button>
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    const blob = new Blob([templateCsv], { type: "text/csv;charset=utf-8" })
+                    const link = document.createElement("a")
+                    link.href = URL.createObjectURL(blob)
+                    link.download = `${dataset}-template.csv`
+                    document.body.appendChild(link)
+                    link.click()
+                    document.body.removeChild(link)
+                    URL.revokeObjectURL(link.href)
+                  }}
+                >
+                  Download Template
+                </Button>
+              </div>
             </div>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-[1fr_auto] gap-4 items-end">
+          <div className="grid grid-cols-1 items-end gap-4 md:grid-cols-[1fr_auto]">
             <div className="space-y-2">
               <Label htmlFor="csv">CSV content</Label>
               <Textarea
@@ -236,7 +248,10 @@ export default function ImportPage() {
                 rows={8}
                 placeholder={templateCsv}
                 value={csvText}
-                onChange={(event) => setCsvText(event.target.value)}
+                onChange={(event) => {
+                  setCsvText(event.target.value)
+                  resetValidationState()
+                }}
               />
             </div>
             <div className="flex flex-col gap-2">
@@ -250,9 +265,23 @@ export default function ImportPage() {
             </div>
           </div>
 
-          <Button onClick={handleImport} disabled={isImporting}>
-            {isImporting ? "Importing..." : "Run Import"}
-          </Button>
+          <div className="flex flex-wrap gap-2">
+            <Button variant="outline" onClick={handleValidate} disabled={isValidating || isCommitting}>
+              {isValidating ? "Validating..." : "Validate CSV"}
+            </Button>
+            <Button onClick={handleCommit} disabled={!canCommit}>
+              {isCommitting ? "Importing..." : "Commit Import"}
+            </Button>
+          </div>
+
+          <div className="text-xs text-muted-foreground">
+            Commit is enabled only after successful validation for the current dataset and CSV.
+            {validationToken ? (
+              <span className="block">
+                Validation token ready{expiresAtLabel ? ` (expires: ${expiresAtLabel})` : ""}.
+              </span>
+            ) : null}
+          </div>
         </CardContent>
       </Card>
 
@@ -293,21 +322,51 @@ export default function ImportPage() {
         </CardContent>
       </Card>
 
-      {result && (
+      {validationResult ? (
         <Card>
           <CardHeader>
-            <CardTitle>Import Summary</CardTitle>
-            <CardDescription>Review imported rows and any issues.</CardDescription>
+            <CardTitle>Validation Summary</CardTitle>
+            <CardDescription>Fix errors before committing import.</CardDescription>
           </CardHeader>
           <CardContent className="space-y-3">
-            <div className="text-sm">Imported: {result.imported || 0}</div>
-            <div className="text-sm">Skipped: {result.skipped || 0}</div>
-            {result.errors?.length ? (
+            <div className="text-sm">Rows checked: {validationResult.rowCount || 0}</div>
+            <div className="text-sm">Invalid rows: {validationResult.skipped || 0}</div>
+            <div className="text-sm">Status: {validationResult.valid ? "Valid" : "Needs fixes"}</div>
+            {validationResult.errors?.length ? (
               <div className="space-y-2">
                 <div className="text-sm font-medium">Errors (first 10)</div>
                 <ul className="list-disc pl-5 text-sm text-muted-foreground">
-                  {result.errors.slice(0, 10).map((err: any) => (
-                    <li key={`${err.row}-${err.message}`}>Row {err.row}: {err.message}</li>
+                  {validationResult.errors.slice(0, 10).map((err) => (
+                    <li key={`${err.row}-${err.message}`}>
+                      Row {err.row}: {err.message}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ) : (
+              <div className="text-sm text-muted-foreground">No validation issues found.</div>
+            )}
+          </CardContent>
+        </Card>
+      ) : null}
+
+      {commitResult ? (
+        <Card>
+          <CardHeader>
+            <CardTitle>Import Summary</CardTitle>
+            <CardDescription>Committed rows and import issues.</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <div className="text-sm">Imported: {commitResult.imported || 0}</div>
+            <div className="text-sm">Skipped: {commitResult.skipped || 0}</div>
+            {commitResult.errors?.length ? (
+              <div className="space-y-2">
+                <div className="text-sm font-medium">Errors (first 10)</div>
+                <ul className="list-disc pl-5 text-sm text-muted-foreground">
+                  {commitResult.errors.slice(0, 10).map((err) => (
+                    <li key={`${err.row}-${err.message}`}>
+                      Row {err.row}: {err.message}
+                    </li>
                   ))}
                 </ul>
               </div>
@@ -316,7 +375,7 @@ export default function ImportPage() {
             )}
           </CardContent>
         </Card>
-      )}
+      ) : null}
     </div>
   )
 }

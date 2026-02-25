@@ -86,7 +86,11 @@ const resolveDispatchRecordReceivedKgs = (record: Pick<DispatchRecord, "kgs_rece
   return bagsValue * bagWeightKg
 }
 
-export default function DispatchTab() {
+type DispatchTabProps = {
+  showDataToolsControls?: boolean
+}
+
+export default function DispatchTab({ showDataToolsControls = false }: DispatchTabProps) {
   const { user } = useAuth()
   const { settings } = useTenantSettings()
   const bagWeightKg = Number(settings.bagWeightKg) || 50
@@ -650,7 +654,7 @@ export default function DispatchTab() {
         "Coffee Type",
         "Bag Type",
         "Bags Dispatched",
-        "KGs Resolved",
+        "KGs Received",
         "Notes",
       ]
       const rows = data.records.map((record: DispatchRecord) => [
@@ -1226,10 +1230,12 @@ export default function DispatchTab() {
               </CardTitle>
               <CardDescription>History of all dispatched bags · {resolvedCountLabel}</CardDescription>
             </div>
-            <Button variant="outline" size="sm" onClick={exportToCSV} className="bg-transparent">
-              <Download className="mr-2 h-4 w-4" />
-              Export CSV
-            </Button>
+            {showDataToolsControls && (
+              <Button variant="outline" size="sm" onClick={exportToCSV} className="bg-transparent">
+                <Download className="mr-2 h-4 w-4" />
+                Export CSV
+              </Button>
+            )}
           </div>
         </CardHeader>
         <CardContent>
@@ -1256,7 +1262,7 @@ export default function DispatchTab() {
                 <p>Coffee: {selectedDispatchRecord.coffee_type}</p>
                 <p>Bag Type: {formatBagTypeLabel(selectedDispatchRecord.bag_type)}</p>
                 <p>Bags: {formatNumber(Number(selectedDispatchRecord.bags_dispatched) || 0)}</p>
-                <p>Resolved KGs: {formatNumber(selectedDispatchResolvedKgs)}</p>
+                <p>Received KGs: {formatNumber(selectedDispatchResolvedKgs)}</p>
               </div>
               <div className="mt-1 text-xs text-muted-foreground">
                 Nominal KGs: {formatNumber(selectedDispatchNominalKgs)} · Variance:{" "}
@@ -1288,7 +1294,7 @@ export default function DispatchTab() {
                       <TableHead className="sticky top-0 bg-muted/70 backdrop-blur">Coffee Type</TableHead>
                       <TableHead className="sticky top-0 bg-muted/70 backdrop-blur">Bag Type</TableHead>
                       <TableHead className="text-right sticky top-0 bg-muted/70 backdrop-blur">Bags</TableHead>
-                      <TableHead className="text-right sticky top-0 bg-muted/70 backdrop-blur">KGs (Resolved)</TableHead>
+                      <TableHead className="text-right sticky top-0 bg-muted/70 backdrop-blur">KGs (Received)</TableHead>
                       <TableHead className="sticky top-0 bg-muted/70 backdrop-blur">Notes</TableHead>
                       <TableHead className="text-right sticky top-0 bg-muted/70 backdrop-blur">Actions</TableHead>
                     </TableRow>

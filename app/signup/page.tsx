@@ -11,6 +11,14 @@ import { Info } from "lucide-react"
 
 export default function SignupRoute() {
   const [submitted, setSubmitted] = useState(false)
+  const [isSubmitting, setIsSubmitting] = useState(false)
+  const [errorMessage, setErrorMessage] = useState("")
+  const [form, setForm] = useState({
+    name: "",
+    email: "",
+    estate: "",
+    region: "",
+  })
 
   return (
     <div className="min-h-screen flex items-center justify-center px-4 relative overflow-hidden">
@@ -39,9 +47,34 @@ export default function SignupRoute() {
             ) : (
               <form
                 className="space-y-4"
-                onSubmit={(event) => {
+                onSubmit={async (event) => {
                   event.preventDefault()
-                  setSubmitted(true)
+                  if (isSubmitting) return
+                  setIsSubmitting(true)
+                  setErrorMessage("")
+                  try {
+                    const response = await fetch("/api/register-interest", {
+                      method: "POST",
+                      headers: { "Content-Type": "application/json" },
+                      body: JSON.stringify({
+                        name: form.name,
+                        email: form.email,
+                        estate: form.estate,
+                        region: form.region,
+                        organization: form.estate,
+                        source: "signup-page",
+                      }),
+                    })
+                    const data = await response.json()
+                    if (!response.ok || !data?.success) {
+                      throw new Error(data?.error || "Failed to submit request")
+                    }
+                    setSubmitted(true)
+                  } catch (error: any) {
+                    setErrorMessage(error?.message || "Failed to submit request")
+                  } finally {
+                    setIsSubmitting(false)
+                  }
                 }}
               >
                 <div className="space-y-2">
@@ -62,7 +95,13 @@ export default function SignupRoute() {
                       </Tooltip>
                     </TooltipProvider>
                   </div>
-                  <Input id="name" placeholder="Your name" required />
+                  <Input
+                    id="name"
+                    value={form.name}
+                    onChange={(event) => setForm((prev) => ({ ...prev, name: event.target.value }))}
+                    placeholder="Your name"
+                    required
+                  />
                 </div>
                 <div className="space-y-2">
                   <div className="flex items-center gap-2">
@@ -82,7 +121,14 @@ export default function SignupRoute() {
                       </Tooltip>
                     </TooltipProvider>
                   </div>
-                  <Input id="email" type="email" placeholder="you@estate.com" required />
+                  <Input
+                    id="email"
+                    type="email"
+                    value={form.email}
+                    onChange={(event) => setForm((prev) => ({ ...prev, email: event.target.value }))}
+                    placeholder="you@estate.com"
+                    required
+                  />
                 </div>
                 <div className="space-y-2">
                   <div className="flex items-center gap-2">
@@ -102,7 +148,13 @@ export default function SignupRoute() {
                       </Tooltip>
                     </TooltipProvider>
                   </div>
-                  <Input id="estate" placeholder="Estate or cooperative name" required />
+                  <Input
+                    id="estate"
+                    value={form.estate}
+                    onChange={(event) => setForm((prev) => ({ ...prev, estate: event.target.value }))}
+                    placeholder="Estate or cooperative name"
+                    required
+                  />
                 </div>
                 <div className="space-y-2">
                   <div className="flex items-center gap-2">
@@ -122,10 +174,20 @@ export default function SignupRoute() {
                       </Tooltip>
                     </TooltipProvider>
                   </div>
-                  <Input id="region" placeholder="Coorg, Chikmagalur, Wayanad..." />
+                  <Input
+                    id="region"
+                    value={form.region}
+                    onChange={(event) => setForm((prev) => ({ ...prev, region: event.target.value }))}
+                    placeholder="Coorg, Chikmagalur, Wayanad..."
+                  />
                 </div>
-                <Button type="submit" className="w-full">
-                  Request Access
+                {errorMessage && (
+                  <p className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+                    {errorMessage}
+                  </p>
+                )}
+                <Button type="submit" className="w-full" disabled={isSubmitting}>
+                  {isSubmitting ? "Submitting..." : "Request Access"}
                 </Button>
                 <p className="text-xs text-muted-foreground">
                   By requesting access, you acknowledge the{" "}

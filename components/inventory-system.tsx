@@ -4,6 +4,7 @@ import React, { useEffect, useState, useCallback, useMemo } from "react"
 import {
   Check,
   Download,
+  Upload,
   List,
   Home,
   LogOut,
@@ -33,6 +34,7 @@ import {
   Info,
   BookOpen,
   Scale,
+  FileText,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -73,12 +75,14 @@ import ReceivablesTab from "@/components/receivables-tab"
 import BalanceSheetTab from "@/components/balance-sheet-tab"
 import JournalTab from "@/components/journal-tab"
 import ResourcesTab from "@/components/resources-tab"
+import PlantHealthTab from "@/components/plant-health-tab"
+import DocumentsTab from "@/components/documents-tab"
 import YieldForecastTab from "@/components/yield-forecast-tab"
 import { PepperTab } from "./pepper-tab"
 import OnboardingChecklist, { type OnboardingStep } from "@/components/onboarding-checklist"
 import Link from "next/link"
 import Image from "next/image"
-import { formatDateForDisplay, generateTimestamp, isWithinLast24Hours } from "@/lib/date-utils"
+import { formatDateForDisplay, isWithinLast24Hours } from "@/lib/date-utils"
 import { formatCurrency, formatNumber } from "@/lib/format"
 import { getCurrentFiscalYear } from "@/lib/fiscal-year-utils"
 import { getModuleDefaultEnabled } from "@/lib/modules"
@@ -86,6 +90,15 @@ import type { InventoryItem, Transaction } from "@/lib/inventory-types"
 import { cn } from "@/lib/utils"
 import { toast } from "@/components/ui/use-toast"
 import { roleLabel } from "@/lib/roles"
+import {
+  datasetTemplateCsv,
+  EXPORT_DATASETS,
+  EXPORT_DATASET_MAP,
+  IMPORT_DATASET_MAP,
+  isExportDatasetId,
+  TAB_DEFAULT_EXPORT_DATASET,
+  type ExportDatasetId,
+} from "@/lib/data-tools"
 
 // API endpoints (adjust if your routes are different)
 const API_TRANSACTIONS = "/api/transactions-neon"
@@ -95,6 +108,10 @@ const LOCATION_ALL = "all"
 const LOCATION_UNASSIGNED = "unassigned"
 const UNASSIGNED_LABEL = "Unassigned (legacy)"
 const PREVIEW_TENANT_COOKIE = "farmflow_preview_tenant"
+const DRILLDOWN_TXN_SEARCH_PARAM = "txnSearch"
+const DRILLDOWN_ITEM_PARAM = "itemType"
+const DRILLDOWN_ALERT_ID_PARAM = "seasonAlertId"
+const DRILLDOWN_ALERT_METRIC_PARAM = "seasonMetric"
 const DEFAULT_DASHBOARD_TAB_PRIORITY = [
   "home",
   "processing",
@@ -110,7 +127,9 @@ const DEFAULT_DASHBOARD_TAB_PRIORITY = [
   "billing",
   "rainfall",
   "journal",
+  "documents",
   "resources",
+  "plant-health",
   "ai-analysis",
   "news",
   "pepper",
@@ -118,6 +137,9 @@ const DEFAULT_DASHBOARD_TAB_PRIORITY = [
   "quality",
   "inventory",
 ]
+
+const supportsImportTemplate = (dataset: ExportDatasetId): dataset is keyof typeof IMPORT_DATASET_MAP =>
+  dataset in IMPORT_DATASET_MAP
 
 interface LocationOption {
   id: string
@@ -173,6 +195,15 @@ interface IntelligenceBrief {
     laborTrendPct: number | null
     expenseTrendPct: number | null
   } | null
+}
+
+interface ExceptionSummaryAlert {
+  id: string
+  title: string
+  severity: "low" | "medium" | "high" | "critical"
+  location?: string
+  coffeeType?: string
+  metric?: string
 }
 
 function parseCustomDateString(dateString: string | undefined | null): Date | null {
@@ -244,13 +275,17 @@ export default function InventorySystem() {
   const [currentPage, setCurrentPage] = useState(1)
   const itemsPerPage = 10
   const [activeTab, setActiveTab] = useState("home")
+  const [loadedTabs, setLoadedTabs] = useState<string[]>(["home"])
+  const [dataToolsDataset, setDataToolsDataset] = useState<ExportDatasetId>("processing")
+  const [isExportingDataTools, setIsExportingDataTools] = useState(false)
+  const [showDataToolsPanel, setShowDataToolsPanel] = useState(false)
   const [enabledModules, setEnabledModules] = useState<string[] | null>(null)
   const [isModulesLoading, setIsModulesLoading] = useState(false)
 
   // data & states
   const [inventory, setInventory] = useState<InventoryItem[]>([])
   const [transactions, setTransactions] = useState<Transaction[]>([])
-  const [laborDeployments, setLaborDeployments] = useState<any[]>([])
+  const laborDeployments: any[] = []
   const [summary, setSummary] = useState({ total_inventory_value: 0, total_items: 0, total_quantity: 0 })
   const [accountsTotals, setAccountsTotals] = useState({ laborTotal: 0, otherTotal: 0, grandTotal: 0 })
   const [accountsTotalsLoading, setAccountsTotalsLoading] = useState(false)
@@ -358,7 +393,6 @@ export default function InventorySystem() {
   // UI controls
   const [inventorySearchTerm, setInventorySearchTerm] = useState("")
   const [transactionSearchTerm, setTransactionSearchTerm] = useState("")
-  const [recentTransactionSearchTerm, setRecentTransactionSearchTerm] = useState("")
   const [filterType, setFilterType] = useState("All Types")
   const [inventoryDrilldownItemName, setInventoryDrilldownItemName] = useState("")
   const [inventorySortOrder, setInventorySortOrder] = useState<"asc" | "desc" | null>(null)
@@ -371,9 +405,14 @@ export default function InventorySystem() {
     () => new Set<string>(["41b4b10c-428c-4155-882f-1cc7f6e89a78"]),
     [],
   )
-  const [exceptionsSummary, setExceptionsSummary] = useState<{ count: number; highlights: string[] }>({
+  const [exceptionsSummary, setExceptionsSummary] = useState<{
+    count: number
+    highlights: string[]
+    alerts: ExceptionSummaryAlert[]
+  }>({
     count: 0,
     highlights: [],
+    alerts: [],
   })
   const [exceptionsLoading, setExceptionsLoading] = useState(false)
   const [exceptionsError, setExceptionsError] = useState<string | null>(null)
@@ -622,7 +661,7 @@ export default function InventorySystem() {
   }, [locations, transactionLocationId])
 
   // load initial data
-  const refreshData = useCallback(async (force = false) => {
+  const refreshData = useCallback(async (_force = false) => {
     if (!tenantId) {
       return
     }
@@ -835,7 +874,6 @@ export default function InventorySystem() {
   }, [selectedLocationId, resolveLocationLabel])
 
   // computed lists
-  const activeItemTypesForDropdown = Array.from(new Set(inventory.filter((i) => i.quantity > 0).map((i) => i.name))).sort()
   const allItemTypesForDropdown = Array.from(new Set([...inventory.map((i) => i.name), ...transactions.map((t) => t.item_type)])).sort().filter(Boolean)
 
   const filteredAndSortedInventory = inventory
@@ -1002,11 +1040,6 @@ export default function InventorySystem() {
       label: "Total transactions",
       value: formatCount(totalTransactions),
       metricValue: totalTransactions,
-    }
-    const bagWeightStat: HeroStat = {
-      label: "Bag weight (kg)",
-      value: formatNumber(bagWeightValue, 0),
-      metricValue: bagWeightValue,
     }
     const exceptionsStat: HeroStat = {
       label: "Exceptions",
@@ -1362,8 +1395,6 @@ export default function InventorySystem() {
       { icon: AlertTriangle, label: unassignedLabel, metricValue: unassignedTransactions },
     ]
 
-    const salesBagsTotal = salesHeroTotals.arabicaBags + salesHeroTotals.robustaBags
-    const dispatchBagsTotal = dispatchHeroTotals.arabicaBags + dispatchHeroTotals.robustaBags
     const chipsSales: HeroChip[] = [
       {
         icon: TrendingUp,
@@ -1621,7 +1652,7 @@ export default function InventorySystem() {
           title: "Side-crop revenue and contracts",
           description: "Track Pepper, Arecanut, Avocado, Coconut, and contract-based estate sales.",
           chips: [
-            { icon: Leaf, label: "Use per-kg mode for PG/MV daily sales", metricValue: null },
+            { icon: Leaf, label: "Use per-kg mode for daily location sales", metricValue: null },
             { icon: Receipt, label: "Use contract mode for lease or season contracts", metricValue: null },
           ],
           stats: [activeLocationsStat, recentActivityStat, unassignedStat],
@@ -1713,6 +1744,17 @@ export default function InventorySystem() {
           description: "Log fertilizers, sprays, irrigation, and observations.",
           chips: chipsJournal,
           stats: journalStats,
+        }
+      case "plant-health":
+        return {
+          badge: "Plant Health",
+          title: "Leaf scans and disease triage",
+          description: "Upload field photos and review likely health issues with suggested actions.",
+          chips: [
+            { icon: Leaf, label: "Leaf scans powered by Kindwise", metricValue: null },
+            { icon: AlertTriangle, label: "Use for early disease triage by location", metricValue: null },
+          ],
+          stats: [activeLocationsStat, recentActivityStat, unassignedStat],
         }
       case "activity-log":
         return {
@@ -2311,6 +2353,129 @@ export default function InventorySystem() {
     document.body.removeChild(link)
   }
 
+  useEffect(() => {
+    const defaultDataset = TAB_DEFAULT_EXPORT_DATASET[activeTab]
+    if (defaultDataset && defaultDataset !== dataToolsDataset) {
+      setDataToolsDataset(defaultDataset)
+    }
+  }, [activeTab, dataToolsDataset])
+
+  useEffect(() => {
+    setShowDataToolsPanel(false)
+  }, [activeTab])
+
+  const selectedDataToolsConfig = useMemo(
+    () => EXPORT_DATASET_MAP[dataToolsDataset] || EXPORT_DATASETS[0],
+    [dataToolsDataset],
+  )
+  const selectedDataToolsTemplateConfig = useMemo(
+    () => (supportsImportTemplate(dataToolsDataset) ? IMPORT_DATASET_MAP[dataToolsDataset] : null),
+    [dataToolsDataset],
+  )
+  const dataToolsImportHref = selectedDataToolsTemplateConfig
+    ? `/settings/import?dataset=${selectedDataToolsTemplateConfig.id}`
+    : "/settings/import"
+
+  const handleDownloadDataTemplate = useCallback(() => {
+    if (!selectedDataToolsTemplateConfig) {
+      toast({
+        title: "Template unavailable",
+        description: "This export dataset does not have an import template.",
+      })
+      return
+    }
+    const templateCsv = datasetTemplateCsv(selectedDataToolsTemplateConfig.id)
+    const blob = new Blob([templateCsv], { type: "text/csv;charset=utf-8" })
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement("a")
+    link.href = url
+    link.download = `${selectedDataToolsTemplateConfig.id}-template.csv`
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+    URL.revokeObjectURL(url)
+    toast({
+      title: "Template downloaded",
+      description: `${selectedDataToolsTemplateConfig.label} template is ready.`,
+    })
+  }, [selectedDataToolsTemplateConfig])
+
+  const handleDataToolsExport = useCallback(async () => {
+    setIsExportingDataTools(true)
+    try {
+      const params = new URLSearchParams({
+        dataset: dataToolsDataset,
+        format: "csv",
+      })
+      if (dataToolsDataset !== "inventory") {
+        params.set("startDate", currentFiscalYear.startDate)
+        params.set("endDate", currentFiscalYear.endDate)
+      }
+      if (isPreviewMode && previewTenantId) {
+        params.set("tenantId", previewTenantId)
+      }
+
+      const response = await fetch(`/api/exports/ops?${params.toString()}`, { cache: "no-store" })
+      if (!response.ok) {
+        let errorMessage = "Export failed"
+        try {
+          const payload = await response.json()
+          errorMessage = payload?.error || errorMessage
+        } catch {
+          // keep generic message
+        }
+        throw new Error(errorMessage)
+      }
+
+      const wasTruncated = response.headers.get("x-export-truncated") === "1"
+      const maxRows = Number(response.headers.get("x-export-max-rows") || "0")
+      const returnedRows = Number(response.headers.get("x-export-returned-rows") || "0")
+
+      const blob = await response.blob()
+      const contentDisposition = response.headers.get("content-disposition") || ""
+      const filenameMatch = contentDisposition.match(/filename="?([^"]+)"?/)
+      const fallbackName =
+        dataToolsDataset === "inventory"
+          ? `${dataToolsDataset}-snapshot.csv`
+          : `${dataToolsDataset}-${currentFiscalYear.startDate}-to-${currentFiscalYear.endDate}.csv`
+      const filename = filenameMatch?.[1] || fallbackName
+      const downloadUrl = URL.createObjectURL(blob)
+      const link = document.createElement("a")
+      link.href = downloadUrl
+      link.download = filename
+      document.body.appendChild(link)
+      link.click()
+      document.body.removeChild(link)
+      URL.revokeObjectURL(downloadUrl)
+      if (wasTruncated) {
+        toast({
+          title: "Export capped at row limit",
+          description: `${selectedDataToolsConfig.label} exported ${returnedRows || maxRows} rows (limit ${maxRows || "configured"}). Narrow date range for full data.`,
+        })
+      } else {
+        toast({
+          title: "Export ready",
+          description: `${selectedDataToolsConfig.label} CSV downloaded.`,
+        })
+      }
+    } catch (error: any) {
+      toast({
+        title: "Export failed",
+        description: error?.message || "Unable to export now.",
+        variant: "destructive",
+      })
+    } finally {
+      setIsExportingDataTools(false)
+    }
+  }, [
+    currentFiscalYear.endDate,
+    currentFiscalYear.startDate,
+    dataToolsDataset,
+    isPreviewMode,
+    previewTenantId,
+    selectedDataToolsConfig.label,
+  ])
+
   const handleOpenItemDrilldownHistory = () => {
     if (!inventoryDrilldownItemName) return
     setFilterType(inventoryDrilldownItemName)
@@ -2361,8 +2526,10 @@ export default function InventorySystem() {
   const canShowActivityLog = (isAdmin || isOwner) && isFeatureEnabled("showActivityLogTab")
   const canShowReceivables = isModuleEnabled("receivables")
   const canShowBilling = isModuleEnabled("billing")
+  const canShowDocuments = isModuleEnabled("documents")
   const canShowJournal = isModuleEnabled("journal")
   const canShowResources = isModuleEnabled("resources") && isFeatureEnabled("showResourcesTab")
+  const canShowPlantHealth = isOwner || isModuleEnabled("plant-health") || canShowResources || canShowAiAnalysis
   const canShowWelcomeCard = isFeatureEnabled("showWelcomeCard")
   const canShowRainfallSection = canShowRainfall || canShowWeather
   const canShowIntelligence = !isScopedUser && (canShowDispatch || canShowSales || canShowAccounts || canShowSeason)
@@ -2382,8 +2549,10 @@ export default function InventorySystem() {
     canShowYieldForecast ||
     canShowActivityLog ||
     canShowRainfallSection ||
+    canShowDocuments ||
     canShowJournal ||
     canShowResources ||
+    canShowPlantHealth ||
     canShowAiAnalysis ||
     canShowNews
 
@@ -2491,6 +2660,7 @@ export default function InventorySystem() {
   const salesSoldKgsTotal = salesHeroTotals.arabicaKgs + salesHeroTotals.robustaKgs
   const saleableCoffeeKgs = Math.max(0, dispatchReceivedKgsTotal - salesSoldKgsTotal)
   const overdrawnCoffeeKgs = Math.max(0, salesSoldKgsTotal - dispatchReceivedKgsTotal)
+  const bookedNetPosition = salesHeroTotals.totalRevenue - accountsTotals.grandTotal
   const reconciliationStatusLabel = overdrawnCoffeeKgs > 0 ? "Overdrawn" : "Healthy"
   const reconciliationStatusTone =
     overdrawnCoffeeKgs > 0 ? "text-rose-700 border-rose-200 bg-rose-50/70" : "text-emerald-700 border-emerald-200 bg-emerald-50/70"
@@ -2515,8 +2685,10 @@ export default function InventorySystem() {
     if (canShowActivityLog) tabs.push("activity-log")
     if (canShowRainfallSection) tabs.push("rainfall")
     if (canShowPepper) tabs.push("pepper")
+    if (canShowDocuments) tabs.push("documents")
     if (canShowJournal) tabs.push("journal")
     if (canShowResources) tabs.push("resources")
+    if (canShowPlantHealth) tabs.push("plant-health")
     if (canShowAiAnalysis) tabs.push("ai-analysis")
     if (canShowNews) tabs.push("news")
     if (canShowReceivables) tabs.push("receivables")
@@ -2528,10 +2700,12 @@ export default function InventorySystem() {
     canShowAiAnalysis,
     canShowBilling,
     canShowDispatch,
+    canShowDocuments,
     canShowOtherSales,
     canShowActivityLog,
     canShowInventory,
     canShowJournal,
+    canShowPlantHealth,
     canShowResources,
     canShowNews,
     canShowPepper,
@@ -2545,6 +2719,24 @@ export default function InventorySystem() {
     canShowYieldForecast,
     showTransactionHistory,
   ])
+  const markTabAsLoaded = useCallback((tab: string) => {
+    setLoadedTabs((previousTabs) => (previousTabs.includes(tab) ? previousTabs : [...previousTabs, tab]))
+  }, [])
+  const isTabLoaded = useCallback(
+    (tab: string) => {
+      return activeTab === tab || loadedTabs.includes(tab)
+    },
+    [activeTab, loadedTabs],
+  )
+  useEffect(() => {
+    markTabAsLoaded(activeTab)
+  }, [activeTab, markTabAsLoaded])
+  useEffect(() => {
+    setLoadedTabs((previousTabs) => {
+      const filteredTabs = previousTabs.filter((tab) => tab === "home" || visibleTabs.includes(tab))
+      return filteredTabs.length === previousTabs.length ? previousTabs : filteredTabs
+    })
+  }, [visibleTabs])
   const tabMeta = useMemo(
     () =>
       ({
@@ -2564,8 +2756,10 @@ export default function InventorySystem() {
         "yield-forecast": { label: "Yield Forecast", icon: TrendingUp },
         "activity-log": { label: "Activity Log", icon: History },
         rainfall: { label: "Rainfall", icon: CloudRain },
+        documents: { label: "Documents", icon: FileText },
         journal: { label: "Journal", icon: NotebookPen },
         resources: { label: "Resources", icon: BookOpen },
+        "plant-health": { label: "Plant Health", icon: Leaf },
         "ai-analysis": { label: "AI Analysis", icon: Brain },
         news: { label: "News", icon: Newspaper },
         curing: { label: "Curing", icon: Factory },
@@ -2583,7 +2777,9 @@ export default function InventorySystem() {
       "transactions",
       "season",
       "rainfall",
+      "documents",
       "resources",
+      "plant-health",
     ]
     return preferred
       .filter((tab) => visibleTabs.includes(tab))
@@ -3108,17 +3304,28 @@ export default function InventorySystem() {
         }
         const alerts = Array.isArray(data.alerts) ? data.alerts : []
         const severityRank: Record<string, number> = { high: 3, medium: 2, low: 1 }
-        const highlights = [...alerts]
-          .sort((a: any, b: any) => (severityRank[b.severity] || 0) - (severityRank[a.severity] || 0))
-          .slice(0, 3)
-          .map((alert: any) => {
+        const sortedAlerts = [...alerts].sort((a: any, b: any) => (severityRank[b.severity] || 0) - (severityRank[a.severity] || 0))
+        const topAlerts = sortedAlerts.slice(0, 3)
+        const highlights = topAlerts.map((alert: any) => {
             const context = [alert.location, alert.coffeeType].filter(Boolean).join(" • ")
             return context ? `${context}: ${alert.title}` : alert.title
           })
         if (!isActive) return
-        setExceptionsSummary({ count: alerts.length, highlights })
+        setExceptionsSummary({
+          count: alerts.length,
+          highlights,
+          alerts: topAlerts.map((alert: any) => ({
+            id: String(alert.id || `${alert.metric || "alert"}-${alert.title || "item"}`),
+            title: String(alert.title || "Alert"),
+            severity: (String(alert.severity || "medium") as ExceptionSummaryAlert["severity"]) || "medium",
+            location: alert.location ? String(alert.location) : undefined,
+            coffeeType: alert.coffeeType ? String(alert.coffeeType) : undefined,
+            metric: alert.metric ? String(alert.metric) : undefined,
+          })),
+        })
       } catch (error: any) {
         if (!isActive) return
+        setExceptionsSummary({ count: 0, highlights: [], alerts: [] })
         setExceptionsError(error.message || "Failed to load exceptions")
       } finally {
         if (isActive) {
@@ -3133,7 +3340,118 @@ export default function InventorySystem() {
     }
   }, [canShowSeason])
 
+  const inferBriefTabFromText = useCallback(
+    (input: string) => {
+      const text = String(input || "").toLowerCase()
+      if (!text) return "home"
+      if ((text.includes("dispatch") || text.includes("received")) && canShowDispatch) return "dispatch"
+      if ((text.includes("sale") || text.includes("buyer") || text.includes("revenue")) && canShowSales) return "sales"
+      if ((text.includes("receivable") || text.includes("outstanding") || text.includes("invoice")) && canShowReceivables) {
+        return "receivables"
+      }
+      if ((text.includes("labor") || text.includes("expense") || text.includes("cost")) && canShowAccounts) return "accounts"
+      if ((text.includes("float") || text.includes("yield") || text.includes("process")) && canShowProcessing) return "processing"
+      if ((text.includes("stock") || text.includes("inventory") || text.includes("transaction")) && showTransactionHistory) {
+        return "transactions"
+      }
+      return "home"
+    },
+    [canShowAccounts, canShowDispatch, canShowProcessing, canShowReceivables, canShowSales, showTransactionHistory],
+  )
+
+  const resolveExceptionDrilldownTab = useCallback(
+    (metric?: string) => {
+      const normalized = String(metric || "").trim().toLowerCase()
+      if (!normalized) return canShowSeason ? "season" : "home"
+      if (["float_rate", "dry_parch_yield", "float_rate_zscore", "dry_parch_yield_zscore"].includes(normalized)) {
+        return canShowProcessing ? "processing" : canShowSeason ? "season" : "home"
+      }
+      if (["transit_loss", "dispatch_unconfirmed", "bag_weight_drift"].includes(normalized)) {
+        return canShowDispatch ? "dispatch" : canShowSeason ? "season" : "home"
+      }
+      if (["inventory_mismatch", "sales_spike"].includes(normalized)) {
+        return canShowSales ? "sales" : canShowSeason ? "season" : "home"
+      }
+      return canShowSeason ? "season" : "home"
+    },
+    [canShowDispatch, canShowProcessing, canShowSales, canShowSeason],
+  )
+
+  type DrilldownOptions = {
+    tab: string
+    locationId?: string | null
+    itemType?: string | null
+    transactionSearch?: string | null
+    seasonAlertId?: string | null
+    seasonMetric?: string | null
+  }
+
+  const openDrilldown = useCallback(
+    (options: DrilldownOptions) => {
+      const requestedTab = options.tab === "weather" ? "rainfall" : options.tab
+      const nextTab = visibleTabs.includes(requestedTab) ? requestedTab : getPreferredDefaultTab(visibleTabs)
+      setActiveTab(nextTab)
+      markTabAsLoaded(nextTab)
+
+      if (options.locationId) {
+        const locationId = String(options.locationId)
+        if (locationId === LOCATION_ALL || locationId === LOCATION_UNASSIGNED || locations.some((loc) => loc.id === locationId)) {
+          setSelectedLocationId(locationId)
+        }
+      }
+      if (options.itemType) {
+        const nextItem = String(options.itemType)
+        if (nextItem === "All Types" || allItemTypesForDropdown.includes(nextItem)) {
+          setFilterType(nextItem)
+        } else if (nextItem.trim()) {
+          setFilterType(nextItem)
+        }
+      }
+      if (options.transactionSearch !== undefined && options.transactionSearch !== null) {
+        setTransactionSearchTerm(String(options.transactionSearch))
+      }
+
+      const params = new URLSearchParams(searchParams.toString())
+      params.set("tab", nextTab)
+      const setOptional = (key: string, value?: string | null) => {
+        const normalized = String(value || "").trim()
+        if (normalized) params.set(key, normalized)
+        else params.delete(key)
+      }
+
+      if (options.locationId !== undefined) {
+        setOptional("locationId", options.locationId)
+      }
+      if (options.itemType !== undefined) {
+        setOptional(DRILLDOWN_ITEM_PARAM, options.itemType)
+      }
+      if (options.transactionSearch !== undefined) {
+        setOptional(DRILLDOWN_TXN_SEARCH_PARAM, options.transactionSearch)
+      }
+      if (options.seasonAlertId !== undefined) {
+        setOptional(DRILLDOWN_ALERT_ID_PARAM, options.seasonAlertId)
+      }
+      if (options.seasonMetric !== undefined) {
+        setOptional(DRILLDOWN_ALERT_METRIC_PARAM, options.seasonMetric)
+      }
+
+      const nextQuery = params.toString()
+      const nextPath = nextQuery ? `/dashboard?${nextQuery}` : "/dashboard"
+      router.replace(nextPath, { scroll: false })
+    },
+    [allItemTypesForDropdown, getPreferredDefaultTab, locations, markTabAsLoaded, router, searchParams, visibleTabs],
+  )
+  const handleTabChange = useCallback(
+    (value: string) => {
+      openDrilldown({ tab: value })
+    },
+    [openDrilldown],
+  )
+
   const tabParam = searchParams.get("tab")
+  const locationFilterParam = (searchParams.get("locationId") || "").trim()
+  const transactionSearchParam = searchParams.get(DRILLDOWN_TXN_SEARCH_PARAM)
+  const itemTypeParam = searchParams.get(DRILLDOWN_ITEM_PARAM)
   useEffect(() => {
     if (isModulesLoading) {
       return
@@ -3154,6 +3472,32 @@ export default function InventorySystem() {
       setActiveTab(requestedTab)
     }
   }, [activeTab, tabParam, visibleTabs])
+
+  useEffect(() => {
+    if (!locationFilterParam) return
+    const normalized = locationFilterParam
+    const isKnown =
+      normalized === LOCATION_ALL || normalized === LOCATION_UNASSIGNED || locations.some((location) => location.id === normalized)
+    if (isKnown && normalized !== selectedLocationId) {
+      setSelectedLocationId(normalized)
+    }
+  }, [locationFilterParam, locations, selectedLocationId])
+
+  useEffect(() => {
+    if (transactionSearchParam === null) return
+    if (transactionSearchParam !== transactionSearchTerm) {
+      setTransactionSearchTerm(transactionSearchParam)
+    }
+  }, [transactionSearchParam, transactionSearchTerm])
+
+  useEffect(() => {
+    if (itemTypeParam === null) return
+    const nextItem = String(itemTypeParam || "").trim()
+    if (!nextItem) return
+    if (nextItem !== filterType) {
+      setFilterType(nextItem)
+    }
+  }, [filterType, itemTypeParam])
 
   useEffect(() => {
     if (!user || !tenantId || isOwner || isPreviewMode) return
@@ -3235,7 +3579,7 @@ export default function InventorySystem() {
     {
       key: "locations",
       title: "Add estate locations",
-      description: "Set up your coffee processing locations (HF A, MV, etc.).",
+      description: "Set up the coffee processing locations your estate uses.",
       done: onboardingStatus.locations,
       actionLabel: "Go to Processing",
       onAction: () => setActiveTab("processing"),
@@ -3822,6 +4166,99 @@ export default function InventorySystem() {
           </div>
         </div>
 
+        <div className="mb-4 flex justify-end">
+          <Button
+            type="button"
+            onClick={() => setShowDataToolsPanel((prev) => !prev)}
+            className="bg-emerald-700 hover:bg-emerald-800 text-white"
+          >
+            <Upload className="mr-2 h-4 w-4" />
+            {showDataToolsPanel ? "Hide Import / Export" : "Import / Export"}
+          </Button>
+        </div>
+
+        {showDataToolsPanel && (
+          <Card className="mb-6 border border-emerald-200/70 bg-gradient-to-br from-emerald-50/70 to-white/95">
+            <CardHeader className="pb-3">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  <CardTitle className="text-base">Data Tools</CardTitle>
+                  <CardDescription>
+                    Export CSV, download an import template, or jump into bulk import from any tab.
+                  </CardDescription>
+                </div>
+                <Badge variant="outline" className="w-fit border-emerald-200 bg-white text-emerald-700">
+                  Tab-aware defaults
+                </Badge>
+              </div>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <div className="grid grid-cols-1 gap-3 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-end">
+                <div className="space-y-2">
+                  <Label className="text-xs uppercase tracking-[0.16em] text-neutral-500">Dataset</Label>
+                  <Select
+                    value={dataToolsDataset}
+                    onValueChange={(value) => {
+                      if (isExportDatasetId(value)) {
+                        setDataToolsDataset(value)
+                      }
+                    }}
+                  >
+                    <SelectTrigger className="h-10 bg-white">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent className="max-h-[45vh] overflow-y-auto">
+                      {EXPORT_DATASETS.map((datasetOption) => (
+                        <SelectItem key={datasetOption.id} value={datasetOption.id}>
+                          {datasetOption.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <p className="text-xs text-muted-foreground">{selectedDataToolsConfig.description}</p>
+                </div>
+                <div className="flex flex-wrap gap-2 lg:justify-end">
+                  <Button onClick={handleDataToolsExport} disabled={isExportingDataTools}>
+                    <Download className="mr-2 h-4 w-4" />
+                    {isExportingDataTools ? "Exporting..." : "Export CSV"}
+                  </Button>
+                  <Button
+                    variant="outline"
+                    onClick={handleDownloadDataTemplate}
+                    disabled={!selectedDataToolsTemplateConfig}
+                    className="bg-white"
+                  >
+                    <FileText className="mr-2 h-4 w-4" />
+                    Template
+                  </Button>
+                  {canManageData ? (
+                    <Button asChild variant="outline" className="bg-white">
+                      <Link href={dataToolsImportHref}>
+                        <Upload className="mr-2 h-4 w-4" />
+                        Import CSV
+                      </Link>
+                    </Button>
+                  ) : (
+                    <Button variant="outline" disabled className="bg-white">
+                      <Upload className="mr-2 h-4 w-4" />
+                      Import CSV
+                    </Button>
+                  )}
+                </div>
+              </div>
+              {selectedDataToolsTemplateConfig ? (
+                <p className="text-xs text-muted-foreground">
+                  Template columns: {selectedDataToolsTemplateConfig.template.join(", ")}
+                </p>
+              ) : (
+                <p className="text-xs text-muted-foreground">
+                  No direct template for this export dataset. Use the import page to choose a supported dataset.
+                </p>
+              )}
+            </CardContent>
+          </Card>
+        )}
+
         {isOwner && (
           <Card className="border-2 border-muted bg-white/90">
             <CardHeader>
@@ -3880,7 +4317,7 @@ export default function InventorySystem() {
             />
           </div>
         )}
-        <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full space-y-4">
+        <Tabs value={activeTab} onValueChange={handleTabChange} className="w-full space-y-4">
           <TabsList
             className={cn(
               "sticky top-2 z-20 flex h-auto w-full rounded-2xl border border-black/5 bg-white/85 shadow-sm backdrop-blur",
@@ -4005,6 +4442,12 @@ export default function InventorySystem() {
                     Rainfall
                   </TabsTrigger>
                 )}
+                {canShowDocuments && (
+                  <TabsTrigger value="documents">
+                    <FileText className="h-3.5 w-3.5 mr-1.5" />
+                    Documents
+                  </TabsTrigger>
+                )}
                 {canShowJournal && (
                   <TabsTrigger value="journal" className="flex items-center gap-2">
                     <NotebookPen className="h-3.5 w-3.5" />
@@ -4015,6 +4458,12 @@ export default function InventorySystem() {
                   <TabsTrigger value="resources" className="flex items-center gap-2">
                     <BookOpen className="h-3.5 w-3.5" />
                     Resources
+                  </TabsTrigger>
+                )}
+                {canShowPlantHealth && (
+                  <TabsTrigger value="plant-health" className="flex items-center gap-2">
+                    <Leaf className="h-3.5 w-3.5" />
+                    Plant Health
                   </TabsTrigger>
                 )}
                 {canShowAiAnalysis && (
@@ -4033,7 +4482,7 @@ export default function InventorySystem() {
             )}
           </TabsList>
 
-          <TabsContent value="home" className="space-y-6">
+          <TabsContent value="home" className="space-y-6" forceMount={isTabLoaded("home") ? true : undefined}>
             <div
               className={cn(
                 "grid grid-cols-1 gap-4 sm:grid-cols-2",
@@ -4049,6 +4498,16 @@ export default function InventorySystem() {
                     {formatNumber(processingTotals.arabicaKg + processingTotals.robustaKg, 0)} kg
                   </p>
                   <p className="text-xs text-muted-foreground">{currentFiscalYear.label}</p>
+                  {canShowProcessing && (
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      className="mt-2 h-7 px-2 text-xs"
+                      onClick={() => openDrilldown({ tab: "processing", locationId: selectedLocationId })}
+                    >
+                      Open records
+                    </Button>
+                  )}
                 </CardContent>
               </Card>
               <Card className="border-black/5 bg-white/90">
@@ -4063,6 +4522,16 @@ export default function InventorySystem() {
                     {formatNumber(dispatchHeroTotals.arabicaBags + dispatchHeroTotals.robustaBags, 0)} bags in{" "}
                     {formatCount(dispatchHeroTotals.totalDispatches)} records
                   </p>
+                  {canShowDispatch && (
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      className="mt-2 h-7 px-2 text-xs"
+                      onClick={() => openDrilldown({ tab: "dispatch", locationId: selectedLocationId })}
+                    >
+                      Open ledger
+                    </Button>
+                  )}
                 </CardContent>
               </Card>
               {canShowSales && (
@@ -4074,11 +4543,21 @@ export default function InventorySystem() {
                     <CardContent>
                       <p className="text-2xl font-semibold tabular-nums text-neutral-900">{formatNumber(salesSoldKgsTotal, 0)} kg</p>
                       <p className="text-xs text-muted-foreground">{formatCount(salesHeroTotals.totalSales)} sales entries</p>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        className="mt-2 h-7 px-2 text-xs"
+                        onClick={() => openDrilldown({ tab: "sales", locationId: selectedLocationId })}
+                      >
+                        Open sales
+                      </Button>
                     </CardContent>
                   </Card>
                   <Card className="border-black/5 bg-white/90">
                     <CardHeader className="pb-2">
-                      <CardTitle className="text-sm font-medium text-neutral-600">Saleable Coffee</CardTitle>
+                      <CardTitle className="text-sm font-medium text-neutral-600">
+                        {overdrawnCoffeeKgs > 0 ? "Overdrawn Coffee" : "Saleable Coffee"}
+                      </CardTitle>
                     </CardHeader>
                     <CardContent>
                       <p
@@ -4089,6 +4568,19 @@ export default function InventorySystem() {
                       <p className={cn("text-xs", overdrawnCoffeeKgs > 0 ? "text-rose-700" : "text-muted-foreground")}>
                         {overdrawnCoffeeKgs > 0 ? "Overdrawn (sold exceeds received)" : "Dispatch received minus sold"}
                       </p>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        className="mt-2 h-7 px-2 text-xs"
+                        onClick={() =>
+                          openDrilldown({
+                            tab: canShowSeason ? "season" : "sales",
+                            seasonMetric: overdrawnCoffeeKgs > 0 ? "inventory_mismatch" : null,
+                          })
+                        }
+                      >
+                        Open reconciliation
+                      </Button>
                     </CardContent>
                   </Card>
                 </>
@@ -4102,17 +4594,36 @@ export default function InventorySystem() {
                     <CardContent>
                       <p className="text-2xl font-semibold tabular-nums text-neutral-900">{formatCurrency(salesHeroTotals.totalRevenue, 0)}</p>
                       <p className="text-xs text-muted-foreground">{formatCount(salesHeroTotals.totalSales)} sales entries</p>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        className="mt-2 h-7 px-2 text-xs"
+                        onClick={() => openDrilldown({ tab: canShowSales ? "sales" : "accounts", locationId: selectedLocationId })}
+                      >
+                        Open revenue detail
+                      </Button>
                     </CardContent>
                   </Card>
                   <Card className="border-black/5 bg-white/90">
                     <CardHeader className="pb-2">
-                      <CardTitle className="text-sm font-medium text-neutral-600">Live Position</CardTitle>
+                      <CardTitle className="text-sm font-medium text-neutral-600">Booked Net</CardTitle>
                     </CardHeader>
                     <CardContent>
-                      <p className="text-2xl font-semibold tabular-nums text-neutral-900">
-                        {formatCurrency(salesHeroTotals.totalRevenue - accountsTotals.grandTotal + receivablesHeroTotals.totalOutstanding, 0)}
-                      </p>
-                      <p className="text-xs text-muted-foreground">Booked net + receivables</p>
+                      <p className="text-2xl font-semibold tabular-nums text-neutral-900">{formatCurrency(bookedNetPosition, 0)}</p>
+                      <p className="text-xs text-muted-foreground">Sales revenue - labor - other expenses</p>
+                      {canShowReceivables && (
+                        <p className="mt-1 text-xs text-muted-foreground">
+                          Receivables outstanding: {formatCurrency(receivablesHeroTotals.totalOutstanding, 0)}
+                        </p>
+                      )}
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        className="mt-2 h-7 px-2 text-xs"
+                        onClick={() => openDrilldown({ tab: canShowReceivables ? "receivables" : "accounts" })}
+                      >
+                        Open finance detail
+                      </Button>
                     </CardContent>
                   </Card>
                 </>
@@ -4224,7 +4735,7 @@ export default function InventorySystem() {
                           key={action.tab}
                           variant="outline"
                           className="h-11 justify-start gap-2 bg-white text-sm"
-                          onClick={() => setActiveTab(action.tab)}
+                          onClick={() => openDrilldown({ tab: action.tab })}
                         >
                           <ActionIcon className="h-4 w-4 text-emerald-700" />
                           {action.label}
@@ -4232,6 +4743,59 @@ export default function InventorySystem() {
                       )
                     })}
                   </div>
+                </CardContent>
+              </Card>
+            )}
+
+            {showDataToolsPanel && (canShowProcessing || canShowDispatch || canShowSales || canShowReceivables || canShowAccounts) && (
+              <Card className="border-black/5 bg-white/90">
+                <CardHeader className="pb-3">
+                  <CardTitle>Ops Exports</CardTitle>
+                  <CardDescription>
+                    One-click CSV exports for Excel/Google Sheets ({currentFiscalYear.label}).
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+                  {canShowProcessing && (
+                    <Button asChild variant="outline" className="justify-start bg-white">
+                      <a
+                        href={`/api/exports/ops?dataset=processing&startDate=${currentFiscalYear.startDate}&endDate=${currentFiscalYear.endDate}&format=csv`}
+                      >
+                        <Download className="mr-2 h-4 w-4" />
+                        Processing CSV
+                      </a>
+                    </Button>
+                  )}
+                  {(canShowDispatch || canShowSales) && (
+                    <Button asChild variant="outline" className="justify-start bg-white">
+                      <a
+                        href={`/api/exports/ops?dataset=reconciliation&startDate=${currentFiscalYear.startDate}&endDate=${currentFiscalYear.endDate}&format=csv`}
+                      >
+                        <Download className="mr-2 h-4 w-4" />
+                        Dispatch vs Sales
+                      </a>
+                    </Button>
+                  )}
+                  {canShowReceivables && (
+                    <Button asChild variant="outline" className="justify-start bg-white">
+                      <a
+                        href={`/api/exports/ops?dataset=receivables-aging&startDate=${currentFiscalYear.startDate}&endDate=${currentFiscalYear.endDate}&format=csv`}
+                      >
+                        <Download className="mr-2 h-4 w-4" />
+                        Receivables Aging
+                      </a>
+                    </Button>
+                  )}
+                  {(canShowAccounts || canShowSales || canShowSeason) && (
+                    <Button asChild variant="outline" className="justify-start bg-white">
+                      <a
+                        href={`/api/exports/ops?dataset=pnl-monthly&startDate=${currentFiscalYear.startDate}&endDate=${currentFiscalYear.endDate}&format=csv`}
+                      >
+                        <Download className="mr-2 h-4 w-4" />
+                        Monthly P&L
+                      </a>
+                    </Button>
+                  )}
                 </CardContent>
               </Card>
             )}
@@ -4265,6 +4829,16 @@ export default function InventorySystem() {
                         </TooltipProvider>
                       </div>
                       <p className="mt-1 text-lg font-semibold tabular-nums text-neutral-900">{formatCount(estateMetrics.locationCount)}</p>
+                      {canShowProcessing && (
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          className="mt-2 h-7 px-2 text-xs"
+                          onClick={() => openDrilldown({ tab: "processing", locationId: selectedLocationId })}
+                        >
+                          Open location records
+                        </Button>
+                      )}
                     </div>
                     <div className="rounded-xl border border-black/5 bg-white p-3">
                       <div className="flex items-center gap-1">
@@ -4287,6 +4861,16 @@ export default function InventorySystem() {
                         </TooltipProvider>
                       </div>
                       <p className="mt-1 text-lg font-semibold tabular-nums text-neutral-900">{formatCount(estateMetrics.recentActivity)}</p>
+                      {showTransactionHistory && (
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          className="mt-2 h-7 px-2 text-xs"
+                          onClick={() => openDrilldown({ tab: "transactions" })}
+                        >
+                          Open transactions
+                        </Button>
+                      )}
                     </div>
                     <div className="rounded-xl border border-black/5 bg-white p-3">
                       <div className="flex items-center gap-1">
@@ -4309,6 +4893,16 @@ export default function InventorySystem() {
                         </TooltipProvider>
                       </div>
                       <p className="mt-1 text-lg font-semibold tabular-nums text-neutral-900">{formatCount(exceptionsSummary.count)}</p>
+                      {canShowSeason && (
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          className="mt-2 h-7 px-2 text-xs"
+                          onClick={() => openDrilldown({ tab: "season" })}
+                        >
+                          Open exceptions
+                        </Button>
+                      )}
                     </div>
                   </div>
                 </CardContent>
@@ -4341,17 +4935,27 @@ export default function InventorySystem() {
                     </p>
                     <div className="flex flex-wrap gap-2">
                       {canShowDispatch && (
-                        <Button size="sm" variant="outline" onClick={() => setActiveTab("dispatch")} className="bg-white">
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => openDrilldown({ tab: "dispatch", locationId: selectedLocationId })}
+                          className="bg-white"
+                        >
                           Reconcile Dispatch
                         </Button>
                       )}
                       {canShowSales && (
-                        <Button size="sm" variant="outline" onClick={() => setActiveTab("sales")} className="bg-white">
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => openDrilldown({ tab: "sales", locationId: selectedLocationId })}
+                          className="bg-white"
+                        >
                           Review Sales Guardrails
                         </Button>
                       )}
                       {canShowActivityLog && (
-                        <Button size="sm" variant="outline" onClick={() => setActiveTab("activity-log")} className="bg-white">
+                        <Button size="sm" variant="outline" onClick={() => openDrilldown({ tab: "activity-log" })} className="bg-white">
                           Open Activity Log
                         </Button>
                       )}
@@ -4383,17 +4987,39 @@ export default function InventorySystem() {
                   ) : intelligenceHighlights.length > 0 ? (
                     <>
                       <div className="grid gap-2 md:grid-cols-2">
-                        {intelligenceHighlights.slice(0, 4).map((highlight, index) => (
-                          <div key={`${highlight}-${index}`} className="rounded-xl border border-black/5 bg-white p-3">
-                            <p className="text-xs uppercase tracking-[0.16em] text-neutral-500">Insight {index + 1}</p>
-                            <p className="mt-1 text-sm text-neutral-800">{highlight}</p>
-                          </div>
-                        ))}
+                        {intelligenceHighlights.slice(0, 4).map((highlight, index) => {
+                          const linkedAction = intelligenceActions.find(
+                            (action) => visibleTabs.includes(action.tab) && highlight.toLowerCase().includes(action.label.toLowerCase()),
+                          )
+                          const actionTab = linkedAction?.tab || inferBriefTabFromText(highlight)
+                          return (
+                            <button
+                              key={`${highlight}-${index}`}
+                              type="button"
+                              data-testid={`home-brief-insight-${index + 1}`}
+                              className="rounded-xl border border-black/5 bg-white p-3 text-left transition-colors hover:bg-emerald-50/40"
+                              onClick={() => openDrilldown({ tab: actionTab })}
+                            >
+                              <p className="text-xs uppercase tracking-[0.16em] text-neutral-500">Insight {index + 1}</p>
+                              <p className="mt-1 text-sm text-neutral-800">{highlight}</p>
+                              <p className="mt-2 text-xs text-emerald-700">Open details →</p>
+                            </button>
+                          )
+                        })}
                       </div>
                       {(intelligenceTopCostCode || intelligenceTopFrequencyCode) && (
                         <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
                           {intelligenceTopCostCode && (
-                            <div className="rounded-xl border border-black/5 bg-white p-3">
+                            <button
+                              type="button"
+                              className="rounded-xl border border-black/5 bg-white p-3 text-left transition-colors hover:bg-emerald-50/40"
+                              onClick={() =>
+                                openDrilldown({
+                                  tab: "accounts",
+                                  transactionSearch: intelligenceTopCostCode.code,
+                                })
+                              }
+                            >
                               <p className="text-xs uppercase tracking-[0.18em] text-neutral-500">Highest Cost Code</p>
                               <p className="mt-1 text-sm font-semibold text-neutral-900">
                                 {intelligenceTopCostCode.code} · {intelligenceTopCostCode.reference}
@@ -4402,10 +5028,20 @@ export default function InventorySystem() {
                                 ₹{formatNumber(intelligenceTopCostCode.totalAmount, 0)} across{" "}
                                 {formatCount(intelligenceTopCostCode.entryCount)} entries
                               </p>
-                            </div>
+                              <p className="mt-2 text-xs text-emerald-700">Open accounts detail →</p>
+                            </button>
                           )}
                           {intelligenceTopFrequencyCode && (
-                            <div className="rounded-xl border border-black/5 bg-white p-3">
+                            <button
+                              type="button"
+                              className="rounded-xl border border-black/5 bg-white p-3 text-left transition-colors hover:bg-emerald-50/40"
+                              onClick={() =>
+                                openDrilldown({
+                                  tab: "accounts",
+                                  transactionSearch: intelligenceTopFrequencyCode.code,
+                                })
+                              }
+                            >
                               <p className="text-xs uppercase tracking-[0.18em] text-neutral-500">Most Frequent Code</p>
                               <p className="mt-1 text-sm font-semibold text-neutral-900">
                                 {intelligenceTopFrequencyCode.code} · {intelligenceTopFrequencyCode.reference}
@@ -4414,7 +5050,8 @@ export default function InventorySystem() {
                                 {formatCount(intelligenceTopFrequencyCode.entryCount)} entries · ₹
                                 {formatNumber(intelligenceTopFrequencyCode.totalAmount, 0)}
                               </p>
-                            </div>
+                              <p className="mt-2 text-xs text-emerald-700">Open accounts detail →</p>
+                            </button>
                           )}
                         </div>
                       )}
@@ -4427,7 +5064,7 @@ export default function InventorySystem() {
                                 key={`${action.tab}-${action.label}`}
                                 size="sm"
                                 variant="outline"
-                                onClick={() => setActiveTab(action.tab)}
+                                onClick={() => openDrilldown({ tab: action.tab })}
                                 className="bg-white"
                               >
                                 {action.label}
@@ -4450,7 +5087,7 @@ export default function InventorySystem() {
                   <CardDescription>High-signal issues to clear before day-end close.</CardDescription>
                 </div>
                 {canShowSeason && (
-                  <Button size="sm" variant="outline" onClick={() => setActiveTab("season")} className="bg-white">
+                  <Button size="sm" variant="outline" onClick={() => openDrilldown({ tab: "season" })} className="bg-white">
                     Open Season Alerts
                   </Button>
                 )}
@@ -4467,12 +5104,37 @@ export default function InventorySystem() {
                   <p className="text-sm text-emerald-700">No active alerts right now.</p>
                 ) : (
                   <div className="grid gap-3 md:grid-cols-3">
-                    {(exceptionsSummary.highlights || []).slice(0, 3).map((item, index) => (
-                      <div key={`${item}-${index}`} className="rounded-xl border border-amber-100 bg-amber-50/70 p-3">
-                        <p className="text-xs uppercase tracking-[0.16em] text-amber-700">Alert {index + 1}</p>
-                        <p className="mt-1 text-sm text-amber-900">{item}</p>
-                      </div>
-                    ))}
+                    {(exceptionsSummary.alerts || []).slice(0, 3).map((alert, index) => {
+                      const summaryLine = [alert.location, alert.coffeeType].filter(Boolean).join(" • ")
+                      const cardTone =
+                        alert.severity === "high" || alert.severity === "critical"
+                          ? "border-rose-100 bg-rose-50/70"
+                          : "border-amber-100 bg-amber-50/70"
+                      const textTone =
+                        alert.severity === "high" || alert.severity === "critical" ? "text-rose-800" : "text-amber-900"
+                      return (
+                        <button
+                          key={`${alert.id}-${index}`}
+                          type="button"
+                          data-testid={`home-priority-alert-${index + 1}`}
+                          className={cn("rounded-xl border p-3 text-left transition-colors hover:bg-white", cardTone)}
+                          onClick={() =>
+                            openDrilldown({
+                              tab: resolveExceptionDrilldownTab(alert.metric),
+                              seasonAlertId: alert.id,
+                              seasonMetric: alert.metric || null,
+                            })
+                          }
+                        >
+                          <p className={cn("text-xs uppercase tracking-[0.16em]", alert.severity === "high" || alert.severity === "critical" ? "text-rose-700" : "text-amber-700")}>
+                            Alert {index + 1}
+                          </p>
+                          <p className={cn("mt-1 text-sm font-medium", textTone)}>{alert.title}</p>
+                          {summaryLine ? <p className="mt-1 text-xs text-muted-foreground">{summaryLine}</p> : null}
+                          <p className="mt-2 text-xs text-emerald-700">Investigate →</p>
+                        </button>
+                      )
+                    })}
                   </div>
                 )}
               </CardContent>
@@ -4480,7 +5142,7 @@ export default function InventorySystem() {
           </TabsContent>
 
           {canShowInventory && (
-            <TabsContent value="inventory" className="space-y-6">
+            <TabsContent value="inventory" className="space-y-6" forceMount={isTabLoaded("inventory") ? true : undefined}>
               <div className="grid grid-cols-1 gap-6 lg:grid-cols-12">
                 <div className="space-y-6 lg:col-span-8">
                   {canShowSeason && (
@@ -4495,7 +5157,7 @@ export default function InventorySystem() {
                             Monitor operational risks across inventory, processing, and dispatch.
                           </CardDescription>
                         </div>
-                        <Button variant="outline" size="sm" onClick={() => setActiveTab("season")}>
+                        <Button variant="outline" size="sm" onClick={() => openDrilldown({ tab: "season" })}>
                           Open Season View
                         </Button>
                       </CardHeader>
@@ -4523,17 +5185,40 @@ export default function InventorySystem() {
                               {exceptionsSummary.count} active alert{exceptionsSummary.count === 1 ? "" : "s"}
                             </div>
                             <div className="grid gap-3 sm:grid-cols-3">
-                              {(exceptionsSummary.highlights || []).slice(0, 3).map((item, index) => (
-                                <div
-                                  key={`${item}-${index}`}
-                                  className="rounded-2xl border border-amber-100 bg-amber-50/70 p-3"
-                                >
-                                  <p className="text-xs uppercase tracking-[0.16em] text-amber-700">
-                                    Alert {index + 1}
-                                  </p>
-                                  <p className="mt-2 text-sm text-amber-900">{item}</p>
-                                </div>
-                              ))}
+                              {(exceptionsSummary.alerts || []).slice(0, 3).map((alert, index) => {
+                                const summaryLine = [alert.location, alert.coffeeType].filter(Boolean).join(" • ")
+                                const tone =
+                                  alert.severity === "high" || alert.severity === "critical"
+                                    ? "border-rose-100 bg-rose-50/70 text-rose-900"
+                                    : "border-amber-100 bg-amber-50/70 text-amber-900"
+                                return (
+                                  <button
+                                    key={`${alert.id}-${index}`}
+                                    type="button"
+                                    data-testid={`inventory-system-alert-${index + 1}`}
+                                    className={cn("rounded-2xl border p-3 text-left transition-colors hover:bg-white", tone)}
+                                    onClick={() =>
+                                      openDrilldown({
+                                        tab: resolveExceptionDrilldownTab(alert.metric),
+                                        seasonAlertId: alert.id,
+                                        seasonMetric: alert.metric || null,
+                                      })
+                                    }
+                                  >
+                                    <p className="text-xs uppercase tracking-[0.16em] text-amber-700">Alert {index + 1}</p>
+                                    <p className="mt-2 text-sm">{alert.title}</p>
+                                    {summaryLine ? <p className="mt-1 text-xs text-muted-foreground">{summaryLine}</p> : null}
+                                    <p className="mt-2 text-xs text-emerald-700">Investigate →</p>
+                                  </button>
+                                )
+                              })}
+                              {exceptionsSummary.alerts.length === 0 &&
+                                (exceptionsSummary.highlights || []).slice(0, 3).map((item, index) => (
+                                  <div key={`${item}-${index}`} className="rounded-2xl border border-amber-100 bg-amber-50/70 p-3">
+                                    <p className="text-xs uppercase tracking-[0.16em] text-amber-700">Alert {index + 1}</p>
+                                    <p className="mt-2 text-sm text-amber-900">{item}</p>
+                                  </div>
+                                ))}
                             </div>
                           </div>
                         )}
@@ -4551,9 +5236,11 @@ export default function InventorySystem() {
                           <p className="text-xs text-neutral-500">Totals for {selectedLocationLabel}.</p>
                         </div>
                         <div className="flex flex-wrap gap-2">
-                          <Button size="sm" variant="outline" onClick={exportInventoryToCSV} className="h-10 bg-transparent">
-                            <Download className="mr-2 h-4 w-4" /> Export
-                          </Button>
+                          {showDataToolsPanel && (
+                            <Button size="sm" variant="outline" onClick={exportInventoryToCSV} className="h-10 bg-transparent">
+                              <Download className="mr-2 h-4 w-4" /> Export
+                            </Button>
+                          )}
                           <Button
                             size="sm"
                             onClick={openNewItemDialog}
@@ -4860,17 +5547,19 @@ export default function InventorySystem() {
                         </span>
                         <span className="text-xs text-neutral-400">Inventory</span>
                       </button>
-                      <button
-                        type="button"
-                        onClick={exportInventoryToCSV}
-                        className="flex w-full items-center justify-between rounded-xl border border-black/5 bg-white px-4 py-3 text-sm text-neutral-800 transition-colors hover:bg-neutral-50"
-                      >
-                        <span className="flex items-center gap-2">
-                          <Download className="h-4 w-4 text-emerald-600" />
-                          Export inventory
-                        </span>
-                        <span className="text-xs text-neutral-400">CSV</span>
-                      </button>
+                      {showDataToolsPanel && (
+                        <button
+                          type="button"
+                          onClick={exportInventoryToCSV}
+                          className="flex w-full items-center justify-between rounded-xl border border-black/5 bg-white px-4 py-3 text-sm text-neutral-800 transition-colors hover:bg-neutral-50"
+                        >
+                          <span className="flex items-center gap-2">
+                            <Download className="h-4 w-4 text-emerald-600" />
+                            Export inventory
+                          </span>
+                          <span className="text-xs text-neutral-400">CSV</span>
+                        </button>
+                      )}
                       <button
                         type="button"
                         onClick={() => setActiveTab("transactions")}
@@ -4904,7 +5593,7 @@ export default function InventorySystem() {
           )}
 
           {showTransactionHistory && (
-            <TabsContent value="transactions" className="space-y-6">
+            <TabsContent value="transactions" className="space-y-6" forceMount={isTabLoaded("transactions") ? true : undefined}>
               {/* Transactions UI (search, filter, table) */}
               <div className="rounded-2xl border border-black/5 bg-white/85 p-6 shadow-sm">
                 <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between mb-5">
@@ -4914,9 +5603,11 @@ export default function InventorySystem() {
                     </h2>
                     <p className="text-xs text-muted-foreground">Inventory adjustments and usage across the estate.</p>
                   </div>
-                  <div className="flex gap-2">
-                    <Button size="sm" variant="outline" onClick={exportToCSV} className="h-10 bg-transparent"><Download className="mr-2 h-4 w-4" /> Export</Button>
-                  </div>
+                  {showDataToolsPanel && (
+                    <div className="flex gap-2">
+                      <Button size="sm" variant="outline" onClick={exportToCSV} className="h-10 bg-transparent"><Download className="mr-2 h-4 w-4" /> Export</Button>
+                    </div>
+                  )}
                 </div>
 
                 <div className="flex flex-col sm:flex-row justify-between mb-5 gap-4">
@@ -5061,94 +5752,105 @@ export default function InventorySystem() {
           )}
 
           {canShowAccounts && (
-            <TabsContent value="accounts" className="space-y-6">
-              <AccountsPage />
+            <TabsContent value="accounts" className="space-y-6" forceMount={isTabLoaded("accounts") ? true : undefined}>
+              <AccountsPage showDataToolsControls={showDataToolsPanel} />
             </TabsContent>
           )}
 
           {canShowBalanceSheet && (
-            <TabsContent value="balance-sheet" className="space-y-6">
+            <TabsContent value="balance-sheet" className="space-y-6" forceMount={isTabLoaded("balance-sheet") ? true : undefined}>
               <BalanceSheetTab />
             </TabsContent>
           )}
 
           {canShowReceivables && (
-            <TabsContent value="receivables" className="space-y-6">
+            <TabsContent value="receivables" className="space-y-6" forceMount={isTabLoaded("receivables") ? true : undefined}>
               <ReceivablesTab />
             </TabsContent>
           )}
 
           {canShowProcessing && (
-            <TabsContent value="processing" className="space-y-6">
-              <ProcessingTab />
+            <TabsContent value="processing" className="space-y-6" forceMount={isTabLoaded("processing") ? true : undefined}>
+              <ProcessingTab showDataToolsControls={showDataToolsPanel} />
             </TabsContent>
           )}
           {canShowDispatch && (
-            <TabsContent value="dispatch" className="space-y-6">
-              <DispatchTab />
+            <TabsContent value="dispatch" className="space-y-6" forceMount={isTabLoaded("dispatch") ? true : undefined}>
+              <DispatchTab showDataToolsControls={showDataToolsPanel} />
             </TabsContent>
           )}
           {canShowSales && (
-            <TabsContent value="sales" className="space-y-6">
-              <SalesTab />
+            <TabsContent value="sales" className="space-y-6" forceMount={isTabLoaded("sales") ? true : undefined}>
+              <SalesTab showDataToolsControls={showDataToolsPanel} />
             </TabsContent>
           )}
           {canShowOtherSales && (
-            <TabsContent value="other-sales" className="space-y-6">
+            <TabsContent value="other-sales" className="space-y-6" forceMount={isTabLoaded("other-sales") ? true : undefined}>
               <OtherSalesTab />
             </TabsContent>
           )}
           {canShowCuring && (
-            <TabsContent value="curing" className="space-y-6">
+            <TabsContent value="curing" className="space-y-6" forceMount={isTabLoaded("curing") ? true : undefined}>
               <CuringTab />
             </TabsContent>
           )}
           {canShowQuality && (
-            <TabsContent value="quality" className="space-y-6">
+            <TabsContent value="quality" className="space-y-6" forceMount={isTabLoaded("quality") ? true : undefined}>
               <QualityGradingTab />
             </TabsContent>
           )}
           {canShowSeason && (
-            <TabsContent value="season" className="space-y-6">
+            <TabsContent value="season" className="space-y-6" forceMount={isTabLoaded("season") ? true : undefined}>
               <SeasonDashboard />
             </TabsContent>
           )}
           {canShowYieldForecast && (
-            <TabsContent value="yield-forecast" className="space-y-6">
+            <TabsContent value="yield-forecast" className="space-y-6" forceMount={isTabLoaded("yield-forecast") ? true : undefined}>
               <YieldForecastTab />
             </TabsContent>
           )}
           {canShowActivityLog && (
-            <TabsContent value="activity-log" className="space-y-6">
+            <TabsContent value="activity-log" className="space-y-6" forceMount={isTabLoaded("activity-log") ? true : undefined}>
               <ActivityLogTab tenantId={activityTenantId} />
             </TabsContent>
           )}
           {canShowRainfallSection && (
-            <TabsContent value="rainfall" className="space-y-6">
+            <TabsContent value="rainfall" className="space-y-6" forceMount={isTabLoaded("rainfall") ? true : undefined}>
               <RainfallWeatherTab
                 username={user?.username || "system"}
                 showRainfall={canShowRainfall}
                 showWeather={canShowWeather}
+                showDataToolsControls={showDataToolsPanel}
               />
             </TabsContent>
           )}
+          {canShowDocuments && (
+            <TabsContent value="documents" className="space-y-6" forceMount={isTabLoaded("documents") ? true : undefined}>
+              <DocumentsTab />
+            </TabsContent>
+          )}
           {canShowPepper && (
-            <TabsContent value="pepper" className="space-y-6">
+            <TabsContent value="pepper" className="space-y-6" forceMount={isTabLoaded("pepper") ? true : undefined}>
               <PepperTab />
             </TabsContent>
           )}
           {canShowJournal && (
-            <TabsContent value="journal" className="space-y-6">
+            <TabsContent value="journal" className="space-y-6" forceMount={isTabLoaded("journal") ? true : undefined}>
               <JournalTab />
             </TabsContent>
           )}
           {canShowResources && (
-            <TabsContent value="resources" className="space-y-6">
+            <TabsContent value="resources" className="space-y-6" forceMount={isTabLoaded("resources") ? true : undefined}>
               <ResourcesTab />
             </TabsContent>
           )}
+          {canShowPlantHealth && (
+            <TabsContent value="plant-health" className="space-y-6" forceMount={isTabLoaded("plant-health") ? true : undefined}>
+              <PlantHealthTab />
+            </TabsContent>
+          )}
           {canShowAiAnalysis && (
-            <TabsContent value="ai-analysis" className="space-y-6">
+            <TabsContent value="ai-analysis" className="space-y-6" forceMount={isTabLoaded("ai-analysis") ? true : undefined}>
               <AiAnalysisCharts inventory={inventory} transactions={transactions} />
 
               <Card className="border-border/70 bg-white/85">
@@ -5178,13 +5880,13 @@ export default function InventorySystem() {
             </TabsContent>
           )}
           {canShowNews && (
-            <TabsContent value="news" className="space-y-6">
+            <TabsContent value="news" className="space-y-6" forceMount={isTabLoaded("news") ? true : undefined}>
               <NewsTab />
             </TabsContent>
           )}
           {canShowBilling && (
-            <TabsContent value="billing" className="space-y-6">
-              <BillingTab />
+            <TabsContent value="billing" className="space-y-6" forceMount={isTabLoaded("billing") ? true : undefined}>
+              <BillingTab showDataToolsControls={showDataToolsPanel} />
             </TabsContent>
           )}
             </Tabs>

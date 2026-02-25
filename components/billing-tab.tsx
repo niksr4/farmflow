@@ -56,7 +56,11 @@ const defaultLineItem = (): LineItem => ({
   taxRate: 5,
 })
 
-export default function BillingTab() {
+type BillingTabProps = {
+  showDataToolsControls?: boolean
+}
+
+export default function BillingTab({ showDataToolsControls = false }: BillingTabProps) {
   const { user } = useAuth()
   const canEdit = user?.role === "admin" || user?.role === "owner"
   const [loading, setLoading] = useState(false)
@@ -431,9 +435,13 @@ export default function BillingTab() {
                       </TableCell>
                       <TableCell>{formatCurrency(Number(invoice.total || 0))}</TableCell>
                       <TableCell>
-                        <Button variant="outline" size="sm" onClick={() => exportInvoice(invoice.id)}>
-                          Export JSON
-                        </Button>
+                        {showDataToolsControls ? (
+                          <Button variant="outline" size="sm" onClick={() => exportInvoice(invoice.id)}>
+                            Export JSON
+                          </Button>
+                        ) : (
+                          <span className="text-xs text-muted-foreground">-</span>
+                        )}
                       </TableCell>
                     </TableRow>
                   ))}

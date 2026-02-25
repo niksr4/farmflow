@@ -4,7 +4,7 @@ import { useEffect, useRef, useState, type FormEvent } from "react"
 import Link from "next/link"
 import Image from "next/image"
 import { Fraunces, Manrope } from "next/font/google"
-import { ArrowRight, CheckCircle2, Leaf, Shield, Sparkles, Truck, MessageCircle, Send, X, Droplets, Sprout, Coffee, TrendingUp, Package, Cloudy } from "lucide-react"
+import { ArrowRight, CheckCircle2, Leaf, Shield, Sparkles, Truck, MessageCircle, Send, X, Droplets, Coffee, TrendingUp, Package, Cloudy } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
@@ -456,7 +456,7 @@ export default function LandingPage() {
       const response = await fetch("/api/register-interest", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(interestForm),
+        body: JSON.stringify({ ...interestForm, source: "landing-page" }),
       })
       const data = await response.json()
       if (!response.ok || !data.success) {
@@ -494,20 +494,13 @@ export default function LandingPage() {
       <div ref={beanLayerRef} className="pointer-events-none absolute inset-0 z-30 overflow-hidden" />
       <div className="relative z-10">
         <header className="px-4 pt-4 sm:px-6 sm:pt-6">
-          <nav className="mx-auto flex w-full max-w-[1400px] flex-col gap-3 rounded-2xl border border-white/60 bg-white/75 px-3 py-3 backdrop-blur-md shadow-[0_24px_50px_-32px_rgba(15,23,42,0.6)] dark:border-white/10 dark:bg-slate-900/70 sm:flex-row sm:items-center sm:justify-between sm:px-4">
+          <nav className="mx-auto flex w-full max-w-6xl flex-col gap-3 rounded-2xl border border-white/60 bg-white/75 px-3 py-3 backdrop-blur-md shadow-[0_24px_50px_-32px_rgba(15,23,42,0.6)] dark:border-white/10 dark:bg-slate-900/70 sm:flex-row sm:items-center sm:justify-between sm:px-4">
             <div className="flex items-center gap-3">
               <Image src="/brand-logo.svg" alt="FarmFlow" width={220} height={86} className="h-12 w-auto" priority />
-              <p className="hidden text-xs text-muted-foreground sm:block">Operations OS</p>
             </div>
             <div className="hidden lg:flex items-center gap-5 whitespace-nowrap text-sm text-muted-foreground">
               <a href="#roles" className="whitespace-nowrap hover:text-foreground">
                 Solutions
-              </a>
-              <a href="#modules" className="whitespace-nowrap hover:text-foreground">
-                Module Paths
-              </a>
-              <a href="#onboarding" className="whitespace-nowrap hover:text-foreground">
-                Go Live
               </a>
               <a href="#features" className="whitespace-nowrap hover:text-foreground">
                 Capabilities
@@ -515,12 +508,9 @@ export default function LandingPage() {
               <Link href="/journey" className="whitespace-nowrap hover:text-foreground">
                 Journey
               </Link>
-              <a href="#traceability" className="whitespace-nowrap hover:text-foreground">
-                Traceability
-              </a>
-              <a href="#impact" className="whitespace-nowrap hover:text-foreground">
-                Impact
-              </a>
+              <Link href="/trust" className="whitespace-nowrap hover:text-foreground">
+                Trust
+              </Link>
               <a href="#pricing" className="whitespace-nowrap hover:text-foreground">
                 Early Access
               </a>
@@ -534,13 +524,12 @@ export default function LandingPage() {
               </Button>
             </div>
           </nav>
-          <div className="mx-auto mt-3 flex w-full max-w-[1400px] gap-2 overflow-x-auto no-scrollbar lg:hidden">
+          <div className="mx-auto mt-3 flex w-full max-w-6xl gap-2 overflow-x-auto no-scrollbar lg:hidden">
             {[
               { href: "#roles", label: "Solutions" },
-              { href: "#modules", label: "Module Paths" },
-              { href: "#onboarding", label: "Go Live" },
               { href: "#features", label: "Capabilities" },
               { href: "/journey", label: "Journey" },
+              { href: "/trust", label: "Trust" },
               { href: "#pricing", label: "Early Access" },
             ].map((item) => (
               <Link
@@ -555,7 +544,7 @@ export default function LandingPage() {
         </header>
 
         <main className="px-4 pb-16 sm:px-6 sm:pb-20">
-          <section className="mx-auto mt-8 w-full max-w-7xl sm:mt-16">
+          <section className="mx-auto mt-8 w-full max-w-6xl sm:mt-16">
             <div className="relative overflow-hidden rounded-3xl border border-white/40 bg-gradient-to-br from-[#0f6f66] via-[#0b4f49] to-[#083730] p-5 sm:p-8 md:p-12 lg:p-16 shadow-[0_40px_100px_-40px_rgba(15,111,102,0.7)] grain">
               {/* Coffee bean background pattern */}
               <div className="pointer-events-none absolute inset-0 opacity-5">
@@ -730,7 +719,7 @@ export default function LandingPage() {
                         </div>
                         <div>
                           <p className="text-xs font-semibold text-slate-900">Yield alert</p>
-                          <p className="text-xs text-slate-600 mt-0.5">Lot MV-847 below target by 3.2%</p>
+                          <p className="text-xs text-slate-600 mt-0.5">Lot LOT-847 below target by 3.2%</p>
                         </div>
                       </div>
                     </div>
@@ -979,16 +968,14 @@ export default function LandingPage() {
         </section>
 
         <section id="features" className="mx-auto mt-16 w-full max-w-6xl space-y-6 scroll-mt-24 sm:mt-20">
-          <div className="flex items-center justify-between">
-            <div>
-              <h2 className={`${display.className} text-3xl font-semibold`}>One platform for processing, labor, stock, and cash</h2>
-              <p className="text-muted-foreground mt-2">
-                Run daily coffee workflows, control cost leakage, and improve buyer confidence across Arabica, Robusta, Cherry, and Parchment lots.
-              </p>
-              <p className="text-muted-foreground mt-1">
-                FarmFlow Intelligence continuously surfaces patterns, anomalies, and trend shifts so teams act before losses compound.
-              </p>
-            </div>
+          <div className="space-y-2">
+            <h2 className={`${display.className} text-3xl font-semibold`}>One platform for processing, labor, stock, and cash</h2>
+            <p className="text-muted-foreground">
+              Run daily coffee workflows, control cost leakage, and improve buyer confidence across Arabica, Robusta, Cherry, and Parchment lots.
+            </p>
+            <p className="text-muted-foreground">
+              FarmFlow Intelligence continuously surfaces patterns, anomalies, and trend shifts so teams act before losses compound.
+            </p>
           </div>
           <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
             {HIGHLIGHTS.map((item) => (
@@ -1239,64 +1226,45 @@ export default function LandingPage() {
         </section>
 
         <section className="mx-auto mt-16 w-full max-w-6xl space-y-6 sm:mt-20">
-          <div>
-            <h2 className={`${display.className} text-3xl font-semibold`}>What we stand for</h2>
-            <p className="text-muted-foreground mt-2">
-              The principles guiding how we build FarmFlow for estates, operators, and buyers.
+          <div className="space-y-2">
+            <h2 className={`${display.className} text-3xl font-semibold`}>Learn more about how we operate</h2>
+            <p className="text-muted-foreground">
+              Explore our principles and governance commitments in dedicated pages.
             </p>
           </div>
           <div className="grid gap-6 lg:grid-cols-2">
-            <Card id="mission" className="scroll-mt-24 border border-white/50 bg-white/80 backdrop-blur-md">
+            <Card className="border border-white/50 bg-white/80 backdrop-blur-md">
               <CardHeader>
-                <CardTitle className={`${display.className} text-xl`}>Mission</CardTitle>
-              <CardDescription>
-                  Help coffee estates improve margins, protect quality, and build durable buyer trust through Arabica/Robusta and Cherry/Parchment traceability.
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="text-sm text-muted-foreground">
-                FarmFlow replaces fragmented tools with one operating system that reconciles every bag, lot, and cost.
-                Teams move faster, reduce leakage, and document the practices that reward quality.
-            </CardContent>
-            </Card>
-            <Card id="vision" className="scroll-mt-24 border border-white/50 bg-white/80 backdrop-blur-md">
-              <CardHeader>
-              <CardTitle className={`${display.className} text-xl`}>Vision</CardTitle>
-              <CardDescription>Transparent coffee supply chains where quality and discipline are rewarded.</CardDescription>
-            </CardHeader>
-            <CardContent className="text-sm text-muted-foreground">
-                We are building a future where every estate runs with real-time tracking, verified quality, and instant
-                visibility for managers, buyers, and auditors.
-            </CardContent>
-            </Card>
-          </div>
-        </section>
-
-        <section className="mx-auto mt-16 w-full max-w-6xl space-y-6 sm:mt-20">
-          <div>
-            <h2 className={`${display.className} text-3xl font-semibold`}>Trust, Privacy & Governance</h2>
-            <p className="text-muted-foreground mt-2">Clear commitments for data ownership, access control, and accountability.</p>
-          </div>
-          <div className="grid gap-6 lg:grid-cols-2">
-            <Card id="privacy" className="scroll-mt-24 border border-white/50 bg-white/80 backdrop-blur-md">
-              <CardHeader>
-                <CardTitle className={`${display.className} text-xl`}>Privacy</CardTitle>
-                <CardDescription>Your estate data stays private, isolated, and under your control.</CardDescription>
+                <CardTitle className={`${display.className} text-xl`}>What We Stand For</CardTitle>
+                <CardDescription>
+                  Mission, vision, and the product principles guiding FarmFlow for estates, operators, and buyers.
+                </CardDescription>
               </CardHeader>
-              <CardContent className="text-sm text-muted-foreground space-y-3">
-                <p>We do not sell operational data. Every estate runs in its own tenant-isolated workspace.</p>
-                <p>Access is role-based with audit trails showing who changed what and when.</p>
-                <p>Exports and backups remain under your control, and user access can be revoked at any time.</p>
+              <CardContent className="space-y-3 text-sm text-muted-foreground">
+                <p>
+                  Understand the operating philosophy behind our decisions, from traceability-first workflows to practical
+                  adoption for field teams.
+                </p>
+                <Button asChild>
+                  <Link href="/standards">Open Standards Page</Link>
+                </Button>
               </CardContent>
             </Card>
-            <Card id="terms" className="scroll-mt-24 border border-white/50 bg-white/80 backdrop-blur-md">
+            <Card className="border border-white/50 bg-white/80 backdrop-blur-md">
               <CardHeader>
-                <CardTitle className={`${display.className} text-xl`}>Terms</CardTitle>
-                <CardDescription>Transparent usage with clear responsibilities for both sides.</CardDescription>
+                <CardTitle className={`${display.className} text-xl`}>Trust, Privacy & Governance</CardTitle>
+                <CardDescription>
+                  Data ownership, privacy, terms, and accountability commitments in one place.
+                </CardDescription>
               </CardHeader>
-              <CardContent className="text-sm text-muted-foreground space-y-3">
-                <p>FarmFlow provides operational tooling and reporting, not financial or legal advice.</p>
-                <p>Tenant admins are responsible for data quality and user access inside their estate workspace.</p>
-                <p>Service updates are communicated in advance and designed to preserve data continuity.</p>
+              <CardContent className="space-y-3 text-sm text-muted-foreground">
+                <p>
+                  Review how estate data is protected, how access is controlled, and what operational responsibilities are
+                  shared between FarmFlow and tenant admins.
+                </p>
+                <Button asChild>
+                  <Link href="/trust">Open Trust Page</Link>
+                </Button>
               </CardContent>
             </Card>
           </div>
@@ -1304,7 +1272,7 @@ export default function LandingPage() {
       </main>
 
         <footer className="border-t border-white/40 bg-white/70 backdrop-blur-md">
-          <div className="mx-auto flex w-full max-w-6xl flex-col gap-6 px-6 py-10 md:flex-row md:items-center md:justify-between">
+          <div className="mx-auto flex w-full max-w-6xl flex-col gap-6 px-4 py-10 sm:px-6 md:flex-row md:items-center md:justify-between">
             <div className="space-y-2">
               <p className="text-sm font-semibold">FarmFlow</p>
               <p className="text-xs text-muted-foreground">
@@ -1336,21 +1304,15 @@ export default function LandingPage() {
               <a href="#pricing" className="hover:text-foreground">
                 Early Access
               </a>
-              <a href="#mission" className="hover:text-foreground">
-                Mission
-              </a>
-              <a href="#vision" className="hover:text-foreground">
-                Vision
-              </a>
-              <a href="#privacy" className="hover:text-foreground">
-                Privacy
-              </a>
+              <Link href="/standards" className="hover:text-foreground">
+                What We Stand For
+              </Link>
+              <Link href="/trust" className="hover:text-foreground">
+                Trust
+              </Link>
               <Link href="/privacy" className="hover:text-foreground">
                 Privacy Notice
               </Link>
-              <a href="#terms" className="hover:text-foreground">
-                Terms
-              </a>
               <Link href="/legal/terms" className="hover:text-foreground">
                 MSA / ToS
               </Link>

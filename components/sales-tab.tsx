@@ -6,7 +6,6 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { FieldLabel } from "@/components/ui/field-label"
-import { Textarea } from "@/components/ui/textarea"
 import { Calendar } from "@/components/ui/calendar"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
@@ -23,6 +22,7 @@ import { useTenantSettings } from "@/hooks/use-tenant-settings"
 import { formatDateOnly } from "@/lib/date-utils"
 import { formatCurrency, formatNumber } from "@/lib/format"
 import { canAcceptNonNegative, isBlockedNumericKey } from "@/lib/number-input"
+import { resolveDispatchReceivedKgs as resolveDispatchReceivedKgsValue, resolveSalesKgs } from "@/lib/sales-math"
 
 interface SalesRecord {
   id?: number
@@ -41,6 +41,8 @@ interface SalesRecord {
   revenue: number
   kgs_received?: number | null
   kgs?: number | null
+  weight_kgs?: number | null
+  kgs_sent?: number | null
   bank_account: string | null
   notes: string | null
 }
@@ -99,25 +101,18 @@ const toCanonicalCoffeeLabel = (value: string | null | undefined) => {
 const resolveDispatchReceivedKgs = (
   row: Pick<DispatchSummaryRow, "kgs_received" | "bags_dispatched">,
   bagWeightKg: number,
-) => {
-  const received = Number(row.kgs_received) || 0
-  if (received > 0) return received
-  const dispatchedBags = Number(row.bags_dispatched) || 0
-  return dispatchedBags * bagWeightKg
-}
+) => resolveDispatchReceivedKgsValue(row, bagWeightKg)
 
 const resolveSalesRecordKgs = (
-  record: Pick<SalesRecord, "kgs" | "kgs_received" | "bags_sold">,
+  record: Pick<SalesRecord, "kgs" | "kgs_received" | "weight_kgs" | "kgs_sent" | "bags_sold">,
   bagWeightKg: number,
-) => {
-  const received = Number(record.kgs_received) || 0
-  if (received > 0) return received
-  const kgs = Number(record.kgs) || 0
-  if (kgs > 0) return kgs
-  return (Number(record.bags_sold) || 0) * bagWeightKg
+) => resolveSalesKgs(record, bagWeightKg)
+
+type SalesTabProps = {
+  showDataToolsControls?: boolean
 }
 
-export default function SalesTab() {
+export default function SalesTab({ showDataToolsControls = false }: SalesTabProps) {
   const { user } = useAuth()
   const { settings } = useTenantSettings()
   const [selectedFiscalYear, setSelectedFiscalYear] = useState<FiscalYear>(getCurrentFiscalYear())
@@ -1399,7 +1394,7 @@ export default function SalesTab() {
               />
               <Input
                 type="text"
-                placeholder="e.g., HF-A1, MV-07"
+                placeholder="e.g., MAIN-A1, BLOCK-07"
                 value={batchNo}
                 onChange={(e) => setBatchNo(e.target.value)}
               />
@@ -1668,10 +1663,12 @@ export default function SalesTab() {
                   ))}
                 </SelectContent>
               </Select>
-              <Button variant="outline" size="sm" onClick={exportToCSV} className="w-full bg-transparent sm:w-auto">
-                <Download className="mr-2 h-4 w-4" />
-                Export CSV
-              </Button>
+              {showDataToolsControls && (
+                <Button variant="outline" size="sm" onClick={exportToCSV} className="w-full bg-transparent sm:w-auto">
+                  <Download className="mr-2 h-4 w-4" />
+                  Export CSV
+                </Button>
+              )}
             </div>
           </div>
         </CardHeader>

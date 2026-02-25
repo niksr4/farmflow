@@ -28,6 +28,11 @@ yarn-error.log*
 # local exports
 tmp_*.csv
 
+# playwright
+playwright-report/
+test-results/
+tests/e2e/.auth/
+
 # typescript
 *.tsbuildinfo
 next-env.d.ts

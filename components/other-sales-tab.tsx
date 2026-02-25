@@ -381,7 +381,7 @@ export default function OtherSalesTab() {
         <CardHeader>
           <CardTitle>{editingRecord ? "Edit Other Sale" : "Record Other Sale"}</CardTitle>
           <CardDescription>
-            Example: HF Pepper can be a contract value, while PG/MV entries can be per-kg sales.
+            Example: one location can use contract mode while another uses per-kg mode.
           </CardDescription>
         </CardHeader>
         <CardContent className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
@@ -395,15 +395,15 @@ export default function OtherSalesTab() {
           </div>
 
           <div className="space-y-2">
-            <Label>Estate</Label>
+            <Label>Location</Label>
             <Select value={form.location_id || undefined} onValueChange={(value) => setForm((prev) => ({ ...prev, location_id: value }))}>
               <SelectTrigger>
-                <SelectValue placeholder="Select estate" />
+                <SelectValue placeholder="Select location" />
               </SelectTrigger>
               <SelectContent>
                 {locations.map((location) => (
                   <SelectItem key={location.id} value={location.id}>
-                    {location.name || location.code || "Estate"}
+                    {location.name || location.code || "Location"}
                   </SelectItem>
                 ))}
               </SelectContent>

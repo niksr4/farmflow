@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server"
 import { runRetentionCleanup } from "@/lib/server/privacy"
+import { runImportJobRetentionCleanup } from "@/lib/server/import-jobs"
 
 export const dynamic = "force-dynamic"
 
@@ -8,7 +9,7 @@ const getCronSecret = () => {
   return secret ? secret : null
 }
 
-export async function POST(request: Request) {
+async function handleCronInvocation(request: Request) {
   try {
     const secret = getCronSecret()
     if (!secret) {
@@ -24,11 +25,20 @@ export async function POST(request: Request) {
     }
 
     await runRetentionCleanup()
-    return NextResponse.json({ success: true })
+    const importJobs = await runImportJobRetentionCleanup()
+    return NextResponse.json({ success: true, importJobs })
   } catch (error: any) {
     return NextResponse.json(
       { success: false, error: error.message || "Retention cleanup failed" },
       { status: 500 },
     )
   }
+}
+
+export async function GET(request: Request) {
+  return handleCronInvocation(request)
+}
+
+export async function POST(request: Request) {
+  return handleCronInvocation(request)
 }

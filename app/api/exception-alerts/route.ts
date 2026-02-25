@@ -880,9 +880,6 @@ export async function GET() {
       const sales = salesDailyMap.get(date) || {}
       const ripe = Number(proc.ripe_kgs) || 0
       const dryParch = Number(proc.dry_parch_kgs) || 0
-      const dryCherry = Number(proc.dry_cherry_kgs) || 0
-      const float = Number(proc.float_kgs) || 0
-      const green = Number(proc.green_kgs) || 0
       const dispatchedKgs = (Number(disp.bags_dispatched) || 0) * bagWeightKg
       const receivedKgs = resolveDispatchReceivedKgs(disp, bagWeightKg)
       const soldKgs = resolveSalesKgs(sales, bagWeightKg)

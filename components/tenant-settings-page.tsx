@@ -957,7 +957,7 @@ export default function TenantSettingsPage() {
   const enabledTenantModuleCount = modulePermissions.filter((module) => module.enabled).length
   const enabledUserModuleCount = userModulePermissions.filter((module) => module.enabled).length
   const selectedUser = users.find((u) => u.id === selectedUserId) || null
-  const isSelectedUserRoleScoped = selectedUser?.role === "user" || selectedUser?.role === "viewer"
+  const isSelectedUserRoleScoped = selectedUser?.role === "user"
   const sectionLinks: Array<{ id: string; label: string }> = [
     { id: "estate-identity", label: "Estate" },
     { id: "display-preferences", label: "Display" },
@@ -1552,7 +1552,7 @@ export default function TenantSettingsPage() {
       <Card id="locations" className="scroll-mt-24 border-border/70 bg-white/85">
         <CardHeader>
           <CardTitle>Locations</CardTitle>
-          <CardDescription>Add or edit estate locations (HF, MV, PG, etc.).</CardDescription>
+          <CardDescription>Add or edit estate locations used by your team.</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="grid grid-cols-1 md:grid-cols-[2fr_1fr_auto] gap-3">
@@ -1570,13 +1570,13 @@ export default function TenantSettingsPage() {
                         <Info className="h-3 w-3" />
                       </button>
                     </TooltipTrigger>
-                    <TooltipContent>Use estate block names (HF, MV, PG) for reports.</TooltipContent>
+                    <TooltipContent>Use the exact names your team uses in the field.</TooltipContent>
                   </Tooltip>
                 </TooltipProvider>
               </div>
               <Input
                 id="location-name"
-                placeholder="HF, MV, PG"
+                placeholder="Main Estate, Block A, Washing Station"
                 value={newLocationName}
                 onChange={(event) => setNewLocationName(event.target.value)}
               />
@@ -1601,7 +1601,7 @@ export default function TenantSettingsPage() {
               </div>
               <Input
                 id="location-code"
-                placeholder="HF"
+                placeholder="MAIN"
                 value={newLocationCode}
                 onChange={(event) => setNewLocationCode(event.target.value)}
               />
@@ -1759,7 +1759,6 @@ export default function TenantSettingsPage() {
                 <SelectContent>
                   <SelectItem value="admin">Admin</SelectItem>
                   <SelectItem value="user">User</SelectItem>
-                  <SelectItem value="viewer">Viewer (Read-only)</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -1805,7 +1804,6 @@ export default function TenantSettingsPage() {
                             <SelectContent>
                               <SelectItem value="admin">Admin</SelectItem>
                               <SelectItem value="user">User</SelectItem>
-                              <SelectItem value="viewer">Viewer (Read-only)</SelectItem>
                             </SelectContent>
                           </Select>
                         )}
@@ -1898,7 +1896,7 @@ export default function TenantSettingsPage() {
             </div>
             {isSelectedUserRoleScoped && (
               <p className="text-xs text-muted-foreground">
-                Live Balance Sheet is admin-only and remains disabled for user/viewer roles.
+                Live Balance Sheet is admin-only and remains disabled for user roles.
               </p>
             )}
 

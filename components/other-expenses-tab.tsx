@@ -78,7 +78,6 @@ export default function OtherExpensesTab({ locationId }: { locationId?: string }
 
     if (matchingActivity) {
       setFormData((prev) => ({ ...prev, reference: matchingActivity.reference }))
-    } else {
     }
   }
 

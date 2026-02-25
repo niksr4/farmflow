@@ -13,7 +13,7 @@ const isMissingRelation = (error: unknown, tableName: string) => {
   return message.includes(`relation "${tableName}" does not exist`)
 }
 
-export async function GET(request: Request) {
+export async function GET(_request: Request) {
   try {
     const sessionUser = await requireModuleAccess("accounts")
     const tenantContext = normalizeTenantContext(sessionUser.tenantId, sessionUser.role)

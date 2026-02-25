@@ -26,9 +26,10 @@ type RainfallRecord = {
 
 type RainfallTabProps = {
   username: string
+  showDataToolsControls?: boolean
 }
 
-export default function RainfallTab({ username }: RainfallTabProps) {
+export default function RainfallTab({ username, showDataToolsControls = false }: RainfallTabProps) {
   const { user } = useAuth()
   const canDelete = user?.role === "admin" || user?.role === "owner"
   const [records, setRecords] = useState<RainfallRecord[]>([])
@@ -261,10 +262,12 @@ export default function RainfallTab({ username }: RainfallTabProps) {
               </CardTitle>
               <CardDescription>Monthly rainfall totals in inches</CardDescription>
             </div>
-            <Button onClick={exportToCSV} variant="outline" className="gap-2 bg-transparent">
-              <Download className="h-4 w-4" />
-              Export to CSV
-            </Button>
+            {showDataToolsControls && (
+              <Button onClick={exportToCSV} variant="outline" className="gap-2 bg-transparent">
+                <Download className="h-4 w-4" />
+                Export to CSV
+              </Button>
+            )}
           </div>
         </CardHeader>
         <CardContent>

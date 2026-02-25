@@ -6,7 +6,7 @@ import { canDeleteModule, canWriteModule } from "@/lib/permissions"
 import { logAuditEvent } from "@/lib/server/audit-log"
 import { toNonNegativeNumber } from "@/lib/number-input"
 
-export async function GET(request: NextRequest) {
+export async function GET(_request: NextRequest) {
   try {
     const sessionUser = await requireModuleAccess("rainfall")
     const tenantContext = normalizeTenantContext(sessionUser.tenantId, sessionUser.role)

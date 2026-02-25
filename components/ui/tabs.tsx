@@ -14,7 +14,7 @@ const TabsList = React.forwardRef<
   <TabsPrimitive.List
     ref={ref}
     className={cn(
-      "flex w-full max-w-full flex-wrap items-start justify-start gap-1 rounded-lg border border-black/5 bg-white/80 p-2 text-foreground/80 backdrop-blur-sm shadow-sm dark:border-slate-700 dark:bg-slate-900/80 dark:text-slate-200",
+      "flex w-full max-w-full flex-wrap items-start justify-start gap-1 rounded-lg border-[1.5px] border-border/85 bg-gradient-to-b from-white/95 to-muted/40 p-2 text-foreground/90 backdrop-blur-sm shadow-[0_8px_20px_-16px_rgba(15,23,42,0.5)] dark:from-slate-900/90 dark:to-slate-900/75 dark:text-slate-100",
       className,
     )}
     {...props}
@@ -29,7 +29,7 @@ const TabsTrigger = React.forwardRef<
   <TabsPrimitive.Trigger
     ref={ref}
     className={cn(
-      "inline-flex min-h-10 items-center justify-center whitespace-nowrap rounded-md border border-transparent bg-transparent px-3.5 py-2.5 text-sm font-medium text-neutral-600 ring-offset-background transition-all hover:border-black/5 hover:bg-neutral-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/30 focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 data-[state=active]:border-emerald-600 data-[state=active]:bg-emerald-600 data-[state=active]:text-white data-[state=active]:shadow-sm [&_svg]:h-4 [&_svg]:w-4 [&_svg]:text-neutral-500 data-[state=active]:[&_svg]:text-white",
+      "inline-flex min-h-10 items-center justify-center whitespace-nowrap rounded-md border border-transparent bg-transparent px-3.5 py-2.5 text-sm font-semibold text-neutral-700 ring-offset-background transition-all hover:border-border/75 hover:bg-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/35 focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 data-[state=active]:border-primary/75 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-[0_8px_18px_-12px_rgba(15,23,42,0.65)] dark:text-slate-200 dark:hover:bg-slate-800/70 [&_svg]:h-4 [&_svg]:w-4 [&_svg]:text-neutral-500 data-[state=active]:[&_svg]:text-white",
       className,
     )}
     {...props}
@@ -44,7 +44,7 @@ const TabsContent = React.forwardRef<
   <TabsPrimitive.Content
     ref={ref}
     className={cn(
-      "mt-2 ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
+      "mt-2 data-[state=inactive]:hidden ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
       className,
     )}
     {...props}

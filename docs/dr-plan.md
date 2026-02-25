@@ -11,10 +11,10 @@
 ## Restore Test Procedure (Quarterly)
 1. Clone the production Neon branch to a staging branch.
 2. Restore latest snapshot to staging.
-3. Run smoke tests:
-   - Auth login
-   - Inventory list
-   - Billing invoice list
+3. Run smoke/regression tests:
+   - `pnpm test:e2e` (auth login, dashboard drilldowns, owner system health)
+   - `pnpm test` (core math/permissions/unit coverage)
+   - `pnpm lint`
 4. Document results and update RPO/RTO if needed.
 
 ## Ownership

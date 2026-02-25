@@ -57,9 +57,9 @@ export function useLaborData(locationId?: string, options: LaborDataOptions = {}
         }
         setError(null)
 
-      const query = new URLSearchParams()
-      query.set("limit", pageSize.toString())
-      query.set("offset", String(pageIndex * pageSize))
+        const query = new URLSearchParams()
+        query.set("limit", pageSize.toString())
+        query.set("offset", String(pageIndex * pageSize))
         if (locationId) {
           query.set("locationId", locationId)
         }
@@ -82,9 +82,10 @@ export function useLaborData(locationId?: string, options: LaborDataOptions = {}
           setError(responseText || `Failed to load deployments (${response.status})`)
           setDeployments([])
           setHasMore(false)
+          setTotalCount(0)
+          setTotalCost(0)
           return
         }
-
 
         if (data.success && Array.isArray(data.deployments)) {
           const nextTotalCount = Number(data.totalCount) || 0
@@ -105,21 +106,33 @@ export function useLaborData(locationId?: string, options: LaborDataOptions = {}
           setPage(pageIndex)
           setError(null)
         } else if (data.success && Array.isArray(data.transactions)) {
-          // Handle case where API returns transactions instead of deployments
-          setDeployments(data.transactions)
+          // Backward-compat for older response shape.
+          const nextDeployments = data.transactions
+          const nextTotalCount = Number(data.totalCount) || nextDeployments.length
+          const nextTotalCost =
+            Number(data.totalCost) ||
+            nextDeployments.reduce((sum: number, row: any) => sum + (Number(row?.totalCost) || 0), 0)
+          setDeployments(nextDeployments)
+          setTotalCount(nextTotalCount)
+          setTotalCost(nextTotalCost)
           setHasMore(false)
+          setPage(pageIndex)
           setError(null)
         } else {
           console.error("❌ Invalid response format:", data)
           setError(data.message || "Failed to load deployments")
           setDeployments([])
           setHasMore(false)
+          setTotalCount(0)
+          setTotalCost(0)
         }
       } catch (err: any) {
         console.error("❌ Error fetching labor deployments:", err)
         setError(err.message || "Failed to fetch deployments")
         setDeployments([])
         setHasMore(false)
+        setTotalCount(0)
+        setTotalCost(0)
       } finally {
         if (append) {
           setLoadingMore(false)

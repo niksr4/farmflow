@@ -37,6 +37,16 @@ const numericFields = [
   "moisture_pct",
 ]
 
+const writableDailyNumericFields = [
+  "crop_today",
+  "ripe_today",
+  "green_today",
+  "float_today",
+  "wet_parchment",
+  "dry_parch",
+  "dry_cherry",
+]
+
 const normalizeRecord = (record: any) => {
   numericFields.forEach((field) => {
     if (record[field] !== null && record[field] !== undefined) {
@@ -46,8 +56,8 @@ const normalizeRecord = (record: any) => {
   return record
 }
 
-const findInvalidNumericField = (record: Record<string, any>) =>
-  numericFields.find((field) => {
+const findInvalidNumericField = (record: Record<string, any>, fields: readonly string[] = numericFields) =>
+  fields.find((field) => {
     const value = record[field]
     if (value === null || value === undefined) return false
     const numeric = Number(value)
@@ -336,47 +346,41 @@ export async function POST(request: NextRequest) {
     const locationId = data.locationId
     const coffeeType = data.coffeeType
 
-    if (!locationId || !coffeeType) {
-      return NextResponse.json({ success: false, error: "Location and coffee type are required" }, { status: 400 })
+    if (!locationId || !coffeeType || !data.process_date) {
+      return NextResponse.json(
+        { success: false, error: "Location, coffee type, and process date are required" },
+        { status: 400 },
+      )
     }
     if (!isUuid(String(locationId))) {
       return NextResponse.json({ success: false, error: "locationId must be a valid UUID" }, { status: 400 })
+    }
+    const moistureValue =
+      data.moisture_pct === null || data.moisture_pct === undefined || data.moisture_pct === ""
+        ? null
+        : Number(data.moisture_pct)
+    if (moistureValue !== null && (!Number.isFinite(moistureValue) || moistureValue < 0 || moistureValue > 100)) {
+      return NextResponse.json({ success: false, error: "moisture_pct must be between 0 and 100" }, { status: 400 })
     }
 
     const record = {
       lot_id: data.lot_id ?? null,
       process_date: data.process_date,
-      crop_today: data.crop_today ?? 0,
-      crop_todate: Number(data.crop_todate) || 0,
-      ripe_today: data.ripe_today ?? 0,
-      ripe_todate: Number(data.ripe_todate) || 0,
-      ripe_percent: Number(data.ripe_percent) || 0,
-      green_today: data.green_today ?? 0,
-      green_todate: Number(data.green_todate) || 0,
-      green_percent: Number(data.green_percent) || 0,
-      float_today: data.float_today ?? 0,
-      float_todate: Number(data.float_todate) || 0,
-      float_percent: Number(data.float_percent) || 0,
-      wet_parchment: data.wet_parchment ?? 0,
-      fr_wp_percent: Number(data.fr_wp_percent) || 0,
-      dry_parch: data.dry_parch ?? 0,
-      dry_p_todate: Number(data.dry_p_todate) || 0,
-      wp_dp_percent: Number(data.wp_dp_percent) || 0,
-      dry_cherry: data.dry_cherry ?? 0,
-      dry_cherry_todate: Number(data.dry_cherry_todate) || 0,
-      dry_cherry_percent: Number(data.dry_cherry_percent) || 0,
-      dry_p_bags: Number(data.dry_p_bags) || 0,
-      dry_p_bags_todate: Number(data.dry_p_bags_todate) || 0,
-      dry_cherry_bags: Number(data.dry_cherry_bags) || 0,
-      dry_cherry_bags_todate: Number(data.dry_cherry_bags_todate) || 0,
-      moisture_pct: data.moisture_pct ?? null,
+      crop_today: Number(data.crop_today) || 0,
+      ripe_today: Number(data.ripe_today) || 0,
+      green_today: Number(data.green_today) || 0,
+      float_today: Number(data.float_today) || 0,
+      wet_parchment: Number(data.wet_parchment) || 0,
+      dry_parch: Number(data.dry_parch) || 0,
+      dry_cherry: Number(data.dry_cherry) || 0,
+      moisture_pct: moistureValue,
       quality_grade: data.quality_grade || null,
       defect_notes: data.defect_notes || null,
       quality_photo_url: data.quality_photo_url || null,
       notes: data.notes || "",
     }
 
-    const invalidField = findInvalidNumericField(record)
+    const invalidField = findInvalidNumericField(record, writableDailyNumericFields)
     if (invalidField) {
       return NextResponse.json(
         { success: false, error: `${invalidField.replace(/_/g, " ")} must be 0 or more` },
@@ -404,48 +408,26 @@ export async function POST(request: NextRequest) {
       sql`
         INSERT INTO processing_records (
           tenant_id, location_id, coffee_type, lot_id, process_date,
-          crop_today, crop_todate, ripe_today, ripe_todate, ripe_percent,
-          green_today, green_todate, green_percent, float_today, float_todate, float_percent,
-          wet_parchment, fr_wp_percent, dry_parch, dry_p_todate, wp_dp_percent,
-          dry_cherry, dry_cherry_todate, dry_cherry_percent,
-          dry_p_bags, dry_p_bags_todate, dry_cherry_bags, dry_cherry_bags_todate,
+          crop_today, ripe_today, green_today, float_today,
+          wet_parchment, dry_parch, dry_cherry,
           moisture_pct, quality_grade, defect_notes, quality_photo_url, notes
         )
         VALUES (
           ${tenantContext.tenantId}, ${locationId}, ${coffeeType}, ${record.lot_id}, ${record.process_date}::date,
-          ${record.crop_today}, ${record.crop_todate}, ${record.ripe_today}, ${record.ripe_todate}, ${record.ripe_percent},
-          ${record.green_today}, ${record.green_todate}, ${record.green_percent}, ${record.float_today}, ${record.float_todate}, ${record.float_percent},
-          ${record.wet_parchment}, ${record.fr_wp_percent}, ${record.dry_parch}, ${record.dry_p_todate}, ${record.wp_dp_percent},
-          ${record.dry_cherry}, ${record.dry_cherry_todate}, ${record.dry_cherry_percent},
-          ${record.dry_p_bags}, ${record.dry_p_bags_todate}, ${record.dry_cherry_bags}, ${record.dry_cherry_bags_todate},
+          ${record.crop_today}, ${record.ripe_today}, ${record.green_today}, ${record.float_today},
+          ${record.wet_parchment}, ${record.dry_parch}, ${record.dry_cherry},
           ${record.moisture_pct}, ${record.quality_grade}, ${record.defect_notes}, ${record.quality_photo_url}, ${record.notes}
         )
         ON CONFLICT (tenant_id, location_id, coffee_type, process_date)
         DO UPDATE SET
           lot_id = EXCLUDED.lot_id,
           crop_today = EXCLUDED.crop_today,
-          crop_todate = EXCLUDED.crop_todate,
           ripe_today = EXCLUDED.ripe_today,
-          ripe_todate = EXCLUDED.ripe_todate,
-          ripe_percent = EXCLUDED.ripe_percent,
           green_today = EXCLUDED.green_today,
-          green_todate = EXCLUDED.green_todate,
-          green_percent = EXCLUDED.green_percent,
           float_today = EXCLUDED.float_today,
-          float_todate = EXCLUDED.float_todate,
-          float_percent = EXCLUDED.float_percent,
           wet_parchment = EXCLUDED.wet_parchment,
-          fr_wp_percent = EXCLUDED.fr_wp_percent,
           dry_parch = EXCLUDED.dry_parch,
-          dry_p_todate = EXCLUDED.dry_p_todate,
-          wp_dp_percent = EXCLUDED.wp_dp_percent,
           dry_cherry = EXCLUDED.dry_cherry,
-          dry_cherry_todate = EXCLUDED.dry_cherry_todate,
-          dry_cherry_percent = EXCLUDED.dry_cherry_percent,
-          dry_p_bags = EXCLUDED.dry_p_bags,
-          dry_p_bags_todate = EXCLUDED.dry_p_bags_todate,
-          dry_cherry_bags = EXCLUDED.dry_cherry_bags,
-          dry_cherry_bags_todate = EXCLUDED.dry_cherry_bags_todate,
           moisture_pct = EXCLUDED.moisture_pct,
           quality_grade = EXCLUDED.quality_grade,
           defect_notes = EXCLUDED.defect_notes,
@@ -458,15 +440,35 @@ export async function POST(request: NextRequest) {
 
     await recomputeProcessingTotals(sql, tenantContext, locationId, coffeeType)
 
+    const refreshed = await runTenantQuery(
+      sql,
+      tenantContext,
+      sql`
+        SELECT pr.*, l.name as location_name, l.code as location_code
+        FROM processing_records pr
+        LEFT JOIN locations l ON l.id = pr.location_id
+        WHERE pr.tenant_id = ${tenantContext.tenantId}
+          AND pr.location_id = ${locationId}
+          AND pr.coffee_type = ${coffeeType}
+          AND DATE(pr.process_date) = ${record.process_date}::date
+        LIMIT 1
+      `,
+    )
+    const savedRecord = refreshed?.[0]
+      ? normalizeRecord(refreshed[0])
+      : result?.[0]
+        ? normalizeRecord(result[0])
+        : null
+
     await logAuditEvent(sql, sessionUser, {
       action: existing?.length ? "update" : "create",
       entityType: "processing_records",
-      entityId: result?.[0]?.id,
+      entityId: savedRecord?.id ?? result?.[0]?.id,
       before: existing?.[0] ?? null,
-      after: result?.[0] ?? null,
+      after: savedRecord ?? null,
     })
 
-    return NextResponse.json({ success: true, record: result[0] })
+    return NextResponse.json({ success: true, record: savedRecord })
   } catch (error: any) {
     console.error("Error saving processing record:", error)
     if (isModuleAccessError(error)) {

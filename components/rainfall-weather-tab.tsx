@@ -8,18 +8,20 @@ type RainfallWeatherTabProps = {
   username: string
   showRainfall?: boolean
   showWeather?: boolean
+  showDataToolsControls?: boolean
 }
 
 export default function RainfallWeatherTab({
   username,
   showRainfall = true,
   showWeather = false,
+  showDataToolsControls = false,
 }: RainfallWeatherTabProps) {
   const hasRainfall = Boolean(showRainfall)
   const hasWeather = Boolean(showWeather)
 
   if (hasRainfall && !hasWeather) {
-    return <RainfallTab username={username} />
+    return <RainfallTab username={username} showDataToolsControls={showDataToolsControls} />
   }
   if (hasWeather && !hasRainfall) {
     return <WeatherTab />
@@ -35,7 +37,7 @@ export default function RainfallWeatherTab({
       </TabsList>
       {hasRainfall && (
         <TabsContent value="rainfall" className="space-y-6">
-          <RainfallTab username={username} />
+          <RainfallTab username={username} showDataToolsControls={showDataToolsControls} />
         </TabsContent>
       )}
       {hasWeather && (

@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef } from "react"
 import Image from "next/image"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { Badge } from "@/components/ui/badge"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
@@ -43,6 +44,28 @@ interface WeatherApiData {
   }
 }
 
+interface RainfallContextData {
+  success: boolean
+  forecast: {
+    next3DaysRainInches: number
+    next7DaysRainInches: number
+    rainyDaysNext3: number
+    maxChanceNext3: number
+  }
+  actuals: {
+    last7DaysRainInches: number
+    recentDailyAverageInches: number
+    loggedDaysInLast30: number
+  }
+  dryingRisk: "low" | "medium" | "high" | string
+  anomalySignal: string
+  guidance: {
+    drying: string
+    picking: string
+    operations: string
+  }
+}
+
 type WeatherRegion = {
   id: string
   label: string
@@ -62,9 +85,11 @@ const WEATHER_REGIONS: WeatherRegion[] = [
 
 export default function WeatherTab() {
   const [weatherData, setWeatherData] = useState<WeatherApiData | null>(null)
+  const [rainfallContext, setRainfallContext] = useState<RainfallContextData | null>(null)
   const [loading, setLoading] = useState(true)
   const [isRefreshing, setIsRefreshing] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [contextError, setContextError] = useState<string | null>(null)
   const [selectedRegionId, setSelectedRegionId] = useState(WEATHER_REGIONS[0]?.id ?? "kodagu")
   const hasLoadedOnceRef = useRef(false)
   const selectedRegion = WEATHER_REGIONS.find((region) => region.id === selectedRegionId) ?? WEATHER_REGIONS[0]
@@ -82,10 +107,17 @@ export default function WeatherTab() {
           setLoading(true)
         }
         setError(null)
-        const response = await fetch(`/api/weather?region=${encodeURIComponent(selectedRegionQuery)}`, {
-          signal: controller.signal,
-          cache: "no-store",
-        })
+        setContextError(null)
+        const [response, contextResponse] = await Promise.all([
+          fetch(`/api/weather?region=${encodeURIComponent(selectedRegionQuery)}`, {
+            signal: controller.signal,
+            cache: "no-store",
+          }),
+          fetch(`/api/weather/rainfall-context?region=${encodeURIComponent(selectedRegionQuery)}`, {
+            signal: controller.signal,
+            cache: "no-store",
+          }),
+        ])
         const data = await response.json()
 
         if (!response.ok) {
@@ -93,6 +125,15 @@ export default function WeatherTab() {
         }
 
         setWeatherData(data)
+        const contextPayload = await contextResponse.json().catch(() => ({}))
+        if (contextResponse.ok && contextPayload?.success) {
+          setRainfallContext(contextPayload as RainfallContextData)
+        } else {
+          setRainfallContext(null)
+          if (contextPayload?.error) {
+            setContextError(String(contextPayload.error))
+          }
+        }
         hasLoadedOnceRef.current = true
       } catch (err) {
         if (err instanceof DOMException && err.name === "AbortError") return
@@ -165,6 +206,12 @@ export default function WeatherTab() {
   const { location, current, forecast } = weatherData
   const locationLabel = [location.name, location.region, location.country].filter(Boolean).join(", ")
   const hasProviderMismatch = Boolean(location.country) && String(location.country || "").toLowerCase() !== "india"
+  const dryingRiskClass =
+    rainfallContext?.dryingRisk === "high"
+      ? "border-rose-200 bg-rose-50 text-rose-700"
+      : rainfallContext?.dryingRisk === "medium"
+        ? "border-amber-200 bg-amber-50 text-amber-700"
+        : "border-emerald-200 bg-emerald-50 text-emerald-700"
 
   return (
     <div className="space-y-6">
@@ -241,6 +288,53 @@ export default function WeatherTab() {
               <span>Rain Chance: {forecast.forecastday[0].day.daily_chance_of_rain}%</span>
             </div>
           </div>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Rainfall Forecast Context</CardTitle>
+          <CardDescription>Use forecast + recent logs to plan drying and picking decisions.</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          {contextError ? (
+            <p className="text-sm text-muted-foreground">{contextError}</p>
+          ) : rainfallContext ? (
+            <>
+              <div className="flex flex-wrap items-center gap-2">
+                <Badge variant="outline" className={dryingRiskClass}>
+                  Drying risk: {String(rainfallContext.dryingRisk || "unknown").toUpperCase()}
+                </Badge>
+                <Badge variant="outline">
+                  Next 3 days rain: {rainfallContext.forecast.next3DaysRainInches.toFixed(2)} in
+                </Badge>
+                <Badge variant="outline">
+                  Rainy days next 3: {rainfallContext.forecast.rainyDaysNext3}
+                </Badge>
+                <Badge variant="outline">Signal: {rainfallContext.anomalySignal}</Badge>
+              </div>
+              <div className="grid gap-3 md:grid-cols-3 text-sm">
+                <div className="rounded-lg border border-border/60 bg-white/80 p-3">
+                  <p className="text-xs text-muted-foreground">Drying guidance</p>
+                  <p>{rainfallContext.guidance.drying}</p>
+                </div>
+                <div className="rounded-lg border border-border/60 bg-white/80 p-3">
+                  <p className="text-xs text-muted-foreground">Picking guidance</p>
+                  <p>{rainfallContext.guidance.picking}</p>
+                </div>
+                <div className="rounded-lg border border-border/60 bg-white/80 p-3">
+                  <p className="text-xs text-muted-foreground">Ops recommendation</p>
+                  <p>{rainfallContext.guidance.operations}</p>
+                </div>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Logged rain (last 7 days): {rainfallContext.actuals.last7DaysRainInches.toFixed(2)} in · Next 7 days forecast:{" "}
+                {rainfallContext.forecast.next7DaysRainInches.toFixed(2)} in
+              </p>
+            </>
+          ) : (
+            <p className="text-sm text-muted-foreground">Rainfall context will appear after forecast data loads.</p>
+          )}
         </CardContent>
       </Card>
 

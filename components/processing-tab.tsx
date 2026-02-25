@@ -114,7 +114,11 @@ interface LocationOption {
 
 const COFFEE_TYPES = DEFAULT_COFFEE_VARIETIES
 
-export default function ProcessingTab() {
+type ProcessingTabProps = {
+  showDataToolsControls?: boolean
+}
+
+export default function ProcessingTab({ showDataToolsControls = false }: ProcessingTabProps) {
   const { user } = useAuth()
   const { settings } = useTenantSettings()
   const bagWeightKg = Number(settings.bagWeightKg) || 50
@@ -905,7 +909,7 @@ export default function ProcessingTab() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {dashboardData.map((data, index) => (
+                  {dashboardData.map((data) => (
                     <TableRow
                       key={data.location}
                       className={cn(
@@ -940,19 +944,21 @@ export default function ProcessingTab() {
               <CardTitle>Processing Records</CardTitle>
               <CardDescription>Track daily coffee processing from cherry to final bags</CardDescription>
             </div>
-            <Button onClick={handleExportCSV} disabled={isExporting} variant="outline">
-              {isExporting ? (
-                <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Exporting...
-                </>
-              ) : (
-                <>
-                  <Download className="mr-2 h-4 w-4" />
-                  Export to CSV
-                </>
-              )}
-            </Button>
+            {showDataToolsControls && (
+              <Button onClick={handleExportCSV} disabled={isExporting} variant="outline">
+                {isExporting ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Exporting...
+                  </>
+                ) : (
+                  <>
+                    <Download className="mr-2 h-4 w-4" />
+                    Export to CSV
+                  </>
+                )}
+              </Button>
+            )}
           </div>
         </CardHeader>
         <CardContent className="space-y-6">

@@ -133,13 +133,13 @@ export default function OnboardingChecklist({
                           <Info className="h-3 w-3" />
                         </button>
                       </TooltipTrigger>
-                      <TooltipContent>Use estate block names (HF, MV, PG) for clean reports.</TooltipContent>
+                      <TooltipContent>Use the same names your team uses at each location.</TooltipContent>
                     </Tooltip>
                   </TooltipProvider>
                 </div>
                 <Input
                   id="onboarding-location-name"
-                  placeholder="HF A, MV, etc."
+                  placeholder="Main Estate, Block A, Wet Mill"
                   value={locationName}
                   onChange={(event) => onLocationNameChange(event.target.value)}
                 />
@@ -164,7 +164,7 @@ export default function OnboardingChecklist({
                 </div>
                 <Input
                   id="onboarding-location-code"
-                  placeholder="HF-A"
+                  placeholder="MAIN-A"
                   value={locationCode}
                   onChange={(event) => onLocationCodeChange(event.target.value)}
                 />

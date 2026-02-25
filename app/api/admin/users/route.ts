@@ -77,7 +77,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ success: false, error: "System usernames are reserved" }, { status: 400 })
     }
 
-    if (!["admin", "user", "viewer", "owner"].includes(role)) {
+    if (!["admin", "user", "owner"].includes(role)) {
       return NextResponse.json({ success: false, error: "Invalid role" }, { status: 400 })
     }
     if (role === "owner" && sessionUser.role !== "owner") {
@@ -145,7 +145,7 @@ export async function PATCH(request: Request) {
       return NextResponse.json({ success: false, error: "userId and role are required" }, { status: 400 })
     }
 
-    if (!["admin", "user", "viewer"].includes(role)) {
+    if (!["admin", "user"].includes(role)) {
       return NextResponse.json({ success: false, error: "Invalid role" }, { status: 400 })
     }
 

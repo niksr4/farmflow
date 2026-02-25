@@ -2,7 +2,6 @@
 
 import { useState, useEffect, useCallback } from "react"
 import type { InventoryItemView, InventoryTransactionView } from "@/lib/inventory-view-types"
-import { useAuth } from "@/hooks/use-auth"
 
 export interface InventorySummary {
   total_inventory_value: number
@@ -11,7 +10,6 @@ export interface InventorySummary {
 }
 
 export function useInventoryData() {
-  const { user } = useAuth()
   const [inventory, setInventory] = useState<InventoryItemView[]>([])
   const [summary, setSummary] = useState<InventorySummary>({
     total_inventory_value: 0,

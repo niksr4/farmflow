@@ -4,7 +4,7 @@ import { requireSessionUser } from "@/lib/server/auth"
 import { resolveEnabledModules } from "@/lib/modules"
 import { normalizeTenantContext, runTenantQuery } from "@/lib/server/tenant-db"
 
-export async function GET(request: Request) {
+export async function GET(_request: Request) {
   try {
     if (!sql) {
       return NextResponse.json({ success: false, error: "Database not configured" }, { status: 500 })

@@ -101,6 +101,11 @@ export default function LaborDeploymentTab({ locationId }: { locationId?: string
     return hfTotal + outsideTotal
   }
 
+  const formatLaborCount = (value: number) => {
+    const numericValue = Number(value) || 0
+    return Number.isInteger(numericValue) ? formatNumber(numericValue, 0) : formatNumber(numericValue, 1)
+  }
+
   const resetForm = () => {
     setFormData({
       date: new Date().toISOString().split("T")[0],
@@ -440,13 +445,13 @@ export default function LaborDeploymentTab({ locationId }: { locationId?: string
                       <CollapsibleContent className="pt-3 space-y-2">
                         {hfEntry && Number(hfEntry.laborCount) > 0 && (
                           <div className="text-sm">
-                            <span className="font-medium">HF Labor:</span> {formatNumber(Number(hfEntry.laborCount) || 0, 0)} @{" "}
+                            <span className="font-medium">Estate Labor:</span> {formatLaborCount(Number(hfEntry.laborCount) || 0)} @{" "}
                             {formatCurrency(hfEntry.costPerLabor)}
                           </div>
                         )}
                         {outsideEntry && Number(outsideEntry.laborCount) > 0 && (
                           <div className="text-sm">
-                            <span className="font-medium">Outside Labor:</span> {formatNumber(Number(outsideEntry.laborCount) || 0, 0)} @{" "}
+                            <span className="font-medium">Outside Labor:</span> {formatLaborCount(Number(outsideEntry.laborCount) || 0)} @{" "}
                             {formatCurrency(outsideEntry.costPerLabor)}
                           </div>
                         )}
@@ -487,7 +492,7 @@ export default function LaborDeploymentTab({ locationId }: { locationId?: string
                     <TableHead className="sticky top-0 bg-muted/60">Date</TableHead>
                     <TableHead className="sticky top-0 bg-muted/60">Code</TableHead>
                     <TableHead className="sticky top-0 bg-muted/60">Reference</TableHead>
-                    <TableHead className="sticky top-0 bg-muted/60">HF Laborers</TableHead>
+                    <TableHead className="sticky top-0 bg-muted/60">Estate Laborers</TableHead>
                     <TableHead className="sticky top-0 bg-muted/60">Outside Laborers</TableHead>
                     <TableHead className="text-right sticky top-0 bg-muted/60">Total Cost</TableHead>
                     <TableHead className="w-[100px] sticky top-0 bg-muted/60">Actions</TableHead>
@@ -504,12 +509,12 @@ export default function LaborDeploymentTab({ locationId }: { locationId?: string
                         <TableCell>{deployment.reference}</TableCell>
                         <TableCell>
                           {hfEntry
-                            ? `${formatNumber(Number(hfEntry.laborCount) || 0, 0)} @ ${formatCurrency(hfEntry.costPerLabor)}`
+                            ? `${formatLaborCount(Number(hfEntry.laborCount) || 0)} @ ${formatCurrency(hfEntry.costPerLabor)}`
                             : "-"}
                         </TableCell>
                         <TableCell>
                           {outsideEntry
-                            ? `${formatNumber(Number(outsideEntry.laborCount) || 0, 0)} @ ${formatCurrency(outsideEntry.costPerLabor)}`
+                            ? `${formatLaborCount(Number(outsideEntry.laborCount) || 0)} @ ${formatCurrency(outsideEntry.costPerLabor)}`
                             : "-"}
                         </TableCell>
                         <TableCell className="text-right font-semibold">{formatCurrency(deployment.totalCost)}</TableCell>

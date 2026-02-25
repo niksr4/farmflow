@@ -20,7 +20,7 @@ const toLocationBucket = (locationName?: string | null, locationCode?: string | 
   const normalized = base.replace(/[_-]+/g, " ").replace(/\s+/g, " ").trim()
   const tokens = normalized.split(" ")
 
-  // Roll up branch-like codes such as "HF A", "HF B", "HF C" into "HF"
+  // Roll up branch-like codes such as "MAIN A", "MAIN B" into a single bucket.
   if (tokens.length >= 2) {
     const head = tokens[0]
     const tail = tokens[1]
@@ -725,7 +725,6 @@ export async function GET(request: NextRequest) {
       if (!lotId) return
       const coffeeType = String(row.coffee_type || "Unknown")
       const bagType = normalizeBagType(row.bag_type)
-      const soldBags = Number(row.bags_sold) || 0
       const revenue = Number(row.revenue) || 0
       const soldKgs = resolveSalesKgs(row, bagWeightKg)
       const record = ensureLot(lotId, coffeeType, bagType)

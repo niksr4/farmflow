@@ -46,7 +46,7 @@ CREATE TABLE IF NOT EXISTS users (
   password_hash TEXT NOT NULL,
   password_reset_required BOOLEAN NOT NULL DEFAULT FALSE,
   password_updated_at TIMESTAMP,
-  role TEXT NOT NULL CHECK (role IN ('admin', 'user', 'viewer', 'owner')),
+  role TEXT NOT NULL CHECK (role IN ('admin', 'user', 'owner')),
   tenant_id UUID,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
@@ -58,7 +58,7 @@ ALTER TABLE users
 
 ALTER TABLE users DROP CONSTRAINT IF EXISTS users_role_check;
 ALTER TABLE users
-  ADD CONSTRAINT users_role_check CHECK (role IN ('admin', 'user', 'viewer', 'owner'));
+  ADD CONSTRAINT users_role_check CHECK (role IN ('admin', 'user', 'owner'));
 
 CREATE TABLE IF NOT EXISTS tenant_modules (
   id SERIAL PRIMARY KEY,
