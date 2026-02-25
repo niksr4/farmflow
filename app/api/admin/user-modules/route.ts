@@ -188,7 +188,7 @@ export async function PUT(request: Request) {
       actorUsername: sessionUser.username,
       actorRole: sessionUser.role,
       eventType: "permission_change",
-      severity: "warning",
+      severity: "info",
       source: "admin/user-modules",
       metadata: {
         action: "user_modules_updated",
@@ -272,7 +272,7 @@ export async function DELETE(request: Request) {
       actorUsername: sessionUser.username,
       actorRole: sessionUser.role,
       eventType: "permission_change",
-      severity: "warning",
+      severity: "info",
       source: "admin/user-modules",
       metadata: {
         action: "user_modules_reset",

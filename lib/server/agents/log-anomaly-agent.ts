@@ -82,6 +82,22 @@ const toAnomalySeverity = (value: unknown): AnomalySeverity => {
   return "low"
 }
 
+const isTestSource = (source: string) => {
+  const normalized = String(source || "").trim().toLowerCase()
+  return (
+    normalized === "smoke" ||
+    normalized.startsWith("smoke/") ||
+    normalized.startsWith("test/") ||
+    normalized.startsWith("e2e/")
+  )
+}
+
+const isOperationalPermissionChange = (cluster: Pick<EventCluster, "source" | "code">) => {
+  const source = String(cluster.source || "").trim().toLowerCase()
+  const code = String(cluster.code || "").trim().toLowerCase()
+  return code === "permission_change" && source.startsWith("admin/")
+}
+
 const inferLikelyCause = (cluster: {
   code: string
   message: string
@@ -144,6 +160,7 @@ async function fetchAnomalyEvents(startDateIso: string) {
     appRows.forEach((row: any) => {
       const endpoint = row.endpoint ? String(row.endpoint) : null
       const source = String(row.source || "app")
+      if (isTestSource(source)) return
       const code = String(row.code || "app_error")
       const message = String(row.message || "")
       const fingerprint =
@@ -352,7 +369,14 @@ export async function runLogAnomalyAgent(input?: {
     const events = await fetchAnomalyEvents(rangeStart)
     const clusters = buildClusters(events)
     const aiBrief = await buildAiDailyBrief(clusters)
-    const alertClusters = clusters.filter((cluster) => cluster.isNewSinceYesterday || cluster.severity === "critical")
+    const suppressedOperationalAlertCandidates = clusters.filter(
+      (cluster) =>
+        (cluster.isNewSinceYesterday || cluster.severity === "critical") && isOperationalPermissionChange(cluster),
+    )
+    const alertClusters = clusters.filter(
+      (cluster) =>
+        (cluster.isNewSinceYesterday || cluster.severity === "critical") && !isOperationalPermissionChange(cluster),
+    )
 
     const summary = {
       dryRun,
@@ -362,6 +386,7 @@ export async function runLogAnomalyAgent(input?: {
       criticalClusters: clusters.filter((cluster) => cluster.severity === "critical").length,
       highClusters: clusters.filter((cluster) => cluster.severity === "high").length,
       alertClusterCount: alertClusters.length,
+      suppressedOperationalAlertCandidates: suppressedOperationalAlertCandidates.length,
       topClusters: clusters.slice(0, 5).map((cluster) => ({
         fingerprint: cluster.fingerprint,
         severity: cluster.severity,

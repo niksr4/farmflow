@@ -183,6 +183,21 @@ async function collectTenantFindings(input: { tenantId: string; tenantName: stri
             WHERE tenant_id = $1
               AND process_date >= (CURRENT_DATE - INTERVAL '29 days')
           ),
+          dispatched AS (
+            SELECT
+              COALESCE(
+                SUM(
+                  COALESCE(
+                    NULLIF(kgs_received, 0),
+                    bags_dispatched * $2
+                  )
+                ),
+                0
+              ) AS dispatch_kgs
+            FROM dispatch_records
+            WHERE tenant_id = $1
+              AND dispatch_date >= (CURRENT_DATE - INTERVAL '29 days')
+          ),
           sold AS (
             SELECT
               COALESCE(
@@ -201,8 +216,8 @@ async function collectTenantFindings(input: { tenantId: string; tenantName: stri
             WHERE tenant_id = $1
               AND sale_date >= (CURRENT_DATE - INTERVAL '29 days')
           )
-          SELECT processed.processed_kgs, sold.sold_kgs
-          FROM processed, sold
+          SELECT processed.processed_kgs, dispatched.dispatch_kgs, sold.sold_kgs
+          FROM processed, dispatched, sold
         `,
         [input.tenantId, input.bagWeightKg],
       ),
@@ -320,21 +335,28 @@ async function collectTenantFindings(input: { tenantId: string; tenantName: stri
   const processedVsSold = processedVsSoldRows[0]
   if (processedVsSold) {
     const processed = toNumber(processedVsSold.processed_kgs)
+    const dispatched = toNumber(processedVsSold.dispatch_kgs)
     const sold = toNumber(processedVsSold.sold_kgs)
-    if (sold > processed + 5) {
+    const supplySignal = Math.max(processed, dispatched)
+    if (sold > supplySignal + 5) {
+      const diff = sold - supplySignal
+      const severity: IntegritySeverity =
+        supplySignal <= 0 ? "medium" : sold > supplySignal * 1.2 ? "high" : "medium"
       findings.push({
         tenantId: input.tenantId,
         tenantName: input.tenantName,
         ruleCode: "processed_less_than_sold_30d",
         entityKey: "estate:30d",
-        severity: sold > processed * 1.2 ? "high" : "medium",
-        title: "Processed volume below sold volume",
-        description: `Last 30 days sold KGs (${round2(sold)}) exceed processed output (${round2(processed)}) by ${round2(sold - processed)} KG.`,
+        severity,
+        title: "Sales exceed 30-day supply signal",
+        description: `Last 30 days sold KGs (${round2(sold)}) exceed supply signal (${round2(supplySignal)}) by ${round2(diff)} KG (processed ${round2(processed)}, dispatched ${round2(dispatched)}).`,
         details: {
           periodDays: 30,
           processedKgs: round2(processed),
+          dispatchReceivedKgs: round2(dispatched),
+          supplySignalKgs: round2(supplySignal),
           soldKgs: round2(sold),
-          diffKgs: round2(sold - processed),
+          diffKgs: round2(diff),
         },
       })
     }

@@ -110,7 +110,7 @@ export async function PUT(request: Request) {
       actorUsername: sessionUser.username,
       actorRole: sessionUser.role,
       eventType: "permission_change",
-      severity: "warning",
+      severity: "info",
       source: "admin/tenant-modules",
       metadata: {
         action: "tenant_modules_updated",

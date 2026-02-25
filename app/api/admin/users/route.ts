@@ -113,7 +113,7 @@ export async function POST(request: Request) {
       actorUsername: sessionUser.username,
       actorRole: sessionUser.role,
       eventType: "permission_change",
-      severity: "warning",
+      severity: "info",
       source: "admin/users",
       metadata: {
         action: "user_created",
@@ -205,7 +205,7 @@ export async function PATCH(request: Request) {
       actorUsername: sessionUser.username,
       actorRole: sessionUser.role,
       eventType: "permission_change",
-      severity: "warning",
+      severity: "info",
       source: "admin/users",
       metadata: {
         action: "role_updated",
@@ -316,7 +316,7 @@ export async function PUT(request: Request) {
       actorUsername: sessionUser.username,
       actorRole: sessionUser.role,
       eventType: "permission_change",
-      severity: "warning",
+      severity: "info",
       source: "admin/users",
       metadata: {
         action: "password_reset_forced",
@@ -401,7 +401,7 @@ export async function DELETE(request: Request) {
       actorUsername: sessionUser.username,
       actorRole: sessionUser.role,
       eventType: "permission_change",
-      severity: "warning",
+      severity: "info",
       source: "admin/users",
       metadata: {
         action: "user_deleted",
