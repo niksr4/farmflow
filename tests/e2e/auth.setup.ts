@@ -17,10 +17,17 @@ setup("authenticate owner session", async ({ page }) => {
   }
 
   await page.goto("/login")
-  await page.getByLabel("Username").fill(username)
-  await page.getByLabel("Password").fill(password)
+  await page.locator("#username").fill(username)
+  await page.locator("#password").fill(password)
   await page.getByRole("button", { name: "Sign In" }).click()
-  await expect(page).toHaveURL(/\/dashboard(?:\?|$)/)
+  try {
+    await expect(page).toHaveURL(/\/dashboard(?:\?|$)/)
+  } catch (error) {
+    const loginErrorText = (await page.locator("div.bg-red-50").first().textContent().catch(() => "")) || ""
+    throw new Error(
+      `E2E login failed. Check E2E_USERNAME/E2E_PASSWORD for a valid account. Login page message: ${loginErrorText.trim() || "none"}`,
+      { cause: error as Error },
+    )
+  }
   await page.context().storageState({ path: authFile })
 })
-
