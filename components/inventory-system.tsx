@@ -3436,6 +3436,10 @@ export default function InventorySystem() {
       }
 
       const nextQuery = params.toString()
+      const currentQuery = searchParams.toString()
+      if (nextQuery === currentQuery) {
+        return
+      }
       const nextPath = nextQuery ? `/dashboard?${nextQuery}` : "/dashboard"
       router.replace(nextPath, { scroll: false })
     },

@@ -28,12 +28,18 @@ Optional:
 # Public + authenticated + owner checks
 pnpm test:e2e
 
+# Authenticated suites only (fails fast if E2E creds are missing)
+pnpm test:e2e:auth
+
 # Full local regression gate
 pnpm test:regression
+
+# Strict gate for release readiness
+pnpm test:regression:strict
 ```
 
 ## Notes
 
 - If `E2E_USERNAME`/`E2E_PASSWORD` are missing, public specs still run and authenticated specs are skipped.
+- `pnpm test:e2e:auth` and `pnpm test:regression:strict` intentionally fail fast when authenticated env vars are not set.
 - High-variance endpoints are mocked inside specs (`/api/intelligence-brief`, `/api/exception-alerts`, `/api/admin/system-health`) to keep drilldown checks deterministic.
-
