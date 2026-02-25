@@ -2,10 +2,10 @@
 
 import { useAuth } from "@/hooks/use-auth"
 import { useRouter, useSearchParams } from "next/navigation"
-import { useEffect } from "react"
+import { Suspense, useEffect } from "react"
 import InventorySystem from "@/components/inventory-system"
 
-export default function DashboardPage() {
+function DashboardPageContent() {
   const { user, status } = useAuth()
   const router = useRouter()
   const searchParams = useSearchParams()
@@ -36,4 +36,12 @@ export default function DashboardPage() {
   }
 
   return <InventorySystem />
+}
+
+export default function DashboardPage() {
+  return (
+    <Suspense fallback={null}>
+      <DashboardPageContent />
+    </Suspense>
+  )
 }
