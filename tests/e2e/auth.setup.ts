@@ -21,7 +21,7 @@ setup("authenticate owner session", async ({ page }) => {
   await page.locator("#password").fill(password)
   await page.getByRole("button", { name: "Sign In" }).click()
   try {
-    await expect(page).toHaveURL(/\/dashboard(?:\?|$)/)
+    await expect(page).toHaveURL(/\/(?:dashboard|admin\/tenants)(?:\?|$)/)
   } catch (error) {
     const loginErrorText = (await page.locator("div.bg-red-50").first().textContent().catch(() => "")) || ""
     throw new Error(

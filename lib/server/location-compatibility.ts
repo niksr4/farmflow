@@ -17,6 +17,16 @@ type LocationCompatibility = {
   firstLocationCreatedAt: string | null
 }
 
+const toSqlSafeIsoTimestamp = (value: unknown): string | null => {
+  if (!value) return null
+  if (value instanceof Date) {
+    const ms = value.getTime()
+    return Number.isFinite(ms) ? value.toISOString() : null
+  }
+  const parsed = new Date(String(value))
+  return Number.isFinite(parsed.getTime()) ? parsed.toISOString() : null
+}
+
 export async function resolveLocationCompatibility(
   db: NeonSql,
   tenantContext: TenantContext,
@@ -55,8 +65,8 @@ export async function resolveLocationCompatibility(
     `,
   )
 
-  const firstLocationCreatedAt = rows?.[0]?.first_location_created_at ? String(rows[0].first_location_created_at) : null
-  const firstActivityCreatedAt = rows?.[0]?.first_activity_created_at
+  const firstLocationCreatedAt = toSqlSafeIsoTimestamp(rows?.[0]?.first_location_created_at)
+  const firstActivityCreatedAt = toSqlSafeIsoTimestamp(rows?.[0]?.first_activity_created_at)
   const includeLegacyPreLocationRecords = shouldIncludeLegacyPreLocationRecords(firstLocationCreatedAt, firstActivityCreatedAt)
 
   return {

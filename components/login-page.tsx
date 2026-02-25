@@ -29,7 +29,10 @@ export default function LoginPage() {
       if (!result.ok) {
         throw new Error(result.error || "Invalid username or password")
       }
-      router.push("/dashboard")
+      const sessionResponse = await fetch("/api/auth/session", { cache: "no-store" })
+      const sessionPayload = await sessionResponse.json().catch(() => null)
+      const role = String(sessionPayload?.user?.role || "").toLowerCase()
+      router.push(role === "owner" ? "/admin/tenants" : "/dashboard")
     } catch (err: any) {
       setError(err.message || "Invalid username or password")
     }

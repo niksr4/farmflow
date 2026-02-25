@@ -381,6 +381,7 @@ export default function InventorySystem() {
   })
   const [isSavingNewItem, setIsSavingNewItem] = useState(false)
   const [isMovementDrawerOpen, setIsMovementDrawerOpen] = useState(false)
+  const [isInventoryDrilldownOpen, setIsInventoryDrilldownOpen] = useState(false)
 
   // transaction creation/editing
   const [newTransaction, setNewTransaction] = useState<Transaction | null>(createDefaultTransaction())
@@ -968,6 +969,11 @@ export default function InventorySystem() {
     return resolveItemValue(selectedInventoryDrilldownItem)
   }, [selectedInventoryDrilldownItem, resolveItemValue])
 
+  const openInventoryDrilldown = useCallback((itemName: string) => {
+    setInventoryDrilldownItemName(itemName)
+    setIsInventoryDrilldownOpen(true)
+  }, [])
+
   const recentDrilldownTransactions = useMemo(() => {
     if (!inventoryDrilldownItemName) return []
     return transactions
@@ -985,6 +991,7 @@ export default function InventorySystem() {
     const stillVisible = filteredAndSortedInventory.some((item) => item.name === inventoryDrilldownItemName)
     if (!stillVisible) {
       setInventoryDrilldownItemName("")
+      setIsInventoryDrilldownOpen(false)
     }
   }, [filteredAndSortedInventory, inventoryDrilldownItemName])
 
@@ -2478,6 +2485,7 @@ export default function InventorySystem() {
 
   const handleOpenItemDrilldownHistory = () => {
     if (!inventoryDrilldownItemName) return
+    setIsInventoryDrilldownOpen(false)
     setFilterType(inventoryDrilldownItemName)
     setTransactionSearchTerm("")
     setCurrentPage(1)
@@ -3891,6 +3899,103 @@ export default function InventorySystem() {
         >
           <Check className="mr-2 h-5 w-5" /> Record Transaction
         </Button>
+      </div>
+    </div>
+  )
+
+  const inventoryDrilldownPanel = (
+    <div className="rounded-2xl border border-black/5 bg-white p-6 shadow-sm">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div>
+          <h3 className="text-lg font-semibold text-neutral-900">Item Drill-Down</h3>
+          <p className="text-xs text-neutral-500">Recent stock movements and value snapshot for the selected item.</p>
+        </div>
+        <Button variant="ghost" size="sm" onClick={() => setIsInventoryDrilldownOpen(false)}>
+          Close
+        </Button>
+      </div>
+      <div className="mt-5 space-y-4">
+        {!selectedInventoryDrilldownItem ? (
+          <div className="rounded-xl border border-dashed border-black/10 bg-neutral-50/70 px-4 py-5 text-sm text-neutral-600">
+            Select an inventory item to open its recent transaction timeline.
+          </div>
+        ) : (
+          <>
+            <div className="rounded-xl border border-black/10 bg-neutral-50/60 p-4">
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <p className="text-sm font-semibold text-neutral-900">{selectedInventoryDrilldownItem.name}</p>
+                  <p className="text-xs text-neutral-500">
+                    {formatNumber(Number(selectedInventoryDrilldownItem.quantity) || 0)}{" "}
+                    {selectedInventoryDrilldownItem.unit || "unit"} on hand
+                  </p>
+                </div>
+                <Badge variant="outline" className="text-xs uppercase tracking-[0.1em]">
+                  {selectedLocationLabel}
+                </Badge>
+              </div>
+              <div className="mt-3 grid grid-cols-1 gap-3 text-xs sm:grid-cols-2">
+                <div className="rounded-lg bg-white px-3 py-2">
+                  <p className="text-neutral-500">Avg cost</p>
+                  <p className="font-semibold text-neutral-900 tabular-nums">
+                    {formatCurrency(selectedInventoryDrilldownValue?.avgPrice || 0)}
+                  </p>
+                </div>
+                <div className="rounded-lg bg-white px-3 py-2">
+                  <p className="text-neutral-500">Total value</p>
+                  <p className="font-semibold text-amber-700 tabular-nums">
+                    {formatCurrency(selectedInventoryDrilldownValue?.totalValue || 0)}
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <p className="text-xs uppercase tracking-[0.18em] text-neutral-500">Recent Transactions</p>
+                <Button variant="link" size="sm" className="h-auto p-0 text-emerald-700" onClick={handleOpenItemDrilldownHistory}>
+                  View full history
+                </Button>
+              </div>
+              {recentDrilldownTransactions.length === 0 ? (
+                <div className="rounded-xl border border-dashed border-black/10 bg-white px-3 py-4 text-xs text-neutral-500">
+                  No transactions found for this item in the current location filter.
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  {recentDrilldownTransactions.map((transaction) => {
+                    const txType = String(transaction.transaction_type || "").toLowerCase()
+                    const isDepleting = txType.includes("deplet")
+                    return (
+                      <div
+                        key={`drilldown-${transaction.id ?? `${transaction.item_type}-${transaction.transaction_date}`}`}
+                        className="rounded-xl border border-black/5 bg-white px-3 py-2"
+                      >
+                        <div className="flex items-center justify-between gap-2">
+                          <p className="text-xs text-neutral-500">{formatDate(transaction.transaction_date)}</p>
+                          <Badge
+                            variant="outline"
+                            className={isDepleting ? "border-red-200 bg-red-50 text-red-700" : "border-emerald-200 bg-emerald-50 text-emerald-700"}
+                          >
+                            {isDepleting ? "Deplete" : "Restock"}
+                          </Badge>
+                        </div>
+                        <p className="mt-1 text-sm font-semibold text-neutral-900 tabular-nums">
+                          {isDepleting ? "-" : "+"}
+                          {formatNumber(Number(transaction.quantity) || 0)}{" "}
+                          {transaction.unit || selectedInventoryDrilldownItem.unit || "unit"}
+                        </p>
+                        <p className="text-xs text-neutral-500">
+                          {resolveLocationLabel(transaction.location_id, transaction.location_name || transaction.location_code)}
+                        </p>
+                      </div>
+                    )
+                  })}
+                </div>
+              )}
+            </div>
+          </>
+        )}
       </div>
     </div>
   )
@@ -5328,11 +5433,11 @@ export default function InventorySystem() {
                             key={`${item.name}-${index}`}
                             role="button"
                             tabIndex={0}
-                            onClick={() => setInventoryDrilldownItemName(item.name)}
+                            onClick={() => openInventoryDrilldown(item.name)}
                             onKeyDown={(event) => {
                               if (event.key === "Enter" || event.key === " ") {
                                 event.preventDefault()
-                                setInventoryDrilldownItemName(item.name)
+                                openInventoryDrilldown(item.name)
                               }
                             }}
                             className={cn(
@@ -5427,102 +5532,6 @@ export default function InventorySystem() {
                 <div className="space-y-6 lg:col-span-4">
                   <Card className="rounded-2xl border border-black/5 bg-white shadow-sm">
                     <CardHeader className="space-y-1">
-                      <CardTitle className="text-base font-semibold text-neutral-900">Item Drill-Down</CardTitle>
-                      <CardDescription className="text-xs text-neutral-500">
-                        Click an inventory item to view recent stock movements.
-                      </CardDescription>
-                    </CardHeader>
-                    <CardContent className="space-y-4">
-                      {!selectedInventoryDrilldownItem ? (
-                        <div className="rounded-xl border border-dashed border-black/10 bg-neutral-50/70 px-4 py-5 text-sm text-neutral-600">
-                          Select an inventory item to open its recent transaction timeline.
-                        </div>
-                      ) : (
-                        <>
-                          <div className="rounded-xl border border-black/10 bg-neutral-50/60 p-4">
-                            <div className="flex items-start justify-between gap-3">
-                              <div>
-                                <p className="text-sm font-semibold text-neutral-900">{selectedInventoryDrilldownItem.name}</p>
-                                <p className="text-xs text-neutral-500">
-                                  {formatNumber(Number(selectedInventoryDrilldownItem.quantity) || 0)}{" "}
-                                  {selectedInventoryDrilldownItem.unit || "unit"} on hand
-                                </p>
-                              </div>
-                              <Badge variant="outline" className="text-xs uppercase tracking-[0.1em]">
-                                {selectedLocationLabel}
-                              </Badge>
-                            </div>
-                            <div className="mt-3 grid grid-cols-2 gap-3 text-xs">
-                              <div className="rounded-lg bg-white px-3 py-2">
-                                <p className="text-neutral-500">Avg cost</p>
-                                <p className="font-semibold text-neutral-900 tabular-nums">
-                                  {formatCurrency(selectedInventoryDrilldownValue?.avgPrice || 0)}
-                                </p>
-                              </div>
-                              <div className="rounded-lg bg-white px-3 py-2">
-                                <p className="text-neutral-500">Total value</p>
-                                <p className="font-semibold text-amber-700 tabular-nums">
-                                  {formatCurrency(selectedInventoryDrilldownValue?.totalValue || 0)}
-                                </p>
-                              </div>
-                            </div>
-                          </div>
-
-                          <div className="space-y-2">
-                            <div className="flex items-center justify-between">
-                              <p className="text-xs uppercase tracking-[0.18em] text-neutral-500">Recent Transactions</p>
-                              <Button
-                                variant="link"
-                                size="sm"
-                                className="h-auto p-0 text-emerald-700"
-                                onClick={handleOpenItemDrilldownHistory}
-                              >
-                                View full history
-                              </Button>
-                            </div>
-                            {recentDrilldownTransactions.length === 0 ? (
-                              <div className="rounded-xl border border-dashed border-black/10 bg-white px-3 py-4 text-xs text-neutral-500">
-                                No transactions found for this item in the current location filter.
-                              </div>
-                            ) : (
-                              <div className="space-y-2">
-                                {recentDrilldownTransactions.map((transaction) => {
-                                  const txType = String(transaction.transaction_type || "").toLowerCase()
-                                  const isDepleting = txType.includes("deplet")
-                                  return (
-                                    <div
-                                      key={`drilldown-${transaction.id ?? `${transaction.item_type}-${transaction.transaction_date}`}`}
-                                      className="rounded-xl border border-black/5 bg-white px-3 py-2"
-                                    >
-                                      <div className="flex items-center justify-between gap-2">
-                                        <p className="text-xs text-neutral-500">{formatDate(transaction.transaction_date)}</p>
-                                        <Badge
-                                          variant="outline"
-                                          className={isDepleting ? "border-red-200 bg-red-50 text-red-700" : "border-emerald-200 bg-emerald-50 text-emerald-700"}
-                                        >
-                                          {isDepleting ? "Deplete" : "Restock"}
-                                        </Badge>
-                                      </div>
-                                      <p className="mt-1 text-sm font-semibold text-neutral-900 tabular-nums">
-                                        {isDepleting ? "-" : "+"}
-                                        {formatNumber(Number(transaction.quantity) || 0)} {transaction.unit || selectedInventoryDrilldownItem.unit || "unit"}
-                                      </p>
-                                      <p className="text-xs text-neutral-500">
-                                        {resolveLocationLabel(transaction.location_id, transaction.location_name || transaction.location_code)}
-                                      </p>
-                                    </div>
-                                  )
-                                })}
-                              </div>
-                            )}
-                          </div>
-                        </>
-                      )}
-                    </CardContent>
-                  </Card>
-
-                  <Card className="rounded-2xl border border-black/5 bg-white shadow-sm">
-                    <CardHeader className="space-y-1">
                       <CardTitle className="text-base font-semibold text-neutral-900">Actions</CardTitle>
                       <CardDescription className="text-xs text-neutral-500">
                         Quick shortcuts for inventory work.
@@ -5575,6 +5584,19 @@ export default function InventorySystem() {
                         </span>
                         <span className="text-xs text-neutral-400">History</span>
                       </button>
+                      {inventoryDrilldownItemName && (
+                        <button
+                          type="button"
+                          onClick={() => setIsInventoryDrilldownOpen(true)}
+                          className="flex w-full items-center justify-between rounded-xl border border-emerald-200 bg-emerald-50/70 px-4 py-3 text-sm text-emerald-900 transition-colors hover:bg-emerald-100/70"
+                        >
+                          <span className="flex items-center gap-2">
+                            <List className="h-4 w-4 text-emerald-700" />
+                            Open item details
+                          </span>
+                          <span className="max-w-[9rem] truncate text-xs text-emerald-700">{inventoryDrilldownItemName}</span>
+                        </button>
+                      )}
                       <div className="rounded-xl border border-black/5 bg-neutral-50/70 px-4 py-3 text-xs text-neutral-600 space-y-2">
                         <div className="flex items-center justify-between">
                           <span>Default location</span>
@@ -5587,6 +5609,9 @@ export default function InventorySystem() {
                         <div className="flex items-center justify-between">
                           <span>Units</span>
                           <span className="text-neutral-900">{newTransaction?.unit || "kg"}</span>
+                        </div>
+                        <div className="border-t border-black/5 pt-2 text-[11px] leading-relaxed text-neutral-500">
+                          Click any inventory item card to open full drill-down and recent transaction timeline.
                         </div>
                       </div>
                     </CardContent>
@@ -5894,9 +5919,22 @@ export default function InventorySystem() {
             </TabsContent>
           )}
             </Tabs>
-        {isMovementDrawerOpen && (
+        {isInventoryDrilldownOpen && (
           <div
             className="fixed inset-0 z-50 bg-black/40"
+            onClick={() => setIsInventoryDrilldownOpen(false)}
+          >
+            <div
+              className="absolute inset-y-0 right-0 w-full max-w-xl overflow-y-auto p-4 sm:p-6"
+              onClick={(event) => event.stopPropagation()}
+            >
+              {inventoryDrilldownPanel}
+            </div>
+          </div>
+        )}
+        {isMovementDrawerOpen && (
+          <div
+            className="fixed inset-0 z-[60] bg-black/40"
             onClick={() => setIsMovementDrawerOpen(false)}
           >
             <div

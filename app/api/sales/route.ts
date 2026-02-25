@@ -201,13 +201,13 @@ export async function GET(request: Request) {
       !locationId
         ? sql``
         : isLegacyPooledScope
-          ? sql` AND (location_id = ${locationId} OR created_at < ${legacyLocationCutover}::timestamp)`
+          ? sql` AND (location_id = ${locationId} OR created_at < ${legacyLocationCutover}::timestamptz)`
           : sql` AND location_id = ${locationId}`
     const recordsLocationClause =
       !locationId
         ? sql``
         : isLegacyPooledScope
-          ? sql` AND (sr.location_id = ${locationId} OR sr.created_at < ${legacyLocationCutover}::timestamp)`
+          ? sql` AND (sr.location_id = ${locationId} OR sr.created_at < ${legacyLocationCutover}::timestamptz)`
           : sql` AND sr.location_id = ${locationId}`
     const dateClause =
       startDate && endDate

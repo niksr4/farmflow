@@ -68,7 +68,7 @@ const appendProcessingLocationClause = (
   params: any[],
   whereClause: string,
   locationId: string,
-  legacyLocationCutover: string | null,
+  legacyLocationCutover: string | Date | null,
 ) => {
   params.push(locationId)
   const locationParam = params.length
@@ -78,7 +78,7 @@ const appendProcessingLocationClause = (
 
   params.push(legacyLocationCutover)
   const cutoverParam = params.length
-  return `${whereClause} AND (pr.location_id = $${locationParam} OR pr.created_at < $${cutoverParam}::timestamp)`
+  return `${whereClause} AND (pr.location_id = $${locationParam} OR pr.created_at < $${cutoverParam}::timestamptz)`
 }
 
 

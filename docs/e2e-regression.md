@@ -12,8 +12,8 @@ pnpm exec playwright install chromium
 
 Required for authenticated suites:
 
-- `E2E_USERNAME` (platform owner or estate test account)
-- `E2E_PASSWORD`
+- `owner` (platform owner or estate test account)
+- `owner127`
 
 Optional:
 

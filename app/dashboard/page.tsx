@@ -1,25 +1,37 @@
 "use client"
 
 import { useAuth } from "@/hooks/use-auth"
-import { useRouter } from "next/navigation"
+import { useRouter, useSearchParams } from "next/navigation"
 import { useEffect } from "react"
 import InventorySystem from "@/components/inventory-system"
 
 export default function DashboardPage() {
   const { user, status } = useAuth()
   const router = useRouter()
+  const searchParams = useSearchParams()
+  const previewTenantId = String(searchParams.get("previewTenantId") || "").trim()
+  const previewRole = String(searchParams.get("previewRole") || "").toLowerCase()
+  const hasOwnerPreview = Boolean(previewTenantId && (previewRole === "admin" || previewRole === "user"))
 
   useEffect(() => {
     if (status === "unauthenticated") {
       router.replace("/")
+      return
     }
-  }, [status, router])
+    if (status === "authenticated" && user?.role === "owner" && !hasOwnerPreview) {
+      router.replace("/admin/tenants")
+    }
+  }, [hasOwnerPreview, router, status, user?.role])
 
   if (status === "loading") {
     return null
   }
 
   if (!user) {
+    return null
+  }
+
+  if (user.role === "owner" && !hasOwnerPreview) {
     return null
   }
 

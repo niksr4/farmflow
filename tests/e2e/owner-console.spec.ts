@@ -45,17 +45,16 @@ test.describe("owner console regression", () => {
 
     await page.goto("/admin/tenants")
     await expect(page.getByText("Owner Console")).toBeVisible()
-    await expect(page.getByRole("heading", { name: "System Health" })).toBeVisible()
+    await expect(page.locator("#system-health").getByText("System Health")).toBeVisible()
     await expect(page.getByText("Critical 1")).toBeVisible()
     await expect(page.getByText("Warning 1")).toBeVisible()
     await expect(page.getByText("Healthy 1")).toBeVisible()
     await expect(page.getByTestId("system-health-check-data-integrity-agent")).toBeVisible()
 
-    await page.getByRole("button", { name: "Refresh" }).click()
+    await page.locator("#system-health").getByRole("button", { name: "Refresh" }).click()
     await expect.poll(() => healthCallCount).toBeGreaterThan(1)
 
     const detailsLink = page.getByTestId("system-health-check-data-integrity-agent").getByRole("link", { name: "Open details" })
     await expect(detailsLink).toHaveAttribute("href", "/api/admin/data-integrity-exceptions")
   })
 })
-
