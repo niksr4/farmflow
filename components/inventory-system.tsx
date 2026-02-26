@@ -5259,7 +5259,7 @@ export default function InventorySystem() {
 
           {canShowInventory && (
             <TabsContent value="inventory" className="space-y-6" forceMount={isTabLoaded("inventory") ? true : undefined}>
-              <div className="grid grid-cols-1 gap-6 lg:grid-cols-12">
+              <div className="grid grid-cols-1 gap-6 lg:grid-cols-12 lg:items-start">
                 <div className="space-y-6 lg:col-span-8">
                   <div className="rounded-2xl border border-black/5 bg-white p-6 shadow-sm">
                     <div className="mb-6 flex flex-col gap-4">
@@ -5455,7 +5455,7 @@ export default function InventorySystem() {
                   </div>
                 </div>
 
-                <div className="space-y-6 lg:col-span-4">
+                <div className="space-y-6 lg:col-span-4 lg:self-start">
                   {canShowSeason && (
                     <Card className="rounded-xl border border-black/5 bg-white shadow-sm">
                       <CardHeader className="flex flex-col gap-2 pb-3">
