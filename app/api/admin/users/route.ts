@@ -17,6 +17,8 @@ const isSystemUsername = (value: string) => {
   return normalized === "system" || normalized.startsWith("system_") || normalized.startsWith("system-")
 }
 
+const isReservedPlatformUsername = (value: string) => value.trim().toLowerCase() === "owner"
+
 export async function GET(request: Request) {
   try {
     const sessionUser = await requireAdminSession()
@@ -75,6 +77,9 @@ export async function POST(request: Request) {
 
     if (isSystemUsername(username)) {
       return NextResponse.json({ success: false, error: "System usernames are reserved" }, { status: 400 })
+    }
+    if (isReservedPlatformUsername(username)) {
+      return NextResponse.json({ success: false, error: "Username 'owner' is reserved for the platform account" }, { status: 400 })
     }
 
     if (!["admin", "user", "owner"].includes(role)) {
@@ -171,6 +176,9 @@ export async function PATCH(request: Request) {
     if (String(rows[0].role) === "owner") {
       return NextResponse.json({ success: false, error: "Owner role cannot be modified" }, { status: 403 })
     }
+    if (isReservedPlatformUsername(String(rows[0].username || ""))) {
+      return NextResponse.json({ success: false, error: "Reserved platform account cannot be modified" }, { status: 403 })
+    }
     if (isSystemUsername(String(rows[0].username || ""))) {
       return NextResponse.json({ success: false, error: "System users cannot be modified" }, { status: 403 })
     }
@@ -262,6 +270,9 @@ export async function PUT(request: Request) {
     }
 
     const target = rows[0]
+    if (isReservedPlatformUsername(String(target.username || "")) && sessionUser.role !== "owner") {
+      return NextResponse.json({ success: false, error: "Only platform owners can reset reserved account passwords" }, { status: 403 })
+    }
     if (isSystemUsername(String(target.username || ""))) {
       return NextResponse.json({ success: false, error: "System users cannot be reset" }, { status: 403 })
     }
@@ -372,6 +383,9 @@ export async function DELETE(request: Request) {
 
     if (String(rows[0].role) === "owner") {
       return NextResponse.json({ success: false, error: "Owner user cannot be deleted" }, { status: 403 })
+    }
+    if (isReservedPlatformUsername(String(rows[0].username || ""))) {
+      return NextResponse.json({ success: false, error: "Reserved platform account cannot be deleted" }, { status: 403 })
     }
     if (isSystemUsername(String(rows[0].username || ""))) {
       return NextResponse.json({ success: false, error: "System users cannot be deleted" }, { status: 403 })

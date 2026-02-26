@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
 import { useToast } from "@/hooks/use-toast"
 import { useAuth } from "@/hooks/use-auth"
+import posthog from "posthog-js"
 
 export default function ResetPasswordPage() {
   const { user, logout } = useAuth()
@@ -46,12 +47,16 @@ export default function ResetPasswordPage() {
         throw new Error(data.error || "Failed to update password")
       }
 
+      posthog.capture("password_changed", {
+        username: user?.username,
+      })
       toast({
         title: "Password updated",
         description: "Sign in again with your new password.",
       })
       logout()
     } catch (err: any) {
+      posthog.captureException(err)
       setError(err.message || "Failed to update password")
     } finally {
       setIsSaving(false)

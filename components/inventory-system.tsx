@@ -100,6 +100,8 @@ import {
   type ExportDatasetId,
 } from "@/lib/data-tools"
 
+import posthog from "posthog-js"
+
 // API endpoints (adjust if your routes are different)
 const API_TRANSACTIONS = "/api/transactions-neon"
 const API_INVENTORY = "/api/inventory-neon"
@@ -834,6 +836,11 @@ export default function InventorySystem() {
   }
 
   const handleLogout = async () => {
+    posthog.capture("user_signed_out", {
+      username: user?.username,
+      role: user?.role,
+      tenant_id: user?.tenantId || "global",
+    })
     if (typeof document !== "undefined") {
       document.cookie = `${PREVIEW_TENANT_COOKIE}=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT; SameSite=Lax`
     }

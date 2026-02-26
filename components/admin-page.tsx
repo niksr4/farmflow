@@ -917,7 +917,7 @@ export default function AdminPage() {
       if (!response.ok || !data.success) {
         throw new Error(data.error || "Failed to update user role")
       }
-      toast({ title: "Role updated", description: `${user.username} is now ${nextRole}.` })
+      toast({ title: "Role updated", description: `${user.username} is now ${roleLabel(nextRole)}.` })
       await loadUsers(selectedTenantId)
     } catch (error: any) {
       toast({ title: "Error", description: error.message || "Failed to update user role", variant: "destructive" })
@@ -1732,8 +1732,8 @@ export default function AdminPage() {
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="admin">Admin</SelectItem>
-                  <SelectItem value="user">User</SelectItem>
+                  <SelectItem value="admin">Estate Admin</SelectItem>
+                  <SelectItem value="user">Estate User</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -1784,8 +1784,8 @@ export default function AdminPage() {
                                 <SelectValue />
                               </SelectTrigger>
                               <SelectContent>
-                                <SelectItem value="admin">Admin</SelectItem>
-                                <SelectItem value="user">User</SelectItem>
+                                <SelectItem value="admin">Estate Admin</SelectItem>
+                                <SelectItem value="user">Estate User</SelectItem>
                               </SelectContent>
                             </Select>
                           )}

@@ -1,8 +1,8 @@
 import { expect, test } from "@playwright/test"
-import { expectOwnerUser, hasAuthCredentials } from "./helpers"
+import { expectOwnerUser, hasRequiredAuthCredentials } from "./helpers"
 
 test.describe("owner console regression", () => {
-  test.skip(!hasAuthCredentials, "Set E2E_USERNAME and E2E_PASSWORD to run authenticated owner-console tests")
+  test.skip(!hasRequiredAuthCredentials, "Set E2E_OWNER_USERNAME and E2E_OWNER_PASSWORD to run owner-console tests")
   test.skip(!expectOwnerUser, "Set E2E_EXPECT_OWNER=1 to run owner-only admin tests")
 
   test("system health section renders triage status and check cards", async ({ page }) => {

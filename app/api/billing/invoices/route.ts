@@ -6,6 +6,7 @@ import { normalizeTenantContext, runTenantQuery } from "@/lib/server/tenant-db"
 import { canWriteModule } from "@/lib/permissions"
 import { computeInvoiceTotals, formatInvoiceNumber } from "@/lib/billing"
 import { logAuditEvent } from "@/lib/server/audit-log"
+import { getPostHogClient } from "@/lib/posthog-server"
 
 export const dynamic = "force-dynamic"
 
@@ -152,6 +153,27 @@ export async function POST(request: Request) {
       entityId: invoice?.id,
       after: invoice ?? null,
     })
+
+    const posthog = getPostHogClient()
+    if (posthog) {
+      const tenantId = sessionUser.tenantId || "global"
+      const distinctId = `${tenantId}:${sessionUser.username}`
+      posthog.capture({
+        distinctId,
+        event: "invoice_created_server",
+        properties: {
+          invoice_id: invoice?.id,
+          invoice_number: invoiceNumber,
+          bill_to_name: payload.billToName,
+          total: totals.total,
+          currency: payload.currency,
+          item_count: payload.items.length,
+          is_inter_state: totals.isInterState,
+          tenant_id: tenantId,
+          created_by: sessionUser.username,
+        },
+      })
+    }
 
     return NextResponse.json({ success: true, invoice })
   } catch (error: any) {

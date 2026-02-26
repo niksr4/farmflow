@@ -2,6 +2,7 @@
 
 import { useState } from "react"
 import Link from "next/link"
+import posthog from "posthog-js"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
@@ -69,8 +70,13 @@ export default function SignupRoute() {
                     if (!response.ok || !data?.success) {
                       throw new Error(data?.error || "Failed to submit request")
                     }
+                    posthog.capture("access_requested", {
+                      estate: form.estate,
+                      region: form.region,
+                    })
                     setSubmitted(true)
                   } catch (error: any) {
+                    posthog.captureException(error)
                     setErrorMessage(error?.message || "Failed to submit request")
                   } finally {
                     setIsSubmitting(false)

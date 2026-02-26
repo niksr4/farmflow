@@ -8,6 +8,7 @@ import { resolveLocationInfo } from "@/lib/server/location-utils"
 import { logAuditEvent } from "@/lib/server/audit-log"
 import { resolveLocationCompatibility } from "@/lib/server/location-compatibility"
 import { computeRemainingKgs, hasSufficientStock } from "@/lib/sales-math"
+import { getPostHogClient } from "@/lib/posthog-server"
 
 export const dynamic = "force-dynamic"
 export const revalidate = 0
@@ -489,6 +490,28 @@ export async function POST(request: Request) {
       entityId: result?.[0]?.id,
       after: result?.[0] ?? null,
     })
+
+    const posthog = getPostHogClient()
+    if (posthog) {
+      const tenantId = sessionUser.tenantId || "global"
+      const distinctId = `${tenantId}:${sessionUser.username}`
+      posthog.capture({
+        distinctId,
+        event: "sales_created_server",
+        properties: {
+          sale_id: result?.[0]?.id,
+          coffee_type: coffeeType,
+          bag_type: bagType,
+          bags_sold: bagsSold,
+          kgs_sold: kgsSold,
+          price_per_bag: payload.price_per_bag,
+          revenue: computedRevenue,
+          buyer_name: payload.buyer_name || null,
+          tenant_id: tenantId,
+          created_by: sessionUser.username,
+        },
+      })
+    }
 
     return NextResponse.json({ success: true, record: result[0] })
   } catch (error) {

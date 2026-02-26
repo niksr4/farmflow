@@ -7,6 +7,7 @@ import { AuthProvider } from "@/hooks/use-auth"
 import BrandWatermark from "@/components/brand-watermark"
 import { Toaster } from "@/components/ui/toaster"
 import PwaRegister from "@/components/pwa-register"
+import PostHogAuthSync from "@/components/posthog-auth-sync"
 
 const bodyFont = Manrope({ subsets: ["latin"], display: "swap", variable: "--font-body" })
 const displayFont = Fraunces({ subsets: ["latin"], weight: ["600", "700", "800"], display: "swap", variable: "--font-display" })
@@ -48,6 +49,7 @@ export default function RootLayout({
       <body className={`${bodyFont.variable} ${displayFont.variable} font-body`} suppressHydrationWarning>
         <ThemeProvider attribute="class" defaultTheme="light" enableSystem disableTransitionOnChange>
           <AuthProvider>
+            <PostHogAuthSync />
             {children}
             <BrandWatermark />
             <Toaster />

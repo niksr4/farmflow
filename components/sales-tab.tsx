@@ -23,6 +23,7 @@ import { formatDateOnly } from "@/lib/date-utils"
 import { formatCurrency, formatNumber } from "@/lib/format"
 import { canAcceptNonNegative, isBlockedNumericKey } from "@/lib/number-input"
 import { resolveDispatchReceivedKgs as resolveDispatchReceivedKgsValue, resolveSalesKgs } from "@/lib/sales-math"
+import posthog from "posthog-js"
 
 interface SalesRecord {
   id?: number
@@ -707,6 +708,17 @@ export default function SalesTab({ showDataToolsControls = false }: SalesTabProp
           type: "success",
           message: `Saved ${formatNumber(kgsValue)} KGs at ${formatCurrency(priceValue)} per bag.`,
         })
+        posthog.capture(wasEditing ? "sale_updated" : "sale_recorded", {
+          coffee_type: coffeeType,
+          bag_type: bagType,
+          kgs_sold: kgsValue,
+          bags_sold: bagsSoldValue,
+          price_per_bag: priceValue,
+          revenue: calculatedRevenue,
+          buyer_name: buyerName || null,
+          location_id: selectedLocationId,
+          fiscal_year: selectedFiscalYear.label,
+        })
         if (buyerName.trim()) {
           setBuyerSuggestions((prev) => Array.from(new Set([buyerName.trim(), ...prev])))
         }
@@ -796,6 +808,7 @@ export default function SalesTab({ showDataToolsControls = false }: SalesTabProp
           title: "Success",
           description: "Record deleted successfully",
         })
+        posthog.capture("sale_deleted", { sale_id: id })
         fetchSalesRecords(0, false)
       } else {
         toast({
@@ -805,6 +818,7 @@ export default function SalesTab({ showDataToolsControls = false }: SalesTabProp
         })
       }
     } catch (error) {
+      posthog.captureException(error)
       toast({
         title: "Error",
         description: "Failed to delete record",
@@ -969,9 +983,15 @@ export default function SalesTab({ showDataToolsControls = false }: SalesTabProp
       a.download = `sales_records_${selectedFiscalYear.label.replace("/", "-")}.csv`
       a.click()
       URL.revokeObjectURL(url)
+      posthog.capture("sales_csv_exported", {
+        fiscal_year: selectedFiscalYear.label,
+        record_count: records.length,
+        location_filter: salesFilterLocationId !== LOCATION_ALL ? salesFilterLocationId : null,
+      })
     }
 
     runExport().catch((error) => {
+      posthog.captureException(error)
       console.error("Error exporting sales records:", error)
       toast({
         title: "Error",

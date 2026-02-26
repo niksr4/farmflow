@@ -36,3 +36,4 @@ tests/e2e/.auth/
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+.env.local

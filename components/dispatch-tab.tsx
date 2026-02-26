@@ -23,6 +23,7 @@ import { useTenantSettings } from "@/hooks/use-tenant-settings"
 import { formatDateOnly } from "@/lib/date-utils"
 import { formatNumber } from "@/lib/format"
 import { canAcceptNonNegative, isBlockedNumericKey } from "@/lib/number-input"
+import posthog from "posthog-js"
 
 interface DispatchRecord {
   id?: number
@@ -539,6 +540,15 @@ export default function DispatchTab({ showDataToolsControls = false }: DispatchT
           title: "Success",
           description: editingRecord ? "Dispatch record updated successfully" : "Dispatch record saved successfully",
         })
+        posthog.capture(editingRecord ? "dispatch_updated" : "dispatch_recorded", {
+          coffee_type: coffeeType,
+          bag_type: bagType,
+          bags_dispatched: bagsValue,
+          kgs_received: kgsValue,
+          location_id: selectedLocationId,
+          lot_id: lotId || null,
+          fiscal_year: selectedFiscalYear.label,
+        })
         // Reset form
         resetForm()
         // Refresh records
@@ -606,6 +616,7 @@ export default function DispatchTab({ showDataToolsControls = false }: DispatchT
           title: "Success",
           description: "Record deleted successfully",
         })
+        posthog.capture("dispatch_deleted", { dispatch_id: id })
         fetchDispatchRecords(0, false)
         fetchDispatchSummary(null, setDispatchSummary)
         fetchBagTotals(null, setBagTotals, setBagTotalsScope)
@@ -679,9 +690,14 @@ export default function DispatchTab({ showDataToolsControls = false }: DispatchT
       a.download = `dispatch_records_${selectedFiscalYear.label.replace("/", "-")}.csv`
       a.click()
       URL.revokeObjectURL(url)
+      posthog.capture("dispatch_csv_exported", {
+        fiscal_year: selectedFiscalYear.label,
+        record_count: data.records.length,
+      })
     }
 
     runExport().catch((error) => {
+      posthog.captureException(error)
       console.error("Error exporting dispatch records:", error)
       toast({
         title: "Error",

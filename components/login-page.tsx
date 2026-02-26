@@ -12,6 +12,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import { useAuth } from "@/hooks/use-auth"
+import posthog from "posthog-js"
 
 export default function LoginPage() {
   const [username, setUsername] = useState("")
@@ -32,8 +33,22 @@ export default function LoginPage() {
       const sessionResponse = await fetch("/api/auth/session", { cache: "no-store" })
       const sessionPayload = await sessionResponse.json().catch(() => null)
       const role = String(sessionPayload?.user?.role || "").toLowerCase()
+      const tenantId = String(sessionPayload?.user?.tenantId || "")
+      const distinctId = `${tenantId || "global"}:${username}`
+      // Identify user in PostHog and capture sign-in event
+      posthog.identify(distinctId, {
+        username,
+        role,
+        tenant_id: tenantId || "global",
+      })
+      posthog.capture("user_signed_in", {
+        username,
+        role,
+        tenant_id: tenantId || "global",
+      })
       router.push(role === "owner" ? "/admin/tenants" : "/dashboard")
     } catch (err: any) {
+      posthog.captureException(err)
       setError(err.message || "Invalid username or password")
     }
   }
