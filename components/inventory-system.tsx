@@ -5261,87 +5261,6 @@ export default function InventorySystem() {
             <TabsContent value="inventory" className="space-y-6" forceMount={isTabLoaded("inventory") ? true : undefined}>
               <div className="grid grid-cols-1 gap-6 lg:grid-cols-12">
                 <div className="space-y-6 lg:col-span-8">
-                  {canShowSeason && (
-                    <Card className="rounded-2xl border border-black/5 bg-white shadow-sm">
-                      <CardHeader className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                        <div>
-                          <CardTitle className="flex items-center gap-2 text-neutral-900">
-                            <AlertTriangle className="h-5 w-5 text-emerald-600" />
-                            System status
-                          </CardTitle>
-                          <CardDescription className="text-sm text-neutral-500">
-                            Monitor operational risks across inventory, processing, and dispatch.
-                          </CardDescription>
-                        </div>
-                        <Button variant="outline" size="sm" onClick={() => openDrilldown({ tab: "season" })}>
-                          Open Season View
-                        </Button>
-                      </CardHeader>
-                      <CardContent>
-                        {exceptionsLoading ? (
-                          <div className="flex items-center gap-2 text-sm text-neutral-500">
-                            <Loader2 className="h-4 w-4 animate-spin" />
-                            Loading system status...
-                          </div>
-                        ) : exceptionsError ? (
-                          <div className="text-sm text-rose-600">{exceptionsError}</div>
-                        ) : exceptionsSummary.count === 0 ? (
-                          <div className="rounded-2xl border border-emerald-100 bg-emerald-50/70 p-4">
-                            <div className="flex items-center gap-2 text-sm font-medium text-emerald-700">
-                              <CheckCircle2 className="h-4 w-4" />
-                              All clear
-                            </div>
-                            <p className="mt-1 text-xs text-emerald-700/70">
-                              No anomalies detected in the last 7 days.
-                            </p>
-                          </div>
-                        ) : (
-                          <div className="space-y-4">
-                            <div className="text-sm font-medium text-amber-800">
-                              {exceptionsSummary.count} active alert{exceptionsSummary.count === 1 ? "" : "s"}
-                            </div>
-                            <div className="grid gap-3 sm:grid-cols-3">
-                              {(exceptionsSummary.alerts || []).slice(0, 3).map((alert, index) => {
-                                const summaryLine = [alert.location, alert.coffeeType].filter(Boolean).join(" • ")
-                                const tone =
-                                  alert.severity === "high" || alert.severity === "critical"
-                                    ? "border-rose-100 bg-rose-50/70 text-rose-900"
-                                    : "border-amber-100 bg-amber-50/70 text-amber-900"
-                                return (
-                                  <button
-                                    key={`${alert.id}-${index}`}
-                                    type="button"
-                                    data-testid={`inventory-system-alert-${index + 1}`}
-                                    className={cn("rounded-2xl border p-3 text-left transition-colors hover:bg-white", tone)}
-                                    onClick={() =>
-                                      openDrilldown({
-                                        tab: resolveExceptionDrilldownTab(alert.metric),
-                                        seasonAlertId: alert.id,
-                                        seasonMetric: alert.metric || null,
-                                      })
-                                    }
-                                  >
-                                    <p className="text-xs uppercase tracking-[0.16em] text-amber-700">Alert {index + 1}</p>
-                                    <p className="mt-2 text-sm">{alert.title}</p>
-                                    {summaryLine ? <p className="mt-1 text-xs text-muted-foreground">{summaryLine}</p> : null}
-                                    <p className="mt-2 text-xs text-emerald-700">Investigate →</p>
-                                  </button>
-                                )
-                              })}
-                              {exceptionsSummary.alerts.length === 0 &&
-                                (exceptionsSummary.highlights || []).slice(0, 3).map((item, index) => (
-                                  <div key={`${item}-${index}`} className="rounded-2xl border border-amber-100 bg-amber-50/70 p-3">
-                                    <p className="text-xs uppercase tracking-[0.16em] text-amber-700">Alert {index + 1}</p>
-                                    <p className="mt-2 text-sm text-amber-900">{item}</p>
-                                  </div>
-                                ))}
-                            </div>
-                          </div>
-                        )}
-                      </CardContent>
-                    </Card>
-                  )}
-
                   <div className="rounded-2xl border border-black/5 bg-white p-6 shadow-sm">
                     <div className="mb-6 flex flex-col gap-4">
                       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -5537,6 +5456,85 @@ export default function InventorySystem() {
                 </div>
 
                 <div className="space-y-6 lg:col-span-4">
+                  {canShowSeason && (
+                    <Card className="rounded-xl border border-black/5 bg-white shadow-sm">
+                      <CardHeader className="flex flex-col gap-2 pb-3">
+                        <div className="space-y-1">
+                          <CardTitle className="flex items-center gap-2 text-sm font-semibold text-neutral-900">
+                            <AlertTriangle className="h-4 w-4 text-emerald-600" />
+                            System status
+                          </CardTitle>
+                          {!exceptionsLoading && !exceptionsError && (
+                            <CardDescription className="text-xs text-neutral-500">
+                              {exceptionsSummary.count === 0
+                                ? "No active anomalies in the last 7 days."
+                                : `${exceptionsSummary.count} active alert${exceptionsSummary.count === 1 ? "" : "s"}`}
+                            </CardDescription>
+                          )}
+                        </div>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="h-8 self-start"
+                          onClick={() => openDrilldown({ tab: "season" })}
+                        >
+                          Open Season View
+                        </Button>
+                      </CardHeader>
+                      <CardContent className="space-y-2 pt-0">
+                        {exceptionsLoading ? (
+                          <div className="flex items-center gap-2 text-xs text-neutral-500">
+                            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                            Loading system status...
+                          </div>
+                        ) : exceptionsError ? (
+                          <div className="text-xs text-rose-600">{exceptionsError}</div>
+                        ) : exceptionsSummary.count === 0 ? (
+                          <div className="inline-flex items-center gap-2 rounded-lg border border-emerald-100 bg-emerald-50/70 px-3 py-2 text-xs font-medium text-emerald-700">
+                            <CheckCircle2 className="h-3.5 w-3.5" />
+                            All clear
+                          </div>
+                        ) : (
+                          <div className="grid gap-2">
+                            {(exceptionsSummary.alerts || []).slice(0, 3).map((alert, index) => {
+                              const summaryLine = [alert.location, alert.coffeeType].filter(Boolean).join(" • ")
+                              const tone =
+                                alert.severity === "high" || alert.severity === "critical"
+                                  ? "border-rose-100 bg-rose-50/70 text-rose-900"
+                                  : "border-amber-100 bg-amber-50/70 text-amber-900"
+                              return (
+                                <button
+                                  key={`${alert.id}-${index}`}
+                                  type="button"
+                                  data-testid={`inventory-system-alert-${index + 1}`}
+                                  className={cn("rounded-xl border px-3 py-2 text-left transition-colors hover:bg-white", tone)}
+                                  onClick={() =>
+                                    openDrilldown({
+                                      tab: resolveExceptionDrilldownTab(alert.metric),
+                                      seasonAlertId: alert.id,
+                                      seasonMetric: alert.metric || null,
+                                    })
+                                  }
+                                >
+                                  <p className="text-[10px] uppercase tracking-[0.15em] text-amber-700">Alert {index + 1}</p>
+                                  <p className="mt-1 line-clamp-2 text-xs font-medium leading-snug">{alert.title}</p>
+                                  {summaryLine ? <p className="mt-1 text-[11px] text-muted-foreground">{summaryLine}</p> : null}
+                                </button>
+                              )
+                            })}
+                            {exceptionsSummary.alerts.length === 0 &&
+                              (exceptionsSummary.highlights || []).slice(0, 3).map((item, index) => (
+                                <div key={`${item}-${index}`} className="rounded-xl border border-amber-100 bg-amber-50/70 px-3 py-2">
+                                  <p className="text-[10px] uppercase tracking-[0.15em] text-amber-700">Alert {index + 1}</p>
+                                  <p className="mt-1 text-xs font-medium leading-snug text-amber-900">{item}</p>
+                                </div>
+                              ))}
+                          </div>
+                        )}
+                      </CardContent>
+                    </Card>
+                  )}
+
                   <Card className="rounded-2xl border border-black/5 bg-white shadow-sm">
                     <CardHeader className="space-y-1">
                       <CardTitle className="text-base font-semibold text-neutral-900">Actions</CardTitle>

@@ -467,7 +467,7 @@ export default function RainfallTab({ username, showDataToolsControls = false }:
         : "text-emerald-700"
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-5">
       <Card>
         <CardHeader>
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -486,21 +486,21 @@ export default function RainfallTab({ username, showDataToolsControls = false }:
             )}
           </div>
         </CardHeader>
-        <CardContent className="space-y-5">
+        <CardContent className="space-y-4">
           <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-            <div className="rounded-xl border border-border/60 bg-white/80 p-4">
+            <div className="rounded-xl border border-border/60 bg-white/80 p-3">
               <p className="text-xs uppercase tracking-[0.16em] text-muted-foreground">Annual rainfall</p>
               <p className="mt-2 text-2xl font-semibold tabular-nums">{formatNumber(annualTotal, 2)} in</p>
               <p className="mt-1 text-xs text-muted-foreground">{normalizedRecords.length} total logged day(s)</p>
             </div>
-            <div className="rounded-xl border border-border/60 bg-white/80 p-4">
+            <div className="rounded-xl border border-border/60 bg-white/80 p-3">
               <p className="text-xs uppercase tracking-[0.16em] text-muted-foreground">Last 30 days</p>
               <p className="mt-2 text-2xl font-semibold tabular-nums">{formatNumber(insights.last30Total, 2)} in</p>
               <p className="mt-1 text-xs text-muted-foreground">
                 {insights.wetDaysLast30} wet day(s) from {insights.loggedDaysLast30} logged day(s)
               </p>
             </div>
-            <div className="rounded-xl border border-border/60 bg-white/80 p-4">
+            <div className="rounded-xl border border-border/60 bg-white/80 p-3">
               <p className="text-xs uppercase tracking-[0.16em] text-muted-foreground">Trend vs prior 30 days</p>
               <p className={`mt-2 text-2xl font-semibold tabular-nums ${trendClass}`}>
                 {insights.trendPct === null
@@ -509,7 +509,7 @@ export default function RainfallTab({ username, showDataToolsControls = false }:
               </p>
               <p className="mt-1 text-xs text-muted-foreground">Prior 30 days: {formatNumber(insights.prior30Total, 2)} in</p>
             </div>
-            <div className="rounded-xl border border-border/60 bg-white/80 p-4">
+            <div className="rounded-xl border border-border/60 bg-white/80 p-3">
               <p className="text-xs uppercase tracking-[0.16em] text-muted-foreground">Data coverage (30d)</p>
               <p className="mt-2 text-2xl font-semibold tabular-nums">{formatNumber(insights.coveragePct, 0)}%</p>
               <p className="mt-1 text-xs text-muted-foreground">Higher coverage improves forecast confidence</p>
@@ -521,7 +521,7 @@ export default function RainfallTab({ username, showDataToolsControls = false }:
           </div>
 
           <div className="grid gap-4 xl:grid-cols-[2fr_1fr]">
-            <div className="rounded-xl border border-border/60 bg-white/80 p-4">
+            <div className="rounded-xl border border-border/60 bg-white/80 p-3">
               <p className="mb-2 text-xs uppercase tracking-[0.16em] text-muted-foreground">Monthly distribution ({currentYear})</p>
               <ChartContainer config={MONTHLY_RAIN_CHART_CONFIG} className="h-[240px] w-full">
                 <BarChart data={monthlyTotalsData} margin={{ left: 8, right: 8, top: 8, bottom: 8 }}>
@@ -540,7 +540,7 @@ export default function RainfallTab({ username, showDataToolsControls = false }:
                 </BarChart>
               </ChartContainer>
             </div>
-            <div className="rounded-xl border border-border/60 bg-white/80 p-4">
+            <div className="rounded-xl border border-border/60 bg-white/80 p-3">
               <p className="text-xs uppercase tracking-[0.16em] text-muted-foreground">Top rainfall months</p>
               <div className="mt-3 space-y-2">
                 {topMonths.length === 0 ? (
@@ -564,7 +564,7 @@ export default function RainfallTab({ username, showDataToolsControls = false }:
           <CardTitle>Rainfall Pattern Watch (Last 8 Weeks)</CardTitle>
           <CardDescription>Daily rainfall signal vs rolling 7-day average to detect wet and dry streaks.</CardDescription>
         </CardHeader>
-        <CardContent className="space-y-4">
+        <CardContent className="space-y-3">
           <ChartContainer config={RAINFALL_TREND_CHART_CONFIG} className="h-[280px] w-full">
             <LineChart data={trendSeries} margin={{ left: 8, right: 8, top: 8, bottom: 8 }}>
               <CartesianGrid vertical={false} />

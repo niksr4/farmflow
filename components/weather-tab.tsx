@@ -375,7 +375,7 @@ export default function WeatherTab() {
         : "border-emerald-200 bg-emerald-50 text-emerald-700"
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-5">
       <Card>
         <CardHeader>
           <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
@@ -408,7 +408,7 @@ export default function WeatherTab() {
             </div>
           </div>
         </CardHeader>
-        <CardContent className="grid gap-6 md:grid-cols-2">
+        <CardContent className="grid gap-4 md:grid-cols-2">
           {hasProviderMismatch && (
             <Alert className="md:col-span-2 border-amber-200 bg-amber-50 text-amber-900">
               <AlertTriangle className="h-4 w-4 text-amber-700" />
@@ -457,26 +457,26 @@ export default function WeatherTab() {
           <CardTitle>Forecast Intelligence</CardTitle>
           <CardDescription>Pattern score, disruption windows, and drying opportunity from the next 7 days.</CardDescription>
         </CardHeader>
-        <CardContent className="space-y-4">
+        <CardContent className="space-y-3">
           <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-            <div className="rounded-xl border border-border/60 bg-white/80 p-4">
+            <div className="rounded-xl border border-border/60 bg-white/80 p-3">
               <p className="text-xs uppercase tracking-[0.16em] text-muted-foreground">7-Day Rain Load</p>
               <p className="mt-2 text-2xl font-semibold tabular-nums">{formatNumber(insightSummary.totalRainInches, 2)} in</p>
               <p className="mt-1 text-xs text-muted-foreground">{insightSummary.heavyRainDays} high-risk rain day(s)</p>
             </div>
-            <div className="rounded-xl border border-border/60 bg-white/80 p-4">
+            <div className="rounded-xl border border-border/60 bg-white/80 p-3">
               <p className="text-xs uppercase tracking-[0.16em] text-muted-foreground">Operations Window Score</p>
               <p className={`mt-2 text-2xl font-semibold tabular-nums ${insightSummary.modeClass}`}>
                 {insightSummary.operationsWindowScore}/100
               </p>
               <p className="mt-1 text-xs text-muted-foreground">{insightSummary.operationsMode} mode</p>
             </div>
-            <div className="rounded-xl border border-border/60 bg-white/80 p-4">
+            <div className="rounded-xl border border-border/60 bg-white/80 p-3">
               <p className="text-xs uppercase tracking-[0.16em] text-muted-foreground">Best Drying Window</p>
               <p className="mt-2 text-lg font-semibold">{insightSummary.dryWindowLabel}</p>
               <p className="mt-1 text-xs text-muted-foreground">Use this slot for high-throughput drying batches</p>
             </div>
-            <div className="rounded-xl border border-border/60 bg-white/80 p-4">
+            <div className="rounded-xl border border-border/60 bg-white/80 p-3">
               <p className="text-xs uppercase tracking-[0.16em] text-muted-foreground">Disruption Watch</p>
               <p className="mt-2 text-lg font-semibold">{insightSummary.highestRiskLabel}</p>
               <p className="mt-1 text-xs text-muted-foreground">Rain chance volatility: {insightSummary.chanceVolatility}%</p>
@@ -665,13 +665,13 @@ export default function WeatherTab() {
 }
 
 const WeatherSkeleton = () => (
-  <div className="space-y-6">
+  <div className="space-y-5">
     <Card>
       <CardHeader>
         <Skeleton className="h-8 w-3/4" />
         <Skeleton className="h-4 w-1/2" />
       </CardHeader>
-      <CardContent className="grid gap-6 md:grid-cols-2">
+      <CardContent className="grid gap-4 md:grid-cols-2">
         <div className="flex items-center space-x-6">
           <Skeleton className="h-16 w-16 rounded-full" />
           <div>
