@@ -10,8 +10,9 @@ if (posthogKey && posthogHost) {
     api_host: "/ingest",
     ui_host: uiHost,
     defaults: "2026-01-30",
-    capture_pageview: "history_change",
+    capture_pageview: false,
     capture_pageleave: "if_capture_pageview",
+    autocapture: true,
     capture_exceptions: true,
     person_profiles: "identified_only",
     session_recording: {

@@ -3,6 +3,7 @@
 import { useEffect, useRef } from "react"
 import posthog from "posthog-js"
 import { useAuth } from "@/hooks/use-auth"
+import { usePathname, useSearchParams } from "next/navigation"
 
 function getDistinctId(username: string, tenantId: string) {
   return `${tenantId || "global"}:${username}`
@@ -10,7 +11,10 @@ function getDistinctId(username: string, tenantId: string) {
 
 export default function PostHogAuthSync() {
   const { user, status } = useAuth()
+  const pathname = usePathname()
+  const searchParams = useSearchParams()
   const lastDistinctIdRef = useRef<string | null>(null)
+  const lastPageviewUrlRef = useRef<string | null>(null)
 
   useEffect(() => {
     if (status === "loading") return
@@ -39,6 +43,22 @@ export default function PostHogAuthSync() {
 
     lastDistinctIdRef.current = distinctId
   }, [status, user])
+
+  useEffect(() => {
+    if (typeof window === "undefined") return
+    const query = searchParams?.toString()
+    const url = query ? `${pathname}?${query}` : pathname
+    if (!url || lastPageviewUrlRef.current === url) return
+
+    posthog.capture("$pageview", {
+      $current_url: window.location.href,
+      pathname,
+      query: query || "",
+      tenant_id: user?.tenantId || "global",
+      role: user?.role || "anonymous",
+    })
+    lastPageviewUrlRef.current = url
+  }, [pathname, searchParams, user?.role, user?.tenantId])
 
   return null
 }
