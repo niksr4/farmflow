@@ -1,4 +1,4 @@
-import type React from "react"
+import React, { Suspense } from "react"
 import type { Metadata, Viewport } from "next"
 import { Fraunces, Manrope } from "next/font/google"
 import "./globals.css"
@@ -49,7 +49,9 @@ export default function RootLayout({
       <body className={`${bodyFont.variable} ${displayFont.variable} font-body`} suppressHydrationWarning>
         <ThemeProvider attribute="class" defaultTheme="light" enableSystem disableTransitionOnChange>
           <AuthProvider>
-            <PostHogAuthSync />
+            <Suspense fallback={null}>
+              <PostHogAuthSync />
+            </Suspense>
             {children}
             <BrandWatermark />
             <Toaster />
