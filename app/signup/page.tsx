@@ -51,6 +51,16 @@ export default function SignupRoute() {
                 onSubmit={async (event) => {
                   event.preventDefault()
                   if (isSubmitting) return
+                  const normalized = {
+                    name: form.name.trim(),
+                    email: form.email.trim().toLowerCase(),
+                    estate: form.estate.trim(),
+                    region: form.region.trim(),
+                  }
+                  if (!normalized.name || !normalized.email || !normalized.estate) {
+                    setErrorMessage("Please fill in name, work email, and estate name.")
+                    return
+                  }
                   setIsSubmitting(true)
                   setErrorMessage("")
                   try {
@@ -58,11 +68,11 @@ export default function SignupRoute() {
                       method: "POST",
                       headers: { "Content-Type": "application/json" },
                       body: JSON.stringify({
-                        name: form.name,
-                        email: form.email,
-                        estate: form.estate,
-                        region: form.region,
-                        organization: form.estate,
+                        name: normalized.name,
+                        email: normalized.email,
+                        estate: normalized.estate,
+                        region: normalized.region,
+                        organization: normalized.estate,
                         source: "signup-page",
                       }),
                     })
@@ -71,13 +81,13 @@ export default function SignupRoute() {
                       throw new Error(data?.error || "Failed to submit request")
                     }
                     posthog.capture("access_requested", {
-                      estate: form.estate,
-                      region: form.region,
+                      estate: normalized.estate,
+                      region: normalized.region,
                     })
                     setSubmitted(true)
                   } catch (error: any) {
                     posthog.captureException(error)
-                    setErrorMessage(error?.message || "Failed to submit request")
+                    setErrorMessage(error?.message || "Unable to submit right now. Please try again.")
                   } finally {
                     setIsSubmitting(false)
                   }
@@ -106,6 +116,7 @@ export default function SignupRoute() {
                     value={form.name}
                     onChange={(event) => setForm((prev) => ({ ...prev, name: event.target.value }))}
                     placeholder="Your name"
+                    autoComplete="name"
                     required
                   />
                 </div>
@@ -133,6 +144,10 @@ export default function SignupRoute() {
                     value={form.email}
                     onChange={(event) => setForm((prev) => ({ ...prev, email: event.target.value }))}
                     placeholder="you@estate.com"
+                    autoComplete="email"
+                    autoCapitalize="none"
+                    autoCorrect="off"
+                    spellCheck={false}
                     required
                   />
                 </div>
@@ -159,6 +174,7 @@ export default function SignupRoute() {
                     value={form.estate}
                     onChange={(event) => setForm((prev) => ({ ...prev, estate: event.target.value }))}
                     placeholder="Estate or cooperative name"
+                    autoComplete="organization"
                     required
                   />
                 </div>
@@ -185,16 +201,18 @@ export default function SignupRoute() {
                     value={form.region}
                     onChange={(event) => setForm((prev) => ({ ...prev, region: event.target.value }))}
                     placeholder="Coorg, Chikmagalur, Wayanad..."
+                    autoComplete="address-level1"
                   />
                 </div>
                 {errorMessage && (
-                  <p className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+                  <p className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700" aria-live="polite">
                     {errorMessage}
                   </p>
                 )}
-                <Button type="submit" className="w-full" disabled={isSubmitting}>
+                <Button type="submit" className="w-full" disabled={isSubmitting || !form.name.trim() || !form.email.trim() || !form.estate.trim()}>
                   {isSubmitting ? "Submitting..." : "Request Access"}
                 </Button>
+                <p className="text-xs text-muted-foreground">Most requests are reviewed within one business day.</p>
                 <p className="text-xs text-muted-foreground">
                   By requesting access, you acknowledge the{" "}
                   <Link href="/privacy" className="underline">

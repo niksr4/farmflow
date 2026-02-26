@@ -7,6 +7,7 @@ import { AuthProvider } from "@/hooks/use-auth"
 import BrandWatermark from "@/components/brand-watermark"
 import { Toaster } from "@/components/ui/toaster"
 import PwaRegister from "@/components/pwa-register"
+import PwaInstallPrompt from "@/components/pwa-install-prompt"
 import PostHogAuthSync from "@/components/posthog-auth-sync"
 
 const bodyFont = Manrope({ subsets: ["latin"], display: "swap", variable: "--font-body" })
@@ -37,6 +38,9 @@ export const metadata: Metadata = {
 
 export const viewport: Viewport = {
   themeColor: "#12AEB1",
+  width: "device-width",
+  initialScale: 1,
+  viewportFit: "cover",
 }
 
 export default function RootLayout({
@@ -53,6 +57,7 @@ export default function RootLayout({
               <PostHogAuthSync />
             </Suspense>
             {children}
+            <PwaInstallPrompt />
             <BrandWatermark />
             <Toaster />
             <PwaRegister />

@@ -1737,7 +1737,96 @@ export default function SalesTab({ showDataToolsControls = false }: SalesTabProp
             </div>
           ) : (
             <div className="space-y-4">
-              <div className="overflow-x-auto">
+              <div className="space-y-3 md:hidden">
+                {salesRecords.map((record) => {
+                  const soldKgs = resolveSalesRecordKgs(record, bagWeightKg)
+                  return (
+                    <div
+                      key={record.id}
+                      className={cn(
+                        "rounded-xl border border-border/70 bg-white p-3 shadow-sm",
+                        selectedSalesRecord?.id === record.id ? "border-emerald-200 bg-emerald-50/40" : "",
+                      )}
+                      onClick={() => setSelectedSalesRecord(record)}
+                    >
+                      <div className="flex items-start justify-between gap-2">
+                        <div>
+                          <p className="text-sm font-semibold text-foreground">{formatDateOnly(record.sale_date)}</p>
+                          <p className="text-xs text-muted-foreground">{record.buyer_name || "Buyer TBD"}</p>
+                        </div>
+                        <span className="rounded-md border border-border/70 bg-muted/40 px-2 py-0.5 text-xs font-medium">
+                          {record.coffee_type || "-"}
+                        </span>
+                      </div>
+                      <div className="mt-2 grid grid-cols-2 gap-2 text-xs">
+                        <div className="rounded-md border border-black/5 bg-white px-2 py-1.5">
+                          <p className="text-[11px] uppercase tracking-wide text-muted-foreground">Batch / Lot</p>
+                          <p className="font-medium text-foreground">{record.batch_no || "-"} / {record.lot_id || "-"}</p>
+                        </div>
+                        <div className="rounded-md border border-black/5 bg-white px-2 py-1.5">
+                          <p className="text-[11px] uppercase tracking-wide text-muted-foreground">Location</p>
+                          <p className="font-medium text-foreground">{getLocationLabel(record)}</p>
+                        </div>
+                        <div className="rounded-md border border-black/5 bg-white px-2 py-1.5">
+                          <p className="text-[11px] uppercase tracking-wide text-muted-foreground">Bags / KGs</p>
+                          <p className="font-medium text-foreground">
+                            {formatNumber(Number(record.bags_sold) || 0)} / {formatNumber(soldKgs)}
+                          </p>
+                        </div>
+                        <div className="rounded-md border border-black/5 bg-white px-2 py-1.5">
+                          <p className="text-[11px] uppercase tracking-wide text-muted-foreground">Revenue</p>
+                          <p className="font-medium text-emerald-700">{formatCurrency(Number(record.revenue) || 0, 0)}</p>
+                        </div>
+                      </div>
+                      <div className="mt-2 grid grid-cols-2 gap-2 text-xs">
+                        <div className="rounded-md border border-black/5 bg-white px-2 py-1.5">
+                          <p className="text-[11px] uppercase tracking-wide text-muted-foreground">Bag Type</p>
+                          <p className="font-medium text-foreground">{formatBagTypeLabel(record.bag_type)}</p>
+                        </div>
+                        <div className="rounded-md border border-black/5 bg-white px-2 py-1.5">
+                          <p className="text-[11px] uppercase tracking-wide text-muted-foreground">Bank</p>
+                          <p className="font-medium text-foreground">{record.bank_account || "-"}</p>
+                        </div>
+                      </div>
+                      {record.notes ? (
+                        <p className="mt-2 rounded-md border border-black/5 bg-white px-2 py-1.5 text-xs text-muted-foreground">
+                          {record.notes}
+                        </p>
+                      ) : null}
+                      <div className="mt-3 flex gap-2">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={(event) => {
+                            event.stopPropagation()
+                            setSelectedSalesRecord(record)
+                            handleEdit(record)
+                          }}
+                          className="h-10 flex-1 border-blue-200 bg-blue-50 text-blue-700 hover:bg-blue-100"
+                        >
+                          <Pencil className="mr-1.5 h-4 w-4" />
+                          Edit
+                        </Button>
+                        {canDelete && (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={(event) => {
+                              event.stopPropagation()
+                              handleDelete(record.id!)
+                            }}
+                            className="h-10 flex-1 border-red-200 bg-red-50 text-red-700 hover:bg-red-100"
+                          >
+                            <Trash2 className="mr-1.5 h-4 w-4" />
+                            Delete
+                          </Button>
+                        )}
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+              <div className="hidden overflow-x-auto md:block">
                 <Table>
                   <TableHeader>
                     <TableRow>

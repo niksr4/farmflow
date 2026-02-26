@@ -27,6 +27,14 @@ yarn-error.log*
 
 # local exports
 tmp_*.csv
+.tmp/
+.claude/
+Auto-updating
+Caveats
+Downloading
+Fetching
+Homebrew
+Pouring
 
 # playwright
 playwright-report/

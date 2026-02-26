@@ -4119,12 +4119,17 @@ export default function InventorySystem() {
   )
 
   return (
-    <div className="relative w-full px-4 py-8 mx-auto">
+    <div
+      className={cn(
+        "relative mx-auto w-full px-3 pt-4 sm:px-4 sm:py-8",
+        isMobile ? "pb-[calc(6.5rem+env(safe-area-inset-bottom))]" : "pb-8",
+      )}
+    >
       <div className="relative max-w-7xl mx-auto">
         <div className="pointer-events-none absolute -top-20 left-[-6%] h-[220px] w-[220px] rounded-full bg-[radial-gradient(circle_at_center,rgba(120,82,46,0.25),transparent_70%)] blur-[110px]" />
         <div className="pointer-events-none absolute -top-16 right-[5%] h-[200px] w-[200px] rounded-full bg-[radial-gradient(circle_at_center,rgba(69,111,96,0.25),transparent_70%)] blur-[110px]" />
 
-        <header className="relative mb-6 overflow-hidden rounded-2xl border border-black/5 bg-white/70 p-6 shadow-sm backdrop-blur">
+        <header className="relative mb-6 overflow-hidden rounded-2xl border border-black/5 bg-white/70 p-4 shadow-sm backdrop-blur sm:p-6">
           <div className="absolute inset-x-0 top-0 h-0.5 bg-gradient-to-r from-emerald-500 via-amber-300 to-emerald-600" />
           <div className="flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between">
             <div className="space-y-3">
@@ -4138,10 +4143,10 @@ export default function InventorySystem() {
                 />
                 <div>
                   <h1 className="text-2xl font-display font-semibold text-[color:var(--foreground)]">
-                    Inventory Command
+                    FarmFlow Dashboard
                   </h1>
                 </div>
-                <Badge className="bg-white/90 text-emerald-700 border-emerald-200">Inventory System</Badge>
+                <Badge className="bg-white/90 text-emerald-700 border-emerald-200">Estate Workspace</Badge>
               </div>
               <div className="flex flex-wrap items-center gap-3 text-sm text-muted-foreground">
                 <span className="inline-flex items-center gap-2 rounded-full border border-emerald-100 bg-white/80 px-3 py-1 text-xs text-emerald-700">
@@ -4548,13 +4553,21 @@ export default function InventorySystem() {
         )}
         <Tabs value={activeTab} onValueChange={handleTabChange} className="w-full space-y-4">
           <div className="sticky top-2 z-20 space-y-3 rounded-2xl border border-black/10 bg-white/90 p-3 shadow-sm backdrop-blur">
-            <div className={cn("grid gap-2", isMobile ? "grid-cols-1" : "grid-cols-1 md:grid-cols-3")}>
+            <div
+              className={cn(
+                "gap-2",
+                isMobile
+                  ? "flex snap-x snap-mandatory overflow-x-auto whitespace-nowrap no-scrollbar"
+                  : "grid grid-cols-1 gap-2 md:grid-cols-3",
+              )}
+            >
               {showOperationsTabs && (
                 <button
                   type="button"
                   onClick={() => handleSectionSelect("operations")}
                   className={cn(
-                    "flex min-h-[86px] items-center gap-3 rounded-xl border px-4 py-3 text-left transition-all",
+                    "flex items-center gap-3 rounded-xl border text-left transition-all touch-manipulation",
+                    isMobile ? "min-h-[76px] min-w-[238px] snap-start px-3 py-2" : "min-h-[86px] px-4 py-3",
                     activeTabGroup === "operations"
                       ? "border-emerald-600 bg-emerald-600 text-white shadow-[0_14px_30px_-20px_rgba(5,150,105,0.9)]"
                       : "border-emerald-200 bg-emerald-50/70 text-emerald-900 hover:border-emerald-300 hover:bg-emerald-50",
@@ -4575,7 +4588,8 @@ export default function InventorySystem() {
                   type="button"
                   onClick={() => handleSectionSelect("finance")}
                   className={cn(
-                    "flex min-h-[86px] items-center gap-3 rounded-xl border px-4 py-3 text-left transition-all",
+                    "flex items-center gap-3 rounded-xl border text-left transition-all touch-manipulation",
+                    isMobile ? "min-h-[76px] min-w-[238px] snap-start px-3 py-2" : "min-h-[86px] px-4 py-3",
                     activeTabGroup === "finance"
                       ? "border-amber-500 bg-amber-500 text-white shadow-[0_14px_30px_-20px_rgba(217,119,6,0.95)]"
                       : "border-amber-200 bg-amber-50/70 text-amber-900 hover:border-amber-300 hover:bg-amber-50",
@@ -4596,7 +4610,8 @@ export default function InventorySystem() {
                   type="button"
                   onClick={() => handleSectionSelect("insights")}
                   className={cn(
-                    "flex min-h-[86px] items-center gap-3 rounded-xl border px-4 py-3 text-left transition-all",
+                    "flex items-center gap-3 rounded-xl border text-left transition-all touch-manipulation",
+                    isMobile ? "min-h-[76px] min-w-[238px] snap-start px-3 py-2" : "min-h-[86px] px-4 py-3",
                     activeTabGroup === "insights"
                       ? "border-cyan-600 bg-cyan-600 text-white shadow-[0_14px_30px_-20px_rgba(8,145,178,0.9)]"
                       : "border-cyan-200 bg-cyan-50/70 text-cyan-900 hover:border-cyan-300 hover:bg-cyan-50",
@@ -4618,7 +4633,7 @@ export default function InventorySystem() {
                 className={cn(
                   "h-auto rounded-xl border border-black/10 bg-neutral-50/90 p-2 shadow-none",
                   isMobile
-                    ? "flex-nowrap items-center gap-2 overflow-x-auto whitespace-nowrap [&>*]:shrink-0"
+                    ? "flex-nowrap items-center gap-2 overflow-x-auto whitespace-nowrap no-scrollbar snap-x snap-mandatory [&>*]:shrink-0"
                     : "flex-wrap items-center gap-2",
                 )}
               >
@@ -4628,7 +4643,10 @@ export default function InventorySystem() {
                     <TabsTrigger
                       key={tab.value}
                       value={tab.value}
-                      className="min-h-11 rounded-lg border border-black/10 bg-white/90 px-4 text-sm font-semibold data-[state=active]:border-emerald-600 data-[state=active]:bg-emerald-600 data-[state=active]:text-white data-[state=active]:shadow-[0_10px_20px_-14px_rgba(5,150,105,0.9)]"
+                      className={cn(
+                        "min-h-11 rounded-lg border border-black/10 bg-white/90 px-4 text-sm font-semibold data-[state=active]:border-emerald-600 data-[state=active]:bg-emerald-600 data-[state=active]:text-white data-[state=active]:shadow-[0_10px_20px_-14px_rgba(5,150,105,0.9)]",
+                        isMobile ? "min-h-12 snap-start touch-manipulation" : "",
+                      )}
                     >
                       <TabIcon className="mr-2 h-4 w-4" />
                       {tab.label}
@@ -5720,8 +5738,8 @@ export default function InventorySystem() {
                   )}
                 </div>
 
-                <div className="flex flex-col sm:flex-row justify-between mb-5 gap-4">
-                  <div className="flex flex-col sm:flex-row gap-3 flex-grow">
+                <div className="mb-5 flex flex-col gap-4 sm:flex-row sm:justify-between">
+                  <div className="flex flex-col gap-3 sm:flex-row sm:flex-grow">
                     <div className="relative flex-grow">
                       <Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground/70" />
                       <Input
@@ -5756,7 +5774,12 @@ export default function InventorySystem() {
                     </Select>
                   </div>
 
-                  <Button variant="outline" size="sm" onClick={toggleTransactionSort} className="flex items-center gap-1 h-10 whitespace-nowrap bg-transparent">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={toggleTransactionSort}
+                    className="flex h-10 w-full items-center justify-center gap-1 whitespace-nowrap bg-transparent sm:w-auto sm:justify-start"
+                  >
                     {transactionSortOrder === "desc" ? (<><SortDesc className="h-4 w-4 mr-1" /> Date: Newest First</>) : (<><SortAsc className="h-4 w-4 mr-1" /> Date: Oldest First</>)}
                   </Button>
                 </div>
@@ -5774,77 +5797,188 @@ export default function InventorySystem() {
                   </div>
                 )}
 
-                <div className="border border-border/60 rounded-lg overflow-x-auto bg-white/80">
-                  <table className="min-w-full">
-                    <thead>
-                      <tr className="bg-muted/60 text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground/80 border-b sticky top-0 backdrop-blur">
-                        <th className="py-4 px-4 text-left">Date</th>
-                        <th className="py-4 px-4 text-left">Location</th>
-                        <th className="py-4 px-4 text-left">Item Type</th>
-                        <th className="py-4 px-4 text-left">Quantity</th>
-                        <th className="py-4 px-4 text-left">Transaction</th>
-                        {!isMobile && (
-                          <>
-                            <th className="py-4 px-4 text-left">Price</th>
-                            <th className="py-4 px-4 text-left">Notes</th>
-                            <th className="py-4 px-4 text-left">User</th>
-                          </>
-                        )}
-                        <th className="py-4 px-4 text-left">Actions</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {currentTransactions.map((transaction, index) => {
-                        const typeValue = String(transaction.transaction_type ?? "").toLowerCase()
-                        const isDepleting = typeValue.includes("deplet")
-                        const isRestocking = typeValue.includes("restock")
-                        const typeLabel = isDepleting ? "Depleting" : isRestocking ? "Restocking" : transaction.transaction_type
-                        const typeClass = isDepleting
-                          ? "bg-red-100 text-red-700 border-red-200"
-                          : isRestocking
-                            ? "bg-green-100 text-green-700 border-green-200"
-                            : "bg-blue-100 text-blue-700 border-blue-200"
-
-                        return (
-                        <tr
+                {isMobile ? (
+                  <div className="space-y-3">
+                    {transactions.length === 0 && (
+                      <div className="rounded-lg border border-border/60 bg-white/80 py-10 text-center text-muted-foreground">
+                        No transactions recorded yet.
+                      </div>
+                    )}
+                    {transactions.length > 0 && filteredTransactions.length === 0 && (
+                      <div className="rounded-lg border border-border/60 bg-white/80 py-10 text-center text-muted-foreground">
+                        No transactions found matching your current filters.
+                      </div>
+                    )}
+                    {currentTransactions.map((transaction, index) => {
+                      const typeValue = String(transaction.transaction_type ?? "").toLowerCase()
+                      const isDepleting = typeValue.includes("deplet")
+                      const isRestocking = typeValue.includes("restock")
+                      const typeLabel = isDepleting ? "Depleting" : isRestocking ? "Restocking" : transaction.transaction_type
+                      const typeClass = isDepleting
+                        ? "bg-red-100 text-red-700 border-red-200"
+                        : isRestocking
+                          ? "bg-green-100 text-green-700 border-green-200"
+                          : "bg-blue-100 text-blue-700 border-blue-200"
+                      const rowTone = index % 2 === 0 ? "bg-white/90" : "bg-muted/10"
+                      return (
+                        <div
                           key={transaction.id ?? `${transaction.item_type}-${transaction.transaction_date}`}
-                          className={`border-b last:border-0 hover:bg-muted/30 ${index % 2 === 0 ? "bg-white/90" : "bg-muted/10"}`}
+                          className={`rounded-xl border border-border/60 p-3 shadow-sm ${rowTone}`}
                         >
-                          <td className="py-4 px-4">{formatDate(transaction.transaction_date)}</td>
-                          <td className="py-4 px-4">{resolveLocationLabel(transaction.location_id, transaction.location_name || transaction.location_code)}</td>
-                          <td className="py-4 px-4">{transaction.item_type}</td>
-                          <td className="py-4 px-4">
-                            {formatNumber(Number(transaction.quantity) || 0)} {transaction.unit}
-                          </td>
-                          <td className="py-4 px-4">
-                            <Badge variant="outline" className={typeClass}>{typeLabel}</Badge>
-                          </td>
-                          {!isMobile && (<>
-                            <td className="py-4 px-4">{transaction.price ? formatCurrency(Number(transaction.price) || 0) : "-"}</td>
-                            <td className="py-4 px-4 max-w-xs truncate" title={transaction.notes}>{transaction.notes}</td>
-                            <td className="py-4 px-4">{transaction.user_id}</td>
-                          </>)}
-                          <td className="py-4 px-4">
-                            <div className="flex gap-2">
-                              <Button size="sm" variant="ghost" onClick={() => handleEditTransaction(transaction)} className="text-amber-600 p-2 h-auto"><Edit className="h-4 w-4" /></Button>
-                              {canManageData && (
-                                <Button size="sm" variant="ghost" onClick={() => handleDeleteConfirm(transaction.id)} className="text-red-600 p-2 h-auto"><Trash2 className="h-4 w-4" /></Button>
-                              )}
+                          <div className="flex items-start justify-between gap-2">
+                            <div>
+                              <p className="text-sm font-semibold text-neutral-900">{transaction.item_type}</p>
+                              <p className="text-xs text-muted-foreground">{formatDate(transaction.transaction_date)}</p>
                             </div>
-                          </td>
+                            <Badge variant="outline" className={typeClass}>
+                              {typeLabel}
+                            </Badge>
+                          </div>
+                          <div className="mt-3 grid grid-cols-2 gap-2 text-xs">
+                            <div className="rounded-md border border-black/5 bg-white px-2 py-1.5">
+                              <p className="text-[11px] uppercase tracking-wide text-muted-foreground">Quantity</p>
+                              <p className="font-medium text-neutral-900">
+                                {formatNumber(Number(transaction.quantity) || 0)} {transaction.unit}
+                              </p>
+                            </div>
+                            <div className="rounded-md border border-black/5 bg-white px-2 py-1.5">
+                              <p className="text-[11px] uppercase tracking-wide text-muted-foreground">Location</p>
+                              <p className="font-medium text-neutral-900">
+                                {resolveLocationLabel(transaction.location_id, transaction.location_name || transaction.location_code)}
+                              </p>
+                            </div>
+                            <div className="rounded-md border border-black/5 bg-white px-2 py-1.5">
+                              <p className="text-[11px] uppercase tracking-wide text-muted-foreground">Price</p>
+                              <p className="font-medium text-neutral-900">
+                                {transaction.price ? formatCurrency(Number(transaction.price) || 0) : "-"}
+                              </p>
+                            </div>
+                            <div className="rounded-md border border-black/5 bg-white px-2 py-1.5">
+                              <p className="text-[11px] uppercase tracking-wide text-muted-foreground">User</p>
+                              <p className="font-medium text-neutral-900">{transaction.user_id || "-"}</p>
+                            </div>
+                          </div>
+                          {transaction.notes && (
+                            <p className="mt-2 rounded-md border border-black/5 bg-white px-2 py-1.5 text-xs text-muted-foreground">
+                              {transaction.notes}
+                            </p>
+                          )}
+                          <div className="mt-3 flex gap-2">
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => handleEditTransaction(transaction)}
+                              className="h-10 flex-1 justify-center gap-1.5 border-amber-200 bg-amber-50 text-amber-700 hover:bg-amber-100"
+                            >
+                              <Edit className="h-4 w-4" />
+                              Edit
+                            </Button>
+                            {canManageData && (
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => handleDeleteConfirm(transaction.id)}
+                                className="h-10 flex-1 justify-center gap-1.5 border-red-200 bg-red-50 text-red-700 hover:bg-red-100"
+                              >
+                                <Trash2 className="h-4 w-4" />
+                                Delete
+                              </Button>
+                            )}
+                          </div>
+                        </div>
+                      )
+                    })}
+                  </div>
+                ) : (
+                  <div className="border border-border/60 rounded-lg overflow-x-auto bg-white/80">
+                    <table className="min-w-full">
+                      <thead>
+                        <tr className="bg-muted/60 text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground/80 border-b sticky top-0 backdrop-blur">
+                          <th className="py-4 px-4 text-left">Date</th>
+                          <th className="py-4 px-4 text-left">Location</th>
+                          <th className="py-4 px-4 text-left">Item Type</th>
+                          <th className="py-4 px-4 text-left">Quantity</th>
+                          <th className="py-4 px-4 text-left">Transaction</th>
+                          <th className="py-4 px-4 text-left">Price</th>
+                          <th className="py-4 px-4 text-left">Notes</th>
+                          <th className="py-4 px-4 text-left">User</th>
+                          <th className="py-4 px-4 text-left">Actions</th>
                         </tr>
-                      )})}
-                    </tbody>
-                  </table>
-                  {transactions.length === 0 && (
-                    <div className="text-center py-10 text-muted-foreground">No transactions recorded yet.</div>
-                  )}
-                  {transactions.length > 0 && filteredTransactions.length === 0 && (
-                    <div className="text-center py-10 text-muted-foreground">
-                      No transactions found matching your current filters.
-                    </div>
-                  )}
-                </div>
+                      </thead>
+                      <tbody>
+                        {currentTransactions.map((transaction, index) => {
+                          const typeValue = String(transaction.transaction_type ?? "").toLowerCase()
+                          const isDepleting = typeValue.includes("deplet")
+                          const isRestocking = typeValue.includes("restock")
+                          const typeLabel = isDepleting ? "Depleting" : isRestocking ? "Restocking" : transaction.transaction_type
+                          const typeClass = isDepleting
+                            ? "bg-red-100 text-red-700 border-red-200"
+                            : isRestocking
+                              ? "bg-green-100 text-green-700 border-green-200"
+                              : "bg-blue-100 text-blue-700 border-blue-200"
+
+                          return (
+                            <tr
+                              key={transaction.id ?? `${transaction.item_type}-${transaction.transaction_date}`}
+                              className={`border-b last:border-0 hover:bg-muted/30 ${index % 2 === 0 ? "bg-white/90" : "bg-muted/10"}`}
+                            >
+                              <td className="py-4 px-4">{formatDate(transaction.transaction_date)}</td>
+                              <td className="py-4 px-4">
+                                {resolveLocationLabel(transaction.location_id, transaction.location_name || transaction.location_code)}
+                              </td>
+                              <td className="py-4 px-4">{transaction.item_type}</td>
+                              <td className="py-4 px-4">
+                                {formatNumber(Number(transaction.quantity) || 0)} {transaction.unit}
+                              </td>
+                              <td className="py-4 px-4">
+                                <Badge variant="outline" className={typeClass}>
+                                  {typeLabel}
+                                </Badge>
+                              </td>
+                              <td className="py-4 px-4">
+                                {transaction.price ? formatCurrency(Number(transaction.price) || 0) : "-"}
+                              </td>
+                              <td className="py-4 px-4 max-w-xs truncate" title={transaction.notes}>
+                                {transaction.notes}
+                              </td>
+                              <td className="py-4 px-4">{transaction.user_id}</td>
+                              <td className="py-4 px-4">
+                                <div className="flex gap-2">
+                                  <Button
+                                    size="sm"
+                                    variant="ghost"
+                                    onClick={() => handleEditTransaction(transaction)}
+                                    className="text-amber-600 p-2 h-auto"
+                                  >
+                                    <Edit className="h-4 w-4" />
+                                  </Button>
+                                  {canManageData && (
+                                    <Button
+                                      size="sm"
+                                      variant="ghost"
+                                      onClick={() => handleDeleteConfirm(transaction.id)}
+                                      className="text-red-600 p-2 h-auto"
+                                    >
+                                      <Trash2 className="h-4 w-4" />
+                                    </Button>
+                                  )}
+                                </div>
+                              </td>
+                            </tr>
+                          )
+                        })}
+                      </tbody>
+                    </table>
+                    {transactions.length === 0 && (
+                      <div className="text-center py-10 text-muted-foreground">No transactions recorded yet.</div>
+                    )}
+                    {transactions.length > 0 && filteredTransactions.length === 0 && (
+                      <div className="text-center py-10 text-muted-foreground">
+                        No transactions found matching your current filters.
+                      </div>
+                    )}
+                  </div>
+                )}
 
                 {filteredTransactions.length > 0 && (
                   <div className="flex justify-between items-center mt-4">
@@ -5999,7 +6133,33 @@ export default function InventorySystem() {
               <BillingTab showDataToolsControls={showDataToolsPanel} />
             </TabsContent>
           )}
-            </Tabs>
+        </Tabs>
+        {isMobile && activeTabGroup !== "dashboard" && activeSectionTabs.length > 0 && (
+          <div className="fixed inset-x-0 bottom-0 z-40 border-t border-black/10 bg-white/95 shadow-[0_-8px_24px_-16px_rgba(15,23,42,0.45)] backdrop-blur">
+            <div className="mx-auto flex max-w-7xl items-center gap-2 overflow-x-auto px-3 pb-[calc(0.5rem+env(safe-area-inset-bottom))] pt-2 no-scrollbar">
+              {activeSectionTabs.map((tab) => {
+                const TabIcon = tab.icon
+                const isActive = activeTab === tab.value
+                return (
+                  <button
+                    key={tab.value}
+                    type="button"
+                    onClick={() => handleTabChange(tab.value)}
+                    className={cn(
+                      "flex min-h-11 flex-1 min-w-[8.25rem] items-center justify-center gap-1.5 rounded-xl border px-3 py-2 text-xs font-semibold transition-colors touch-manipulation",
+                      isActive
+                        ? "border-emerald-600 bg-emerald-600 text-white"
+                        : "border-black/10 bg-white text-neutral-700",
+                    )}
+                  >
+                    <TabIcon className="h-3.5 w-3.5" />
+                    <span className="truncate">{tab.label}</span>
+                  </button>
+                )
+              })}
+            </div>
+          </div>
+        )}
         {isInventoryDrilldownOpen && (
           <div
             className="fixed inset-0 z-50 bg-black/40"
@@ -6028,14 +6188,22 @@ export default function InventorySystem() {
         )}
         {isNewItemDialogOpen && (
           <div
-            className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
+            className={cn(
+              "fixed inset-0 z-50 bg-black/40",
+              isMobile ? "flex items-end justify-center p-0" : "flex items-center justify-center p-4",
+            )}
             onClick={() => {
               setIsNewItemDialogOpen(false)
               resetNewItemForm()
             }}
           >
             <div
-              className="w-full max-w-xl rounded-lg bg-white p-6 shadow-xl"
+              className={cn(
+                "w-full bg-white shadow-xl",
+                isMobile
+                  ? "max-h-[92vh] rounded-t-2xl overflow-y-auto px-4 pb-[calc(1rem+env(safe-area-inset-bottom))] pt-4"
+                  : "max-w-xl rounded-lg p-6",
+              )}
               onClick={(event) => event.stopPropagation()}
             >
               <div className="flex items-center justify-between">
@@ -6140,7 +6308,7 @@ export default function InventorySystem() {
                   />
                 </div>
               </div>
-              <div className="mt-6 flex justify-end gap-2">
+              <div className={cn("mt-6 flex gap-2", isMobile ? "flex-col-reverse" : "justify-end")}>
                 <Button
                   variant="outline"
                   onClick={() => {
@@ -6159,14 +6327,22 @@ export default function InventorySystem() {
         )}
         {isEditDialogOpen && editingTransaction && (
           <div
-            className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
+            className={cn(
+              "fixed inset-0 z-50 bg-black/40",
+              isMobile ? "flex items-end justify-center p-0" : "flex items-center justify-center p-4",
+            )}
             onClick={() => {
               setIsEditDialogOpen(false)
               setEditingTransaction(null)
             }}
           >
             <div
-              className="w-full max-w-2xl rounded-lg bg-white p-6 shadow-xl"
+              className={cn(
+                "w-full bg-white shadow-xl",
+                isMobile
+                  ? "max-h-[92vh] rounded-t-2xl overflow-y-auto px-4 pb-[calc(1rem+env(safe-area-inset-bottom))] pt-4"
+                  : "max-w-2xl rounded-lg p-6",
+              )}
               onClick={(event) => event.stopPropagation()}
             >
               <div className="flex items-center justify-between">
@@ -6369,7 +6545,7 @@ export default function InventorySystem() {
                   />
                 </div>
               </div>
-              <div className="mt-6 flex justify-end gap-2">
+              <div className={cn("mt-6 flex gap-2", isMobile ? "flex-col-reverse" : "justify-end")}>
                 <Button
                   variant="outline"
                   onClick={() => {
@@ -6388,14 +6564,22 @@ export default function InventorySystem() {
         )}
         {isInventoryEditDialogOpen && editingInventoryItem && (
           <div
-            className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
+            className={cn(
+              "fixed inset-0 z-50 bg-black/40",
+              isMobile ? "flex items-end justify-center p-0" : "flex items-center justify-center p-4",
+            )}
             onClick={() => {
               setIsInventoryEditDialogOpen(false)
               setEditingInventoryItem(null)
             }}
           >
             <div
-              className="w-full max-w-xl rounded-lg bg-white p-6 shadow-xl"
+              className={cn(
+                "w-full bg-white shadow-xl",
+                isMobile
+                  ? "max-h-[92vh] rounded-t-2xl overflow-y-auto px-4 pb-[calc(1rem+env(safe-area-inset-bottom))] pt-4"
+                  : "max-w-xl rounded-lg p-6",
+              )}
               onClick={(event) => event.stopPropagation()}
             >
               <div className="flex items-center justify-between">
@@ -6538,7 +6722,7 @@ export default function InventorySystem() {
                   </p>
                 </div>
               </div>
-              <div className="mt-6 flex justify-end gap-2">
+              <div className={cn("mt-6 flex gap-2", isMobile ? "flex-col-reverse" : "justify-end")}>
                 <Button
                   variant="outline"
                   onClick={() => {
@@ -6557,21 +6741,29 @@ export default function InventorySystem() {
         )}
         {deleteConfirmDialogOpen && (
           <div
-            className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
+            className={cn(
+              "fixed inset-0 z-50 bg-black/40",
+              isMobile ? "flex items-end justify-center p-0" : "flex items-center justify-center p-4",
+            )}
             onClick={() => {
               setDeleteConfirmDialogOpen(false)
               setTransactionToDelete(null)
             }}
           >
             <div
-              className="w-full max-w-md rounded-lg bg-white p-6 shadow-xl"
+              className={cn(
+                "w-full bg-white shadow-xl",
+                isMobile
+                  ? "rounded-t-2xl px-4 pb-[calc(1rem+env(safe-area-inset-bottom))] pt-4"
+                  : "max-w-md rounded-lg p-6",
+              )}
               onClick={(event) => event.stopPropagation()}
             >
               <h3 className="text-lg font-semibold">Delete transaction?</h3>
               <p className="mt-2 text-sm text-muted-foreground">
                 This will remove the transaction and recalculate inventory totals.
               </p>
-              <div className="mt-6 flex justify-end gap-2">
+              <div className={cn("mt-6 flex gap-2", isMobile ? "flex-col-reverse" : "justify-end")}>
                 <Button
                   variant="outline"
                   onClick={() => {

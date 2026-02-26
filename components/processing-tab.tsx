@@ -884,54 +884,96 @@ export default function ProcessingTab({ showDataToolsControls = false }: Process
               <span>Loading dashboard...</span>
             </div>
           ) : (
-            <div className="overflow-x-auto">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead className="font-semibold sticky top-0 bg-muted/70 backdrop-blur">Location</TableHead>
-                    <TableHead className="text-right sticky top-0 bg-muted/70 backdrop-blur">Crop To Date (kg)</TableHead>
-                    <TableHead className="text-right sticky top-0 bg-muted/70 backdrop-blur">Ripe To Date (kg)</TableHead>
-                    <TableHead className="text-right sticky top-0 bg-muted/70 backdrop-blur">Green To Date (kg)</TableHead>
-                    <TableHead className="text-right sticky top-0 bg-muted/70 backdrop-blur">Float To Date (kg)</TableHead>
-                    <TableHead className="text-right sticky top-0 bg-muted/70 backdrop-blur">WP To Date (kg)</TableHead>
-                    <TableHead className="text-right sticky top-0 bg-muted/70 backdrop-blur">
-                      Dry Parchment To Date (kg)
-                    </TableHead>
-                    <TableHead className="text-right sticky top-0 bg-muted/70 backdrop-blur">
-                      Dry Cherry To Date (kg)
-                    </TableHead>
-                    <TableHead className="text-right sticky top-0 bg-muted/70 backdrop-blur">
-                      Dry Parchment Bags To Date
-                    </TableHead>
-                    <TableHead className="text-right sticky top-0 bg-muted/70 backdrop-blur">
-                      Dry Cherry Bags To Date
-                    </TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {dashboardData.map((data) => (
-                    <TableRow
-                      key={data.location}
-                      className={cn(
-                        data.isGrandTotal && "border-t-2 border-emerald-200 font-semibold bg-emerald-50/70",
-                        data.isTotal && "border-t-2 border-border/70 font-semibold bg-muted/50",
-                      )}
-                    >
-                      <TableCell className="font-medium">{data.location}</TableCell>
-                      <TableCell className="text-right">{formatNumber(data.cropToDate)}</TableCell>
-                      <TableCell className="text-right">{formatNumber(data.ripeToDate)}</TableCell>
-                      <TableCell className="text-right">{formatNumber(data.greenToDate)}</TableCell>
-                      <TableCell className="text-right">{formatNumber(data.floatToDate)}</TableCell>
-                      <TableCell className="text-right">{formatNumber(data.wetParchmentToDate)}</TableCell>
-                      <TableCell className="text-right">{formatNumber(data.dryPToDate)}</TableCell>
-                      <TableCell className="text-right">{formatNumber(data.dryCherryToDate)}</TableCell>
-                      <TableCell className="text-right">{formatNumber(data.dryPBagsToDate)}</TableCell>
-                      <TableCell className="text-right">{formatNumber(data.dryCherryBagsToDate)}</TableCell>
+            <>
+              <div className="space-y-3 md:hidden">
+                {dashboardData.map((data) => (
+                  <div
+                    key={data.location}
+                    className={cn(
+                      "rounded-xl border border-border/70 p-3 shadow-sm",
+                      data.isGrandTotal && "border-emerald-200 bg-emerald-50/70",
+                      data.isTotal && "border-border/80 bg-muted/40",
+                    )}
+                  >
+                    <p className="text-sm font-semibold text-foreground">{data.location}</p>
+                    <div className="mt-2 grid grid-cols-2 gap-2 text-xs">
+                      <div className="rounded-md border border-black/5 bg-white px-2 py-1.5">
+                        <p className="text-[11px] uppercase tracking-wide text-muted-foreground">Crop To Date</p>
+                        <p className="font-medium text-foreground">{formatNumber(data.cropToDate)} kg</p>
+                      </div>
+                      <div className="rounded-md border border-black/5 bg-white px-2 py-1.5">
+                        <p className="text-[11px] uppercase tracking-wide text-muted-foreground">Ripe To Date</p>
+                        <p className="font-medium text-foreground">{formatNumber(data.ripeToDate)} kg</p>
+                      </div>
+                      <div className="rounded-md border border-black/5 bg-white px-2 py-1.5">
+                        <p className="text-[11px] uppercase tracking-wide text-muted-foreground">Dry Parchment</p>
+                        <p className="font-medium text-foreground">{formatNumber(data.dryPToDate)} kg</p>
+                      </div>
+                      <div className="rounded-md border border-black/5 bg-white px-2 py-1.5">
+                        <p className="text-[11px] uppercase tracking-wide text-muted-foreground">Dry Cherry</p>
+                        <p className="font-medium text-foreground">{formatNumber(data.dryCherryToDate)} kg</p>
+                      </div>
+                      <div className="rounded-md border border-black/5 bg-white px-2 py-1.5">
+                        <p className="text-[11px] uppercase tracking-wide text-muted-foreground">DP Bags</p>
+                        <p className="font-medium text-foreground">{formatNumber(data.dryPBagsToDate)}</p>
+                      </div>
+                      <div className="rounded-md border border-black/5 bg-white px-2 py-1.5">
+                        <p className="text-[11px] uppercase tracking-wide text-muted-foreground">Cherry Bags</p>
+                        <p className="font-medium text-foreground">{formatNumber(data.dryCherryBagsToDate)}</p>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+              <div className="hidden overflow-x-auto md:block">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead className="font-semibold sticky top-0 bg-muted/70 backdrop-blur">Location</TableHead>
+                      <TableHead className="text-right sticky top-0 bg-muted/70 backdrop-blur">Crop To Date (kg)</TableHead>
+                      <TableHead className="text-right sticky top-0 bg-muted/70 backdrop-blur">Ripe To Date (kg)</TableHead>
+                      <TableHead className="text-right sticky top-0 bg-muted/70 backdrop-blur">Green To Date (kg)</TableHead>
+                      <TableHead className="text-right sticky top-0 bg-muted/70 backdrop-blur">Float To Date (kg)</TableHead>
+                      <TableHead className="text-right sticky top-0 bg-muted/70 backdrop-blur">WP To Date (kg)</TableHead>
+                      <TableHead className="text-right sticky top-0 bg-muted/70 backdrop-blur">
+                        Dry Parchment To Date (kg)
+                      </TableHead>
+                      <TableHead className="text-right sticky top-0 bg-muted/70 backdrop-blur">
+                        Dry Cherry To Date (kg)
+                      </TableHead>
+                      <TableHead className="text-right sticky top-0 bg-muted/70 backdrop-blur">
+                        Dry Parchment Bags To Date
+                      </TableHead>
+                      <TableHead className="text-right sticky top-0 bg-muted/70 backdrop-blur">
+                        Dry Cherry Bags To Date
+                      </TableHead>
                     </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </div>
+                  </TableHeader>
+                  <TableBody>
+                    {dashboardData.map((data) => (
+                      <TableRow
+                        key={data.location}
+                        className={cn(
+                          data.isGrandTotal && "border-t-2 border-emerald-200 font-semibold bg-emerald-50/70",
+                          data.isTotal && "border-t-2 border-border/70 font-semibold bg-muted/50",
+                        )}
+                      >
+                        <TableCell className="font-medium">{data.location}</TableCell>
+                        <TableCell className="text-right">{formatNumber(data.cropToDate)}</TableCell>
+                        <TableCell className="text-right">{formatNumber(data.ripeToDate)}</TableCell>
+                        <TableCell className="text-right">{formatNumber(data.greenToDate)}</TableCell>
+                        <TableCell className="text-right">{formatNumber(data.floatToDate)}</TableCell>
+                        <TableCell className="text-right">{formatNumber(data.wetParchmentToDate)}</TableCell>
+                        <TableCell className="text-right">{formatNumber(data.dryPToDate)}</TableCell>
+                        <TableCell className="text-right">{formatNumber(data.dryCherryToDate)}</TableCell>
+                        <TableCell className="text-right">{formatNumber(data.dryPBagsToDate)}</TableCell>
+                        <TableCell className="text-right">{formatNumber(data.dryCherryBagsToDate)}</TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+            </>
           )}
         </CardContent>
       </Card>
@@ -1474,7 +1516,7 @@ export default function ProcessingTab({ showDataToolsControls = false }: Process
                   key={rec.id}
                   variant="outline"
                   className={cn(
-                    "w-full justify-start border-border/60 bg-white/70 text-left hover:bg-muted/40",
+                    "h-auto w-full justify-start border-border/60 bg-white/70 py-3 text-left hover:bg-muted/40",
                     selectedRecentRecord?.id === rec.id && selectedRecentRecord?.process_date === rec.process_date
                       ? "border-emerald-200 bg-emerald-50/60"
                       : "",
@@ -1484,9 +1526,9 @@ export default function ProcessingTab({ showDataToolsControls = false }: Process
                     setDate(new Date(rec.process_date))
                   }}
                 >
-                  <div className="flex justify-between w-full">
-                    <span>{formatDateOnly(rec.process_date)}</span>
-                    <span className="text-muted-foreground">
+                  <div className="flex w-full flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+                    <span className="font-medium">{formatDateOnly(rec.process_date)}</span>
+                    <span className="text-xs text-muted-foreground sm:text-sm">
                       {rec.lot_id ? `Lot: ${rec.lot_id} | ` : ""}
                       Crop: {rec.crop_today ?? 0}kg | Bags: {rec.dry_p_bags}
                       {rec.quality_grade ? ` | Grade: ${rec.quality_grade}` : ""}

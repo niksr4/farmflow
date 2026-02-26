@@ -450,13 +450,25 @@ export default function LandingPage() {
 
   const handleInterestSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
+    const normalized = {
+      name: interestForm.name.trim(),
+      email: interestForm.email.trim().toLowerCase(),
+      organization: interestForm.organization.trim(),
+      estateSize: interestForm.estateSize.trim(),
+      notes: interestForm.notes.trim(),
+    }
+    if (!normalized.name || !normalized.email) {
+      setInterestState("error")
+      setInterestError("Please enter your name and work email.")
+      return
+    }
     setInterestError("")
     setInterestState("submitting")
     try {
       const response = await fetch("/api/register-interest", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ...interestForm, source: "landing-page" }),
+        body: JSON.stringify({ ...normalized, source: "landing-page" }),
       })
       const data = await response.json()
       if (!response.ok || !data.success) {
@@ -472,7 +484,7 @@ export default function LandingPage() {
       })
     } catch (error: any) {
       setInterestState("error")
-      setInterestError(error.message || "Failed to submit interest")
+      setInterestError(error.message || "Unable to submit right now. Please try again.")
     }
   }
 
@@ -1130,6 +1142,7 @@ export default function LandingPage() {
                       value={interestForm.name}
                       onChange={(event) => setInterestForm((prev) => ({ ...prev, name: event.target.value }))}
                       placeholder="Your name"
+                      autoComplete="name"
                       required
                     />
                   </div>
@@ -1143,6 +1156,10 @@ export default function LandingPage() {
                       value={interestForm.email}
                       onChange={(event) => setInterestForm((prev) => ({ ...prev, email: event.target.value }))}
                       placeholder="name@estate.com"
+                      autoComplete="email"
+                      autoCapitalize="none"
+                      autoCorrect="off"
+                      spellCheck={false}
                       required
                     />
                   </div>
@@ -1157,6 +1174,7 @@ export default function LandingPage() {
                       value={interestForm.organization}
                       onChange={(event) => setInterestForm((prev) => ({ ...prev, organization: event.target.value }))}
                       placeholder="HoneyFarm Estate"
+                      autoComplete="organization"
                     />
                   </div>
                   <div className="space-y-1.5">
@@ -1184,18 +1202,23 @@ export default function LandingPage() {
                   />
                 </div>
                 {interestState === "success" && (
-                  <p className="rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-700">
+                  <p className="rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-700" aria-live="polite">
                     Thanks, your interest has been registered.
                   </p>
                 )}
                 {interestState === "error" && (
-                  <p className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+                  <p className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700" aria-live="polite">
                     {interestError || "Failed to submit interest."}
                   </p>
                 )}
-                <Button type="submit" className="w-full" disabled={interestState === "submitting"}>
+                <Button
+                  type="submit"
+                  className="w-full"
+                  disabled={interestState === "submitting" || !interestForm.name.trim() || !interestForm.email.trim()}
+                >
                   {interestState === "submitting" ? "Submitting..." : "Request Early Access"}
                 </Button>
+                <p className="text-xs text-muted-foreground">We usually reply within one business day.</p>
               </form>
             </CardContent>
           </Card>
