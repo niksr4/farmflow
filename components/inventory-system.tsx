@@ -110,13 +110,14 @@ const LOCATION_ALL = "all"
 const LOCATION_UNASSIGNED = "unassigned"
 const UNASSIGNED_LABEL = "Unassigned (legacy)"
 const PREVIEW_TENANT_COOKIE = "farmflow_preview_tenant"
+const DASHBOARD_LAUNCHER_TAB = "launcher"
 const DRILLDOWN_TXN_SEARCH_PARAM = "txnSearch"
 const DRILLDOWN_ITEM_PARAM = "itemType"
 const DRILLDOWN_ALERT_ID_PARAM = "seasonAlertId"
 const DRILLDOWN_ALERT_METRIC_PARAM = "seasonMetric"
 const DEFAULT_DASHBOARD_TAB_PRIORITY = [
-  "home",
   "processing",
+  "inventory",
   "dispatch",
   "sales",
   "other-sales",
@@ -137,7 +138,7 @@ const DEFAULT_DASHBOARD_TAB_PRIORITY = [
   "pepper",
   "curing",
   "quality",
-  "inventory",
+  "home",
 ]
 
 const supportsImportTemplate = (dataset: ExportDatasetId): dataset is keyof typeof IMPORT_DATASET_MAP =>
@@ -276,8 +277,8 @@ export default function InventorySystem() {
   // UI / paging
   const [currentPage, setCurrentPage] = useState(1)
   const itemsPerPage = 10
-  const [activeTab, setActiveTab] = useState("home")
-  const [loadedTabs, setLoadedTabs] = useState<string[]>(["home"])
+  const [activeTab, setActiveTab] = useState(DASHBOARD_LAUNCHER_TAB)
+  const [loadedTabs, setLoadedTabs] = useState<string[]>([DASHBOARD_LAUNCHER_TAB])
   const [dataToolsDataset, setDataToolsDataset] = useState<ExportDatasetId>("processing")
   const [isExportingDataTools, setIsExportingDataTools] = useState(false)
   const [showDataToolsPanel, setShowDataToolsPanel] = useState(false)
@@ -2571,6 +2572,61 @@ export default function InventorySystem() {
     canShowAiAnalysis ||
     canShowNews
 
+  const operationsTabItems = useMemo(
+    () =>
+      [
+        canShowInventory ? { value: "inventory", label: "Inventory", icon: List } : null,
+        canShowProcessing ? { value: "processing", label: "Processing", icon: Factory } : null,
+        canShowCuring ? { value: "curing", label: "Curing", icon: Factory } : null,
+        canShowQuality ? { value: "quality", label: "Quality", icon: CheckCircle2 } : null,
+        canShowDispatch ? { value: "dispatch", label: "Dispatch", icon: Truck } : null,
+        canShowSales ? { value: "sales", label: "Sales", icon: TrendingUp } : null,
+        canShowOtherSales ? { value: "other-sales", label: "Other Sales", icon: TrendingUp } : null,
+        canShowPepper ? { value: "pepper", label: "Pepper", icon: Leaf } : null,
+      ].filter(Boolean) as Array<{ value: string; label: string; icon: React.ComponentType<{ className?: string }> }>,
+    [canShowCuring, canShowDispatch, canShowInventory, canShowOtherSales, canShowPepper, canShowProcessing, canShowQuality, canShowSales],
+  )
+
+  const financeTabItems = useMemo(
+    () =>
+      [
+        canShowAccounts ? { value: "accounts", label: "Accounts", icon: Users } : null,
+        canShowBalanceSheet ? { value: "balance-sheet", label: "Balance Sheet", icon: Scale } : null,
+        showTransactionHistory ? { value: "transactions", label: "Transaction History", icon: History } : null,
+        canShowReceivables ? { value: "receivables", label: "Receivables", icon: Receipt } : null,
+        canShowBilling ? { value: "billing", label: "Billing", icon: Receipt } : null,
+      ].filter(Boolean) as Array<{ value: string; label: string; icon: React.ComponentType<{ className?: string }> }>,
+    [canShowAccounts, canShowBalanceSheet, canShowBilling, canShowReceivables, showTransactionHistory],
+  )
+
+  const insightsTabItems = useMemo(
+    () =>
+      [
+        canShowSeason ? { value: "season", label: "Season View", icon: BarChart3 } : null,
+        canShowYieldForecast ? { value: "yield-forecast", label: "Yield Forecast", icon: TrendingUp } : null,
+        canShowActivityLog ? { value: "activity-log", label: "Activity Log", icon: History } : null,
+        canShowRainfallSection ? { value: "rainfall", label: "Rainfall", icon: CloudRain } : null,
+        canShowDocuments ? { value: "documents", label: "Documents", icon: FileText } : null,
+        canShowJournal ? { value: "journal", label: "Journal", icon: NotebookPen } : null,
+        canShowResources ? { value: "resources", label: "Resources", icon: BookOpen } : null,
+        canShowPlantHealth ? { value: "plant-health", label: "Plant Health", icon: Leaf } : null,
+        canShowAiAnalysis ? { value: "ai-analysis", label: "AI Analysis", icon: Brain } : null,
+        canShowNews ? { value: "news", label: "News", icon: Newspaper } : null,
+      ].filter(Boolean) as Array<{ value: string; label: string; icon: React.ComponentType<{ className?: string }> }>,
+    [
+      canShowActivityLog,
+      canShowAiAnalysis,
+      canShowDocuments,
+      canShowJournal,
+      canShowNews,
+      canShowPlantHealth,
+      canShowRainfallSection,
+      canShowResources,
+      canShowSeason,
+      canShowYieldForecast,
+    ],
+  )
+
   useEffect(() => {
     if (!tenantId || !canShowIntelligence) {
       setIntelligenceBrief(null)
@@ -2748,14 +2804,16 @@ export default function InventorySystem() {
   }, [activeTab, markTabAsLoaded])
   useEffect(() => {
     setLoadedTabs((previousTabs) => {
-      const filteredTabs = previousTabs.filter((tab) => tab === "home" || visibleTabs.includes(tab))
+      const filteredTabs = previousTabs.filter(
+        (tab) => tab === DASHBOARD_LAUNCHER_TAB || tab === "home" || visibleTabs.includes(tab),
+      )
       return filteredTabs.length === previousTabs.length ? previousTabs : filteredTabs
     })
   }, [visibleTabs])
   const tabMeta = useMemo(
     () =>
       ({
-        home: { label: "Home", icon: Home },
+        home: { label: "Dashboard", icon: Home },
         inventory: { label: "Inventory", icon: List },
         processing: { label: "Processing", icon: Factory },
         dispatch: { label: "Dispatch", icon: Truck },
@@ -3467,12 +3525,54 @@ export default function InventorySystem() {
     [openDrilldown],
   )
 
+  type TabGroupKey = "dashboard" | "operations" | "finance" | "insights"
+
+  const activeTabGroup = useMemo<TabGroupKey>(() => {
+    if (activeTab === "home") return "dashboard"
+    if (operationsTabItems.some((item) => item.value === activeTab)) return "operations"
+    if (financeTabItems.some((item) => item.value === activeTab)) return "finance"
+    if (insightsTabItems.some((item) => item.value === activeTab)) return "insights"
+    return "dashboard"
+  }, [activeTab, financeTabItems, insightsTabItems, operationsTabItems])
+
+  const activeSectionTabs = useMemo(() => {
+    if (activeTabGroup === "operations") return operationsTabItems
+    if (activeTabGroup === "finance") return financeTabItems
+    if (activeTabGroup === "insights") return insightsTabItems
+    return []
+  }, [activeTabGroup, financeTabItems, insightsTabItems, operationsTabItems])
+
+  const handleSectionSelect = useCallback(
+    (group: TabGroupKey) => {
+      if (group === "dashboard") {
+        handleTabChange("home")
+        return
+      }
+      if (group === "operations") {
+        const nextTab = operationsTabItems[0]?.value || "home"
+        handleTabChange(nextTab)
+        return
+      }
+      if (group === "finance") {
+        const nextTab = financeTabItems[0]?.value || "home"
+        handleTabChange(nextTab)
+        return
+      }
+      const nextTab = insightsTabItems[0]?.value || "home"
+      handleTabChange(nextTab)
+    },
+    [financeTabItems, handleTabChange, insightsTabItems, operationsTabItems],
+  )
+
   const tabParam = searchParams.get("tab")
   const locationFilterParam = (searchParams.get("locationId") || "").trim()
   const transactionSearchParam = searchParams.get(DRILLDOWN_TXN_SEARCH_PARAM)
   const itemTypeParam = searchParams.get(DRILLDOWN_ITEM_PARAM)
   useEffect(() => {
     if (isModulesLoading) {
+      return
+    }
+    if (activeTab === DASHBOARD_LAUNCHER_TAB) {
       return
     }
     if (visibleTabs.length && !visibleTabs.includes(activeTab)) {
@@ -3485,7 +3585,18 @@ export default function InventorySystem() {
   }, [activeTab, getPreferredDefaultTab, isModulesLoading, visibleTabs])
 
   useEffect(() => {
-    if (!tabParam) return
+    if (!tabParam) {
+      if (activeTab !== DASHBOARD_LAUNCHER_TAB) {
+        setActiveTab(DASHBOARD_LAUNCHER_TAB)
+      }
+      return
+    }
+    if (tabParam === DASHBOARD_LAUNCHER_TAB) {
+      if (activeTab !== DASHBOARD_LAUNCHER_TAB) {
+        setActiveTab(DASHBOARD_LAUNCHER_TAB)
+      }
+      return
+    }
     const requestedTab = tabParam === "weather" ? "rainfall" : tabParam
     if (visibleTabs.includes(requestedTab) && requestedTab !== activeTab) {
       setActiveTab(requestedTab)
@@ -4171,49 +4282,51 @@ export default function InventorySystem() {
           </Card>
         )}
 
-        <div className="relative mb-6 overflow-hidden rounded-2xl border border-black/5 bg-white p-6 shadow-sm">
-          <div className="relative flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between lg:gap-8">
-            <div className="space-y-2 max-w-xl">
-              <Badge className="bg-emerald-600 text-white border-emerald-600 shadow-sm">
-                {visibleHeroContent.badge}
-              </Badge>
-              <h2 className="font-display text-2xl text-[color:var(--foreground)]">
-                {visibleHeroContent.title}
-              </h2>
-              <p className="text-sm text-muted-foreground leading-relaxed max-w-lg">
-                {visibleHeroContent.description}
-              </p>
-              {visibleHeroContent.chips.length > 0 && (
-                <p className="text-xs text-neutral-500">
-                  {visibleHeroContent.chips
-                    .slice(0, 3)
-                    .map((chip) => chip.label)
-                    .join(" · ")}
+        {activeTab !== DASHBOARD_LAUNCHER_TAB && (
+          <div className="relative mb-6 overflow-hidden rounded-2xl border border-black/5 bg-white p-6 shadow-sm">
+            <div className="relative flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between lg:gap-8">
+              <div className="space-y-2 max-w-xl">
+                <Badge className="bg-emerald-600 text-white border-emerald-600 shadow-sm">
+                  {visibleHeroContent.badge}
+                </Badge>
+                <h2 className="font-display text-2xl text-[color:var(--foreground)]">
+                  {visibleHeroContent.title}
+                </h2>
+                <p className="text-sm text-muted-foreground leading-relaxed max-w-lg">
+                  {visibleHeroContent.description}
                 </p>
-              )}
-            </div>
-            <div className="grid w-full gap-3 sm:grid-cols-2 xl:grid-cols-3 lg:flex-1">
-              {visibleHeroContent.stats.slice(0, 3).map((stat) => (
-                <div
-                  key={stat.label}
-                  className="min-w-0 rounded-2xl border border-black/5 bg-white p-4 shadow-sm flex flex-col gap-2"
-                >
-                  <p className="text-xs font-medium uppercase tracking-[0.22em] text-neutral-500">
-                    {stat.label}
+                {visibleHeroContent.chips.length > 0 && (
+                  <p className="text-xs text-neutral-500">
+                    {visibleHeroContent.chips
+                      .slice(0, 3)
+                      .map((chip) => chip.label)
+                      .join(" · ")}
                   </p>
-                  <p className="text-2xl font-semibold leading-tight text-neutral-900 tabular-nums">
-                    {stat.value}
-                  </p>
-                  {stat.subValue && (
-                    <p className="text-xs text-muted-foreground">{stat.subValue}</p>
-                  )}
-                </div>
-              ))}
+                )}
+              </div>
+              <div className="grid w-full gap-3 sm:grid-cols-2 xl:grid-cols-3 lg:flex-1">
+                {visibleHeroContent.stats.slice(0, 3).map((stat) => (
+                  <div
+                    key={stat.label}
+                    className="min-w-0 rounded-2xl border border-black/5 bg-white p-4 shadow-sm flex flex-col gap-2"
+                  >
+                    <p className="text-xs font-medium uppercase tracking-[0.22em] text-neutral-500">
+                      {stat.label}
+                    </p>
+                    <p className="text-2xl font-semibold leading-tight text-neutral-900 tabular-nums">
+                      {stat.value}
+                    </p>
+                    {stat.subValue && (
+                      <p className="text-xs text-muted-foreground">{stat.subValue}</p>
+                    )}
+                  </div>
+                ))}
+              </div>
             </div>
           </div>
-        </div>
+        )}
 
-        {visibleCommandStripItems.length > 0 && (
+        {activeTab !== DASHBOARD_LAUNCHER_TAB && visibleCommandStripItems.length > 0 && (
           <div className="mb-5 grid grid-cols-1 gap-3 lg:grid-cols-3">
             {visibleCommandStripItems.map((item) => {
               const isActive = activeTab === item.tab
@@ -4434,169 +4547,132 @@ export default function InventorySystem() {
           </div>
         )}
         <Tabs value={activeTab} onValueChange={handleTabChange} className="w-full space-y-4">
-          <TabsList
-            className={cn(
-              "sticky top-2 z-20 flex h-auto w-full rounded-2xl border border-black/5 bg-white/85 shadow-sm backdrop-blur",
-              isMobile
-                ? "flex-nowrap items-center gap-2 overflow-x-auto whitespace-nowrap px-2 py-2 [&>*]:shrink-0"
-                : "flex-wrap items-start gap-3 p-3",
-            )}
-          >
-            <div className="flex items-center gap-2">
-              <TabsTrigger value="home">
-                <Home className="h-3.5 w-3.5 mr-1.5" />
-                Home
-              </TabsTrigger>
+          <div className="sticky top-2 z-20 space-y-3 rounded-2xl border border-black/10 bg-white/90 p-3 shadow-sm backdrop-blur">
+            <div className={cn("grid gap-2", isMobile ? "grid-cols-1" : "grid-cols-1 md:grid-cols-3")}>
+              {showOperationsTabs && (
+                <button
+                  type="button"
+                  onClick={() => handleSectionSelect("operations")}
+                  className={cn(
+                    "flex min-h-[86px] items-center gap-3 rounded-xl border px-4 py-3 text-left transition-all",
+                    activeTabGroup === "operations"
+                      ? "border-emerald-600 bg-emerald-600 text-white shadow-[0_14px_30px_-20px_rgba(5,150,105,0.9)]"
+                      : "border-emerald-200 bg-emerald-50/70 text-emerald-900 hover:border-emerald-300 hover:bg-emerald-50",
+                  )}
+                >
+                  <Factory className={cn("h-5 w-5", activeTabGroup === "operations" ? "text-white" : "text-emerald-700")} />
+                  <div>
+                    <p className="text-base font-semibold">Operations</p>
+                    <p className={cn("text-xs", activeTabGroup === "operations" ? "text-emerald-100" : "text-emerald-700/80")}>
+                      Inventory, processing, dispatch, sales
+                    </p>
+                  </div>
+                </button>
+              )}
+
+              {showFinanceTabs && (
+                <button
+                  type="button"
+                  onClick={() => handleSectionSelect("finance")}
+                  className={cn(
+                    "flex min-h-[86px] items-center gap-3 rounded-xl border px-4 py-3 text-left transition-all",
+                    activeTabGroup === "finance"
+                      ? "border-amber-500 bg-amber-500 text-white shadow-[0_14px_30px_-20px_rgba(217,119,6,0.95)]"
+                      : "border-amber-200 bg-amber-50/70 text-amber-900 hover:border-amber-300 hover:bg-amber-50",
+                  )}
+                >
+                  <Scale className={cn("h-5 w-5", activeTabGroup === "finance" ? "text-white" : "text-amber-700")} />
+                  <div>
+                    <p className="text-base font-semibold">Finance</p>
+                    <p className={cn("text-xs", activeTabGroup === "finance" ? "text-amber-100" : "text-amber-700/80")}>
+                      Accounts, balance sheet, receivables
+                    </p>
+                  </div>
+                </button>
+              )}
+
+              {showInsightsTabs && (
+                <button
+                  type="button"
+                  onClick={() => handleSectionSelect("insights")}
+                  className={cn(
+                    "flex min-h-[86px] items-center gap-3 rounded-xl border px-4 py-3 text-left transition-all",
+                    activeTabGroup === "insights"
+                      ? "border-cyan-600 bg-cyan-600 text-white shadow-[0_14px_30px_-20px_rgba(8,145,178,0.9)]"
+                      : "border-cyan-200 bg-cyan-50/70 text-cyan-900 hover:border-cyan-300 hover:bg-cyan-50",
+                  )}
+                >
+                  <BarChart3 className={cn("h-5 w-5", activeTabGroup === "insights" ? "text-white" : "text-cyan-700")} />
+                  <div>
+                    <p className="text-base font-semibold">Insights</p>
+                    <p className={cn("text-xs", activeTabGroup === "insights" ? "text-cyan-100" : "text-cyan-700/80")}>
+                      Season patterns, rainfall, AI analysis
+                    </p>
+                  </div>
+                </button>
+              )}
             </div>
-            {(showOperationsTabs || showFinanceTabs || showInsightsTabs) && (
-              <div aria-hidden className="hidden lg:block h-px w-full bg-black/10 lg:h-7 lg:w-px lg:self-center" />
+
+            {activeTabGroup !== "dashboard" && activeSectionTabs.length > 0 && (
+              <TabsList
+                className={cn(
+                  "h-auto rounded-xl border border-black/10 bg-neutral-50/90 p-2 shadow-none",
+                  isMobile
+                    ? "flex-nowrap items-center gap-2 overflow-x-auto whitespace-nowrap [&>*]:shrink-0"
+                    : "flex-wrap items-center gap-2",
+                )}
+              >
+                {activeSectionTabs.map((tab) => {
+                  const TabIcon = tab.icon
+                  return (
+                    <TabsTrigger
+                      key={tab.value}
+                      value={tab.value}
+                      className="min-h-11 rounded-lg border border-black/10 bg-white/90 px-4 text-sm font-semibold data-[state=active]:border-emerald-600 data-[state=active]:bg-emerald-600 data-[state=active]:text-white data-[state=active]:shadow-[0_10px_20px_-14px_rgba(5,150,105,0.9)]"
+                    >
+                      <TabIcon className="mr-2 h-4 w-4" />
+                      {tab.label}
+                    </TabsTrigger>
+                  )
+                })}
+              </TabsList>
             )}
-            {showOperationsTabs && (
-              <div className={cn("flex items-center gap-2", !isMobile && "flex-wrap")}>
-                <span className="rounded-full border border-black/5 bg-neutral-100/70 px-2 py-0.5 text-[11px] font-medium uppercase tracking-[0.22em] text-neutral-500">
-                  Operations
-                </span>
-                {canShowInventory && <TabsTrigger value="inventory">Inventory</TabsTrigger>}
-                {canShowProcessing && (
-                  <TabsTrigger value="processing">
-                    <Factory className="h-3.5 w-3.5 mr-1.5" />
-                    Processing
-                  </TabsTrigger>
+          </div>
+
+          <TabsContent
+            value={DASHBOARD_LAUNCHER_TAB}
+            className="space-y-4"
+            forceMount={isTabLoaded(DASHBOARD_LAUNCHER_TAB) ? true : undefined}
+          >
+            <Card className="border-black/5 bg-white/95">
+              <CardHeader>
+                <CardTitle>Start Here</CardTitle>
+                <CardDescription>
+                  Pick one area above to begin. Keep it simple: Operations for daily work, Finance for money, Insights for trends.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="flex flex-wrap gap-2">
+                {showOperationsTabs && (
+                  <Button onClick={() => handleSectionSelect("operations")} className="bg-emerald-700 hover:bg-emerald-800 text-white">
+                    Open Operations
+                  </Button>
                 )}
-                {canShowCuring && (
-                  <TabsTrigger value="curing">
-                    <Factory className="h-3.5 w-3.5 mr-1.5" />
-                    Curing
-                  </TabsTrigger>
+                {showFinanceTabs && (
+                  <Button
+                    onClick={() => handleSectionSelect("finance")}
+                    className="bg-amber-600 hover:bg-amber-700 text-white"
+                  >
+                    Open Finance
+                  </Button>
                 )}
-                {canShowQuality && (
-                  <TabsTrigger value="quality">
-                    <CheckCircle2 className="h-3.5 w-3.5 mr-1.5" />
-                    Quality
-                  </TabsTrigger>
+                {showInsightsTabs && (
+                  <Button onClick={() => handleSectionSelect("insights")} className="bg-cyan-700 hover:bg-cyan-800 text-white">
+                    Open Insights
+                  </Button>
                 )}
-                {canShowDispatch && (
-                  <TabsTrigger value="dispatch">
-                    <Truck className="h-3.5 w-3.5 mr-1.5" />
-                    Dispatch
-                  </TabsTrigger>
-                )}
-                {canShowSales && (
-                  <TabsTrigger value="sales">
-                    <TrendingUp className="h-3.5 w-3.5 mr-1.5" />
-                    Sales
-                  </TabsTrigger>
-                )}
-                {canShowOtherSales && (
-                  <TabsTrigger value="other-sales">
-                    <TrendingUp className="h-3.5 w-3.5 mr-1.5" />
-                    Other Sales
-                  </TabsTrigger>
-                )}
-                {canShowPepper && (
-                  <TabsTrigger value="pepper" className="flex items-center gap-2">
-                    <Leaf className="h-3.5 w-3.5" />
-                    Pepper
-                  </TabsTrigger>
-                )}
-              </div>
-            )}
-            {showOperationsTabs && (showFinanceTabs || showInsightsTabs) && (
-              <div aria-hidden className="hidden lg:block h-px w-full bg-black/10 lg:h-7 lg:w-px lg:self-center" />
-            )}
-            {showFinanceTabs && (
-              <div className={cn("flex items-center gap-2", !isMobile && "flex-wrap")}>
-                <span className="rounded-full border border-black/5 bg-neutral-100/70 px-2 py-0.5 text-[11px] font-medium uppercase tracking-[0.22em] text-neutral-500">
-                  Finance
-                </span>
-                {canShowAccounts && (
-                  <TabsTrigger value="accounts">
-                    <Users className="h-3.5 w-3.5 mr-1.5" />
-                    Accounts
-                  </TabsTrigger>
-                )}
-                {canShowBalanceSheet && (
-                  <TabsTrigger value="balance-sheet">
-                    <Scale className="h-3.5 w-3.5 mr-1.5" />
-                    Balance Sheet
-                  </TabsTrigger>
-                )}
-                {showTransactionHistory && <TabsTrigger value="transactions">Transaction History</TabsTrigger>}
-                {canShowReceivables && <TabsTrigger value="receivables">Receivables</TabsTrigger>}
-                {canShowBilling && (
-                  <TabsTrigger value="billing">
-                    <Receipt className="h-3.5 w-3.5 mr-1.5" />
-                    Billing
-                  </TabsTrigger>
-                )}
-              </div>
-            )}
-            {showFinanceTabs && showInsightsTabs && (
-              <div aria-hidden className="hidden lg:block h-px w-full bg-black/10 lg:h-7 lg:w-px lg:self-center" />
-            )}
-            {showInsightsTabs && (
-              <div className={cn("flex items-center gap-2", !isMobile && "flex-wrap")}>
-                <span className="rounded-full border border-black/5 bg-neutral-100/70 px-2 py-0.5 text-[11px] font-medium uppercase tracking-[0.22em] text-neutral-500">
-                  Insights
-                </span>
-                {canShowSeason && <TabsTrigger value="season">Season View</TabsTrigger>}
-                {canShowYieldForecast && (
-                  <TabsTrigger value="yield-forecast">
-                    <TrendingUp className="h-3.5 w-3.5 mr-1.5" />
-                    Yield Forecast
-                  </TabsTrigger>
-                )}
-                {canShowActivityLog && (
-                  <TabsTrigger value="activity-log">
-                    <History className="h-3.5 w-3.5 mr-1.5" />
-                    Activity Log
-                  </TabsTrigger>
-                )}
-                {canShowRainfallSection && (
-                  <TabsTrigger value="rainfall">
-                    <CloudRain className="h-3.5 w-3.5 mr-1.5" />
-                    Rainfall
-                  </TabsTrigger>
-                )}
-                {canShowDocuments && (
-                  <TabsTrigger value="documents">
-                    <FileText className="h-3.5 w-3.5 mr-1.5" />
-                    Documents
-                  </TabsTrigger>
-                )}
-                {canShowJournal && (
-                  <TabsTrigger value="journal" className="flex items-center gap-2">
-                    <NotebookPen className="h-3.5 w-3.5" />
-                    Journal
-                  </TabsTrigger>
-                )}
-                {canShowResources && (
-                  <TabsTrigger value="resources" className="flex items-center gap-2">
-                    <BookOpen className="h-3.5 w-3.5" />
-                    Resources
-                  </TabsTrigger>
-                )}
-                {canShowPlantHealth && (
-                  <TabsTrigger value="plant-health" className="flex items-center gap-2">
-                    <Leaf className="h-3.5 w-3.5" />
-                    Plant Health
-                  </TabsTrigger>
-                )}
-                {canShowAiAnalysis && (
-                  <TabsTrigger value="ai-analysis">
-                    <Brain className="h-3.5 w-3.5 mr-1.5" />
-                    AI Analysis
-                  </TabsTrigger>
-                )}
-                {canShowNews && (
-                  <TabsTrigger value="news">
-                    <Newspaper className="h-3.5 w-3.5 mr-1.5" />
-                    News
-                  </TabsTrigger>
-                )}
-              </div>
-            )}
-          </TabsList>
+              </CardContent>
+            </Card>
+          </TabsContent>
 
           <TabsContent value="home" className="space-y-6" forceMount={isTabLoaded("home") ? true : undefined}>
             <div

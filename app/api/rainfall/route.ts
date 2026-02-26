@@ -4,7 +4,13 @@ import { requireModuleAccess, isModuleAccessError } from "@/lib/server/module-ac
 import { normalizeTenantContext, runTenantQuery } from "@/lib/server/tenant-db"
 import { canDeleteModule, canWriteModule } from "@/lib/permissions"
 import { logAuditEvent } from "@/lib/server/audit-log"
-import { toNonNegativeNumber } from "@/lib/number-input"
+
+const parseWholeNonNegative = (value: unknown) => {
+  if (value === undefined || value === null || value === "") return 0
+  const numeric = Number(value)
+  if (!Number.isFinite(numeric) || !Number.isInteger(numeric) || numeric < 0) return null
+  return numeric
+}
 
 export async function GET(_request: NextRequest) {
   try {
@@ -42,15 +48,22 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: false, error: "Date is required" }, { status: 400 })
     }
 
-    const inchesValue =
-      inches === undefined || inches === null || inches === "" ? 0 : toNonNegativeNumber(inches)
+    const inchesValue = parseWholeNonNegative(inches)
     if (inchesValue === null) {
-      return NextResponse.json({ success: false, error: "Inches must be 0 or more" }, { status: 400 })
+      return NextResponse.json({ success: false, error: "Inches must be a whole number (0 or more)" }, { status: 400 })
     }
-    const centsValue =
-      cents === undefined || cents === null || cents === "" ? 0 : toNonNegativeNumber(cents)
+    const centsValue = parseWholeNonNegative(cents)
     if (centsValue === null || centsValue > 99) {
-      return NextResponse.json({ success: false, error: "Hundredths must be between 0 and 99" }, { status: 400 })
+      return NextResponse.json(
+        { success: false, error: "Cents/points must be a whole number between 0 and 99" },
+        { status: 400 },
+      )
+    }
+    if (inchesValue === 0 && centsValue === 0) {
+      return NextResponse.json(
+        { success: false, error: "Rainfall amount must be greater than 0 (at least 1 point / 0.01 inch)" },
+        { status: 400 },
+      )
     }
 
     const result = await runTenantQuery(

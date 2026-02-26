@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useMemo, useState, type ChangeEvent, type KeyboardEvent } from "react"
+import { useEffect, useMemo, useState, type ChangeEvent } from "react"
 import { Bar, BarChart, CartesianGrid, Line, LineChart, XAxis, YAxis } from "recharts"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -15,7 +15,6 @@ import { format } from "date-fns"
 import { useAuth } from "@/hooks/use-auth"
 import { formatDateOnly } from "@/lib/date-utils"
 import { formatNumber } from "@/lib/format"
-import { canAcceptNonNegative, isBlockedNumericKey } from "@/lib/number-input"
 
 type RainfallRecord = {
   id: number
@@ -82,15 +81,9 @@ export default function RainfallTab({ username, showDataToolsControls = false }:
   const [notes, setNotes] = useState("")
   const [loading, setLoading] = useState(false)
 
-  const blockInvalidNumberKey = (event: KeyboardEvent<HTMLInputElement>) => {
-    if (isBlockedNumericKey(event.key)) {
-      event.preventDefault()
-    }
-  }
-
-  const handleNonNegativeChange = (setter: (value: string) => void) => (event: ChangeEvent<HTMLInputElement>) => {
+  const handleWholeNumberChange = (setter: (value: string) => void) => (event: ChangeEvent<HTMLInputElement>) => {
     const nextValue = event.target.value
-    if (!canAcceptNonNegative(nextValue)) return
+    if (!/^\d*$/.test(nextValue)) return
     setter(nextValue)
   }
 
@@ -111,22 +104,22 @@ export default function RainfallTab({ username, showDataToolsControls = false }:
   }, [])
 
   const handleSaveRecord = async () => {
-    const inchesNum = inches === "" ? 0 : Number.parseInt(inches, 10)
-    const centsNum = cents === "" ? 0 : Number.parseInt(cents, 10)
+    const inchesNum = inches === "" ? 0 : Number(inches)
+    const centsNum = cents === "" ? 0 : Number(cents)
 
-    if (!Number.isFinite(inchesNum) || inchesNum < 0) {
+    if (!Number.isFinite(inchesNum) || !Number.isInteger(inchesNum) || inchesNum < 0) {
       toast({
         title: "Invalid data",
-        description: "Inches must be 0 or more",
+        description: "Inches must be a whole number (0 or more)",
         variant: "destructive",
       })
       return
     }
 
-    if (!Number.isFinite(centsNum) || centsNum < 0 || centsNum > 99) {
+    if (!Number.isFinite(centsNum) || !Number.isInteger(centsNum) || centsNum < 0 || centsNum > 99) {
       toast({
         title: "Invalid data",
-        description: "Hundredths must be between 0 and 99",
+        description: "Cents/points must be a whole number between 0 and 99",
         variant: "destructive",
       })
       return
@@ -135,7 +128,7 @@ export default function RainfallTab({ username, showDataToolsControls = false }:
     if (inchesNum === 0 && centsNum === 0) {
       toast({
         title: "Invalid data",
-        description: "Please enter at least some rainfall amount",
+        description: "Please enter at least 1 point (0.01 inch)",
         variant: "destructive",
       })
       return
@@ -670,37 +663,34 @@ export default function RainfallTab({ username, showDataToolsControls = false }:
                 htmlFor="rainfall-inches"
                 className="mb-2"
                 labelClassName="text-sm font-medium"
-                tooltip="Whole inches of rainfall for the day."
+                tooltip="Whole inches of rainfall for the day (integer only)."
               />
               <Input
                 id="rainfall-inches"
-                type="number"
+                type="text"
+                inputMode="numeric"
+                pattern="[0-9]*"
                 placeholder="0"
                 value={inches}
-                onChange={handleNonNegativeChange(setInches)}
-                onKeyDown={blockInvalidNumberKey}
-                min={0}
-                step="1"
+                onChange={handleWholeNumberChange(setInches)}
               />
             </div>
             <div>
               <FieldLabel
-                label="Hundredths (0-99)"
+                label="Cents / Points (0-99)"
                 htmlFor="rainfall-cents"
                 className="mb-2"
                 labelClassName="text-sm font-medium"
-                tooltip="Decimal part of inches (e.g., 0.25 in = 25)."
+                tooltip="1 point = 0.01 inch. Example: 0.25 in = 25 points."
               />
               <Input
                 id="rainfall-cents"
-                type="number"
+                type="text"
+                inputMode="numeric"
+                pattern="[0-9]*"
                 placeholder="0"
                 value={cents}
-                onChange={handleNonNegativeChange(setCents)}
-                onKeyDown={blockInvalidNumberKey}
-                min={0}
-                max={99}
-                step="1"
+                onChange={handleWholeNumberChange(setCents)}
               />
             </div>
           </div>

@@ -12,7 +12,7 @@
     "agent:schema:staged": "node scripts/agent-schema-migration-assistant.js --staged",
     "test": "vitest run",
     "test:e2e": "playwright test",
-    "test:e2e:auth": "node scripts/check-e2e-auth-env.mjs && playwright test tests/e2e/dashboard-regression.spec.ts tests/e2e/owner-console.spec.ts tests/e2e/admin-auth.spec.ts",
+    "test:e2e:auth": "node scripts/check-e2e-auth-env.mjs && playwright test tests/e2e/dashboard-regression.spec.ts tests/e2e/owner-console.spec.ts tests/e2e/tab-smoke.spec.ts tests/e2e/admin-auth.spec.ts",
     "test:e2e:headed": "playwright test --headed",
     "test:e2e:ui": "playwright test --ui",
     "test:regression": "pnpm lint && pnpm test && pnpm test:e2e",

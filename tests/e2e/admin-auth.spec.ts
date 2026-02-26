@@ -14,7 +14,7 @@ test.describe("tenant admin auth regression", () => {
     await page.getByRole("button", { name: "Sign In" }).click()
 
     await expect(page).toHaveURL(/\/dashboard(?:\?|$)/)
-    await expect(page.getByRole("tab", { name: "Home" })).toBeVisible()
+    await expect(page.getByRole("button", { name: /Operations|Finance|Insights/ }).first()).toBeVisible()
 
     await page.goto("/admin/tenants")
     await expect(page).toHaveURL(/\/settings(?:\?|$)/)

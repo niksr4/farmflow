@@ -29,5 +29,5 @@ export const hasRequiredAuthCredentials = expectOwnerUser ? hasOwnerCredentials 
 
 export const waitForDashboardReady = async (page: Page) => {
   await expect(page).toHaveURL(/\/dashboard(?:\?|$)/)
-  await expect(page.getByRole("tab", { name: "Home" })).toBeVisible()
+  await expect(page.getByRole("button", { name: /Operations|Finance|Insights/ }).first()).toBeVisible()
 }
