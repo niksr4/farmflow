@@ -1,4 +1,4 @@
-const CACHE_VERSION = "farmflow-pwa-v2"
+const CACHE_VERSION = "farmflow-pwa-v3"
 const APP_SHELL_CACHE = `${CACHE_VERSION}-app-shell`
 const RUNTIME_CACHE = `${CACHE_VERSION}-runtime`
 const API_CACHE = `${CACHE_VERSION}-api`
