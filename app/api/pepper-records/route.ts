@@ -158,9 +158,11 @@ export async function POST(request: Request) {
     }
     const tenantContext = normalizeTenantContext(sessionUser.tenantId, sessionUser.role)
     const data = await request.json()
+    const recordId = Number(data.id)
+    const hasRecordId = Number.isFinite(recordId) && recordId > 0
     const locationId = data.locationId
 
-    if (!locationId) {
+    if (!hasRecordId && !locationId) {
       return NextResponse.json({ success: false, error: "Location is required" }, { status: 400 })
     }
 
@@ -173,6 +175,54 @@ export async function POST(request: Request) {
       dry_pepper_percent: Number(data.dry_pepper_percent) || 0,
       notes: data.notes || "",
       recorded_by: sessionUser.username || "system",
+    }
+
+    if (hasRecordId) {
+      const existingById = await runTenantQuery(
+        sql,
+        tenantContext,
+        sql`
+          SELECT *
+          FROM pepper_records
+          WHERE tenant_id = ${tenantContext.tenantId}
+            AND id = ${recordId}
+          LIMIT 1
+        `,
+      )
+
+      if (!existingById?.length) {
+        return NextResponse.json({ success: false, error: "Record not found" }, { status: 404 })
+      }
+
+      const updatedById = await runTenantQuery(
+        sql,
+        tenantContext,
+        sql`
+          UPDATE pepper_records
+          SET process_date = ${record.process_date}::date,
+              kg_picked = ${record.kg_picked},
+              green_pepper = ${record.green_pepper},
+              green_pepper_percent = ${record.green_pepper_percent},
+              dry_pepper = ${record.dry_pepper},
+              dry_pepper_percent = ${record.dry_pepper_percent},
+              notes = ${record.notes},
+              recorded_by = ${record.recorded_by},
+              updated_at = CURRENT_TIMESTAMP
+          WHERE tenant_id = ${tenantContext.tenantId}
+            AND id = ${recordId}
+          RETURNING *
+        `,
+      )
+
+      await logAuditEvent(sql, sessionUser, {
+        action: "update",
+        entityType: "pepper_records",
+        entityId: updatedById?.[0]?.id,
+        before: existingById?.[0] ?? null,
+        after: updatedById?.[0] ?? null,
+      })
+
+      return NextResponse.json({ success: true, record: updatedById?.[0] })
     }
 
     const existing = await runTenantQuery(
@@ -242,36 +292,103 @@ export async function DELETE(request: Request) {
     }
     const tenantContext = normalizeTenantContext(sessionUser.tenantId, sessionUser.role)
     const { searchParams } = new URL(request.url)
+    const id = Number(searchParams.get("id"))
     const date = searchParams.get("date")
     const locationId = searchParams.get("locationId")
+    const hasId = Number.isFinite(id) && id > 0
 
-    if (!date || !locationId) {
-      return NextResponse.json({ success: false, error: "Date and location are required" }, { status: 400 })
+    if (!hasId && (!date || !locationId)) {
+      return NextResponse.json({ success: false, error: "Record id or date + location are required" }, { status: 400 })
     }
 
-    const existing = await runTenantQuery(
-      sql,
-      tenantContext,
-      sql`
-        SELECT *
-        FROM pepper_records
-        WHERE tenant_id = ${tenantContext.tenantId}
-          AND location_id = ${locationId}
-          AND DATE(process_date) = ${date}::date
-        LIMIT 1
-      `,
-    )
+    if (hasId) {
+      const existingById = await runTenantQuery(
+        sql,
+        tenantContext,
+        sql`
+          SELECT *
+          FROM pepper_records
+          WHERE tenant_id = ${tenantContext.tenantId}
+            AND id = ${id}
+          LIMIT 1
+        `,
+      )
 
-    await runTenantQuery(
-      sql,
-      tenantContext,
-      sql`
-        DELETE FROM pepper_records
-        WHERE tenant_id = ${tenantContext.tenantId}
-          AND location_id = ${locationId}
-          AND DATE(process_date) = ${date}::date
-      `,
-    )
+      if (!existingById?.length) {
+        return NextResponse.json({ success: false, error: "Record not found" }, { status: 404 })
+      }
+
+      await runTenantQuery(
+        sql,
+        tenantContext,
+        sql`
+          DELETE FROM pepper_records
+          WHERE tenant_id = ${tenantContext.tenantId}
+            AND id = ${id}
+        `,
+      )
+
+      await logAuditEvent(sql, sessionUser, {
+        action: "delete",
+        entityType: "pepper_records",
+        entityId: existingById?.[0]?.id,
+        before: existingById?.[0] ?? null,
+      })
+
+      return NextResponse.json({ success: true })
+    }
+
+    const isUnassigned = locationId === LOCATION_UNASSIGNED
+
+    const existing = isUnassigned
+      ? await runTenantQuery(
+          sql,
+          tenantContext,
+          sql`
+            SELECT *
+            FROM pepper_records
+            WHERE tenant_id = ${tenantContext.tenantId}
+              AND location_id IS NULL
+              AND DATE(process_date) = ${date}::date
+            LIMIT 1
+          `,
+        )
+      : await runTenantQuery(
+          sql,
+          tenantContext,
+          sql`
+            SELECT *
+            FROM pepper_records
+            WHERE tenant_id = ${tenantContext.tenantId}
+              AND location_id = ${locationId}
+              AND DATE(process_date) = ${date}::date
+            LIMIT 1
+          `,
+        )
+
+    if (isUnassigned) {
+      await runTenantQuery(
+        sql,
+        tenantContext,
+        sql`
+          DELETE FROM pepper_records
+          WHERE tenant_id = ${tenantContext.tenantId}
+            AND location_id IS NULL
+            AND DATE(process_date) = ${date}::date
+        `,
+      )
+    } else {
+      await runTenantQuery(
+        sql,
+        tenantContext,
+        sql`
+          DELETE FROM pepper_records
+          WHERE tenant_id = ${tenantContext.tenantId}
+            AND location_id = ${locationId}
+            AND DATE(process_date) = ${date}::date
+        `,
+      )
+    }
 
     await logAuditEvent(sql, sessionUser, {
       action: "delete",

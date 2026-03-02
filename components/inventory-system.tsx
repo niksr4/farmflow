@@ -2264,6 +2264,19 @@ export default function InventorySystem() {
     setIsNewItemDialogOpen(true)
   }
 
+  const openMovementDrawer = (transactionType?: "restock" | "deplete") => {
+    if (selectedLocationId !== LOCATION_ALL) {
+      setTransactionLocationId(selectedLocationId)
+    }
+    if (transactionType) {
+      setNewTransaction((prev) => {
+        const base = prev ? ensureTransactionSafety(prev) : createDefaultTransaction()
+        return { ...base, transaction_type: transactionType }
+      })
+    }
+    setIsMovementDrawerOpen(true)
+  }
+
   const resetNewItemForm = () => {
     setNewItemForm({
       name: "",
@@ -5783,7 +5796,7 @@ export default function InventorySystem() {
                     <CardContent className="space-y-2">
                       <button
                         type="button"
-                        onClick={() => setIsMovementDrawerOpen(true)}
+                        onClick={() => openMovementDrawer()}
                         className="flex w-full items-center justify-between rounded-xl border border-black/5 bg-white px-4 py-3 text-sm text-neutral-800 transition-colors hover:bg-neutral-50"
                       >
                         <span className="flex items-center gap-2">
@@ -5792,6 +5805,22 @@ export default function InventorySystem() {
                         </span>
                         <span className="text-xs text-neutral-400">Form</span>
                       </button>
+                      <div className="grid grid-cols-2 gap-2">
+                        <button
+                          type="button"
+                          onClick={() => openMovementDrawer("restock")}
+                          className="flex min-h-11 items-center justify-center rounded-xl border border-emerald-200 bg-emerald-50/80 px-3 py-2 text-sm font-medium text-emerald-800 transition-colors hover:bg-emerald-100"
+                        >
+                          Restocking
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => openMovementDrawer("deplete")}
+                          className="flex min-h-11 items-center justify-center rounded-xl border border-amber-200 bg-amber-50/80 px-3 py-2 text-sm font-medium text-amber-800 transition-colors hover:bg-amber-100"
+                        >
+                          Depleting
+                        </button>
+                      </div>
                       <button
                         type="button"
                         onClick={openNewItemDialog}

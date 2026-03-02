@@ -11,12 +11,13 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Alert, AlertDescription } from "@/components/ui/alert"
-import { CalendarIcon, Download, Loader2, Save, Leaf } from "lucide-react"
+import { CalendarIcon, Download, Loader2, Save, Leaf, Edit, Trash2 } from "lucide-react"
 import { format } from "date-fns"
 import { cn } from "@/lib/utils"
 import { getCurrentFiscalYear, getAvailableFiscalYears, type FiscalYear } from "@/lib/fiscal-year-utils"
 import { formatDateOnly } from "@/lib/date-utils"
 import { formatNumber } from "@/lib/format"
+import { useAuth } from "@/hooks/use-auth"
 
 interface LocationOption {
   id: string
@@ -46,6 +47,7 @@ const LOCATION_UNASSIGNED = "unassigned"
 const UNASSIGNED_LABEL = "Unassigned (legacy)"
 
 export function PepperTab() {
+  const { user } = useAuth()
   const [selectedFiscalYear, setSelectedFiscalYear] = useState<FiscalYear>(getCurrentFiscalYear())
   const availableFiscalYears = getAvailableFiscalYears()
 
@@ -62,7 +64,10 @@ export function PepperTab() {
   const [saving, setSaving] = useState(false)
   const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null)
   const [hasExistingRecord, setHasExistingRecord] = useState(false)
+  const [editingRecordId, setEditingRecordId] = useState<number | null>(null)
+  const [isDeletingRecordId, setIsDeletingRecordId] = useState<number | null>(null)
   const selectedLocation = locations.find((loc) => loc.id === selectedLocationId) || null
+  const canDeleteRecord = user?.role === "admin" || user?.role === "owner"
   const showLocationColumn = selectedLocationId === LOCATION_ALL || selectedLocationId === LOCATION_UNASSIGNED
 
   const loadLocations = useCallback(async () => {
@@ -119,6 +124,7 @@ export function PepperTab() {
       setDryPepper("")
       setNotes("")
       setHasExistingRecord(false)
+      setEditingRecordId(null)
       return
     }
     try {
@@ -135,6 +141,7 @@ export function PepperTab() {
         setDryPepper(record.dry_pepper?.toString() || "")
         setNotes(record.notes || "")
         setHasExistingRecord(true)
+        setEditingRecordId(Number(record.id) || null)
       } else {
         // Clear form for new entry
         setKgPicked("")
@@ -142,6 +149,7 @@ export function PepperTab() {
         setDryPepper("")
         setNotes("")
         setHasExistingRecord(false)
+        setEditingRecordId(null)
       }
     } catch (error) {
       console.error("Error fetching record:", error)
@@ -192,6 +200,7 @@ export function PepperTab() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
+          id: editingRecordId || undefined,
           locationId: selectedLocationId,
           process_date: format(selectedDate, "yyyy-MM-dd"),
           kg_picked: Number.parseFloat(kgPicked),
@@ -210,6 +219,7 @@ export function PepperTab() {
       if (data.success) {
         setMessage({ type: "success", text: "Record saved successfully!" })
         setHasExistingRecord(true)
+        setEditingRecordId(Number(data.record?.id) || editingRecordId)
         fetchRecentRecords()
       } else {
         setMessage({ type: "error", text: data.error || "Failed to save record" })
@@ -270,6 +280,40 @@ export function PepperTab() {
     setDryPepper(record.dry_pepper.toString())
     setNotes(record.notes || "")
     setHasExistingRecord(true)
+    setEditingRecordId(record.id)
+  }
+
+  const handleDeleteRecord = async (record: PepperRecord) => {
+    if (!canDeleteRecord) return
+    if (!window.confirm(`Delete pepper record for ${formatDateOnly(record.process_date)}?`)) {
+      return
+    }
+
+    setIsDeletingRecordId(record.id)
+    setMessage(null)
+    try {
+      const response = await fetch(`/api/pepper-records?id=${record.id}`, { method: "DELETE" })
+      const data = await response.json()
+      if (!response.ok || !data.success) {
+        throw new Error(data.error || "Failed to delete record")
+      }
+
+      setMessage({ type: "success", text: "Record deleted successfully." })
+      if (selectedPepperRecord?.id === record.id) {
+        setSelectedPepperRecord(null)
+        setKgPicked("")
+        setGreenPepper("")
+        setDryPepper("")
+        setNotes("")
+        setHasExistingRecord(false)
+        setEditingRecordId(null)
+      }
+      await fetchRecentRecords()
+    } catch (error: any) {
+      setMessage({ type: "error", text: error.message || "Failed to delete record" })
+    } finally {
+      setIsDeletingRecordId(null)
+    }
   }
 
   return (
@@ -482,8 +526,25 @@ export function PepperTab() {
                   </p>
                 </div>
                 <Button size="sm" variant="outline" className="bg-white" onClick={() => loadRecord(selectedPepperRecord)}>
-                  Open in Form
+                  <Edit className="mr-2 h-4 w-4" />
+                  Edit in Form
                 </Button>
+                {canDeleteRecord && (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="bg-white text-rose-700 border-rose-200 hover:bg-rose-50"
+                    disabled={isDeletingRecordId === selectedPepperRecord.id}
+                    onClick={() => handleDeleteRecord(selectedPepperRecord)}
+                  >
+                    {isDeletingRecordId === selectedPepperRecord.id ? (
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    ) : (
+                      <Trash2 className="mr-2 h-4 w-4" />
+                    )}
+                    Delete
+                  </Button>
+                )}
               </div>
               <div className="mt-2 grid gap-2 text-xs text-muted-foreground sm:grid-cols-2 lg:grid-cols-4">
                 <p>Picked: {formatNumber(selectedPepperRecord.kg_picked)} KG</p>
@@ -515,6 +576,7 @@ export function PepperTab() {
                     <TableHead className="text-right sticky top-0 bg-muted/60">Dry Pepper</TableHead>
                     <TableHead className="text-right sticky top-0 bg-muted/60">Dry %</TableHead>
                     <TableHead className="sticky top-0 bg-muted/60">Notes</TableHead>
+                    <TableHead className="sticky top-0 bg-muted/60 text-right">Actions</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -542,6 +604,39 @@ export function PepperTab() {
                       <TableCell className="text-right">{formatNumber(record.dry_pepper)}</TableCell>
                       <TableCell className="text-right">{formatNumber(record.dry_pepper_percent)}%</TableCell>
                       <TableCell className="max-w-xs truncate">{record.notes || "-"}</TableCell>
+                      <TableCell className="text-right">
+                        <div className="inline-flex items-center gap-1">
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            onClick={(event) => {
+                              event.stopPropagation()
+                              loadRecord(record)
+                            }}
+                            className="h-8 px-2 text-amber-700"
+                          >
+                            <Edit className="h-4 w-4" />
+                          </Button>
+                          {canDeleteRecord && (
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              onClick={(event) => {
+                                event.stopPropagation()
+                                handleDeleteRecord(record)
+                              }}
+                              disabled={isDeletingRecordId === record.id}
+                              className="h-8 px-2 text-rose-700"
+                            >
+                              {isDeletingRecordId === record.id ? (
+                                <Loader2 className="h-4 w-4 animate-spin" />
+                              ) : (
+                                <Trash2 className="h-4 w-4" />
+                              )}
+                            </Button>
+                          )}
+                        </div>
+                      </TableCell>
                     </TableRow>
                   ))}
                 </TableBody>
