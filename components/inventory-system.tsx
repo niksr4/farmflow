@@ -3531,6 +3531,22 @@ export default function InventorySystem() {
     [openDrilldown],
   )
 
+  const goToWorkspaceNavigator = useCallback(() => {
+    setActiveTab(DASHBOARD_LAUNCHER_TAB)
+    markTabAsLoaded(DASHBOARD_LAUNCHER_TAB)
+
+    const params = new URLSearchParams(searchParams.toString())
+    params.set("tab", DASHBOARD_LAUNCHER_TAB)
+    params.delete("locationId")
+    params.delete(DRILLDOWN_ITEM_PARAM)
+    params.delete(DRILLDOWN_TXN_SEARCH_PARAM)
+    params.delete(DRILLDOWN_ALERT_ID_PARAM)
+    params.delete(DRILLDOWN_ALERT_METRIC_PARAM)
+
+    const nextPath = `/dashboard?${params.toString()}`
+    router.replace(nextPath, { scroll: false })
+  }, [markTabAsLoaded, router, searchParams])
+
   type TabGroupKey = "dashboard" | "operations" | "finance" | "insights"
   type SectionTabItem = { value: string; label: string; icon: React.ComponentType<{ className?: string }> }
 
@@ -4627,11 +4643,11 @@ export default function InventorySystem() {
                   type="button"
                   variant="outline"
                   size="sm"
-                  onClick={() => handleTabChange(DASHBOARD_LAUNCHER_TAB)}
+                  onClick={goToWorkspaceNavigator}
                   className={cn("bg-white", isMobile ? "min-h-10 w-full justify-center" : "")}
                 >
                   <Home className="mr-2 h-3.5 w-3.5" />
-                  Back to Dashboard
+                  Workspace Navigator
                 </Button>
               </div>
             )}
