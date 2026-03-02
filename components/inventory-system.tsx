@@ -3465,7 +3465,10 @@ export default function InventorySystem() {
   const openDrilldown = useCallback(
     (options: DrilldownOptions) => {
       const requestedTab = options.tab === "weather" ? "rainfall" : options.tab
-      const nextTab = visibleTabs.includes(requestedTab) ? requestedTab : getPreferredDefaultTab(visibleTabs)
+      const nextTab =
+        requestedTab === DASHBOARD_LAUNCHER_TAB || visibleTabs.includes(requestedTab)
+          ? requestedTab
+          : getPreferredDefaultTab(visibleTabs)
       setActiveTab(nextTab)
       markTabAsLoaded(nextTab)
 
@@ -4619,7 +4622,7 @@ export default function InventorySystem() {
             )}
           >
             {activeTab !== DASHBOARD_LAUNCHER_TAB && (
-              <div className={cn("flex", isMobile ? "justify-stretch" : "justify-end")}>
+              <div className={cn("flex", isMobile ? "justify-stretch" : "justify-start")}>
                 <Button
                   type="button"
                   variant="outline"
