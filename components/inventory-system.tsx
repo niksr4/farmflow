@@ -2510,10 +2510,12 @@ export default function InventorySystem() {
   const handleOpenItemDrilldownHistory = () => {
     if (!inventoryDrilldownItemName) return
     setIsInventoryDrilldownOpen(false)
-    setFilterType(inventoryDrilldownItemName)
-    setTransactionSearchTerm("")
+    openDrilldown({
+      tab: "transactions",
+      itemType: inventoryDrilldownItemName,
+      transactionSearch: "",
+    })
     setCurrentPage(1)
-    setActiveTab("transactions")
   }
 
   // AI Analysis trigger (calls your AI API route)
@@ -3804,7 +3806,7 @@ export default function InventorySystem() {
       description: "Set up the coffee processing locations your estate uses.",
       done: onboardingStatus.locations,
       actionLabel: "Go to Processing",
-      onAction: () => setActiveTab("processing"),
+      onAction: () => handleTabChange("processing"),
     },
     {
       key: "inventory",
@@ -3812,7 +3814,7 @@ export default function InventorySystem() {
       description: "Create your first inventory item and restock quantity.",
       done: onboardingStatus.inventory,
       actionLabel: "Go to Inventory",
-      onAction: () => setActiveTab("inventory"),
+      onAction: () => handleTabChange("inventory"),
     },
     {
       key: "processing",
@@ -3820,7 +3822,7 @@ export default function InventorySystem() {
       description: "Log today's coffee processing (parchment/cherry).",
       done: onboardingStatus.processing,
       actionLabel: "Open Processing",
-      onAction: () => setActiveTab("processing"),
+      onAction: () => handleTabChange("processing"),
     },
     {
       key: "dispatch",
@@ -3828,7 +3830,7 @@ export default function InventorySystem() {
       description: "Send bags out and optionally note KGs received.",
       done: onboardingStatus.dispatch,
       actionLabel: "Open Dispatch",
-      onAction: () => setActiveTab("dispatch"),
+      onAction: () => handleTabChange("dispatch"),
     },
     ...(canShowSales
       ? [
@@ -3838,7 +3840,7 @@ export default function InventorySystem() {
             description: "Capture bags sold and pricing for revenue tracking.",
             done: onboardingStatus.sales,
             actionLabel: "Open Sales",
-            onAction: () => setActiveTab("sales"),
+            onAction: () => handleTabChange("sales"),
           } satisfies OnboardingStep,
         ]
       : []),
@@ -3868,7 +3870,7 @@ export default function InventorySystem() {
       detail: "Configure locations and inventory masters before daily records begin.",
       done: onboardingStatus.locations && onboardingStatus.inventory,
       actionLabel: onboardingStatus.locations ? "Open Inventory" : "Add Locations",
-      onAction: () => setActiveTab(onboardingStatus.locations ? "inventory" : "processing"),
+      onAction: () => handleTabChange(onboardingStatus.locations ? "inventory" : "processing"),
     },
     {
       id: "phase-2",
@@ -3877,7 +3879,7 @@ export default function InventorySystem() {
       detail: "Capture Arabica/Robusta outputs every day with consistent lot notes.",
       done: onboardingStatus.processing,
       actionLabel: "Open Processing",
-      onAction: () => setActiveTab("processing"),
+      onAction: () => handleTabChange("processing"),
     },
     {
       id: "phase-3",
@@ -3886,7 +3888,7 @@ export default function InventorySystem() {
       detail: "Record bags dispatched and KGs received so sales stock is reliable.",
       done: onboardingStatus.dispatch,
       actionLabel: "Open Dispatch",
-      onAction: () => setActiveTab("dispatch"),
+      onAction: () => handleTabChange("dispatch"),
     },
     {
       id: "phase-4",
@@ -3895,7 +3897,7 @@ export default function InventorySystem() {
       detail: "Close the loop with sales entries and account activity code hygiene.",
       done: canShowSales ? onboardingStatus.sales : true,
       actionLabel: canShowSales ? "Open Sales" : "Open Accounts",
-      onAction: () => setActiveTab(canShowSales ? "sales" : "accounts"),
+      onAction: () => handleTabChange(canShowSales ? "sales" : "accounts"),
     },
   ]
   const showOnboarding =
@@ -4360,14 +4362,14 @@ export default function InventorySystem() {
                 Use the checklist below to get to a live, traceable setup in under 10 minutes.
               </div>
               <div className="flex flex-wrap gap-2">
-                <Button onClick={() => setActiveTab("inventory")}>Start setup</Button>
+                <Button onClick={() => handleTabChange("inventory")}>Start setup</Button>
                 {isAdmin && (
                   <Button asChild variant="outline" className="bg-transparent">
                     <Link href="/settings">Manage users</Link>
                   </Button>
                 )}
                 {canShowResources && (
-                  <Button variant="outline" className="bg-transparent" onClick={() => setActiveTab("resources")}>
+                  <Button variant="outline" className="bg-transparent" onClick={() => handleTabChange("resources")}>
                     Open resources
                   </Button>
                 )}
@@ -4431,7 +4433,7 @@ export default function InventorySystem() {
                 <button
                   key={item.id}
                   type="button"
-                  onClick={() => setActiveTab(item.tab)}
+                  onClick={() => handleTabChange(item.tab)}
                   className={cn(
                     "rounded-2xl border bg-white p-4 text-left transition",
                     isActive
@@ -4472,7 +4474,7 @@ export default function InventorySystem() {
               <Button
                 variant="outline"
                 size="sm"
-                onClick={() => setActiveTab("season")}
+                onClick={() => handleTabChange("season")}
                 className="bg-white"
               >
                 <BarChart3 className="h-3 w-3 mr-1" />
@@ -5847,7 +5849,7 @@ export default function InventorySystem() {
                       )}
                       <button
                         type="button"
-                        onClick={() => setActiveTab("transactions")}
+                        onClick={() => handleTabChange("transactions")}
                         className="flex w-full items-center justify-between rounded-xl border border-black/5 bg-white px-4 py-3 text-sm text-neutral-800 transition-colors hover:bg-neutral-50"
                       >
                         <span className="flex items-center gap-2">
