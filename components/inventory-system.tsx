@@ -431,6 +431,7 @@ export default function InventorySystem() {
     sales: false,
   })
   const [isOnboardingLoading, setIsOnboardingLoading] = useState(false)
+  const [hasLoadedOnboardingStatus, setHasLoadedOnboardingStatus] = useState(false)
   const [onboardingError, setOnboardingError] = useState<string | null>(null)
   const [newLocationName, setNewLocationName] = useState("")
   const [newLocationCode, setNewLocationCode] = useState("")
@@ -722,6 +723,7 @@ export default function InventorySystem() {
       return
     }
     setIsOnboardingLoading(true)
+    setHasLoadedOnboardingStatus(false)
     setOnboardingError(null)
     try {
       const locationsEndpoint =
@@ -784,6 +786,7 @@ export default function InventorySystem() {
       setOnboardingError(error?.message || "Failed to load setup checklist.")
     } finally {
       setIsOnboardingLoading(false)
+      setHasLoadedOnboardingStatus(true)
     }
   }, [isOwner, isPreviewMode, previewTenantId, tenantId])
 
@@ -2525,7 +2528,7 @@ export default function InventorySystem() {
   const showTransactionHistory = isModuleEnabled("transactions")
   const canShowInventory = isModuleEnabled("inventory")
   const canShowAccounts = isModuleEnabled("accounts")
-  const canShowBalanceSheet = isModuleEnabled("balance-sheet")
+  const canShowBalanceSheet = isModuleEnabled("balance-sheet") && (isAdmin || isOwner)
   const canShowProcessing = isModuleEnabled("processing")
   const canShowDispatch = isModuleEnabled("dispatch")
   const canShowSales = isModuleEnabled("sales") && !isScopedUser
@@ -3526,6 +3529,7 @@ export default function InventorySystem() {
   )
 
   type TabGroupKey = "dashboard" | "operations" | "finance" | "insights"
+  type SectionTabItem = { value: string; label: string; icon: React.ComponentType<{ className?: string }> }
 
   const activeTabGroup = useMemo<TabGroupKey>(() => {
     if (activeTab === "home") return "dashboard"
@@ -3541,6 +3545,62 @@ export default function InventorySystem() {
     if (activeTabGroup === "insights") return insightsTabItems
     return []
   }, [activeTabGroup, financeTabItems, insightsTabItems, operationsTabItems])
+
+  const launcherSections = useMemo(
+    () =>
+      [
+        showOperationsTabs
+          ? {
+              id: "operations" as const,
+              label: "Operations",
+              description: "Daily execution across inventory, processing, dispatch, and sales.",
+              icon: Factory,
+              tabs: operationsTabItems as SectionTabItem[],
+              cardClassName: "border-emerald-200/80 bg-emerald-50/50",
+              badgeClassName: "border-emerald-200 bg-white text-emerald-700",
+              tabClassName: "border-emerald-200 bg-white text-emerald-900 hover:bg-emerald-50",
+              iconClassName: "text-emerald-700",
+            }
+          : null,
+        showFinanceTabs
+          ? {
+              id: "finance" as const,
+              label: "Finance",
+              description: "Money flow, receivables, accounts, and fiscal control.",
+              icon: Scale,
+              tabs: financeTabItems as SectionTabItem[],
+              cardClassName: "border-amber-200/80 bg-amber-50/50",
+              badgeClassName: "border-amber-200 bg-white text-amber-700",
+              tabClassName: "border-amber-200 bg-white text-amber-900 hover:bg-amber-50",
+              iconClassName: "text-amber-700",
+            }
+          : null,
+        showInsightsTabs
+          ? {
+              id: "insights" as const,
+              label: "Insights",
+              description: "Season monitoring, rainfall, AI, and trend intelligence.",
+              icon: BarChart3,
+              tabs: insightsTabItems as SectionTabItem[],
+              cardClassName: "border-cyan-200/80 bg-cyan-50/50",
+              badgeClassName: "border-cyan-200 bg-white text-cyan-700",
+              tabClassName: "border-cyan-200 bg-white text-cyan-900 hover:bg-cyan-50",
+              iconClassName: "text-cyan-700",
+            }
+          : null,
+      ].filter(Boolean) as Array<{
+        id: Exclude<TabGroupKey, "dashboard">
+        label: string
+        description: string
+        icon: React.ComponentType<{ className?: string }>
+        tabs: SectionTabItem[]
+        cardClassName: string
+        badgeClassName: string
+        tabClassName: string
+        iconClassName: string
+      }>,
+    [financeTabItems, insightsTabItems, operationsTabItems, showFinanceTabs, showInsightsTabs, showOperationsTabs],
+  )
 
   const handleSectionSelect = useCallback(
     (group: TabGroupKey) => {
@@ -3807,7 +3867,7 @@ export default function InventorySystem() {
     },
   ]
   const showOnboarding =
-    !isOwner && onboardingTotalCount > 0 && onboardingCompletedCount < onboardingTotalCount
+    !isOwner && hasLoadedOnboardingStatus && onboardingTotalCount > 0 && onboardingCompletedCount < onboardingTotalCount
   const showLaunchGuide = showOnboarding
   const recordMovementPanel = (
     <div className="rounded-2xl border border-black/5 bg-white p-6 shadow-sm">
@@ -4552,13 +4612,24 @@ export default function InventorySystem() {
           </div>
         )}
         <Tabs value={activeTab} onValueChange={handleTabChange} className="w-full space-y-4">
-          <div className="sticky top-2 z-20 space-y-3 rounded-2xl border border-black/10 bg-white/90 p-3 shadow-sm backdrop-blur">
+          <div
+            className={cn(
+              "sticky top-2 z-20 rounded-3xl border border-black/10 bg-gradient-to-br from-white/95 via-white to-neutral-100/80 shadow-[0_12px_30px_-24px_rgba(15,23,42,0.75)] backdrop-blur",
+              isMobile ? "space-y-2.5 p-3" : "space-y-3 p-4",
+            )}
+          >
+            {isMobile && (
+              <div className="flex items-center justify-between px-1">
+                <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-neutral-500">Workspace Sections</p>
+                <p className="text-[11px] text-neutral-500">Swipe</p>
+              </div>
+            )}
             <div
               className={cn(
                 "gap-2",
                 isMobile
                   ? "flex snap-x snap-mandatory overflow-x-auto whitespace-nowrap no-scrollbar"
-                  : "grid grid-cols-1 gap-2 md:grid-cols-3",
+                  : "grid grid-cols-1 gap-3 md:grid-cols-3",
               )}
             >
               {showOperationsTabs && (
@@ -4566,8 +4637,8 @@ export default function InventorySystem() {
                   type="button"
                   onClick={() => handleSectionSelect("operations")}
                   className={cn(
-                    "flex items-center gap-3 rounded-xl border text-left transition-all touch-manipulation",
-                    isMobile ? "min-h-[76px] min-w-[238px] snap-start px-3 py-2" : "min-h-[86px] px-4 py-3",
+                    "flex items-center gap-3 rounded-2xl border text-left transition-all touch-manipulation shadow-sm",
+                    isMobile ? "min-h-[82px] min-w-[220px] snap-start px-3.5 py-2.5" : "min-h-[96px] px-4 py-3.5",
                     activeTabGroup === "operations"
                       ? "border-emerald-600 bg-emerald-600 text-white shadow-[0_14px_30px_-20px_rgba(5,150,105,0.9)]"
                       : "border-emerald-200 bg-emerald-50/70 text-emerald-900 hover:border-emerald-300 hover:bg-emerald-50",
@@ -4588,8 +4659,8 @@ export default function InventorySystem() {
                   type="button"
                   onClick={() => handleSectionSelect("finance")}
                   className={cn(
-                    "flex items-center gap-3 rounded-xl border text-left transition-all touch-manipulation",
-                    isMobile ? "min-h-[76px] min-w-[238px] snap-start px-3 py-2" : "min-h-[86px] px-4 py-3",
+                    "flex items-center gap-3 rounded-2xl border text-left transition-all touch-manipulation shadow-sm",
+                    isMobile ? "min-h-[82px] min-w-[220px] snap-start px-3.5 py-2.5" : "min-h-[96px] px-4 py-3.5",
                     activeTabGroup === "finance"
                       ? "border-amber-500 bg-amber-500 text-white shadow-[0_14px_30px_-20px_rgba(217,119,6,0.95)]"
                       : "border-amber-200 bg-amber-50/70 text-amber-900 hover:border-amber-300 hover:bg-amber-50",
@@ -4610,8 +4681,8 @@ export default function InventorySystem() {
                   type="button"
                   onClick={() => handleSectionSelect("insights")}
                   className={cn(
-                    "flex items-center gap-3 rounded-xl border text-left transition-all touch-manipulation",
-                    isMobile ? "min-h-[76px] min-w-[238px] snap-start px-3 py-2" : "min-h-[86px] px-4 py-3",
+                    "flex items-center gap-3 rounded-2xl border text-left transition-all touch-manipulation shadow-sm",
+                    isMobile ? "min-h-[82px] min-w-[220px] snap-start px-3.5 py-2.5" : "min-h-[96px] px-4 py-3.5",
                     activeTabGroup === "insights"
                       ? "border-cyan-600 bg-cyan-600 text-white shadow-[0_14px_30px_-20px_rgba(8,145,178,0.9)]"
                       : "border-cyan-200 bg-cyan-50/70 text-cyan-900 hover:border-cyan-300 hover:bg-cyan-50",
@@ -4631,7 +4702,7 @@ export default function InventorySystem() {
             {activeTabGroup !== "dashboard" && activeSectionTabs.length > 0 && (
               <TabsList
                 className={cn(
-                  "h-auto rounded-xl border border-black/10 bg-neutral-50/90 p-2 shadow-none",
+                  "h-auto rounded-2xl border border-black/10 bg-neutral-50/90 p-2 shadow-inner",
                   isMobile
                     ? "flex-nowrap items-center gap-2 overflow-x-auto whitespace-nowrap no-scrollbar snap-x snap-mandatory [&>*]:shrink-0"
                     : "flex-wrap items-center gap-2",
@@ -4662,32 +4733,72 @@ export default function InventorySystem() {
             className="space-y-4"
             forceMount={isTabLoaded(DASHBOARD_LAUNCHER_TAB) ? true : undefined}
           >
-            <Card className="border-black/5 bg-white/95">
-              <CardHeader>
-                <CardTitle>Start Here</CardTitle>
+            <Card className="overflow-hidden border-black/10 bg-gradient-to-br from-white via-neutral-50 to-neutral-100/80 shadow-sm">
+              <CardHeader className="space-y-3 pb-4">
+                <div className="flex flex-wrap items-center gap-2">
+                  <Badge variant="outline" className="border-emerald-200 bg-emerald-50 text-emerald-700">
+                    Workspace Navigator
+                  </Badge>
+                  <Badge variant="outline" className="border-black/10 bg-white text-neutral-700">
+                    {Math.max(visibleTabs.length - 1, 0)} tabs available
+                  </Badge>
+                </div>
+                <CardTitle className={cn("leading-tight", isMobile ? "text-xl" : "text-2xl")}>Open any tab in one tap</CardTitle>
                 <CardDescription>
-                  Pick one area above to begin. Keep it simple: Operations for daily work, Finance for money, Insights for trends.
+                  This replaces the old duplicate launcher buttons. Choose by section below for a cleaner, faster flow.
                 </CardDescription>
               </CardHeader>
-              <CardContent className="flex flex-wrap gap-2">
-                {showOperationsTabs && (
-                  <Button onClick={() => handleSectionSelect("operations")} className="bg-emerald-700 hover:bg-emerald-800 text-white">
-                    Open Operations
+              <CardContent className="space-y-4">
+                <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
+                  {launcherSections.map((section) => {
+                    const SectionIcon = section.icon
+                    return (
+                      <div key={section.id} className={cn("rounded-2xl border", section.cardClassName, isMobile ? "p-3.5" : "p-3")}>
+                        <div className="mb-3 flex items-start justify-between gap-2">
+                          <button
+                            type="button"
+                            onClick={() => handleSectionSelect(section.id)}
+                            className={cn("flex items-center gap-2 text-left", isMobile ? "min-h-10" : "")}
+                          >
+                            <SectionIcon className={cn("h-4 w-4", section.iconClassName)} />
+                            <div>
+                              <p className="text-sm font-semibold text-neutral-900">{section.label}</p>
+                              <p className="text-xs text-muted-foreground">{section.description}</p>
+                            </div>
+                          </button>
+                          <Badge variant="outline" className={section.badgeClassName}>
+                            {section.tabs.length}
+                          </Badge>
+                        </div>
+                        <div className={cn("gap-2", isMobile ? "grid grid-cols-2" : "flex flex-wrap")}>
+                          {section.tabs.map((tab) => {
+                            const TabIcon = tab.icon
+                            return (
+                              <button
+                                key={tab.value}
+                                type="button"
+                                onClick={() => handleTabChange(tab.value)}
+                                className={cn(
+                                  "inline-flex min-h-10 items-center gap-1.5 rounded-lg border px-3 py-2 text-xs font-semibold transition-colors touch-manipulation",
+                                  isMobile ? "w-full justify-start rounded-xl px-3.5 py-2.5 text-sm" : "",
+                                  section.tabClassName,
+                                )}
+                              >
+                                <TabIcon className={cn("h-3.5 w-3.5", section.iconClassName)} />
+                                <span>{tab.label}</span>
+                              </button>
+                            )
+                          })}
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  <Button variant="outline" className={cn("bg-white", isMobile ? "w-full min-h-11" : "")} onClick={() => handleTabChange("home")}>
+                    Open Dashboard Home
                   </Button>
-                )}
-                {showFinanceTabs && (
-                  <Button
-                    onClick={() => handleSectionSelect("finance")}
-                    className="bg-amber-600 hover:bg-amber-700 text-white"
-                  >
-                    Open Finance
-                  </Button>
-                )}
-                {showInsightsTabs && (
-                  <Button onClick={() => handleSectionSelect("insights")} className="bg-cyan-700 hover:bg-cyan-800 text-white">
-                    Open Insights
-                  </Button>
-                )}
+                </div>
               </CardContent>
             </Card>
           </TabsContent>

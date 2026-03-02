@@ -193,6 +193,12 @@ export async function PUT(request: Request) {
     const tenantContext = normalizeTenantContext(tenantId, sessionUser.role)
     const columnStatus = await loadTenantExperienceColumnStatus(sql, tenantContext)
     const hasExperienceUpdateInput = body.uiVariant !== undefined || body.featureFlags !== undefined
+    if (hasExperienceUpdateInput && sessionUser.role !== "owner") {
+      return NextResponse.json(
+        { success: false, error: "Owner role required to update tenant experience profile" },
+        { status: 403 },
+      )
+    }
     if (hasExperienceUpdateInput && (!columnStatus.hasUiVariant || !columnStatus.hasFeatureFlags)) {
       return NextResponse.json(
         { success: false, error: "Tenant experience schema missing. Run scripts/48-tenant-variants.sql." },

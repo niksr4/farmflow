@@ -158,6 +158,7 @@ export default function TenantSettingsPage() {
 
   const isOwner = user?.role === "owner"
   const isAdminOrOwner = user?.role === "admin" || user?.role === "owner"
+  const canManageTenantExperience = isOwner
   const privacyFeatureEnabled = false
   const mfaFeatureEnabled = false
   const mfaEnabled = mfaFeatureEnabled ? Boolean(mfaStatus?.enabled) : false
@@ -748,6 +749,14 @@ export default function TenantSettingsPage() {
   }
 
   const handleSaveTenantExperience = async () => {
+    if (!canManageTenantExperience) {
+      toast({
+        title: "Owner required",
+        description: "Only owners can update the tenant experience profile.",
+        variant: "destructive",
+      })
+      return
+    }
     setIsSavingTenantExperience(true)
     try {
       await updateSettings({
@@ -961,12 +970,14 @@ export default function TenantSettingsPage() {
   const sectionLinks: Array<{ id: string; label: string }> = [
     { id: "estate-identity", label: "Estate" },
     { id: "display-preferences", label: "Display" },
-    { id: "tenant-experience", label: "Experience" },
     { id: "data-import", label: "Import" },
     { id: "thresholds", label: "Thresholds" },
     { id: "locations", label: "Locations" },
     { id: "tenant-users", label: "Users" },
   ]
+  if (canManageTenantExperience) {
+    sectionLinks.push({ id: "tenant-experience", label: "Experience" })
+  }
   if (isOwner) {
     sectionLinks.push({ id: "tenant-modules", label: "Modules" })
     sectionLinks.push({ id: "user-module-overrides", label: "User Access" })
@@ -1153,7 +1164,7 @@ export default function TenantSettingsPage() {
         </Card>
       )}
 
-      {isAdminOrOwner && (
+      {canManageTenantExperience && (
         <Card id="tenant-experience" className="scroll-mt-24 border-border/70 bg-white/85">
           <CardHeader>
             <CardTitle>Tenant Experience Profile</CardTitle>
