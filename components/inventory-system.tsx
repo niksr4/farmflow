@@ -1842,7 +1842,7 @@ export default function InventorySystem() {
         return {
           badge: "Estate Pulse",
           title: "Estate operations at a glance",
-          description: "Track inventory, processing, and sales from one dashboard.",
+          description: "Track inventory, processing, and sales from one view.",
           chips: chipsInventory,
           stats: inventoryStats,
         }
@@ -4222,7 +4222,7 @@ export default function InventorySystem() {
                 />
                 <div>
                   <h1 className="text-2xl font-display font-semibold text-[color:var(--foreground)]">
-                    FarmFlow Dashboard
+                    FarmFlow Workspace Navigator
                   </h1>
                 </div>
                 <Badge className="bg-white/90 text-emerald-700 border-emerald-200">Estate Workspace</Badge>
@@ -4829,7 +4829,7 @@ export default function InventorySystem() {
                 </div>
                 <div className="flex flex-wrap gap-2">
                   <Button variant="outline" className={cn("bg-white", isMobile ? "w-full min-h-11" : "")} onClick={() => handleTabChange("home")}>
-                    Open Dashboard Home
+                    Open Dashboard
                   </Button>
                 </div>
               </CardContent>
