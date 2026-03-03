@@ -4,50 +4,6 @@
 
 BEGIN;
 
--- Source: scripts/17-add-owner-role-and-user.sql
--- Review notes:
--- - UPDATE without WHERE detected; verify this is intended
-
--- TODO: Add explicit rollback SQL for this migration.
--- Example:
--- ALTER TABLE ... DROP COLUMN ...;
--- CREATE INDEX ...;
-
--- Source: scripts/20-tenant-schema.sql
--- Review notes:
--- - No high-risk patterns detected.
-
--- TODO: Add explicit rollback SQL for this migration.
--- Example:
--- ALTER TABLE ... DROP COLUMN ...;
--- CREATE INDEX ...;
-
--- Source: scripts/52-add-viewer-role.sql
--- Review notes:
--- - File removed or renamed; validate migration ordering and rollback requirements.
-
--- TODO: Add explicit rollback SQL for this migration.
--- Example:
--- ALTER TABLE ... DROP COLUMN ...;
--- CREATE INDEX ...;
-
--- Source: scripts/53-processing-recompute-and-composite-indexes.sql
--- Review notes:
--- - No high-risk patterns detected.
-
--- TODO: Add explicit rollback SQL for this migration.
--- Example:
--- ALTER TABLE ... DROP COLUMN ...;
--- CREATE INDEX ...;
-
--- Source: scripts/54-agent-ops.sql
--- Review notes:
--- - No high-risk patterns detected.
-
--- TODO: Add explicit rollback SQL for this migration.
--- Example:
--- ALTER TABLE ... DROP COLUMN ...;
--- CREATE INDEX ...;
 
 
 -- COMMIT only after review/testing.

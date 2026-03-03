@@ -38,6 +38,12 @@ pnpm test
 pnpm build
 ```
 
+Canonical local regression gate:
+
+```bash
+pnpm lint && pnpm test && pnpm build && pnpm test:e2e:public
+```
+
 ## End-to-End Tests
 
 ```bash
@@ -48,6 +54,12 @@ If your auth flow requires seeded credentials, run:
 
 ```bash
 pnpm test:e2e:auth
+```
+
+Public smoke tests (no auth credentials required):
+
+```bash
+pnpm test:e2e:public
 ```
 
 ## Phone + App Install
@@ -73,4 +85,6 @@ If you want App Store / Play Store binaries:
 ## Project Docs
 
 - Product and operational docs: `docs/`
+- E2E runbook and auth matrix: `docs/e2e-regression.md`
+- Product validation metrics and funnel runbook: `docs/product-validation-metrics.md`
 - DB schema and migrations: `scripts/`

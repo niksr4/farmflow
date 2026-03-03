@@ -56,6 +56,10 @@ export default function LoginPage() {
         role,
         tenant_id: tenantId || "global",
       })
+      posthog.capture("funnel_login_succeeded", {
+        role,
+        tenant_id: tenantId || "global",
+      })
       router.push(role === "owner" ? "/admin/tenants" : "/dashboard")
     } catch (err: any) {
       posthog.captureException(err)

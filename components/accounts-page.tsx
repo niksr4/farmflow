@@ -68,7 +68,7 @@ type AccountsPageProps = {
 }
 
 export default function AccountsPage({ showDataToolsControls = false }: AccountsPageProps) {
-  const { isAdmin, user } = useAuth()
+  const { isAdmin, isOwner, user } = useAuth()
   const canManageActivities = isAdmin || user?.role === "owner"
   const { deployments: laborDeployments, loading: laborLoading, totalCount: laborCount } = useLaborData()
   const { deployments: consumableDeployments, loading: consumablesLoading, totalCount: consumablesCount } =
@@ -883,7 +883,7 @@ export default function AccountsPage({ showDataToolsControls = false }: Accounts
         </CardContent>
       </Card>
 
-      {showDataToolsControls && isAdmin && hasAnyData && (
+      {showDataToolsControls && (isAdmin || isOwner) && (
         <Card>
           <CardHeader>
             <div className="flex justify-between items-start">

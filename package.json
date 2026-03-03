@@ -12,6 +12,7 @@
     "agent:schema:staged": "node scripts/agent-schema-migration-assistant.js --staged",
     "test": "vitest run",
     "test:e2e": "playwright test",
+    "test:e2e:public": "E2E_EXPECT_OWNER=0 E2E_EXPECT_ADMIN=0 playwright test tests/e2e/public-flows.spec.ts",
     "test:e2e:auth": "node scripts/check-e2e-auth-env.mjs && playwright test tests/e2e/dashboard-regression.spec.ts tests/e2e/owner-console.spec.ts tests/e2e/tab-smoke.spec.ts tests/e2e/admin-auth.spec.ts",
     "test:e2e:headed": "playwright test --headed",
     "test:e2e:ui": "playwright test --ui",
@@ -94,7 +95,10 @@
   },
   "pnpm": {
     "overrides": {
-      "glob": "^10.5.0"
+      "glob": "^10.5.0",
+      "minimatch@<3.1.4": "3.1.4",
+      "minimatch@>=9.0.0 <9.0.7": "9.0.7",
+      "rollup@<4.59.0": "4.59.0"
     }
   }
 }

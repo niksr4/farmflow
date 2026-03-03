@@ -9,6 +9,17 @@ import { logAuditEvent } from "@/lib/server/audit-log"
 import { resolveLocationCompatibility } from "@/lib/server/location-compatibility"
 import { computeRemainingKgs, hasSufficientStock } from "@/lib/sales-math"
 import { getPostHogClient } from "@/lib/posthog-server"
+import {
+  bagPatternFor,
+  canonicalizeBagType,
+  canonicalizeCoffeeType,
+  coerceBagsSentValue,
+  coffeePatternFor,
+  getZodErrorMessage,
+  isScopedUserRole,
+  resolveKgsSold,
+  resolvePricePerKg,
+} from "@/lib/server/sales-route-utils"
 
 export const dynamic = "force-dynamic"
 export const revalidate = 0
@@ -45,55 +56,8 @@ async function resolveBagsSentValue(
     `,
   )
   const dataType = String(rows?.[0]?.data_type || "").toLowerCase()
-  if (dataType === "integer" || dataType === "smallint" || dataType === "bigint") {
-    return Math.round(bagsSold)
-  }
-  return Number(bagsSold.toFixed(2))
+  return coerceBagsSentValue(bagsSold, dataType)
 }
-
-const getZodErrorMessage = (error: unknown) => {
-  if (error instanceof z.ZodError) {
-    return error.issues?.[0]?.message || "Invalid request payload"
-  }
-  return null
-}
-
-const resolveKgsSold = (bagsSold: number, bagWeightKg: number, explicitKgsSold?: number | null) => {
-  const explicit = Number(explicitKgsSold)
-  if (Number.isFinite(explicit) && explicit > 0) {
-    return Number(explicit.toFixed(2))
-  }
-  return Number((bagsSold * bagWeightKg).toFixed(2))
-}
-
-const resolvePricePerKg = (revenue: number, kgsSold: number) => {
-  if (!Number.isFinite(revenue) || !Number.isFinite(kgsSold) || kgsSold <= 0) return 0
-  return Number((revenue / kgsSold).toFixed(4))
-}
-
-const canonicalizeCoffeeType = (value: string | null | undefined) => {
-  const normalized = String(value || "").trim().toLowerCase()
-  if (!normalized) return null
-  if (normalized.includes("arabica")) return "Arabica"
-  if (normalized.includes("robusta")) return "Robusta"
-  return null
-}
-
-const canonicalizeBagType = (value: string | null | undefined) => {
-  const normalized = String(value || "").trim().toLowerCase()
-  if (!normalized) return null
-  if (normalized.includes("cherry")) return "Dry Cherry"
-  if (normalized.includes("parchment")) return "Dry Parchment"
-  return null
-}
-
-const coffeePatternFor = (coffeeType: string) =>
-  coffeeType === "Arabica" ? "%arabica%" : "%robusta%"
-
-const bagPatternFor = (bagType: string) =>
-  bagType === "Dry Cherry" ? "%cherry%" : "%parchment%"
-
-const isScopedUserRole = (role: string | null | undefined) => String(role || "").toLowerCase() === "user"
 
 async function resolveSlotStock(
   db: typeof sql,

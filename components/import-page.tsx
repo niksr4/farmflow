@@ -14,6 +14,7 @@ import { useAuth } from "@/hooks/use-auth"
 import { parseCsv } from "@/lib/csv"
 import { apiRequest } from "@/lib/api-client"
 import { datasetTemplateCsv, IMPORT_DATASETS, IMPORT_DATASET_MAP, isImportDatasetId, type ImportDatasetId } from "@/lib/data-tools"
+import posthog from "posthog-js"
 
 interface ImportIssue {
   row: number
@@ -116,6 +117,10 @@ export default function ImportPage() {
         setValidationToken(data.validationToken)
         setValidationExpiresAt(data.expiresAt || null)
         setValidatedDataset(dataset)
+        posthog.capture("import_validation_passed", {
+          dataset,
+          row_count: data.rowCount || 0,
+        })
         toast({
           title: "Validation passed",
           description: `${data.rowCount || 0} rows are ready to import.`,
@@ -124,6 +129,11 @@ export default function ImportPage() {
         setValidationToken(null)
         setValidationExpiresAt(null)
         setValidatedDataset(null)
+        posthog.capture("import_validation_failed", {
+          dataset,
+          row_count: data.rowCount || 0,
+          error_count: (data.errors || []).length,
+        })
         toast({
           title: "Validation failed",
           description: `${(data.errors || []).length} row(s) need fixes before import.`,
@@ -134,6 +144,7 @@ export default function ImportPage() {
       setValidationToken(null)
       setValidationExpiresAt(null)
       setValidatedDataset(null)
+      posthog.captureException(error)
       toast({ title: "Validation failed", description: error.message || "Failed to validate CSV", variant: "destructive" })
     } finally {
       setIsValidating(false)
@@ -157,11 +168,25 @@ export default function ImportPage() {
         body: JSON.stringify({ dataset, mode: "commit", validationToken }),
       })
       setCommitResult(data)
+      posthog.capture("import_commit_succeeded", {
+        dataset,
+        imported: data.imported || 0,
+        skipped: data.skipped || 0,
+      })
+      posthog.capture("funnel_first_import_committed", {
+        dataset,
+        imported: data.imported || 0,
+      })
       toast({ title: "Import complete", description: `${data.imported || 0} rows imported.` })
       setValidationToken(null)
       setValidationExpiresAt(null)
       setValidatedDataset(null)
     } catch (error: any) {
+      posthog.capture("import_commit_failed", {
+        dataset,
+        message: String(error?.message || "unknown"),
+      })
+      posthog.captureException(error)
       toast({ title: "Import failed", description: error.message || "Failed to import CSV", variant: "destructive" })
     } finally {
       setIsCommitting(false)

@@ -1,62 +1,21 @@
 # Schema + Migration Assistant Report
 
-- Mode: working-tree
-- Risk Level: **MEDIUM**
-- Changed SQL files: 5
+- Mode: staged
+- Risk Level: **LOW**
+- Changed SQL files: 0
 - Destructive flags: 0
-- Warnings: 2
+- Warnings: 0
 - Idempotency flags: 0
-- Generated at: 2026-02-24T14:52:39.581Z
+- Generated at: 2026-03-02T23:58:14.496Z
 
 ## Changed SQL Files
-- `scripts/17-add-owner-role-and-user.sql`
-- `scripts/20-tenant-schema.sql`
-- `scripts/52-add-viewer-role.sql`
-- `scripts/53-processing-recompute-and-composite-indexes.sql`
-- `scripts/54-agent-ops.sql`
+- None
 
 ## Touched Tables
-- `account_activities`
-- `agent_run_findings`
-- `agent_runs`
-- `app_error_events`
-- `current_inventory`
-- `data_integrity_exceptions`
-- `dispatch_records`
-- `expense_transactions`
-- `hf_arabica`
-- `hf_pepper`
-- `hf_robusta`
-- `inventory_summary`
-- `labor_transactions`
-- `mv_pepper`
-- `mv_robusta`
-- `pg_pepper`
-- `pg_robusta`
-- `processing_records`
-- `rainfall_records`
-- `sales_records`
-- `tenant_modules`
-- `tenants`
-- `transaction_history`
-- `user_modules`
-- `users`
+- None detected
 
 ## Findings
-### scripts/17-add-owner-role-and-user.sql
-- [MEDIUM] UPDATE without WHERE detected; verify this is intended
 
-### scripts/20-tenant-schema.sql
-- [OK] No obvious destructive/idempotency risks detected
-
-### scripts/52-add-viewer-role.sql
-- [MEDIUM] File removed or renamed; validate migration ordering and rollback requirements.
-
-### scripts/53-processing-recompute-and-composite-indexes.sql
-- [OK] No obvious destructive/idempotency risks detected
-
-### scripts/54-agent-ops.sql
-- [OK] No obvious destructive/idempotency risks detected
 
 ## Human Approval Checklist
 - [ ] Confirm migration is additive and idempotent where possible.

@@ -1,10 +1,12 @@
-# Neon Database Setup Instructions
+# FarmFlow Database Setup Instructions
 
 ## 📋 Overview
 
-This folder contains all the SQL scripts needed to set up your Coffee Inventory Tracker database directly in Neon PostgreSQL.
+This folder contains SQL scripts for setting up and evolving the FarmFlow PostgreSQL schema (including multi-tenant modules, RLS, and optional hardening migrations).
 
 ## 🚀 Quick Start
+
+For the canonical app setup and test commands, use the root `README.md`.
 
 ### Step 1: Prepare Your Data
 

@@ -84,6 +84,10 @@ export default function SignupRoute() {
                       estate: normalized.estate,
                       region: normalized.region,
                     })
+                    posthog.capture("funnel_signup_submitted", {
+                      source: "signup-page",
+                      has_region: Boolean(normalized.region),
+                    })
                     setSubmitted(true)
                   } catch (error: any) {
                     posthog.captureException(error)

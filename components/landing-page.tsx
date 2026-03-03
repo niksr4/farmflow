@@ -10,6 +10,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
+import posthog from "posthog-js"
 
 const display = Fraunces({ subsets: ["latin"], weight: ["600", "700", "800"] })
 const body = Manrope({ subsets: ["latin"], weight: ["400", "500", "600", "700"] })
@@ -474,6 +475,10 @@ export default function LandingPage() {
       if (!response.ok || !data.success) {
         throw new Error(data.error || "Failed to submit interest")
       }
+      posthog.capture("funnel_signup_submitted", {
+        source: "landing-page",
+        has_estate_size: Boolean(normalized.estateSize),
+      })
       setInterestState("success")
       setInterestForm({
         name: "",

@@ -1,6 +1,6 @@
 "use client"
 
-import React, { useEffect, useState, useCallback, useMemo } from "react"
+import React, { useEffect, useState, useCallback, useMemo, useRef } from "react"
 import {
   Check,
   Download,
@@ -82,7 +82,7 @@ import { PepperTab } from "./pepper-tab"
 import OnboardingChecklist, { type OnboardingStep } from "@/components/onboarding-checklist"
 import Link from "next/link"
 import Image from "next/image"
-import { formatDateForDisplay, isWithinLast24Hours } from "@/lib/date-utils"
+import { isWithinLast24Hours } from "@/lib/date-utils"
 import { formatCurrency, formatNumber } from "@/lib/format"
 import { getCurrentFiscalYear } from "@/lib/fiscal-year-utils"
 import { getModuleDefaultEnabled } from "@/lib/modules"
@@ -99,179 +99,31 @@ import {
   TAB_DEFAULT_EXPORT_DATASET,
   type ExportDatasetId,
 } from "@/lib/data-tools"
+import {
+  API_INVENTORY,
+  API_TRANSACTIONS,
+  DASHBOARD_LAUNCHER_TAB,
+  DEFAULT_DASHBOARD_TAB_PRIORITY,
+  DRILLDOWN_ALERT_ID_PARAM,
+  DRILLDOWN_ALERT_METRIC_PARAM,
+  DRILLDOWN_ITEM_PARAM,
+  DRILLDOWN_TXN_SEARCH_PARAM,
+  LOCATION_ALL,
+  LOCATION_UNASSIGNED,
+  PREVIEW_TENANT_COOKIE,
+  UNASSIGNED_LABEL,
+} from "@/components/inventory-system/constants"
+import type { ExceptionSummaryAlert, IntelligenceBrief, LocationOption } from "@/components/inventory-system/types"
+import {
+  createDefaultTransaction,
+  formatDate,
+  parseCustomDateString,
+  parseJsonResponse,
+  safeGet,
+  supportsImportTemplate,
+} from "@/components/inventory-system/utils"
 
 import posthog from "posthog-js"
-
-// API endpoints (adjust if your routes are different)
-const API_TRANSACTIONS = "/api/transactions-neon"
-const API_INVENTORY = "/api/inventory-neon"
-
-const LOCATION_ALL = "all"
-const LOCATION_UNASSIGNED = "unassigned"
-const UNASSIGNED_LABEL = "Unassigned (legacy)"
-const PREVIEW_TENANT_COOKIE = "farmflow_preview_tenant"
-const DASHBOARD_LAUNCHER_TAB = "launcher"
-const DRILLDOWN_TXN_SEARCH_PARAM = "txnSearch"
-const DRILLDOWN_ITEM_PARAM = "itemType"
-const DRILLDOWN_ALERT_ID_PARAM = "seasonAlertId"
-const DRILLDOWN_ALERT_METRIC_PARAM = "seasonMetric"
-const DEFAULT_DASHBOARD_TAB_PRIORITY = [
-  "processing",
-  "inventory",
-  "dispatch",
-  "sales",
-  "other-sales",
-  "season",
-  "yield-forecast",
-  "accounts",
-  "transactions",
-  "balance-sheet",
-  "receivables",
-  "billing",
-  "rainfall",
-  "journal",
-  "documents",
-  "resources",
-  "plant-health",
-  "ai-analysis",
-  "news",
-  "pepper",
-  "curing",
-  "quality",
-  "home",
-]
-
-const supportsImportTemplate = (dataset: ExportDatasetId): dataset is keyof typeof IMPORT_DATASET_MAP =>
-  dataset in IMPORT_DATASET_MAP
-
-interface LocationOption {
-  id: string
-  name: string
-  code?: string | null
-}
-
-interface IntelligenceCodePattern {
-  code: string
-  reference: string
-  totalAmount: number
-  entryCount: number
-}
-
-interface IntelligenceDayPattern {
-  date: string
-  totalAmount: number
-  entryCount: number
-}
-
-interface IntelligenceBrief {
-  dateRange: {
-    startDate: string
-    endDate: string
-  }
-  generatedAt: string
-  highlights: string[]
-  actions: Array<{
-    label: string
-    tab: string
-  }>
-  reconciliation: {
-    totalReceivedKgs: number
-    totalSoldKgs: number
-    saleableKgs: number
-    overdrawnKgs: number
-    overdrawnSlots: Array<{
-      coffeeType: string
-      bagType: string
-      overdrawnKgs: number
-    }>
-  } | null
-  accountsPatterns: {
-    totalLabor: number
-    totalExpenses: number
-    totalSpend: number
-    laborSharePct: number
-    expenseSharePct: number
-    topCostCodes: IntelligenceCodePattern[]
-    mostFrequentCodes: IntelligenceCodePattern[]
-    highestLaborDays: IntelligenceDayPattern[]
-    highestExpenseDays: IntelligenceDayPattern[]
-    laborTrendPct: number | null
-    expenseTrendPct: number | null
-  } | null
-}
-
-interface ExceptionSummaryAlert {
-  id: string
-  title: string
-  severity: "low" | "medium" | "high" | "critical"
-  location?: string
-  coffeeType?: string
-  metric?: string
-}
-
-function parseCustomDateString(dateString: string | undefined | null): Date | null {
-  if (!dateString || typeof dateString !== "string") return null
-  // accept ISO or custom "DD/MM/YYYY hh:mm"
-  const iso = Date.parse(dateString)
-  if (!isNaN(iso)) return new Date(iso)
-
-  const parts = dateString.split(" ")
-  const dateParts = parts[0].split("/")
-  const timeParts = parts[1] ? parts[1].split(":") : ["00", "00"]
-
-  if (dateParts.length !== 3) return null
-
-  const day = Number.parseInt(dateParts[0], 10)
-  const month = Number.parseInt(dateParts[1], 10) - 1
-  const year = Number.parseInt(dateParts[2], 10)
-  const hour = Number.parseInt(timeParts[0], 10)
-  const minute = Number.parseInt(timeParts[1], 10)
-
-  if (isNaN(day) || isNaN(month) || isNaN(year) || isNaN(hour) || isNaN(minute)) {
-    return null
-  }
-
-  return new Date(year, month, day, hour, minute)
-}
-
-const formatDate = (dateString?: string | null) => {
-  if (!dateString) return ""
-  const parsed = parseCustomDateString(dateString)
-  return formatDateForDisplay(parsed ?? dateString)
-}
-
-const safeGet = <T,>(value: T | null | undefined, fallback: T): T => {
-  return value !== null && value !== undefined ? value : fallback
-}
-
-const parseJsonResponse = async (res: Response) => {
-  const text = await res.text()
-  if (!text) {
-    return { json: null as any, text: "" }
-  }
-  try {
-    return { json: JSON.parse(text), text }
-  } catch {
-    return { json: null as any, text }
-  }
-}
-
-const createDefaultTransaction = (): Transaction => {
-  // Keep snake_case fields aligned to backend
-  return {
-    item_type: "",
-    quantity: 0,
-    transaction_type: "deplete",
-    notes: "",
-    transaction_date: new Date().toISOString(),
-    user_id: "unknown",
-    price: 0,
-    total_cost: 0,
-    unit: "kg",
-    location_id: null,
-    id: undefined as any, // optional
-  } as Transaction
-}
 
 export default function InventorySystem() {
   // UI / paging
@@ -423,6 +275,7 @@ export default function InventorySystem() {
   const [intelligenceBrief, setIntelligenceBrief] = useState<IntelligenceBrief | null>(null)
   const [intelligenceLoading, setIntelligenceLoading] = useState(false)
   const [intelligenceError, setIntelligenceError] = useState<string | null>(null)
+  const hasTrackedInsightViewRef = useRef(false)
   const [onboardingStatus, setOnboardingStatus] = useState({
     locations: false,
     inventory: false,
@@ -2667,7 +2520,24 @@ export default function InventorySystem() {
           throw new Error(data?.error || "Failed to load intelligence brief")
         }
         if (!ignore) {
-          setIntelligenceBrief(data as IntelligenceBrief)
+          const brief = data as IntelligenceBrief
+          setIntelligenceBrief(brief)
+          const highlightCount = Array.isArray(brief.highlights) ? brief.highlights.length : 0
+          const actionCount = Array.isArray(brief.actions) ? brief.actions.length : 0
+          const hasInsight = highlightCount > 0 || actionCount > 0 || Boolean(brief.reconciliation)
+          if (!hasTrackedInsightViewRef.current && hasInsight) {
+            posthog.capture("funnel_first_dashboard_insight_viewed", {
+              source: "intelligence-brief",
+              highlight_count: highlightCount,
+              action_count: actionCount,
+              has_reconciliation: Boolean(brief.reconciliation),
+              fiscal_year_start: currentFiscalYear.startDate,
+              fiscal_year_end: currentFiscalYear.endDate,
+              tenant_id: tenantId || "global",
+              role: effectiveRole || "unknown",
+            })
+            hasTrackedInsightViewRef.current = true
+          }
         }
       } catch (error: any) {
         if (!ignore) {
@@ -2685,7 +2555,7 @@ export default function InventorySystem() {
     return () => {
       ignore = true
     }
-  }, [canShowIntelligence, currentFiscalYear.endDate, currentFiscalYear.startDate, tenantId])
+  }, [canShowIntelligence, currentFiscalYear.endDate, currentFiscalYear.startDate, effectiveRole, tenantId])
 
   const commandStripItems = useMemo(() => {
     const processingTotalKg = processingTotals.arabicaKg + processingTotals.robustaKg
@@ -2885,6 +2755,10 @@ export default function InventorySystem() {
     (tabs: string[]) => DEFAULT_DASHBOARD_TAB_PRIORITY.find((tab) => tabs.includes(tab)) || tabs[0],
     [],
   )
+
+  useEffect(() => {
+    hasTrackedInsightViewRef.current = false
+  }, [effectiveRole, tenantId])
 
   useEffect(() => {
     if (!tenantId || !canShowProcessing) return
@@ -3954,7 +3828,7 @@ export default function InventorySystem() {
             <SelectTrigger className="w-full h-11 rounded-xl border-black/5 bg-white focus-visible:ring-2 focus-visible:ring-emerald-200">
               <SelectValue placeholder="Select item type" />
             </SelectTrigger>
-            <SelectContent className="max-h-[40vh] overflow-y-auto">
+            <SelectContent className="z-[70] max-h-[40vh] overflow-y-auto">
               {allItemTypesForDropdown.map((type) => (
                 <SelectItem key={type} value={type}>
                   {type}
@@ -3986,7 +3860,7 @@ export default function InventorySystem() {
             <SelectTrigger className="w-full h-11 rounded-xl border-black/5 bg-white focus-visible:ring-2 focus-visible:ring-emerald-200">
               <SelectValue placeholder={locations.length ? "Select location" : "No locations yet"} />
             </SelectTrigger>
-            <SelectContent className="max-h-[40vh] overflow-y-auto">
+            <SelectContent className="z-[70] max-h-[40vh] overflow-y-auto">
               <SelectItem value={LOCATION_UNASSIGNED}>{UNASSIGNED_LABEL}</SelectItem>
               {locations.map((loc) => (
                 <SelectItem key={loc.id} value={loc.id}>
