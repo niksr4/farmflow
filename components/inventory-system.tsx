@@ -452,7 +452,7 @@ export default function InventorySystem() {
 
   useEffect(() => {
     if (!tenantId) return
-    if (activeTab !== "accounts" && activeTab !== "billing" && activeTab !== "balance-sheet") {
+    if (activeTab !== "accounts" && activeTab !== "billing" && activeTab !== "balance-sheet" && activeTab !== "home") {
       setAccountsTotalsLoading(false)
       return
     }
@@ -2748,6 +2748,234 @@ export default function InventorySystem() {
         icon: tabMeta[tab]?.icon || Home,
       }))
   }, [tabMeta, visibleTabs])
+  type ExecutionOutcomeStatus = "good" | "attention" | "blocked"
+  type ExecutionOutcomeCheck = {
+    id: string
+    title: string
+    goal: string
+    metric: string
+    status: ExecutionOutcomeStatus
+    actionLabel: string
+    actionTab: string
+  }
+  const executionOutcomeTone: Record<ExecutionOutcomeStatus, string> = {
+    good: "border-emerald-200 bg-emerald-50 text-emerald-700",
+    attention: "border-amber-200 bg-amber-50 text-amber-700",
+    blocked: "border-rose-200 bg-rose-50 text-rose-700",
+  }
+  const executionOutcomeLabel: Record<ExecutionOutcomeStatus, string> = {
+    good: "Strong",
+    attention: "Needs Attention",
+    blocked: "Blocked",
+  }
+  const recentThirtyDayTransactions = useMemo(() => {
+    const cutoff = Date.now() - 30 * 24 * 60 * 60 * 1000
+    return transactions.filter((tx) => {
+      const parsed = tx.transaction_date ? parseCustomDateString(tx.transaction_date) : null
+      if (!parsed) return false
+      return parsed.getTime() >= cutoff
+    })
+  }, [transactions])
+  const availableExportDatasetCount = useMemo(() => {
+    const datasets = new Set<string>()
+    if (canShowProcessing) datasets.add("processing")
+    if (canShowDispatch) datasets.add("dispatch")
+    if (canShowSales) datasets.add("sales")
+    if (canShowPepper) datasets.add("pepper")
+    if (canShowRainfall) datasets.add("rainfall")
+    if (showTransactionHistory) datasets.add("transactions")
+    if (canShowInventory) datasets.add("inventory")
+    if (canShowAccounts) {
+      datasets.add("labor")
+      datasets.add("expenses")
+    }
+    if (canShowDispatch || canShowSales || canShowSeason) datasets.add("reconciliation")
+    if (canShowReceivables) datasets.add("receivables-aging")
+    if (canShowAccounts || canShowSales || canShowSeason) datasets.add("pnl-monthly")
+    return datasets.size
+  }, [
+    canShowAccounts,
+    canShowDispatch,
+    canShowInventory,
+    canShowPepper,
+    canShowProcessing,
+    canShowRainfall,
+    canShowReceivables,
+    canShowSales,
+    canShowSeason,
+    showTransactionHistory,
+  ])
+  const executionOutcomeChecks = useMemo<ExecutionOutcomeCheck[]>(() => {
+    const pct = (value: number, total: number) => (total > 0 ? Math.round((value / total) * 100) : null)
+    const pickActionTab = (preferredTabs: string[]) =>
+      preferredTabs.find((tab) => visibleTabs.includes(tab)) || "home"
+    const hasTaggedLocation = (tx: Transaction) => {
+      const locationId = String(tx.location_id || "").trim()
+      return Boolean(locationId && locationId !== LOCATION_UNASSIGNED)
+    }
+    const hasNotes = (tx: Transaction) => String(tx.notes || "").trim().length > 0
+    const hasRequiredFields = (tx: Transaction) =>
+      String(tx.item_type || "").trim().length > 0 &&
+      Number(tx.quantity) > 0 &&
+      String(tx.transaction_type || "").trim().length > 0 &&
+      hasTaggedLocation(tx)
+
+    const structuredTaskCount = recentThirtyDayTransactions.filter(hasRequiredFields).length
+    const structuredTaskPct = pct(structuredTaskCount, recentThirtyDayTransactions.length)
+    const missedFieldTaskStatus: ExecutionOutcomeStatus =
+      recentThirtyDayTransactions.length === 0
+        ? "attention"
+        : (structuredTaskPct || 0) >= 95
+          ? "good"
+          : (structuredTaskPct || 0) >= 80
+            ? "attention"
+            : "blocked"
+
+    const harvestKg = processingTotals.arabicaKg + processingTotals.robustaKg
+    const harvestStatus: ExecutionOutcomeStatus =
+      !canShowProcessing ? "blocked" : processingTotals.loading ? "attention" : harvestKg > 0 ? "good" : "attention"
+
+    const depleteTransactions = recentThirtyDayTransactions.filter((tx) =>
+      String(tx.transaction_type || "").toLowerCase().includes("deplet"),
+    )
+    const taggedDepleteTransactions = depleteTransactions.filter((tx) => hasTaggedLocation(tx) && Number(tx.quantity) > 0)
+    const inputTrackingPct = pct(taggedDepleteTransactions.length, depleteTransactions.length)
+    const inputTrackingStatus: ExecutionOutcomeStatus =
+      !showTransactionHistory
+        ? "blocked"
+        : depleteTransactions.length === 0
+          ? "attention"
+          : (inputTrackingPct || 0) >= 90
+            ? "good"
+            : (inputTrackingPct || 0) >= 70
+              ? "attention"
+              : "blocked"
+
+    const laborSharePct =
+      accountsTotals.grandTotal > 0 ? Math.round((accountsTotals.laborTotal / accountsTotals.grandTotal) * 100) : null
+    const laborVisibilityStatus: ExecutionOutcomeStatus =
+      !canShowAccounts
+        ? "blocked"
+        : accountsTotalsLoading
+          ? "attention"
+          : accountsTotals.laborTotal > 0
+            ? "good"
+            : "attention"
+
+    const notesCoveragePct = pct(
+      recentThirtyDayTransactions.filter((tx) => hasNotes(tx)).length,
+      recentThirtyDayTransactions.length,
+    )
+    const chaosReductionStatus: ExecutionOutcomeStatus =
+      recentThirtyDayTransactions.length === 0
+        ? "attention"
+        : (notesCoveragePct || 0) >= 70 && availableExportDatasetCount >= 4
+          ? "good"
+          : (notesCoveragePct || 0) >= 45 && availableExportDatasetCount >= 3
+            ? "attention"
+            : "blocked"
+
+    const ownerReportReady = canShowSeason && (canShowBalanceSheet || canShowAccounts)
+    const exporterReportReady = canShowDispatch && canShowSales && (canShowBilling || canShowReceivables)
+    const managerReportReady = canShowInventory && canShowProcessing && (canShowAccounts || showTransactionHistory)
+    const audienceReadyCount = [ownerReportReady, exporterReportReady, managerReportReady].filter(Boolean).length
+    const cleanerReportsStatus: ExecutionOutcomeStatus =
+      audienceReadyCount >= 3 ? "good" : audienceReadyCount >= 2 ? "attention" : "blocked"
+
+    return [
+      {
+        id: "missed-field-tasks",
+        title: "Fewer Missed Field Tasks",
+        goal: "Ensure field teams capture complete, location-tagged entries.",
+        metric:
+          recentThirtyDayTransactions.length === 0
+            ? "No inventory tasks logged in last 30 days."
+            : `${structuredTaskPct || 0}% of recent inventory tasks are complete`,
+        status: missedFieldTaskStatus,
+        actionLabel: "Open Transactions",
+        actionTab: pickActionTab(["transactions", "inventory"]),
+      },
+      {
+        id: "better-harvest-records",
+        title: "Better Harvest Records",
+        goal: "Track harvest and processing output consistently through the season.",
+        metric: !canShowProcessing
+          ? "Processing module is disabled."
+          : processingTotals.loading
+            ? "Loading processing totals..."
+            : `${formatNumber(harvestKg, 0)} kg harvest output logged`,
+        status: harvestStatus,
+        actionLabel: "Open Processing",
+        actionTab: pickActionTab(["processing", "season"]),
+      },
+      {
+        id: "input-usage-tracking",
+        title: "Input Usage Tracking",
+        goal: "Tie depleting usage to specific locations for accountability.",
+        metric:
+          depleteTransactions.length === 0
+            ? "No depleting entries logged in last 30 days."
+            : `${inputTrackingPct || 0}% of depleting entries are location-tagged`,
+        status: inputTrackingStatus,
+        actionLabel: "Open Inventory",
+        actionTab: pickActionTab(["inventory", "transactions"]),
+      },
+      {
+        id: "labor-visibility",
+        title: "Labor Visibility",
+        goal: "Keep labor spend visible for day-to-day decisions.",
+        metric: !canShowAccounts
+          ? "Accounts module is disabled."
+          : accountsTotalsLoading
+            ? "Loading labor totals..."
+            : `${formatCurrency(accountsTotals.laborTotal, 0)} labor tracked${laborSharePct !== null ? ` (${laborSharePct}% of spend)` : ""}`,
+        status: laborVisibilityStatus,
+        actionLabel: "Open Accounts",
+        actionTab: pickActionTab(["accounts", "balance-sheet"]),
+      },
+      {
+        id: "less-chaos",
+        title: "Less Spreadsheet / WhatsApp Chaos",
+        goal: "Keep updates structured in-app with reusable exports.",
+        metric:
+          recentThirtyDayTransactions.length === 0
+            ? `${availableExportDatasetCount} CSV exports ready for operations`
+            : `${notesCoveragePct || 0}% entries include notes · ${availableExportDatasetCount} CSV exports ready`,
+        status: chaosReductionStatus,
+        actionLabel: "Open Dashboard",
+        actionTab: "home",
+      },
+      {
+        id: "cleaner-reports",
+        title: "Cleaner Reports for Owner / Exporter / Manager",
+        goal: "Ensure decision-ready views exist for each leadership role.",
+        metric: `${audienceReadyCount}/3 role views covered (owner, exporter, manager)`,
+        status: cleanerReportsStatus,
+        actionLabel: "Open Season",
+        actionTab: pickActionTab(["season", "accounts", "dispatch"]),
+      },
+    ]
+  }, [
+    accountsTotals.grandTotal,
+    accountsTotals.laborTotal,
+    accountsTotalsLoading,
+    availableExportDatasetCount,
+    canShowAccounts,
+    canShowBalanceSheet,
+    canShowBilling,
+    canShowDispatch,
+    canShowInventory,
+    canShowProcessing,
+    canShowReceivables,
+    canShowSales,
+    canShowSeason,
+    processingTotals.arabicaKg,
+    processingTotals.loading,
+    processingTotals.robustaKg,
+    recentThirtyDayTransactions,
+    showTransactionHistory,
+    visibleTabs,
+  ])
   const getPreferredDefaultTab = useCallback(
     (tabs: string[]) => DEFAULT_DASHBOARD_TAB_PRIORITY.find((tab) => tabs.includes(tab)) || tabs[0],
     [],
@@ -5013,6 +5241,41 @@ export default function InventorySystem() {
                 </CardContent>
               </Card>
             )}
+
+            <Card className="border-black/5 bg-white/90">
+              <CardHeader className="pb-3">
+                <CardTitle>Execution Scorecard</CardTitle>
+                <CardDescription>
+                  Daily guardrails to reduce missed tasks, improve harvest tracking, and keep reports decision-ready.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                {executionOutcomeChecks.map((check) => (
+                  <div key={check.id} className="rounded-xl border border-black/5 bg-white p-3">
+                    <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                      <div className="space-y-1">
+                        <p className="text-sm font-semibold text-neutral-900">{check.title}</p>
+                        <p className="text-xs text-muted-foreground">{check.goal}</p>
+                      </div>
+                      <Badge variant="outline" className={cn("w-fit", executionOutcomeTone[check.status])}>
+                        {executionOutcomeLabel[check.status]}
+                      </Badge>
+                    </div>
+                    <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                      <p className="text-sm text-neutral-700">{check.metric}</p>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="w-full bg-white sm:w-auto"
+                        onClick={() => openDrilldown({ tab: check.actionTab })}
+                      >
+                        {check.actionLabel}
+                      </Button>
+                    </div>
+                  </div>
+                ))}
+              </CardContent>
+            </Card>
 
             {showDataToolsPanel && (canShowProcessing || canShowDispatch || canShowSales || canShowReceivables || canShowAccounts) && (
               <Card className="border-black/5 bg-white/90">
