@@ -20,6 +20,7 @@ import { toast } from "sonner"
 import { getCurrentFiscalYear, getAvailableFiscalYears, type FiscalYear } from "@/lib/fiscal-year-utils"
 import { formatDateOnly } from "@/lib/date-utils"
 import { formatCurrency, formatNumber } from "@/lib/format"
+import { cn } from "@/lib/utils"
 
 interface AccountActivity {
   code: string
@@ -684,6 +685,12 @@ export default function AccountsPage({ showDataToolsControls = false }: Accounts
     (laborCount || laborDeployments.length) + (consumablesCount || consumableDeployments.length)
   const hasAnyData = totalEntries > 0
   const canExport = hasAnyData && !summaryLoading && !laborLoading && !consumablesLoading && !exportDateRangeError
+  const exportDisabledReason = useMemo(() => {
+    if (exportDateRangeError) return exportDateRangeError
+    if (summaryLoading || laborLoading || consumablesLoading) return "Loading latest accounts data..."
+    if (!hasAnyData) return "No labor or expense records yet. Add one entry to enable export."
+    return null
+  }, [consumablesLoading, exportDateRangeError, hasAnyData, laborLoading, summaryLoading])
   const filteredLaborTotal = summaryTotals.laborTotal
   const filteredOtherExpensesTotal = summaryTotals.otherTotal
   const filteredGrandTotal = summaryTotals.grandTotal
@@ -950,13 +957,9 @@ export default function AccountsPage({ showDataToolsControls = false }: Accounts
             >
               <Coins className="mr-2 h-4 w-4" /> Export QIF
             </Button>
-            {exportDateRangeError ? (
-              <p className="w-full text-xs text-rose-600">{exportDateRangeError}</p>
-            ) : (
-              <p className="w-full text-xs text-muted-foreground">
-                Optional date filter applies to both exports.
-              </p>
-            )}
+            <p className={cn("w-full text-xs", exportDateRangeError ? "text-rose-600" : "text-muted-foreground")}>
+              {exportDisabledReason || "Optional date filter applies to both exports."}
+            </p>
           </CardContent>
         </Card>
       )}

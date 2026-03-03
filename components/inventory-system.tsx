@@ -740,6 +740,7 @@ export default function InventorySystem() {
 
   // computed lists
   const allItemTypesForDropdown = Array.from(new Set([...inventory.map((i) => i.name), ...transactions.map((t) => t.item_type)])).sort().filter(Boolean)
+  const hasMovementItemTypes = allItemTypesForDropdown.length > 0
 
   const filteredAndSortedInventory = inventory
     .filter((item) => item.name && item.name.toLowerCase().includes(inventorySearchTerm.toLowerCase()))
@@ -2243,10 +2244,6 @@ export default function InventorySystem() {
       setDataToolsDataset(defaultDataset)
     }
   }, [activeTab, dataToolsDataset])
-
-  useEffect(() => {
-    setShowDataToolsPanel(false)
-  }, [activeTab])
 
   const selectedDataToolsConfig = useMemo(
     () => EXPORT_DATASET_MAP[dataToolsDataset] || EXPORT_DATASETS[0],
@@ -3818,6 +3815,7 @@ export default function InventorySystem() {
             </TooltipProvider>
           </div>
           <Select
+            disabled={!hasMovementItemTypes}
             value={newTransaction?.item_type || ""}
             onValueChange={(value) => {
               handleFieldChange("item_type", value)
@@ -3826,16 +3824,27 @@ export default function InventorySystem() {
             }}
           >
             <SelectTrigger className="w-full h-11 rounded-xl border-black/5 bg-white focus-visible:ring-2 focus-visible:ring-emerald-200">
-              <SelectValue placeholder="Select item type" />
+              <SelectValue placeholder={hasMovementItemTypes ? "Select item type" : "No items yet"} />
             </SelectTrigger>
             <SelectContent className="z-[70] max-h-[40vh] overflow-y-auto">
-              {allItemTypesForDropdown.map((type) => (
-                <SelectItem key={type} value={type}>
-                  {type}
+              {hasMovementItemTypes ? (
+                allItemTypesForDropdown.map((type) => (
+                  <SelectItem key={type} value={type}>
+                    {type}
+                  </SelectItem>
+                ))
+              ) : (
+                <SelectItem value="__no_items" disabled>
+                  Add an inventory item first
                 </SelectItem>
-              ))}
+              )}
             </SelectContent>
           </Select>
+          {!hasMovementItemTypes && (
+            <p className="text-xs text-neutral-500">
+              No inventory item types yet. Add an inventory item or restock first.
+            </p>
+          )}
         </div>
 
         <div className="space-y-2">
@@ -5387,7 +5396,7 @@ export default function InventorySystem() {
           {canShowInventory && (
             <TabsContent value="inventory" className="space-y-6" forceMount={isTabLoaded("inventory") ? true : undefined}>
               <div className="grid grid-cols-1 gap-6 lg:grid-cols-12 lg:items-start">
-                <div className="space-y-6 lg:col-span-8">
+                <div className="order-2 space-y-6 lg:order-1 lg:col-span-8">
                   <div className="rounded-2xl border border-black/5 bg-white p-6 shadow-sm">
                     <div className="mb-6 flex flex-col gap-4">
                       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -5582,9 +5591,9 @@ export default function InventorySystem() {
                   </div>
                 </div>
 
-                <div className="space-y-6 lg:col-span-4 lg:self-start">
+                <div className="order-1 flex flex-col gap-6 lg:order-2 lg:col-span-4 lg:self-start">
                   {canShowSeason && (
-                    <Card className="rounded-xl border border-black/5 bg-white shadow-sm">
+                    <Card className="order-2 rounded-xl border border-black/5 bg-white shadow-sm lg:order-1">
                       <CardHeader className="flex flex-col gap-2 pb-3">
                         <div className="space-y-1">
                           <CardTitle className="flex items-center gap-2 text-sm font-semibold text-neutral-900">
@@ -5662,7 +5671,7 @@ export default function InventorySystem() {
                     </Card>
                   )}
 
-                  <Card className="rounded-2xl border border-black/5 bg-white shadow-sm">
+                  <Card className="order-1 rounded-2xl border border-black/5 bg-white shadow-sm lg:order-2">
                     <CardHeader className="space-y-1">
                       <CardTitle className="text-base font-semibold text-neutral-900">Actions</CardTitle>
                       <CardDescription className="text-xs text-neutral-500">
