@@ -1,6 +1,7 @@
 import React, { Suspense } from "react"
 import type { Metadata, Viewport } from "next"
 import { Fraunces, Manrope } from "next/font/google"
+import Script from "next/script"
 import "./globals.css"
 import { ThemeProvider } from "@/components/theme-provider"
 import { AuthProvider } from "@/hooks/use-auth"
@@ -56,6 +57,13 @@ export default function RootLayout({
             <Suspense fallback={null}>
               <PostHogAuthSync />
             </Suspense>
+            <Script async src="https://www.googletagmanager.com/gtag/js?id=G-X0RB06WXE9" />
+            <Script id="ga4-google-tag">
+              {`window.dataLayer = window.dataLayer || [];
+function gtag(){dataLayer.push(arguments);}
+gtag('js', new Date());
+gtag('config', 'G-X0RB06WXE9');`}
+            </Script>
             {children}
             <PwaInstallPrompt />
             <BrandWatermark />
