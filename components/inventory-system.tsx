@@ -4559,7 +4559,7 @@ export default function InventorySystem() {
               className={cn(
                 "gap-2",
                 isMobile
-                  ? "flex snap-x snap-mandatory overflow-x-auto whitespace-nowrap no-scrollbar"
+                  ? "flex snap-x snap-mandatory overflow-x-auto no-scrollbar"
                   : "grid grid-cols-1 gap-3 md:grid-cols-3",
               )}
             >
@@ -4576,9 +4576,14 @@ export default function InventorySystem() {
                   )}
                 >
                   <Factory className={cn("h-5 w-5", activeTabGroup === "operations" ? "text-white" : "text-emerald-700")} />
-                  <div>
+                  <div className="min-w-0">
                     <p className="text-base font-semibold">Operations</p>
-                    <p className={cn("text-xs", activeTabGroup === "operations" ? "text-emerald-100" : "text-emerald-700/80")}>
+                    <p
+                      className={cn(
+                        "text-xs whitespace-normal break-words leading-snug",
+                        activeTabGroup === "operations" ? "text-emerald-100" : "text-emerald-700/80",
+                      )}
+                    >
                       Inventory, processing, dispatch, sales
                     </p>
                   </div>
@@ -4598,9 +4603,14 @@ export default function InventorySystem() {
                   )}
                 >
                   <Scale className={cn("h-5 w-5", activeTabGroup === "finance" ? "text-white" : "text-amber-700")} />
-                  <div>
+                  <div className="min-w-0">
                     <p className="text-base font-semibold">Finance</p>
-                    <p className={cn("text-xs", activeTabGroup === "finance" ? "text-amber-100" : "text-amber-700/80")}>
+                    <p
+                      className={cn(
+                        "text-xs whitespace-normal break-words leading-snug",
+                        activeTabGroup === "finance" ? "text-amber-100" : "text-amber-700/80",
+                      )}
+                    >
                       Accounts, balance sheet, receivables
                     </p>
                   </div>
@@ -4620,9 +4630,14 @@ export default function InventorySystem() {
                   )}
                 >
                   <BarChart3 className={cn("h-5 w-5", activeTabGroup === "insights" ? "text-white" : "text-cyan-700")} />
-                  <div>
+                  <div className="min-w-0">
                     <p className="text-base font-semibold">Insights</p>
-                    <p className={cn("text-xs", activeTabGroup === "insights" ? "text-cyan-100" : "text-cyan-700/80")}>
+                    <p
+                      className={cn(
+                        "text-xs whitespace-normal break-words leading-snug",
+                        activeTabGroup === "insights" ? "text-cyan-100" : "text-cyan-700/80",
+                      )}
+                    >
                       Season patterns, rainfall, AI analysis
                     </p>
                   </div>
@@ -4630,7 +4645,7 @@ export default function InventorySystem() {
               )}
             </div>
 
-            {activeTabGroup !== "dashboard" && activeSectionTabs.length > 0 && (
+            {!isMobile && activeTabGroup !== "dashboard" && activeSectionTabs.length > 0 && (
               <TabsList
                 className={cn(
                   "h-auto rounded-2xl border border-black/10 bg-neutral-50/90 p-2 shadow-inner",
