@@ -773,6 +773,10 @@ export async function GET(request: NextRequest) {
     }
 
     const sessionUser = await requireAnyModuleAccess(DATASET_TO_MODULES[dataset])
+    const sessionRole = String(sessionUser.role || "").toLowerCase()
+    if (sessionRole === "user") {
+      return NextResponse.json({ success: false, error: "Export not allowed for user role" }, { status: 403 })
+    }
     const tenantId = parseTenantId(searchParams.get("tenantId"), sessionUser.tenantId, sessionUser.role)
     if (!tenantId) {
       return NextResponse.json({ success: false, error: "tenantId is required" }, { status: 400 })

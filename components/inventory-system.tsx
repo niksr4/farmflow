@@ -368,6 +368,7 @@ export default function InventorySystem() {
   const isScopedUser = effectiveRole === "user"
   const showFinancialHomeCards = isAdmin || isOwner
   const canManageData = !isPreviewMode && (isAdmin || isOwner)
+  const showDataToolsControls = canManageData && showDataToolsPanel
   const isTenantLoading = status === "loading"
   const preventNegativeKey = (event: React.KeyboardEvent<HTMLInputElement>) => {
     if (event.key === "-" || event.key === "e" || event.key === "E") {
@@ -5011,142 +5012,139 @@ export default function InventorySystem() {
           </Card>
         )}
 
-        <div className="mb-4 flex justify-end">
-          <Button
-            type="button"
-            onClick={() => setShowDataToolsPanel((prev) => !prev)}
-            className="bg-emerald-700 hover:bg-emerald-800 text-white"
-          >
-            <Upload className="mr-2 h-4 w-4" />
-            {showDataToolsPanel ? "Hide Exports / Import" : "Exports / Import"}
-          </Button>
-        </div>
+        {canManageData && (
+          <>
+            <div className="mb-4 flex justify-end">
+              <Button
+                type="button"
+                onClick={() => setShowDataToolsPanel((prev) => !prev)}
+                className="bg-emerald-700 hover:bg-emerald-800 text-white"
+              >
+                <Upload className="mr-2 h-4 w-4" />
+                {showDataToolsPanel ? "Hide Exports / Import" : "Exports / Import"}
+              </Button>
+            </div>
 
-        {showDataToolsPanel && (
-          <Card className="mb-6 border border-emerald-200/70 bg-gradient-to-br from-emerald-50/70 to-white/95">
-            <CardHeader className="pb-3">
-              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                <div>
-                  <CardTitle className="text-base">Exports & Import</CardTitle>
-                  <CardDescription>
-                    One clear export hub: CSV and QIF for accounts, plus tab-aware ops CSV and import templates.
-                  </CardDescription>
-                </div>
-                <Badge variant="outline" className="w-fit border-emerald-200 bg-white text-emerald-700">
-                  Mobile-first export hub
-                </Badge>
-              </div>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
-                <Button onClick={handleDataToolsExport} disabled={isExportingDataTools} className="justify-start">
-                  <Download className="mr-2 h-4 w-4" />
-                  {isExportingDataTools ? "Exporting Ops CSV..." : "Ops CSV Export"}
-                </Button>
-                {canManageData && canShowAccounts ? (
-                  <>
-                    <Button
-                      variant="outline"
-                      className="justify-start bg-white"
-                      onClick={() => handleRequestAccountsExport("csv")}
-                    >
-                      <FileText className="mr-2 h-4 w-4" />
-                      Accounts CSV
-                    </Button>
-                    <Button
-                      variant="outline"
-                      className="justify-start bg-white"
-                      onClick={() => handleRequestAccountsExport("qif")}
-                    >
-                      <Coins className="mr-2 h-4 w-4" />
-                      Accounts QIF
-                    </Button>
-                  </>
-                ) : (
-                  <p className="rounded-lg border border-dashed border-neutral-300 bg-white px-3 py-2 text-xs text-muted-foreground sm:col-span-2">
-                    Accounts CSV/QIF exports are visible to admin and owner roles.
-                  </p>
-                )}
-              </div>
-              {lastOpsExportFailure && (
-                <div data-testid="ops-export-failure-banner" className="rounded-lg border border-amber-200 bg-amber-50/90 p-3 text-sm">
-                  <p className="font-medium text-amber-900">Ops export failed</p>
-                  <p className="mt-1 text-xs text-amber-800">
-                    {lastOpsExportFailureLabel || "Selected dataset"}: {lastOpsExportFailure.message}
-                    {lastOpsExportFailure.occurredAt > 0
-                      ? ` (at ${new Date(lastOpsExportFailure.occurredAt).toLocaleTimeString()})`
-                      : ""}
-                  </p>
-                  <div className="mt-2 flex flex-wrap gap-2">
-                    <Button size="sm" variant="outline" className="bg-white" onClick={handleRetryLastOpsExport}>
-                      Retry export
-                    </Button>
-                    <Button size="sm" variant="ghost" className="text-amber-700" onClick={() => setLastOpsExportFailure(null)}>
-                      Dismiss
-                    </Button>
+            {showDataToolsControls && (
+              <Card className="mb-6 border border-emerald-200/70 bg-gradient-to-br from-emerald-50/70 to-white/95">
+                <CardHeader className="pb-3">
+                  <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                    <div>
+                      <CardTitle className="text-base">Exports & Import</CardTitle>
+                      <CardDescription>
+                        One clear export hub: CSV and QIF for accounts, plus tab-aware ops CSV and import templates.
+                      </CardDescription>
+                    </div>
+                    <Badge variant="outline" className="w-fit border-emerald-200 bg-white text-emerald-700">
+                      Mobile-first export hub
+                    </Badge>
                   </div>
-                </div>
-              )}
-              <div className="grid grid-cols-1 gap-3 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-end">
-                <div className="space-y-2">
-                  <Label className="text-xs uppercase tracking-[0.16em] text-neutral-500">Dataset</Label>
-                  <Select
-                    value={dataToolsDataset}
-                    onValueChange={(value) => {
-                      if (isExportDatasetId(value)) {
-                        setDataToolsDataset(value)
-                      }
-                    }}
-                  >
-                    <SelectTrigger className="h-10 bg-white">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent className="max-h-[45vh] overflow-y-auto">
-                      {EXPORT_DATASETS.map((datasetOption) => (
-                        <SelectItem key={datasetOption.id} value={datasetOption.id}>
-                          {datasetOption.label}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  <p className="text-xs text-muted-foreground">{selectedDataToolsConfig.description}</p>
-                </div>
-                <div className="flex flex-wrap gap-2 lg:justify-end">
-                  <Button
-                    variant="outline"
-                    onClick={handleDownloadDataTemplate}
-                    disabled={!selectedDataToolsTemplateConfig}
-                    className="bg-white"
-                  >
-                    <FileText className="mr-2 h-4 w-4" />
-                    Template
-                  </Button>
-                  {canManageData ? (
-                    <Button asChild variant="outline" className="bg-white">
-                      <Link href={dataToolsImportHref}>
-                        <Upload className="mr-2 h-4 w-4" />
-                        Import CSV
-                      </Link>
+                </CardHeader>
+                <CardContent className="space-y-3">
+                  <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+                    <Button onClick={handleDataToolsExport} disabled={isExportingDataTools} className="justify-start">
+                      <Download className="mr-2 h-4 w-4" />
+                      {isExportingDataTools ? "Exporting Ops CSV..." : "Ops CSV Export"}
                     </Button>
-                  ) : (
-                    <Button variant="outline" disabled className="bg-white">
-                      <Upload className="mr-2 h-4 w-4" />
-                      Import CSV
-                    </Button>
+                    {canShowAccounts ? (
+                      <>
+                        <Button
+                          variant="outline"
+                          className="justify-start bg-white"
+                          onClick={() => handleRequestAccountsExport("csv")}
+                        >
+                          <FileText className="mr-2 h-4 w-4" />
+                          Accounts CSV
+                        </Button>
+                        <Button
+                          variant="outline"
+                          className="justify-start bg-white"
+                          onClick={() => handleRequestAccountsExport("qif")}
+                        >
+                          <Coins className="mr-2 h-4 w-4" />
+                          Accounts QIF
+                        </Button>
+                      </>
+                    ) : (
+                      <p className="rounded-lg border border-dashed border-neutral-300 bg-white px-3 py-2 text-xs text-muted-foreground sm:col-span-2">
+                        Accounts module is disabled for this tenant.
+                      </p>
+                    )}
+                  </div>
+                  {lastOpsExportFailure && (
+                    <div data-testid="ops-export-failure-banner" className="rounded-lg border border-amber-200 bg-amber-50/90 p-3 text-sm">
+                      <p className="font-medium text-amber-900">Ops export failed</p>
+                      <p className="mt-1 text-xs text-amber-800">
+                        {lastOpsExportFailureLabel || "Selected dataset"}: {lastOpsExportFailure.message}
+                        {lastOpsExportFailure.occurredAt > 0
+                          ? ` (at ${new Date(lastOpsExportFailure.occurredAt).toLocaleTimeString()})`
+                          : ""}
+                      </p>
+                      <div className="mt-2 flex flex-wrap gap-2">
+                        <Button size="sm" variant="outline" className="bg-white" onClick={handleRetryLastOpsExport}>
+                          Retry export
+                        </Button>
+                        <Button size="sm" variant="ghost" className="text-amber-700" onClick={() => setLastOpsExportFailure(null)}>
+                          Dismiss
+                        </Button>
+                      </div>
+                    </div>
                   )}
-                </div>
-              </div>
-              {selectedDataToolsTemplateConfig ? (
-                <p className="text-xs text-muted-foreground">
-                  Template columns: {selectedDataToolsTemplateConfig.template.join(", ")}
-                </p>
-              ) : (
-                <p className="text-xs text-muted-foreground">
-                  No direct template for this export dataset. Use the import page to choose a supported dataset.
-                </p>
-              )}
-            </CardContent>
-          </Card>
+                  <div className="grid grid-cols-1 gap-3 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-end">
+                    <div className="space-y-2">
+                      <Label className="text-xs uppercase tracking-[0.16em] text-neutral-500">Dataset</Label>
+                      <Select
+                        value={dataToolsDataset}
+                        onValueChange={(value) => {
+                          if (isExportDatasetId(value)) {
+                            setDataToolsDataset(value)
+                          }
+                        }}
+                      >
+                        <SelectTrigger className="h-10 bg-white">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent className="max-h-[45vh] overflow-y-auto">
+                          {EXPORT_DATASETS.map((datasetOption) => (
+                            <SelectItem key={datasetOption.id} value={datasetOption.id}>
+                              {datasetOption.label}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <p className="text-xs text-muted-foreground">{selectedDataToolsConfig.description}</p>
+                    </div>
+                    <div className="flex flex-wrap gap-2 lg:justify-end">
+                      <Button
+                        variant="outline"
+                        onClick={handleDownloadDataTemplate}
+                        disabled={!selectedDataToolsTemplateConfig}
+                        className="bg-white"
+                      >
+                        <FileText className="mr-2 h-4 w-4" />
+                        Template
+                      </Button>
+                      <Button asChild variant="outline" className="bg-white">
+                        <Link href={dataToolsImportHref}>
+                          <Upload className="mr-2 h-4 w-4" />
+                          Import CSV
+                        </Link>
+                      </Button>
+                    </div>
+                  </div>
+                  {selectedDataToolsTemplateConfig ? (
+                    <p className="text-xs text-muted-foreground">
+                      Template columns: {selectedDataToolsTemplateConfig.template.join(", ")}
+                    </p>
+                  ) : (
+                    <p className="text-xs text-muted-foreground">
+                      No direct template for this export dataset. Use the import page to choose a supported dataset.
+                    </p>
+                  )}
+                </CardContent>
+              </Card>
+            )}
+          </>
         )}
 
         {isOwner && (
@@ -6085,7 +6083,7 @@ export default function InventorySystem() {
                           <p className="text-xs text-neutral-500">Totals for {selectedLocationLabel}.</p>
                         </div>
                         <div className="flex flex-wrap gap-2">
-                          {showDataToolsPanel && (
+                          {showDataToolsControls && (
                             <Button size="sm" variant="outline" onClick={exportInventoryToCSV} className="h-10 bg-transparent">
                               <Download className="mr-2 h-4 w-4" /> Export
                             </Button>
@@ -6398,7 +6396,7 @@ export default function InventorySystem() {
                         </span>
                         <span className="text-xs text-neutral-400">Inventory</span>
                       </button>
-                      {showDataToolsPanel && (
+                      {showDataToolsControls && (
                         <button
                           type="button"
                           onClick={exportInventoryToCSV}
@@ -6470,7 +6468,7 @@ export default function InventorySystem() {
                     </h2>
                     <p className="text-xs text-muted-foreground">Inventory adjustments and usage across the estate.</p>
                   </div>
-                  {showDataToolsPanel && (
+                  {showDataToolsControls && (
                     <div className="flex gap-2">
                       <Button size="sm" variant="outline" onClick={exportToCSV} className="h-10 bg-transparent"><Download className="mr-2 h-4 w-4" /> Export</Button>
                     </div>
@@ -6737,7 +6735,7 @@ export default function InventorySystem() {
           {canShowAccounts && (
             <TabsContent value="accounts" className="space-y-6" forceMount={isTabLoaded("accounts") ? true : undefined}>
               <AccountsPage
-                showDataToolsControls={showDataToolsPanel}
+                showDataToolsControls={showDataToolsControls}
                 requestedExport={accountsExportRequest}
                 onRequestedExportHandled={handleAccountsExportRequestHandled}
               />
@@ -6758,17 +6756,17 @@ export default function InventorySystem() {
 
           {canShowProcessing && (
             <TabsContent value="processing" className="space-y-6" forceMount={isTabLoaded("processing") ? true : undefined}>
-              <ProcessingTab showDataToolsControls={showDataToolsPanel} />
+              <ProcessingTab showDataToolsControls={showDataToolsControls} />
             </TabsContent>
           )}
           {canShowDispatch && (
             <TabsContent value="dispatch" className="space-y-6" forceMount={isTabLoaded("dispatch") ? true : undefined}>
-              <DispatchTab showDataToolsControls={showDataToolsPanel} />
+              <DispatchTab showDataToolsControls={showDataToolsControls} />
             </TabsContent>
           )}
           {canShowSales && (
             <TabsContent value="sales" className="space-y-6" forceMount={isTabLoaded("sales") ? true : undefined}>
-              <SalesTab showDataToolsControls={showDataToolsPanel} />
+              <SalesTab showDataToolsControls={showDataToolsControls} />
             </TabsContent>
           )}
           {canShowOtherSales && (
@@ -6807,7 +6805,7 @@ export default function InventorySystem() {
                 username={user?.username || "system"}
                 showRainfall={canShowRainfall}
                 showWeather={canShowWeather}
-                showDataToolsControls={showDataToolsPanel}
+                showDataToolsControls={showDataToolsControls}
               />
             </TabsContent>
           )}
@@ -6873,7 +6871,7 @@ export default function InventorySystem() {
           )}
           {canShowBilling && (
             <TabsContent value="billing" className="space-y-6" forceMount={isTabLoaded("billing") ? true : undefined}>
-              <BillingTab showDataToolsControls={showDataToolsPanel} />
+              <BillingTab showDataToolsControls={showDataToolsControls} />
             </TabsContent>
           )}
         </Tabs>
