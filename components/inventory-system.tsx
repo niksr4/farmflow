@@ -894,7 +894,13 @@ export default function InventorySystem() {
   }, [requestWriteQueueStatus])
 
   // computed lists
-  const allItemTypesForDropdown = Array.from(new Set([...inventory.map((i) => i.name), ...transactions.map((t) => t.item_type)])).sort().filter(Boolean)
+  const allItemTypesForDropdown = Array.from(
+    new Set(
+      [...inventory.map((i) => String(i.name || "").trim()), ...transactions.map((t) => String(t.item_type || "").trim())].filter(
+        Boolean,
+      ),
+    ),
+  ).sort()
   const hasMovementItemTypes = allItemTypesForDropdown.length > 0
 
   const filteredAndSortedInventory = inventory
@@ -1982,7 +1988,7 @@ export default function InventorySystem() {
   // helpers for transaction object safety
   const ensureTransactionSafety = (transaction: Transaction | null): Transaction => {
     return {
-      item_type: safeGet(transaction?.item_type, ""),
+      item_type: String(safeGet(transaction?.item_type, "")).trim(),
       quantity: safeGet(Number(transaction?.quantity), 0),
       transaction_type: safeGet(transaction?.transaction_type, "deplete"),
       notes: safeGet(transaction?.notes, ""),
@@ -4356,7 +4362,7 @@ export default function InventorySystem() {
             value={newTransaction?.item_type || ""}
             onValueChange={(value) => {
               handleFieldChange("item_type", value)
-              const u = inventory.find((i) => i.name === value)?.unit || "kg"
+              const u = inventory.find((i) => String(i.name || "").trim() === value)?.unit || "kg"
               handleFieldChange("unit", u)
             }}
           >

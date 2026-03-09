@@ -39,6 +39,66 @@ const normalizeQuantity = (value: unknown) => {
   return Number((Math.round((numeric + Number.EPSILON) * 100) / 100).toFixed(2))
 }
 
+const normalizeItemType = (value: unknown) => String(value || "").trim().replace(/\s+/g, " ")
+
+type InventorySlotMatch = {
+  item_type: string
+  quantity: number
+  unit: string | null
+}
+
+const loadInventorySlotByNormalizedItem = async (
+  tenantContext: ReturnType<typeof normalizeTenantContext>,
+  normalizedItemType: string,
+  locationId: string | null,
+) => {
+  if (!normalizedItemType) return null
+  const rows = await runTenantQuery(
+    inventorySql,
+    tenantContext,
+    inventorySql`
+      SELECT item_type, COALESCE(quantity, 0) AS quantity, unit
+      FROM current_inventory
+      WHERE tenant_id = ${tenantContext.tenantId}
+        AND lower(btrim(item_type)) = lower(${normalizedItemType})
+        AND location_id IS NOT DISTINCT FROM ${locationId}
+      ORDER BY item_type ASC
+      LIMIT 1
+    `,
+  )
+  if (!rows?.length) return null
+  return {
+    item_type: String(rows[0].item_type || normalizedItemType),
+    quantity: Number(rows[0].quantity) || 0,
+    unit: rows[0].unit ? String(rows[0].unit) : null,
+  } satisfies InventorySlotMatch
+}
+
+const loadAnyInventorySlotByNormalizedItem = async (
+  tenantContext: ReturnType<typeof normalizeTenantContext>,
+  normalizedItemType: string,
+) => {
+  if (!normalizedItemType) return null
+  const rows = await runTenantQuery(
+    inventorySql,
+    tenantContext,
+    inventorySql`
+      SELECT item_type, COALESCE(quantity, 0) AS quantity, unit, location_id
+      FROM current_inventory
+      WHERE tenant_id = ${tenantContext.tenantId}
+        AND lower(btrim(item_type)) = lower(${normalizedItemType})
+      ORDER BY location_id NULLS FIRST, item_type ASC
+      LIMIT 1
+    `,
+  )
+  if (!rows?.length) return null
+  return {
+    item_type: String(rows[0].item_type || normalizedItemType),
+    quantity: Number(rows[0].quantity) || 0,
+    unit: rows[0].unit ? String(rows[0].unit) : null,
+  } satisfies InventorySlotMatch
+}
+
 export async function PUT(request: NextRequest) {
   try {
     const sessionUser = await requireModuleAccess("transactions")
@@ -49,8 +109,9 @@ export async function PUT(request: NextRequest) {
     const body = await request.json()
 
     const { id, item_type, quantity, transaction_type, notes, price, location_id } = body
+    const requestedItemType = normalizeItemType(item_type)
 
-    if (!id || !item_type || !quantity || !transaction_type) {
+    if (!id || !requestedItemType || !quantity || !transaction_type) {
       return NextResponse.json(
         {
           success: false,
@@ -135,49 +196,27 @@ export async function PUT(request: NextRequest) {
       }
 
       if (allowLegacyPooledFallback) {
-        const selectedSlotRows = await runTenantQuery(
-          inventorySql,
-          tenantContext,
-          inventorySql`
-            SELECT COALESCE(quantity, 0) AS quantity
-            FROM current_inventory
-            WHERE tenant_id = ${tenantContext.tenantId}
-              AND item_type = ${item_type}
-              AND location_id = ${requestedUsageLocationId}
-            LIMIT 1
-          `,
-        )
-        const pooledRows = await runTenantQuery(
-          inventorySql,
-          tenantContext,
-          inventorySql`
-            SELECT COALESCE(quantity, 0) AS quantity
-            FROM current_inventory
-            WHERE tenant_id = ${tenantContext.tenantId}
-              AND item_type = ${item_type}
-              AND location_id IS NULL
-            LIMIT 1
-          `,
-        )
+        const selectedSlotMatch = await loadInventorySlotByNormalizedItem(tenantContext, requestedItemType, requestedUsageLocationId)
+        const pooledSlotMatch = await loadInventorySlotByNormalizedItem(tenantContext, requestedItemType, null)
 
         const existingIsDeplete = isDepleteType(String(existingRow?.transaction_type || ""))
-        const existingItemType = String(existingRow?.item_type || "")
+        const existingItemType = normalizeItemType(existingRow?.item_type)
         const existingQty = Number(existingRow?.quantity) || 0
         const selectedEditAllowance =
           existingIsDeplete &&
-          existingItemType === item_type &&
+          existingItemType === requestedItemType &&
           existingStockLocationId === requestedUsageLocationId
             ? existingQty
             : 0
         const pooledEditAllowance =
           existingIsDeplete &&
-          existingItemType === item_type &&
+          existingItemType === requestedItemType &&
           existingStockLocationId === null
             ? existingQty
             : 0
 
-        const selectedSlotQty = (Number(selectedSlotRows?.[0]?.quantity) || 0) + selectedEditAllowance
-        const pooledQty = (Number(pooledRows?.[0]?.quantity) || 0) + pooledEditAllowance
+        const selectedSlotQty = (selectedSlotMatch?.quantity || 0) + selectedEditAllowance
+        const pooledQty = (pooledSlotMatch?.quantity || 0) + pooledEditAllowance
 
         if (selectedSlotQty + 0.0001 < quantityValue && pooledQty + 0.0001 >= quantityValue) {
           nextStockLocationId = null
@@ -192,13 +231,24 @@ export async function PUT(request: NextRequest) {
       notesValue = stripUsageLocationTag(notesValue)
     }
 
+    const effectiveSlotMatch =
+      (nextStockLocationId === null
+        ? await loadInventorySlotByNormalizedItem(tenantContext, requestedItemType, null)
+        : await loadInventorySlotByNormalizedItem(tenantContext, requestedItemType, nextStockLocationId)) ||
+      (requestedUsageLocationId && nextStockLocationId === null
+        ? await loadInventorySlotByNormalizedItem(tenantContext, requestedItemType, requestedUsageLocationId)
+        : null) ||
+      (await loadAnyInventorySlotByNormalizedItem(tenantContext, requestedItemType))
+
+    const canonicalItemType = effectiveSlotMatch?.item_type || requestedItemType
+
     const result = await runTenantQuery(
       inventorySql,
       tenantContext,
       inventorySql`
         UPDATE transaction_history
         SET
-          item_type = ${item_type},
+          item_type = ${canonicalItemType},
           quantity = ${quantityValue},
           transaction_type = ${normalizedType},
           notes = ${notesValue || ""},
@@ -228,8 +278,8 @@ export async function PUT(request: NextRequest) {
     if (existingItem) {
       affectedPairs.add(`${existingItem}::${existingLocation ?? "null"}`)
     }
-    if (item_type) {
-      affectedPairs.add(`${item_type}::${nextStockLocationId ?? "null"}`)
+    if (canonicalItemType) {
+      affectedPairs.add(`${canonicalItemType}::${nextStockLocationId ?? "null"}`)
     }
 
     for (const key of affectedPairs) {

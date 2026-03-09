@@ -44,6 +44,66 @@ const normalizeQuantity = (value: unknown) => {
   return Number((Math.round((numeric + Number.EPSILON) * 100) / 100).toFixed(2))
 }
 
+const normalizeItemType = (value: unknown) => String(value || "").trim().replace(/\s+/g, " ")
+
+type InventorySlotMatch = {
+  item_type: string
+  quantity: number
+  unit: string | null
+}
+
+const loadInventorySlotByNormalizedItem = async (
+  tenantContext: ReturnType<typeof normalizeTenantContext>,
+  normalizedItemType: string,
+  locationId: string | null,
+) => {
+  if (!normalizedItemType) return null
+  const rows = await runTenantQuery(
+    inventorySql,
+    tenantContext,
+    inventorySql`
+      SELECT item_type, COALESCE(quantity, 0) AS quantity, unit
+      FROM current_inventory
+      WHERE tenant_id = ${tenantContext.tenantId}
+        AND lower(btrim(item_type)) = lower(${normalizedItemType})
+        AND location_id IS NOT DISTINCT FROM ${locationId}
+      ORDER BY item_type ASC
+      LIMIT 1
+    `,
+  )
+  if (!rows?.length) return null
+  return {
+    item_type: String(rows[0].item_type || normalizedItemType),
+    quantity: Number(rows[0].quantity) || 0,
+    unit: rows[0].unit ? String(rows[0].unit) : null,
+  } satisfies InventorySlotMatch
+}
+
+const loadAnyInventorySlotByNormalizedItem = async (
+  tenantContext: ReturnType<typeof normalizeTenantContext>,
+  normalizedItemType: string,
+) => {
+  if (!normalizedItemType) return null
+  const rows = await runTenantQuery(
+    inventorySql,
+    tenantContext,
+    inventorySql`
+      SELECT item_type, COALESCE(quantity, 0) AS quantity, unit, location_id
+      FROM current_inventory
+      WHERE tenant_id = ${tenantContext.tenantId}
+        AND lower(btrim(item_type)) = lower(${normalizedItemType})
+      ORDER BY location_id NULLS FIRST, item_type ASC
+      LIMIT 1
+    `,
+  )
+  if (!rows?.length) return null
+  return {
+    item_type: String(rows[0].item_type || normalizedItemType),
+    quantity: Number(rows[0].quantity) || 0,
+    unit: rows[0].unit ? String(rows[0].unit) : null,
+  } satisfies InventorySlotMatch
+}
+
 export async function GET(request: NextRequest) {
   try {
     const sessionUser = await requireModuleAccess("transactions")
@@ -371,8 +431,9 @@ export async function POST(request: NextRequest) {
     const body = await request.json()
 
     const { item_type, quantity, transaction_type, notes, price, location_id, unit } = body
+    const requestedItemType = normalizeItemType(item_type)
 
-    if (!item_type || !quantity || !transaction_type) {
+    if (!requestedItemType || !quantity || !transaction_type) {
       return NextResponse.json(
         {
           success: false,
@@ -397,6 +458,8 @@ export async function POST(request: NextRequest) {
     let stockLocationValue: string | null = locationValue
     let notesValue = typeof notes === "string" ? notes : ""
     let pooledFallbackApplied = false
+    let selectedSlotMatch: InventorySlotMatch | null = null
+    let pooledSlotMatch: InventorySlotMatch | null = null
 
     const quantityValue = normalizeQuantity(quantity)
     if (!quantityValue || quantityValue <= 0) {
@@ -419,33 +482,11 @@ export async function POST(request: NextRequest) {
       }
 
       if (allowLegacyPooledFallback) {
-        const selectedSlotRows = await runTenantQuery(
-          inventorySql,
-          tenantContext,
-          inventorySql`
-            SELECT COALESCE(quantity, 0) AS quantity
-            FROM current_inventory
-            WHERE tenant_id = ${tenantContext.tenantId}
-              AND item_type = ${item_type}
-              AND location_id = ${requestedUsageLocationId}
-            LIMIT 1
-          `,
-        )
-        const selectedSlotQty = Number(selectedSlotRows?.[0]?.quantity) || 0
+        selectedSlotMatch = await loadInventorySlotByNormalizedItem(tenantContext, requestedItemType, requestedUsageLocationId)
+        const selectedSlotQty = selectedSlotMatch?.quantity || 0
         if (selectedSlotQty + 0.0001 < quantityValue) {
-          const pooledRows = await runTenantQuery(
-            inventorySql,
-            tenantContext,
-            inventorySql`
-              SELECT COALESCE(quantity, 0) AS quantity
-              FROM current_inventory
-              WHERE tenant_id = ${tenantContext.tenantId}
-                AND item_type = ${item_type}
-                AND location_id IS NULL
-              LIMIT 1
-            `,
-          )
-          const pooledQty = Number(pooledRows?.[0]?.quantity) || 0
+          pooledSlotMatch = await loadInventorySlotByNormalizedItem(tenantContext, requestedItemType, null)
+          const pooledQty = pooledSlotMatch?.quantity || 0
           if (pooledQty + 0.0001 >= quantityValue) {
             stockLocationValue = null
             pooledFallbackApplied = true
@@ -455,9 +496,22 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    const effectiveSlotMatch =
+      (stockLocationValue === null
+        ? pooledSlotMatch || (await loadInventorySlotByNormalizedItem(tenantContext, requestedItemType, null))
+        : selectedSlotMatch || (await loadInventorySlotByNormalizedItem(tenantContext, requestedItemType, stockLocationValue))) ||
+      (requestedUsageLocationId && stockLocationValue === null
+        ? await loadInventorySlotByNormalizedItem(tenantContext, requestedItemType, requestedUsageLocationId)
+        : null) ||
+      (await loadAnyInventorySlotByNormalizedItem(tenantContext, requestedItemType))
+
+    const canonicalItemType = effectiveSlotMatch?.item_type || requestedItemType
+
     const providedUnit = typeof unit === "string" ? unit.trim() : ""
-    let unitValue = providedUnit || "kg"
-    if (!providedUnit) {
+    let unitValue = providedUnit || effectiveSlotMatch?.unit || "kg"
+    if (normalizedType === "deplete" && effectiveSlotMatch?.unit) {
+      unitValue = effectiveSlotMatch.unit
+    } else if (!providedUnit) {
       const unitRows = await runTenantQuery(
         inventorySql,
         tenantContext,
@@ -465,7 +519,7 @@ export async function POST(request: NextRequest) {
           SELECT unit
           FROM current_inventory
           WHERE tenant_id = ${tenantContext.tenantId}
-            AND item_type = ${item_type}
+            AND item_type = ${canonicalItemType}
             AND location_id IS NOT DISTINCT FROM ${stockLocationValue}
           LIMIT 1
         `,
@@ -480,7 +534,7 @@ export async function POST(request: NextRequest) {
             SELECT unit
             FROM current_inventory
             WHERE tenant_id = ${tenantContext.tenantId}
-              AND item_type = ${item_type}
+              AND item_type = ${canonicalItemType}
               AND location_id = ${requestedUsageLocationId}
             LIMIT 1
           `,
@@ -512,7 +566,7 @@ export async function POST(request: NextRequest) {
         unit
       )
       VALUES (
-        ${item_type},
+        ${canonicalItemType},
         ${quantityValue},
         ${normalizedType},
         ${notesValue || ""},
