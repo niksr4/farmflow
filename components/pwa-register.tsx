@@ -29,6 +29,12 @@ const isSecureRuntime = () => {
   return window.isSecureContext || isLocalHost
 }
 
+const isStandaloneRuntime = () => {
+  if (typeof window === "undefined") return false
+  const iosStandalone = Boolean((window.navigator as Navigator & { standalone?: boolean }).standalone)
+  return iosStandalone || window.matchMedia("(display-mode: standalone)").matches
+}
+
 type ServiceWorkerMessage = {
   type?: string
   reason?: string
@@ -98,10 +104,16 @@ export default function PwaRegister() {
       window.dispatchEvent(new CustomEvent<ServiceWorkerMessage>(WRITE_QUEUE_STATUS_EVENT, { detail }))
     }
 
+    const resolveRuntimeConfig = () => ({
+      ...RUNTIME_SW_CONFIG,
+      // Keep read API cache/offline fallback for installed app mode only.
+      readApiCache: RUNTIME_SW_CONFIG.readApiCache && isStandaloneRuntime(),
+    })
+
     const syncRuntimeConfig = () => {
       postMessageToRegistration({
         type: "SET_RUNTIME_CONFIG",
-        config: RUNTIME_SW_CONFIG,
+        config: resolveRuntimeConfig(),
       })
     }
 

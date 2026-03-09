@@ -19,7 +19,7 @@ const REVIEW_REQUIRED_STATUSES = new Set([400, 404, 409, 410, 412, 422])
 let runtimeConfig = {
   navigationCache: true,
   staticAssetCache: true,
-  readApiCache: true,
+  readApiCache: false,
   writeQueue: true,
   readApiTimeoutMs: DEFAULT_READ_API_TIMEOUT_MS,
   writeTimeoutMs: DEFAULT_WRITE_TIMEOUT_MS,
@@ -472,10 +472,26 @@ const fetchWithTimeout = async (request, timeoutMs, init = undefined) => {
   }
 }
 
+const buildReadApiOfflineResponse = () =>
+  new Response(
+    JSON.stringify({
+      success: false,
+      error: "Network unavailable and no cached response",
+      offline: true,
+    }),
+    {
+      status: 503,
+      headers: {
+        "Content-Type": "application/json",
+        "X-FarmFlow-Offline": "1",
+      },
+    },
+  )
+
 const networkFirst = async (request, cacheName, timeoutMs) => {
   const cache = await caches.open(cacheName)
   try {
-    const response = await fetchWithTimeout(request, timeoutMs)
+    const response = await fetchWithTimeout(request.clone(), timeoutMs)
     if (response.status === 401 || response.status === 403) {
       await cache.delete(request)
       return response
@@ -485,9 +501,24 @@ const networkFirst = async (request, cacheName, timeoutMs) => {
     }
     return response
   } catch {
+    // If the timed fetch failed due to a slow network, retry once without timeout.
+    try {
+      const networkResponse = await fetch(request.clone())
+      if (networkResponse.status === 401 || networkResponse.status === 403) {
+        await cache.delete(request)
+        return networkResponse
+      }
+      if (shouldCacheResponse(networkResponse)) {
+        cache.put(request, networkResponse.clone())
+      }
+      return networkResponse
+    } catch {
+      // Continue to cached/offline fallback below.
+    }
+
     const cached = await cache.match(request)
     if (cached) return cached
-    throw new Error("Network unavailable and no cached response")
+    return buildReadApiOfflineResponse()
   }
 }
 
