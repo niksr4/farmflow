@@ -8,7 +8,6 @@ import { AuthProvider } from "@/hooks/use-auth"
 import BrandWatermark from "@/components/brand-watermark"
 import { Toaster } from "@/components/ui/toaster"
 import PwaRegister from "@/components/pwa-register"
-import PwaInstallPrompt from "@/components/pwa-install-prompt"
 import PostHogAuthSync from "@/components/posthog-auth-sync"
 
 const bodyFont = Manrope({ subsets: ["latin"], display: "swap", variable: "--font-body" })
@@ -43,16 +42,10 @@ export const metadata: Metadata = {
   description: "Coffee estate operations with traceability, yields, and buyer-ready reporting.",
   generator: "v0.dev",
   applicationName: "FarmFlow",
-  manifest: "/manifest.webmanifest",
   formatDetection: {
     telephone: false,
     email: false,
     address: false,
-  },
-  appleWebApp: {
-    capable: true,
-    statusBarStyle: "black-translucent",
-    title: "FarmFlow",
   },
   icons: {
     icon: [
@@ -64,10 +57,6 @@ export const metadata: Metadata = {
     ],
     shortcut: "/icon-light-32x32.png",
     apple: [{ url: "/apple-icon.png", sizes: "180x180", type: "image/png" }],
-  },
-  other: {
-    "mobile-web-app-capable": "yes",
-    "apple-mobile-web-app-capable": "yes",
   },
 }
 
@@ -99,7 +88,6 @@ gtag('js', new Date());
 gtag('config', 'G-X0RB06WXE9');`}
             </Script>
             {children}
-            <PwaInstallPrompt />
             <BrandWatermark />
             <Toaster />
             <PwaRegister />

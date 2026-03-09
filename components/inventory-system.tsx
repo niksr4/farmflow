@@ -805,8 +805,9 @@ export default function InventorySystem() {
     if (navigator.serviceWorker.controller) {
       navigator.serviceWorker.controller.postMessage(payload)
     }
-    void navigator.serviceWorker.ready
+    void navigator.serviceWorker.getRegistration()
       .then((registration) => {
+        if (!registration) return
         registration.active?.postMessage(payload)
         registration.waiting?.postMessage(payload)
         registration.installing?.postMessage(payload)
