@@ -5,9 +5,13 @@ import { authOptions } from "@/lib/auth"
 import { sql } from "@/lib/server/db"
 import { normalizeTenantContext, runTenantQuery } from "@/lib/server/tenant-db"
 
+const asErrorRecord = (error: unknown): Record<string, unknown> =>
+  error && typeof error === "object" ? (error as Record<string, unknown>) : {}
+
 const isMissingPasswordResetColumnError = (error: unknown) => {
-  const code = String((error as any)?.code || "")
-  const message = String((error as any)?.message || "")
+  const errorRecord = asErrorRecord(error)
+  const code = String(errorRecord.code || "")
+  const message = String(errorRecord.message || "")
   return code === "42703" || message.includes('column "password_reset_required" does not exist')
 }
 
@@ -15,6 +19,7 @@ export type SessionUser = {
   username: string
   role: "admin" | "user" | "owner"
   tenantId: string
+  sessionMode?: "app" | "web"
   mfaEnabled?: boolean
   mfaVerified?: boolean
   passwordResetRequired?: boolean
@@ -22,22 +27,29 @@ export type SessionUser = {
 
 export async function requireSessionUser(): Promise<SessionUser> {
   const session = await getServerSession(authOptions)
-  const user = session?.user as any
+  const user = session?.user
+
+  type UserLookupRow = {
+    role: SessionUser["role"]
+    tenant_id: string
+    password_reset_required: boolean
+  }
 
   if (user?.tenantId && user?.role) {
     return {
       username: String(user.name || ""),
       role: user.role,
       tenantId: String(user.tenantId),
-      mfaEnabled: Boolean((user as any).mfaEnabled),
-      mfaVerified: Boolean((user as any).mfaVerified),
-      passwordResetRequired: Boolean((user as any).passwordResetRequired),
+      sessionMode: user.sessionMode,
+      mfaEnabled: Boolean(user.mfaEnabled),
+      mfaVerified: Boolean(user.mfaVerified),
+      passwordResetRequired: Boolean(user.passwordResetRequired),
     }
   }
 
   if (user?.name && sql) {
     const ownerContext = normalizeTenantContext(undefined, "owner")
-    let rows: any[] = []
+    let rows: UserLookupRow[] = []
     try {
       rows = await runTenantQuery(
         sql,
@@ -48,12 +60,12 @@ export async function requireSessionUser(): Promise<SessionUser> {
           WHERE username = ${String(user.name)}
           LIMIT 1
         `,
-      )
+      ) as UserLookupRow[]
     } catch (error) {
       if (!isMissingPasswordResetColumnError(error)) {
         throw error
       }
-      rows = await runTenantQuery(
+      const fallbackRows = (await runTenantQuery(
         sql,
         ownerContext,
         sql`
@@ -62,16 +74,17 @@ export async function requireSessionUser(): Promise<SessionUser> {
           WHERE username = ${String(user.name)}
           LIMIT 1
         `,
-      )
-      rows = rows.map((row) => ({ ...row, password_reset_required: false }))
+      )) as Array<Omit<UserLookupRow, "password_reset_required">>
+      rows = fallbackRows.map((row) => ({ ...row, password_reset_required: false }))
     }
     if (rows.length) {
       return {
         username: String(user.name || ""),
-        role: String(rows[0].role) as SessionUser["role"],
+        role: rows[0].role,
         tenantId: String(rows[0].tenant_id),
-        mfaEnabled: Boolean((user as any)?.mfaEnabled),
-        mfaVerified: Boolean((user as any)?.mfaVerified),
+        sessionMode: user.sessionMode,
+        mfaEnabled: Boolean(user.mfaEnabled),
+        mfaVerified: Boolean(user.mfaVerified),
         passwordResetRequired: Boolean(rows[0].password_reset_required),
       }
     }

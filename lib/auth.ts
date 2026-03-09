@@ -2,20 +2,87 @@ import "server-only"
 
 import type { NextAuthOptions } from "next-auth"
 import CredentialsProvider from "next-auth/providers/credentials"
+import { decode as defaultJwtDecode, encode as defaultJwtEncode } from "next-auth/jwt"
 import { sql } from "@/lib/server/db"
 import { normalizeTenantContext, runTenantQuery } from "@/lib/server/tenant-db"
 import { hashPassword, verifyPassword } from "@/lib/passwords"
 import { logSecurityEvent } from "@/lib/server/security-events"
+import { checkRateLimit } from "@/lib/rate-limit"
+
+type SessionMode = "app" | "web"
+type FarmFlowRole = "admin" | "user" | "owner"
+
+type UserRow = {
+  id: string
+  username: string
+  role: FarmFlowRole
+  tenant_id: string
+  password_hash: string
+  password_reset_required: boolean
+}
+
+type CredentialsInput = {
+  username: string
+  password: string
+  sessionMode?: SessionMode
+}
+
+type RequestHeadersLike = Record<string, string | string[] | undefined>
+
+const asRecord = (value: unknown): Record<string, unknown> =>
+  value && typeof value === "object" ? (value as Record<string, unknown>) : {}
+
+const toRequestHeaders = (value: unknown): RequestHeadersLike => asRecord(value) as RequestHeadersLike
+
+const getHeaderValue = (headers: RequestHeadersLike, key: string): string | null => {
+  const value = headers[key]
+  if (Array.isArray(value)) {
+    return value[0] ? String(value[0]) : null
+  }
+  return value ? String(value) : null
+}
+
+const normalizeRole = (value: unknown): FarmFlowRole => {
+  const role = String(value || "").toLowerCase()
+  if (role === "owner" || role === "admin" || role === "user") return role
+  return "user"
+}
+
+const parseMaxAgeSeconds = (raw: string | undefined, fallback: number) => {
+  const parsed = Number(raw || "")
+  return Number.isFinite(parsed) && parsed > 0 ? Math.floor(parsed) : fallback
+}
+
+const APP_SESSION_MAX_AGE_SECONDS = parseMaxAgeSeconds(process.env.AUTH_APP_SESSION_MAX_AGE_SECONDS, 60 * 60 * 24 * 30)
+const WEB_SESSION_MAX_AGE_SECONDS = parseMaxAgeSeconds(process.env.AUTH_WEB_SESSION_MAX_AGE_SECONDS, 60 * 60 * 12)
+
+const resolveSessionMode = (value: unknown): SessionMode => (String(value || "").toLowerCase() === "app" ? "app" : "web")
+
+const resolveSessionMaxAge = (mode: SessionMode): number =>
+  mode === "app" ? APP_SESSION_MAX_AGE_SECONDS : WEB_SESSION_MAX_AGE_SECONDS
 
 const isMissingPasswordResetColumnError = (error: unknown) => {
-  const code = String((error as any)?.code || "")
-  const message = String((error as any)?.message || "")
+  const code = String(asRecord(error).code || "")
+  const message = String(asRecord(error).message || "")
   return code === "42703" || message.includes('column "password_reset_required" does not exist')
 }
 
 export const authOptions: NextAuthOptions = {
   session: {
     strategy: "jwt",
+    maxAge: APP_SESSION_MAX_AGE_SECONDS,
+  },
+  jwt: {
+    async encode(params) {
+      const mode = resolveSessionMode(params.token?.sessionMode)
+      return defaultJwtEncode({
+        ...params,
+        maxAge: resolveSessionMaxAge(mode),
+      })
+    },
+    async decode(params) {
+      return defaultJwtDecode(params)
+    },
   },
   providers: [
     CredentialsProvider({
@@ -29,24 +96,39 @@ export const authOptions: NextAuthOptions = {
           throw new Error("Database not configured")
         }
 
-        const username = String(credentials?.username || "").trim()
-        const password = String(credentials?.password || "")
-        const headers = (req as any)?.headers || {}
-        const ipAddress =
-          (Array.isArray(headers["x-forwarded-for"]) ? headers["x-forwarded-for"][0] : headers["x-forwarded-for"]) ||
-          headers["x-real-ip"] ||
-          null
-        const userAgent =
-          (Array.isArray(headers["user-agent"]) ? headers["user-agent"][0] : headers["user-agent"]) || null
+        const credentialValues = (credentials || {}) as CredentialsInput
+        const username = String(credentialValues.username || "").trim()
+        const password = String(credentialValues.password || "")
+        const sessionMode = resolveSessionMode(credentialValues.sessionMode)
+        const headers = toRequestHeaders((req as { headers?: unknown } | undefined)?.headers)
+        const ipAddress = getHeaderValue(headers, "x-forwarded-for") || getHeaderValue(headers, "x-real-ip") || null
+        const userAgent = getHeaderValue(headers, "user-agent") || null
 
         if (!username || !password) {
           throw new Error("Username and password are required")
         }
 
-        const ownerContext = normalizeTenantContext(undefined, "owner")
-        let users: any[] = []
         try {
-          users = await runTenantQuery(
+          const rateLimit = await checkRateLimit("authLogin", `${String(ipAddress || "unknown")}::${username.toLowerCase()}`)
+          if (!rateLimit.success) {
+            await logSecurityEvent({
+              eventType: "auth_login_failure",
+              severity: "warning",
+              source: "next-auth",
+              ipAddress,
+              userAgent,
+              metadata: { username, reason: "rate_limited" },
+            })
+            return null
+          }
+        } catch (rateLimitError) {
+          console.warn("Auth rate-limit check failed:", rateLimitError)
+        }
+
+        const ownerContext = normalizeTenantContext(undefined, "owner")
+        let users: UserRow[] = []
+        try {
+          users = (await runTenantQuery(
             sql,
             ownerContext,
             sql`
@@ -59,13 +141,13 @@ export const authOptions: NextAuthOptions = {
                 created_at ASC
               LIMIT 25
             `,
-          )
+          )) as UserRow[]
         } catch (error) {
           if (!isMissingPasswordResetColumnError(error)) {
             throw error
           }
           // Backward compatibility for databases that haven't run password rotation migration yet.
-          users = await runTenantQuery(
+          const fallbackUsers = (await runTenantQuery(
             sql,
             ownerContext,
             sql`
@@ -78,8 +160,8 @@ export const authOptions: NextAuthOptions = {
                 created_at ASC
               LIMIT 25
             `,
-          )
-          users = users.map((row) => ({ ...row, password_reset_required: false }))
+          )) as Array<Omit<UserRow, "password_reset_required">>
+          users = fallbackUsers.map((row) => ({ ...row, password_reset_required: false }))
         }
 
         if (!users || users.length === 0) {
@@ -94,7 +176,7 @@ export const authOptions: NextAuthOptions = {
           return null
         }
 
-        let user: any | null = null
+        let user: UserRow | null = null
         let needsRehash = false
         for (const candidate of users) {
           const storedHash = String(candidate.password_hash || "")
@@ -154,33 +236,38 @@ export const authOptions: NextAuthOptions = {
         return {
           id: String(user.id),
           name: String(user.username),
-          role: String(user.role),
+          role: normalizeRole(user.role),
           tenantId: String(user.tenant_id),
+          sessionMode,
           mfaVerified,
           mfaEnabled,
           passwordResetRequired,
-        } as any
+        }
       },
     }),
   ],
   callbacks: {
     async jwt({ token, user }) {
       if (user) {
-        token.role = (user as any).role
-        token.tenantId = (user as any).tenantId
-        token.mfaVerified = (user as any).mfaVerified || false
-        token.mfaEnabled = (user as any).mfaEnabled || false
-        token.passwordResetRequired = (user as any).passwordResetRequired || false
+        token.role = normalizeRole(user.role)
+        token.tenantId = String(user.tenantId || "")
+        token.sessionMode = resolveSessionMode(user.sessionMode)
+        token.mfaVerified = Boolean(user.mfaVerified)
+        token.mfaEnabled = Boolean(user.mfaEnabled)
+        token.passwordResetRequired = Boolean(user.passwordResetRequired)
+      } else {
+        token.sessionMode = resolveSessionMode(token.sessionMode)
       }
       return token
     },
     async session({ session, token }) {
       if (session.user) {
-        ;(session.user as any).role = token.role
-        ;(session.user as any).tenantId = token.tenantId
-        ;(session.user as any).mfaVerified = Boolean(token.mfaVerified)
-        ;(session.user as any).mfaEnabled = Boolean(token.mfaEnabled)
-        ;(session.user as any).passwordResetRequired = Boolean((token as any).passwordResetRequired)
+        session.user.role = normalizeRole(token.role)
+        session.user.tenantId = String(token.tenantId || "")
+        session.user.sessionMode = resolveSessionMode(token.sessionMode)
+        session.user.mfaVerified = Boolean(token.mfaVerified)
+        session.user.mfaEnabled = Boolean(token.mfaEnabled)
+        session.user.passwordResetRequired = Boolean(token.passwordResetRequired)
       }
       return session
     },

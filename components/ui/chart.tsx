@@ -7,6 +7,23 @@ import { cn } from "@/lib/utils"
 
 // Format: { THEME_NAME: CSS_SELECTOR }
 const THEMES = { light: "", dark: ".dark" } as const
+const SAFE_CSS_TOKEN = /^[a-zA-Z0-9_-]{1,64}$/
+const SAFE_COLOR_CHARACTERS = /[;{}<>]/
+const SAFE_COLOR_VALUE =
+  /^(#[0-9a-fA-F]{3,8}|(?:rgb|rgba|hsl|hsla|oklch|oklab|lab|lch|color)\([^)]+\)|var\(--[a-zA-Z0-9_-]+\)|[a-zA-Z]{3,20}|transparent|currentColor)$/
+
+const sanitizeCssToken = (value: string): string | null => {
+  const trimmed = String(value || "").trim()
+  return SAFE_CSS_TOKEN.test(trimmed) ? trimmed : null
+}
+
+const sanitizeColorValue = (value: unknown): string | null => {
+  const trimmed = String(value || "").trim().slice(0, 120)
+  if (!trimmed || SAFE_COLOR_CHARACTERS.test(trimmed)) {
+    return null
+  }
+  return SAFE_COLOR_VALUE.test(trimmed) ? trimmed : null
+}
 
 export type ChartConfig = {
   [k in string]: {
@@ -68,6 +85,10 @@ const ChartContainer = React.forwardRef<
 ChartContainer.displayName = "Chart"
 
 const ChartStyle = ({ id, config }: { id: string; config: ChartConfig }) => {
+  const safeChartId = sanitizeCssToken(id)
+  if (!safeChartId) {
+    return null
+  }
   const colorConfig = Object.entries(config).filter(
     ([_, config]) => config.theme || config.color
   )
@@ -76,28 +97,31 @@ const ChartStyle = ({ id, config }: { id: string; config: ChartConfig }) => {
     return null
   }
 
-  return (
-    <style
-      dangerouslySetInnerHTML={{
-        __html: Object.entries(THEMES)
-          .map(
-            ([theme, prefix]) => `
-${prefix} [data-chart=${id}] {
-${colorConfig
-  .map(([key, itemConfig]) => {
-    const color =
-      itemConfig.theme?.[theme as keyof typeof itemConfig.theme] ||
-      itemConfig.color
-    return color ? `  --color-${key}: ${color};` : null
-  })
-  .join("\n")}
-}
-`
+  const cssText = Object.entries(THEMES)
+    .map(([theme, prefix]) => {
+      const declarations = colorConfig
+        .map(([key, itemConfig]) => {
+          const safeKey = sanitizeCssToken(key)
+          if (!safeKey) return null
+          const color = sanitizeColorValue(
+            itemConfig.theme?.[theme as keyof typeof itemConfig.theme] ||
+              itemConfig.color
           )
-          .join("\n"),
-      }}
-    />
-  )
+          return color ? `  --color-${safeKey}: ${color};` : null
+        })
+        .filter(Boolean)
+        .join("\n")
+      if (!declarations) return ""
+      return `${prefix} [data-chart="${safeChartId}"] {\n${declarations}\n}`
+    })
+    .filter(Boolean)
+    .join("\n")
+
+  if (!cssText) {
+    return null
+  }
+
+  return <style>{cssText}</style>
 }
 
 const ChartTooltip = RechartsPrimitive.Tooltip

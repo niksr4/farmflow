@@ -1,5 +1,9 @@
 import type { Page } from "@playwright/test"
 import { expect } from "@playwright/test"
+import { loadEnvConfig } from "@next/env"
+
+// Align Playwright env resolution with Next.js so `.env.local` credentials work in local runs.
+loadEnvConfig(process.cwd())
 
 export const expectOwnerUser = process.env.E2E_EXPECT_OWNER !== "0"
 export const expectAdminUser = process.env.E2E_EXPECT_ADMIN === "1"

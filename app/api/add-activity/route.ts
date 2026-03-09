@@ -5,6 +5,8 @@ import { normalizeTenantContext, runTenantQuery } from "@/lib/server/tenant-db"
 import { requireAdminRole } from "@/lib/permissions"
 import { logAuditEvent } from "@/lib/server/audit-log"
 
+const MAX_ACTIVITY_CODE_LENGTH = 10
+
 export async function POST(request: Request) {
   try {
     const sessionUser = await requireModuleAccess("accounts")
@@ -15,11 +17,18 @@ export async function POST(request: Request) {
     }
     const tenantContext = normalizeTenantContext(sessionUser.tenantId, sessionUser.role)
     const body = await request.json()
-    const { code, reference } = body
+    const code = String(body?.code || "").trim().toUpperCase()
+    const reference = String(body?.reference || "").trim()
 
     if (!code || !reference) {
       return NextResponse.json(
         { success: false, error: "Code and reference are required" },
+        { status: 400 },
+      )
+    }
+    if (code.length > MAX_ACTIVITY_CODE_LENGTH) {
+      return NextResponse.json(
+        { success: false, error: `Code must be ${MAX_ACTIVITY_CODE_LENGTH} characters or fewer` },
         { status: 400 },
       )
     }

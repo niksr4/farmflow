@@ -7,6 +7,7 @@ interface User {
   username: string
   role: "admin" | "user" | "owner"
   tenantId: string
+  sessionMode?: "app" | "web"
   mfaEnabled?: boolean
   mfaVerified?: boolean
   passwordResetRequired?: boolean
@@ -14,7 +15,11 @@ interface User {
 
 interface AuthContextType {
   user: User | null
-  login: (username: string, password: string) => Promise<{ ok: boolean; error?: string }>
+  login: (
+    username: string,
+    password: string,
+    sessionMode?: "app" | "web",
+  ) => Promise<{ ok: boolean; error?: string }>
   logout: () => void
   isAdmin: boolean
   isOwner: boolean
@@ -30,18 +35,20 @@ export function useAuth(): AuthContextType {
   const user = session?.user
     ? {
         username: String(session.user.name || ""),
-        role: (session.user as any).role as User["role"],
-        tenantId: String((session.user as any).tenantId || ""),
-        mfaEnabled: Boolean((session.user as any).mfaEnabled),
-        mfaVerified: Boolean((session.user as any).mfaVerified),
-        passwordResetRequired: Boolean((session.user as any).passwordResetRequired),
+        role: session.user.role,
+        tenantId: String(session.user.tenantId || ""),
+        sessionMode: session.user.sessionMode,
+        mfaEnabled: Boolean(session.user.mfaEnabled),
+        mfaVerified: Boolean(session.user.mfaVerified),
+        passwordResetRequired: Boolean(session.user.passwordResetRequired),
       }
     : null
 
-  const login = async (username: string, password: string) => {
+  const login = async (username: string, password: string, sessionMode: "app" | "web" = "web") => {
     const result = await signIn("credentials", {
       username,
       password,
+      sessionMode,
       redirect: false,
     })
 
@@ -61,6 +68,17 @@ export function useAuth(): AuthContextType {
   }
 
   const logout = () => {
+    if (typeof window !== "undefined" && "serviceWorker" in navigator) {
+      const clearPayload = { type: "CLEAR_SENSITIVE_DATA" }
+      navigator.serviceWorker.controller?.postMessage(clearPayload)
+      navigator.serviceWorker.ready
+        .then((registration) => {
+          registration.active?.postMessage(clearPayload)
+        })
+        .catch(() => {
+          // Ignore failures and continue logout.
+        })
+    }
     signOut({ callbackUrl: "/" })
   }
 

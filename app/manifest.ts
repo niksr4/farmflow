@@ -11,8 +11,10 @@ export default function manifest(): MetadataRoute.Manifest {
     display: "standalone",
     display_override: ["standalone", "minimal-ui", "browser"],
     orientation: "portrait",
+    dir: "ltr",
     background_color: "#f6fbf9",
     theme_color: "#12AEB1",
+    prefer_related_applications: false,
     categories: ["business", "productivity", "agriculture"],
     lang: "en",
     icons: [
@@ -20,13 +22,19 @@ export default function manifest(): MetadataRoute.Manifest {
         src: "/pwa-192x192.png",
         sizes: "192x192",
         type: "image/png",
-        purpose: "any",
+        purpose: "maskable",
       },
       {
         src: "/pwa-512x512.png",
         sizes: "512x512",
         type: "image/png",
         purpose: "maskable",
+      },
+      {
+        src: "/apple-icon.png",
+        sizes: "180x180",
+        type: "image/png",
+        purpose: "any",
       },
       {
         src: "/icon.svg",

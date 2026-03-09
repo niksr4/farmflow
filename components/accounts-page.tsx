@@ -2,7 +2,7 @@
 
 import type React from "react"
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select"
-import { useMemo, useState, useEffect } from "react"
+import { useMemo, useState, useEffect, useRef } from "react"
 import { useAuth } from "@/hooks/use-auth"
 import { useLaborData, type LaborEntry, type LaborDeployment } from "@/hooks/use-labor-data"
 import { useConsumablesData, type ConsumableDeployment } from "@/hooks/use-consumables-data"
@@ -18,9 +18,17 @@ import LaborDeploymentTab from "./labor-deployment-tab"
 import OtherExpensesTab from "./other-expenses-tab"
 import { toast } from "sonner"
 import { getCurrentFiscalYear, getAvailableFiscalYears, type FiscalYear } from "@/lib/fiscal-year-utils"
-import { formatDateOnly } from "@/lib/date-utils"
+import { formatDateForQIF, formatDateOnly } from "@/lib/date-utils"
 import { formatCurrency, formatNumber } from "@/lib/format"
 import { cn } from "@/lib/utils"
+import {
+  buildAccountsCsvFilename,
+  buildAccountsQifFilename,
+  normalizeAccountsExportFormat,
+  normalizeAccountsInterchangeFormat,
+  type LegacyAccountsExportFormat,
+} from "@/lib/accounts-export"
+import posthog from "posthog-js"
 
 interface AccountActivity {
   code: string
@@ -66,9 +74,15 @@ interface AccountsIntelligence {
 
 type AccountsPageProps = {
   showDataToolsControls?: boolean
+  requestedExport?: { requestId: number; format: LegacyAccountsExportFormat } | null
+  onRequestedExportHandled?: (requestId: number) => void
 }
 
-export default function AccountsPage({ showDataToolsControls = false }: AccountsPageProps) {
+export default function AccountsPage({
+  showDataToolsControls = false,
+  requestedExport = null,
+  onRequestedExportHandled,
+}: AccountsPageProps) {
   const { isAdmin, isOwner, user } = useAuth()
   const canManageActivities = isAdmin || user?.role === "owner"
   const { deployments: laborDeployments, loading: laborLoading, totalCount: laborCount } = useLaborData()
@@ -101,6 +115,9 @@ export default function AccountsPage({ showDataToolsControls = false }: Accounts
   const [accountsIntelligence, setAccountsIntelligence] = useState<AccountsIntelligence | null>(null)
   const [accountsIntelligenceLoading, setAccountsIntelligenceLoading] = useState(false)
   const [accountsIntelligenceError, setAccountsIntelligenceError] = useState<string | null>(null)
+  const handledExportRequestRef = useRef<number | null>(null)
+  const exportCombinedCSVRef = useRef<() => Promise<void>>(async () => undefined)
+  const exportInterchangeRef = useRef<(format?: LegacyAccountsExportFormat) => Promise<void>>(async () => undefined)
   const exportDateRangeError = useMemo(() => {
     if ((exportStartDate && !exportEndDate) || (!exportStartDate && exportEndDate)) {
       return "Select both start and end date, or leave both empty."
@@ -605,81 +622,100 @@ export default function AccountsPage({ showDataToolsControls = false }: Accounts
     const encodedUri = encodeURI(csvContent)
     const link = document.createElement("a")
     link.setAttribute("href", encodedUri)
-    const dateSuffix = exportStartDate && exportEndDate ? `${exportStartDate}_to_${exportEndDate}` : "all_entries"
-    link.setAttribute("download", `accounts_summary_${dateSuffix}.csv`)
+    link.setAttribute("download", buildAccountsCsvFilename(exportStartDate, exportEndDate))
     document.body.appendChild(link)
     link.click()
     document.body.removeChild(link)
+    toast.success(`Accounts CSV exported (${deploymentsToExport.length} entries)`)
+
+    posthog.capture("accounts_export_downloaded", {
+      format: "csv",
+      rows_exported: deploymentsToExport.length,
+      date_range_start: exportStartDate || null,
+      date_range_end: exportEndDate || null,
+    })
   }
 
-  const exportQIF = async () => {
-    const deploymentsToExport = await getFilteredDeploymentsForExport()
-    if (!deploymentsToExport) return
+  const exportInterchange = async (format: LegacyAccountsExportFormat = "qif") => {
+    const canonicalFormat = normalizeAccountsInterchangeFormat(format)
+    posthog.capture("accounts_export_requested", {
+      format: canonicalFormat,
+      date_range_start: exportStartDate || null,
+      date_range_end: exportEndDate || null,
+    })
 
-    let qifContent = "!Type:Bank\n"
+    try {
+      const deploymentsToExport = await getFilteredDeploymentsForExport()
+      if (!deploymentsToExport) return
 
-    deploymentsToExport
-      .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
-      .forEach((d) => {
-        const date = new Date(d.date)
-        const month = date.getMonth() + 1
-        const day = date.getDate()
-        const year = date.getFullYear()
-        const formattedDate = `${month}/${day}/${year}`
+      let qifContent = "!Type:Bank\n"
 
-        const amount = d.entryType === "Labor" ? d.totalCost : (d as ConsumableDeployment).amount
+      deploymentsToExport
+        .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
+        .forEach((d) => {
+          const formattedDate = formatDateForQIF(d.date)
+          const amount = d.entryType === "Labor" ? d.totalCost : (d as ConsumableDeployment).amount
 
-        let payee = ""
-        let category = ""
-        let memo = ""
+          let payee = ""
+          let category = ""
+          let memo = ""
 
-        if (d.entryType === "Labor") {
-          // Payee is the notes
-          payee = d.notes || ""
+          if (d.entryType === "Labor") {
+            payee = d.notes || ""
+            category = `${d.code} ${d.reference}`
 
-          // Category is code + reference
-          category = `${d.code} ${d.reference}`
-
-          if (d.laborEntries && d.laborEntries.length > 0) {
-            const hfDetail = d.laborEntries[0]
-              ? `Estate: ${d.laborEntries[0].laborCount}@${d.laborEntries[0].costPerLabor.toFixed(2)}`
-              : ""
-            const outsideDetails = d.laborEntries
-              .slice(1)
-              .map((le: LaborEntry, index: number) => `DS${index + 1}: ${le.laborCount}@${le.costPerLabor.toFixed(2)}`)
-              .join("; ")
-            memo = [hfDetail, outsideDetails].filter(Boolean).join("; ")
+            if (d.laborEntries && d.laborEntries.length > 0) {
+              const hfDetail = d.laborEntries[0]
+                ? `Estate: ${d.laborEntries[0].laborCount}@${d.laborEntries[0].costPerLabor.toFixed(2)}`
+                : ""
+              const outsideDetails = d.laborEntries
+                .slice(1)
+                .map((le: LaborEntry, index: number) => `DS${index + 1}: ${le.laborCount}@${le.costPerLabor.toFixed(2)}`)
+                .join("; ")
+              memo = [hfDetail, outsideDetails].filter(Boolean).join("; ")
+            }
+          } else {
+            const reference = d.reference || activities.find((a) => a.code === d.code)?.reference || d.code
+            payee = d.notes || ""
+            category = `${d.code} ${reference}`
+            memo = ""
           }
-        } else {
-          const reference = d.reference || activities.find((a) => a.code === d.code)?.reference || d.code
 
-          // Payee is the notes
-          payee = d.notes || ""
+          qifContent += `D${formattedDate}\n`
+          qifContent += `T-${amount.toFixed(2)}\n`
+          qifContent += `P${payee}\n`
+          qifContent += `L${category}\n`
+          if (memo) qifContent += `M${memo}\n`
+          qifContent += "^\n"
+        })
 
-          // Category is code + reference
-          category = `${d.code} ${reference}`
+      const encodedUri = encodeURI("data:text/plain;charset=utf-8," + qifContent)
+      const link = document.createElement("a")
+      link.setAttribute("href", encodedUri)
+      link.setAttribute("download", buildAccountsQifFilename(exportStartDate, exportEndDate))
+      document.body.appendChild(link)
+      link.click()
+      document.body.removeChild(link)
+      toast.success(`Accounts ${canonicalFormat.toUpperCase()} exported (${deploymentsToExport.length} entries)`)
 
-          // Memo is blank for other expenses
-          memo = ""
-        }
-
-        qifContent += `D${formattedDate}\n`
-        qifContent += `T-${amount.toFixed(2)}\n`
-        qifContent += `P${payee}\n`
-        qifContent += `L${category}\n`
-        if (memo) qifContent += `M${memo}\n`
-        qifContent += "^\n"
+      posthog.capture("accounts_export_downloaded", {
+        format: canonicalFormat,
+        rows_exported: deploymentsToExport.length,
+        date_range_start: exportStartDate || null,
+        date_range_end: exportEndDate || null,
       })
-
-    const encodedUri = encodeURI("data:application/qif;charset=utf-8," + qifContent)
-    const link = document.createElement("a")
-    link.setAttribute("href", encodedUri)
-    const dateSuffix = exportStartDate && exportEndDate ? `${exportStartDate}_to_${exportEndDate}` : "all_entries"
-    link.setAttribute("download", `accounts_export_${dateSuffix}.qif`)
-    document.body.appendChild(link)
-    link.click()
-    document.body.removeChild(link)
+    } catch (error: any) {
+      console.error("Error exporting accounts interchange file:", error)
+      toast.error(error?.message || "Failed to export QIF file")
+      posthog.capture("accounts_export_failed", {
+        format: canonicalFormat,
+        reason: error?.message || "unknown",
+      })
+    }
   }
+
+  exportCombinedCSVRef.current = exportCombinedCSV
+  exportInterchangeRef.current = exportInterchange
 
   const totalEntries =
     (laborCount || laborDeployments.length) + (consumablesCount || consumableDeployments.length)
@@ -702,6 +738,26 @@ export default function AccountsPage({ showDataToolsControls = false }: Accounts
   const topCostCodes = patterns?.topCostCodes?.slice(0, 5) || []
   const topFrequencyCodes = patterns?.mostFrequentCodes?.slice(0, 5) || []
   const topHighlights = (accountsIntelligence?.highlights || []).slice(0, 3)
+
+  useEffect(() => {
+    if (!requestedExport) return
+    if (handledExportRequestRef.current === requestedExport.requestId) return
+
+    handledExportRequestRef.current = requestedExport.requestId
+    const run = async () => {
+      try {
+        const normalizedFormat = normalizeAccountsExportFormat(requestedExport.format)
+        if (normalizedFormat === "csv") {
+          await exportCombinedCSVRef.current()
+        } else {
+          await exportInterchangeRef.current(normalizedFormat)
+        }
+      } finally {
+        onRequestedExportHandled?.(requestedExport.requestId)
+      }
+    }
+    void run()
+  }, [onRequestedExportHandled, requestedExport])
 
   return (
     <div className="container mx-auto space-y-6 px-4 py-6 sm:p-6">
@@ -949,7 +1005,7 @@ export default function AccountsPage({ showDataToolsControls = false }: Accounts
               <FileText className="mr-2 h-4 w-4" /> Export CSV
             </Button>
             <Button
-              onClick={exportQIF}
+              onClick={() => void exportInterchange("qif")}
               variant="outline"
               size="sm"
               disabled={!canExport}
@@ -958,7 +1014,7 @@ export default function AccountsPage({ showDataToolsControls = false }: Accounts
               <Coins className="mr-2 h-4 w-4" /> Export QIF
             </Button>
             <p className={cn("w-full text-xs", exportDateRangeError ? "text-rose-600" : "text-muted-foreground")}>
-              {exportDisabledReason || "Optional date filter applies to both exports."}
+              {exportDisabledReason || "Optional date filter applies to CSV and QIF exports."}
             </p>
           </CardContent>
         </Card>

@@ -2,6 +2,7 @@ import { NextResponse } from "next/server"
 import { logSecurityEvent } from "@/lib/server/security-events"
 import { logAppErrorEvent } from "@/lib/server/error-events"
 import { sendAgentAlertEmail } from "@/lib/server/agents/alert-email"
+import { buildRateLimitHeaders, checkRateLimit } from "@/lib/rate-limit"
 
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 
@@ -93,6 +94,22 @@ const notifySlack = async (payload: {
 
 export async function POST(request: Request) {
   try {
+    const requestHeaders = request.headers
+    const ipAddress = requestHeaders.get("x-forwarded-for")?.split(",")[0]?.trim() || requestHeaders.get("x-real-ip") || null
+    const userAgent = requestHeaders.get("user-agent") || null
+    try {
+      const rateLimit = await checkRateLimit("registerInterest", `register-interest:${String(ipAddress || "unknown")}`)
+      const rateHeaders = buildRateLimitHeaders(rateLimit)
+      if (!rateLimit.success) {
+        return NextResponse.json(
+          { success: false, error: "Too many submissions. Please wait and try again." },
+          { status: 429, headers: rateHeaders },
+        )
+      }
+    } catch (rateLimitError) {
+      console.warn("Register interest rate-limit check failed:", rateLimitError)
+    }
+
     const body = await request.json()
     const name = sanitize(body?.name, 120)
     const email = sanitize(body?.email, 160).toLowerCase()
@@ -109,10 +126,6 @@ export async function POST(request: Request) {
     if (!EMAIL_PATTERN.test(email)) {
       return NextResponse.json({ success: false, error: "Enter a valid email address" }, { status: 400 })
     }
-
-    const headers = request.headers
-    const ipAddress = headers.get("x-forwarded-for")?.split(",")[0]?.trim() || headers.get("x-real-ip") || null
-    const userAgent = headers.get("user-agent") || null
 
     await logSecurityEvent({
       eventType: "landing_register_interest",

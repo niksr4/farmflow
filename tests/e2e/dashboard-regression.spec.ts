@@ -204,4 +204,79 @@ test.describe("dashboard regression", () => {
     await expect(page).toHaveURL(/seasonAlertId=e2e-alert-2/)
     await expect(page).toHaveURL(/tab=dispatch|tab=season/)
   })
+
+  test("transaction write failure banner supports retry from movement drawer", async ({ page }) => {
+    const inventoryRoute = await getDashboardRoute(page, "inventory", ["inventory", "transactions"])
+    test.skip(!inventoryRoute, "No tenant with required modules (inventory + transactions) for owner preview")
+    if (!inventoryRoute) return
+
+    const uniqueSuffix = `${Date.now().toString(36)}${Math.floor(Math.random() * 1000)
+      .toString(36)
+      .padStart(2, "0")}`.toUpperCase()
+    const note = `Retry test ${uniqueSuffix}`
+
+    await page.goto(inventoryRoute)
+    await waitForDashboardReady(page)
+
+    const previewTenantId = new URL(inventoryRoute, "http://127.0.0.1").searchParams.get("previewTenantId")
+    if (previewTenantId) {
+      await page.context().addCookies([
+        {
+          name: "farmflow_preview_tenant",
+          value: previewTenantId,
+          url: new URL(page.url()).origin,
+        },
+      ])
+    }
+
+    let postAttempts = 0
+    await page.route("**/api/transactions-neon", async (route) => {
+      if (route.request().method() === "POST") {
+        postAttempts += 1
+        if (postAttempts === 1) {
+          await route.fulfill({
+            status: 500,
+            contentType: "application/json",
+            body: JSON.stringify({
+              success: false,
+              message: "Injected write failure",
+            }),
+          })
+          return
+        }
+      }
+      await route.continue()
+    })
+
+    await page.getByTestId("inventory-action-record-movement").click()
+    const itemTypeSelect = page.getByTestId("movement-item-type-select")
+    if (await itemTypeSelect.isDisabled()) {
+      test.skip(true, "Movement item type is disabled because no inventory items exist")
+    }
+    await itemTypeSelect.click()
+    const movementOptions = (await page.getByRole("option").allTextContents()).map((value) => value.trim())
+    const selectedItemType = movementOptions.find((value) => value && !/add an inventory item first/i.test(value))
+    if (!selectedItemType) {
+      test.skip(true, "No inventory item type is available for retry test")
+    }
+    await page.getByRole("option", { name: selectedItemType as string, exact: true }).first().click()
+    await page.getByLabel("Restocking").click()
+    await page.getByTestId("movement-quantity-input").fill("5")
+    await page.getByPlaceholder("Add any additional details").fill(note)
+    await page.getByTestId("movement-record-transaction").click()
+
+    const failureBanner = page.getByTestId("transaction-write-failure-banner")
+    await expect(failureBanner).toBeVisible()
+    await expect(failureBanner.getByText("Injected write failure")).toBeVisible()
+
+    await failureBanner.getByRole("button", { name: "Retry last transaction" }).click()
+
+    await expect
+      .poll(() => postAttempts, {
+        timeout: 15000,
+      })
+      .toBeGreaterThanOrEqual(2)
+    await expect(page.getByText("Transaction recorded")).toBeVisible()
+    await expect(failureBanner).toHaveCount(0)
+  })
 })

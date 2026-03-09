@@ -2,7 +2,7 @@
 
 import type React from "react"
 
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
 import Link from "next/link"
 import Image from "next/image"
@@ -21,8 +21,16 @@ export default function LoginPage() {
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [showPassword, setShowPassword] = useState(false)
   const [capsLockOn, setCapsLockOn] = useState(false)
+  const [sessionMode, setSessionMode] = useState<"app" | "web">("web")
   const { login } = useAuth()
   const router = useRouter()
+
+  useEffect(() => {
+    if (typeof window === "undefined") return
+    const isIosStandalone = Boolean((window.navigator as Navigator & { standalone?: boolean }).standalone)
+    const isStandalone = isIosStandalone || window.matchMedia("(display-mode: standalone)").matches
+    setSessionMode(isStandalone ? "app" : "web")
+  }, [])
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -36,7 +44,7 @@ export default function LoginPage() {
 
     try {
       setIsSubmitting(true)
-      const result = await login(normalizedUsername, password)
+      const result = await login(normalizedUsername, password, sessionMode)
       if (!result.ok) {
         throw new Error(result.error || "Invalid username or password")
       }
@@ -241,6 +249,9 @@ export default function LoginPage() {
             >
               {isSubmitting ? "Signing in..." : "Sign In"}
             </Button>
+            <p className="text-[11px] text-gray-500">
+              {sessionMode === "app" ? "App mode: stay signed in is enabled." : "Web mode: session expires sooner for safety."}
+            </p>
           </form>
           <p className="mt-4 text-xs text-gray-500">
             By signing in, you acknowledge the{" "}

@@ -10,6 +10,15 @@ import { resolveLocationCompatibility } from "@/lib/server/location-compatibilit
 const isUuid = (value: string) =>
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value)
 
+const isProcessingTriggerRecursionError = (error: unknown) => {
+  const code = String((error as { code?: unknown })?.code || "")
+  const message = String((error as { message?: unknown })?.message || "").toLowerCase()
+  return code === "54001" || message.includes("stack depth limit exceeded")
+}
+
+const processingTriggerRepairHint =
+  "Processing trigger recursion detected for this tenant. Run scripts/56-fix-processing-recompute-trigger-recursion.sql on the database."
+
 const numericFields = [
   "crop_today",
   "crop_todate",
@@ -474,6 +483,16 @@ export async function POST(request: NextRequest) {
     if (isModuleAccessError(error)) {
       return NextResponse.json({ success: false, error: "Module access disabled" }, { status: 403 })
     }
+    if (isProcessingTriggerRecursionError(error)) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: processingTriggerRepairHint,
+          code: "processing_trigger_recursion",
+        },
+        { status: 503 },
+      )
+    }
     return NextResponse.json({ success: false, error: error.message }, { status: 500 })
   }
 }
@@ -541,6 +560,16 @@ export async function DELETE(request: NextRequest) {
     console.error("Error deleting processing record:", error)
     if (isModuleAccessError(error)) {
       return NextResponse.json({ success: false, error: "Module access disabled" }, { status: 403 })
+    }
+    if (isProcessingTriggerRecursionError(error)) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: processingTriggerRepairHint,
+          code: "processing_trigger_recursion",
+        },
+        { status: 503 },
+      )
     }
     return NextResponse.json({ success: false, error: error.message }, { status: 500 })
   }

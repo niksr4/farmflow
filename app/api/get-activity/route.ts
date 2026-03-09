@@ -7,6 +7,7 @@ import { logAuditEvent } from "@/lib/server/audit-log"
 
 const normalizeCode = (value: unknown) => String(value || "").trim().toUpperCase()
 const normalizeReference = (value: unknown) => String(value || "").trim()
+const MAX_ACTIVITY_CODE_LENGTH = 10
 
 const isMissingRelation = (error: unknown, tableName: string) => {
   const message = String((error as any)?.message || "")
@@ -98,6 +99,15 @@ export async function POST(request: Request) {
     const body = await request.json()
     const code = normalizeCode(body?.code)
     const activity = normalizeReference(body?.activity)
+    if (!code || !activity) {
+      return NextResponse.json({ success: false, error: "code and activity are required" }, { status: 400 })
+    }
+    if (code.length > MAX_ACTIVITY_CODE_LENGTH) {
+      return NextResponse.json(
+        { success: false, error: `code must be ${MAX_ACTIVITY_CODE_LENGTH} characters or fewer` },
+        { status: 400 },
+      )
+    }
 
 
     // Check if code already exists

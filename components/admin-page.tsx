@@ -522,33 +522,36 @@ export default function AdminPage() {
       return
     }
     const doc = summaryWindow.document
-    doc.open()
-    summaryWindow.document.write(`
-      <html>
-        <head>
-          <title>Weekly Summary</title>
-          <style>
-            body { font-family: Arial, sans-serif; padding: 24px; }
-            h1 { font-size: 18px; margin-bottom: 12px; }
-            pre { white-space: pre-wrap; font-size: 14px; }
-          </style>
-        </head>
-        <body>
-          <h1 id="summary-title"></h1>
-          <pre id="summary-body"></pre>
-        </body>
-      </html>
-    `)
-    doc.close()
-    const titleEl = doc.getElementById("summary-title")
-    if (titleEl) {
-      const rangeLabel = payload.range ? `${payload.range.startDate} to ${payload.range.endDate}` : "Current period"
-      titleEl.textContent = `${tenantName} Weekly Summary (${rangeLabel})`
+    const head = doc.head
+    const body = doc.body
+    if (!head || !body) {
+      toast({ title: "Print failed", description: "Unable to prepare summary preview." })
+      return
     }
-    const bodyEl = doc.getElementById("summary-body")
-    if (bodyEl) {
-      bodyEl.textContent = summaryText
-    }
+
+    while (head.firstChild) head.removeChild(head.firstChild)
+    while (body.firstChild) body.removeChild(body.firstChild)
+
+    doc.title = "Weekly Summary"
+    const styleEl = doc.createElement("style")
+    styleEl.textContent = `
+      body { font-family: Arial, sans-serif; padding: 24px; }
+      h1 { font-size: 18px; margin-bottom: 12px; }
+      pre { white-space: pre-wrap; font-size: 14px; }
+    `
+    head.appendChild(styleEl)
+
+    const titleEl = doc.createElement("h1")
+    titleEl.id = "summary-title"
+    const rangeLabel = payload.range ? `${payload.range.startDate} to ${payload.range.endDate}` : "Current period"
+    titleEl.textContent = `${tenantName} Weekly Summary (${rangeLabel})`
+
+    const bodyEl = doc.createElement("pre")
+    bodyEl.id = "summary-body"
+    bodyEl.textContent = summaryText
+
+    body.appendChild(titleEl)
+    body.appendChild(bodyEl)
     summaryWindow.focus()
     summaryWindow.print()
   }

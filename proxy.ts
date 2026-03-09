@@ -4,6 +4,15 @@ import { getToken } from "next-auth/jwt"
 
 export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl
+  const host = String(request.headers.get("host") || request.nextUrl.hostname || "").toLowerCase()
+  const forwardedProto = String(request.headers.get("x-forwarded-proto") || "").toLowerCase()
+  const isLocalHost = host.includes("localhost") || host.startsWith("127.0.0.1")
+
+  if (process.env.NODE_ENV === "production" && forwardedProto && forwardedProto !== "https" && !isLocalHost) {
+    const secureUrl = request.nextUrl.clone()
+    secureUrl.protocol = "https"
+    return NextResponse.redirect(secureUrl, 308)
+  }
 
   if (
     pathname.startsWith("/api/auth") ||

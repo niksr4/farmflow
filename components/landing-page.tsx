@@ -312,7 +312,9 @@ export default function LandingPage() {
 
     const layer = beanLayerRef.current
     if (!layer) return
-    layer.innerHTML = ""
+    while (layer.firstChild) {
+      layer.removeChild(layer.firstChild)
+    }
 
     const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches
 

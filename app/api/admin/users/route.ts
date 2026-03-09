@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server"
+import { z } from "zod"
 import { sql } from "@/lib/server/db"
 import { requireAdminSession } from "@/lib/server/mfa"
 import { normalizeTenantContext, runTenantQuery } from "@/lib/server/tenant-db"
@@ -6,8 +7,42 @@ import { generateTemporaryPassword, hashPassword } from "@/lib/passwords"
 import { logAuditEvent } from "@/lib/server/audit-log"
 import { logSecurityEvent } from "@/lib/server/security-events"
 
-const adminErrorResponse = (error: any, fallback: string) => {
-  const message = error?.message || fallback
+type UserRole = "admin" | "user" | "owner"
+
+type UserRecord = {
+  id: string
+  username: string
+  role: UserRole
+  tenant_id: string
+  created_at?: string
+  password_reset_required?: boolean
+}
+
+const createUserBodySchema = z.object({
+  username: z.string().trim().min(1, "username is required"),
+  password: z.string().min(1, "password is required"),
+  role: z.enum(["admin", "user", "owner"]).optional().default("user"),
+  tenantId: z.string().trim().optional().default(""),
+})
+
+const updateUserRoleSchema = z.object({
+  userId: z.string().trim().min(1, "userId is required"),
+  role: z.enum(["admin", "user"]),
+})
+
+const resetPasswordSchema = z.object({
+  userId: z.string().trim().min(1, "userId is required"),
+  temporaryPassword: z.string().trim().optional(),
+})
+
+const getErrorMessage = (error: unknown, fallback: string) => {
+  if (error instanceof Error && error.message) return error.message
+  const maybeMessage = typeof error === "object" && error && "message" in error ? String((error as { message?: unknown }).message || "") : ""
+  return maybeMessage || fallback
+}
+
+const adminErrorResponse = (error: unknown, fallback: string) => {
+  const message = getErrorMessage(error, fallback)
   const status = ["MFA required", "Admin role required", "Unauthorized"].includes(message) ? 403 : 500
   return NextResponse.json({ success: false, error: message }, { status })
 }
@@ -39,7 +74,7 @@ export async function GET(request: Request) {
     }
 
     const tenantContext = normalizeTenantContext(tenantId, sessionUser.role)
-    const users = await runTenantQuery(
+    const users = (await runTenantQuery(
       sql,
       tenantContext,
       sql`
@@ -48,10 +83,10 @@ export async function GET(request: Request) {
         WHERE tenant_id = ${tenantId}
         ORDER BY created_at DESC
       `,
-    )
+    )) as UserRecord[]
 
     return NextResponse.json({ success: true, users })
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("Error fetching users:", error)
     return adminErrorResponse(error, "Failed to fetch users")
   }
@@ -64,11 +99,14 @@ export async function POST(request: Request) {
       return NextResponse.json({ success: false, error: "Database not configured" }, { status: 500 })
     }
 
-    const body = await request.json()
-    const username = String(body.username || "").trim()
-    const password = String(body.password || "")
-    const role = String(body.role || "user").trim().toLowerCase()
-    const requestedTenantId = String(body.tenantId || "").trim()
+    const parsedBody = createUserBodySchema.safeParse(await request.json().catch(() => ({})))
+    if (!parsedBody.success) {
+      return NextResponse.json({ success: false, error: parsedBody.error.issues[0]?.message || "Invalid request body" }, { status: 400 })
+    }
+    const username = parsedBody.data.username
+    const password = parsedBody.data.password
+    const role = parsedBody.data.role
+    const requestedTenantId = parsedBody.data.tenantId
     const tenantId = sessionUser.role === "owner" ? requestedTenantId : sessionUser.tenantId
 
     if (!username || !password || !tenantId) {
@@ -82,9 +120,6 @@ export async function POST(request: Request) {
       return NextResponse.json({ success: false, error: "Username 'owner' is reserved for the platform account" }, { status: 400 })
     }
 
-    if (!["admin", "user", "owner"].includes(role)) {
-      return NextResponse.json({ success: false, error: "Invalid role" }, { status: 400 })
-    }
     if (role === "owner" && sessionUser.role !== "owner") {
       return NextResponse.json({ success: false, error: "Only platform owners can create owner users" }, { status: 403 })
     }
@@ -96,7 +131,7 @@ export async function POST(request: Request) {
     const passwordHash = hashPassword(password)
 
     const tenantContext = normalizeTenantContext(tenantId, sessionUser.role)
-    const result = await runTenantQuery(
+    const result = (await runTenantQuery(
       sql,
       tenantContext,
       sql`
@@ -104,7 +139,7 @@ export async function POST(request: Request) {
         VALUES (${username}, ${passwordHash}, ${role}, ${tenantId})
         RETURNING id, username, role, tenant_id, created_at
       `,
-    )
+    )) as UserRecord[]
 
     await logAuditEvent(sql, sessionUser, {
       action: "create",
@@ -129,7 +164,7 @@ export async function POST(request: Request) {
     })
 
     return NextResponse.json({ success: true, user: result[0] })
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("Error creating user:", error)
     return adminErrorResponse(error, "Failed to create user")
   }
@@ -142,23 +177,18 @@ export async function PATCH(request: Request) {
       return NextResponse.json({ success: false, error: "Database not configured" }, { status: 500 })
     }
 
-    const body = await request.json()
-    const userId = String(body.userId || "").trim()
-    const role = String(body.role || "").trim().toLowerCase()
-
-    if (!userId || !role) {
-      return NextResponse.json({ success: false, error: "userId and role are required" }, { status: 400 })
+    const parsedBody = updateUserRoleSchema.safeParse(await request.json().catch(() => ({})))
+    if (!parsedBody.success) {
+      return NextResponse.json({ success: false, error: parsedBody.error.issues[0]?.message || "Invalid request body" }, { status: 400 })
     }
-
-    if (!["admin", "user"].includes(role)) {
-      return NextResponse.json({ success: false, error: "Invalid role" }, { status: 400 })
-    }
+    const userId = parsedBody.data.userId
+    const role = parsedBody.data.role
 
     const lookupContext = normalizeTenantContext(
       sessionUser.role === "owner" ? undefined : sessionUser.tenantId,
       sessionUser.role,
     )
-    const rows = await runTenantQuery(
+    const rows = (await runTenantQuery(
       sql,
       lookupContext,
       sql`
@@ -167,7 +197,7 @@ export async function PATCH(request: Request) {
         WHERE id = ${userId}
         LIMIT 1
       `,
-    )
+    )) as UserRecord[]
 
     if (!rows?.length) {
       return NextResponse.json({ success: false, error: "User not found" }, { status: 404 })
@@ -189,7 +219,7 @@ export async function PATCH(request: Request) {
     }
 
     const tenantContext = normalizeTenantContext(targetTenantId, sessionUser.role)
-    const result = await runTenantQuery(
+    const result = (await runTenantQuery(
       sql,
       tenantContext,
       sql`
@@ -198,7 +228,7 @@ export async function PATCH(request: Request) {
         WHERE id = ${userId}
         RETURNING id, username, role, tenant_id, created_at
       `,
-    )
+    )) as UserRecord[]
 
     await logAuditEvent(sql, sessionUser, {
       action: "update",
@@ -223,7 +253,7 @@ export async function PATCH(request: Request) {
     })
 
     return NextResponse.json({ success: true, user: result[0] })
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("Error updating user role:", error)
     return adminErrorResponse(error, "Failed to update user role")
   }
@@ -236,13 +266,12 @@ export async function PUT(request: Request) {
       return NextResponse.json({ success: false, error: "Database not configured" }, { status: 500 })
     }
 
-    const body = await request.json()
-    const userId = String(body.userId || "").trim()
-    const providedTempPassword = String(body.temporaryPassword || "").trim()
-
-    if (!userId) {
-      return NextResponse.json({ success: false, error: "userId is required" }, { status: 400 })
+    const parsedBody = resetPasswordSchema.safeParse(await request.json().catch(() => ({})))
+    if (!parsedBody.success) {
+      return NextResponse.json({ success: false, error: parsedBody.error.issues[0]?.message || "Invalid request body" }, { status: 400 })
     }
+    const userId = parsedBody.data.userId
+    const providedTempPassword = String(parsedBody.data.temporaryPassword || "").trim()
     if (providedTempPassword && providedTempPassword.length < 8) {
       return NextResponse.json(
         { success: false, error: "temporaryPassword must be at least 8 characters" },
@@ -254,7 +283,7 @@ export async function PUT(request: Request) {
       sessionUser.role === "owner" ? undefined : sessionUser.tenantId,
       sessionUser.role,
     )
-    const rows = await runTenantQuery(
+    const rows = (await runTenantQuery(
       sql,
       lookupContext,
       sql`
@@ -263,7 +292,7 @@ export async function PUT(request: Request) {
         WHERE id = ${userId}
         LIMIT 1
       `,
-    )
+    )) as UserRecord[]
 
     if (!rows?.length) {
       return NextResponse.json({ success: false, error: "User not found" }, { status: 404 })
@@ -289,7 +318,7 @@ export async function PUT(request: Request) {
     const passwordHash = hashPassword(temporaryPassword)
 
     const tenantContext = normalizeTenantContext(targetTenantId, sessionUser.role)
-    const result = await runTenantQuery(
+    const result = (await runTenantQuery(
       sql,
       tenantContext,
       sql`
@@ -300,7 +329,7 @@ export async function PUT(request: Request) {
         WHERE id = ${userId}
         RETURNING id, username, role, tenant_id, created_at, password_reset_required
       `,
-    )
+    )) as UserRecord[]
 
     await logAuditEvent(sql, sessionUser, {
       action: "update",
@@ -342,7 +371,7 @@ export async function PUT(request: Request) {
       temporaryPassword,
       message: "Temporary password generated. User must rotate password at next login.",
     })
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("Error resetting user password:", error)
     return adminErrorResponse(error, "Failed to reset password")
   }
@@ -366,7 +395,7 @@ export async function DELETE(request: Request) {
       sessionUser.role === "owner" ? undefined : sessionUser.tenantId,
       sessionUser.role,
     )
-    const rows = await runTenantQuery(
+    const rows = (await runTenantQuery(
       sql,
       lookupContext,
       sql`
@@ -375,7 +404,7 @@ export async function DELETE(request: Request) {
         WHERE id = ${userId}
         LIMIT 1
       `,
-    )
+    )) as UserRecord[]
 
     if (!rows?.length) {
       return NextResponse.json({ success: false, error: "User not found" }, { status: 404 })
@@ -425,7 +454,7 @@ export async function DELETE(request: Request) {
     })
 
     return NextResponse.json({ success: true })
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("Error deleting user:", error)
     return adminErrorResponse(error, "Failed to delete user")
   }

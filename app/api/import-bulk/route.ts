@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server"
+import { z } from "zod"
 import { sql } from "@/lib/server/db"
 import { requireSessionUser } from "@/lib/server/auth"
 import { requireModuleAccess, isModuleAccessError } from "@/lib/server/module-access"
@@ -26,8 +27,49 @@ import {
   parseNumber,
   toLocationCode,
   VALIDATION_EXPIRY_MINUTES,
+  type ImportMode,
   type ImportValidationError,
 } from "@/lib/server/import-bulk-utils"
+
+type ValidationImportJobRow = {
+  id: string
+  validation_expires_at: string | Date | null
+}
+
+type ValidationJobRecord = {
+  id: string
+  status: string
+  dataset: string
+  csv_text: string
+  row_count: number
+  validation_expires_at: string | Date | null
+  errors: unknown
+}
+
+type RequestBody = {
+  dataset: string
+  mode: ImportMode
+  validationToken: string
+  csv: string
+}
+
+type SqlQuery = Parameters<typeof runTenantQueries>[2][number]
+
+const getErrorMessage = (error: unknown, fallback: string) => {
+  if (error instanceof Error && error.message) return error.message
+  if (typeof error === "object" && error && "message" in error) {
+    const message = (error as { message?: unknown }).message
+    if (typeof message === "string" && message.trim()) return message
+  }
+  return fallback
+}
+
+const importBulkBodySchema = z.object({
+  dataset: z.string().trim().optional().default(""),
+  mode: z.union([z.literal("validate"), z.literal("commit")]).optional().default("commit"),
+  validationToken: z.string().trim().optional().default(""),
+  csv: z.string().optional().default(""),
+})
 
 async function createValidationImportJob(input: {
   tenantId: string
@@ -38,7 +80,7 @@ async function createValidationImportJob(input: {
   csvText: string
   rowCount: number
   errors: ImportValidationError[]
-}) {
+}): Promise<ValidationImportJobRow | null> {
   const tenantContext = normalizeTenantContext(input.tenantId, input.role)
   try {
     const rows = await runTenantQuery(
@@ -85,7 +127,7 @@ async function createValidationImportJob(input: {
       `,
     )
 
-    return rows?.[0]
+    return (rows?.[0] || null) as ValidationImportJobRow | null
   } catch (error) {
     if (!isImportJobsUserColumnMissing(error)) throw error
 
@@ -131,7 +173,7 @@ async function createValidationImportJob(input: {
       `,
     )
 
-    return rows?.[0]
+    return (rows?.[0] || null) as ValidationImportJobRow | null
   }
 }
 
@@ -160,7 +202,7 @@ async function loadValidatedImportJob(input: {
   requestedByUserId?: string | null
   dataset: string
   validationToken: string
-}) {
+}): Promise<ValidationJobRecord | null> {
   const tenantContext = normalizeTenantContext(input.tenantId, input.role)
   if (input.requestedByUserId) {
     try {
@@ -187,7 +229,7 @@ async function loadValidatedImportJob(input: {
           LIMIT 1
         `,
       )
-      return rows?.[0]
+      return (rows?.[0] || null) as ValidationJobRecord | null
     } catch (error) {
       if (!isImportJobsUserColumnMissing(error)) throw error
     }
@@ -213,7 +255,7 @@ async function loadValidatedImportJob(input: {
       LIMIT 1
     `,
   )
-  return fallbackRows?.[0]
+  return (fallbackRows?.[0] || null) as ValidationJobRecord | null
 }
 
 async function markImportJobCommitted(input: {
@@ -293,11 +335,22 @@ export async function POST(request: Request) {
       username: requestedBy,
     })
 
-    const body = await request.json()
-    const dataset = String(body?.dataset || "").trim().toLowerCase()
-    mode = normalizeImportMode(body?.mode)
-    const validationToken = String(body?.validationToken || "").trim()
-    let csvText = String(body?.csv || "")
+    const parsedBody = importBulkBodySchema.safeParse(await request.json().catch(() => ({})))
+    if (!parsedBody.success) {
+      return NextResponse.json({ success: false, error: parsedBody.error.issues[0]?.message || "Invalid request body" }, { status: 400 })
+    }
+
+    const body: RequestBody = {
+      dataset: parsedBody.data.dataset,
+      mode: parsedBody.data.mode,
+      validationToken: parsedBody.data.validationToken,
+      csv: parsedBody.data.csv,
+    }
+
+    const dataset = String(body.dataset || "").trim().toLowerCase()
+    mode = normalizeImportMode(body.mode)
+    const validationToken = String(body.validationToken || "").trim()
+    let csvText = String(body.csv || "")
 
     if (!dataset) {
       return NextResponse.json({ success: false, error: "Dataset is required" }, { status: 400 })
@@ -311,7 +364,7 @@ export async function POST(request: Request) {
     await requireModuleAccess(moduleId, sessionUser)
 
     if (mode === "commit" && validationToken) {
-      let validationJob: any
+      let validationJob: ValidationJobRecord | null
       try {
         validationJob = await loadValidatedImportJob({
           tenantId: tenantContext.tenantId,
@@ -387,7 +440,7 @@ export async function POST(request: Request) {
       }
 
       const validation = buildValidationErrors(dataset, records)
-      let jobRow: any
+      let jobRow: ValidationImportJobRow | null
       try {
         jobRow = await createValidationImportJob({
           tenantId: tenantContext.tenantId,
@@ -534,7 +587,7 @@ export async function POST(request: Request) {
       return null
     }
 
-    const flushQueries = async (queries: any[]) => {
+    const flushQueries = async (queries: SqlQuery[]) => {
       if (!queries.length) return
       await runTenantQueries(sql, tenantContext, queries)
       imported += queries.length
@@ -542,7 +595,7 @@ export async function POST(request: Request) {
     }
 
     if (dataset === "processing") {
-      const queries: any[] = []
+      const queries: SqlQuery[] = []
       const recomputeTargets = new Set<string>()
 
       for (let index = 0; index < records.length; index += 1) {
@@ -651,7 +704,7 @@ export async function POST(request: Request) {
     }
 
     if (dataset === "pepper") {
-      const queries: any[] = []
+      const queries: SqlQuery[] = []
       for (let index = 0; index < records.length; index += 1) {
         const row = records[index]
         const rowNumber = index + 2
@@ -728,7 +781,7 @@ export async function POST(request: Request) {
     }
 
     if (dataset === "rainfall") {
-      const queries: any[] = []
+      const queries: SqlQuery[] = []
       for (let index = 0; index < records.length; index += 1) {
         const row = records[index]
         const rowNumber = index + 2
@@ -767,7 +820,7 @@ export async function POST(request: Request) {
     }
 
     if (dataset === "dispatch") {
-      const queries: any[] = []
+      const queries: SqlQuery[] = []
       for (let index = 0; index < records.length; index += 1) {
         const row = records[index]
         const rowNumber = index + 2
@@ -838,7 +891,7 @@ export async function POST(request: Request) {
     }
 
     if (dataset === "sales") {
-      const queries: any[] = []
+      const queries: SqlQuery[] = []
       const bagWeightKg = await resolveBagWeightKg(sql, tenantContext)
 
       for (let index = 0; index < records.length; index += 1) {
@@ -943,7 +996,7 @@ export async function POST(request: Request) {
     }
 
     if (dataset === "transactions") {
-      const queries: any[] = []
+      const queries: SqlQuery[] = []
       const affectedItems = new Set<string>()
 
       for (let index = 0; index < records.length; index += 1) {
@@ -1124,7 +1177,7 @@ export async function POST(request: Request) {
     }
 
     if (dataset === "labor") {
-      const queries: any[] = []
+      const queries: SqlQuery[] = []
       for (let index = 0; index < records.length; index += 1) {
         const row = records[index]
         const rowNumber = index + 2
@@ -1197,7 +1250,7 @@ export async function POST(request: Request) {
     }
 
     if (dataset === "expenses") {
-      const queries: any[] = []
+      const queries: SqlQuery[] = []
       for (let index = 0; index < records.length; index += 1) {
         const row = records[index]
         const rowNumber = index + 2
@@ -1240,7 +1293,7 @@ export async function POST(request: Request) {
     }
 
     return NextResponse.json({ success: false, error: "Unsupported dataset" }, { status: 400 })
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("Import error:", error)
     if (commitJobId && activeTenantContext) {
       try {
@@ -1248,7 +1301,7 @@ export async function POST(request: Request) {
           tenantId: activeTenantContext.tenantId,
           role: activeTenantContext.role,
           jobId: commitJobId,
-          message: error?.message || "Import failed",
+          message: getErrorMessage(error, "Import failed"),
         })
       } catch (jobError) {
         console.warn("Failed to mark import job as failed:", jobError)
@@ -1260,6 +1313,6 @@ export async function POST(request: Request) {
     if ((mode === "validate" || commitJobId) && isImportJobTableMissing(error)) {
       return NextResponse.json({ success: false, error: IMPORT_JOB_HELP }, { status: 503 })
     }
-    return NextResponse.json({ success: false, error: error?.message || "Import failed" }, { status: 500 })
+    return NextResponse.json({ success: false, error: getErrorMessage(error, "Import failed") }, { status: 500 })
   }
 }

@@ -35,6 +35,7 @@ import {
   BookOpen,
   Scale,
   FileText,
+  Coins,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -55,6 +56,7 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import { useMediaQuery } from "@/hooks/use-media-query"
+import { useStandaloneMode } from "@/hooks/use-standalone-mode"
 import { useAuth } from "@/hooks/use-auth"
 import { useTenantExperience } from "@/hooks/use-tenant-experience"
 import { useRouter, useSearchParams } from "next/navigation"
@@ -84,6 +86,7 @@ import Link from "next/link"
 import Image from "next/image"
 import { isWithinLast24Hours } from "@/lib/date-utils"
 import { formatCurrency, formatNumber } from "@/lib/format"
+import { type AccountsExportFormat } from "@/lib/accounts-export"
 import { getCurrentFiscalYear } from "@/lib/fiscal-year-utils"
 import { getModuleDefaultEnabled } from "@/lib/modules"
 import type { InventoryItem, Transaction } from "@/lib/inventory-types"
@@ -91,10 +94,7 @@ import { cn } from "@/lib/utils"
 import { toast } from "@/components/ui/use-toast"
 import { roleLabel } from "@/lib/roles"
 import {
-  datasetTemplateCsv,
   EXPORT_DATASETS,
-  EXPORT_DATASET_MAP,
-  IMPORT_DATASET_MAP,
   isExportDatasetId,
   TAB_DEFAULT_EXPORT_DATASET,
   type ExportDatasetId,
@@ -120,10 +120,46 @@ import {
   parseCustomDateString,
   parseJsonResponse,
   safeGet,
-  supportsImportTemplate,
 } from "@/components/inventory-system/utils"
+import { downloadDataToolsTemplate, exportOpsCsv, getDataToolsSelection } from "@/components/inventory-system/data-tools-export"
 
 import posthog from "posthog-js"
+
+const WRITE_QUEUE_STATUS_EVENT = "farmflow:write-queue-status"
+
+type WriteQueueBlockedEntry = {
+  id: number
+  method: string
+  pathname: string
+  url: string
+  queuedAt: number
+  attempts: number
+  lastError?: string
+  lastStatus?: number | null
+  blockedReason?: string
+}
+
+type WriteQueueStatusSnapshot = {
+  pendingCount: number
+  blockedAuthCount: number
+  blockedReviewCount: number
+  blockedAuthEntries: WriteQueueBlockedEntry[]
+  blockedReviewEntries: WriteQueueBlockedEntry[]
+  updatedAt: number | null
+}
+
+type OpsExportFailureSnapshot = {
+  dataset: ExportDatasetId
+  message: string
+  occurredAt: number
+}
+
+type TransactionWriteFailureSnapshot = {
+  message: string
+  occurredAt: number
+  locationId: string | null
+  transaction: Transaction
+}
 
 export default function InventorySystem() {
   // UI / paging
@@ -219,6 +255,21 @@ export default function InventorySystem() {
   const [isSyncing, setIsSyncing] = useState(false)
   const [syncError, setSyncError] = useState<string | null>(null)
   const [lastSync, setLastSync] = useState<Date | null>(null)
+  const [writeQueueStatus, setWriteQueueStatus] = useState<WriteQueueStatusSnapshot>({
+    pendingCount: 0,
+    blockedAuthCount: 0,
+    blockedReviewCount: 0,
+    blockedAuthEntries: [],
+    blockedReviewEntries: [],
+    updatedAt: null,
+  })
+  const [isRequestingQueueRetry, setIsRequestingQueueRetry] = useState(false)
+  const [accountsExportRequest, setAccountsExportRequest] = useState<{
+    requestId: number
+    format: AccountsExportFormat
+  } | null>(null)
+  const [lastOpsExportFailure, setLastOpsExportFailure] = useState<OpsExportFailureSnapshot | null>(null)
+  const [lastTransactionWriteFailure, setLastTransactionWriteFailure] = useState<TransactionWriteFailureSnapshot | null>(null)
 
   // edit/create UI
   const [isNewItemDialogOpen, setIsNewItemDialogOpen] = useState(false)
@@ -276,6 +327,7 @@ export default function InventorySystem() {
   const [intelligenceLoading, setIntelligenceLoading] = useState(false)
   const [intelligenceError, setIntelligenceError] = useState<string | null>(null)
   const hasTrackedInsightViewRef = useRef(false)
+  const lastExecutionOutcomeSignatureRef = useRef("")
   const [onboardingStatus, setOnboardingStatus] = useState({
     locations: false,
     inventory: false,
@@ -342,6 +394,8 @@ export default function InventorySystem() {
 
   // helpers
   const isMobile = useMediaQuery("(max-width: 768px)")
+  const isStandaloneMode = useStandaloneMode()
+  const isStandaloneMobileApp = isMobile && isStandaloneMode
   const currentFiscalYear = useMemo(() => getCurrentFiscalYear(), [])
   const estateMetrics = useMemo(() => {
     const inventoryCount = inventory.length
@@ -737,6 +791,99 @@ export default function InventorySystem() {
     if (selectedLocationId === LOCATION_UNASSIGNED) return UNASSIGNED_LABEL
     return resolveLocationLabel(selectedLocationId)
   }, [selectedLocationId, resolveLocationLabel])
+
+  const postMessageToServiceWorker = useCallback((payload: Record<string, unknown>) => {
+    if (typeof window === "undefined" || !("serviceWorker" in navigator)) return
+    if (navigator.serviceWorker.controller) {
+      navigator.serviceWorker.controller.postMessage(payload)
+    }
+    void navigator.serviceWorker.ready
+      .then((registration) => {
+        registration.active?.postMessage(payload)
+        registration.waiting?.postMessage(payload)
+        registration.installing?.postMessage(payload)
+      })
+      .catch(() => undefined)
+  }, [])
+
+  const requestWriteQueueStatus = useCallback(() => {
+    postMessageToServiceWorker({ type: "GET_WRITE_QUEUE_STATUS" })
+  }, [postMessageToServiceWorker])
+
+  const handleRetryWriteQueue = useCallback(() => {
+    setIsRequestingQueueRetry(true)
+    postMessageToServiceWorker({ type: "FLUSH_WRITE_QUEUE" })
+    posthog.capture("offline_queue_retry_requested", {
+      pending_count: writeQueueStatus.pendingCount,
+      blocked_auth_count: writeQueueStatus.blockedAuthCount,
+      blocked_review_count: writeQueueStatus.blockedReviewCount,
+    })
+    window.setTimeout(() => {
+      requestWriteQueueStatus()
+      setIsRequestingQueueRetry(false)
+    }, 900)
+  }, [
+    postMessageToServiceWorker,
+    requestWriteQueueStatus,
+    writeQueueStatus.blockedAuthCount,
+    writeQueueStatus.blockedReviewCount,
+    writeQueueStatus.pendingCount,
+  ])
+
+  const handleRemoveQueuedEntry = useCallback(
+    (entryId: number) => {
+      if (!entryId) return
+      postMessageToServiceWorker({ type: "DELETE_QUEUED_REQUEST", id: entryId })
+      posthog.capture("offline_queue_entry_removed", { queue_entry_id: entryId })
+      window.setTimeout(() => {
+        requestWriteQueueStatus()
+      }, 250)
+    },
+    [postMessageToServiceWorker, requestWriteQueueStatus],
+  )
+
+  useEffect(() => {
+    if (typeof window === "undefined") return
+
+    const toQueueEntryArray = (value: unknown): WriteQueueBlockedEntry[] => {
+      if (!Array.isArray(value)) return []
+      return value
+        .map((entry) => {
+          const source = entry && typeof entry === "object" ? (entry as Record<string, unknown>) : {}
+          return {
+            id: Number(source.id || 0),
+            method: String(source.method || "POST").toUpperCase(),
+            pathname: String(source.pathname || ""),
+            url: String(source.url || ""),
+            queuedAt: Number(source.queuedAt || 0),
+            attempts: Number(source.attempts || 0),
+            lastError: String(source.lastError || ""),
+            lastStatus: source.lastStatus == null ? null : Number(source.lastStatus || 0),
+            blockedReason: String(source.blockedReason || ""),
+          }
+        })
+        .filter((entry) => entry.id > 0)
+    }
+
+    const handleQueueStatusEvent = (rawEvent: Event) => {
+      const detail = (rawEvent as CustomEvent<Record<string, unknown>>).detail || {}
+      setWriteQueueStatus({
+        pendingCount: Number(detail.pendingCount || 0),
+        blockedAuthCount: Number(detail.blockedAuthCount || detail.blockedCount || 0),
+        blockedReviewCount: Number(detail.blockedReviewCount || detail.reviewCount || 0),
+        blockedAuthEntries: toQueueEntryArray(detail.blockedAuthEntries),
+        blockedReviewEntries: toQueueEntryArray(detail.blockedReviewEntries),
+        updatedAt: Number(detail.updatedAt || Date.now()),
+      })
+    }
+
+    window.addEventListener(WRITE_QUEUE_STATUS_EVENT, handleQueueStatusEvent as EventListener)
+    requestWriteQueueStatus()
+
+    return () => {
+      window.removeEventListener(WRITE_QUEUE_STATUS_EVENT, handleQueueStatusEvent as EventListener)
+    }
+  }, [requestWriteQueueStatus])
 
   // computed lists
   const allItemTypesForDropdown = Array.from(new Set([...inventory.map((i) => i.name), ...transactions.map((t) => t.item_type)])).sort().filter(Boolean)
@@ -1858,8 +2005,8 @@ export default function InventorySystem() {
   }
 
   // POST a transaction to the API
-  const handleRecordTransaction = async () => {
-    const tx = ensureTransactionSafety(newTransaction)
+  const submitTransaction = async (sourceTransaction: Transaction, locationOverride?: string | null) => {
+    const tx = ensureTransactionSafety(sourceTransaction)
     if (!tx.item_type || !tx.transaction_type) {
       toast({ title: "Missing fields", description: "Please select item and transaction type.", variant: "destructive" })
       return
@@ -1869,9 +2016,11 @@ export default function InventorySystem() {
       return
     }
 
+    const locationSource = locationOverride ?? transactionLocationId
+    const normalizedLocationSource = typeof locationSource === "string" ? locationSource.trim() : ""
     const locationValue =
-      transactionLocationId && transactionLocationId !== LOCATION_UNASSIGNED && transactionLocationId !== LOCATION_ALL
-        ? transactionLocationId
+      normalizedLocationSource && normalizedLocationSource !== LOCATION_UNASSIGNED && normalizedLocationSource !== LOCATION_ALL
+        ? normalizedLocationSource
         : null
 
     try {
@@ -1889,10 +2038,28 @@ export default function InventorySystem() {
       await refreshData(true)
       // reset
       setNewTransaction(createDefaultTransaction())
+      setLastTransactionWriteFailure(null)
     } catch (error: any) {
       console.error("Record transaction error:", error)
-      toast({ title: "Transaction failed", description: error.message || "Try again", variant: "destructive" })
+      const failureMessage = error.message || "Try again"
+      setLastTransactionWriteFailure({
+        message: failureMessage,
+        occurredAt: Date.now(),
+        locationId: locationValue,
+        transaction: tx,
+      })
+      toast({ title: "Transaction failed", description: failureMessage, variant: "destructive" })
     }
+  }
+
+  const handleRecordTransaction = async () => {
+    const tx = ensureTransactionSafety(newTransaction)
+    await submitTransaction(tx)
+  }
+
+  const handleRetryTransactionWrite = () => {
+    if (!lastTransactionWriteFailure) return
+    void submitTransaction(lastTransactionWriteFailure.transaction, lastTransactionWriteFailure.locationId)
   }
 
   // Edit / Delete flows (simplified; use your route shapes as needed)
@@ -2245,17 +2412,17 @@ export default function InventorySystem() {
     }
   }, [activeTab, dataToolsDataset])
 
-  const selectedDataToolsConfig = useMemo(
-    () => EXPORT_DATASET_MAP[dataToolsDataset] || EXPORT_DATASETS[0],
+  const selectedDataTools = useMemo(
+    () => getDataToolsSelection(dataToolsDataset),
     [dataToolsDataset],
   )
-  const selectedDataToolsTemplateConfig = useMemo(
-    () => (supportsImportTemplate(dataToolsDataset) ? IMPORT_DATASET_MAP[dataToolsDataset] : null),
-    [dataToolsDataset],
-  )
-  const dataToolsImportHref = selectedDataToolsTemplateConfig
-    ? `/settings/import?dataset=${selectedDataToolsTemplateConfig.id}`
-    : "/settings/import"
+  const selectedDataToolsConfig = selectedDataTools.exportConfig
+  const selectedDataToolsTemplateConfig = selectedDataTools.templateConfig
+  const dataToolsImportHref = selectedDataTools.importHref
+  const lastOpsExportFailureLabel = useMemo(() => {
+    if (!lastOpsExportFailure) return ""
+    return getDataToolsSelection(lastOpsExportFailure.dataset).exportConfig.label
+  }, [lastOpsExportFailure])
 
   const handleDownloadDataTemplate = useCallback(() => {
     if (!selectedDataToolsTemplateConfig) {
@@ -2265,16 +2432,7 @@ export default function InventorySystem() {
       })
       return
     }
-    const templateCsv = datasetTemplateCsv(selectedDataToolsTemplateConfig.id)
-    const blob = new Blob([templateCsv], { type: "text/csv;charset=utf-8" })
-    const url = URL.createObjectURL(blob)
-    const link = document.createElement("a")
-    link.href = url
-    link.download = `${selectedDataToolsTemplateConfig.id}-template.csv`
-    document.body.appendChild(link)
-    link.click()
-    document.body.removeChild(link)
-    URL.revokeObjectURL(url)
+    downloadDataToolsTemplate(selectedDataToolsTemplateConfig)
     toast({
       title: "Template downloaded",
       description: `${selectedDataToolsTemplateConfig.label} template is ready.`,
@@ -2284,50 +2442,22 @@ export default function InventorySystem() {
   const handleDataToolsExport = useCallback(async () => {
     setIsExportingDataTools(true)
     try {
-      const params = new URLSearchParams({
+      const exportResult = await exportOpsCsv({
         dataset: dataToolsDataset,
-        format: "csv",
+        exportConfig: selectedDataToolsConfig,
+        startDate: currentFiscalYear.startDate,
+        endDate: currentFiscalYear.endDate,
+        isPreviewMode,
+        previewTenantId,
       })
-      if (dataToolsDataset !== "inventory") {
-        params.set("startDate", currentFiscalYear.startDate)
-        params.set("endDate", currentFiscalYear.endDate)
-      }
-      if (isPreviewMode && previewTenantId) {
-        params.set("tenantId", previewTenantId)
-      }
-
-      const response = await fetch(`/api/exports/ops?${params.toString()}`, { cache: "no-store" })
-      if (!response.ok) {
-        let errorMessage = "Export failed"
-        try {
-          const payload = await response.json()
-          errorMessage = payload?.error || errorMessage
-        } catch {
-          // keep generic message
-        }
-        throw new Error(errorMessage)
-      }
-
-      const wasTruncated = response.headers.get("x-export-truncated") === "1"
-      const maxRows = Number(response.headers.get("x-export-max-rows") || "0")
-      const returnedRows = Number(response.headers.get("x-export-returned-rows") || "0")
-
-      const blob = await response.blob()
-      const contentDisposition = response.headers.get("content-disposition") || ""
-      const filenameMatch = contentDisposition.match(/filename="?([^"]+)"?/)
-      const fallbackName =
-        dataToolsDataset === "inventory"
-          ? `${dataToolsDataset}-snapshot.csv`
-          : `${dataToolsDataset}-${currentFiscalYear.startDate}-to-${currentFiscalYear.endDate}.csv`
-      const filename = filenameMatch?.[1] || fallbackName
-      const downloadUrl = URL.createObjectURL(blob)
-      const link = document.createElement("a")
-      link.href = downloadUrl
-      link.download = filename
-      document.body.appendChild(link)
-      link.click()
-      document.body.removeChild(link)
-      URL.revokeObjectURL(downloadUrl)
+      const { wasTruncated, maxRows, returnedRows } = exportResult
+      posthog.capture("ops_export_downloaded", {
+        dataset: dataToolsDataset,
+        truncated: wasTruncated,
+        returned_rows: returnedRows,
+        max_rows: maxRows,
+        source_tab: activeTab,
+      })
       if (wasTruncated) {
         toast({
           title: "Export capped at row limit",
@@ -2339,10 +2469,22 @@ export default function InventorySystem() {
           description: `${selectedDataToolsConfig.label} CSV downloaded.`,
         })
       }
-    } catch (error: any) {
+      setLastOpsExportFailure(null)
+    } catch (error: unknown) {
+      const failureMessage = error instanceof Error ? error.message : "Unable to export now."
+      posthog.capture("ops_export_failed", {
+        dataset: dataToolsDataset,
+        source_tab: activeTab,
+        message: failureMessage,
+      })
+      setLastOpsExportFailure({
+        dataset: dataToolsDataset,
+        message: failureMessage,
+        occurredAt: Date.now(),
+      })
       toast({
         title: "Export failed",
-        description: error?.message || "Unable to export now.",
+        description: failureMessage,
         variant: "destructive",
       })
     } finally {
@@ -2354,8 +2496,13 @@ export default function InventorySystem() {
     dataToolsDataset,
     isPreviewMode,
     previewTenantId,
-    selectedDataToolsConfig.label,
+    activeTab,
+    selectedDataToolsConfig,
   ])
+
+  const handleRetryLastOpsExport = useCallback(() => {
+    void handleDataToolsExport()
+  }, [handleDataToolsExport])
 
   const handleOpenItemDrilldownHistory = () => {
     if (!inventoryDrilldownItemName) return
@@ -2976,6 +3123,43 @@ export default function InventorySystem() {
     showTransactionHistory,
     visibleTabs,
   ])
+
+  useEffect(() => {
+    if (!user?.tenantId || executionOutcomeChecks.length === 0) return
+
+    const statusById = executionOutcomeChecks.reduce<Record<string, string>>((acc, check) => {
+      acc[check.id] = check.status
+      return acc
+    }, {})
+    const metricById = executionOutcomeChecks.reduce<Record<string, string>>((acc, check) => {
+      acc[check.id] = check.metric
+      return acc
+    }, {})
+
+    const signature = JSON.stringify({
+      tenantId: user.tenantId,
+      statusById,
+      metricById,
+    })
+
+    if (signature === lastExecutionOutcomeSignatureRef.current) {
+      return
+    }
+    lastExecutionOutcomeSignatureRef.current = signature
+
+    posthog.capture("execution_scorecard_snapshot", {
+      tenant_id: user.tenantId,
+      role: user.role,
+      active_tab: activeTab,
+      checks: executionOutcomeChecks.length,
+      strong_count: executionOutcomeChecks.filter((check) => check.status === "good").length,
+      attention_count: executionOutcomeChecks.filter((check) => check.status === "attention").length,
+      blocked_count: executionOutcomeChecks.filter((check) => check.status === "blocked").length,
+      status_by_id: statusById,
+      metric_by_id: metricById,
+    })
+  }, [activeTab, executionOutcomeChecks, user?.role, user?.tenantId])
+
   const getPreferredDefaultTab = useCallback(
     (tabs: string[]) => DEFAULT_DASHBOARD_TAB_PRIORITY.find((tab) => tabs.includes(tab)) || tabs[0],
     [],
@@ -3645,6 +3829,84 @@ export default function InventorySystem() {
     [openDrilldown],
   )
 
+  const handleExecutionOutcomeAction = useCallback(
+    (check: ExecutionOutcomeCheck) => {
+      posthog.capture("execution_scorecard_action_clicked", {
+        check_id: check.id,
+        check_status: check.status,
+        action_tab: check.actionTab,
+      })
+      openDrilldown({ tab: check.actionTab })
+    },
+    [openDrilldown],
+  )
+
+  const resolveWriteQueueTab = useCallback(
+    (pathname: string) => {
+      const normalized = String(pathname || "").trim().toLowerCase()
+      if (!normalized) return "home"
+      if (normalized.startsWith("/api/processing-records")) return canShowProcessing ? "processing" : "home"
+      if (normalized.startsWith("/api/dispatch")) return canShowDispatch ? "dispatch" : "home"
+      if (normalized.startsWith("/api/sales")) return canShowSales ? "sales" : "home"
+      if (normalized.startsWith("/api/rainfall")) return canShowRainfall ? "rainfall" : "home"
+      if (normalized.startsWith("/api/pepper-records")) return canShowPepper ? "pepper" : "home"
+      if (normalized.startsWith("/api/transactions-neon")) return showTransactionHistory ? "transactions" : "inventory"
+      if (normalized.startsWith("/api/inventory-neon")) return canShowInventory ? "inventory" : "home"
+      if (normalized.startsWith("/api/locations")) return canShowInventory ? "inventory" : "home"
+      if (normalized.startsWith("/api/labor-neon") || normalized.startsWith("/api/expenses-neon")) {
+        return canShowAccounts ? "accounts" : "home"
+      }
+      if (normalized.startsWith("/api/receivables")) return canShowReceivables ? "receivables" : "home"
+      return "home"
+    },
+    [
+      canShowAccounts,
+      canShowDispatch,
+      canShowInventory,
+      canShowPepper,
+      canShowProcessing,
+      canShowRainfall,
+      canShowReceivables,
+      canShowSales,
+      showTransactionHistory,
+    ],
+  )
+
+  const handleOpenWriteQueueFix = useCallback(
+    (entry: WriteQueueBlockedEntry) => {
+      const targetTab = resolveWriteQueueTab(entry.pathname || entry.url)
+      openDrilldown({ tab: targetTab })
+      posthog.capture("offline_queue_fix_opened", {
+        endpoint: entry.pathname || entry.url,
+        target_tab: targetTab,
+        queue_entry_id: entry.id,
+        blocked_reason: entry.blockedReason || "unknown",
+        status_code: entry.lastStatus ?? null,
+      })
+    },
+    [openDrilldown, resolveWriteQueueTab],
+  )
+
+  const handleRequestAccountsExport = useCallback(
+    (format: AccountsExportFormat) => {
+      const requestId = Date.now()
+      setAccountsExportRequest({ requestId, format })
+      openDrilldown({ tab: "accounts" })
+      posthog.capture("accounts_export_requested_from_hub", {
+        format,
+        source_tab: activeTab,
+      })
+    },
+    [activeTab, openDrilldown],
+  )
+
+  const handleAccountsExportRequestHandled = useCallback((requestId: number) => {
+    setAccountsExportRequest((current) => {
+      if (!current || current.requestId !== requestId) return current
+      return null
+    })
+  }, [])
+
   const goToWorkspaceNavigator = useCallback(() => {
     setActiveTab(DASHBOARD_LAUNCHER_TAB)
     markTabAsLoaded(DASHBOARD_LAUNCHER_TAB)
@@ -3678,6 +3940,17 @@ export default function InventorySystem() {
     if (activeTabGroup === "insights") return insightsTabItems
     return []
   }, [activeTabGroup, financeTabItems, insightsTabItems, operationsTabItems])
+
+  const mobileAppSectionGroups = useMemo(
+    () =>
+      [
+        { id: "dashboard" as TabGroupKey, label: "Home", icon: Home, visible: true },
+        { id: "operations" as TabGroupKey, label: "Ops", icon: Factory, visible: showOperationsTabs },
+        { id: "finance" as TabGroupKey, label: "Finance", icon: Scale, visible: showFinanceTabs },
+        { id: "insights" as TabGroupKey, label: "Insights", icon: BarChart3, visible: showInsightsTabs },
+      ].filter((group) => group.visible),
+    [showFinanceTabs, showInsightsTabs, showOperationsTabs],
+  )
 
   const launcherSections = useMemo(
     () =>
@@ -4024,6 +4297,28 @@ export default function InventorySystem() {
         </Badge>
       </div>
       <div className="mt-6 space-y-5">
+        {lastTransactionWriteFailure && (
+          <div
+            data-testid="transaction-write-failure-banner"
+            className="rounded-xl border border-rose-200 bg-rose-50/90 px-4 py-3 text-sm"
+          >
+            <p className="font-medium text-rose-900">Last transaction did not save</p>
+            <p className="mt-1 text-xs text-rose-800">
+              {lastTransactionWriteFailure.message}
+              {lastTransactionWriteFailure.occurredAt > 0
+                ? ` (at ${new Date(lastTransactionWriteFailure.occurredAt).toLocaleTimeString()})`
+                : ""}
+            </p>
+            <div className="mt-2 flex flex-wrap gap-2">
+              <Button size="sm" variant="outline" className="bg-white" onClick={handleRetryTransactionWrite}>
+                Retry last transaction
+              </Button>
+              <Button size="sm" variant="ghost" className="text-rose-700" onClick={() => setLastTransactionWriteFailure(null)}>
+                Dismiss
+              </Button>
+            </div>
+          </div>
+        )}
         <div className="space-y-2">
           <div className="flex items-center gap-2">
             <label className="text-sm font-medium text-neutral-700">Item Type</label>
@@ -4051,7 +4346,10 @@ export default function InventorySystem() {
               handleFieldChange("unit", u)
             }}
           >
-            <SelectTrigger className="w-full h-11 rounded-xl border-black/5 bg-white focus-visible:ring-2 focus-visible:ring-emerald-200">
+            <SelectTrigger
+              data-testid="movement-item-type-select"
+              className="w-full h-11 rounded-xl border-black/5 bg-white focus-visible:ring-2 focus-visible:ring-emerald-200"
+            >
               <SelectValue placeholder={hasMovementItemTypes ? "Select item type" : "No items yet"} />
             </SelectTrigger>
             <SelectContent className="z-[70] max-h-[40vh] overflow-y-auto">
@@ -4131,6 +4429,7 @@ export default function InventorySystem() {
           </div>
           <div className="relative">
             <Input
+              data-testid="movement-quantity-input"
               type="number"
               min={0}
               step="0.01"
@@ -4217,6 +4516,7 @@ export default function InventorySystem() {
         </div>
 
         <Button
+          data-testid="movement-record-transaction"
           onClick={handleRecordTransaction}
           className="w-full h-11 text-base bg-emerald-700 hover:bg-emerald-800 text-white shadow-sm"
         >
@@ -4323,11 +4623,18 @@ export default function InventorySystem() {
     </div>
   )
 
+  const showMobileSectionRail = isMobile && activeTabGroup !== "dashboard" && activeSectionTabs.length > 0
+  const mobileBottomSpacingClass = isMobile
+    ? isStandaloneMobileApp
+      ? "pb-[calc(11rem+env(safe-area-inset-bottom))]"
+      : "pb-[calc(6.5rem+env(safe-area-inset-bottom))]"
+    : "pb-8"
+
   return (
     <div
       className={cn(
         "relative mx-auto w-full px-3 pt-4 sm:px-4 sm:py-8",
-        isMobile ? "pb-[calc(6.5rem+env(safe-area-inset-bottom))]" : "pb-8",
+        mobileBottomSpacingClass,
       )}
     >
       <div className="relative max-w-7xl mx-auto">
@@ -4605,6 +4912,92 @@ export default function InventorySystem() {
           </div>
         </div>
 
+        {writeQueueStatus.pendingCount > 0 && (
+          <Card className="mb-4 border-amber-200 bg-amber-50/70">
+            <CardHeader className="pb-2">
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                <div>
+                  <CardTitle className="text-base">Offline Sync Queue</CardTitle>
+                  <CardDescription>
+                    {writeQueueStatus.pendingCount} queued update{writeQueueStatus.pendingCount === 1 ? "" : "s"} pending.
+                    {writeQueueStatus.blockedAuthCount > 0
+                      ? ` ${writeQueueStatus.blockedAuthCount} need sign-in.`
+                      : writeQueueStatus.blockedReviewCount > 0
+                        ? ` ${writeQueueStatus.blockedReviewCount} need manual review.`
+                        : " Waiting for retry."}
+                  </CardDescription>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    className="bg-white"
+                    disabled={isRequestingQueueRetry}
+                    onClick={handleRetryWriteQueue}
+                  >
+                    <RefreshCw className={cn("mr-2 h-4 w-4", isRequestingQueueRetry && "animate-spin")} />
+                    {isRequestingQueueRetry ? "Retrying..." : "Retry Sync"}
+                  </Button>
+                </div>
+              </div>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              {writeQueueStatus.blockedAuthEntries.length > 0 && (
+                <div className="space-y-2">
+                  <p className="text-xs font-semibold uppercase tracking-[0.14em] text-rose-700">Sign-in required</p>
+                  {writeQueueStatus.blockedAuthEntries.slice(0, 3).map((entry) => (
+                    <div key={`auth-${entry.id}`} className="rounded-lg border border-rose-200 bg-white p-3">
+                      <p className="text-sm font-medium text-rose-800">
+                        #{entry.id} {entry.method} {entry.pathname || entry.url}
+                      </p>
+                      <p className="mt-1 text-xs text-rose-700">
+                        {entry.lastStatus ? `HTTP ${entry.lastStatus}` : "Authentication required"} · Attempts {entry.attempts}
+                      </p>
+                      <div className="mt-2 flex flex-wrap gap-2">
+                        <Button size="sm" variant="outline" className="bg-white" onClick={() => handleOpenWriteQueueFix(entry)}>
+                          Open Fix
+                        </Button>
+                        <Button size="sm" variant="ghost" className="text-rose-700" onClick={() => void handleLogout()}>
+                          Sign In Again
+                        </Button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {writeQueueStatus.blockedReviewEntries.length > 0 && (
+                <div className="space-y-2">
+                  <p className="text-xs font-semibold uppercase tracking-[0.14em] text-amber-800">Review required</p>
+                  {writeQueueStatus.blockedReviewEntries.slice(0, 5).map((entry) => (
+                    <div key={`review-${entry.id}`} className="rounded-lg border border-amber-200 bg-white p-3">
+                      <p className="text-sm font-medium text-amber-900">
+                        #{entry.id} {entry.method} {entry.pathname || entry.url}
+                      </p>
+                      <p className="mt-1 text-xs text-amber-800">
+                        {entry.lastStatus ? `HTTP ${entry.lastStatus}` : "Server rejected the request"} · Attempts {entry.attempts}
+                        {entry.queuedAt > 0 ? ` · Queued ${new Date(entry.queuedAt).toLocaleString()}` : ""}
+                      </p>
+                      <p className="mt-1 text-xs text-muted-foreground">
+                        {entry.lastError || "Re-open the matching module, correct the value, then retry sync."}
+                      </p>
+                      <div className="mt-2 flex flex-wrap gap-2">
+                        <Button size="sm" variant="outline" className="bg-white" onClick={() => handleOpenWriteQueueFix(entry)}>
+                          Open Fix
+                        </Button>
+                        <Button size="sm" variant="ghost" className="text-rose-700" onClick={() => handleRemoveQueuedEntry(entry.id)}>
+                          Remove
+                        </Button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        )}
+
         <div className="mb-4 flex justify-end">
           <Button
             type="button"
@@ -4612,7 +5005,7 @@ export default function InventorySystem() {
             className="bg-emerald-700 hover:bg-emerald-800 text-white"
           >
             <Upload className="mr-2 h-4 w-4" />
-            {showDataToolsPanel ? "Hide Import / Export" : "Import / Export"}
+            {showDataToolsPanel ? "Hide Exports / Import" : "Exports / Import"}
           </Button>
         </div>
 
@@ -4621,17 +5014,66 @@ export default function InventorySystem() {
             <CardHeader className="pb-3">
               <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                 <div>
-                  <CardTitle className="text-base">Data Tools</CardTitle>
+                  <CardTitle className="text-base">Exports & Import</CardTitle>
                   <CardDescription>
-                    Export CSV, download an import template, or jump into bulk import from any tab.
+                    One clear export hub: CSV and QIF for accounts, plus tab-aware ops CSV and import templates.
                   </CardDescription>
                 </div>
                 <Badge variant="outline" className="w-fit border-emerald-200 bg-white text-emerald-700">
-                  Tab-aware defaults
+                  Mobile-first export hub
                 </Badge>
               </div>
             </CardHeader>
             <CardContent className="space-y-3">
+              <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+                <Button onClick={handleDataToolsExport} disabled={isExportingDataTools} className="justify-start">
+                  <Download className="mr-2 h-4 w-4" />
+                  {isExportingDataTools ? "Exporting Ops CSV..." : "Ops CSV Export"}
+                </Button>
+                {canManageData && canShowAccounts ? (
+                  <>
+                    <Button
+                      variant="outline"
+                      className="justify-start bg-white"
+                      onClick={() => handleRequestAccountsExport("csv")}
+                    >
+                      <FileText className="mr-2 h-4 w-4" />
+                      Accounts CSV
+                    </Button>
+                    <Button
+                      variant="outline"
+                      className="justify-start bg-white"
+                      onClick={() => handleRequestAccountsExport("qif")}
+                    >
+                      <Coins className="mr-2 h-4 w-4" />
+                      Accounts QIF
+                    </Button>
+                  </>
+                ) : (
+                  <p className="rounded-lg border border-dashed border-neutral-300 bg-white px-3 py-2 text-xs text-muted-foreground sm:col-span-2">
+                    Accounts CSV/QIF exports are visible to admin and owner roles.
+                  </p>
+                )}
+              </div>
+              {lastOpsExportFailure && (
+                <div data-testid="ops-export-failure-banner" className="rounded-lg border border-amber-200 bg-amber-50/90 p-3 text-sm">
+                  <p className="font-medium text-amber-900">Ops export failed</p>
+                  <p className="mt-1 text-xs text-amber-800">
+                    {lastOpsExportFailureLabel || "Selected dataset"}: {lastOpsExportFailure.message}
+                    {lastOpsExportFailure.occurredAt > 0
+                      ? ` (at ${new Date(lastOpsExportFailure.occurredAt).toLocaleTimeString()})`
+                      : ""}
+                  </p>
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    <Button size="sm" variant="outline" className="bg-white" onClick={handleRetryLastOpsExport}>
+                      Retry export
+                    </Button>
+                    <Button size="sm" variant="ghost" className="text-amber-700" onClick={() => setLastOpsExportFailure(null)}>
+                      Dismiss
+                    </Button>
+                  </div>
+                </div>
+              )}
               <div className="grid grid-cols-1 gap-3 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-end">
                 <div className="space-y-2">
                   <Label className="text-xs uppercase tracking-[0.16em] text-neutral-500">Dataset</Label>
@@ -4657,10 +5099,6 @@ export default function InventorySystem() {
                   <p className="text-xs text-muted-foreground">{selectedDataToolsConfig.description}</p>
                 </div>
                 <div className="flex flex-wrap gap-2 lg:justify-end">
-                  <Button onClick={handleDataToolsExport} disabled={isExportingDataTools}>
-                    <Download className="mr-2 h-4 w-4" />
-                    {isExportingDataTools ? "Exporting..." : "Export CSV"}
-                  </Button>
                   <Button
                     variant="outline"
                     onClick={handleDownloadDataTemplate}
@@ -4757,12 +5195,13 @@ export default function InventorySystem() {
           </div>
         )}
         <Tabs value={activeTab} onValueChange={handleTabChange} className="w-full space-y-4">
-          <div
-            className={cn(
-              "sticky top-2 z-20 rounded-3xl border border-black/10 bg-gradient-to-br from-white/95 via-white to-neutral-100/80 shadow-[0_12px_30px_-24px_rgba(15,23,42,0.75)] backdrop-blur",
-              isMobile ? "space-y-2.5 p-3" : "space-y-3 p-4",
-            )}
-          >
+          {!isStandaloneMobileApp && (
+            <div
+              className={cn(
+                "z-20 rounded-3xl border border-black/10 bg-gradient-to-br from-white/95 via-white to-neutral-100/80 shadow-[0_12px_30px_-24px_rgba(15,23,42,0.75)] backdrop-blur",
+                isMobile ? "relative space-y-2.5 p-3" : "sticky top-2 space-y-3 p-4",
+              )}
+            >
             {activeTab !== DASHBOARD_LAUNCHER_TAB && (
               <div className={cn("flex", isMobile ? "justify-stretch" : "justify-start")}>
                 <Button
@@ -4797,7 +5236,7 @@ export default function InventorySystem() {
                   onClick={() => handleSectionSelect("operations")}
                   className={cn(
                     "flex items-center gap-3 rounded-2xl border text-left transition-all touch-manipulation shadow-sm",
-                    isMobile ? "min-h-[82px] min-w-[220px] snap-start px-3.5 py-2.5" : "min-h-[96px] px-4 py-3.5",
+                    isMobile ? "min-h-[82px] min-w-[220px] max-w-[85vw] snap-start px-3.5 py-2.5" : "min-h-[96px] px-4 py-3.5",
                     activeTabGroup === "operations"
                       ? "border-emerald-600 bg-emerald-600 text-white shadow-[0_14px_30px_-20px_rgba(5,150,105,0.9)]"
                       : "border-emerald-200 bg-emerald-50/70 text-emerald-900 hover:border-emerald-300 hover:bg-emerald-50",
@@ -4824,7 +5263,7 @@ export default function InventorySystem() {
                   onClick={() => handleSectionSelect("finance")}
                   className={cn(
                     "flex items-center gap-3 rounded-2xl border text-left transition-all touch-manipulation shadow-sm",
-                    isMobile ? "min-h-[82px] min-w-[220px] snap-start px-3.5 py-2.5" : "min-h-[96px] px-4 py-3.5",
+                    isMobile ? "min-h-[82px] min-w-[220px] max-w-[85vw] snap-start px-3.5 py-2.5" : "min-h-[96px] px-4 py-3.5",
                     activeTabGroup === "finance"
                       ? "border-amber-500 bg-amber-500 text-white shadow-[0_14px_30px_-20px_rgba(217,119,6,0.95)]"
                       : "border-amber-200 bg-amber-50/70 text-amber-900 hover:border-amber-300 hover:bg-amber-50",
@@ -4851,7 +5290,7 @@ export default function InventorySystem() {
                   onClick={() => handleSectionSelect("insights")}
                   className={cn(
                     "flex items-center gap-3 rounded-2xl border text-left transition-all touch-manipulation shadow-sm",
-                    isMobile ? "min-h-[82px] min-w-[220px] snap-start px-3.5 py-2.5" : "min-h-[96px] px-4 py-3.5",
+                    isMobile ? "min-h-[82px] min-w-[220px] max-w-[85vw] snap-start px-3.5 py-2.5" : "min-h-[96px] px-4 py-3.5",
                     activeTabGroup === "insights"
                       ? "border-cyan-600 bg-cyan-600 text-white shadow-[0_14px_30px_-20px_rgba(8,145,178,0.9)]"
                       : "border-cyan-200 bg-cyan-50/70 text-cyan-900 hover:border-cyan-300 hover:bg-cyan-50",
@@ -4900,7 +5339,8 @@ export default function InventorySystem() {
                 })}
               </TabsList>
             )}
-          </div>
+            </div>
+          )}
 
           <TabsContent
             value={DASHBOARD_LAUNCHER_TAB}
@@ -5267,7 +5707,7 @@ export default function InventorySystem() {
                         size="sm"
                         variant="outline"
                         className="w-full bg-white sm:w-auto"
-                        onClick={() => openDrilldown({ tab: check.actionTab })}
+                        onClick={() => handleExecutionOutcomeAction(check)}
                       >
                         {check.actionLabel}
                       </Button>
@@ -5276,59 +5716,6 @@ export default function InventorySystem() {
                 ))}
               </CardContent>
             </Card>
-
-            {showDataToolsPanel && (canShowProcessing || canShowDispatch || canShowSales || canShowReceivables || canShowAccounts) && (
-              <Card className="border-black/5 bg-white/90">
-                <CardHeader className="pb-3">
-                  <CardTitle>Ops Exports</CardTitle>
-                  <CardDescription>
-                    One-click CSV exports for Excel/Google Sheets ({currentFiscalYear.label}).
-                  </CardDescription>
-                </CardHeader>
-                <CardContent className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
-                  {canShowProcessing && (
-                    <Button asChild variant="outline" className="justify-start bg-white">
-                      <a
-                        href={`/api/exports/ops?dataset=processing&startDate=${currentFiscalYear.startDate}&endDate=${currentFiscalYear.endDate}&format=csv`}
-                      >
-                        <Download className="mr-2 h-4 w-4" />
-                        Processing CSV
-                      </a>
-                    </Button>
-                  )}
-                  {(canShowDispatch || canShowSales) && (
-                    <Button asChild variant="outline" className="justify-start bg-white">
-                      <a
-                        href={`/api/exports/ops?dataset=reconciliation&startDate=${currentFiscalYear.startDate}&endDate=${currentFiscalYear.endDate}&format=csv`}
-                      >
-                        <Download className="mr-2 h-4 w-4" />
-                        Dispatch vs Sales
-                      </a>
-                    </Button>
-                  )}
-                  {canShowReceivables && (
-                    <Button asChild variant="outline" className="justify-start bg-white">
-                      <a
-                        href={`/api/exports/ops?dataset=receivables-aging&startDate=${currentFiscalYear.startDate}&endDate=${currentFiscalYear.endDate}&format=csv`}
-                      >
-                        <Download className="mr-2 h-4 w-4" />
-                        Receivables Aging
-                      </a>
-                    </Button>
-                  )}
-                  {(canShowAccounts || canShowSales || canShowSeason) && (
-                    <Button asChild variant="outline" className="justify-start bg-white">
-                      <a
-                        href={`/api/exports/ops?dataset=pnl-monthly&startDate=${currentFiscalYear.startDate}&endDate=${currentFiscalYear.endDate}&format=csv`}
-                      >
-                        <Download className="mr-2 h-4 w-4" />
-                        Monthly P&L
-                      </a>
-                    </Button>
-                  )}
-                </CardContent>
-              </Card>
-            )}
 
             <div className={cn("grid grid-cols-1 gap-4", canShowSales && "xl:grid-cols-2")}>
               <Card className="border-black/5 bg-white/90">
@@ -5958,6 +6345,7 @@ export default function InventorySystem() {
                     </CardHeader>
                     <CardContent className="space-y-2">
                       <button
+                        data-testid="inventory-action-record-movement"
                         type="button"
                         onClick={() => openMovementDrawer()}
                         className="flex w-full items-center justify-between rounded-xl border border-black/5 bg-white px-4 py-3 text-sm text-neutral-800 transition-colors hover:bg-neutral-50"
@@ -5970,6 +6358,7 @@ export default function InventorySystem() {
                       </button>
                       <div className="grid grid-cols-2 gap-2">
                         <button
+                          data-testid="inventory-action-restocking"
                           type="button"
                           onClick={() => openMovementDrawer("restock")}
                           className="flex min-h-11 items-center justify-center rounded-xl border border-emerald-200 bg-emerald-50/80 px-3 py-2 text-sm font-medium text-emerald-800 transition-colors hover:bg-emerald-100"
@@ -5977,6 +6366,7 @@ export default function InventorySystem() {
                           Restocking
                         </button>
                         <button
+                          data-testid="inventory-action-depleting"
                           type="button"
                           onClick={() => openMovementDrawer("deplete")}
                           className="flex min-h-11 items-center justify-center rounded-xl border border-amber-200 bg-amber-50/80 px-3 py-2 text-sm font-medium text-amber-800 transition-colors hover:bg-amber-100"
@@ -6333,7 +6723,11 @@ export default function InventorySystem() {
 
           {canShowAccounts && (
             <TabsContent value="accounts" className="space-y-6" forceMount={isTabLoaded("accounts") ? true : undefined}>
-              <AccountsPage showDataToolsControls={showDataToolsPanel} />
+              <AccountsPage
+                showDataToolsControls={showDataToolsPanel}
+                requestedExport={accountsExportRequest}
+                onRequestedExportHandled={handleAccountsExportRequestHandled}
+              />
             </TabsContent>
           )}
 
@@ -6470,30 +6864,96 @@ export default function InventorySystem() {
             </TabsContent>
           )}
         </Tabs>
-        {isMobile && activeTabGroup !== "dashboard" && activeSectionTabs.length > 0 && (
+        {(showMobileSectionRail || isStandaloneMobileApp) && (
           <div className="fixed inset-x-0 bottom-0 z-40 border-t border-black/10 bg-white/95 shadow-[0_-8px_24px_-16px_rgba(15,23,42,0.45)] backdrop-blur">
-            <div className="mx-auto flex max-w-7xl items-center gap-2 overflow-x-auto px-3 pb-[calc(0.5rem+env(safe-area-inset-bottom))] pt-2 no-scrollbar">
-              {activeSectionTabs.map((tab) => {
-                const TabIcon = tab.icon
-                const isActive = activeTab === tab.value
-                return (
+            {isStandaloneMobileApp ? (
+              <div className="mx-auto flex max-w-7xl flex-col gap-2 px-3 pb-[calc(0.5rem+env(safe-area-inset-bottom))] pt-2">
+                <div className="flex items-center gap-2 overflow-x-auto no-scrollbar">
                   <button
-                    key={tab.value}
                     type="button"
-                    onClick={() => handleTabChange(tab.value)}
+                    onClick={goToWorkspaceNavigator}
                     className={cn(
-                      "flex min-h-11 flex-1 min-w-[8.25rem] items-center justify-center gap-1.5 rounded-xl border px-3 py-2 text-xs font-semibold transition-colors touch-manipulation",
-                      isActive
-                        ? "border-emerald-600 bg-emerald-600 text-white"
+                      "flex min-h-11 flex-1 min-w-[6.75rem] items-center justify-center gap-1.5 rounded-xl border px-3 py-2 text-xs font-semibold transition-colors touch-manipulation",
+                      activeTab === DASHBOARD_LAUNCHER_TAB
+                        ? "border-neutral-900 bg-neutral-900 text-white"
                         : "border-black/10 bg-white text-neutral-700",
                     )}
                   >
-                    <TabIcon className="h-3.5 w-3.5" />
-                    <span className="truncate">{tab.label}</span>
+                    <Home className="h-3.5 w-3.5" />
+                    <span className="truncate">Workspace</span>
                   </button>
-                )
-              })}
-            </div>
+
+                  {mobileAppSectionGroups.map((group) => {
+                    const GroupIcon = group.icon
+                    const isActive = activeTabGroup === group.id
+                    return (
+                      <button
+                        key={group.id}
+                        type="button"
+                        onClick={() => handleSectionSelect(group.id)}
+                        className={cn(
+                          "flex min-h-11 flex-1 min-w-[6.75rem] items-center justify-center gap-1.5 rounded-xl border px-3 py-2 text-xs font-semibold transition-colors touch-manipulation",
+                          isActive
+                            ? "border-neutral-900 bg-neutral-900 text-white"
+                            : "border-black/10 bg-white text-neutral-700",
+                        )}
+                      >
+                        <GroupIcon className="h-3.5 w-3.5" />
+                        <span className="truncate">{group.label}</span>
+                      </button>
+                    )
+                  })}
+                </div>
+
+                {showMobileSectionRail && (
+                  <div className="flex items-center gap-2 overflow-x-auto no-scrollbar">
+                    {activeSectionTabs.map((tab) => {
+                      const TabIcon = tab.icon
+                      const isActive = activeTab === tab.value
+                      return (
+                        <button
+                          key={tab.value}
+                          type="button"
+                          onClick={() => handleTabChange(tab.value)}
+                          className={cn(
+                            "flex min-h-11 flex-1 min-w-[8.25rem] items-center justify-center gap-1.5 rounded-xl border px-3 py-2 text-xs font-semibold transition-colors touch-manipulation",
+                            isActive
+                              ? "border-emerald-600 bg-emerald-600 text-white"
+                              : "border-black/10 bg-white text-neutral-700",
+                          )}
+                        >
+                          <TabIcon className="h-3.5 w-3.5" />
+                          <span className="truncate">{tab.label}</span>
+                        </button>
+                      )
+                    })}
+                  </div>
+                )}
+              </div>
+            ) : (
+              <div className="mx-auto flex max-w-7xl items-center gap-2 overflow-x-auto px-3 pb-[calc(0.5rem+env(safe-area-inset-bottom))] pt-2 no-scrollbar">
+                {activeSectionTabs.map((tab) => {
+                  const TabIcon = tab.icon
+                  const isActive = activeTab === tab.value
+                  return (
+                    <button
+                      key={tab.value}
+                      type="button"
+                      onClick={() => handleTabChange(tab.value)}
+                      className={cn(
+                        "flex min-h-11 flex-1 min-w-[8.25rem] items-center justify-center gap-1.5 rounded-xl border px-3 py-2 text-xs font-semibold transition-colors touch-manipulation",
+                        isActive
+                          ? "border-emerald-600 bg-emerald-600 text-white"
+                          : "border-black/10 bg-white text-neutral-700",
+                      )}
+                    >
+                      <TabIcon className="h-3.5 w-3.5" />
+                      <span className="truncate">{tab.label}</span>
+                    </button>
+                  )
+                })}
+              </div>
+            )}
           </div>
         )}
         {isInventoryDrilldownOpen && (

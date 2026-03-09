@@ -34,6 +34,58 @@ BEGIN
   END LOOP;
 END $$;
 
+-- Normalize duplicate slots so unique indexes can be added safely on older tenant data.
+WITH ranked AS (
+  SELECT
+    ctid,
+    item_type,
+    tenant_id,
+    location_id,
+    ROW_NUMBER() OVER (
+      PARTITION BY item_type, tenant_id, location_id
+      ORDER BY ctid
+    ) AS row_number,
+    SUM(COALESCE(quantity, 0)) OVER (
+      PARTITION BY item_type, tenant_id, location_id
+    ) AS merged_quantity,
+    SUM(COALESCE(total_cost, 0)) OVER (
+      PARTITION BY item_type, tenant_id, location_id
+    ) AS merged_total_cost,
+    FIRST_VALUE(unit) OVER (
+      PARTITION BY item_type, tenant_id, location_id
+      ORDER BY ctid
+    ) AS merged_unit
+  FROM current_inventory
+),
+keepers AS (
+  SELECT
+    ctid,
+    merged_quantity,
+    merged_total_cost,
+    CASE
+      WHEN merged_quantity > 0 THEN merged_total_cost / merged_quantity
+      ELSE 0
+    END AS merged_avg_price,
+    merged_unit
+  FROM ranked
+  WHERE row_number = 1
+),
+updated AS (
+  UPDATE current_inventory slot
+  SET
+    quantity = keepers.merged_quantity,
+    total_cost = keepers.merged_total_cost,
+    avg_price = keepers.merged_avg_price,
+    unit = COALESCE(keepers.merged_unit, slot.unit)
+  FROM keepers
+  WHERE slot.ctid = keepers.ctid
+  RETURNING slot.ctid
+)
+DELETE FROM current_inventory slot
+USING ranked
+WHERE slot.ctid = ranked.ctid
+  AND ranked.row_number > 1;
+
 CREATE UNIQUE INDEX IF NOT EXISTS uq_current_inventory_item_tenant_null_location
   ON current_inventory (item_type, tenant_id)
   WHERE location_id IS NULL;

@@ -7,6 +7,129 @@ import { normalizeTenantContext, runTenantQueries, runTenantQuery } from "@/lib/
 
 export const dynamic = "force-dynamic"
 
+const getErrorCode = (error: unknown) => String((error as { code?: unknown })?.code || "")
+const getErrorMessage = (error: unknown) => String((error as { message?: unknown })?.message || "")
+
+const isMissingInventoryUpsertConstraintError = (error: unknown) => {
+  const code = getErrorCode(error)
+  const message = getErrorMessage(error).toLowerCase()
+  return (
+    code === "42P10" ||
+    message.includes("no unique or exclusion constraint matching the on conflict specification")
+  )
+}
+
+const ensureInventorySlotExists = async (
+  tenantContext: ReturnType<typeof normalizeTenantContext>,
+  itemType: string,
+  unit: string,
+  locationValue: string | null,
+) => {
+  const applyFallback = async () => {
+    if (locationValue) {
+      const existingRows = await runTenantQuery(
+        inventorySql,
+        tenantContext,
+        inventorySql`
+          SELECT id
+          FROM current_inventory
+          WHERE tenant_id = ${tenantContext.tenantId}
+            AND item_type = ${itemType}
+            AND location_id = ${locationValue}
+          ORDER BY id ASC
+          LIMIT 1
+        `,
+      )
+      if (existingRows?.length) {
+        await runTenantQuery(
+          inventorySql,
+          tenantContext,
+          inventorySql`
+            UPDATE current_inventory
+            SET unit = ${unit}
+            WHERE id = ${existingRows[0].id}
+          `,
+        )
+        return
+      }
+      await runTenantQuery(
+        inventorySql,
+        tenantContext,
+        inventorySql`
+          INSERT INTO current_inventory (item_type, quantity, unit, avg_price, total_cost, tenant_id, location_id)
+          VALUES (${itemType}, 0, ${unit}, 0, 0, ${tenantContext.tenantId}, ${locationValue})
+        `,
+      )
+      return
+    }
+
+    const existingRows = await runTenantQuery(
+      inventorySql,
+      tenantContext,
+      inventorySql`
+        SELECT id
+        FROM current_inventory
+        WHERE tenant_id = ${tenantContext.tenantId}
+          AND item_type = ${itemType}
+          AND location_id IS NULL
+        ORDER BY id ASC
+        LIMIT 1
+      `,
+    )
+    if (existingRows?.length) {
+      await runTenantQuery(
+        inventorySql,
+        tenantContext,
+        inventorySql`
+          UPDATE current_inventory
+          SET unit = ${unit}
+          WHERE id = ${existingRows[0].id}
+        `,
+      )
+      return
+    }
+    await runTenantQuery(
+      inventorySql,
+      tenantContext,
+      inventorySql`
+        INSERT INTO current_inventory (item_type, quantity, unit, avg_price, total_cost, tenant_id, location_id)
+        VALUES (${itemType}, 0, ${unit}, 0, 0, ${tenantContext.tenantId}, NULL)
+      `,
+    )
+  }
+
+  try {
+    if (locationValue) {
+      await runTenantQuery(
+        inventorySql,
+        tenantContext,
+        inventorySql`
+          INSERT INTO current_inventory (item_type, quantity, unit, avg_price, total_cost, tenant_id, location_id)
+          VALUES (${itemType}, 0, ${unit}, 0, 0, ${tenantContext.tenantId}, ${locationValue})
+          ON CONFLICT (item_type, tenant_id, location_id)
+          DO UPDATE SET unit = EXCLUDED.unit
+        `,
+      )
+      return
+    }
+    await runTenantQuery(
+      inventorySql,
+      tenantContext,
+      inventorySql`
+        INSERT INTO current_inventory (item_type, quantity, unit, avg_price, total_cost, tenant_id, location_id)
+        VALUES (${itemType}, 0, ${unit}, 0, 0, ${tenantContext.tenantId}, NULL)
+        ON CONFLICT (item_type, tenant_id) WHERE location_id IS NULL
+        DO UPDATE SET unit = EXCLUDED.unit
+      `,
+    )
+  } catch (error) {
+    if (!isMissingInventoryUpsertConstraintError(error)) {
+      throw error
+    }
+    await applyFallback()
+  }
+}
+
 export async function GET(request: NextRequest) {
   try {
     const sessionUser = await requireModuleAccess("inventory")
@@ -171,48 +294,8 @@ export async function POST(request: NextRequest) {
     const locationValue = resolvedLocationId && resolvedLocationId !== "unassigned" ? resolvedLocationId : null
 
     // Ensure the item exists with the correct unit without double-counting inventory.
-    // The transaction_history trigger will update quantity/total_cost when we insert a restock transaction.
-    if (locationValue) {
-      await runTenantQuery(
-        inventorySql,
-        tenantContext,
-        inventorySql`
-          INSERT INTO current_inventory (item_type, quantity, unit, avg_price, total_cost, tenant_id, location_id)
-          VALUES (
-            ${item_type},
-            0,
-            ${unit},
-            0,
-            0,
-            ${tenantContext.tenantId},
-            ${locationValue}
-          )
-          ON CONFLICT (item_type, tenant_id, location_id)
-          DO UPDATE SET
-            unit = EXCLUDED.unit
-        `,
-      )
-    } else {
-      await runTenantQuery(
-        inventorySql,
-        tenantContext,
-        inventorySql`
-          INSERT INTO current_inventory (item_type, quantity, unit, avg_price, total_cost, tenant_id, location_id)
-          VALUES (
-            ${item_type},
-            0,
-            ${unit},
-            0,
-            0,
-            ${tenantContext.tenantId},
-            NULL
-          )
-          ON CONFLICT (item_type, tenant_id) WHERE location_id IS NULL
-          DO UPDATE SET
-            unit = EXCLUDED.unit
-        `,
-      )
-    }
+    // Fallback handles older tenant schemas that are missing the expected unique constraints.
+    await ensureInventorySlotExists(tenantContext, String(item_type), String(unit), locationValue)
 
 
     // Add initial transaction if quantity > 0 (trigger updates current_inventory)

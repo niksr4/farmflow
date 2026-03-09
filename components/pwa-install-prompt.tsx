@@ -13,6 +13,7 @@ type BeforeInstallPromptEvent = Event & {
 
 const DISMISS_KEY = "farmflow_pwa_install_dismissed_at"
 const DISMISS_WINDOW_MS = 1000 * 60 * 60 * 24 * 7
+const INSTALLABLE_PATH_PREFIX = "/dashboard"
 
 const getIsStandalone = () => {
   if (typeof window === "undefined") return false
@@ -24,6 +25,16 @@ const getIsMobile = () => {
   if (typeof window === "undefined") return false
   return window.matchMedia("(max-width: 1024px)").matches
 }
+
+const getIsSecureRuntime = () => {
+  if (typeof window === "undefined") return false
+  const host = String(window.location.hostname || "").toLowerCase()
+  const isLocalHost = host === "localhost" || host === "127.0.0.1" || host === "::1"
+  return window.isSecureContext || isLocalHost
+}
+
+const canShowInstallPromptOnPath = (pathname?: string | null) =>
+  Boolean(pathname && pathname.startsWith(INSTALLABLE_PATH_PREFIX))
 
 const getIsIosSafari = () => {
   if (typeof window === "undefined") return false
@@ -63,7 +74,13 @@ export default function PwaInstallPrompt() {
 
   useEffect(() => {
     if (typeof window === "undefined") return
-    if (getIsStandalone() || wasRecentlyDismissed() || !getIsMobile()) return
+    if (!canShowInstallPromptOnPath(pathname)) {
+      setIsVisible(false)
+      setDeferredPrompt(null)
+      setShowIosHint(false)
+      return
+    }
+    if (!getIsSecureRuntime() || getIsStandalone() || wasRecentlyDismissed() || !getIsMobile()) return
 
     const canShowIosHint = getIsIosSafari()
     if (canShowIosHint) {
@@ -90,7 +107,7 @@ export default function PwaInstallPrompt() {
       window.removeEventListener("beforeinstallprompt", handleBeforeInstallPrompt)
       window.removeEventListener("appinstalled", handleAppInstalled)
     }
-  }, [])
+  }, [pathname])
 
   const dismissPrompt = () => {
     markDismissed()

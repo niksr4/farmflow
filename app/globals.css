@@ -53,6 +53,9 @@
   html {
     -webkit-text-size-adjust: 100%;
     text-size-adjust: 100%;
+    width: 100%;
+    overflow-x: clip;
+    overscroll-behavior-x: none;
   }
 
   * {
@@ -64,9 +67,20 @@
     font-family: var(--font-body), "Manrope", "Segoe UI", sans-serif;
     position: relative;
     min-height: 100%;
+    width: 100%;
+    overflow-x: clip;
+    overscroll-behavior-x: none;
     isolation: isolate;
     line-height: 1.6;
     text-rendering: optimizeLegibility;
+  }
+
+  img,
+  svg,
+  video,
+  canvas {
+    max-width: 100%;
+    height: auto;
   }
 
   hr {
