@@ -84,7 +84,7 @@ export default function AccountsPage({
   onRequestedExportHandled,
 }: AccountsPageProps) {
   const { isAdmin, isOwner, user } = useAuth()
-  const canManageActivities = isAdmin || user?.role === "owner"
+  const canManageActivities = isAdmin || isOwner || user?.role === "user"
   const { deployments: laborDeployments, loading: laborLoading, totalCount: laborCount } = useLaborData()
   const { deployments: consumableDeployments, loading: consumablesLoading, totalCount: consumablesCount } =
     useConsumablesData()
@@ -262,7 +262,7 @@ export default function AccountsPage({
     e.preventDefault()
 
     if (!canManageActivities) {
-      toast.error("Only admin or owner can add activity codes")
+      toast.error("You do not have permission to add activity codes")
       return
     }
 
@@ -307,7 +307,7 @@ export default function AccountsPage({
 
   const startEditingActivity = (activity: AccountActivity) => {
     if (!canManageActivities) {
-      toast.error("Only admin or owner can edit activity codes")
+      toast.error("You do not have permission to edit activity codes")
       return
     }
     setEditingActivityCode(activity.code)
@@ -363,7 +363,7 @@ export default function AccountsPage({
 
   const handleDeleteActivity = async (code: string) => {
     if (!canManageActivities) {
-      toast.error("Only admin or owner can delete activity codes")
+      toast.error("You do not have permission to delete activity codes")
       return
     }
     if (!window.confirm(`Delete activity code ${code}?`)) {
@@ -1089,7 +1089,7 @@ export default function AccountsPage({
 
               {!canManageActivities && (
                 <p className="text-xs text-muted-foreground">
-                  You have read-only access to activity codes. Ask an admin/owner to manage this list.
+                  You have read-only access to activity codes.
                 </p>
               )}
 

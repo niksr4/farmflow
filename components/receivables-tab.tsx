@@ -137,7 +137,7 @@ export default function ReceivablesTab() {
   const previewRole = previewRoleParam === "admin" || previewRoleParam === "user" ? previewRoleParam : null
   const isPlatformOwner = user?.role?.toLowerCase() === "owner"
   const isPreviewMode = Boolean(isPlatformOwner && previewTenantId && previewRole)
-  const canEdit = !isPreviewMode && (user?.role === "admin" || user?.role === "owner")
+  const canEdit = !isPreviewMode && (user?.role === "admin" || user?.role === "owner" || user?.role === "user")
 
   const [records, setRecords] = useState<ReceivableRecord[]>([])
   const [summary, setSummary] = useState<ReceivablesSummary>(emptySummary)

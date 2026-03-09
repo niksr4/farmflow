@@ -2,7 +2,7 @@ import { NextResponse } from "next/server"
 import { sql } from "@/lib/server/db"
 import { requireModuleAccess, isModuleAccessError } from "@/lib/server/module-access"
 import { normalizeTenantContext, runTenantQuery } from "@/lib/server/tenant-db"
-import { requireAdminRole } from "@/lib/permissions"
+import { canDeleteModule, canWriteModule } from "@/lib/permissions"
 import { logAuditEvent } from "@/lib/server/audit-log"
 
 const VALID_STATUSES = new Set(["unpaid", "partial", "paid", "overdue"])
@@ -192,9 +192,7 @@ export async function POST(request: Request) {
     }
 
     const sessionUser = await requireModuleAccess("receivables")
-    try {
-      requireAdminRole(sessionUser.role)
-    } catch {
+    if (!canWriteModule(sessionUser.role, "receivables")) {
       return NextResponse.json({ success: false, error: "Insufficient role" }, { status: 403 })
     }
 
@@ -285,9 +283,7 @@ export async function PUT(request: Request) {
     }
 
     const sessionUser = await requireModuleAccess("receivables")
-    try {
-      requireAdminRole(sessionUser.role)
-    } catch {
+    if (!canWriteModule(sessionUser.role, "receivables")) {
       return NextResponse.json({ success: false, error: "Insufficient role" }, { status: 403 })
     }
 
@@ -386,9 +382,7 @@ export async function DELETE(request: Request) {
     }
 
     const sessionUser = await requireModuleAccess("receivables")
-    try {
-      requireAdminRole(sessionUser.role)
-    } catch {
+    if (!canDeleteModule(sessionUser.role, "receivables")) {
       return NextResponse.json({ success: false, error: "Insufficient role" }, { status: 403 })
     }
 

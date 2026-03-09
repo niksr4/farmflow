@@ -49,7 +49,7 @@ interface QualityRecord {
 export default function QualityGradingTab() {
   const { user } = useAuth()
   const { toast } = useToast()
-  const isAdmin = user?.role === "admin" || user?.role === "owner"
+  const isAdmin = user?.role === "admin" || user?.role === "owner" || user?.role === "user"
 
   const [selectedFiscalYear, setSelectedFiscalYear] = useState<FiscalYear>(getCurrentFiscalYear())
   const availableFiscalYears = getAvailableFiscalYears()

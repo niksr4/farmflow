@@ -15,8 +15,6 @@ const SALE_MODES = ["per_kg", "contract"] as const
 type AssetType = (typeof ASSET_TYPES)[number]
 type SaleMode = (typeof SALE_MODES)[number]
 
-const isScopedUserRole = (role: string | null | undefined) => String(role || "").toLowerCase() === "user"
-
 const round2 = (value: number) => Number(value.toFixed(2))
 
 const toNumber = (value: unknown) => {
@@ -142,10 +140,6 @@ const parsePayload = (body: any): { data: ParsedPayload | null; error: string | 
 export async function GET(request: Request) {
   try {
     const sessionUser = await requireModuleAccess("other-sales")
-    if (isScopedUserRole(sessionUser.role)) {
-      return NextResponse.json({ success: false, error: "Other sales access is restricted for this role." }, { status: 403 })
-    }
-
     const tenantContext = normalizeTenantContext(sessionUser.tenantId, sessionUser.role)
     const { searchParams } = new URL(request.url)
     const startDate = parseDate(searchParams.get("startDate"))
@@ -282,9 +276,6 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
   try {
     const sessionUser = await requireModuleAccess("other-sales")
-    if (isScopedUserRole(sessionUser.role)) {
-      return NextResponse.json({ success: false, error: "Other sales access is restricted for this role." }, { status: 403 })
-    }
     if (!canWriteModule(sessionUser.role, "other-sales")) {
       return NextResponse.json({ success: false, error: "Insufficient role" }, { status: 403 })
     }
@@ -362,9 +353,6 @@ export async function POST(request: Request) {
 export async function PUT(request: Request) {
   try {
     const sessionUser = await requireModuleAccess("other-sales")
-    if (isScopedUserRole(sessionUser.role)) {
-      return NextResponse.json({ success: false, error: "Other sales access is restricted for this role." }, { status: 403 })
-    }
     if (!canWriteModule(sessionUser.role, "other-sales")) {
       return NextResponse.json({ success: false, error: "Insufficient role" }, { status: 403 })
     }
@@ -449,9 +437,6 @@ export async function PUT(request: Request) {
 export async function DELETE(request: Request) {
   try {
     const sessionUser = await requireModuleAccess("other-sales")
-    if (isScopedUserRole(sessionUser.role)) {
-      return NextResponse.json({ success: false, error: "Other sales access is restricted for this role." }, { status: 403 })
-    }
     if (!canDeleteModule(sessionUser.role, "other-sales")) {
       return NextResponse.json({ success: false, error: "Insufficient role" }, { status: 403 })
     }

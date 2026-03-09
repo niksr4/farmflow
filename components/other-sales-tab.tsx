@@ -82,7 +82,7 @@ const newDefaultForm = () => ({
 export default function OtherSalesTab() {
   const { toast } = useToast()
   const { user } = useAuth()
-  const canDelete = user?.role === "admin" || user?.role === "owner"
+  const canDelete = user?.role === "admin" || user?.role === "owner" || user?.role === "user"
   const [selectedFiscalYear, setSelectedFiscalYear] = useState<FiscalYear>(getCurrentFiscalYear())
   const availableFiscalYears = getAvailableFiscalYears()
 
@@ -317,7 +317,7 @@ export default function OtherSalesTab() {
 
   const handleDelete = async (record: OtherSalesRecord) => {
     if (!canDelete) {
-      toast({ title: "Insufficient role", description: "Only admin/owner can delete sales records.", variant: "destructive" })
+      toast({ title: "Insufficient role", description: "You do not have permission to delete sales records.", variant: "destructive" })
       return
     }
     if (!window.confirm("Delete this record?")) return

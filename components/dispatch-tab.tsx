@@ -95,7 +95,7 @@ export default function DispatchTab({ showDataToolsControls = false }: DispatchT
   const { user } = useAuth()
   const { settings } = useTenantSettings()
   const bagWeightKg = Number(settings.bagWeightKg) || 50
-  const canDelete = user?.role === "admin" || user?.role === "owner"
+  const canDelete = user?.role === "admin" || user?.role === "owner" || user?.role === "user"
   const [selectedFiscalYear, setSelectedFiscalYear] = useState<FiscalYear>(getCurrentFiscalYear())
   const availableFiscalYears = getAvailableFiscalYears()
   

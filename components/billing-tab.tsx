@@ -62,7 +62,7 @@ type BillingTabProps = {
 
 export default function BillingTab({ showDataToolsControls = false }: BillingTabProps) {
   const { user } = useAuth()
-  const canEdit = user?.role === "admin" || user?.role === "owner"
+  const canEdit = user?.role === "admin" || user?.role === "owner" || user?.role === "user"
   const [loading, setLoading] = useState(false)
   const [invoices, setInvoices] = useState<InvoiceRow[]>([])
   const [billToName, setBillToName] = useState("")

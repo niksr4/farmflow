@@ -2,7 +2,7 @@ import { NextResponse } from "next/server"
 import { accountsSql } from "@/lib/server/db"
 import { requireModuleAccess, isModuleAccessError } from "@/lib/server/module-access"
 import { normalizeTenantContext, runTenantQuery } from "@/lib/server/tenant-db"
-import { requireAdminRole } from "@/lib/permissions"
+import { canWriteModule } from "@/lib/permissions"
 import { logAuditEvent } from "@/lib/server/audit-log"
 
 const MAX_ACTIVITY_CODE_LENGTH = 10
@@ -10,9 +10,7 @@ const MAX_ACTIVITY_CODE_LENGTH = 10
 export async function POST(request: Request) {
   try {
     const sessionUser = await requireModuleAccess("accounts")
-    try {
-      requireAdminRole(sessionUser.role)
-    } catch {
+    if (!canWriteModule(sessionUser.role, "accounts")) {
       return NextResponse.json({ success: false, error: "Insufficient role" }, { status: 403 })
     }
     const tenantContext = normalizeTenantContext(sessionUser.tenantId, sessionUser.role)

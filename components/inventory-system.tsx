@@ -368,6 +368,7 @@ export default function InventorySystem() {
   const isScopedUser = effectiveRole === "user"
   const showFinancialHomeCards = isAdmin || isOwner
   const canManageData = !isPreviewMode && (isAdmin || isOwner)
+  const canManageRecords = !isPreviewMode && (isAdmin || isOwner || isScopedUser)
   const showDataToolsControls = canManageData && showDataToolsPanel
   const isTenantLoading = status === "loading"
   const preventNegativeKey = (event: React.KeyboardEvent<HTMLInputElement>) => {
@@ -6212,7 +6213,7 @@ export default function InventorySystem() {
                                     {formatCurrency(itemValue)}
                                   </p>
                                 </div>
-                                {canManageData && (
+                                {canManageRecords && (
                                   <div className="flex items-center gap-1 opacity-100 transition-opacity sm:opacity-0 sm:group-hover:opacity-100">
                                     <TooltipProvider>
                                       <Tooltip>
@@ -6610,7 +6611,7 @@ export default function InventorySystem() {
                               <Edit className="h-4 w-4" />
                               Edit
                             </Button>
-                            {canManageData && (
+                            {canManageRecords && (
                               <Button
                                 size="sm"
                                 variant="outline"
@@ -6689,7 +6690,7 @@ export default function InventorySystem() {
                                   >
                                     <Edit className="h-4 w-4" />
                                   </Button>
-                                  {canManageData && (
+                                  {canManageRecords && (
                                     <Button
                                       size="sm"
                                       variant="ghost"

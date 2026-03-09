@@ -67,7 +67,7 @@ export function PepperTab() {
   const [editingRecordId, setEditingRecordId] = useState<number | null>(null)
   const [isDeletingRecordId, setIsDeletingRecordId] = useState<number | null>(null)
   const selectedLocation = locations.find((loc) => loc.id === selectedLocationId) || null
-  const canDeleteRecord = user?.role === "admin" || user?.role === "owner"
+  const canDeleteRecord = user?.role === "admin" || user?.role === "owner" || user?.role === "user"
   const showLocationColumn = selectedLocationId === LOCATION_ALL || selectedLocationId === LOCATION_UNASSIGNED
 
   const loadLocations = useCallback(async () => {

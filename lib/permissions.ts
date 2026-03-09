@@ -1,14 +1,19 @@
 export type UserRole = "owner" | "admin" | "user"
 
-const USER_WRITE_MODULES = new Set<string>([
+const USER_MUTATION_MODULES = new Set<string>([
   "inventory",
   "transactions",
   "accounts",
   "processing",
   "dispatch",
   "sales",
+  "other-sales",
+  "receivables",
+  "billing",
   "rainfall",
   "pepper",
+  "curing",
+  "quality",
   "journal",
 ])
 
@@ -17,12 +22,12 @@ export const isOwnerRole = (role?: string | null) => role === "owner"
 
 export const canWriteModule = (role: UserRole, moduleId: string) => {
   if (isAdminRole(role)) return true
-  return role === "user" && USER_WRITE_MODULES.has(moduleId)
+  return role === "user" && USER_MUTATION_MODULES.has(moduleId)
 }
 
-export const canDeleteModule = (role: UserRole, _moduleId: string) => {
+export const canDeleteModule = (role: UserRole, moduleId: string) => {
   if (isAdminRole(role)) return true
-  return false
+  return role === "user" && USER_MUTATION_MODULES.has(moduleId)
 }
 
 export const requireAdminRole = (role?: string | null) => {
