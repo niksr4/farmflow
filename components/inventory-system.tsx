@@ -2557,7 +2557,7 @@ export default function InventorySystem() {
   const canShowBalanceSheet = isModuleEnabled("balance-sheet") && (isAdmin || isOwner)
   const canShowProcessing = isModuleEnabled("processing")
   const canShowDispatch = isModuleEnabled("dispatch")
-  const canShowSales = isModuleEnabled("sales") && !isScopedUser
+  const canShowSales = isModuleEnabled("sales") && isAdmin
   const canShowOtherSales = isModuleEnabled("other-sales") && !isScopedUser
   const canShowCuring = isModuleEnabled("curing")
   const canShowQuality = isModuleEnabled("quality")

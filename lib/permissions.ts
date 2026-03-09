@@ -6,7 +6,6 @@ const USER_MUTATION_MODULES = new Set<string>([
   "accounts",
   "processing",
   "dispatch",
-  "sales",
   "other-sales",
   "receivables",
   "billing",

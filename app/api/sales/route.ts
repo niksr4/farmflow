@@ -23,6 +23,8 @@ import {
 export const dynamic = "force-dynamic"
 export const revalidate = 0
 
+const isSalesAdminRole = (role: string | null | undefined) => String(role || "").toLowerCase() === "admin"
+
 async function resolveBagWeightKg(db: typeof sql, tenantContext: { tenantId: string; role: string }) {
   const rows = await runTenantQuery(
     db,
@@ -112,6 +114,9 @@ async function resolveSlotStock(
 export async function GET(request: Request) {
   try {
     const sessionUser = await requireModuleAccess("sales")
+    if (!isSalesAdminRole(sessionUser.role)) {
+      return NextResponse.json({ success: false, error: "Sales tab is admin-only." }, { status: 403 })
+    }
     const tenantContext = normalizeTenantContext(sessionUser.tenantId, sessionUser.role)
     const { searchParams } = new URL(request.url)
     const startDate = searchParams.get("startDate")?.trim() || null
@@ -310,6 +315,9 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
   try {
     const sessionUser = await requireModuleAccess("sales")
+    if (!isSalesAdminRole(sessionUser.role)) {
+      return NextResponse.json({ success: false, error: "Sales tab is admin-only." }, { status: 403 })
+    }
     if (!canWriteModule(sessionUser.role, "sales")) {
       return NextResponse.json({ success: false, error: "Insufficient role" }, { status: 403 })
     }
@@ -488,6 +496,9 @@ export async function POST(request: Request) {
 export async function PUT(request: Request) {
   try {
     const sessionUser = await requireModuleAccess("sales")
+    if (!isSalesAdminRole(sessionUser.role)) {
+      return NextResponse.json({ success: false, error: "Sales tab is admin-only." }, { status: 403 })
+    }
     if (!canWriteModule(sessionUser.role, "sales")) {
       return NextResponse.json({ success: false, error: "Insufficient role" }, { status: 403 })
     }
@@ -636,6 +647,9 @@ export async function DELETE(request: Request) {
     const { searchParams } = new URL(request.url)
     const id = searchParams.get("id")
     const sessionUser = await requireModuleAccess("sales")
+    if (!isSalesAdminRole(sessionUser.role)) {
+      return NextResponse.json({ success: false, error: "Sales tab is admin-only." }, { status: 403 })
+    }
     if (!canDeleteModule(sessionUser.role, "sales")) {
       return NextResponse.json({ success: false, error: "Insufficient role" }, { status: 403 })
     }
