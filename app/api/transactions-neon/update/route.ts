@@ -33,6 +33,12 @@ const isDepleteType = (value: string | null | undefined) => {
   return normalized === "deplete" || normalized === "depleting"
 }
 
+const normalizeQuantity = (value: unknown) => {
+  const numeric = Number(value)
+  if (!Number.isFinite(numeric)) return null
+  return Number((Math.round((numeric + Number.EPSILON) * 100) / 100).toFixed(2))
+}
+
 export async function PUT(request: NextRequest) {
   try {
     const sessionUser = await requireModuleAccess("transactions")
@@ -107,8 +113,8 @@ export async function PUT(request: NextRequest) {
       notes === undefined ? stripUsageLocationTag(existingRow?.notes ? String(existingRow.notes) : "") : String(notes || "")
 
     const priceValue = Number(price) || 0
-    const quantityValue = Number(quantity)
-    if (!Number.isFinite(quantityValue) || quantityValue <= 0) {
+    const quantityValue = normalizeQuantity(quantity)
+    if (!quantityValue || quantityValue <= 0) {
       return NextResponse.json(
         {
           success: false,

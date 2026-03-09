@@ -374,10 +374,16 @@ export default function InventorySystem() {
       event.preventDefault()
     }
   }
-  const coerceNonNegativeNumber = (value: string) => {
+  const preventNumberScrollChange = (event: React.WheelEvent<HTMLInputElement>) => {
+    event.currentTarget.blur()
+  }
+  const normalizeQuantityValue = (value: unknown) => {
     const numeric = Number(value)
-    if (Number.isNaN(numeric) || numeric < 0) return null
-    return numeric
+    if (!Number.isFinite(numeric) || numeric < 0) return null
+    return Number((Math.round((numeric + Number.EPSILON) * 100) / 100).toFixed(2))
+  }
+  const coerceNonNegativeNumber = (value: string) => {
+    return normalizeQuantityValue(value)
   }
   const isModuleEnabled = useCallback(
     (moduleId: string) => {
@@ -2011,10 +2017,13 @@ export default function InventorySystem() {
       toast({ title: "Missing fields", description: "Please select item and transaction type.", variant: "destructive" })
       return
     }
-    if (!tx.quantity || Number(tx.quantity) <= 0) {
+    const normalizedQty = normalizeQuantityValue(tx.quantity)
+    if (!normalizedQty || normalizedQty <= 0) {
       toast({ title: "Invalid quantity", description: "Quantity must be a positive number.", variant: "destructive" })
       return
     }
+    tx.quantity = normalizedQty
+    tx.total_cost = (Number(tx.price) || 0) * normalizedQty
 
     const locationSource = locationOverride ?? transactionLocationId
     const normalizedLocationSource = typeof locationSource === "string" ? locationSource.trim() : ""
@@ -2088,10 +2097,13 @@ export default function InventorySystem() {
       toast({ title: "Missing fields", description: "Item type and transaction type are required.", variant: "destructive" })
       return
     }
-    if (!tx.quantity || Number(tx.quantity) <= 0) {
+    const normalizedQty = normalizeQuantityValue(tx.quantity)
+    if (!normalizedQty || normalizedQty <= 0) {
       toast({ title: "Invalid quantity", description: "Quantity must be a positive number.", variant: "destructive" })
       return
     }
+    tx.quantity = normalizedQty
+    tx.total_cost = (Number(tx.price) || 0) * normalizedQty
 
     setIsSavingTransactionEdit(true)
     try {
@@ -2207,7 +2219,7 @@ export default function InventorySystem() {
           ? inventoryEditLocationId
           : null
 
-      const delta = Number((nextQty - originalQty).toFixed(4))
+      const delta = Number((nextQty - originalQty).toFixed(2))
       if (Math.abs(delta) > 0.0001) {
         const res = await fetch(API_TRANSACTIONS, {
           method: "POST",
@@ -4436,6 +4448,7 @@ export default function InventorySystem() {
               placeholder="Enter quantity"
               value={newTransaction?.quantity ?? ""}
               onKeyDown={preventNegativeKey}
+              onWheel={preventNumberScrollChange}
               onChange={(e) => {
                 const nextValue = coerceNonNegativeNumber(e.target.value)
                 if (nextValue === null) return
@@ -7280,6 +7293,7 @@ export default function InventorySystem() {
                       step="0.01"
                       value={editingTransaction.quantity ?? ""}
                       onKeyDown={preventNegativeKey}
+                      onWheel={preventNumberScrollChange}
                       onChange={(event) => {
                         const nextValue = coerceNonNegativeNumber(event.target.value)
                         if (nextValue === null) return
@@ -7506,6 +7520,7 @@ export default function InventorySystem() {
                     step="0.01"
                     value={inventoryEditForm.quantity}
                     onKeyDown={preventNegativeKey}
+                    onWheel={preventNumberScrollChange}
                     onChange={(event) => {
                       const nextValue = event.target.value
                       const numeric = coerceNonNegativeNumber(nextValue)

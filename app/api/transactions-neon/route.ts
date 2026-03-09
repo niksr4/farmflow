@@ -38,6 +38,12 @@ const isInventoryUnderflowError = (error: unknown) => {
   )
 }
 
+const normalizeQuantity = (value: unknown) => {
+  const numeric = Number(value)
+  if (!Number.isFinite(numeric)) return null
+  return Number((Math.round((numeric + Number.EPSILON) * 100) / 100).toFixed(2))
+}
+
 export async function GET(request: NextRequest) {
   try {
     const sessionUser = await requireModuleAccess("transactions")
@@ -392,8 +398,8 @@ export async function POST(request: NextRequest) {
     let notesValue = typeof notes === "string" ? notes : ""
     let pooledFallbackApplied = false
 
-    const quantityValue = Number(quantity)
-    if (!Number.isFinite(quantityValue) || quantityValue <= 0) {
+    const quantityValue = normalizeQuantity(quantity)
+    if (!quantityValue || quantityValue <= 0) {
       return NextResponse.json(
         {
           success: false,
