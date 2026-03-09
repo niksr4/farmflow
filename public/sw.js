@@ -20,7 +20,7 @@ let runtimeConfig = {
   navigationCache: true,
   staticAssetCache: true,
   readApiCache: false,
-  writeQueue: true,
+  writeQueue: false,
   readApiTimeoutMs: DEFAULT_READ_API_TIMEOUT_MS,
   writeTimeoutMs: DEFAULT_WRITE_TIMEOUT_MS,
   maxWriteQueueEntries: MAX_WRITE_QUEUE_ENTRIES,

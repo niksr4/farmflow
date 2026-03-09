@@ -106,8 +106,9 @@ export default function PwaRegister() {
 
     const resolveRuntimeConfig = () => ({
       ...RUNTIME_SW_CONFIG,
-      // Keep read API cache/offline fallback for installed app mode only.
+      // Keep offline-first APIs for installed app mode only.
       readApiCache: RUNTIME_SW_CONFIG.readApiCache && isStandaloneRuntime(),
+      writeQueue: RUNTIME_SW_CONFIG.writeQueue && isStandaloneRuntime(),
     })
 
     const syncRuntimeConfig = () => {

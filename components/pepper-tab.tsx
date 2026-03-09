@@ -234,28 +234,101 @@ export function PepperTab() {
   const handleExportCSV = () => {
     if (recentRecords.length === 0) return
 
-    const headers = showLocationColumn
-      ? ["Location", "Date", "KG Picked", "Green Pepper", "Green %", "Dry Pepper", "Dry %", "Notes"]
-      : ["Date", "KG Picked", "Green Pepper", "Green %", "Dry Pepper", "Dry %", "Notes"]
-    const rows = recentRecords.map((record) => {
-      const row = [
-        format(new Date(record.process_date), "yyyy-MM-dd"),
-        record.kg_picked,
-        record.green_pepper,
-        record.green_pepper_percent,
-        record.dry_pepper,
-        record.dry_pepper_percent,
-        record.notes || "",
-      ]
-      if (showLocationColumn) {
-        const locationLabel =
-          record.location_name || record.location_code || (record.location_id ? "Unknown" : UNASSIGNED_LABEL)
-        return [locationLabel, ...row]
-      }
-      return row
+    const toCsvCell = (value: unknown) => `"${String(value ?? "").replace(/"/g, '""')}"`
+    const toCsvRow = (values: unknown[]) => values.map((value) => toCsvCell(value)).join(",")
+    const toNumber = (value: unknown) => {
+      const parsed = Number(value)
+      return Number.isFinite(parsed) ? parsed : 0
+    }
+
+    const groups = new Map<string, PepperRecord[]>()
+    recentRecords.forEach((record) => {
+      const derivedLocationLabel =
+        record.location_name || record.location_code || (record.location_id ? "Unknown" : UNASSIGNED_LABEL)
+      const locationLabel = showLocationColumn
+        ? derivedLocationLabel
+        : selectedLocation?.name || selectedLocation?.code || derivedLocationLabel
+      const currentRows = groups.get(locationLabel) || []
+      currentRows.push(record)
+      groups.set(locationLabel, currentRows)
     })
 
-    const csvContent = [headers, ...rows].map((row) => row.map((cell) => `"${cell}"`).join(",")).join("\n")
+    const locationLabels = [...groups.keys()].sort((a, b) => a.localeCompare(b))
+    const csvRows: string[] = [
+      toCsvRow(["Location", "Date", "KG Picked", "Green Pepper", "Green %", "Dry Pepper", "Dry %", "Notes"]),
+    ]
+    const grandTotals = {
+      kgPicked: 0,
+      greenPepper: 0,
+      dryPepper: 0,
+    }
+
+    locationLabels.forEach((locationLabel) => {
+      const locationRows = [...(groups.get(locationLabel) || [])].sort((a, b) => a.process_date.localeCompare(b.process_date))
+      const totals = {
+        kgPicked: 0,
+        greenPepper: 0,
+        dryPepper: 0,
+      }
+
+      locationRows.forEach((record) => {
+        const kgPicked = toNumber(record.kg_picked)
+        const greenPepper = toNumber(record.green_pepper)
+        const dryPepper = toNumber(record.dry_pepper)
+        const greenPct = toNumber(record.green_pepper_percent) || (kgPicked > 0 ? (greenPepper / kgPicked) * 100 : 0)
+        const dryPct = toNumber(record.dry_pepper_percent) || (greenPepper > 0 ? (dryPepper / greenPepper) * 100 : 0)
+
+        totals.kgPicked += kgPicked
+        totals.greenPepper += greenPepper
+        totals.dryPepper += dryPepper
+
+        csvRows.push(
+          toCsvRow([
+            locationLabel,
+            format(new Date(record.process_date), "yyyy-MM-dd"),
+            kgPicked.toFixed(2),
+            greenPepper.toFixed(2),
+            greenPct.toFixed(2),
+            dryPepper.toFixed(2),
+            dryPct.toFixed(2),
+            record.notes || "",
+          ]),
+        )
+      })
+
+      grandTotals.kgPicked += totals.kgPicked
+      grandTotals.greenPepper += totals.greenPepper
+      grandTotals.dryPepper += totals.dryPepper
+
+      csvRows.push(
+        toCsvRow([
+          `TOTAL - ${locationLabel}`,
+          "",
+          totals.kgPicked.toFixed(2),
+          totals.greenPepper.toFixed(2),
+          totals.kgPicked > 0 ? ((totals.greenPepper / totals.kgPicked) * 100).toFixed(2) : "0.00",
+          totals.dryPepper.toFixed(2),
+          totals.greenPepper > 0 ? ((totals.dryPepper / totals.greenPepper) * 100).toFixed(2) : "0.00",
+          "",
+        ]),
+      )
+      csvRows.push("")
+    })
+
+    csvRows.push(
+      toCsvRow([
+        "TOTAL OF TOTALS",
+        "",
+        grandTotals.kgPicked.toFixed(2),
+        grandTotals.greenPepper.toFixed(2),
+        grandTotals.kgPicked > 0 ? ((grandTotals.greenPepper / grandTotals.kgPicked) * 100).toFixed(2) : "0.00",
+        grandTotals.dryPepper.toFixed(2),
+        grandTotals.greenPepper > 0 ? ((grandTotals.dryPepper / grandTotals.greenPepper) * 100).toFixed(2) : "0.00",
+        "",
+      ]),
+    )
+
+    const csvContent = csvRows.join("\n")
 
     const blob = new Blob([csvContent], { type: "text/csv" })
     const url = window.URL.createObjectURL(blob)

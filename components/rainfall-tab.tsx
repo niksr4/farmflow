@@ -192,58 +192,63 @@ export default function RainfallTab({ username, showDataToolsControls = false }:
   }
 
   const exportToCSV = () => {
+    const rainfallValuesByYear = new Map<number, Map<string, { display: string; value: number }>>()
     const currentYear = new Date().getFullYear()
+    const yearsWithData = new Set<number>()
 
-    const rainfallMap: Record<string, string> = {}
     records.forEach((record) => {
       const date = parseRecordDate(record.record_date)
-      if (date && date.getFullYear() === currentYear) {
-        const dateKey = format(date, "yyyy-MM-dd")
-        rainfallMap[dateKey] = `${record.inches}.${String(record.cents).padStart(2, "0")}`
+      if (!date) return
+      const year = date.getFullYear()
+      yearsWithData.add(year)
+      const dateKey = format(date, "yyyy-MM-dd")
+      const inchesValue = Math.max(0, Math.trunc(Number(record.inches) || 0))
+      const centsValue = Math.max(0, Math.min(99, Math.trunc(Number(record.cents) || 0)))
+      const parsedValue = round2(inchesValue + centsValue / 100)
+      const displayValue = `${inchesValue}.${String(centsValue).padStart(2, "0")}`
+      const yearMap = rainfallValuesByYear.get(year) || new Map<string, { display: string; value: number }>()
+      if (!yearMap.has(dateKey)) {
+        yearMap.set(dateKey, { display: displayValue, value: parsedValue })
       }
+      rainfallValuesByYear.set(year, yearMap)
     })
 
-    const monthlyTotals: number[] = []
-    for (let month = 0; month < 12; month++) {
-      let monthTotal = 0
-      for (let day = 1; day <= 31; day++) {
-        const dateStr = `${currentYear}-${String(month + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`
-        if (rainfallMap[dateStr]) {
-          const [whole, fractional] = rainfallMap[dateStr].split(".").map(Number)
-          monthTotal += whole + fractional / 100
-        }
-      }
-      monthlyTotals.push(monthTotal)
-    }
-
-    const annualTotal = monthlyTotals.reduce((sum, total) => sum + total, 0)
+    const years = yearsWithData.size > 0 ? [...yearsWithData].sort((a, b) => a - b) : [currentYear]
     const csvRows: string[] = []
-    csvRows.push(["Day", ...MONTHS].join(","))
+    years.forEach((year, yearIndex) => {
+      const yearlyValues = rainfallValuesByYear.get(year) || new Map<string, { display: string; value: number }>()
+      const monthlyTotals = Array.from({ length: 12 }, () => 0)
+      csvRows.push(`Year,${year}`)
+      csvRows.push(["Day", ...MONTHS].join(","))
 
-    for (let day = 1; day <= 31; day++) {
-      const row = [String(day)]
-      for (let month = 0; month < 12; month++) {
-        const dateStr = `${currentYear}-${String(month + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`
-        row.push(rainfallMap[dateStr] || "")
+      for (let day = 1; day <= 31; day++) {
+        const row = [String(day)]
+        for (let month = 0; month < 12; month++) {
+          const dateStr = `${year}-${String(month + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`
+          const entry = yearlyValues.get(dateStr)
+          row.push(entry?.display || "")
+          if (entry) {
+            monthlyTotals[month] += entry.value
+          }
+        }
+        csvRows.push(row.join(","))
       }
-      csvRows.push(row.join(","))
-    }
 
-    const totalsRow = ["TOTAL"]
-    monthlyTotals.forEach((total) => {
-      totalsRow.push(total.toFixed(2))
+      csvRows.push(["Monthly Total", ...monthlyTotals.map((total) => total.toFixed(2))].join(","))
+      const totalOfTotals = monthlyTotals.reduce((sum, total) => sum + total, 0)
+      csvRows.push(["Total of Totals", totalOfTotals.toFixed(2), "", "", "", "", "", "", "", "", "", "", ""].join(","))
+      if (yearIndex < years.length - 1) {
+        csvRows.push("")
+      }
     })
-    csvRows.push(totalsRow.join(","))
-
-    const annualRow = ["ANNUAL TOTAL", "", "", "", "", "", "", "", "", "", "", "", annualTotal.toFixed(2)]
-    csvRows.push(annualRow.join(","))
 
     const csvContent = csvRows.join("\n")
     const blob = new Blob([csvContent], { type: "text/csv" })
     const url = window.URL.createObjectURL(blob)
+    const filenameSuffix = years.length === 1 ? String(years[0]) : `${years[0]}-to-${years[years.length - 1]}`
     const a = document.createElement("a")
     a.href = url
-    a.download = `rainfall-${currentYear}.csv`
+    a.download = `rainfall-${filenameSuffix}.csv`
     document.body.appendChild(a)
     a.click()
     document.body.removeChild(a)
@@ -251,7 +256,7 @@ export default function RainfallTab({ username, showDataToolsControls = false }:
 
     toast({
       title: "Export successful",
-      description: `Rainfall data exported for ${currentYear}`,
+      description: `Rainfall data exported for ${years.join(", ")}`,
     })
   }
 
