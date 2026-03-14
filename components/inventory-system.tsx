@@ -122,6 +122,15 @@ import {
   safeGet,
 } from "@/components/inventory-system/utils"
 import { downloadDataToolsTemplate, exportOpsCsv, getDataToolsSelection } from "@/components/inventory-system/data-tools-export"
+import {
+  INITIAL_ONBOARDING_STATUS,
+  buildLaunchGuidePhases,
+  buildOnboardingSteps,
+  getOnboardingStatusRequests,
+  type OnboardingAccess,
+  type OnboardingStatusKey,
+  type OnboardingStatusSnapshot,
+} from "@/components/inventory-system/onboarding"
 
 import posthog from "posthog-js"
 
@@ -172,6 +181,7 @@ export default function InventorySystem() {
   const [showDataToolsPanel, setShowDataToolsPanel] = useState(false)
   const [enabledModules, setEnabledModules] = useState<string[] | null>(null)
   const [isModulesLoading, setIsModulesLoading] = useState(false)
+  const [hasResolvedModules, setHasResolvedModules] = useState(false)
 
   // data & states
   const [inventory, setInventory] = useState<InventoryItem[]>([])
@@ -328,13 +338,7 @@ export default function InventorySystem() {
   const [intelligenceError, setIntelligenceError] = useState<string | null>(null)
   const hasTrackedInsightViewRef = useRef(false)
   const lastExecutionOutcomeSignatureRef = useRef("")
-  const [onboardingStatus, setOnboardingStatus] = useState({
-    locations: false,
-    inventory: false,
-    processing: false,
-    dispatch: false,
-    sales: false,
-  })
+  const [onboardingStatus, setOnboardingStatus] = useState<OnboardingStatusSnapshot>(INITIAL_ONBOARDING_STATUS)
   const [isOnboardingLoading, setIsOnboardingLoading] = useState(false)
   const [hasLoadedOnboardingStatus, setHasLoadedOnboardingStatus] = useState(false)
   const [onboardingError, setOnboardingError] = useState<string | null>(null)
@@ -436,6 +440,7 @@ export default function InventorySystem() {
 
   const loadTenantModules = useCallback(async () => {
     if (isPreviewMode) {
+      setHasResolvedModules(false)
       setIsModulesLoading(true)
       try {
         const response = await fetch(`/api/admin/tenant-modules?tenantId=${encodeURIComponent(previewTenantId)}`, {
@@ -461,13 +466,16 @@ export default function InventorySystem() {
         setEnabledModules(null)
       } finally {
         setIsModulesLoading(false)
+        setHasResolvedModules(true)
       }
       return
     }
     if (!tenantId || isOwner) {
       setEnabledModules(null)
+      setHasResolvedModules(true)
       return
     }
+    setHasResolvedModules(false)
     setIsModulesLoading(true)
     try {
       const response = await fetch("/api/tenant-modules", { cache: "no-store" })
@@ -485,6 +493,7 @@ export default function InventorySystem() {
       setEnabledModules(null)
     } finally {
       setIsModulesLoading(false)
+      setHasResolvedModules(true)
     }
   }, [isOwner, isPreviewMode, previewTenantId, tenantId])
 
@@ -634,24 +643,33 @@ export default function InventorySystem() {
   }, [tenantId, refreshData])
 
   const loadOnboardingStatus = useCallback(async () => {
-    if (!tenantId || isOwner) {
+    if (!tenantId || isOwner || !hasResolvedModules) {
       return
     }
     setIsOnboardingLoading(true)
     setHasLoadedOnboardingStatus(false)
     setOnboardingError(null)
     try {
+      const onboardingAccess: OnboardingAccess = {
+        canShowInventory: isModuleEnabled("inventory"),
+        canShowProcessing: isModuleEnabled("processing"),
+        canShowDispatch: isModuleEnabled("dispatch"),
+        canShowSales: isAdmin && isModuleEnabled("sales"),
+      }
       const locationsEndpoint =
         isPreviewMode && previewTenantId
           ? `/api/locations?tenantId=${encodeURIComponent(previewTenantId)}`
           : "/api/locations"
-      const results = await Promise.allSettled([
-        fetch(locationsEndpoint),
-        fetch("/api/inventory-neon"),
-        fetch("/api/processing-records?limit=1&offset=0"),
-        fetch("/api/dispatch?limit=1&offset=0"),
-        fetch("/api/sales?limit=1&offset=0"),
-      ])
+      const requests = getOnboardingStatusRequests(locationsEndpoint, onboardingAccess)
+
+      if (requests.length === 0) {
+        setOnboardingStatus(INITIAL_ONBOARDING_STATUS)
+        setHasLoadedOnboardingStatus(true)
+        setIsOnboardingLoading(false)
+        return
+      }
+
+      const results = await Promise.allSettled(requests.map((request) => fetch(request.endpoint)))
 
       const parseJson = async (result: PromiseSettledResult<Response>) => {
         if (result.status !== "fulfilled") {
@@ -668,28 +686,30 @@ export default function InventorySystem() {
         }
       }
 
-      const locationsData = await parseJson(results[0])
-      const inventoryData = await parseJson(results[1])
-      const processingData = await parseJson(results[2])
-      const dispatchData = await parseJson(results[3])
-      const salesData = await parseJson(results[4])
+      const payloads = await Promise.all(results.map((result) => parseJson(result)))
+      const nextStatus: OnboardingStatusSnapshot = { ...INITIAL_ONBOARDING_STATUS }
 
-      const hasLocations = Array.isArray(locationsData?.locations) && locationsData.locations.length > 0
-      const processingCount = Number(processingData?.totalCount) || (Array.isArray(processingData?.records) ? processingData.records.length : 0)
-      const dispatchCount = Number(dispatchData?.totalCount) || (Array.isArray(dispatchData?.records) ? dispatchData.records.length : 0)
-      const salesCount = Number(salesData?.totalCount) || (Array.isArray(salesData?.records) ? salesData.records.length : 0)
-      const hasInventory =
-        Number(inventoryData?.summary?.total_items) > 0 ||
-        (Array.isArray(inventoryData?.inventory) && inventoryData.inventory.length > 0) ||
-        (Array.isArray(inventoryData?.items) && inventoryData.items.length > 0)
+      const hasRecords = (data: any) =>
+        (Number(data?.totalCount) || 0) > 0 || (Array.isArray(data?.records) && data.records.length > 0)
 
-      setOnboardingStatus({
-        locations: hasLocations,
-        inventory: hasInventory,
-        processing: processingCount > 0,
-        dispatch: dispatchCount > 0,
-        sales: salesCount > 0,
+      requests.forEach((request, index) => {
+        const payload = payloads[index]
+        if (request.key === "locations") {
+          nextStatus.locations = Array.isArray(payload?.locations) && payload.locations.length > 0
+          return
+        }
+        if (request.key === "inventory") {
+          nextStatus.inventory =
+            Number(payload?.summary?.total_items) > 0 ||
+            (Array.isArray(payload?.inventory) && payload.inventory.length > 0) ||
+            (Array.isArray(payload?.items) && payload.items.length > 0)
+          return
+        }
+
+        nextStatus[request.key as Exclude<OnboardingStatusKey, "locations" | "inventory">] = hasRecords(payload)
       })
+
+      setOnboardingStatus(nextStatus)
 
       const hasError = results.some(
         (result) => result.status === "rejected" || (result.status === "fulfilled" && !result.value.ok),
@@ -703,12 +723,12 @@ export default function InventorySystem() {
       setIsOnboardingLoading(false)
       setHasLoadedOnboardingStatus(true)
     }
-  }, [isOwner, isPreviewMode, previewTenantId, tenantId])
+  }, [hasResolvedModules, isAdmin, isModuleEnabled, isOwner, isPreviewMode, previewTenantId, tenantId])
 
   useEffect(() => {
-    if (!tenantId || isOwner) return
+    if (!tenantId || isOwner || !hasResolvedModules) return
     loadOnboardingStatus()
-  }, [tenantId, isOwner, loadOnboardingStatus])
+  }, [hasResolvedModules, tenantId, isOwner, loadOnboardingStatus])
 
   const handleCreateLocation = async () => {
     if (!newLocationName.trim()) {
@@ -4192,52 +4212,20 @@ export default function InventorySystem() {
     )
   }
 
-  const onboardingSteps: OnboardingStep[] = [
-    {
-      key: "locations",
-      title: "Add estate locations",
-      description: "Set up the coffee processing locations your estate uses.",
-      done: onboardingStatus.locations,
-      actionLabel: "Go to Processing",
-      onAction: () => handleTabChange("processing"),
-    },
-    {
-      key: "inventory",
-      title: "Add first inventory item",
-      description: "Create your first inventory item and restock quantity.",
-      done: onboardingStatus.inventory,
-      actionLabel: "Go to Inventory",
-      onAction: () => handleTabChange("inventory"),
-    },
-    {
-      key: "processing",
-      title: "Record processing output",
-      description: "Log today's coffee processing (parchment/cherry).",
-      done: onboardingStatus.processing,
-      actionLabel: "Open Processing",
-      onAction: () => handleTabChange("processing"),
-    },
-    {
-      key: "dispatch",
-      title: "Create a dispatch record",
-      description: "Send bags out and optionally note KGs received.",
-      done: onboardingStatus.dispatch,
-      actionLabel: "Open Dispatch",
-      onAction: () => handleTabChange("dispatch"),
-    },
-    ...(canShowSales
-      ? [
-          {
-            key: "sales",
-            title: "Record your first sale",
-            description: "Capture bags sold and pricing for revenue tracking.",
-            done: onboardingStatus.sales,
-            actionLabel: "Open Sales",
-            onAction: () => handleTabChange("sales"),
-          } satisfies OnboardingStep,
-        ]
-      : []),
-  ]
+  const onboardingAccess: OnboardingAccess = {
+    canShowInventory,
+    canShowProcessing,
+    canShowDispatch,
+    canShowSales,
+  }
+  const onboardingSteps: OnboardingStep[] = buildOnboardingSteps(onboardingStatus, onboardingAccess).map((step) => ({
+    key: step.key,
+    title: step.title,
+    description: step.description,
+    done: step.done,
+    actionLabel: step.actionLabel,
+    onAction: () => handleTabChange(step.actionTab),
+  }))
   const onboardingCompletedCount = onboardingSteps.filter((step) => step.done).length
   const onboardingTotalCount = onboardingSteps.length
   const onboardingPendingSteps = onboardingSteps.filter((step) => !step.done)
@@ -4255,44 +4243,10 @@ export default function InventorySystem() {
       : onboardingProgressPct >= 60
         ? "text-amber-700 border-amber-200 bg-amber-50/70"
         : "text-rose-700 border-rose-200 bg-rose-50/70"
-  const launchGuidePhases = [
-    {
-      id: "phase-1",
-      label: "Week 1",
-      title: "Foundation setup",
-      detail: "Configure locations and inventory masters before daily records begin.",
-      done: onboardingStatus.locations && onboardingStatus.inventory,
-      actionLabel: onboardingStatus.locations ? "Open Inventory" : "Add Locations",
-      onAction: () => handleTabChange(onboardingStatus.locations ? "inventory" : "processing"),
-    },
-    {
-      id: "phase-2",
-      label: "Week 2",
-      title: "Daily processing rhythm",
-      detail: "Capture Arabica/Robusta outputs every day with consistent lot notes.",
-      done: onboardingStatus.processing,
-      actionLabel: "Open Processing",
-      onAction: () => handleTabChange("processing"),
-    },
-    {
-      id: "phase-3",
-      label: "Week 3",
-      title: "Dispatch discipline",
-      detail: "Record bags dispatched and KGs received so sales stock is reliable.",
-      done: onboardingStatus.dispatch,
-      actionLabel: "Open Dispatch",
-      onAction: () => handleTabChange("dispatch"),
-    },
-    {
-      id: "phase-4",
-      label: "Week 4",
-      title: "Sales and finance close",
-      detail: "Close the loop with sales entries and account activity code hygiene.",
-      done: canShowSales ? onboardingStatus.sales : true,
-      actionLabel: canShowSales ? "Open Sales" : "Open Accounts",
-      onAction: () => handleTabChange(canShowSales ? "sales" : "accounts"),
-    },
-  ]
+  const launchGuidePhases = buildLaunchGuidePhases(onboardingStatus, onboardingAccess).map((phase) => ({
+    ...phase,
+    onAction: () => handleTabChange(phase.actionTab),
+  }))
   const showOnboarding =
     !isOwner && hasLoadedOnboardingStatus && onboardingTotalCount > 0 && onboardingCompletedCount < onboardingTotalCount
   const showLaunchGuide = showOnboarding
