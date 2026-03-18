@@ -13,7 +13,10 @@ export async function POST(request: Request) {
       return NextResponse.json({ success: false, error: "Database not configured" }, { status: 500 })
     }
 
-    const body = await request.json()
+    const body = await request.json().catch(() => null)
+    if (!body || typeof body !== "object" || Array.isArray(body)) {
+      return NextResponse.json({ success: false, error: "Invalid request body" }, { status: 400 })
+    }
     const currentPassword = String(body.currentPassword || "")
     const newPassword = String(body.newPassword || "")
 
@@ -40,7 +43,7 @@ export async function POST(request: Request) {
       sql`
         SELECT id, username, role, tenant_id, password_hash, password_reset_required
         FROM users
-        WHERE username = ${sessionUser.username}
+        WHERE id = ${sessionUser.id}
           AND tenant_id = ${tenantContext.tenantId}
         LIMIT 1
       `,
@@ -106,4 +109,3 @@ export async function POST(request: Request) {
     return NextResponse.json({ success: false, error: message }, { status: 500 })
   }
 }
-

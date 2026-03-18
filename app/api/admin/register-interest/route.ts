@@ -3,16 +3,11 @@ import { sql } from "@/lib/server/db"
 import { requireOwnerRole } from "@/lib/tenant"
 import { requireAdminSession } from "@/lib/server/mfa"
 import { normalizeTenantContext, runTenantQuery } from "@/lib/server/tenant-db"
+import { buildAdminErrorResponse, databaseNotConfiguredResponse } from "@/lib/server/route-utils"
 
 const isMissingRelation = (error: unknown, relation: string) => {
   const message = String((error as Error)?.message || error)
   return message.includes(`relation "${relation}" does not exist`)
-}
-
-const adminErrorResponse = (error: any, fallback: string) => {
-  const message = error?.message || fallback
-  const status = ["Admin role required", "Unauthorized"].includes(message) ? 403 : 500
-  return NextResponse.json({ success: false, error: message }, { status })
 }
 
 type InterestRecord = {
@@ -29,7 +24,7 @@ export async function GET(request: Request) {
     const sessionUser = await requireAdminSession()
     requireOwnerRole(sessionUser.role)
     if (!sql) {
-      return NextResponse.json({ success: false, error: "Database not configured" }, { status: 500 })
+      return databaseNotConfiguredResponse()
     }
 
     const { searchParams } = new URL(request.url)
@@ -84,6 +79,6 @@ export async function GET(request: Request) {
     return NextResponse.json({ success: true, records })
   } catch (error: any) {
     console.error("Error fetching register-interest records:", error)
-    return adminErrorResponse(error, "Failed to fetch register-interest records")
+    return buildAdminErrorResponse(error, "Failed to fetch register-interest records", { ownerRequired: true })
   }
 }

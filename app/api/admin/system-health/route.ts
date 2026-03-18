@@ -2,6 +2,7 @@ import { NextResponse } from "next/server"
 import { sql } from "@/lib/server/db"
 import { requireOwnerRole } from "@/lib/tenant"
 import { requireAdminSession } from "@/lib/server/mfa"
+import { buildAdminErrorResponse, databaseNotConfiguredResponse } from "@/lib/server/route-utils"
 
 type HealthStatus = "healthy" | "warning" | "critical" | "unknown"
 
@@ -88,7 +89,7 @@ export async function GET() {
     requireOwnerRole(sessionUser.role)
 
     if (!sql) {
-      return NextResponse.json({ success: false, error: "Database not configured" }, { status: 500 })
+      return databaseNotConfiguredResponse()
     }
 
     const checks: HealthCheck[] = []
@@ -285,8 +286,6 @@ export async function GET() {
       staleThresholdHours: STALE_THRESHOLD_HOURS,
     })
   } catch (error: any) {
-    const message = error?.message || "Failed to load system health"
-    const status = ["Admin role required", "Owner role required", "Unauthorized"].includes(message) ? 403 : 500
-    return NextResponse.json({ success: false, error: message }, { status })
+    return buildAdminErrorResponse(error, "Failed to load system health", { ownerRequired: true })
   }
 }

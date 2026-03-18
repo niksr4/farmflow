@@ -110,7 +110,10 @@ export async function POST(request: Request) {
       console.warn("Register interest rate-limit check failed:", rateLimitError)
     }
 
-    const body = await request.json()
+    const body = await request.json().catch(() => null)
+    if (!body || typeof body !== "object" || Array.isArray(body)) {
+      return NextResponse.json({ success: false, error: "Invalid request body" }, { status: 400 })
+    }
     const name = sanitize(body?.name, 120)
     const email = sanitize(body?.email, 160).toLowerCase()
     const estate = sanitize(body?.estate, 180)

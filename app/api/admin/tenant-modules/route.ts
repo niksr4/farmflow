@@ -6,18 +6,13 @@ import { MODULES, resolveModuleStates } from "@/lib/modules"
 import { normalizeTenantContext, runTenantQuery } from "@/lib/server/tenant-db"
 import { logAuditEvent } from "@/lib/server/audit-log"
 import { logSecurityEvent } from "@/lib/server/security-events"
-
-const adminErrorResponse = (error: any, fallback: string) => {
-  const message = error?.message || fallback
-  const status = ["Admin role required", "Unauthorized"].includes(message) ? 403 : 500
-  return NextResponse.json({ success: false, error: message }, { status })
-}
+import { buildAdminErrorResponse, databaseNotConfiguredResponse } from "@/lib/server/route-utils"
 
 export async function GET(request: Request) {
   try {
     const sessionUser = await requireAdminSession()
     if (!sql) {
-      return NextResponse.json({ success: false, error: "Database not configured" }, { status: 500 })
+      return databaseNotConfiguredResponse()
     }
 
     const { searchParams } = new URL(request.url)
@@ -48,7 +43,7 @@ export async function GET(request: Request) {
     return NextResponse.json({ success: true, modules })
   } catch (error: any) {
     console.error("Error fetching tenant modules:", error)
-    return adminErrorResponse(error, "Failed to fetch tenant modules")
+    return buildAdminErrorResponse(error, "Failed to fetch tenant modules")
   }
 }
 
@@ -57,7 +52,7 @@ export async function PUT(request: Request) {
     const sessionUser = await requireAdminSession()
     requireOwnerRole(sessionUser.role)
     if (!sql) {
-      return NextResponse.json({ success: false, error: "Database not configured" }, { status: 500 })
+      return databaseNotConfiguredResponse()
     }
 
     const body = await request.json()
@@ -121,6 +116,6 @@ export async function PUT(request: Request) {
     return NextResponse.json({ success: true })
   } catch (error: any) {
     console.error("Error updating tenant modules:", error)
-    return adminErrorResponse(error, "Failed to update tenant modules")
+    return buildAdminErrorResponse(error, "Failed to update tenant modules", { ownerRequired: true })
   }
 }

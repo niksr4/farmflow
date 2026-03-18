@@ -5,6 +5,12 @@ import { sql } from "@/lib/server/db"
 import { normalizeTenantContext, runTenantQuery } from "@/lib/server/tenant-db"
 import type { SessionUser } from "@/lib/server/auth"
 import { PRIVACY_NOTICE_VERSION, PRIVACY_RETENTION } from "@/lib/privacy-config"
+import {
+  isReservedPlatformUsername,
+  isSystemUsername,
+  normalizeUsername,
+  normalizeUsernameLookup,
+} from "@/lib/usernames"
 
 type PrivacySchemaStatus = {
   ok: boolean
@@ -119,7 +125,7 @@ export async function getPrivacyStatus(sessionUser: SessionUser): Promise<Privac
         deletion_requested_at,
         anonymized_at
       FROM users
-      WHERE username = ${sessionUser.username}
+      WHERE id = ${sessionUser.id}
         AND tenant_id = ${tenantContext.tenantId}
       LIMIT 1
     `,
@@ -147,7 +153,7 @@ export async function acceptPrivacyNotice(sessionUser: SessionUser) {
       UPDATE users
       SET privacy_notice_version = ${PRIVACY_NOTICE_VERSION},
           privacy_notice_accepted_at = NOW()
-      WHERE username = ${sessionUser.username}
+      WHERE id = ${sessionUser.id}
         AND tenant_id = ${tenantContext.tenantId}
     `,
   )
@@ -163,7 +169,7 @@ export async function updateMarketingConsent(sessionUser: SessionUser, consent: 
       UPDATE users
       SET consent_marketing = ${consent},
           consent_marketing_updated_at = NOW()
-      WHERE username = ${sessionUser.username}
+      WHERE id = ${sessionUser.id}
         AND tenant_id = ${tenantContext.tenantId}
     `,
   )
@@ -181,7 +187,7 @@ export async function exportPersonalData(sessionUser: SessionUser) {
         consent_marketing, consent_marketing_updated_at,
         deletion_requested_at, anonymized_at
       FROM users
-      WHERE username = ${sessionUser.username}
+      WHERE id = ${sessionUser.id}
         AND tenant_id = ${tenantContext.tenantId}
       LIMIT 1
     `,
@@ -281,7 +287,7 @@ export async function exportPersonalData(sessionUser: SessionUser) {
       SELECT id, request_type, request_details, status, created_at, resolved_at
       FROM privacy_requests
       WHERE tenant_id = ${tenantContext.tenantId}
-        AND username = ${sessionUser.username}
+        AND (username = ${sessionUser.username} OR user_id = ${sessionUser.id})
       ORDER BY created_at DESC
     `,
     tenantContext,
@@ -308,19 +314,41 @@ export async function exportPersonalData(sessionUser: SessionUser) {
 export async function updateUsername(sessionUser: SessionUser, newUsername: string) {
   const db = ensureSql()
   const tenantContext = normalizeTenantContext(sessionUser.tenantId, sessionUser.role)
-  const trimmed = newUsername.trim()
+  const trimmed = normalizeUsername(newUsername)
   if (!trimmed) {
     throw new Error("New username is required")
+  }
+  if (isSystemUsername(trimmed)) {
+    throw new Error("System usernames are reserved")
+  }
+  if (isReservedPlatformUsername(trimmed)) {
+    throw new Error("Username 'owner' is reserved for the platform account")
+  }
+
+  const currentUserRows = await runTenantQuery(
+    db,
+    tenantContext,
+    db`
+      SELECT username
+      FROM users
+      WHERE id = ${sessionUser.id}
+        AND tenant_id = ${tenantContext.tenantId}
+      LIMIT 1
+    `,
+  )
+  const currentUsername = String(currentUserRows?.[0]?.username || sessionUser.username || "").trim()
+  if (!currentUsername) {
+    throw new Error("User not found")
   }
 
   const existing = await runTenantQuery(
     db,
-    tenantContext,
+    normalizeTenantContext(undefined, "owner"),
     db`
       SELECT id
       FROM users
-      WHERE username = ${trimmed}
-        AND tenant_id = ${tenantContext.tenantId}
+      WHERE LOWER(BTRIM(username)) = ${normalizeUsernameLookup(trimmed)}
+        AND id <> ${sessionUser.id}
       LIMIT 1
     `,
   )
@@ -334,7 +362,7 @@ export async function updateUsername(sessionUser: SessionUser, newUsername: stri
     db`
       UPDATE users
       SET username = ${trimmed}
-      WHERE username = ${sessionUser.username}
+      WHERE id = ${sessionUser.id}
         AND tenant_id = ${tenantContext.tenantId}
     `,
   )
@@ -344,43 +372,43 @@ export async function updateUsername(sessionUser: SessionUser, newUsername: stri
       UPDATE transaction_history
       SET user_id = ${trimmed}
       WHERE tenant_id = ${tenantContext.tenantId}
-        AND user_id = ${sessionUser.username}
+        AND user_id = ${currentUsername}
     `,
     db`
       UPDATE rainfall_records
       SET user_id = ${trimmed}
       WHERE tenant_id = ${tenantContext.tenantId}
-        AND user_id = ${sessionUser.username}
+        AND user_id = ${currentUsername}
     `,
     db`
       UPDATE dispatch_records
       SET created_by = ${trimmed}
       WHERE tenant_id = ${tenantContext.tenantId}
-        AND created_by = ${sessionUser.username}
+        AND created_by = ${currentUsername}
     `,
     db`
       UPDATE curing_records
       SET recorded_by = ${trimmed}
       WHERE tenant_id = ${tenantContext.tenantId}
-        AND recorded_by = ${sessionUser.username}
+        AND recorded_by = ${currentUsername}
     `,
     db`
       UPDATE quality_grading_records
       SET graded_by = ${trimmed}
       WHERE tenant_id = ${tenantContext.tenantId}
-        AND graded_by = ${sessionUser.username}
+        AND graded_by = ${currentUsername}
     `,
     db`
       UPDATE pepper_records
       SET recorded_by = ${trimmed}
       WHERE tenant_id = ${tenantContext.tenantId}
-        AND recorded_by = ${sessionUser.username}
+        AND recorded_by = ${currentUsername}
     `,
     db`
       UPDATE audit_logs
       SET username = ${trimmed}
       WHERE tenant_id = ${tenantContext.tenantId}
-        AND username = ${sessionUser.username}
+        AND username = ${currentUsername}
     `,
   ]
 
@@ -398,7 +426,7 @@ export async function requestDeletion(sessionUser: SessionUser, reason?: string 
     db`
       UPDATE users
       SET deletion_requested_at = NOW()
-      WHERE username = ${sessionUser.username}
+      WHERE id = ${sessionUser.id}
         AND tenant_id = ${tenantContext.tenantId}
     `,
   )
@@ -408,7 +436,7 @@ export async function requestDeletion(sessionUser: SessionUser, reason?: string 
       INSERT INTO privacy_requests (tenant_id, user_id, username, request_type, request_details, status)
       SELECT tenant_id, id, username, 'deletion', ${reason ? { reason } : null}::jsonb, 'open'
       FROM users
-      WHERE username = ${sessionUser.username}
+      WHERE id = ${sessionUser.id}
         AND tenant_id = ${tenantContext.tenantId}
     `,
     tenantContext,

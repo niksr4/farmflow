@@ -1,223 +1,55 @@
 "use client"
 
 import { useCallback, useEffect, useMemo, useState } from "react"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { useToast } from "@/hooks/use-toast"
 import { useAuth } from "@/hooks/use-auth"
 import { MODULES, MODULE_BUNDLES, type ModuleBundle } from "@/lib/modules"
 import {
   DEFAULT_TENANT_FEATURE_FLAGS,
   DEFAULT_TENANT_UI_VARIANT,
-  TENANT_FEATURE_FLAG_DEFINITIONS,
-  TENANT_UI_VARIANTS,
   type TenantFeatureFlags,
   type TenantUiVariant,
 } from "@/lib/tenant-experience"
-import { formatDateForDisplay, formatDateOnly } from "@/lib/date-utils"
+import { formatDateForDisplay } from "@/lib/date-utils"
 import { formatCurrency } from "@/lib/format"
 import { roleLabel } from "@/lib/roles"
-
-interface Tenant {
-  id: string
-  name: string
-  created_at: string
-}
-
-interface User {
-  id: string
-  username: string
-  role: string
-  tenant_id: string
-  created_at: string
-}
-
-interface ModulePermission {
-  id: string
-  label: string
-  enabled: boolean
-}
-
-interface AuditLog {
-  id: string
-  tenant_id: string
-  user_id: string | null
-  username: string
-  role: string
-  action: string
-  entity_type: string
-  entity_id: string | null
-  before_data: any
-  after_data: any
-  created_at: string
-}
-
-interface WeeklySummary {
-  inventoryCount: number
-  transactionCount: number
-  processingCount: number
-  dispatchCount: number
-  salesCount: number
-  salesRevenue: number
-  laborSpend: number
-  expenseSpend: number
-  receivablesOutstanding: number
-}
-
-interface WeeklySummaryRange {
-  startDate: string
-  endDate: string
-  totalDays: number
-}
-
-interface WeeklySummaryResponse {
-  summary: WeeklySummary
-  compareSummary: WeeklySummary | null
-  range: WeeklySummaryRange | null
-  compareRange: WeeklySummaryRange | null
-}
-
-interface TenantProfile {
-  uiVariant: TenantUiVariant
-  featureFlags: TenantFeatureFlags
-}
-
-interface SystemHealthCheck {
-  id: string
-  label: string
-  status: "healthy" | "warning" | "critical" | "unknown"
-  value: string
-  detail: string
-  actionPath?: string
-}
-
-interface SystemHealthResponse {
-  generatedAt: string
-  checks: SystemHealthCheck[]
-}
-
-const AUDIT_ENTITY_TYPES = [
-  { id: "all", label: "All modules" },
-  { id: "processing_records", label: "Processing" },
-  { id: "dispatch_records", label: "Dispatch" },
-  { id: "sales_records", label: "Sales" },
-  { id: "journal_entries", label: "Journal" },
-]
-
-const formatAuditTimestamp = (value: string) => {
-  return formatDateForDisplay(value)
-}
-
-const toDateInputValue = (value: Date) => {
-  const year = value.getFullYear()
-  const month = String(value.getMonth() + 1).padStart(2, "0")
-  const day = String(value.getDate()).padStart(2, "0")
-  return `${year}-${month}-${day}`
-}
-
-const DEFAULT_WEEKLY_END = toDateInputValue(new Date())
-const DEFAULT_WEEKLY_START = toDateInputValue(new Date(new Date().setDate(new Date().getDate() - 6)))
-
-const formatAuditPayload = (payload: any) => {
-  if (!payload) return "None"
-  try {
-    return JSON.stringify(payload, null, 2)
-  } catch {
-    return String(payload)
-  }
-}
-
-const formatCount = (value: number) => Number(value || 0).toLocaleString()
-
-const formatDeltaText = (delta: number, currency = false) => {
-  if (delta === 0) return "no change"
-  const abs = currency ? formatCurrency(Math.abs(delta)) : formatCount(Math.abs(delta))
-  return `${delta > 0 ? "+" : "-"}${abs}`
-}
-
-const SYSTEM_HEALTH_STATUS_META: Record<SystemHealthCheck["status"], { label: string; chipClass: string; cardClass: string }> = {
-  healthy: {
-    label: "Healthy",
-    chipClass: "border-emerald-200 bg-emerald-50 text-emerald-700",
-    cardClass: "border-emerald-100 bg-emerald-50/30",
-  },
-  warning: {
-    label: "Warning",
-    chipClass: "border-amber-200 bg-amber-50 text-amber-700",
-    cardClass: "border-amber-100 bg-amber-50/30",
-  },
-  critical: {
-    label: "Critical",
-    chipClass: "border-rose-200 bg-rose-50 text-rose-700",
-    cardClass: "border-rose-100 bg-rose-50/30",
-  },
-  unknown: {
-    label: "Unknown",
-    chipClass: "border-slate-200 bg-slate-50 text-slate-700",
-    cardClass: "border-slate-100 bg-slate-50/30",
-  },
-}
-
-const buildWeeklySummaryText = (
-  summary: WeeklySummary,
-  tenantName: string,
-  range: WeeklySummaryRange | null,
-  compareSummary: WeeklySummary | null,
-  compareRange: WeeklySummaryRange | null,
-) => {
-  const periodDays = range?.totalDays || 7
-  const rangeLabel = range ? `${range.startDate} to ${range.endDate}` : "last 7 days"
-  const compareLabel = compareRange ? `${compareRange.startDate} to ${compareRange.endDate}` : "previous period"
-  const withCompare = (label: string, value: string, delta?: string | null) =>
-    delta ? `${label}: ${value} (${delta} vs ${compareLabel})` : `${label}: ${value}`
-
-  const lines = [
-    `FarmFlow Weekly Summary (${tenantName})`,
-    `Range: ${rangeLabel} (${periodDays} day${periodDays === 1 ? "" : "s"})`,
-    `Inventory items: ${formatCount(summary.inventoryCount)}`,
-    withCompare(
-      `Transactions (${periodDays}d)`,
-      formatCount(summary.transactionCount),
-      compareSummary ? formatDeltaText(summary.transactionCount - compareSummary.transactionCount) : null,
-    ),
-    withCompare(
-      `Processing records (${periodDays}d)`,
-      formatCount(summary.processingCount),
-      compareSummary ? formatDeltaText(summary.processingCount - compareSummary.processingCount) : null,
-    ),
-    withCompare(
-      `Dispatches (${periodDays}d)`,
-      formatCount(summary.dispatchCount),
-      compareSummary ? formatDeltaText(summary.dispatchCount - compareSummary.dispatchCount) : null,
-    ),
-    withCompare(
-      `Sales (${periodDays}d)`,
-      formatCount(summary.salesCount),
-      compareSummary ? formatDeltaText(summary.salesCount - compareSummary.salesCount) : null,
-    ),
-    withCompare(
-      `Sales revenue (${periodDays}d)`,
-      formatCurrency(summary.salesRevenue),
-      compareSummary ? formatDeltaText(summary.salesRevenue - compareSummary.salesRevenue, true) : null,
-    ),
-    withCompare(
-      `Labor spend (${periodDays}d)`,
-      formatCurrency(summary.laborSpend),
-      compareSummary ? formatDeltaText(summary.laborSpend - compareSummary.laborSpend, true) : null,
-    ),
-    withCompare(
-      `Expense spend (${periodDays}d)`,
-      formatCurrency(summary.expenseSpend),
-      compareSummary ? formatDeltaText(summary.expenseSpend - compareSummary.expenseSpend, true) : null,
-    ),
-    `Receivables outstanding: ${formatCurrency(summary.receivablesOutstanding)}`,
-  ]
-  return lines.join("\n")
-}
+import {
+  type AuditLog,
+  type ModulePermission,
+  type SectionLink,
+  type SystemHealthCheck,
+  type SystemHealthCounts,
+  type SystemHealthResponse,
+  type Tenant,
+  type TenantProfile,
+  type User,
+  type WeeklyCompareMode,
+  type WeeklyDeltas,
+  type WeeklySummary,
+  type WeeklySummaryRange,
+  type WeeklySummaryResponse,
+} from "@/components/admin/types"
+import {
+  AUDIT_ENTITY_TYPES,
+  DEFAULT_WEEKLY_END,
+  DEFAULT_WEEKLY_START,
+  buildWeeklySummaryText,
+  formatCount,
+} from "@/components/admin/utils"
+import { ConsoleOverviewSection } from "@/components/admin/console-overview-section"
+import { SystemHealthSection } from "@/components/admin/system-health-section"
+import {
+  SeedDataSection,
+  TenantModulesSection,
+  TenantProfileSection,
+  TenantsSection,
+} from "@/components/admin/tenant-operations-sections"
+import { WeeklySummarySection } from "@/components/admin/weekly-summary-section"
+import {
+  AuditLogSection,
+  TenantUsersSection,
+  UserModuleOverridesSection,
+} from "@/components/admin/user-access-sections"
 
 export default function AdminPage() {
   const { user, isOwner } = useAuth()
@@ -262,7 +94,7 @@ export default function AdminPage() {
   const [weeklyCompareRange, setWeeklyCompareRange] = useState<WeeklySummaryRange | null>(null)
   const [weeklyStartDate, setWeeklyStartDate] = useState(DEFAULT_WEEKLY_START)
   const [weeklyEndDate, setWeeklyEndDate] = useState(DEFAULT_WEEKLY_END)
-  const [weeklyCompareMode, setWeeklyCompareMode] = useState<"none" | "previous">("previous")
+  const [weeklyCompareMode, setWeeklyCompareMode] = useState<WeeklyCompareMode>("previous")
   const [isWeeklyLoading, setIsWeeklyLoading] = useState(false)
   const [isSendingWeeklyWhatsApp, setIsSendingWeeklyWhatsApp] = useState(false)
   const [systemHealth, setSystemHealth] = useState<SystemHealthResponse | null>(null)
@@ -1090,8 +922,8 @@ export default function AdminPage() {
   const selectedUser = users.find((u) => u.id === selectedUserId) || null
   const isSelectedUserRoleScoped = selectedUser?.role === "user"
   const systemHealthGeneratedLabel = systemHealth?.generatedAt ? formatDateForDisplay(systemHealth.generatedAt) : null
-  const systemHealthCounts = useMemo(() => {
-    const counts = { healthy: 0, warning: 0, critical: 0, unknown: 0 }
+  const systemHealthCounts = useMemo<SystemHealthCounts>(() => {
+    const counts: SystemHealthCounts = { healthy: 0, warning: 0, critical: 0, unknown: 0 }
     ;(systemHealth?.checks || []).forEach((check) => {
       if (check.status === "critical") counts.critical += 1
       else if (check.status === "warning") counts.warning += 1
@@ -1109,7 +941,7 @@ export default function AdminPage() {
     }
     return [...(systemHealth?.checks || [])].sort((a, b) => (rank[b.status] || 0) - (rank[a.status] || 0))
   }, [systemHealth?.checks])
-  const ownerSectionLinks: Array<{ id: string; label: string }> = [
+  const ownerSectionLinks: SectionLink[] = [
     { id: "tenant-users", label: "Users" },
     { id: "user-module-overrides", label: "User Access" },
   ]
@@ -1127,882 +959,217 @@ export default function AdminPage() {
 
   return (
     <div className="space-y-6">
-      <Card
-        id="console-overview"
-        className="scroll-mt-24 border-emerald-200/80 bg-gradient-to-br from-emerald-50 via-white to-amber-50"
-      >
-        <CardHeader>
-          <CardTitle>{isOwner ? "Owner Console" : "Admin Console"}</CardTitle>
-          <CardDescription>
-            {isOwner
-              ? "Manage tenants, preview experiences, seed demo data, and control platform access."
-              : "Manage users and module access for your tenant."}
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
-            <div className="rounded-lg border border-emerald-100 bg-white/90 p-3">
-              <p className="text-xs uppercase tracking-wide text-emerald-700">Selected Tenant</p>
-              <p className="mt-1 text-sm font-semibold text-foreground">{selectedTenant?.name || "Not selected"}</p>
-            </div>
-            <div className="rounded-lg border border-emerald-100 bg-white/90 p-3">
-              <p className="text-xs uppercase tracking-wide text-emerald-700">Tenant ID</p>
-              <p className="mt-1 break-all font-mono text-xs text-foreground">{selectedTenantId || "Unavailable"}</p>
-            </div>
-            <div className="rounded-lg border border-emerald-100 bg-white/90 p-3">
-              <p className="text-xs uppercase tracking-wide text-emerald-700">Users Loaded</p>
-              <p className="mt-1 text-lg font-semibold text-foreground">{users.length}</p>
-            </div>
-            <div className="rounded-lg border border-emerald-100 bg-white/90 p-3">
-              <p className="text-xs uppercase tracking-wide text-emerald-700">Modules Enabled</p>
-              <p className="mt-1 text-lg font-semibold text-foreground">{enabledModuleCount}</p>
-            </div>
-            <div className="rounded-lg border border-emerald-100 bg-white/90 p-3">
-              <p className="text-xs uppercase tracking-wide text-emerald-700">{isOwner ? "Tenants" : "Audit Events"}</p>
-              <p className="mt-1 text-lg font-semibold text-foreground">{isOwner ? tenants.length : auditTotalCount}</p>
-            </div>
-          </div>
-          <div className="flex flex-wrap gap-2">
-            {ownerSectionLinks.map((section) => (
-              <a
-                key={section.id}
-                href={`#${section.id}`}
-                className="rounded-full border border-border/70 bg-white/90 px-3 py-1 text-xs text-foreground transition hover:border-emerald-200 hover:text-emerald-700"
-              >
-                {section.label}
-              </a>
-            ))}
-          </div>
-          {isOwner && (
-            <div className="flex flex-wrap gap-2">
-              {selectedTenantId && (
-                <>
-                  <Button size="sm" onClick={() => handleOpenTenantPreview(false)}>
-                    Preview as {previewRole === "admin" ? "Estate Admin" : "Estate User"}
-                  </Button>
-                  <Button size="sm" variant="outline" onClick={() => handleOpenTenantPreview(true)}>
-                    Preview in new tab
-                  </Button>
-                </>
-              )}
-              <Button asChild size="sm" variant="outline">
-                <a href="/admin/register-interest">Request Access Inbox</a>
-              </Button>
-            </div>
-          )}
-        </CardContent>
-      </Card>
+      <ConsoleOverviewSection
+        isOwner={isOwner}
+        selectedTenant={selectedTenant}
+        selectedTenantId={selectedTenantId}
+        previewRole={previewRole}
+        usersCount={users.length}
+        enabledModuleCount={enabledModuleCount}
+        tenantsCount={tenants.length}
+        auditTotalCount={auditTotalCount}
+        ownerSectionLinks={ownerSectionLinks}
+        onOpenTenantPreview={handleOpenTenantPreview}
+      />
 
-      {isOwner && (
-        <Card id="system-health" className="scroll-mt-24 border-border/70 bg-white/85">
-          <CardHeader className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-            <div>
-              <CardTitle>System Health</CardTitle>
-              <CardDescription>Daily checks from data-integrity, log-anomaly, imports, and error telemetry.</CardDescription>
-            </div>
-            <div className="flex items-center gap-2">
-              {systemHealthGeneratedLabel ? (
-                <span className="text-xs text-muted-foreground">Updated {systemHealthGeneratedLabel}</span>
-              ) : null}
-              <Button size="sm" variant="outline" className="bg-transparent" onClick={loadSystemHealth} disabled={isSystemHealthLoading}>
-                {isSystemHealthLoading ? "Refreshing..." : "Refresh"}
-              </Button>
-            </div>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            {isSystemHealthLoading && !systemHealth ? (
-              <p className="text-sm text-muted-foreground">Loading system health...</p>
-            ) : systemHealthError ? (
-              <p className="text-sm text-rose-600">{systemHealthError}</p>
-            ) : !systemHealth || systemHealth.checks.length === 0 ? (
-              <p className="text-sm text-muted-foreground">No health checks found yet.</p>
-            ) : (
-              <>
-                <div className="flex flex-wrap gap-2">
-                  <span className="rounded-full border border-rose-200 bg-rose-50 px-2.5 py-1 text-xs font-medium text-rose-700">
-                    Critical {systemHealthCounts.critical}
-                  </span>
-                  <span className="rounded-full border border-amber-200 bg-amber-50 px-2.5 py-1 text-xs font-medium text-amber-700">
-                    Warning {systemHealthCounts.warning}
-                  </span>
-                  <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-xs font-medium text-emerald-700">
-                    Healthy {systemHealthCounts.healthy}
-                  </span>
-                  <span className="rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-xs font-medium text-slate-700">
-                    Unknown {systemHealthCounts.unknown}
-                  </span>
-                </div>
-                <div className="grid gap-3 md:grid-cols-2">
-                {sortedSystemChecks.map((check) => {
-                  const meta = SYSTEM_HEALTH_STATUS_META[check.status] || SYSTEM_HEALTH_STATUS_META.unknown
-                  return (
-                    <div key={check.id} data-testid={`system-health-check-${check.id}`} className={`rounded-lg border p-3 ${meta.cardClass}`}>
-                      <div className="flex items-start justify-between gap-2">
-                        <div>
-                          <p className="text-sm font-semibold text-foreground">{check.label}</p>
-                          <p className="text-xs text-muted-foreground">{check.value}</p>
-                        </div>
-                        <span className={`rounded-full border px-2 py-0.5 text-[11px] font-medium ${meta.chipClass}`}>
-                          {meta.label}
-                        </span>
-                      </div>
-                      <p className="mt-2 text-xs text-muted-foreground">{check.detail}</p>
-                      {check.actionPath ? (
-                        <div className="mt-2">
-                          <a
-                            href={check.actionPath}
-                            target="_blank"
-                            rel="noreferrer"
-                            className="text-xs font-medium text-emerald-700 hover:underline"
-                          >
-                            Open details
-                          </a>
-                        </div>
-                      ) : null}
-                    </div>
-                  )
-                })}
-                </div>
-              </>
-            )}
-          </CardContent>
-        </Card>
-      )}
+      {isOwner ? (
+        <SystemHealthSection
+          systemHealthGeneratedLabel={systemHealthGeneratedLabel}
+          isSystemHealthLoading={isSystemHealthLoading}
+          systemHealth={systemHealth}
+          systemHealthError={systemHealthError}
+          systemHealthCounts={systemHealthCounts}
+          sortedSystemChecks={sortedSystemChecks}
+          onRefresh={loadSystemHealth}
+        />
+      ) : null}
 
-      {isOwner && (
-        <Card id="tenants" className="scroll-mt-24 border-border/70 bg-white/85">
-          <CardHeader>
-            <CardTitle>Tenants</CardTitle>
-            <CardDescription>Create and manage estates/tenants.</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="flex flex-col md:flex-row gap-3">
-              <div className="flex-1 space-y-2">
-                <Label htmlFor="tenantName">New Tenant</Label>
-                <Input
-                  id="tenantName"
-                  placeholder="Estate name"
-                  value={newTenantName}
-                  onChange={(e) => setNewTenantName(e.target.value)}
-                />
-              </div>
-              <div className="flex items-end">
-                <Button onClick={handleCreateTenant}>Create Tenant</Button>
-              </div>
-            </div>
+      {isOwner ? (
+        <TenantsSection
+          tenants={tenants}
+          selectedTenantId={selectedTenantId}
+          currentUserTenantId={user?.tenantId}
+          newTenantName={newTenantName}
+          previewRole={previewRole}
+          isDeletingTenantId={isDeletingTenantId}
+          onNewTenantNameChange={setNewTenantName}
+          onCreateTenant={handleCreateTenant}
+          onSelectedTenantIdChange={setSelectedTenantId}
+          onPreviewRoleChange={setPreviewRole}
+          onOpenTenantPreview={handleOpenTenantPreview}
+          onDeleteTenant={handleDeleteTenant}
+        />
+      ) : null}
 
-            <div className="space-y-2">
-              <Label>Current Tenant</Label>
-              <Select value={selectedTenantId} onValueChange={setSelectedTenantId}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Select tenant" />
-                </SelectTrigger>
-                <SelectContent>
-                  {tenants.map((tenant) => (
-                    <SelectItem key={tenant.id} value={tenant.id}>
-                      {tenant.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
+      {isOwner ? (
+        <WeeklySummarySection
+          selectedTenantId={selectedTenantId}
+          weeklyStartDate={weeklyStartDate}
+          weeklyEndDate={weeklyEndDate}
+          weeklyCompareMode={weeklyCompareMode}
+          weeklyRangeLabel={weeklyRangeLabel}
+          weeklyCompareLabel={weeklyCompareLabel}
+          weeklySummary={weeklySummary}
+          weeklyPeriodLabel={weeklyPeriodLabel}
+          weeklyDeltas={weeklyDeltas}
+          isWeeklyLoading={isWeeklyLoading}
+          isSendingWeeklyWhatsApp={isSendingWeeklyWhatsApp}
+          onWeeklyStartDateChange={(value) => {
+            setWeeklyStartDate(value)
+            setWeeklySummary(null)
+            setWeeklyCompareSummary(null)
+            setWeeklySummaryRange(null)
+            setWeeklyCompareRange(null)
+          }}
+          onWeeklyEndDateChange={(value) => {
+            setWeeklyEndDate(value)
+            setWeeklySummary(null)
+            setWeeklyCompareSummary(null)
+            setWeeklySummaryRange(null)
+            setWeeklyCompareRange(null)
+          }}
+          onWeeklyCompareModeChange={(value) => {
+            setWeeklyCompareMode(value)
+            setWeeklySummary(null)
+            setWeeklyCompareSummary(null)
+            setWeeklySummaryRange(null)
+            setWeeklyCompareRange(null)
+          }}
+          onLoadWeeklySummary={() => {
+            void loadWeeklySummary()
+          }}
+          onCopyWeeklySummary={() => {
+            void handleCopyWeeklySummary()
+          }}
+          onSendWeeklySummaryWhatsApp={() => {
+            void handleSendWeeklySummaryWhatsApp()
+          }}
+          onDownloadWeeklySummary={() => {
+            void handleDownloadWeeklySummary()
+          }}
+        />
+      ) : null}
 
-            <div className="rounded-lg border border-emerald-100 bg-emerald-50/40 p-4 space-y-3">
-              <div>
-                <p className="text-sm font-medium text-emerald-900">Tenant Preview</p>
-                <p className="text-xs text-muted-foreground">
-                  Open dashboard in preview mode to see tabs as a tenant admin or user without logging out.
-                </p>
-              </div>
-              <div className="grid grid-cols-1 gap-3 md:grid-cols-[220px_1fr]">
-                <div className="space-y-2">
-                  <Label>Preview role</Label>
-                  <Select value={previewRole} onValueChange={(value) => setPreviewRole(value === "user" ? "user" : "admin")}>
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="admin">Estate Admin</SelectItem>
-                      <SelectItem value="user">Estate User</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="flex flex-wrap items-end gap-2">
-                  <Button onClick={() => handleOpenTenantPreview(false)} disabled={!selectedTenantId}>
-                    Open Dashboard Preview
-                  </Button>
-                  <Button variant="outline" className="bg-transparent" onClick={() => handleOpenTenantPreview(true)} disabled={!selectedTenantId}>
-                    Open in New Tab
-                  </Button>
-                </div>
-              </div>
-            </div>
+      {isOwner ? (
+        <TenantProfileSection
+          selectedTenantId={selectedTenantId}
+          tenantProfileDraft={tenantProfileDraft}
+          isTenantProfileLoading={isTenantProfileLoading}
+          isSavingTenantProfile={isSavingTenantProfile}
+          onUiVariantChange={(value) =>
+            setTenantProfileDraft((prev) => ({
+              ...prev,
+              uiVariant: value,
+            }))
+          }
+          onFeatureFlagChange={(flagId, enabled) =>
+            setTenantProfileDraft((prev) => ({
+              ...prev,
+              featureFlags: {
+                ...prev.featureFlags,
+                [flagId]: enabled,
+              },
+            }))
+          }
+          onSaveTenantProfile={() => {
+            void handleSaveTenantProfile()
+          }}
+        />
+      ) : null}
 
-            <div className="rounded-lg border border-border/60 bg-white/80">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Tenant</TableHead>
-                    <TableHead>Created</TableHead>
-                    <TableHead className="text-right">Actions</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {tenants.length === 0 && (
-                    <TableRow>
-                      <TableCell colSpan={3} className="text-sm text-muted-foreground">
-                        No tenants found yet.
-                      </TableCell>
-                    </TableRow>
-                  )}
-                  {tenants.map((tenant) => (
-                    <TableRow key={tenant.id}>
-                      <TableCell className="font-medium">{tenant.name}</TableCell>
-                      <TableCell>{formatDateOnly(tenant.created_at)}</TableCell>
-                      <TableCell className="text-right">
-                          <Button
-                            size="sm"
-                            variant="destructive"
-                            onClick={() => handleDeleteTenant(tenant)}
-                            disabled={tenant.id === user?.tenantId || isDeletingTenantId === tenant.id}
-                          >
-                          {isDeletingTenantId === tenant.id ? "Deleting..." : "Delete"}
-                        </Button>
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </div>
-          </CardContent>
-        </Card>
-      )}
+      {isOwner ? (
+        <TenantModulesSection
+          modulePermissions={modulePermissions}
+          enabledModuleLabels={enabledModuleLabels}
+          selectedTenantId={selectedTenantId}
+          onApplyModuleBundle={(bundleId) => {
+            const bundle = MODULE_BUNDLES.find((entry) => entry.id === bundleId)
+            if (bundle) {
+              applyModuleBundle(bundle)
+            }
+          }}
+          onToggleModule={toggleModule}
+          onSaveModules={() => {
+            void handleSaveModules()
+          }}
+        />
+      ) : null}
 
-      {isOwner && (
-        <Card id="weekly-summary" className="scroll-mt-24 border-border/70 bg-white/85">
-          <CardHeader>
-            <CardTitle>Weekly Summary</CardTitle>
-            <CardDescription>Share a quick snapshot with owners or buyers.</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="grid grid-cols-1 gap-3 md:grid-cols-4">
-              <div className="space-y-2">
-                <Label htmlFor="weekly-start">Start date</Label>
-                <Input
-                  id="weekly-start"
-                  type="date"
-                  value={weeklyStartDate}
-                  onChange={(event) => {
-                    setWeeklyStartDate(event.target.value)
-                    setWeeklySummary(null)
-                    setWeeklyCompareSummary(null)
-                    setWeeklySummaryRange(null)
-                    setWeeklyCompareRange(null)
-                  }}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="weekly-end">End date</Label>
-                <Input
-                  id="weekly-end"
-                  type="date"
-                  value={weeklyEndDate}
-                  onChange={(event) => {
-                    setWeeklyEndDate(event.target.value)
-                    setWeeklySummary(null)
-                    setWeeklyCompareSummary(null)
-                    setWeeklySummaryRange(null)
-                    setWeeklyCompareRange(null)
-                  }}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label>Compare period</Label>
-                <Select
-                  value={weeklyCompareMode}
-                  onValueChange={(value) => {
-                    const mode = value === "previous" ? "previous" : "none"
-                    setWeeklyCompareMode(mode)
-                    setWeeklySummary(null)
-                    setWeeklyCompareSummary(null)
-                    setWeeklySummaryRange(null)
-                    setWeeklyCompareRange(null)
-                  }}
-                >
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="previous">Previous period</SelectItem>
-                    <SelectItem value="none">No compare</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-2">
-                <Label>Selected range</Label>
-                <div className="rounded-md border border-border/60 bg-white/80 px-3 py-2 text-sm text-muted-foreground">
-                  {weeklyRangeLabel}
-                </div>
-              </div>
-            </div>
-            <div className="flex flex-col gap-2 sm:flex-row">
-              <Button
-                variant="outline"
-                className="w-full sm:w-auto"
-                onClick={loadWeeklySummary}
-                disabled={!selectedTenantId || isWeeklyLoading}
-              >
-                {isWeeklyLoading ? "Loading..." : "Generate Summary"}
-              </Button>
-              <Button
-                variant="outline"
-                className="w-full sm:w-auto"
-                onClick={handleCopyWeeklySummary}
-                disabled={!selectedTenantId}
-              >
-                Copy WhatsApp summary
-              </Button>
-              <Button
-                variant="outline"
-                className="w-full sm:w-auto"
-                onClick={handleSendWeeklySummaryWhatsApp}
-                disabled={!selectedTenantId || isSendingWeeklyWhatsApp}
-              >
-                {isSendingWeeklyWhatsApp ? "Sending WhatsApp..." : "Send to WhatsApp"}
-              </Button>
-              <Button
-                variant="outline"
-                className="w-full sm:w-auto"
-                onClick={handleDownloadWeeklySummary}
-                disabled={!selectedTenantId}
-              >
-                Print / Save PDF
-              </Button>
-            </div>
-            {weeklyCompareLabel && (
-              <p className="text-xs text-muted-foreground">
-                Comparison window: {weeklyCompareLabel}
-              </p>
-            )}
-            {!weeklySummary && (
-              <p className="text-sm text-muted-foreground">
-                Generate a summary to see activity in your selected date range.
-              </p>
-            )}
-            {weeklySummary && (
-              <div className="grid gap-3 md:grid-cols-2 text-sm">
-                <div className="rounded-lg border border-border/60 bg-white/80 p-3">
-                  <p className="text-xs text-muted-foreground">Inventory items</p>
-                  <p className="font-semibold">{formatCount(weeklySummary.inventoryCount)}</p>
-                </div>
-                <div className="rounded-lg border border-border/60 bg-white/80 p-3">
-                  <p className="text-xs text-muted-foreground">Transactions ({weeklyPeriodLabel})</p>
-                  <p className="font-semibold">{formatCount(weeklySummary.transactionCount)}</p>
-                  {weeklyDeltas && <p className={`mt-1 text-xs ${weeklyDeltas.transaction.className}`}>{weeklyDeltas.transaction.text}</p>}
-                </div>
-                <div className="rounded-lg border border-border/60 bg-white/80 p-3">
-                  <p className="text-xs text-muted-foreground">Processing records ({weeklyPeriodLabel})</p>
-                  <p className="font-semibold">{formatCount(weeklySummary.processingCount)}</p>
-                  {weeklyDeltas && <p className={`mt-1 text-xs ${weeklyDeltas.processing.className}`}>{weeklyDeltas.processing.text}</p>}
-                </div>
-                <div className="rounded-lg border border-border/60 bg-white/80 p-3">
-                  <p className="text-xs text-muted-foreground">Dispatches ({weeklyPeriodLabel})</p>
-                  <p className="font-semibold">{formatCount(weeklySummary.dispatchCount)}</p>
-                  {weeklyDeltas && <p className={`mt-1 text-xs ${weeklyDeltas.dispatch.className}`}>{weeklyDeltas.dispatch.text}</p>}
-                </div>
-                <div className="rounded-lg border border-border/60 bg-white/80 p-3">
-                  <p className="text-xs text-muted-foreground">Sales ({weeklyPeriodLabel})</p>
-                  <p className="font-semibold">{formatCount(weeklySummary.salesCount)}</p>
-                  {weeklyDeltas && <p className={`mt-1 text-xs ${weeklyDeltas.salesCount.className}`}>{weeklyDeltas.salesCount.text}</p>}
-                </div>
-                <div className="rounded-lg border border-border/60 bg-white/80 p-3">
-                  <p className="text-xs text-muted-foreground">Sales revenue ({weeklyPeriodLabel})</p>
-                  <p className="font-semibold">{formatCurrency(weeklySummary.salesRevenue)}</p>
-                  {weeklyDeltas && <p className={`mt-1 text-xs ${weeklyDeltas.salesRevenue.className}`}>{weeklyDeltas.salesRevenue.text}</p>}
-                </div>
-                <div className="rounded-lg border border-border/60 bg-white/80 p-3">
-                  <p className="text-xs text-muted-foreground">Labor spend ({weeklyPeriodLabel})</p>
-                  <p className="font-semibold">{formatCurrency(weeklySummary.laborSpend)}</p>
-                  {weeklyDeltas && <p className={`mt-1 text-xs ${weeklyDeltas.laborSpend.className}`}>{weeklyDeltas.laborSpend.text}</p>}
-                </div>
-                <div className="rounded-lg border border-border/60 bg-white/80 p-3">
-                  <p className="text-xs text-muted-foreground">Expense spend ({weeklyPeriodLabel})</p>
-                  <p className="font-semibold">{formatCurrency(weeklySummary.expenseSpend)}</p>
-                  {weeklyDeltas && <p className={`mt-1 text-xs ${weeklyDeltas.expenseSpend.className}`}>{weeklyDeltas.expenseSpend.text}</p>}
-                </div>
-                <div className="rounded-lg border border-border/60 bg-white/80 p-3 md:col-span-2">
-                  <p className="text-xs text-muted-foreground">Receivables outstanding</p>
-                  <p className="font-semibold">{formatCurrency(weeklySummary.receivablesOutstanding)}</p>
-                </div>
-              </div>
-            )}
-          </CardContent>
-        </Card>
-      )}
+      {isOwner ? (
+        <SeedDataSection
+          selectedTenantId={selectedTenantId}
+          isSeeding={isSeeding}
+          onSeedMockData={() => {
+            void handleSeedMockData()
+          }}
+        />
+      ) : null}
 
-      {isOwner && (
-        <Card id="tenant-profile" className="scroll-mt-24 border-border/70 bg-white/85">
-          <CardHeader>
-            <CardTitle>Tenant Experience Profile</CardTitle>
-            <CardDescription>
-              Configure UI variant and feature flags for the selected tenant.
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            {!selectedTenantId ? (
-              <p className="text-sm text-muted-foreground">Select a tenant first.</p>
-            ) : (
-              <>
-                <div className="space-y-2">
-                  <Label>UI variant</Label>
-                  <Select
-                    value={tenantProfileDraft.uiVariant}
-                    onValueChange={(value) =>
-                      setTenantProfileDraft((prev) => ({
-                        ...prev,
-                        uiVariant: (value || DEFAULT_TENANT_UI_VARIANT) as TenantUiVariant,
-                      }))
-                    }
-                    disabled={isTenantProfileLoading}
-                  >
-                    <SelectTrigger className="w-full md:w-[320px]">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {TENANT_UI_VARIANTS.map((variant) => (
-                        <SelectItem key={variant.id} value={variant.id}>
-                          {variant.label}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  <p className="text-xs text-muted-foreground">
-                    {TENANT_UI_VARIANTS.find((variant) => variant.id === tenantProfileDraft.uiVariant)?.description}
-                  </p>
-                </div>
+      <TenantUsersSection
+        selectedTenant={selectedTenant}
+        isOwner={isOwner}
+        selectedTenantId={selectedTenantId}
+        newUsername={newUsername}
+        newPassword={newPassword}
+        newRole={newRole}
+        users={users}
+        userRoleDrafts={userRoleDrafts}
+        isUpdatingUserId={isUpdatingUserId}
+        isDeletingUserId={isDeletingUserId}
+        isResettingPasswordUserId={isResettingPasswordUserId}
+        onNewUsernameChange={setNewUsername}
+        onNewPasswordChange={setNewPassword}
+        onNewRoleChange={setNewRole}
+        onCreateUser={() => {
+          void handleCreateUser()
+        }}
+        onRoleDraftChange={handleRoleDraftChange}
+        onSaveUserRole={(nextUser) => {
+          void handleSaveUserRole(nextUser)
+        }}
+        onResetUserPassword={(nextUser) => {
+          void handleResetUserPassword(nextUser)
+        }}
+        onDeleteUser={(nextUser) => {
+          void handleDeleteUser(nextUser)
+        }}
+      />
 
-                <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-                  {TENANT_FEATURE_FLAG_DEFINITIONS.map((flag) => (
-                    <label
-                      key={flag.id}
-                      className="flex items-start gap-3 rounded-lg border border-border/60 bg-white/80 p-3"
-                    >
-                      <input
-                        type="checkbox"
-                        className="mt-1"
-                        checked={Boolean(tenantProfileDraft.featureFlags[flag.id])}
-                        disabled={isTenantProfileLoading}
-                        onChange={(event) =>
-                          setTenantProfileDraft((prev) => ({
-                            ...prev,
-                            featureFlags: {
-                              ...prev.featureFlags,
-                              [flag.id]: event.target.checked,
-                            },
-                          }))
-                        }
-                      />
-                      <div className="space-y-1">
-                        <p className="text-sm font-medium text-foreground">{flag.label}</p>
-                        <p className="text-xs text-muted-foreground">{flag.description}</p>
-                      </div>
-                    </label>
-                  ))}
-                </div>
+      <UserModuleOverridesSection
+        selectedTenantId={selectedTenantId}
+        users={users}
+        selectedUserId={selectedUserId}
+        userModulePermissions={userModulePermissions}
+        userModuleSource={userModuleSource}
+        isUserModulesLoading={isUserModulesLoading}
+        isSavingUserModules={isSavingUserModules}
+        isSelectedUserRoleScoped={Boolean(isSelectedUserRoleScoped)}
+        onSelectedUserIdChange={setSelectedUserId}
+        onToggleUserModule={toggleUserModule}
+        onSaveUserModules={() => {
+          void handleSaveUserModules()
+        }}
+        onResetUserModules={() => {
+          void handleResetUserModules()
+        }}
+      />
 
-                <Button onClick={handleSaveTenantProfile} disabled={isTenantProfileLoading || isSavingTenantProfile}>
-                  {isSavingTenantProfile ? "Saving..." : isTenantProfileLoading ? "Loading..." : "Save Tenant Profile"}
-                </Button>
-              </>
-            )}
-          </CardContent>
-        </Card>
-      )}
-
-      {isOwner && (
-        <Card id="tenant-modules" className="scroll-mt-24 border-border/70 bg-white/85">
-          <CardHeader>
-            <CardTitle>Tenant Modules</CardTitle>
-            <CardDescription>Control which modules are available to users in this tenant.</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="rounded-lg border border-emerald-100 bg-emerald-50/50 p-4 text-sm">
-              <p className="font-medium text-emerald-900">Enabled modules ({enabledModuleLabels.length})</p>
-              <p className="text-xs text-muted-foreground">
-                These are active for the selected tenant.
-              </p>
-              <div className="mt-3 flex flex-wrap gap-2">
-                {enabledModuleLabels.length === 0 ? (
-                  <span className="text-xs text-muted-foreground">None enabled yet.</span>
-                ) : (
-                  enabledModuleLabels.map((label) => (
-                    <span key={label} className="rounded-full bg-white px-2.5 py-1 text-xs text-emerald-800">
-                      {label}
-                    </span>
-                  ))
-                )}
-              </div>
-            </div>
-            <div className="space-y-3 rounded-lg border border-border/60 bg-muted/30 p-4">
-              <div>
-                <p className="text-sm font-medium text-foreground">Module bundles</p>
-                <p className="text-xs text-muted-foreground">
-                  Apply a preset, then adjust individual modules as needed.
-                </p>
-              </div>
-              <div className="grid gap-3 md:grid-cols-2">
-                {MODULE_BUNDLES.map((bundle) => (
-                  <button
-                    key={bundle.id}
-                    type="button"
-                    onClick={() => applyModuleBundle(bundle)}
-                    className="rounded-lg border border-border/60 bg-white/80 p-3 text-left transition hover:border-emerald-200 hover:bg-emerald-50/40"
-                  >
-                    <p className="text-sm font-medium text-foreground">{bundle.label}</p>
-                    <p className="text-xs text-muted-foreground">{bundle.description}</p>
-                  </button>
-                ))}
-              </div>
-            </div>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-              {modulePermissions.map((module) => (
-                <label key={module.id} className="flex items-center gap-2 rounded-lg border border-border/60 bg-white/80 p-3">
-                  <input
-                    type="checkbox"
-                    checked={module.enabled}
-                    onChange={() => toggleModule(module.id)}
-                  />
-                  <span>{module.label}</span>
-                </label>
-              ))}
-            </div>
-            <Button onClick={handleSaveModules} disabled={!selectedTenantId}>
-              Save Module Access
-            </Button>
-          </CardContent>
-        </Card>
-      )}
-
-      {isOwner && (
-        <Card id="seed-data" className="scroll-mt-24 border-border/70 bg-white/85">
-          <CardHeader>
-            <CardTitle>Seed Tenant Data</CardTitle>
-            <CardDescription>
-              Generate mock inventory, accounts, processing, dispatch, sales, curing, quality, receivables, and billing records.
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            <Button onClick={handleSeedMockData} disabled={!selectedTenantId || isSeeding}>
-              {isSeeding ? "Seeding..." : "Seed Mock Data"}
-            </Button>
-            <p className="text-sm text-muted-foreground">
-              Use this for demo tenants. Reseeding replaces existing tenant transaction data. HoneyFarm is intentionally blocked.
-            </p>
-          </CardContent>
-        </Card>
-      )}
-
-      <Card id="tenant-users" className="scroll-mt-24 border-border/70 bg-white/85">
-        <CardHeader>
-          <CardTitle>Tenant Users</CardTitle>
-          <CardDescription>
-            {selectedTenant
-              ? `Users for ${selectedTenant.name}`
-              : isOwner
-                ? "Select a tenant"
-                : "Users for your estate"}
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-            <div className="space-y-2">
-              <Label htmlFor="username">Username</Label>
-              <Input id="username" value={newUsername} onChange={(e) => setNewUsername(e.target.value)} />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="password">Password</Label>
-              <Input
-                id="password"
-                type="password"
-                value={newPassword}
-                onChange={(e) => setNewPassword(e.target.value)}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label>Role</Label>
-              <Select value={newRole} onValueChange={setNewRole}>
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="admin">Estate Admin</SelectItem>
-                  <SelectItem value="user">Estate User</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
-          <Button onClick={handleCreateUser} disabled={!selectedTenantId}>
-            Create User
-          </Button>
-          <p className="text-xs text-muted-foreground">System accounts are read-only and cannot be edited.</p>
-
-          <div className="rounded-md border border-border/60 bg-white/80">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Username</TableHead>
-                  <TableHead>Role</TableHead>
-                  <TableHead>Created</TableHead>
-                  <TableHead>Actions</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {users.length === 0 ? (
-                  <TableRow>
-                    <TableCell colSpan={4} className="text-center text-muted-foreground">
-                      No users found for this tenant.
-                    </TableCell>
-                  </TableRow>
-                ) : (
-                  users.map((u) => {
-                    const isOwnerUser = u.role === "owner"
-                    const isSystemUser =
-                      String(u.username || "").toLowerCase() === "system" ||
-                      String(u.username || "").toLowerCase().startsWith("system_") ||
-                      String(u.username || "").toLowerCase().startsWith("system-")
-                    return (
-                      <TableRow key={u.id}>
-                        <TableCell>{u.username}</TableCell>
-                        <TableCell>
-                          {isOwnerUser ? (
-                            <div className="text-sm font-medium text-emerald-700">{roleLabel(u.role)}</div>
-                          ) : isSystemUser ? (
-                            <div className="text-sm font-medium text-foreground">System Admin</div>
-                          ) : (
-                            <Select
-                              value={userRoleDrafts[u.id] || u.role}
-                              onValueChange={(value) => handleRoleDraftChange(u.id, value)}
-                            >
-                              <SelectTrigger className="h-9">
-                                <SelectValue />
-                              </SelectTrigger>
-                              <SelectContent>
-                                <SelectItem value="admin">Estate Admin</SelectItem>
-                                <SelectItem value="user">Estate User</SelectItem>
-                              </SelectContent>
-                            </Select>
-                          )}
-                          {isOwnerUser && (
-                            <p className="mt-1 text-xs text-muted-foreground">Platform Owner role cannot be modified.</p>
-                          )}
-                          {isSystemUser && (
-                            <p className="mt-1 text-xs text-muted-foreground">System user is read-only.</p>
-                          )}
-                        </TableCell>
-                        <TableCell>{formatDateOnly(u.created_at)}</TableCell>
-                        <TableCell>
-                          <div className="flex flex-col sm:flex-row gap-2">
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              onClick={() => handleSaveUserRole(u)}
-                              disabled={
-                                isOwnerUser ||
-                                isSystemUser ||
-                                isUpdatingUserId === u.id ||
-                                (userRoleDrafts[u.id] || u.role) === u.role
-                              }
-                            >
-                              {isUpdatingUserId === u.id ? "Saving..." : "Save"}
-                            </Button>
-                            <Button
-                              size="sm"
-                              variant="secondary"
-                              onClick={() => handleResetUserPassword(u)}
-                              disabled={isOwnerUser || isSystemUser || isResettingPasswordUserId === u.id}
-                            >
-                              {isResettingPasswordUserId === u.id ? "Resetting..." : "Reset Password"}
-                            </Button>
-                            <Button
-                              size="sm"
-                              variant="destructive"
-                              onClick={() => handleDeleteUser(u)}
-                              disabled={isOwnerUser || isSystemUser || isDeletingUserId === u.id}
-                            >
-                              {isDeletingUserId === u.id ? "Deleting..." : "Delete"}
-                            </Button>
-                          </div>
-                        </TableCell>
-                      </TableRow>
-                    )
-                  })
-                )}
-              </TableBody>
-            </Table>
-          </div>
-        </CardContent>
-      </Card>
-
-      <Card id="user-module-overrides" className="scroll-mt-24 border-border/70 bg-white/85">
-        <CardHeader>
-          <CardTitle>User Module Overrides</CardTitle>
-          <CardDescription>
-            Override tenant defaults for a single user. Data remains shared within the estate.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="space-y-2">
-            <Label>Select User</Label>
-            <Select
-              value={selectedUserId}
-              onValueChange={setSelectedUserId}
-              disabled={!selectedTenantId || users.length === 0}
-            >
-              <SelectTrigger>
-                <SelectValue placeholder={users.length ? "Choose a user" : "No users available"} />
-              </SelectTrigger>
-              <SelectContent>
-                {users.map((u) => (
-                  <SelectItem key={u.id} value={u.id}>
-                    {u.username} ({roleLabel(u.role)})
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            <p className="text-xs text-muted-foreground">
-              {userModuleSource
-                ? `Source: ${userModuleSource === "user" ? "User override" : userModuleSource === "tenant" ? "Tenant defaults" : "System defaults"}`
-                : "Source: System defaults"}
-            </p>
-            <p className="text-xs text-muted-foreground">
-              Enabled for selected user: {userModulePermissions.filter((module) => module.enabled).length}
-            </p>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-            {userModulePermissions.map((module) => {
-              const isLockedForRole = isSelectedUserRoleScoped && module.id === "balance-sheet"
-              return (
-                <label key={module.id} className="flex items-center gap-2 rounded-lg border border-border/60 bg-white/80 p-3">
-                  <input
-                    type="checkbox"
-                    checked={module.enabled}
-                    onChange={() => toggleUserModule(module.id)}
-                    disabled={isUserModulesLoading || isLockedForRole}
-                  />
-                  <span>{module.label}</span>
-                  {isLockedForRole && <span className="ml-auto text-xs text-muted-foreground">Admin only</span>}
-                </label>
-              )
-            })}
-          </div>
-          {isSelectedUserRoleScoped && (
-            <p className="text-xs text-muted-foreground">
-              Live Balance Sheet is admin-only and remains disabled for user roles.
-            </p>
-          )}
-
-          <div className="flex flex-col sm:flex-row gap-2">
-            <Button onClick={handleSaveUserModules} disabled={!selectedUserId || isUserModulesLoading || isSavingUserModules}>
-              {isSavingUserModules ? "Saving..." : "Save User Access"}
-            </Button>
-            <Button variant="outline" onClick={handleResetUserModules} disabled={!selectedUserId || isUserModulesLoading}>
-              Reset to Tenant Defaults
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
-
-      {isOwner && (
-        <Card id="audit-log" className="scroll-mt-24 border-border/70 bg-white/85">
-          <CardHeader>
-            <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
-              <div>
-                <CardTitle>Audit Log</CardTitle>
-                <CardDescription>Track who changed what for the selected tenant.</CardDescription>
-              </div>
-              <div className="flex flex-col gap-2 sm:flex-row sm:items-end">
-                <div className="space-y-1">
-                  <Label>Filter</Label>
-                  <Select value={auditEntityType} onValueChange={setAuditEntityType}>
-                    <SelectTrigger className="w-full sm:w-[180px]">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {AUDIT_ENTITY_TYPES.map((option) => (
-                        <SelectItem key={option.id} value={option.id}>
-                          {option.label}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <Button
-                  variant="outline"
-                  onClick={() => selectedTenantId && loadAuditLogs(selectedTenantId, auditEntityType)}
-                  disabled={!selectedTenantId || isAuditLoading}
-                >
-                  {isAuditLoading ? "Loading..." : "Refresh"}
-                </Button>
-              </div>
-            </div>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            <p className="text-xs text-muted-foreground">
-              Showing {auditLogs.length} of {auditTotalCount} recent events.
-            </p>
-            {isAuditLoading ? (
-              <div className="text-sm text-muted-foreground">Loading audit log...</div>
-            ) : auditLogs.length === 0 ? (
-              <div className="text-sm text-muted-foreground">No audit events yet.</div>
-            ) : (
-              <div className="rounded-md border border-border/60 bg-white/80">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Time</TableHead>
-                      <TableHead>User</TableHead>
-                      <TableHead>Action</TableHead>
-                      <TableHead>Entity</TableHead>
-                      <TableHead>ID</TableHead>
-                      <TableHead>Details</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {auditLogs.map((log) => (
-                      <TableRow key={log.id}>
-                        <TableCell>{formatAuditTimestamp(log.created_at)}</TableCell>
-                        <TableCell>
-                          {log.username}
-                          <span className="text-xs text-muted-foreground"> ({roleLabel(log.role)})</span>
-                        </TableCell>
-                        <TableCell className="capitalize">{log.action}</TableCell>
-                        <TableCell>{log.entity_type}</TableCell>
-                        <TableCell>{log.entity_id || "-"}</TableCell>
-                        <TableCell>
-                          <details>
-                            <summary className="cursor-pointer text-xs text-emerald-600">View</summary>
-                            <div className="mt-2 space-y-2 text-xs text-muted-foreground">
-                              <div>
-                                <span className="font-semibold text-foreground">Before</span>
-                                <pre className="mt-1 whitespace-pre-wrap">{formatAuditPayload(log.before_data)}</pre>
-                              </div>
-                              <div>
-                                <span className="font-semibold text-foreground">After</span>
-                                <pre className="mt-1 whitespace-pre-wrap">{formatAuditPayload(log.after_data)}</pre>
-                              </div>
-                            </div>
-                          </details>
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </div>
-            )}
-          </CardContent>
-        </Card>
-      )}
+      {isOwner ? (
+        <AuditLogSection
+          selectedTenantId={selectedTenantId}
+          auditEntityType={auditEntityType}
+          auditLogs={auditLogs}
+          auditTotalCount={auditTotalCount}
+          isAuditLoading={isAuditLoading}
+          auditEntityTypes={AUDIT_ENTITY_TYPES}
+          onAuditEntityTypeChange={setAuditEntityType}
+          onRefreshAuditLogs={() => {
+            if (selectedTenantId) {
+              void loadAuditLogs(selectedTenantId, auditEntityType)
+            }
+          }}
+        />
+      ) : null}
     </div>
   )
 }

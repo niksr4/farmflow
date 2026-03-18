@@ -19,7 +19,10 @@ export async function POST(request: Request) {
       )
     }
 
-    const body = await request.json()
+    const body = await request.json().catch(() => null)
+    if (!body || typeof body !== "object" || Array.isArray(body)) {
+      return NextResponse.json({ success: false, error: "Invalid request body" }, { status: 400 })
+    }
     const newUsername = String(body?.newUsername || "").trim()
     if (!newUsername) {
       return NextResponse.json({ success: false, error: "New username is required" }, { status: 400 })
@@ -28,6 +31,18 @@ export async function POST(request: Request) {
     await updateUsername(sessionUser, newUsername)
     return NextResponse.json({ success: true })
   } catch (error: any) {
-    return NextResponse.json({ success: false, error: error.message || "Failed to update username" }, { status: 500 })
+    const message = error?.message || "Failed to update username"
+    const status =
+      message === "Username already exists" ? 409
+        : [
+            "Invalid request body",
+            "New username is required",
+            "System usernames are reserved",
+            "Username 'owner' is reserved for the platform account",
+            "User not found",
+          ].includes(message)
+          ? 400
+          : 500
+    return NextResponse.json({ success: false, error: message }, { status })
   }
 }

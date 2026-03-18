@@ -4,6 +4,7 @@ import type { NeonQueryFunction } from "@neondatabase/serverless"
 import { normalizeTenantContext, runTenantQuery } from "@/lib/server/tenant-db"
 import type { SessionUser } from "@/lib/server/auth"
 import { logSecurityEvent } from "@/lib/server/security-events"
+import { normalizeUsernameLookup } from "@/lib/usernames"
 
 type AuditAction = "create" | "update" | "delete" | "upsert"
 
@@ -39,24 +40,26 @@ export async function logAuditEvent(
   const tenantContext = normalizeTenantContext(sessionUser.tenantId, sessionUser.role)
   const beforeData = serializeAuditPayload(event.before)
   const afterData = serializeAuditPayload(event.after)
-  let userId: string | null = null
+  let userId: string | null = sessionUser.id || null
 
-  try {
-    const userRows = await runTenantQuery(
-      client,
-      tenantContext,
-      client`
-        SELECT id
-        FROM users
-        WHERE username = ${sessionUser.username}
-          AND tenant_id = ${tenantContext.tenantId}
-        LIMIT 1
-      `,
-    )
-    userId = userRows?.[0]?.id ?? null
-  } catch (error) {
-    if (!isMissingRelation(error, "users")) {
-      console.warn("Audit log user lookup failed:", error)
+  if (!userId && sessionUser.username) {
+    try {
+      const userRows = await runTenantQuery(
+        client,
+        tenantContext,
+        client`
+          SELECT id
+          FROM users
+          WHERE tenant_id = ${tenantContext.tenantId}
+            AND LOWER(BTRIM(username)) = ${normalizeUsernameLookup(sessionUser.username)}
+          LIMIT 1
+        `,
+      )
+      userId = userRows?.[0]?.id ?? null
+    } catch (error) {
+      if (!isMissingRelation(error, "users")) {
+        console.warn("Audit log user lookup failed:", error)
+      }
     }
   }
 
@@ -97,6 +100,7 @@ export async function logAuditEvent(
 
   await logSecurityEvent({
     tenantId: tenantContext.tenantId,
+    actorUserId: userId,
     actorUsername: sessionUser.username,
     actorRole: sessionUser.role,
     eventType: "data_write",

@@ -5,12 +5,7 @@ import { requireAdminSession } from "@/lib/server/mfa"
 import { normalizeTenantContext, runTenantQuery } from "@/lib/server/tenant-db"
 import { logAuditEvent } from "@/lib/server/audit-log"
 import { recalculateInventoryForItem } from "@/lib/server/inventory-recalc"
-
-const adminErrorResponse = (error: any, fallback: string) => {
-  const message = error?.message || fallback
-  const status = ["Admin role required", "Unauthorized"].includes(message) ? 403 : 500
-  return NextResponse.json({ success: false, error: message }, { status })
-}
+import { buildAdminErrorResponse, databaseNotConfiguredResponse } from "@/lib/server/route-utils"
 
 const isMissingRelation = (error: unknown) => {
   const message = String((error as Error)?.message || error)
@@ -62,7 +57,7 @@ export async function POST(request: Request) {
     const sessionUser = await requireAdminSession()
     requireOwnerRole(sessionUser.role)
     if (!sql) {
-      return NextResponse.json({ success: false, error: "Database not configured" }, { status: 500 })
+      return databaseNotConfiguredResponse()
     }
 
     const body = await request.json()
@@ -1832,6 +1827,6 @@ export async function POST(request: Request) {
     })
   } catch (error: any) {
     console.error("Error seeding tenant data:", error)
-    return adminErrorResponse(error, "Failed to seed tenant data")
+    return buildAdminErrorResponse(error, "Failed to seed tenant data", { ownerRequired: true })
   }
 }

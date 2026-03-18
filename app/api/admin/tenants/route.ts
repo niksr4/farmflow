@@ -5,19 +5,14 @@ import { requireAdminSession } from "@/lib/server/mfa"
 import { MODULES } from "@/lib/modules"
 import { normalizeTenantContext, runTenantQuery } from "@/lib/server/tenant-db"
 import { logAuditEvent } from "@/lib/server/audit-log"
-
-const adminErrorResponse = (error: any, fallback: string) => {
-  const message = error?.message || fallback
-  const status = ["Admin role required", "Unauthorized"].includes(message) ? 403 : 500
-  return NextResponse.json({ success: false, error: message }, { status })
-}
+import { buildAdminErrorResponse, databaseNotConfiguredResponse } from "@/lib/server/route-utils"
 
 export async function GET(_request: Request) {
   try {
     const sessionUser = await requireAdminSession()
     requireOwnerRole(sessionUser.role)
     if (!sql) {
-      return NextResponse.json({ success: false, error: "Database not configured" }, { status: 500 })
+      return databaseNotConfiguredResponse()
     }
 
     const adminContext = normalizeTenantContext(sessionUser.tenantId, sessionUser.role)
@@ -34,7 +29,7 @@ export async function GET(_request: Request) {
     return NextResponse.json({ success: true, tenants })
   } catch (error: any) {
     console.error("Error fetching tenants:", error)
-    return adminErrorResponse(error, "Failed to fetch tenants")
+    return buildAdminErrorResponse(error, "Failed to fetch tenants", { ownerRequired: true })
   }
 }
 
@@ -43,7 +38,7 @@ export async function POST(request: Request) {
     const sessionUser = await requireAdminSession()
     requireOwnerRole(sessionUser.role)
     if (!sql) {
-      return NextResponse.json({ success: false, error: "Database not configured" }, { status: 500 })
+      return databaseNotConfiguredResponse()
     }
 
     const body = await request.json()
@@ -89,7 +84,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ success: true, tenant: result[0] })
   } catch (error: any) {
     console.error("Error creating tenant:", error)
-    return adminErrorResponse(error, "Failed to create tenant")
+    return buildAdminErrorResponse(error, "Failed to create tenant", { ownerRequired: true })
   }
 }
 
@@ -98,7 +93,7 @@ export async function DELETE(request: Request) {
     const sessionUser = await requireAdminSession()
     requireOwnerRole(sessionUser.role)
     if (!sql) {
-      return NextResponse.json({ success: false, error: "Database not configured" }, { status: 500 })
+      return databaseNotConfiguredResponse()
     }
 
     const { searchParams } = new URL(request.url)
@@ -181,6 +176,6 @@ export async function DELETE(request: Request) {
     return NextResponse.json({ success: true })
   } catch (error: any) {
     console.error("Error deleting tenant:", error)
-    return adminErrorResponse(error, "Failed to delete tenant")
+    return buildAdminErrorResponse(error, "Failed to delete tenant", { ownerRequired: true })
   }
 }

@@ -319,10 +319,11 @@ export default function InventorySystem() {
   const [analysisError, setAnalysisError] = useState("")
   const [aiAnalysis, setAiAnalysis] = useState<string | null>(null)
   const [showWelcome, setShowWelcome] = useState(false)
-  const WELCOME_SKIP_TENANTS = useMemo(
+  const LIVE_TENANT_SKIP_TENANTS = useMemo(
     () => new Set<string>(["41b4b10c-428c-4155-882f-1cc7f6e89a78"]),
     [],
   )
+  const [isOnboardingExpanded, setIsOnboardingExpanded] = useState(false)
   const [exceptionsSummary, setExceptionsSummary] = useState<{
     count: number
     highlights: string[]
@@ -4168,7 +4169,7 @@ export default function InventorySystem() {
       setShowWelcome(false)
       return
     }
-    if (WELCOME_SKIP_TENANTS.has(tenantId)) {
+    if (LIVE_TENANT_SKIP_TENANTS.has(tenantId)) {
       setShowWelcome(false)
       return
     }
@@ -4181,7 +4182,34 @@ export default function InventorySystem() {
     } catch (error) {
       console.warn("Unable to read welcome flag", error)
     }
-  }, [WELCOME_SKIP_TENANTS, canShowWelcomeCard, isOwner, isPreviewMode, tenantId, user])
+  }, [LIVE_TENANT_SKIP_TENANTS, canShowWelcomeCard, isOwner, isPreviewMode, tenantId, user])
+
+  useEffect(() => {
+    if (!user || !tenantId || isOwner || isPreviewMode) return
+    const key = `farmflow_onboarding_expanded:${tenantId}:${user.username}`
+    try {
+      const storedValue = window.localStorage.getItem(key)
+      setIsOnboardingExpanded(storedValue === "true")
+    } catch (error) {
+      console.warn("Unable to read onboarding expansion flag", error)
+    }
+  }, [isOwner, isPreviewMode, tenantId, user])
+
+  const handleOnboardingExpandedChange = useCallback(
+    (expanded: boolean) => {
+      setIsOnboardingExpanded(expanded)
+      if (!user || !tenantId) {
+        return
+      }
+      const key = `farmflow_onboarding_expanded:${tenantId}:${user.username}`
+      try {
+        window.localStorage.setItem(key, expanded ? "true" : "false")
+      } catch (error) {
+        console.warn("Unable to store onboarding expansion flag", error)
+      }
+    },
+    [tenantId, user],
+  )
 
   const dismissWelcome = () => {
     if (!user || !tenantId) {
@@ -4274,7 +4302,11 @@ export default function InventorySystem() {
     onAction: () => handleTabChange(phase.actionTab),
   }))
   const showOnboarding =
-    !isOwner && hasLoadedOnboardingStatus && onboardingTotalCount > 0 && onboardingCompletedCount < onboardingTotalCount
+    !isOwner &&
+    !LIVE_TENANT_SKIP_TENANTS.has(tenantId || "") &&
+    hasLoadedOnboardingStatus &&
+    onboardingTotalCount > 0 &&
+    onboardingCompletedCount < onboardingTotalCount
   const showLaunchGuide = showOnboarding
   const recordMovementPanel = (
     <div className="rounded-2xl border border-black/5 bg-white p-6 shadow-sm">
@@ -5194,6 +5226,8 @@ export default function InventorySystem() {
               onCreateLocation={handleCreateLocation}
               isCreatingLocation={isCreatingLocation}
               onRefresh={loadOnboardingStatus}
+              isExpanded={isOnboardingExpanded}
+              onExpandedChange={handleOnboardingExpandedChange}
             />
           </div>
         )}

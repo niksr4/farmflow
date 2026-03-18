@@ -12,12 +12,7 @@ import {
   sanitizeTenantFeatureFlags,
   sanitizeTenantUiVariant,
 } from "@/lib/tenant-experience"
-
-const adminErrorResponse = (error: any, fallback: string) => {
-  const message = error?.message || fallback
-  const status = ["Admin role required", "Unauthorized"].includes(message) ? 403 : 500
-  return NextResponse.json({ success: false, error: message }, { status })
-}
+import { buildAdminErrorResponse, databaseNotConfiguredResponse } from "@/lib/server/route-utils"
 
 export async function GET(request: Request) {
   try {
@@ -25,7 +20,7 @@ export async function GET(request: Request) {
     requireOwnerRole(sessionUser.role)
 
     if (!sql) {
-      return NextResponse.json({ success: false, error: "Database not configured" }, { status: 500 })
+      return databaseNotConfiguredResponse()
     }
 
     const { searchParams } = new URL(request.url)
@@ -68,7 +63,7 @@ export async function GET(request: Request) {
     })
   } catch (error: any) {
     console.error("Error loading tenant profile:", error)
-    return adminErrorResponse(error, "Failed to load tenant profile")
+    return buildAdminErrorResponse(error, "Failed to load tenant profile", { ownerRequired: true })
   }
 }
 
@@ -78,7 +73,7 @@ export async function PUT(request: Request) {
     requireOwnerRole(sessionUser.role)
 
     if (!sql) {
-      return NextResponse.json({ success: false, error: "Database not configured" }, { status: 500 })
+      return databaseNotConfiguredResponse()
     }
 
     const body = await request.json()
@@ -152,6 +147,6 @@ export async function PUT(request: Request) {
     })
   } catch (error: any) {
     console.error("Error updating tenant profile:", error)
-    return adminErrorResponse(error, "Failed to update tenant profile")
+    return buildAdminErrorResponse(error, "Failed to update tenant profile", { ownerRequired: true })
   }
 }

@@ -5,6 +5,7 @@ import { MODULES, MODULE_IDS, resolveEnabledModules, resolveModuleStates } from 
 import { normalizeTenantContext, runTenantQueries, runTenantQuery } from "@/lib/server/tenant-db"
 import { logAuditEvent } from "@/lib/server/audit-log"
 import { logSecurityEvent } from "@/lib/server/security-events"
+import { buildAdminErrorResponse, databaseNotConfiguredResponse } from "@/lib/server/route-utils"
 
 type ModuleState = { id: string; label: string; enabled: boolean }
 const MODULE_LABEL_BY_ID = new Map(MODULES.map((module) => [module.id, module.label]))
@@ -13,17 +14,11 @@ const SCOPED_ROLE_DISABLED_MODULES = new Set(["balance-sheet"])
 const applyUserRoleModulePolicy = (role: string, moduleId: string, enabled: boolean) =>
   role === "user" && SCOPED_ROLE_DISABLED_MODULES.has(moduleId) ? false : enabled
 
-const adminErrorResponse = (error: any, fallback: string) => {
-  const message = error?.message || fallback
-  const status = ["Admin role required", "Unauthorized"].includes(message) ? 403 : 500
-  return NextResponse.json({ success: false, error: message }, { status })
-}
-
 export async function GET(request: Request) {
   try {
     const sessionUser = await requireAdminSession()
     if (!sql) {
-      return NextResponse.json({ success: false, error: "Database not configured" }, { status: 500 })
+      return databaseNotConfiguredResponse()
     }
 
     const { searchParams } = new URL(request.url)
@@ -88,7 +83,7 @@ export async function GET(request: Request) {
     return NextResponse.json({ success: true, modules, source })
   } catch (error: any) {
     console.error("Error fetching user modules:", error)
-    return adminErrorResponse(error, "Failed to fetch user modules")
+    return buildAdminErrorResponse(error, "Failed to fetch user modules")
   }
 }
 
@@ -96,7 +91,7 @@ export async function PUT(request: Request) {
   try {
     const sessionUser = await requireAdminSession()
     if (!sql) {
-      return NextResponse.json({ success: false, error: "Database not configured" }, { status: 500 })
+      return databaseNotConfiguredResponse()
     }
 
     const body = await request.json()
@@ -199,7 +194,7 @@ export async function PUT(request: Request) {
     return NextResponse.json({ success: true })
   } catch (error: any) {
     console.error("Error updating user modules:", error)
-    return adminErrorResponse(error, "Failed to update user modules")
+    return buildAdminErrorResponse(error, "Failed to update user modules")
   }
 }
 
@@ -207,7 +202,7 @@ export async function DELETE(request: Request) {
   try {
     const sessionUser = await requireAdminSession()
     if (!sql) {
-      return NextResponse.json({ success: false, error: "Database not configured" }, { status: 500 })
+      return databaseNotConfiguredResponse()
     }
 
     const { searchParams } = new URL(request.url)
@@ -283,6 +278,6 @@ export async function DELETE(request: Request) {
     return NextResponse.json({ success: true })
   } catch (error: any) {
     console.error("Error resetting user modules:", error)
-    return adminErrorResponse(error, "Failed to reset user modules")
+    return buildAdminErrorResponse(error, "Failed to reset user modules")
   }
 }

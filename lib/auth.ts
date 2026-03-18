@@ -8,6 +8,7 @@ import { normalizeTenantContext, runTenantQuery } from "@/lib/server/tenant-db"
 import { hashPassword, verifyPassword } from "@/lib/passwords"
 import { logSecurityEvent } from "@/lib/server/security-events"
 import { checkRateLimit } from "@/lib/rate-limit"
+import { normalizeUsername, normalizeUsernameLookup } from "@/lib/usernames"
 
 type SessionMode = "app" | "web"
 type FarmFlowRole = "admin" | "user" | "owner"
@@ -97,7 +98,7 @@ export const authOptions: NextAuthOptions = {
         }
 
         const credentialValues = (credentials || {}) as CredentialsInput
-        const username = String(credentialValues.username || "").trim()
+        const username = normalizeUsername(credentialValues.username)
         const password = String(credentialValues.password || "")
         const sessionMode = resolveSessionMode(credentialValues.sessionMode)
         const headers = toRequestHeaders((req as { headers?: unknown } | undefined)?.headers)
@@ -108,8 +109,10 @@ export const authOptions: NextAuthOptions = {
           throw new Error("Username and password are required")
         }
 
+        const normalizedUsername = normalizeUsernameLookup(username)
+
         try {
-          const rateLimit = await checkRateLimit("authLogin", `${String(ipAddress || "unknown")}::${username.toLowerCase()}`)
+          const rateLimit = await checkRateLimit("authLogin", `${String(ipAddress || "unknown")}::${normalizedUsername}`)
           if (!rateLimit.success) {
             await logSecurityEvent({
               eventType: "auth_login_failure",
@@ -134,9 +137,9 @@ export const authOptions: NextAuthOptions = {
             sql`
               SELECT id, username, role, tenant_id, password_hash, password_reset_required
               FROM users
-              WHERE LOWER(username) = LOWER(${username})
+              WHERE LOWER(BTRIM(username)) = ${normalizedUsername}
               ORDER BY
-                CASE WHEN username = ${username} THEN 0 ELSE 1 END,
+                CASE WHEN BTRIM(username) = ${username} THEN 0 ELSE 1 END,
                 CASE role WHEN 'owner' THEN 0 WHEN 'admin' THEN 1 ELSE 2 END,
                 created_at ASC
               LIMIT 25
@@ -153,9 +156,9 @@ export const authOptions: NextAuthOptions = {
             sql`
               SELECT id, username, role, tenant_id, password_hash
               FROM users
-              WHERE LOWER(username) = LOWER(${username})
+              WHERE LOWER(BTRIM(username)) = ${normalizedUsername}
               ORDER BY
-                CASE WHEN username = ${username} THEN 0 ELSE 1 END,
+                CASE WHEN BTRIM(username) = ${username} THEN 0 ELSE 1 END,
                 CASE role WHEN 'owner' THEN 0 WHEN 'admin' THEN 1 ELSE 2 END,
                 created_at ASC
               LIMIT 25
@@ -245,6 +248,7 @@ export const authOptions: NextAuthOptions = {
   callbacks: {
     async jwt({ token, user }) {
       if (user) {
+        token.sub = String(user.id || token.sub || "")
         token.role = normalizeRole(user.role)
         token.tenantId = String(user.tenantId || "")
         token.sessionMode = resolveSessionMode(user.sessionMode)
@@ -256,6 +260,7 @@ export const authOptions: NextAuthOptions = {
     },
     async session({ session, token }) {
       if (session.user) {
+        session.user.id = String(token.sub || "")
         session.user.role = normalizeRole(token.role)
         session.user.tenantId = String(token.tenantId || "")
         session.user.sessionMode = resolveSessionMode(token.sessionMode)

@@ -2,16 +2,11 @@ import { NextResponse } from "next/server"
 import { sql } from "@/lib/server/db"
 import { requireOwnerRole } from "@/lib/tenant"
 import { requireAdminSession } from "@/lib/server/mfa"
+import { buildAdminErrorResponse, databaseNotConfiguredResponse } from "@/lib/server/route-utils"
 
 const isMissingRelation = (error: unknown, relation: string) => {
   const message = String((error as Error)?.message || error)
   return message.includes(`relation "${relation}" does not exist`)
-}
-
-const adminErrorResponse = (error: any, fallback: string) => {
-  const message = error?.message || fallback
-  const status = ["Admin role required", "Owner role required", "Unauthorized"].includes(message) ? 403 : 500
-  return NextResponse.json({ success: false, error: message }, { status })
 }
 
 export async function GET(request: Request) {
@@ -20,7 +15,7 @@ export async function GET(request: Request) {
     requireOwnerRole(sessionUser.role)
 
     if (!sql) {
-      return NextResponse.json({ success: false, error: "Database not configured" }, { status: 500 })
+      return databaseNotConfiguredResponse()
     }
 
     const { searchParams } = new URL(request.url)
@@ -100,6 +95,6 @@ export async function GET(request: Request) {
       )
     }
     console.error("Error fetching log anomaly brief:", error)
-    return adminErrorResponse(error, "Failed to fetch log anomaly brief")
+    return buildAdminErrorResponse(error, "Failed to fetch log anomaly brief", { ownerRequired: true })
   }
 }

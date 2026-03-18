@@ -2,16 +2,20 @@ import { NextResponse } from "next/server"
 import { logAppErrorEvent } from "@/lib/server/error-events"
 
 export const dynamic = "force-dynamic"
+const MAX_EVENTS_PER_REQUEST = 50
 
 const getIngestToken = () => {
   const token = process.env.LOG_INGEST_TOKEN
   return token || null
 }
 
-const toEvents = (body: any) => {
-  if (Array.isArray(body)) return body
-  if (body?.events && Array.isArray(body.events)) return body.events
-  return [body]
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  Boolean(value) && typeof value === "object" && !Array.isArray(value)
+
+const toEvents = (body: unknown): Array<Record<string, unknown>> => {
+  if (Array.isArray(body)) return body.filter(isRecord)
+  if (isRecord(body) && Array.isArray(body.events)) return body.events.filter(isRecord)
+  return isRecord(body) ? [body] : []
 }
 
 export async function POST(request: Request) {
@@ -30,8 +34,21 @@ export async function POST(request: Request) {
       return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 })
     }
 
-    const body = await request.json()
+    const body = await request.json().catch(() => null)
+    if (body === null) {
+      return NextResponse.json({ success: false, error: "Invalid JSON body" }, { status: 400 })
+    }
+
     const events = toEvents(body)
+    if (!events.length) {
+      return NextResponse.json({ success: false, error: "Provide at least one event object" }, { status: 400 })
+    }
+    if (events.length > MAX_EVENTS_PER_REQUEST) {
+      return NextResponse.json(
+        { success: false, error: `Too many events. Limit is ${MAX_EVENTS_PER_REQUEST} per request.` },
+        { status: 413 },
+      )
+    }
 
     let inserted = 0
     for (const event of events) {
@@ -47,9 +64,13 @@ export async function POST(request: Request) {
           : "error",
         message,
         fingerprint: event?.fingerprint ? String(event.fingerprint) : null,
-        metadata: event?.metadata && typeof event.metadata === "object" ? event.metadata : {},
+        metadata: isRecord(event?.metadata) ? event.metadata : {},
       })
       inserted += 1
+    }
+
+    if (inserted === 0) {
+      return NextResponse.json({ success: false, error: "At least one event must include a message" }, { status: 400 })
     }
 
     return NextResponse.json({ success: true, inserted })
