@@ -2647,6 +2647,7 @@ export default function InventorySystem() {
   const canShowIntelligence = !isScopedUser && (canShowDispatch || canShowSales || canShowAccounts || canShowSeason)
   const showOperationsTabs =
     canShowInventory ||
+    showTransactionHistory ||
     canShowProcessing ||
     canShowCuring ||
     canShowQuality ||
@@ -2655,7 +2656,7 @@ export default function InventorySystem() {
     canShowOtherSales ||
     canShowPepper
   const showFinanceTabs =
-    canShowAccounts || canShowBalanceSheet || showTransactionHistory || canShowReceivables || canShowBilling
+    canShowAccounts || canShowBalanceSheet || canShowReceivables || canShowBilling
   const showInsightsTabs =
     canShowSeason ||
     canShowYieldForecast ||
@@ -2672,6 +2673,7 @@ export default function InventorySystem() {
     () =>
       [
         canShowInventory ? { value: "inventory", label: "Inventory", icon: List } : null,
+        showTransactionHistory ? { value: "transactions", label: "Transaction History", icon: History } : null,
         canShowProcessing ? { value: "processing", label: "Processing", icon: Factory } : null,
         canShowCuring ? { value: "curing", label: "Curing", icon: Factory } : null,
         canShowQuality ? { value: "quality", label: "Quality", icon: CheckCircle2 } : null,
@@ -2680,7 +2682,17 @@ export default function InventorySystem() {
         canShowOtherSales ? { value: "other-sales", label: "Other Sales", icon: TrendingUp } : null,
         canShowPepper ? { value: "pepper", label: "Pepper", icon: Leaf } : null,
       ].filter(Boolean) as Array<{ value: string; label: string; icon: React.ComponentType<{ className?: string }> }>,
-    [canShowCuring, canShowDispatch, canShowInventory, canShowOtherSales, canShowPepper, canShowProcessing, canShowQuality, canShowSales],
+    [
+      canShowCuring,
+      canShowDispatch,
+      canShowInventory,
+      canShowOtherSales,
+      canShowPepper,
+      canShowProcessing,
+      canShowQuality,
+      canShowSales,
+      showTransactionHistory,
+    ],
   )
 
   const financeTabItems = useMemo(
@@ -2688,11 +2700,10 @@ export default function InventorySystem() {
       [
         canShowAccounts ? { value: "accounts", label: "Accounts", icon: Users } : null,
         canShowBalanceSheet ? { value: "balance-sheet", label: "Balance Sheet", icon: Scale } : null,
-        showTransactionHistory ? { value: "transactions", label: "Transaction History", icon: History } : null,
         canShowReceivables ? { value: "receivables", label: "Receivables", icon: Receipt } : null,
         canShowBilling ? { value: "billing", label: "Billing", icon: Receipt } : null,
       ].filter(Boolean) as Array<{ value: string; label: string; icon: React.ComponentType<{ className?: string }> }>,
-    [canShowAccounts, canShowBalanceSheet, canShowBilling, canShowReceivables, showTransactionHistory],
+    [canShowAccounts, canShowBalanceSheet, canShowBilling, canShowReceivables],
   )
 
   const insightsTabItems = useMemo(
@@ -4040,7 +4051,7 @@ export default function InventorySystem() {
           ? {
               id: "operations" as const,
               label: "Operations",
-              description: "Daily execution across inventory, processing, dispatch, and sales.",
+              description: "Daily execution across inventory, transactions, processing, dispatch, and sales.",
               icon: Factory,
               tabs: operationsTabItems as SectionTabItem[],
               cardClassName: "border-emerald-200/80 bg-emerald-50/50",

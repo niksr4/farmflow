@@ -22,6 +22,7 @@ import { useTenantSettings } from "@/hooks/use-tenant-settings"
 import { formatDateOnly } from "@/lib/date-utils"
 import { formatCurrency, formatNumber } from "@/lib/format"
 import { canAcceptNonNegative, isBlockedNumericKey } from "@/lib/number-input"
+import { buildSalesCsv } from "@/lib/sales-export"
 import { resolveDispatchReceivedKgs as resolveDispatchReceivedKgsValue, resolveSalesKgs } from "@/lib/sales-math"
 import posthog from "posthog-js"
 
@@ -847,134 +848,8 @@ export default function SalesTab({ showDataToolsControls = false }: SalesTabProp
         throw new Error(data.error || "Failed to load sales records for export")
       }
 
-      const records = [...(data.records as SalesRecord[])]
-      records.sort((a, b) => new Date(a.sale_date).getTime() - new Date(b.sale_date).getTime())
-
-      const toEstateCode = (record: SalesRecord) => {
-        const locationValue = String(record.location_code || record.location_name || record.estate || "").trim()
-        if (!locationValue) return "UNASSIGNED"
-        return locationValue
-          .toUpperCase()
-          .replace(/[^A-Z0-9]/g, "")
-      }
-
-      const csvEscape = (value: string | number | null | undefined) => `"${String(value ?? "").replace(/"/g, '""')}"`
-      const csvRow = (values: Array<string | number | null | undefined>) => values.map(csvEscape).join(",")
-
-      const detailHeaders = [
-        "Date",
-        "Batch Reference",
-        "Lot ID",
-        "Estate",
-        "Coffee Type",
-        "Bags Sold",
-        "Bag Type",
-        "KGs Sold",
-        "Buyer",
-        "Price/Bag",
-        "Revenue",
-        "Bank Account",
-        "Notes",
-      ]
-
-      const detailRows = records.map((record: SalesRecord) => [
-        format(new Date(record.sale_date), "yyyy-MM-dd"),
-        record.batch_no || "",
-        record.lot_id || "",
-        toEstateCode(record),
-        record.coffee_type || "",
-        record.bags_sold.toString(),
-        formatBagTypeLabel(record.bag_type),
-        resolveSalesRecordKgs(record, bagWeightKg).toFixed(2),
-        record.buyer_name || "",
-        record.price_per_bag.toString(),
-        record.revenue.toString(),
-        record.bank_account || "",
-        record.notes || "",
-      ])
-
-      type EstateAgg = { txCount: number; bags: number; kgs: number; revenue: number }
-      const estateSummary = new Map<string, EstateAgg>()
-
-      records.forEach((record) => {
-        const estateCode = toEstateCode(record)
-        const current = estateSummary.get(estateCode) || { txCount: 0, bags: 0, kgs: 0, revenue: 0 }
-        current.txCount += 1
-        current.bags += Number(record.bags_sold) || 0
-        current.kgs += resolveSalesRecordKgs(record, bagWeightKg)
-        current.revenue += Number(record.revenue) || 0
-        estateSummary.set(estateCode, current)
-      })
-
-      const estateRows = Array.from(estateSummary.entries())
-        .sort((a, b) => a[0].localeCompare(b[0]))
-        .map(([estateCode, values]) => [
-          estateCode,
-          values.txCount.toString(),
-          values.bags.toFixed(2),
-          values.kgs.toFixed(2),
-          values.revenue.toFixed(2),
-          values.bags > 0 ? (values.revenue / values.bags).toFixed(2) : "0.00",
-        ])
-
-      type CoffeeCode = "AP" | "AC" | "RP" | "RC"
-      const typeOrder: CoffeeCode[] = ["AP", "AC", "RP", "RC"]
-      const typeLabels: Record<CoffeeCode, string> = {
-        AP: "Arabica Parchment",
-        AC: "Arabica Cherry",
-        RP: "Robusta Parchment",
-        RC: "Robusta Cherry",
-      }
-      const typeSummary = new Map<CoffeeCode, EstateAgg>()
-
-      records.forEach((record) => {
-        const coffee = normalizeCoffeeType(record.coffee_type)
-        const bag = normalizeBagType(record.bag_type)
-        let code: CoffeeCode | null = null
-        if (coffee === "arabica" && bag === "parchment") code = "AP"
-        else if (coffee === "arabica" && bag === "cherry") code = "AC"
-        else if (coffee === "robusta" && bag === "parchment") code = "RP"
-        else if (coffee === "robusta" && bag === "cherry") code = "RC"
-        if (!code) return
-
-        const current = typeSummary.get(code) || { txCount: 0, bags: 0, kgs: 0, revenue: 0 }
-        current.txCount += 1
-        current.bags += Number(record.bags_sold) || 0
-        current.kgs += resolveSalesRecordKgs(record, bagWeightKg)
-        current.revenue += Number(record.revenue) || 0
-        typeSummary.set(code, current)
-      })
-
-      const typeRows = typeOrder.map((code) => {
-        const values = typeSummary.get(code) || { txCount: 0, bags: 0, kgs: 0, revenue: 0 }
-        return [
-          code,
-          typeLabels[code],
-          values.txCount.toString(),
-          values.bags.toFixed(2),
-          values.kgs.toFixed(2),
-          values.revenue.toFixed(2),
-          values.bags > 0 ? (values.revenue / values.bags).toFixed(2) : "0.00",
-        ]
-      })
-
-      const csvLines: string[] = []
-
-      csvLines.push(csvRow(["1. Sales by Date"]))
-      csvLines.push(csvRow(detailHeaders))
-      detailRows.forEach((row) => csvLines.push(csvRow(row)))
-      csvLines.push("")
-
-      csvLines.push(csvRow(["2. Segregated by Estate"]))
-      csvLines.push(csvRow(["Estate", "Transactions", "Bags Sold", "KGs Sold", "Revenue", "Avg Price / Bag"]))
-      estateRows.forEach((row) => csvLines.push(csvRow(row)))
-      csvLines.push("")
-
-      csvLines.push(csvRow(["3. Segregated by Coffee Type"]))
-      csvLines.push(csvRow(["Type Code", "Type Label", "Transactions", "Bags Sold", "KGs Sold", "Revenue", "Avg Price / Bag"]))
-      typeRows.forEach((row) => csvLines.push(csvRow(row)))
-
-      const csvContent = csvLines.join("\n")
+      const records = data.records as SalesRecord[]
+      const csvContent = buildSalesCsv(records, bagWeightKg)
 
       const blob = new Blob([csvContent], { type: "text/csv" })
       const url = URL.createObjectURL(blob)
