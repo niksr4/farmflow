@@ -116,11 +116,14 @@ import {
 } from "@/components/inventory-system/constants"
 import type { ExceptionSummaryAlert, IntelligenceBrief, LocationOption } from "@/components/inventory-system/types"
 import {
+  buildTransactionDateFromInput,
   createDefaultTransaction,
   formatDate,
+  getTodayDateInputValue,
   parseCustomDateString,
   parseJsonResponse,
   safeGet,
+  transactionDateToInputValue,
 } from "@/components/inventory-system/utils"
 import { downloadDataToolsTemplate, exportOpsCsv, getDataToolsSelection } from "@/components/inventory-system/data-tools-export"
 import {
@@ -2039,7 +2042,7 @@ export default function InventorySystem() {
       quantity: safeQuantity,
       transaction_type: safeGet(transaction?.transaction_type, "deplete"),
       notes: safeGet(transaction?.notes, ""),
-      transaction_date: safeGet(transaction?.transaction_date, new Date().toISOString()),
+      transaction_date: safeGet(transaction?.transaction_date, createDefaultTransaction().transaction_date),
       user_id: safeGet(transaction?.user_id, user?.username || "unknown"),
       price: safeGet(Number(transaction?.price), 0),
       total_cost: safeGet(Number(transaction?.total_cost), 0),
@@ -2078,6 +2081,16 @@ export default function InventorySystem() {
       return
     }
     tx.quantity = normalizedQty
+    const normalizedTransactionDate = buildTransactionDateFromInput(transactionDateToInputValue(tx.transaction_date))
+    if (!normalizedTransactionDate) {
+      toast({
+        title: "Movement date required",
+        description: "Select the date when this movement happened.",
+        variant: "destructive",
+      })
+      return
+    }
+    tx.transaction_date = normalizedTransactionDate
     tx.unit = resolveInventoryUnitForItemType(tx.item_type, tx.unit)
     tx.total_cost = (Number(tx.price) || 0) * normalizedQty
 
@@ -4446,43 +4459,73 @@ export default function InventorySystem() {
           </p>
         </div>
 
-        <div className="space-y-2">
-          <div className="flex items-center gap-2">
-            <label className="text-sm font-medium text-neutral-700">Quantity</label>
-            <TooltipProvider>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <button
-                    type="button"
-                    aria-label="Quantity help"
-                    className="inline-flex h-5 w-5 items-center justify-center rounded-full border border-black/10 text-neutral-500 hover:text-neutral-700"
-                  >
-                    <Info className="h-3 w-3" />
-                  </button>
-                </TooltipTrigger>
-                <TooltipContent>Enter the exact kg or unit amount for the lot.</TooltipContent>
-              </Tooltip>
-            </TooltipProvider>
-          </div>
-          <div className="relative">
+        <div className="grid gap-5 sm:grid-cols-[minmax(0,220px)_minmax(0,1fr)]">
+          <div className="space-y-2">
+            <div className="flex items-center gap-2">
+              <label className="text-sm font-medium text-neutral-700">Movement Date</label>
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <button
+                      type="button"
+                      aria-label="Movement date help"
+                      className="inline-flex h-5 w-5 items-center justify-center rounded-full border border-black/10 text-neutral-500 hover:text-neutral-700"
+                    >
+                      <Info className="h-3 w-3" />
+                    </button>
+                  </TooltipTrigger>
+                  <TooltipContent>Choose when the movement actually happened, including backfilled entries.</TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+            </div>
             <Input
-              data-testid="movement-quantity-input"
-              type="number"
-              min={0}
-              step="0.01"
-              placeholder="Enter quantity"
-              value={newTransaction?.quantity ?? ""}
-              onKeyDown={preventNegativeKey}
-              onWheel={preventNumberScrollChange}
-              onChange={(e) => {
-                const nextValue = coerceNonNegativeNumber(e.target.value)
-                if (nextValue === null) return
-                handleFieldChange("quantity", nextValue)
-              }}
-              className="h-11 rounded-xl border-black/5 bg-white pr-12 focus-visible:ring-2 focus-visible:ring-emerald-200"
+              type="date"
+              value={transactionDateToInputValue(newTransaction?.transaction_date)}
+              max={getTodayDateInputValue()}
+              onChange={(event) => handleFieldChange("transaction_date", buildTransactionDateFromInput(event.target.value))}
+              className="h-11 rounded-xl border-black/5 bg-white focus-visible:ring-2 focus-visible:ring-emerald-200"
             />
-            <div className="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none text-neutral-500 text-sm">
-              {selectedMovementUnit}
+            <p className="text-xs text-neutral-500">Defaults to today, but you can record movements from earlier dates.</p>
+          </div>
+
+          <div className="space-y-2">
+            <div className="flex items-center gap-2">
+              <label className="text-sm font-medium text-neutral-700">Quantity</label>
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <button
+                      type="button"
+                      aria-label="Quantity help"
+                      className="inline-flex h-5 w-5 items-center justify-center rounded-full border border-black/10 text-neutral-500 hover:text-neutral-700"
+                    >
+                      <Info className="h-3 w-3" />
+                    </button>
+                  </TooltipTrigger>
+                  <TooltipContent>Enter the exact kg or unit amount for the lot.</TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+            </div>
+            <div className="relative">
+              <Input
+                data-testid="movement-quantity-input"
+                type="number"
+                min={0}
+                step="0.01"
+                placeholder="Enter quantity"
+                value={newTransaction?.quantity ?? ""}
+                onKeyDown={preventNegativeKey}
+                onWheel={preventNumberScrollChange}
+                onChange={(e) => {
+                  const nextValue = coerceNonNegativeNumber(e.target.value)
+                  if (nextValue === null) return
+                  handleFieldChange("quantity", nextValue)
+                }}
+                className="h-11 rounded-xl border-black/5 bg-white pr-12 focus-visible:ring-2 focus-visible:ring-emerald-200"
+              />
+              <div className="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none text-neutral-500 text-sm">
+                {selectedMovementUnit}
+              </div>
             </div>
           </div>
         </div>

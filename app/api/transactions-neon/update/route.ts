@@ -40,6 +40,16 @@ const normalizeQuantity = (value: unknown) => {
   return Number((Math.round((numeric + Number.EPSILON) * 100) / 100).toFixed(2))
 }
 
+const normalizeTransactionDateInput = (value: unknown) => {
+  if (value === undefined || value === null || value === "") return null
+  if (typeof value !== "string") return null
+  const normalized = value.trim()
+  if (!normalized) return null
+  const parsed = new Date(normalized)
+  if (Number.isNaN(parsed.getTime())) return null
+  return parsed.toISOString()
+}
+
 type InventorySlotMatch = {
   item_type: string
   quantity: number
@@ -107,7 +117,7 @@ export async function PUT(request: NextRequest) {
     const tenantContext = normalizeTenantContext(sessionUser.tenantId, sessionUser.role)
     const body = await request.json()
 
-    const { id, item_type, quantity, transaction_type, notes, price, location_id } = body
+    const { id, item_type, quantity, transaction_type, notes, price, location_id, transaction_date } = body
     const requestedItemType = normalizeInventoryItemType(item_type)
 
     if (!id || !requestedItemType || !quantity || !transaction_type) {
@@ -171,6 +181,19 @@ export async function PUT(request: NextRequest) {
 
     let notesValue =
       notes === undefined ? stripUsageLocationTag(existingRow?.notes ? String(existingRow.notes) : "") : String(notes || "")
+    const normalizedTransactionDate =
+      transaction_date === undefined
+        ? String(existingRow?.transaction_date || new Date().toISOString())
+        : normalizeTransactionDateInput(transaction_date)
+    if (!normalizedTransactionDate) {
+      return NextResponse.json(
+        {
+          success: false,
+          message: "transaction_date must be a valid date",
+        },
+        { status: 400 },
+      )
+    }
 
     const priceValue = Number(price) || 0
     const quantityValue = normalizeQuantity(quantity)
@@ -251,6 +274,7 @@ export async function PUT(request: NextRequest) {
           quantity = ${quantityValue},
           transaction_type = ${normalizedType},
           notes = ${notesValue || ""},
+          transaction_date = ${normalizedTransactionDate},
           price = ${priceValue},
           total_cost = ${total_cost},
           location_id = ${nextStockLocationId},

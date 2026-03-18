@@ -52,13 +52,43 @@ export const parseJsonResponse = async (res: Response) => {
   }
 }
 
+const formatDatePart = (value: number) => value.toString().padStart(2, "0")
+
+export const getTodayDateInputValue = () => {
+  const today = new Date()
+  return `${today.getFullYear()}-${formatDatePart(today.getMonth() + 1)}-${formatDatePart(today.getDate())}`
+}
+
+export const transactionDateToInputValue = (transactionDate?: string | null) => {
+  if (typeof transactionDate === "string") {
+    const normalized = transactionDate.trim()
+    const isoPrefixMatch = normalized.match(/^\d{4}-\d{2}-\d{2}/)
+    if (isoPrefixMatch) {
+      return isoPrefixMatch[0]
+    }
+    const parsed = parseCustomDateString(normalized)
+    if (parsed) {
+      return `${parsed.getFullYear()}-${formatDatePart(parsed.getMonth() + 1)}-${formatDatePart(parsed.getDate())}`
+    }
+  }
+  return getTodayDateInputValue()
+}
+
+export const buildTransactionDateFromInput = (dateInput: string) => {
+  const normalized = dateInput.trim()
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(normalized)) {
+    return ""
+  }
+  return `${normalized}T12:00:00.000Z`
+}
+
 export const createDefaultTransaction = (): Transaction => {
   return {
     item_type: "",
     quantity: "",
     transaction_type: "deplete",
     notes: "",
-    transaction_date: new Date().toISOString(),
+    transaction_date: buildTransactionDateFromInput(getTodayDateInputValue()),
     user_id: "unknown",
     price: 0,
     total_cost: 0,

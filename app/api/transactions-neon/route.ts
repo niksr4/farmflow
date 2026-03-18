@@ -45,6 +45,16 @@ const normalizeQuantity = (value: unknown) => {
   return Number((Math.round((numeric + Number.EPSILON) * 100) / 100).toFixed(2))
 }
 
+const normalizeTransactionDateInput = (value: unknown) => {
+  if (value === undefined || value === null || value === "") return null
+  if (typeof value !== "string") return null
+  const normalized = value.trim()
+  if (!normalized) return null
+  const parsed = new Date(normalized)
+  if (Number.isNaN(parsed.getTime())) return null
+  return parsed.toISOString()
+}
+
 type InventorySlotMatch = {
   item_type: string
   quantity: number
@@ -429,7 +439,7 @@ export async function POST(request: NextRequest) {
     const tenantContext = normalizeTenantContext(sessionUser.tenantId, sessionUser.role)
     const body = await request.json()
 
-    const { item_type, quantity, transaction_type, notes, price, location_id, unit } = body
+    const { item_type, quantity, transaction_type, notes, price, location_id, unit, transaction_date } = body
     const requestedItemType = normalizeInventoryItemType(item_type)
 
     if (!requestedItemType || !quantity || !transaction_type) {
@@ -456,6 +466,17 @@ export async function POST(request: NextRequest) {
     const requestedUsageLocationId = locationValue
     let stockLocationValue: string | null = locationValue
     let notesValue = typeof notes === "string" ? notes : ""
+    const normalizedTransactionDate =
+      transaction_date === undefined ? new Date().toISOString() : normalizeTransactionDateInput(transaction_date)
+    if (!normalizedTransactionDate) {
+      return NextResponse.json(
+        {
+          success: false,
+          message: "transaction_date must be a valid date",
+        },
+        { status: 400 },
+      )
+    }
     let pooledFallbackApplied = false
     let selectedSlotMatch: InventorySlotMatch | null = null
     let pooledSlotMatch: InventorySlotMatch | null = null
@@ -557,6 +578,7 @@ export async function POST(request: NextRequest) {
         quantity, 
         transaction_type, 
         notes, 
+        transaction_date,
         user_id, 
         price, 
         total_cost,
@@ -569,6 +591,7 @@ export async function POST(request: NextRequest) {
         ${quantityValue},
         ${normalizedType},
         ${notesValue || ""},
+        ${normalizedTransactionDate},
         ${sessionUser.username || "system"},
         ${priceValue},
         ${total_cost},
