@@ -200,8 +200,6 @@ export const authOptions: NextAuthOptions = {
           return null
         }
 
-        const mfaEnabled = false
-        const mfaVerified = false
         const passwordResetRequired = Boolean(user.password_reset_required)
 
         if (needsRehash) {
@@ -239,8 +237,6 @@ export const authOptions: NextAuthOptions = {
           role: normalizeRole(user.role),
           tenantId: String(user.tenant_id),
           sessionMode,
-          mfaVerified,
-          mfaEnabled,
           passwordResetRequired,
         }
       },
@@ -252,8 +248,6 @@ export const authOptions: NextAuthOptions = {
         token.role = normalizeRole(user.role)
         token.tenantId = String(user.tenantId || "")
         token.sessionMode = resolveSessionMode(user.sessionMode)
-        token.mfaVerified = Boolean(user.mfaVerified)
-        token.mfaEnabled = Boolean(user.mfaEnabled)
         token.passwordResetRequired = Boolean(user.passwordResetRequired)
       } else {
         token.sessionMode = resolveSessionMode(token.sessionMode)
@@ -265,8 +259,6 @@ export const authOptions: NextAuthOptions = {
         session.user.role = normalizeRole(token.role)
         session.user.tenantId = String(token.tenantId || "")
         session.user.sessionMode = resolveSessionMode(token.sessionMode)
-        session.user.mfaVerified = Boolean(token.mfaVerified)
-        session.user.mfaEnabled = Boolean(token.mfaEnabled)
         session.user.passwordResetRequired = Boolean(token.passwordResetRequired)
       }
       return session

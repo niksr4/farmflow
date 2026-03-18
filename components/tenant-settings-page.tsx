@@ -146,24 +146,10 @@ export default function TenantSettingsPage() {
   const [isRequestingDeletion, setIsRequestingDeletion] = useState(false)
   const [isUpdatingConsent, setIsUpdatingConsent] = useState(false)
 
-  const [mfaStatus, setMfaStatus] = useState<{ enabled: boolean; enrolledAt: string | null } | null>(null)
-  const [mfaSecret, setMfaSecret] = useState<string | null>(null)
-  const [mfaOtpAuth, setMfaOtpAuth] = useState<string | null>(null)
-  const [mfaToken, setMfaToken] = useState("")
-  const [isMfaLoading, setIsMfaLoading] = useState(false)
-  const [isMfaSetupLoading, setIsMfaSetupLoading] = useState(false)
-  const [isMfaVerifyLoading, setIsMfaVerifyLoading] = useState(false)
-  const [isMfaDisableLoading, setIsMfaDisableLoading] = useState(false)
-  const [mfaError, setMfaError] = useState<string | null>(null)
-
   const isOwner = user?.role === "owner"
   const isAdminOrOwner = user?.role === "admin" || user?.role === "owner"
   const canManageTenantExperience = isOwner
   const privacyFeatureEnabled = false
-  const mfaFeatureEnabled = false
-  const mfaEnabled = mfaFeatureEnabled ? Boolean(mfaStatus?.enabled) : false
-  const mfaVerified = mfaFeatureEnabled ? Boolean(user?.mfaVerified) : true
-  const mfaGate = Boolean(isAdminOrOwner && mfaFeatureEnabled && mfaEnabled && !mfaVerified)
 
   useEffect(() => {
     setEstateNameInput(settings.estateName || "")
@@ -314,103 +300,6 @@ export default function TenantSettingsPage() {
     }
   }
 
-  const loadMfaStatus = useCallback(async () => {
-    if (!user) return
-    setIsMfaLoading(true)
-    setMfaError(null)
-    try {
-      const response = await fetch("/api/mfa/status")
-      const data = await response.json()
-      if (!response.ok || !data.success) {
-        throw new Error(data.error || "Failed to load MFA status")
-      }
-      setMfaStatus(data.status)
-    } catch (error: any) {
-      setMfaError(error.message || "Failed to load MFA status")
-    } finally {
-      setIsMfaLoading(false)
-    }
-  }, [user])
-
-  useEffect(() => {
-    if (!mfaFeatureEnabled) return
-    loadMfaStatus()
-  }, [loadMfaStatus, mfaFeatureEnabled])
-
-  const handleMfaSetup = async () => {
-    setIsMfaSetupLoading(true)
-    setMfaError(null)
-    try {
-      const response = await fetch("/api/mfa/setup", { method: "POST" })
-      const data = await response.json()
-      if (!response.ok || !data.success) {
-        throw new Error(data.error || "Failed to start MFA setup")
-      }
-      setMfaSecret(data.secret)
-      setMfaOtpAuth(data.otpauth)
-    } catch (error: any) {
-      setMfaError(error.message || "Failed to start MFA setup")
-    } finally {
-      setIsMfaSetupLoading(false)
-    }
-  }
-
-  const handleMfaVerify = async () => {
-    if (!mfaToken.trim()) {
-      setMfaError("Enter the 6-digit MFA code")
-      return
-    }
-    setIsMfaVerifyLoading(true)
-    setMfaError(null)
-    try {
-      const response = await fetch("/api/mfa/verify", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ token: mfaToken.trim() }),
-      })
-      const data = await response.json()
-      if (!response.ok || !data.success) {
-        throw new Error(data.error || "Failed to verify MFA code")
-      }
-      setMfaToken("")
-      setMfaSecret(null)
-      setMfaOtpAuth(null)
-      await loadMfaStatus()
-      toast({ title: "MFA enabled", description: "Admin actions now require MFA." })
-    } catch (error: any) {
-      setMfaError(error.message || "Failed to verify MFA code")
-    } finally {
-      setIsMfaVerifyLoading(false)
-    }
-  }
-
-  const handleMfaDisable = async () => {
-    if (!mfaToken.trim()) {
-      setMfaError("Enter the 6-digit MFA code")
-      return
-    }
-    setIsMfaDisableLoading(true)
-    setMfaError(null)
-    try {
-      const response = await fetch("/api/mfa/disable", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ token: mfaToken.trim() }),
-      })
-      const data = await response.json()
-      if (!response.ok || !data.success) {
-        throw new Error(data.error || "Failed to disable MFA")
-      }
-      setMfaToken("")
-      await loadMfaStatus()
-      toast({ title: "MFA disabled", description: "Admin actions will be blocked until MFA is re-enabled." })
-    } catch (error: any) {
-      setMfaError(error.message || "Failed to disable MFA")
-    } finally {
-      setIsMfaDisableLoading(false)
-    }
-  }
-
   useEffect(() => {
     if (settings.alertThresholds) {
       setThresholdDraft(settings.alertThresholds)
@@ -418,7 +307,7 @@ export default function TenantSettingsPage() {
   }, [settings.alertThresholds])
 
   const loadUsers = useCallback(async () => {
-    if (!tenantId || mfaGate) return
+    if (!tenantId) return
     try {
       const response = await fetch(`/api/admin/users?tenantId=${tenantId}`)
       const data = await response.json()
@@ -434,10 +323,10 @@ export default function TenantSettingsPage() {
     } catch (error: any) {
       toast({ title: "Error", description: error.message || "Failed to load users", variant: "destructive" })
     }
-  }, [tenantId, toast, mfaGate])
+  }, [tenantId, toast])
 
   const loadModules = useCallback(async () => {
-    if (!tenantId || mfaGate || !isOwner) return
+    if (!tenantId || !isOwner) return
     try {
       const response = await fetch(`/api/admin/tenant-modules?tenantId=${tenantId}`)
       const data = await response.json()
@@ -448,12 +337,9 @@ export default function TenantSettingsPage() {
     } catch (error: any) {
       toast({ title: "Error", description: error.message || "Failed to load tenant modules", variant: "destructive" })
     }
-  }, [isOwner, tenantId, toast, mfaGate])
+  }, [isOwner, tenantId, toast])
 
   const loadUserModules = useCallback(async (userId: string) => {
-    if (mfaGate) {
-      return
-    }
     if (!userId) {
       setUserModulePermissions(MODULES.map((module) => ({ ...module, enabled: module.defaultEnabled !== false })))
       setUserModuleSource("default")
@@ -478,10 +364,10 @@ export default function TenantSettingsPage() {
     } finally {
       setIsUserModulesLoading(false)
     }
-  }, [toast, mfaGate])
+  }, [toast])
 
   const loadAuditLogs = useCallback(async () => {
-    if (!tenantId || mfaGate || !isOwner) return
+    if (!tenantId || !isOwner) return
     setIsAuditLoading(true)
     try {
       const params = new URLSearchParams({ tenantId, limit: "50" })
@@ -502,7 +388,7 @@ export default function TenantSettingsPage() {
     } finally {
       setIsAuditLoading(false)
     }
-  }, [auditEntityType, isOwner, tenantId, toast, mfaGate])
+  }, [auditEntityType, isOwner, tenantId, toast])
 
   const loadLocations = useCallback(async () => {
     if (!tenantId) return
@@ -520,21 +406,19 @@ export default function TenantSettingsPage() {
 
   useEffect(() => {
     if (!tenantId) return
-    if (!mfaGate) {
-      loadUsers()
-      if (isOwner) {
-        loadModules()
-        loadAuditLogs()
-      }
-    }
-    loadLocations()
-  }, [tenantId, loadAuditLogs, loadLocations, loadModules, loadUsers, mfaGate, isOwner])
-
-  useEffect(() => {
-    if (tenantId && !mfaGate && isOwner) {
+    loadUsers()
+    if (isOwner) {
+      loadModules()
       loadAuditLogs()
     }
-  }, [auditEntityType, tenantId, loadAuditLogs, mfaGate, isOwner])
+    loadLocations()
+  }, [tenantId, loadAuditLogs, loadLocations, loadModules, loadUsers, isOwner])
+
+  useEffect(() => {
+    if (tenantId && isOwner) {
+      loadAuditLogs()
+    }
+  }, [auditEntityType, tenantId, loadAuditLogs, isOwner])
 
   useEffect(() => {
     if (!users.length) {
@@ -547,9 +431,6 @@ export default function TenantSettingsPage() {
   }, [users, selectedUserId])
 
   useEffect(() => {
-    if (mfaGate) {
-      return
-    }
     if (!isAdminOrOwner) {
       return
     }
@@ -559,17 +440,9 @@ export default function TenantSettingsPage() {
     }
     setUserModulePermissions(MODULES.map((module) => ({ ...module, enabled: module.defaultEnabled !== false })))
     setUserModuleSource("default")
-  }, [selectedUserId, loadUserModules, mfaGate, isAdminOrOwner])
+  }, [selectedUserId, loadUserModules, isAdminOrOwner])
 
   const handleCreateUser = async () => {
-    if (mfaGate) {
-      toast({
-        title: "MFA required",
-        description: "Sign out and sign back in with your MFA code to manage users.",
-        variant: "destructive",
-      })
-      return
-    }
     if (!tenantId) {
       toast({ title: "Tenant missing", description: "Tenant context not available." })
       return
@@ -609,14 +482,6 @@ export default function TenantSettingsPage() {
   }
 
   const handleSaveUserRole = async (user: User) => {
-    if (mfaGate) {
-      toast({
-        title: "MFA required",
-        description: "Sign out and sign back in with your MFA code to update roles.",
-        variant: "destructive",
-      })
-      return
-    }
     const nextRole = userRoleDrafts[user.id] || user.role
     if (nextRole === user.role) {
       return
@@ -643,14 +508,6 @@ export default function TenantSettingsPage() {
   }
 
   const handleDeleteUser = async (user: User) => {
-    if (mfaGate) {
-      toast({
-        title: "MFA required",
-        description: "Sign out and sign back in with your MFA code to delete users.",
-        variant: "destructive",
-      })
-      return
-    }
     if (!window.confirm(`Delete ${user.username}? This cannot be undone.`)) {
       return
     }
@@ -704,14 +561,6 @@ export default function TenantSettingsPage() {
   }
 
   const handleSaveModules = async () => {
-    if (mfaGate) {
-      toast({
-        title: "MFA required",
-        description: "Sign out and sign back in with your MFA code to update tenant modules.",
-        variant: "destructive",
-      })
-      return
-    }
     if (!tenantId) return
     setIsSavingModules(true)
     try {
@@ -779,14 +628,6 @@ export default function TenantSettingsPage() {
   }
 
   const handleSaveUserModules = async () => {
-    if (mfaGate) {
-      toast({
-        title: "MFA required",
-        description: "Sign out and sign back in with your MFA code to update user modules.",
-        variant: "destructive",
-      })
-      return
-    }
     if (!selectedUserId) return
     setIsSavingUserModules(true)
     try {
@@ -809,14 +650,6 @@ export default function TenantSettingsPage() {
   }
 
   const handleResetUserModules = async () => {
-    if (mfaGate) {
-      toast({
-        title: "MFA required",
-        description: "Sign out and sign back in with your MFA code to reset user modules.",
-        variant: "destructive",
-      })
-      return
-    }
     if (!selectedUserId) return
     try {
       const response = await fetch(`/api/admin/user-modules?userId=${selectedUserId}`, {
@@ -983,9 +816,6 @@ export default function TenantSettingsPage() {
     sectionLinks.push({ id: "user-module-overrides", label: "User Access" })
     sectionLinks.push({ id: "audit-log", label: "Audit" })
   }
-  if (mfaFeatureEnabled && isAdminOrOwner) {
-    sectionLinks.push({ id: "admin-security", label: "Security" })
-  }
   if (privacyFeatureEnabled) {
     sectionLinks.push({ id: "privacy-dpdp", label: "Privacy" })
   }
@@ -1070,18 +900,6 @@ export default function TenantSettingsPage() {
               Estate settings remain on this page. Platform-level controls are separated under the owner console.
             </p>
           </CardContent>
-        </Card>
-      )}
-
-      {mfaGate && (
-        <Card className="border-amber-200/70 bg-amber-50/70">
-          <CardHeader>
-            <CardTitle>MFA verification required</CardTitle>
-            <CardDescription>
-              MFA is enabled for your account. Sign out and sign back in with your 6-digit code to access admin settings
-              like users, modules, and audit logs.
-            </CardDescription>
-          </CardHeader>
         </Card>
       )}
 
@@ -1922,61 +1740,6 @@ export default function TenantSettingsPage() {
                 Reset to Tenant Defaults
               </Button>
             </div>
-          </CardContent>
-        </Card>
-      )}
-
-      {mfaFeatureEnabled && (user?.role === "admin" || user?.role === "owner") && (
-        <Card id="admin-security" className="scroll-mt-24 border-border/70 bg-white/85">
-          <CardHeader>
-            <CardTitle>Admin Security (MFA)</CardTitle>
-            <CardDescription>Admins must enroll in MFA to access sensitive settings and admin APIs.</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4 text-sm text-muted-foreground">
-            {mfaError && <div className="rounded-md border border-red-200 bg-red-50 p-3 text-red-700">{mfaError}</div>}
-            {isMfaLoading ? (
-              <div>Loading MFA status...</div>
-            ) : (
-              <div className="rounded-lg border border-border/60 bg-white/80 p-4 space-y-3">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-sm font-medium text-foreground">MFA status</p>
-                    <p>
-                      {mfaStatus?.enabled
-                        ? `Enabled · Enrolled ${mfaStatus?.enrolledAt ? formatDateForDisplay(mfaStatus.enrolledAt) : ""}`
-                        : "Not enabled"}
-                    </p>
-                  </div>
-                  <Button onClick={handleMfaSetup} disabled={isMfaSetupLoading}>
-                    {isMfaSetupLoading ? "Preparing..." : "Generate MFA secret"}
-                  </Button>
-                </div>
-
-                {(mfaSecret || mfaOtpAuth) && (
-                  <div className="space-y-2 rounded-md border border-emerald-200 bg-emerald-50/60 p-3">
-                    <p className="text-sm font-medium text-emerald-800">Step 1: Add to Authenticator</p>
-                    <p>Secret: <span className="font-mono text-emerald-900">{mfaSecret}</span></p>
-                    {mfaOtpAuth && (
-                      <p className="text-xs text-emerald-800 break-all">OTP URI: {mfaOtpAuth}</p>
-                    )}
-                    <p className="text-xs text-emerald-800">Use your authenticator app to add a manual key. QR code support can be added later.</p>
-                  </div>
-                )}
-
-                <div className="flex flex-col sm:flex-row gap-2 items-end">
-                  <div className="flex-1">
-                    <Label>Enter 6-digit MFA code</Label>
-                    <Input value={mfaToken} onChange={(event) => setMfaToken(event.target.value)} />
-                  </div>
-                  <Button onClick={handleMfaVerify} disabled={isMfaVerifyLoading}>
-                    {isMfaVerifyLoading ? "Verifying..." : "Verify & enable"}
-                  </Button>
-                  <Button variant="outline" onClick={handleMfaDisable} disabled={isMfaDisableLoading}>
-                    {isMfaDisableLoading ? "Disabling..." : "Disable"}
-                  </Button>
-                </div>
-              </div>
-            )}
           </CardContent>
         </Card>
       )}

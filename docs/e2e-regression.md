@@ -1,6 +1,6 @@
 # End-to-End Regression Runbook
 
-This suite covers public flows, dashboard drilldowns, owner-console system-health checks, and tenant-admin auth smoke checks.
+This suite covers public flows, dashboard drilldowns, owner-console system-health checks, tenant-admin auth smoke checks, and tenant-user auth smoke checks.
 
 ## 1) Install browser binaries (first time)
 
@@ -15,6 +15,8 @@ Required for authenticated suites:
 - `E2E_USERNAME` + `E2E_PASSWORD` for standard authenticated dashboard runs.
 - `E2E_OWNER_USERNAME` + `E2E_OWNER_PASSWORD` for owner-console runs when `E2E_EXPECT_OWNER=1` (default).
 - `E2E_ADMIN_USERNAME` + `E2E_ADMIN_PASSWORD` for tenant-admin smoke runs when `E2E_EXPECT_ADMIN=1`.
+
+Tenant-user auth smoke runs are self-provisioned during owner-mode E2E runs and do not require separate user credentials.
 
 Optional:
 

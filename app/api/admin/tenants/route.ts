@@ -8,7 +8,7 @@ import { logAuditEvent } from "@/lib/server/audit-log"
 
 const adminErrorResponse = (error: any, fallback: string) => {
   const message = error?.message || fallback
-  const status = ["MFA required", "Admin role required", "Unauthorized"].includes(message) ? 403 : 500
+  const status = ["Admin role required", "Unauthorized"].includes(message) ? 403 : 500
   return NextResponse.json({ success: false, error: message }, { status })
 }
 
@@ -129,6 +129,38 @@ export async function DELETE(request: Request) {
     if (!existing?.length) {
       return NextResponse.json({ success: false, error: "Tenant not found" }, { status: 404 })
     }
+
+    await runTenantQuery(
+      sql,
+      adminContext,
+      sql`
+        DELETE FROM user_modules
+        WHERE tenant_id = ${tenantId}
+           OR user_id IN (
+             SELECT id
+             FROM users
+             WHERE tenant_id = ${tenantId}
+           )
+      `,
+    )
+
+    await runTenantQuery(
+      sql,
+      adminContext,
+      sql`
+        DELETE FROM tenant_modules
+        WHERE tenant_id = ${tenantId}
+      `,
+    )
+
+    await runTenantQuery(
+      sql,
+      adminContext,
+      sql`
+        DELETE FROM users
+        WHERE tenant_id = ${tenantId}
+      `,
+    )
 
     await runTenantQuery(
       sql,

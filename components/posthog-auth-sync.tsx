@@ -74,8 +74,6 @@ export default function PostHogAuthSync() {
       username: user.username,
       role: user.role,
       tenant_id: tenantId,
-      mfa_enabled: Boolean(user.mfaEnabled),
-      mfa_verified: Boolean(user.mfaVerified),
     })
     posthog.group("tenant", tenantId, { tenant_id: tenantId })
 

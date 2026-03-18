@@ -286,7 +286,7 @@ export async function GET() {
     })
   } catch (error: any) {
     const message = error?.message || "Failed to load system health"
-    const status = ["MFA required", "Admin role required", "Owner role required", "Unauthorized"].includes(message) ? 403 : 500
+    const status = ["Admin role required", "Owner role required", "Unauthorized"].includes(message) ? 403 : 500
     return NextResponse.json({ success: false, error: message }, { status })
   }
 }

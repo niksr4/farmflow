@@ -8,8 +8,6 @@ interface User {
   role: "admin" | "user" | "owner"
   tenantId: string
   sessionMode?: "app" | "web"
-  mfaEnabled?: boolean
-  mfaVerified?: boolean
   passwordResetRequired?: boolean
 }
 
@@ -33,15 +31,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 export function useAuth(): AuthContextType {
   const { data: session, status } = useSession()
   const user = session?.user
-    ? {
-        username: String(session.user.name || ""),
-        role: session.user.role,
-        tenantId: String(session.user.tenantId || ""),
-        sessionMode: session.user.sessionMode,
-        mfaEnabled: Boolean(session.user.mfaEnabled),
-        mfaVerified: Boolean(session.user.mfaVerified),
-        passwordResetRequired: Boolean(session.user.passwordResetRequired),
-      }
+      ? {
+          username: String(session.user.name || ""),
+          role: session.user.role,
+          tenantId: String(session.user.tenantId || ""),
+          sessionMode: session.user.sessionMode,
+          passwordResetRequired: Boolean(session.user.passwordResetRequired),
+        }
     : null
 
   const login = async (username: string, password: string, sessionMode: "app" | "web" = "web") => {

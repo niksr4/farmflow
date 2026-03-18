@@ -15,7 +15,7 @@ const applyUserRoleModulePolicy = (role: string, moduleId: string, enabled: bool
 
 const adminErrorResponse = (error: any, fallback: string) => {
   const message = error?.message || fallback
-  const status = ["MFA required", "Admin role required", "Unauthorized"].includes(message) ? 403 : 500
+  const status = ["Admin role required", "Unauthorized"].includes(message) ? 403 : 500
   return NextResponse.json({ success: false, error: message }, { status })
 }
 

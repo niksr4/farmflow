@@ -20,8 +20,6 @@ export type SessionUser = {
   role: "admin" | "user" | "owner"
   tenantId: string
   sessionMode?: "app" | "web"
-  mfaEnabled?: boolean
-  mfaVerified?: boolean
   passwordResetRequired?: boolean
 }
 
@@ -36,15 +34,13 @@ export async function requireSessionUser(): Promise<SessionUser> {
   }
 
   if (user?.tenantId && user?.role) {
-    return {
-      username: String(user.name || ""),
-      role: user.role,
-      tenantId: String(user.tenantId),
-      sessionMode: user.sessionMode,
-      mfaEnabled: Boolean(user.mfaEnabled),
-      mfaVerified: Boolean(user.mfaVerified),
-      passwordResetRequired: Boolean(user.passwordResetRequired),
-    }
+      return {
+        username: String(user.name || ""),
+        role: user.role,
+        tenantId: String(user.tenantId),
+        sessionMode: user.sessionMode,
+        passwordResetRequired: Boolean(user.passwordResetRequired),
+      }
   }
 
   if (user?.name && sql) {
@@ -83,8 +79,6 @@ export async function requireSessionUser(): Promise<SessionUser> {
         role: rows[0].role,
         tenantId: String(rows[0].tenant_id),
         sessionMode: user.sessionMode,
-        mfaEnabled: Boolean(user.mfaEnabled),
-        mfaVerified: Boolean(user.mfaVerified),
         passwordResetRequired: Boolean(rows[0].password_reset_required),
       }
     }

@@ -1,8 +1,8 @@
 # Security Baseline
 
-## MFA
-- Admins/owners must complete MFA to access admin APIs.
-- MFA is TOTP-based (authenticator app).
+## Admin Auth
+- Admin and owner API access currently relies on the primary authenticated session only.
+- MFA is not enabled in the product at this time.
 
 ## Encryption
 - In transit: TLS enforced for all requests (Next.js + Neon over SSL).

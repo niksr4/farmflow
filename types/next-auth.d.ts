@@ -9,8 +9,6 @@ declare module "next-auth" {
       role: FarmFlowRole
       tenantId: string
       sessionMode?: SessionMode
-      mfaEnabled: boolean
-      mfaVerified: boolean
       passwordResetRequired: boolean
     }
   }
@@ -19,8 +17,6 @@ declare module "next-auth" {
     role: FarmFlowRole
     tenantId: string
     sessionMode?: SessionMode
-    mfaEnabled?: boolean
-    mfaVerified?: boolean
     passwordResetRequired?: boolean
   }
 }
@@ -30,8 +26,6 @@ declare module "next-auth/jwt" {
     role?: FarmFlowRole
     tenantId?: string
     sessionMode?: SessionMode
-    mfaEnabled?: boolean
-    mfaVerified?: boolean
     passwordResetRequired?: boolean
   }
 }

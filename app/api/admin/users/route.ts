@@ -43,7 +43,7 @@ const getErrorMessage = (error: unknown, fallback: string) => {
 
 const adminErrorResponse = (error: unknown, fallback: string) => {
   const message = getErrorMessage(error, fallback)
-  const status = ["MFA required", "Admin role required", "Unauthorized"].includes(message) ? 403 : 500
+  const status = ["Admin role required", "Unauthorized"].includes(message) ? 403 : 500
   return NextResponse.json({ success: false, error: message }, { status })
 }
 

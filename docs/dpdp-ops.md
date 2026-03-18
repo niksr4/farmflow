@@ -5,7 +5,6 @@ Run these on the tenant database before using privacy/security APIs:
 - `scripts/40-dpdp-privacy.sql`
 - `scripts/41-security-events.sql`
 - `scripts/42-billing.sql`
-- `scripts/43-mfa.sql`
 - `scripts/44-db-roles.sql` (optional, recommended)
 - `scripts/22-enable-rls.sql` (if not already applied)
 
