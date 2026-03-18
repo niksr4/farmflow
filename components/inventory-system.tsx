@@ -1421,7 +1421,9 @@ export default function InventorySystem() {
     const totalBookedRevenue = salesHeroTotals.totalRevenue + otherSalesHeroTotals.totalRevenue
     const totalBookedRevenueLoading = salesHeroTotals.loading || otherSalesHeroTotals.loading
     const totalBookedRevenueError = salesHeroTotals.error || otherSalesHeroTotals.error
-    const balanceNetBooked = totalBookedRevenue - accountsTotals.grandTotal
+    const totalCostValue = accountsTotals.grandTotal + resolvedInventoryValue
+    const totalCostLoading = accountsTotalsLoading || loading
+    const balanceNetBooked = totalBookedRevenue - totalCostValue
     const balanceLivePosition = balanceNetBooked + receivablesHeroTotals.totalOutstanding
     const balanceSheetStats: HeroStat[] = [
       {
@@ -1431,19 +1433,19 @@ export default function InventorySystem() {
       },
       {
         label: "Booked outflow",
-        value: accountsTotalsLoading ? "Loading..." : formatCurrency(accountsTotals.grandTotal, 0),
-        metricValue: accountsTotalsLoading ? null : accountsTotals.grandTotal,
+        value: totalCostLoading ? "Loading..." : formatCurrency(totalCostValue, 0),
+        metricValue: totalCostLoading ? null : totalCostValue,
       },
       {
         label: "Live position",
         value:
-          accountsTotalsLoading || receivablesHeroTotals.loading || totalBookedRevenueLoading
+          totalCostLoading || receivablesHeroTotals.loading || totalBookedRevenueLoading
             ? "Loading..."
             : totalBookedRevenueError
               ? "Unavailable"
             : formatCurrency(balanceLivePosition, 0),
         metricValue:
-          accountsTotalsLoading || receivablesHeroTotals.loading || totalBookedRevenueLoading || totalBookedRevenueError
+          totalCostLoading || receivablesHeroTotals.loading || totalBookedRevenueLoading || totalBookedRevenueError
             ? null
             : balanceLivePosition,
       },
@@ -1954,6 +1956,7 @@ export default function InventorySystem() {
     filteredInventoryTotals.unitLabel,
     formatCount,
     isModuleEnabled,
+    loading,
     processingTotals.arabicaKg,
     processingTotals.arabicaBags,
     processingTotals.loading,
@@ -2938,6 +2941,7 @@ export default function InventorySystem() {
   const canShowDispatch = isModuleEnabled("dispatch")
   const canShowSales = isModuleEnabled("sales") && isAdmin
   const canShowOtherSales = isModuleEnabled("other-sales") && !isScopedUser
+  const canShowInventoryWorkspace = canShowInventory || showTransactionHistory
   const canShowSalesWorkspace = canShowSales || canShowOtherSales
   const canShowCuring = isModuleEnabled("curing")
   const canShowQuality = isModuleEnabled("quality")
@@ -2957,10 +2961,9 @@ export default function InventorySystem() {
   const canShowPlantHealth = isOwner || isModuleEnabled("plant-health") || canShowResources || canShowAiAnalysis
   const canShowWelcomeCard = isFeatureEnabled("showWelcomeCard")
   const canShowRainfallSection = canShowRainfall || canShowWeather
-  const canShowIntelligence = !isScopedUser && (canShowDispatch || canShowSales || canShowAccounts || canShowSeason)
+  const canShowIntelligence = !isScopedUser && (canShowDispatch || canShowSalesWorkspace || canShowAccounts || canShowSeason)
   const showOperationsTabs =
-    canShowInventory ||
-    showTransactionHistory ||
+    canShowInventoryWorkspace ||
     canShowProcessing ||
     canShowCuring ||
     canShowQuality ||
@@ -2984,7 +2987,7 @@ export default function InventorySystem() {
   const operationsTabItems = useMemo(
     () =>
       [
-        canShowInventory ? { value: "inventory", label: "Inventory", icon: List } : null,
+        canShowInventoryWorkspace ? { value: "inventory", label: "Inventory", icon: List } : null,
         canShowProcessing ? { value: "processing", label: "Processing", icon: Factory } : null,
         canShowCuring ? { value: "curing", label: "Curing", icon: Factory } : null,
         canShowQuality ? { value: "quality", label: "Quality", icon: CheckCircle2 } : null,
@@ -2995,7 +2998,7 @@ export default function InventorySystem() {
     [
       canShowCuring,
       canShowDispatch,
-      canShowInventory,
+      canShowInventoryWorkspace,
       canShowPepper,
       canShowProcessing,
       canShowQuality,
@@ -3163,12 +3166,17 @@ export default function InventorySystem() {
   const salesSoldKgsTotal = salesHeroTotals.arabicaKgs + salesHeroTotals.robustaKgs
   const saleableCoffeeKgs = Math.max(0, dispatchReceivedKgsTotal - salesSoldKgsTotal)
   const overdrawnCoffeeKgs = Math.max(0, salesSoldKgsTotal - dispatchReceivedKgsTotal)
+  const resolvedInventoryWorkspaceView: InventoryWorkspaceView =
+    !canShowInventory && showTransactionHistory ? "transactions" : inventoryWorkspaceView
   const coffeeRevenueTotal = salesHeroTotals.totalRevenue
   const otherRevenueTotal = otherSalesHeroTotals.totalRevenue
   const totalRevenueAmount = coffeeRevenueTotal + otherRevenueTotal
   const revenueTotalsLoading = salesHeroTotals.loading || otherSalesHeroTotals.loading
   const revenueTotalsError = salesHeroTotals.error || otherSalesHeroTotals.error
-  const bookedNetPosition = totalRevenueAmount - accountsTotals.grandTotal
+  const inventoryCostTotal = resolvedInventoryValue
+  const totalCostAmount = accountsTotals.grandTotal + inventoryCostTotal
+  const costTotalsLoading = accountsTotalsLoading || loading
+  const bookedNetPosition = totalRevenueAmount - totalCostAmount
   const reconciliationStatusLabel = overdrawnCoffeeKgs > 0 ? "Overdrawn" : "Healthy"
   const reconciliationStatusTone =
     overdrawnCoffeeKgs > 0 ? "text-rose-700 border-rose-200 bg-rose-50/70" : "text-emerald-700 border-emerald-200 bg-emerald-50/70"
@@ -3178,7 +3186,7 @@ export default function InventorySystem() {
   const intelligenceTopFrequencyCode = intelligenceBrief?.accountsPatterns?.mostFrequentCodes?.[0] || null
   const visibleTabs = useMemo(() => {
     const tabs: string[] = ["home"]
-    if (canShowInventory) tabs.push("inventory")
+    if (canShowInventoryWorkspace) tabs.push("inventory")
     if (canShowAccounts) tabs.push("accounts")
     if (canShowBalanceSheet) tabs.push("balance-sheet")
     if (canShowProcessing) tabs.push("processing")
@@ -3208,7 +3216,7 @@ export default function InventorySystem() {
     canShowDispatch,
     canShowDocuments,
     canShowActivityLog,
-    canShowInventory,
+    canShowInventoryWorkspace,
     canShowJournal,
     canShowPlantHealth,
     canShowResources,
@@ -3251,11 +3259,9 @@ export default function InventorySystem() {
         processing: { label: "Processing", icon: Factory },
         dispatch: { label: "Dispatch", icon: Truck },
         sales: { label: "Sales", icon: TrendingUp },
-        "other-sales": { label: "Other Sales", icon: TrendingUp },
         pepper: { label: "Pepper", icon: Leaf },
         accounts: { label: "Accounts", icon: Users },
         "balance-sheet": { label: "Balance Sheet", icon: Scale },
-        transactions: { label: "Transactions", icon: History },
         receivables: { label: "Receivables", icon: Receipt },
         billing: { label: "Billing", icon: Receipt },
         season: { label: "Season", icon: BarChart3 },
@@ -3280,7 +3286,6 @@ export default function InventorySystem() {
       "sales",
       "inventory",
       "accounts",
-      "transactions",
       "season",
       "rainfall",
       "documents",
@@ -4217,7 +4222,7 @@ export default function InventorySystem() {
         setInventoryWorkspaceView("transactions")
         nextTabCandidate = "inventory"
       } else if (requestedTab === "inventory") {
-        setInventoryWorkspaceView("inventory")
+        setInventoryWorkspaceView(canShowInventory ? "inventory" : "transactions")
       } else if (requestedTab === "other-sales") {
         setSalesWorkspaceView("other-sales")
         nextTabCandidate = "sales"
@@ -4285,7 +4290,7 @@ export default function InventorySystem() {
       const nextPath = nextQuery ? `/dashboard?${nextQuery}` : "/dashboard"
       router.replace(nextPath, { scroll: false })
     },
-    [allItemTypesForDropdown, canShowSales, getPreferredDefaultTab, locations, markTabAsLoaded, router, searchParams, visibleTabs],
+    [allItemTypesForDropdown, canShowInventory, canShowSales, getPreferredDefaultTab, locations, markTabAsLoaded, router, searchParams, visibleTabs],
   )
   const handleTabChange = useCallback(
     (value: string) => {
@@ -4294,7 +4299,7 @@ export default function InventorySystem() {
         setInventoryWorkspaceView("transactions")
         nextTab = "inventory"
       } else if (value === "inventory") {
-        setInventoryWorkspaceView("inventory")
+        setInventoryWorkspaceView(canShowInventory ? "inventory" : "transactions")
       } else if (value === "other-sales") {
         setSalesWorkspaceView("other-sales")
         nextTab = "sales"
@@ -4303,7 +4308,7 @@ export default function InventorySystem() {
       }
       openDrilldown({ tab: nextTab })
     },
-    [canShowSales, openDrilldown],
+    [canShowInventory, canShowSales, openDrilldown],
   )
 
   const handleExecutionOutcomeAction = useCallback(
@@ -4327,7 +4332,7 @@ export default function InventorySystem() {
       if (normalized.startsWith("/api/sales")) return canShowSales ? "sales" : "home"
       if (normalized.startsWith("/api/rainfall")) return canShowRainfall ? "rainfall" : "home"
       if (normalized.startsWith("/api/pepper-records")) return canShowPepper ? "pepper" : "home"
-      if (normalized.startsWith("/api/transactions-neon")) return canShowInventory ? "inventory" : "home"
+      if (normalized.startsWith("/api/transactions-neon")) return canShowInventoryWorkspace ? "inventory" : "home"
       if (normalized.startsWith("/api/inventory-neon")) return canShowInventory ? "inventory" : "home"
       if (normalized.startsWith("/api/locations")) return canShowInventory ? "inventory" : "home"
       if (normalized.startsWith("/api/labor-neon") || normalized.startsWith("/api/expenses-neon")) {
@@ -4340,6 +4345,7 @@ export default function InventorySystem() {
       canShowAccounts,
       canShowDispatch,
       canShowInventory,
+      canShowInventoryWorkspace,
       canShowPepper,
       canShowProcessing,
       canShowRainfall,
@@ -4435,7 +4441,7 @@ export default function InventorySystem() {
           ? {
               id: "operations" as const,
               label: "Operations",
-              description: "Daily execution across inventory, transactions, processing, dispatch, and sales.",
+              description: "Daily execution across inventory, processing, dispatch, and sales.",
               icon: Factory,
               tabs: operationsTabItems as SectionTabItem[],
               cardClassName: "border-emerald-200/80 bg-emerald-50/50",
@@ -4565,7 +4571,7 @@ export default function InventorySystem() {
       return
     }
     if (requestedTab === "inventory") {
-      setInventoryWorkspaceView("inventory")
+      setInventoryWorkspaceView(canShowInventory ? "inventory" : "transactions")
     }
     if (requestedTab === "sales") {
       setSalesWorkspaceView(canShowSales ? "coffee" : "other-sales")
@@ -4573,7 +4579,7 @@ export default function InventorySystem() {
     if (visibleTabs.includes(requestedTab) && requestedTab !== activeTab) {
       setActiveTab(requestedTab)
     }
-  }, [activeTab, canShowSales, tabParam, visibleTabs])
+  }, [activeTab, canShowInventory, canShowSales, tabParam, visibleTabs])
 
   useEffect(() => {
     if (!locationFilterParam) return
@@ -6072,11 +6078,18 @@ export default function InventorySystem() {
                   </Card>
                   <Card className="border-black/5 bg-white/90">
                     <CardHeader className="pb-2">
-                      <CardTitle className="text-sm font-medium text-neutral-600">Booked Net</CardTitle>
+                      <CardTitle className="text-sm font-medium text-neutral-600">Net After Costs</CardTitle>
                     </CardHeader>
                     <CardContent>
-                      <p className="text-2xl font-semibold tabular-nums text-neutral-900">{formatCurrency(bookedNetPosition, 0)}</p>
-                      <p className="text-xs text-muted-foreground">Total revenue - labor - other expenses</p>
+                      <p className="text-2xl font-semibold tabular-nums text-neutral-900">
+                        {costTotalsLoading ? "Loading..." : formatCurrency(bookedNetPosition, 0)}
+                      </p>
+                      <p className="text-xs text-muted-foreground">Total revenue - accounts costs - inventory costs</p>
+                      <div className="mt-2 space-y-1 text-xs text-muted-foreground">
+                        <p>Accounts costs: {accountsTotalsLoading ? "Loading..." : formatCurrency(accountsTotals.grandTotal, 0)}</p>
+                        <p>Inventory costs: {loading ? "Loading..." : formatCurrency(inventoryCostTotal, 0)}</p>
+                        <p>Total costs: {costTotalsLoading ? "Loading..." : formatCurrency(totalCostAmount, 0)}</p>
+                      </div>
                       {canShowReceivables && (
                         <p className="mt-1 text-xs text-muted-foreground">
                           Receivables outstanding: {formatCurrency(receivablesHeroTotals.totalOutstanding, 0)}
@@ -6589,13 +6602,13 @@ export default function InventorySystem() {
             </Card>
           </TabsContent>
 
-          {canShowInventory && (
+          {canShowInventoryWorkspace && (
             <TabsContent value="inventory" className="space-y-6" forceMount={isTabLoaded("inventory") ? true : undefined}>
               <Card className="border-border/70 bg-white/90">
                 <CardHeader className="pb-3">
                   <CardTitle className="text-xs uppercase tracking-[0.2em] text-muted-foreground">Inventory Dashboard</CardTitle>
                   <CardDescription>
-                    {inventoryWorkspaceView === "transactions"
+                    {resolvedInventoryWorkspaceView === "transactions"
                       ? "Review and correct movement history without leaving Inventory."
                       : "Stock levels, movement shortcuts, and item drill-downs in one place."}
                   </CardDescription>
@@ -6605,7 +6618,7 @@ export default function InventorySystem() {
                     <div>
                       <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">Current View</p>
                       <p className="text-2xl font-semibold text-foreground">
-                        {inventoryWorkspaceView === "transactions" ? "Transaction History" : "Inventory"}
+                        {resolvedInventoryWorkspaceView === "transactions" ? "Transaction History" : "Inventory"}
                       </p>
                     </div>
                     <div>
@@ -6623,30 +6636,36 @@ export default function InventorySystem() {
                   </div>
                   {showTransactionHistory ? (
                     <div className="rounded-xl border border-border/60 bg-muted/20 p-3">
-                      <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">Inventory Workspace</p>
-                      <div className="mt-3 grid grid-cols-2 gap-2">
-                        <Button
-                          type="button"
-                          variant={inventoryWorkspaceView === "inventory" ? "default" : "outline"}
-                          className={cn(inventoryWorkspaceView === "inventory" ? "bg-emerald-700 hover:bg-emerald-800" : "bg-white")}
-                          onClick={() => setInventoryWorkspaceView("inventory")}
-                        >
-                          Inventory
-                        </Button>
-                        <Button
-                          type="button"
-                          variant={inventoryWorkspaceView === "transactions" ? "default" : "outline"}
-                          className={cn(inventoryWorkspaceView === "transactions" ? "bg-emerald-700 hover:bg-emerald-800" : "bg-white")}
-                          onClick={() => setInventoryWorkspaceView("transactions")}
-                        >
-                          Transaction History
-                        </Button>
+                      <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">Inventory Actions</p>
+                      <div className="mt-3 space-y-2">
+                        {resolvedInventoryWorkspaceView === "transactions" ? (
+                          canShowInventory ? (
+                            <Button
+                              type="button"
+                              variant="outline"
+                              className="w-full bg-white"
+                              onClick={() => setInventoryWorkspaceView("inventory")}
+                            >
+                              Back to Inventory
+                            </Button>
+                          ) : (
+                            <p className="text-sm text-muted-foreground">History view only for this module set.</p>
+                          )
+                        ) : (
+                          <Button
+                            type="button"
+                            className="w-full bg-emerald-700 hover:bg-emerald-800"
+                            onClick={() => setInventoryWorkspaceView("transactions")}
+                          >
+                            Open Transaction History
+                          </Button>
+                        )}
                       </div>
                     </div>
                   ) : null}
                 </CardContent>
               </Card>
-              {inventoryWorkspaceView === "transactions" && showTransactionHistory ? (
+              {resolvedInventoryWorkspaceView === "transactions" && showTransactionHistory ? (
                 renderTransactionHistoryPanel()
               ) : (
               <div className="grid grid-cols-1 gap-6 lg:grid-cols-12 lg:items-start">
@@ -6987,17 +7006,19 @@ export default function InventorySystem() {
                           <span className="text-xs text-neutral-400">CSV</span>
                         </button>
                       )}
-                      <button
-                        type="button"
-                        onClick={() => setInventoryWorkspaceView("transactions")}
-                        className="flex w-full items-center justify-between rounded-xl border border-black/5 bg-white px-4 py-3 text-sm text-neutral-800 transition-colors hover:bg-neutral-50"
-                      >
-                        <span className="flex items-center gap-2">
-                          <History className="h-4 w-4 text-emerald-600" />
-                          View transactions
-                        </span>
-                        <span className="text-xs text-neutral-400">History</span>
-                      </button>
+                      {showTransactionHistory && (
+                        <button
+                          type="button"
+                          onClick={() => setInventoryWorkspaceView("transactions")}
+                          className="flex w-full items-center justify-between rounded-xl border border-black/5 bg-white px-4 py-3 text-sm text-neutral-800 transition-colors hover:bg-neutral-50"
+                        >
+                          <span className="flex items-center gap-2">
+                            <History className="h-4 w-4 text-emerald-600" />
+                            View transactions
+                          </span>
+                          <span className="text-xs text-neutral-400">History</span>
+                        </button>
+                      )}
                       {inventoryDrilldownItemName && (
                         <button
                           type="button"

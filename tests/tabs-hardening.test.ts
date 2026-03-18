@@ -13,5 +13,12 @@ describe("tabs hardening regression guards", () => {
     expect(dashboardSource).toContain("const [loadedTabs, setLoadedTabs]")
     expect(dashboardSource).toContain('forceMount={isTabLoaded("')
   })
-})
 
+  it("does not restore transaction history or other sales as standalone top-level tabs", () => {
+    const dashboardSource = readFileSync(resolve(process.cwd(), "components/inventory-system.tsx"), "utf8")
+    expect(dashboardSource).not.toContain('<TabsContent value="transactions"')
+    expect(dashboardSource).not.toContain('<TabsContent value="other-sales"')
+    expect(dashboardSource).not.toContain('{ value: "transactions",')
+    expect(dashboardSource).not.toContain('{ value: "other-sales",')
+  })
+})
