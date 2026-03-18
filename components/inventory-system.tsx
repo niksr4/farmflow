@@ -3173,10 +3173,6 @@ export default function InventorySystem() {
   const totalRevenueAmount = coffeeRevenueTotal + otherRevenueTotal
   const revenueTotalsLoading = salesHeroTotals.loading || otherSalesHeroTotals.loading
   const revenueTotalsError = salesHeroTotals.error || otherSalesHeroTotals.error
-  const inventoryCostTotal = resolvedInventoryValue
-  const totalCostAmount = accountsTotals.grandTotal + inventoryCostTotal
-  const costTotalsLoading = accountsTotalsLoading || loading
-  const bookedNetPosition = totalRevenueAmount - totalCostAmount
   const reconciliationStatusLabel = overdrawnCoffeeKgs > 0 ? "Overdrawn" : "Healthy"
   const reconciliationStatusTone =
     overdrawnCoffeeKgs > 0 ? "text-rose-700 border-rose-200 bg-rose-50/70" : "text-emerald-700 border-emerald-200 bg-emerald-50/70"
@@ -6032,80 +6028,49 @@ export default function InventorySystem() {
                 </>
               )}
               {showFinancialHomeCards && (
-                <>
-                  <Card className="border-black/5 bg-white/90">
-                    <CardHeader className="pb-2">
-                      <CardTitle className="text-sm font-medium text-neutral-600">Revenue Breakdown</CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                      <div className="space-y-2">
-                        <div>
-                          <p className="text-[11px] uppercase tracking-[0.18em] text-muted-foreground">Coffee Revenue</p>
-                          <p className="text-lg font-semibold tabular-nums text-emerald-700">
-                            {revenueTotalsLoading ? "Loading..." : revenueTotalsError ? "Unavailable" : formatCurrency(coffeeRevenueTotal, 0)}
-                          </p>
-                        </div>
-                        <div>
-                          <p className="text-[11px] uppercase tracking-[0.18em] text-muted-foreground">Other Revenue</p>
-                          <p className="text-base font-semibold tabular-nums text-amber-700">
-                            {revenueTotalsLoading ? "Loading..." : revenueTotalsError ? "Unavailable" : formatCurrency(otherRevenueTotal, 0)}
-                          </p>
-                        </div>
-                        <div className="border-t border-black/5 pt-2">
-                          <p className="text-[11px] uppercase tracking-[0.18em] text-muted-foreground">Total Revenue</p>
-                          <p className="text-xl font-semibold tabular-nums text-neutral-900">
-                            {revenueTotalsLoading ? "Loading..." : revenueTotalsError ? "Unavailable" : formatCurrency(totalRevenueAmount, 0)}
-                          </p>
-                          <p className="text-xs text-muted-foreground">
-                            Coffee sales: {formatCount(salesHeroTotals.totalSales)} · Other sales: {formatCount(otherSalesHeroTotals.totalCount)}
-                          </p>
-                        </div>
-                      </div>
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        className="mt-2 h-7 px-2 text-xs"
-                        onClick={() =>
-                          openDrilldown({
-                            tab: canShowSales || canShowOtherSales ? "sales" : "accounts",
-                            locationId: selectedLocationId,
-                          })
-                        }
-                      >
-                        Open revenue detail
-                      </Button>
-                    </CardContent>
-                  </Card>
-                  <Card className="border-black/5 bg-white/90">
-                    <CardHeader className="pb-2">
-                      <CardTitle className="text-sm font-medium text-neutral-600">Net After Costs</CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                      <p className="text-2xl font-semibold tabular-nums text-neutral-900">
-                        {costTotalsLoading ? "Loading..." : formatCurrency(bookedNetPosition, 0)}
-                      </p>
-                      <p className="text-xs text-muted-foreground">Total revenue - accounts costs - inventory costs</p>
-                      <div className="mt-2 space-y-1 text-xs text-muted-foreground">
-                        <p>Accounts costs: {accountsTotalsLoading ? "Loading..." : formatCurrency(accountsTotals.grandTotal, 0)}</p>
-                        <p>Inventory costs: {loading ? "Loading..." : formatCurrency(inventoryCostTotal, 0)}</p>
-                        <p>Total costs: {costTotalsLoading ? "Loading..." : formatCurrency(totalCostAmount, 0)}</p>
-                      </div>
-                      {canShowReceivables && (
-                        <p className="mt-1 text-xs text-muted-foreground">
-                          Receivables outstanding: {formatCurrency(receivablesHeroTotals.totalOutstanding, 0)}
+                <Card className="border-black/5 bg-white/90">
+                  <CardHeader className="pb-2">
+                    <CardTitle className="text-sm font-medium text-neutral-600">Revenue Breakdown</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="space-y-2">
+                      <div>
+                        <p className="text-[11px] uppercase tracking-[0.18em] text-muted-foreground">Coffee Revenue</p>
+                        <p className="text-lg font-semibold tabular-nums text-emerald-700">
+                          {revenueTotalsLoading ? "Loading..." : revenueTotalsError ? "Unavailable" : formatCurrency(coffeeRevenueTotal, 0)}
                         </p>
-                      )}
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        className="mt-2 h-7 px-2 text-xs"
-                        onClick={() => openDrilldown({ tab: canShowReceivables ? "receivables" : "accounts" })}
-                      >
-                        Open finance detail
-                      </Button>
-                    </CardContent>
-                  </Card>
-                </>
+                      </div>
+                      <div>
+                        <p className="text-[11px] uppercase tracking-[0.18em] text-muted-foreground">Other Revenue</p>
+                        <p className="text-base font-semibold tabular-nums text-amber-700">
+                          {revenueTotalsLoading ? "Loading..." : revenueTotalsError ? "Unavailable" : formatCurrency(otherRevenueTotal, 0)}
+                        </p>
+                      </div>
+                      <div className="border-t border-black/5 pt-2">
+                        <p className="text-[11px] uppercase tracking-[0.18em] text-muted-foreground">Total Revenue</p>
+                        <p className="text-xl font-semibold tabular-nums text-neutral-900">
+                          {revenueTotalsLoading ? "Loading..." : revenueTotalsError ? "Unavailable" : formatCurrency(totalRevenueAmount, 0)}
+                        </p>
+                        <p className="text-xs text-muted-foreground">
+                          Coffee sales: {formatCount(salesHeroTotals.totalSales)} · Other sales: {formatCount(otherSalesHeroTotals.totalCount)}
+                        </p>
+                      </div>
+                    </div>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      className="mt-2 h-7 px-2 text-xs"
+                      onClick={() =>
+                        openDrilldown({
+                          tab: canShowSales || canShowOtherSales ? "sales" : "accounts",
+                          locationId: selectedLocationId,
+                        })
+                      }
+                    >
+                      Open revenue detail
+                    </Button>
+                  </CardContent>
+                </Card>
               )}
             </div>
 
