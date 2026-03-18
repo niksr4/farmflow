@@ -1767,7 +1767,7 @@ export default function InventorySystem() {
         return {
           badge: "Quality Checks",
           title: "Grading and defect signals",
-          description: "Keep quality scores tied to each lot.",
+          description: "Keep quality scores tied to each record.",
           chips: chipsQuality,
           stats: qualityStats,
         }
@@ -4754,7 +4754,7 @@ export default function InventorySystem() {
         <div>
           <h3 className="text-lg font-semibold text-neutral-900">Record Inventory Movement</h3>
           <p className="text-xs text-neutral-500">
-            Keep estate lots traceable from harvest through storage.
+            Keep estate stock movements clear from intake through storage.
           </p>
         </div>
         <Button variant="ghost" size="sm" onClick={() => setIsMovementDrawerOpen(false)}>
@@ -4929,7 +4929,7 @@ export default function InventorySystem() {
                       <Info className="h-3 w-3" />
                     </button>
                   </TooltipTrigger>
-                  <TooltipContent>Enter the exact kg or unit amount for the lot.</TooltipContent>
+                  <TooltipContent>Enter the exact kg or unit amount for this movement.</TooltipContent>
                 </Tooltip>
               </TooltipProvider>
             </div>
@@ -5011,7 +5011,7 @@ export default function InventorySystem() {
                     <Info className="h-3 w-3" />
                   </button>
                 </TooltipTrigger>
-                <TooltipContent>Use notes for lot IDs, processing stage, or buyer references.</TooltipContent>
+                <TooltipContent>Use notes for processing stage, buyer references, or extra context.</TooltipContent>
               </Tooltip>
             </TooltipProvider>
           </div>
@@ -7633,7 +7633,7 @@ export default function InventorySystem() {
                             <Info className="h-3 w-3" />
                           </button>
                         </TooltipTrigger>
-                        <TooltipContent>Capture lot IDs, buyer refs, or processing notes.</TooltipContent>
+                        <TooltipContent>Capture buyer refs, processing notes, or extra context.</TooltipContent>
                       </Tooltip>
                     </TooltipProvider>
                   </div>

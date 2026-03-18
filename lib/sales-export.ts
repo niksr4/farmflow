@@ -111,7 +111,6 @@ export const buildSalesCsv = (recordsInput: SalesExportRecord[], bagWeightKg: nu
   const detailHeaders = [
     "Date",
     "Batch Reference",
-    "Lot ID",
     "Estate",
     "Coffee Type",
     "Bags Sold",
@@ -127,7 +126,6 @@ export const buildSalesCsv = (recordsInput: SalesExportRecord[], bagWeightKg: nu
   const detailRows = records.map((record) => [
     format(new Date(record.sale_date), "yyyy-MM-dd"),
     record.batch_no || "",
-    record.lot_id || "",
     resolveSalesEstateDisplay(record),
     record.coffee_type || "",
     toNumber(record.bags_sold).toString(),

@@ -15,7 +15,6 @@ import { format } from "date-fns"
 import { cn } from "@/lib/utils"
 import { useToast } from "@/hooks/use-toast"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { getCurrentFiscalYear, getAvailableFiscalYears, getFiscalYearDateRange, type FiscalYear } from "@/lib/fiscal-year-utils"
 import { DEFAULT_COFFEE_VARIETIES } from "@/lib/crop-config"
 import { useAuth } from "@/hooks/use-auth"
 import { useTenantSettings } from "@/hooks/use-tenant-settings"
@@ -131,8 +130,6 @@ export default function SalesTab({
 }: SalesTabProps) {
   const { user } = useAuth()
   const { settings } = useTenantSettings()
-  const [selectedFiscalYear, setSelectedFiscalYear] = useState<FiscalYear>(getCurrentFiscalYear())
-  const availableFiscalYears = getAvailableFiscalYears()
   const bagWeightKg = Number(settings.bagWeightKg) || 50
   const canDelete = user?.role === "admin" || user?.role === "owner" || user?.role === "user"
   
@@ -141,7 +138,6 @@ export default function SalesTab({
   const [batchNo, setBatchNo] = useState<string>("")
   const [selectedLocationId, setSelectedLocationId] = useState<string>("")
   const [salesFilterLocationId, setSalesFilterLocationId] = useState<string>(LOCATION_ALL)
-  const [lotId, setLotId] = useState<string>("")
   const [coffeeType, setCoffeeType] = useState<string>("Arabica")
   const [bagType, setBagType] = useState<string>("Dry Parchment")
   const [kgsSold, setKgsSold] = useState<string>("")
@@ -150,7 +146,6 @@ export default function SalesTab({
   const [bankAccount, setBankAccount] = useState<string>("")
   const [notes, setNotes] = useState<string>("")
   const [buyerSuggestions, setBuyerSuggestions] = useState<string[]>([])
-  const selectedFiscalRange = useMemo(() => getFiscalYearDateRange(selectedFiscalYear), [selectedFiscalYear])
   
   const kgsSoldValue = Number(kgsSold) || 0
   const pricePerBagValue = Number(pricePerBag) || 0
@@ -302,10 +297,7 @@ export default function SalesTab({
       setIsLoading(true)
     }
     try {
-      const { startDate, endDate } = getFiscalYearDateRange(selectedFiscalYear)
       const params = new URLSearchParams({
-        startDate,
-        endDate,
         limit: salesPageSize.toString(),
         offset: String(pageIndex * salesPageSize),
       })
@@ -340,7 +332,7 @@ export default function SalesTab({
         setIsLoading(false)
       }
     }
-  }, [coffeeSalesEnabled, salesFilterLocationId, salesPageSize, selectedFiscalYear])
+  }, [coffeeSalesEnabled, salesFilterLocationId, salesPageSize])
 
   const fetchDispatchSummary = useCallback(async () => {
     if (!coffeeSalesEnabled) {
@@ -351,8 +343,6 @@ export default function SalesTab({
     try {
       const params = new URLSearchParams({
         summaryOnly: "true",
-        startDate: selectedFiscalRange.startDate,
-        endDate: selectedFiscalRange.endDate,
       })
       const response = await fetch(`/api/dispatch?${params.toString()}`, { cache: "no-store" })
       const data = await response.json()
@@ -370,7 +360,7 @@ export default function SalesTab({
       setDispatchSummary([])
       setDispatchSummaryScope("all")
     }
-  }, [coffeeSalesEnabled, selectedFiscalRange.endDate, selectedFiscalRange.startDate])
+  }, [coffeeSalesEnabled])
 
   const fetchSalesSummary = useCallback(async () => {
     if (!coffeeSalesEnabled) {
@@ -381,8 +371,6 @@ export default function SalesTab({
     try {
       const params = new URLSearchParams({
         summaryOnly: "true",
-        startDate: selectedFiscalRange.startDate,
-        endDate: selectedFiscalRange.endDate,
       })
       const response = await fetch(`/api/sales?${params.toString()}`, { cache: "no-store" })
       const data = await response.json()
@@ -399,7 +387,7 @@ export default function SalesTab({
       setSalesSummary([])
       setSalesSummaryScope("all")
     }
-  }, [coffeeSalesEnabled, selectedFiscalRange.endDate, selectedFiscalRange.startDate])
+  }, [coffeeSalesEnabled])
 
   const fetchOverviewDispatchSummary = useCallback(async () => {
     if (!coffeeSalesEnabled) {
@@ -407,10 +395,7 @@ export default function SalesTab({
       return
     }
     try {
-      const { startDate, endDate } = getFiscalYearDateRange(selectedFiscalYear)
       const params = new URLSearchParams({
-        startDate,
-        endDate,
         summaryOnly: "true",
       })
       const response = await fetch(`/api/dispatch?${params.toString()}`, { cache: "no-store" })
@@ -425,7 +410,7 @@ export default function SalesTab({
       console.error("Error fetching dispatch summary:", error)
       setOverviewDispatchSummary([])
     }
-  }, [coffeeSalesEnabled, selectedFiscalYear])
+  }, [coffeeSalesEnabled])
 
   const fetchOverviewSalesSummary = useCallback(async () => {
     if (!coffeeSalesEnabled) {
@@ -433,10 +418,7 @@ export default function SalesTab({
       return
     }
     try {
-      const { startDate, endDate } = getFiscalYearDateRange(selectedFiscalYear)
       const params = new URLSearchParams({
-        startDate,
-        endDate,
         summaryOnly: "true",
       })
       const response = await fetch(`/api/sales?${params.toString()}`, { cache: "no-store" })
@@ -451,7 +433,7 @@ export default function SalesTab({
       console.error("Error fetching sales overview:", error)
       setOverviewSalesSummary([])
     }
-  }, [coffeeSalesEnabled, selectedFiscalYear])
+  }, [coffeeSalesEnabled])
 
   useEffect(() => {
     loadLocations()
@@ -465,10 +447,7 @@ export default function SalesTab({
     }
 
     let ignore = false
-    const { startDate, endDate } = getFiscalYearDateRange(selectedFiscalYear)
     const params = new URLSearchParams({
-      startDate,
-      endDate,
       all: "true",
     })
     if (salesFilterLocationId && salesFilterLocationId !== LOCATION_ALL) {
@@ -499,7 +478,7 @@ export default function SalesTab({
     return () => {
       ignore = true
     }
-  }, [otherSalesEnabled, salesFilterLocationId, selectedFiscalYear])
+  }, [otherSalesEnabled, salesFilterLocationId])
 
   useEffect(() => {
     fetchSalesRecords(0, false)
@@ -766,7 +745,7 @@ export default function SalesTab({
           id: editingId,
           sale_date: format(date, "yyyy-MM-dd"),
           batch_no: batchNo || null,
-          lot_id: lotId || null,
+          lot_id: null,
           locationId: selectedLocationId,
           estate: locationLabel || null,
           coffee_type: coffeeType,
@@ -818,7 +797,6 @@ export default function SalesTab({
           revenue: calculatedRevenue,
           buyer_name: buyerName || null,
           location_id: selectedLocationId,
-          fiscal_year: selectedFiscalYear.label,
         })
         if (buyerName.trim()) {
           setBuyerSuggestions((prev) => Array.from(new Set([buyerName.trim(), ...prev])))
@@ -863,7 +841,6 @@ export default function SalesTab({
 
   const resetForm = () => {
     setBatchNo("")
-    setLotId("")
     setCoffeeType("Arabica")
     setBagType("Dry Parchment")
     setKgsSold("")
@@ -878,7 +855,6 @@ export default function SalesTab({
     setEditingRecord(record)
     setDate(new Date(record.sale_date))
     setBatchNo(record.batch_no || "")
-    setLotId(record.lot_id || "")
     const resolvedLocationId =
       record.location_id || resolveLocationIdFromLabel(record.location_name || record.location_code || record.estate)
     if (resolvedLocationId) {
@@ -930,10 +906,7 @@ export default function SalesTab({
 
   const exportToCSV = () => {
     const runExport = async () => {
-      const { startDate, endDate } = getFiscalYearDateRange(selectedFiscalYear)
       const params = new URLSearchParams({
-        startDate,
-        endDate,
         all: "true",
       })
       if (salesFilterLocationId && salesFilterLocationId !== LOCATION_ALL) {
@@ -955,11 +928,10 @@ export default function SalesTab({
       const url = URL.createObjectURL(blob)
       const a = document.createElement("a")
       a.href = url
-      a.download = `sales_records_${selectedFiscalYear.label.replace("/", "-")}.csv`
+      a.download = "sales_records.csv"
       a.click()
       URL.revokeObjectURL(url)
       posthog.capture("sales_csv_exported", {
-        fiscal_year: selectedFiscalYear.label,
         record_count: records.length,
         location_filter: salesFilterLocationId !== LOCATION_ALL ? salesFilterLocationId : null,
       })
@@ -1066,7 +1038,7 @@ export default function SalesTab({
     return () => window.removeEventListener("keydown", onKeyDown)
   }, [])
 
-  const overviewScopeLabel = "all locations in the selected fiscal year"
+  const overviewScopeLabel = "all locations"
   const selectedSalesKgs = selectedSalesRecord ? resolveSalesRecordKgs(selectedSalesRecord, bagWeightKg) : 0
   const selectedSalesBags = Number(selectedSalesRecord?.bags_sold) || 0
   const selectedSalesPricePerBag = Number(selectedSalesRecord?.price_per_bag) || 0
@@ -1078,34 +1050,10 @@ export default function SalesTab({
 
   return (
     <div className="flex flex-col gap-8">
-      {/* Fiscal Year Selector */}
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h2 className="text-xl font-semibold text-foreground">Sales</h2>
           <p className="text-sm text-muted-foreground">Track coffee sales and other estate revenue from one workspace.</p>
-        </div>
-        <div className="flex items-center gap-2">
-          <Label htmlFor="fiscal-year" className="text-xs uppercase tracking-[0.2em] text-muted-foreground">
-            Fiscal Year:
-          </Label>
-          <Select
-            value={selectedFiscalYear.label}
-            onValueChange={(value) => {
-              const fy = availableFiscalYears.find((y) => y.label === value)
-              if (fy) setSelectedFiscalYear(fy)
-            }}
-          >
-            <SelectTrigger className="w-full sm:w-[140px]">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {availableFiscalYears.map((fy) => (
-                <SelectItem key={fy.label} value={fy.label}>
-                  FY {fy.label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
         </div>
       </div>
 
@@ -1113,8 +1061,7 @@ export default function SalesTab({
         <CardHeader className="pb-3">
           <CardTitle className="text-xs uppercase tracking-[0.2em] text-muted-foreground">Revenue Dashboard</CardTitle>
           <CardDescription>
-            Fiscal year {selectedFiscalYear.label}
-            {salesFilterLocationId !== LOCATION_ALL ? " with estate filter applied." : " across all estates."}
+            {salesFilterLocationId !== LOCATION_ALL ? "Estate filter applied." : "Across all estates."}
           </CardDescription>
         </CardHeader>
         <CardContent className="grid gap-4 lg:grid-cols-[1.6fr_1fr]">
@@ -1178,13 +1125,13 @@ export default function SalesTab({
             Guardrail before save: this checks one strict slot only (coffee type + bag type), not estate totals.
           </CardDescription>
           <p className="text-xs text-muted-foreground">
-            Selection: {selectionScopeLabel} · {coffeeType} · {bagType} · {selectedFiscalYear.label}
+            Selection: {selectionScopeLabel} · {coffeeType} · {bagType}
           </p>
           <p className="text-xs text-muted-foreground">
             Available for this selection is confirmed received stock for this exact slot. Unconfirmed dispatch is not sellable.
           </p>
           <p className="text-xs text-muted-foreground">
-            Note: validation uses confirmed received KGs in the selected fiscal year scope to match the availability cards below.
+            Note: validation uses confirmed received KGs in this scope to match the availability cards below.
           </p>
           {isLegacyPooledAvailability && (
             <p className="text-xs font-medium text-amber-700">
@@ -1273,7 +1220,7 @@ export default function SalesTab({
             Inventory Available for Sale
           </CardTitle>
           <CardDescription>
-            Scope: {overviewScopeLabel}. Based on dispatch received KGs (falls back to nominal bags x bag weight only when KGs are missing).
+            Scope: {overviewScopeLabel}. Based on dispatch received KGs only.
           </CardDescription>
         </CardHeader>
         <CardContent className="grid grid-cols-1 lg:grid-cols-3 gap-4">
@@ -1402,7 +1349,7 @@ export default function SalesTab({
                 <div className="text-lg font-semibold">{formatCurrency(pricePerBagByType.robustaCherry)}</div>
               </div>
             </div>
-            <div className="text-xs text-muted-foreground mt-2">Weighted by bags sold in the selected fiscal year.</div>
+            <div className="text-xs text-muted-foreground mt-2">Weighted by bags sold across recorded sales.</div>
           </CardContent>
         </Card>
       </div>
@@ -1452,20 +1399,6 @@ export default function SalesTab({
                 placeholder="e.g., MAIN-A1, BLOCK-07"
                 value={batchNo}
                 onChange={(e) => setBatchNo(e.target.value)}
-              />
-            </div>
-
-            {/* Lot ID */}
-            <div className="space-y-2">
-              <FieldLabel
-                label="Lot ID"
-                tooltip="Match the lot/batch ID from processing and dispatch records."
-              />
-              <Input
-                type="text"
-                placeholder="e.g., LOT-2026-001"
-                value={lotId}
-                onChange={(e) => setLotId(e.target.value)}
               />
             </div>
 
@@ -1549,7 +1482,7 @@ export default function SalesTab({
                 </p>
               ) : (
                 <p className="text-xs text-muted-foreground">
-                  Available in fiscal year: {selectionAvailability.availableKgs.toFixed(2)} KGs ({selectionAvailability.availableBags.toFixed(2)} bags)
+                  Available now: {selectionAvailability.availableKgs.toFixed(2)} KGs ({selectionAvailability.availableBags.toFixed(2)} bags)
                 </p>
               )}
               {editAllowance.matchesSelection && (
@@ -1751,7 +1684,7 @@ export default function SalesTab({
                 <p>Location: {getLocationLabel(selectedSalesRecord)}</p>
                 <p>Coffee: {selectedSalesRecord.coffee_type || "-"}</p>
                 <p>Type: {formatBagTypeLabel(selectedSalesRecord.bag_type)}</p>
-                <p>Lot: {selectedSalesRecord.lot_id || "-"}</p>
+                <p>Batch: {selectedSalesRecord.batch_no || "-"}</p>
               </div>
               <div className="mt-1 grid gap-2 text-xs text-muted-foreground sm:grid-cols-2 lg:grid-cols-4">
                 <p>Bags: {formatNumber(selectedSalesBags)}</p>
@@ -1795,8 +1728,8 @@ export default function SalesTab({
                       </div>
                       <div className="mt-2 grid grid-cols-2 gap-2 text-xs">
                         <div className="rounded-md border border-black/5 bg-white px-2 py-1.5">
-                          <p className="text-[11px] uppercase tracking-wide text-muted-foreground">Batch / Lot</p>
-                          <p className="font-medium text-foreground">{record.batch_no || "-"} / {record.lot_id || "-"}</p>
+                          <p className="text-[11px] uppercase tracking-wide text-muted-foreground">Batch</p>
+                          <p className="font-medium text-foreground">{record.batch_no || "-"}</p>
                         </div>
                         <div className="rounded-md border border-black/5 bg-white px-2 py-1.5">
                           <p className="text-[11px] uppercase tracking-wide text-muted-foreground">Location</p>
@@ -1867,7 +1800,6 @@ export default function SalesTab({
                     <TableRow>
                       <TableHead className="sticky top-0 bg-muted/70 backdrop-blur">Date</TableHead>
                       <TableHead className="sticky top-0 bg-muted/70 backdrop-blur">Batch Reference</TableHead>
-                      <TableHead className="sticky top-0 bg-muted/70 backdrop-blur">Lot ID</TableHead>
                       <TableHead className="sticky top-0 bg-muted/70 backdrop-blur">Location</TableHead>
                       <TableHead className="sticky top-0 bg-muted/70 backdrop-blur">Coffee Type</TableHead>
                       <TableHead className="sticky top-0 bg-muted/70 backdrop-blur">Bag Type</TableHead>
@@ -1893,7 +1825,6 @@ export default function SalesTab({
                       >
                         <TableCell>{formatDateOnly(record.sale_date)}</TableCell>
                         <TableCell>{record.batch_no || "-"}</TableCell>
-                        <TableCell>{record.lot_id || "-"}</TableCell>
                         <TableCell>{getLocationLabel(record)}</TableCell>
                         <TableCell>{record.coffee_type || "-"}</TableCell>
                         <TableCell>{formatBagTypeLabel(record.bag_type)}</TableCell>
@@ -1974,9 +1905,6 @@ export default function SalesTab({
       ) : (
         <OtherSalesTab
           showOverviewCard={false}
-          hideFiscalYearControl
-          selectedFiscalYear={selectedFiscalYear}
-          onSelectedFiscalYearChange={setSelectedFiscalYear}
           locationFilterId={salesFilterLocationId}
           onLocationFilterChange={setSalesFilterLocationId}
         />

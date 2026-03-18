@@ -14,7 +14,6 @@ import { Alert, AlertDescription } from "@/components/ui/alert"
 import { CalendarIcon, Download, Loader2, Save, Leaf, Edit, Trash2 } from "lucide-react"
 import { format } from "date-fns"
 import { cn } from "@/lib/utils"
-import { getCurrentFiscalYear, getAvailableFiscalYears, type FiscalYear } from "@/lib/fiscal-year-utils"
 import { formatDateOnly } from "@/lib/date-utils"
 import { formatNumber } from "@/lib/format"
 import { useAuth } from "@/hooks/use-auth"
@@ -48,8 +47,6 @@ const UNASSIGNED_LABEL = "Unassigned (legacy)"
 
 export function PepperTab() {
   const { user } = useAuth()
-  const [selectedFiscalYear, setSelectedFiscalYear] = useState<FiscalYear>(getCurrentFiscalYear())
-  const availableFiscalYears = getAvailableFiscalYears()
 
   const [locations, setLocations] = useState<LocationOption[]>([])
   const [selectedLocationId, setSelectedLocationId] = useState(LOCATION_ALL)
@@ -100,9 +97,7 @@ export function PepperTab() {
         selectedLocationId === LOCATION_ALL
           ? ""
           : `&locationId=${encodeURIComponent(selectedLocationId)}`
-      const response = await fetch(
-        `/api/pepper-records?fiscalYearStart=${selectedFiscalYear.startDate}&fiscalYearEnd=${selectedFiscalYear.endDate}${locationParam}`,
-      )
+      const response = await fetch(`/api/pepper-records?${locationParam.replace(/^&/, "")}`)
       const data = await response.json()
 
       if (data.success) {
@@ -113,7 +108,7 @@ export function PepperTab() {
     } finally {
       setLoading(false)
     }
-  }, [selectedFiscalYear.endDate, selectedFiscalYear.startDate, selectedLocationId])
+  }, [selectedLocationId])
 
   // Fetch record for selected date
   const fetchRecordForDate = useCallback(async (date: Date) => {
@@ -391,33 +386,6 @@ export function PepperTab() {
 
   return (
     <div className="space-y-6">
-      <Card>
-        <CardHeader>
-          <CardTitle>Fiscal Year</CardTitle>
-          <CardDescription>Select the accounting year to view (April 1 - March 31)</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <Select
-            value={selectedFiscalYear.label}
-            onValueChange={(value) => {
-              const fy = availableFiscalYears.find((f) => f.label === value)
-              if (fy) setSelectedFiscalYear(fy)
-            }}
-          >
-            <SelectTrigger className="w-full sm:w-[200px]">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {availableFiscalYears.map((fy) => (
-                <SelectItem key={fy.label} value={fy.label}>
-                  {fy.label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </CardContent>
-      </Card>
-
       {/* Location and Date Selection */}
       <Card>
         <CardHeader>

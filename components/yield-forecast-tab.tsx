@@ -7,7 +7,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Button } from "@/components/ui/button"
 import { ChartContainer, ChartTooltip, ChartTooltipContent, type ChartConfig } from "@/components/ui/chart"
-import { getAvailableFiscalYears, getCurrentFiscalYear, type FiscalYear } from "@/lib/fiscal-year-utils"
+import { getCurrentFiscalYear } from "@/lib/fiscal-year-utils"
 import { formatNumber } from "@/lib/format"
 
 type CoffeeScope = "all" | "arabica" | "robusta"
@@ -82,17 +82,13 @@ const TREND_CHART_CONFIG = {
 } satisfies ChartConfig
 
 export default function YieldForecastTab() {
-  const fiscalYears = useMemo(() => getAvailableFiscalYears().filter((year) => year.label !== "All time"), [])
   const currentFiscalYear = useMemo(() => getCurrentFiscalYear(), [])
-  const [selectedFiscalYearLabel, setSelectedFiscalYearLabel] = useState(currentFiscalYear.label)
   const [coffeeScope, setCoffeeScope] = useState<CoffeeScope>("all")
   const [forecast, setForecast] = useState<YieldForecastResponse | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  const selectedFiscalYear = useMemo<FiscalYear>(() => {
-    return fiscalYears.find((year) => year.label === selectedFiscalYearLabel) || fiscalYears[0] || currentFiscalYear
-  }, [currentFiscalYear, fiscalYears, selectedFiscalYearLabel])
+  const selectedFiscalYear = currentFiscalYear
 
   const loadForecast = useCallback(async () => {
     if (!selectedFiscalYear) return
@@ -139,22 +135,7 @@ export default function YieldForecastTab() {
               Seasonal dry output forecast using rainfall signals and processing trend.
             </CardDescription>
           </div>
-          <div className="grid gap-3 md:grid-cols-3">
-            <div className="space-y-2">
-              <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">Fiscal Year</p>
-              <Select value={selectedFiscalYearLabel} onValueChange={setSelectedFiscalYearLabel}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Select fiscal year" />
-                </SelectTrigger>
-                <SelectContent>
-                  {fiscalYears.map((year) => (
-                    <SelectItem key={year.label} value={year.label}>
-                      {year.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
+          <div className="grid gap-3 md:grid-cols-2">
             <div className="space-y-2">
               <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">Coffee Scope</p>
               <Select value={coffeeScope} onValueChange={(value) => setCoffeeScope(value as CoffeeScope)}>

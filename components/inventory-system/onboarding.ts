@@ -185,7 +185,7 @@ export const buildLaunchGuidePhases = (
       id: "phase-2",
       label: "Week 2",
       title: "Daily processing rhythm",
-      detail: "Capture Arabica/Robusta outputs every day with consistent lot notes.",
+      detail: "Capture Arabica and Robusta outputs every day with consistent operating notes.",
       done: status.processing,
       actionLabel: "Open Processing",
       actionTab: "processing",

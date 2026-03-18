@@ -74,7 +74,7 @@ export function ThresholdsSection({
                 <HelpLabel
                   htmlFor="threshold-float"
                   label="Float rate increase (ratio)"
-                  help="Flags lots when float rate jumps vs last week."
+                  help="Flags records when float rate jumps vs last week."
                 />
                 <Input
                   id="threshold-float"
@@ -176,7 +176,7 @@ export function ThresholdsSection({
                 <HelpLabel
                   htmlFor="threshold-minkgs"
                   label="Minimum KGs for signal"
-                  help="Ignore tiny lots to avoid noisy alerts."
+                  help="Ignore tiny volumes to avoid noisy alerts."
                 />
                 <Input
                   id="threshold-minkgs"

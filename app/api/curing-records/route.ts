@@ -197,67 +197,78 @@ export async function POST(request: Request) {
       `,
     )
 
-    const result = await runTenantQuery(
-      sql,
-      tenantContext,
-      sql`
-        INSERT INTO curing_records (
-          tenant_id,
-          location_id,
-          lot_id,
-          coffee_type,
-          process_type,
-          process_date,
-          intake_kg,
-          intake_bags,
-          moisture_start_pct,
-          moisture_end_pct,
-          drying_days,
-          output_kg,
-          output_bags,
-          loss_kg,
-          storage_bin,
-          recorded_by,
-          notes
+    const result = existing?.length
+      ? await runTenantQuery(
+          sql,
+          tenantContext,
+          sql`
+            UPDATE curing_records
+            SET
+              lot_id = ${record.lot_id},
+              coffee_type = ${record.coffee_type},
+              process_type = ${record.process_type},
+              intake_kg = ${record.intake_kg},
+              intake_bags = ${record.intake_bags},
+              moisture_start_pct = ${record.moisture_start_pct},
+              moisture_end_pct = ${record.moisture_end_pct},
+              drying_days = ${record.drying_days},
+              output_kg = ${record.output_kg},
+              output_bags = ${record.output_bags},
+              loss_kg = ${record.loss_kg},
+              storage_bin = ${record.storage_bin},
+              recorded_by = ${record.recorded_by},
+              notes = ${record.notes},
+              updated_at = CURRENT_TIMESTAMP
+            WHERE tenant_id = ${tenantContext.tenantId}
+              AND id = ${existing[0].id}
+            RETURNING *
+          `,
         )
-        VALUES (
-          ${tenantContext.tenantId},
-          ${locationId},
-          ${record.lot_id},
-          ${record.coffee_type},
-          ${record.process_type},
-          ${record.process_date}::date,
-          ${record.intake_kg},
-          ${record.intake_bags},
-          ${record.moisture_start_pct},
-          ${record.moisture_end_pct},
-          ${record.drying_days},
-          ${record.output_kg},
-          ${record.output_bags},
-          ${record.loss_kg},
-          ${record.storage_bin},
-          ${record.recorded_by},
-          ${record.notes}
+      : await runTenantQuery(
+          sql,
+          tenantContext,
+          sql`
+            INSERT INTO curing_records (
+              tenant_id,
+              location_id,
+              lot_id,
+              coffee_type,
+              process_type,
+              process_date,
+              intake_kg,
+              intake_bags,
+              moisture_start_pct,
+              moisture_end_pct,
+              drying_days,
+              output_kg,
+              output_bags,
+              loss_kg,
+              storage_bin,
+              recorded_by,
+              notes
+            )
+            VALUES (
+              ${tenantContext.tenantId},
+              ${locationId},
+              ${record.lot_id},
+              ${record.coffee_type},
+              ${record.process_type},
+              ${record.process_date}::date,
+              ${record.intake_kg},
+              ${record.intake_bags},
+              ${record.moisture_start_pct},
+              ${record.moisture_end_pct},
+              ${record.drying_days},
+              ${record.output_kg},
+              ${record.output_bags},
+              ${record.loss_kg},
+              ${record.storage_bin},
+              ${record.recorded_by},
+              ${record.notes}
+            )
+            RETURNING *
+          `,
         )
-        ON CONFLICT (tenant_id, location_id, process_date, lot_id)
-        DO UPDATE SET
-          coffee_type = EXCLUDED.coffee_type,
-          process_type = EXCLUDED.process_type,
-          intake_kg = EXCLUDED.intake_kg,
-          intake_bags = EXCLUDED.intake_bags,
-          moisture_start_pct = EXCLUDED.moisture_start_pct,
-          moisture_end_pct = EXCLUDED.moisture_end_pct,
-          drying_days = EXCLUDED.drying_days,
-          output_kg = EXCLUDED.output_kg,
-          output_bags = EXCLUDED.output_bags,
-          loss_kg = EXCLUDED.loss_kg,
-          storage_bin = EXCLUDED.storage_bin,
-          recorded_by = EXCLUDED.recorded_by,
-          notes = EXCLUDED.notes,
-          updated_at = CURRENT_TIMESTAMP
-        RETURNING *
-      `,
-    )
 
     await logAuditEvent(sql, sessionUser, {
       action: existing?.length ? "update" : "create",

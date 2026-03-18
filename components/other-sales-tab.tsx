@@ -12,7 +12,6 @@ import { useToast } from "@/hooks/use-toast"
 import { useAuth } from "@/hooks/use-auth"
 import { formatCurrency, formatNumber } from "@/lib/format"
 import { formatDateOnly } from "@/lib/date-utils"
-import { getAvailableFiscalYears, getCurrentFiscalYear, getFiscalYearDateRange, type FiscalYear } from "@/lib/fiscal-year-utils"
 import { canAcceptNonNegative, isBlockedNumericKey } from "@/lib/number-input"
 import { Pencil, Save, Trash2 } from "lucide-react"
 
@@ -81,26 +80,18 @@ const newDefaultForm = () => ({
 
 type OtherSalesTabProps = {
   showOverviewCard?: boolean
-  hideFiscalYearControl?: boolean
-  selectedFiscalYear?: FiscalYear
-  onSelectedFiscalYearChange?: (value: FiscalYear) => void
   locationFilterId?: string
   onLocationFilterChange?: (value: string) => void
 }
 
 export default function OtherSalesTab({
   showOverviewCard = true,
-  hideFiscalYearControl = false,
-  selectedFiscalYear: controlledFiscalYear,
-  onSelectedFiscalYearChange,
   locationFilterId,
   onLocationFilterChange,
 }: OtherSalesTabProps) {
   const { toast } = useToast()
   const { user } = useAuth()
   const canDelete = user?.role === "admin" || user?.role === "owner" || user?.role === "user"
-  const [internalSelectedFiscalYear, setInternalSelectedFiscalYear] = useState<FiscalYear>(getCurrentFiscalYear())
-  const availableFiscalYears = getAvailableFiscalYears()
 
   const [locations, setLocations] = useState<LocationOption[]>([])
   const [records, setRecords] = useState<OtherSalesRecord[]>([])
@@ -112,12 +103,8 @@ export default function OtherSalesTab({
   const [form, setForm] = useState(newDefaultForm())
   const [internalLocationFilter, setInternalLocationFilter] = useState<string>("all")
 
-  const selectedFiscalYear = controlledFiscalYear || internalSelectedFiscalYear
-  const setSelectedFiscalYear = onSelectedFiscalYearChange || setInternalSelectedFiscalYear
   const locationFilter = locationFilterId ?? internalLocationFilter
   const setLocationFilter = onLocationFilterChange || setInternalLocationFilter
-
-  const selectedFiscalRange = useMemo(() => getFiscalYearDateRange(selectedFiscalYear), [selectedFiscalYear])
 
   const blockInvalidNumberKey = (event: ReactKeyboardEvent<HTMLInputElement>) => {
     if (isBlockedNumericKey(event.key)) {
@@ -151,8 +138,6 @@ export default function OtherSalesTab({
     setIsLoading(true)
     try {
       const params = new URLSearchParams({
-        startDate: selectedFiscalRange.startDate,
-        endDate: selectedFiscalRange.endDate,
         all: "true",
       })
       if (locationFilter !== "all") {
@@ -207,7 +192,7 @@ export default function OtherSalesTab({
     } finally {
       setIsLoading(false)
     }
-  }, [locationFilter, selectedFiscalRange.endDate, selectedFiscalRange.startDate, toast])
+  }, [locationFilter, toast])
 
   useEffect(() => {
     loadLocations()
@@ -569,31 +554,9 @@ export default function OtherSalesTab({
         <CardHeader className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <CardTitle>Other Sales Records</CardTitle>
-            <CardDescription>
-              {isLoading ? "Loading..." : `${records.length} record(s) in ${selectedFiscalYear.label}`}
-            </CardDescription>
+            <CardDescription>{isLoading ? "Loading..." : `${records.length} record(s)`}</CardDescription>
           </div>
           <div className="flex items-center gap-2">
-            {!hideFiscalYearControl ? (
-              <Select
-                value={selectedFiscalYear.label}
-                onValueChange={(value) => {
-                  const nextYear = availableFiscalYears.find((fy) => fy.label === value) || getCurrentFiscalYear()
-                  setSelectedFiscalYear(nextYear)
-                }}
-              >
-                <SelectTrigger className="w-[140px]">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {availableFiscalYears.map((fy) => (
-                    <SelectItem key={fy.label} value={fy.label}>
-                      {fy.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            ) : null}
             <Select value={locationFilter} onValueChange={setLocationFilter}>
               <SelectTrigger className="w-[180px]">
                 <SelectValue placeholder="Filter estate" />
@@ -644,7 +607,7 @@ export default function OtherSalesTab({
                 {records.length === 0 ? (
                   <TableRow>
                     <TableCell colSpan={12} className="text-center text-sm text-muted-foreground">
-                      No records yet for this period.
+                      No records yet.
                     </TableCell>
                   </TableRow>
                 ) : (

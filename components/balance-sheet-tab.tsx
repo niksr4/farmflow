@@ -3,12 +3,11 @@
 import { useCallback, useEffect, useMemo, useState } from "react"
 import { ArrowDownCircle, ArrowUpCircle, CircleDashed, RefreshCw, TrendingUp, Wallet } from "lucide-react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Skeleton } from "@/components/ui/skeleton"
-import { getAvailableFiscalYears, getCurrentFiscalYear, getFiscalYearDateRange, type FiscalYear } from "@/lib/fiscal-year-utils"
+import { getCurrentFiscalYear, getFiscalYearDateRange } from "@/lib/fiscal-year-utils"
 import { formatCurrency } from "@/lib/format"
 import { cn } from "@/lib/utils"
 import { useToast } from "@/hooks/use-toast"
@@ -65,10 +64,9 @@ const getDirectionBadge = (direction: ModuleLine["direction"]) => {
 
 export default function BalanceSheetTab() {
   const { toast } = useToast()
-  const [selectedFiscalYear, setSelectedFiscalYear] = useState<FiscalYear>(getCurrentFiscalYear())
+  const selectedFiscalYear = useMemo(() => getCurrentFiscalYear(), [])
   const [summary, setSummary] = useState<SummaryPayload>(emptySummary)
   const [isLoading, setIsLoading] = useState(false)
-  const availableFiscalYears = useMemo(() => getAvailableFiscalYears(), [])
   const selectedRange = useMemo(() => getFiscalYearDateRange(selectedFiscalYear), [selectedFiscalYear])
 
   const loadSummary = useCallback(async () => {
@@ -133,27 +131,6 @@ export default function BalanceSheetTab() {
             </CardDescription>
           </div>
           <div className="flex items-center gap-2">
-            <div className="flex items-center gap-2">
-              <span className="text-xs uppercase tracking-[0.18em] text-muted-foreground">Fiscal year</span>
-              <Select
-                value={selectedFiscalYear.label}
-                onValueChange={(label) => {
-                  const matched = availableFiscalYears.find((fy) => fy.label === label)
-                  if (matched) setSelectedFiscalYear(matched)
-                }}
-              >
-                <SelectTrigger className="w-36">
-                  <SelectValue placeholder={selectedFiscalYear.label} />
-                </SelectTrigger>
-                <SelectContent>
-                  {availableFiscalYears.map((fy) => (
-                    <SelectItem key={fy.label} value={fy.label}>
-                      {fy.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
             <Button variant="outline" size="sm" onClick={loadSummary} disabled={isLoading}>
               <RefreshCw className={cn("mr-2 h-3.5 w-3.5", isLoading && "animate-spin")} />
               Refresh
@@ -173,7 +150,7 @@ export default function BalanceSheetTab() {
                 ) : (
                   <p className="mt-2 text-2xl font-semibold text-emerald-800">{formatCurrency(summary.totals.inflowBooked, 0)}</p>
                 )}
-                <p className="mt-1 text-xs text-emerald-700/80">Sales revenue in selected fiscal year.</p>
+                <p className="mt-1 text-xs text-emerald-700/80">Sales revenue in the current book year.</p>
               </CardContent>
             </Card>
             <Card className="border-rose-100 bg-rose-50/60">
@@ -270,7 +247,7 @@ export default function BalanceSheetTab() {
       <Card className="rounded-2xl border border-black/5 bg-white shadow-sm">
         <CardHeader>
           <CardTitle className="text-lg">Money Ledger Breakdown</CardTitle>
-          <CardDescription>Cross-tab contribution line by line for the selected fiscal year.</CardDescription>
+          <CardDescription>Cross-tab contribution line by line for the current book year.</CardDescription>
         </CardHeader>
         <CardContent>
           <div className="rounded-xl border border-border/60 overflow-hidden">

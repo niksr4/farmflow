@@ -17,7 +17,6 @@ import { CalendarIcon, Loader2, Save, Trash2 } from "lucide-react"
 import { format } from "date-fns"
 import { useToast } from "@/hooks/use-toast"
 import { useAuth } from "@/hooks/use-auth"
-import { getAvailableFiscalYears, getCurrentFiscalYear, type FiscalYear } from "@/lib/fiscal-year-utils"
 import { canAcceptNonNegative, isBlockedNumericKey } from "@/lib/number-input"
 import { cn } from "@/lib/utils"
 
@@ -51,13 +50,9 @@ export default function QualityGradingTab() {
   const { toast } = useToast()
   const isAdmin = user?.role === "admin" || user?.role === "owner" || user?.role === "user"
 
-  const [selectedFiscalYear, setSelectedFiscalYear] = useState<FiscalYear>(getCurrentFiscalYear())
-  const availableFiscalYears = getAvailableFiscalYears()
-
   const [locations, setLocations] = useState<LocationOption[]>([])
   const [selectedLocationId, setSelectedLocationId] = useState("")
   const [selectedDate, setSelectedDate] = useState<Date>(new Date())
-  const [lotId, setLotId] = useState("")
   const [coffeeType, setCoffeeType] = useState("")
   const [processType, setProcessType] = useState("")
   const [grade, setGrade] = useState("")
@@ -124,9 +119,7 @@ export default function QualityGradingTab() {
     if (!selectedLocationId) return
     setLoading(true)
     try {
-      const response = await fetch(
-        `/api/quality-grading-records?locationId=${selectedLocationId}&fiscalYearStart=${selectedFiscalYear.startDate}&fiscalYearEnd=${selectedFiscalYear.endDate}`,
-      )
+      const response = await fetch(`/api/quality-grading-records?locationId=${selectedLocationId}`)
       const data = await response.json()
       if (data.success) {
         setRecentRecords(data.records || [])
@@ -136,19 +129,17 @@ export default function QualityGradingTab() {
     } finally {
       setLoading(false)
     }
-  }, [selectedFiscalYear.endDate, selectedFiscalYear.startDate, selectedLocationId])
+  }, [selectedLocationId])
 
   const fetchRecordForDate = useCallback(
     async (date: Date) => {
-      if (!selectedLocationId || !lotId.trim()) {
+      if (!selectedLocationId) {
         resetForm()
         return
       }
       try {
         const dateStr = format(date, "yyyy-MM-dd")
-        const response = await fetch(
-          `/api/quality-grading-records?locationId=${selectedLocationId}&date=${dateStr}&lotId=${encodeURIComponent(lotId)}`,
-        )
+        const response = await fetch(`/api/quality-grading-records?locationId=${selectedLocationId}&date=${dateStr}`)
         const data = await response.json()
         if (data.success && data.record) {
           const record = data.record as QualityRecord
@@ -173,7 +164,7 @@ export default function QualityGradingTab() {
         console.error("Error fetching quality record:", error)
       }
     },
-    [lotId, resetForm, selectedLocationId],
+    [resetForm, selectedLocationId],
   )
 
   useEffect(() => {
@@ -196,20 +187,12 @@ export default function QualityGradingTab() {
   }, [recentRecords])
 
   useEffect(() => {
-    if (!lotId.trim()) {
-      resetForm()
-      return
-    }
     fetchRecordForDate(selectedDate)
-  }, [fetchRecordForDate, lotId, resetForm, selectedDate])
+  }, [fetchRecordForDate, selectedDate])
 
   const handleSave = async () => {
     if (!selectedLocationId) {
       toast({ title: "Location required", description: "Select a location before saving.", variant: "destructive" })
-      return
-    }
-    if (!lotId.trim()) {
-      toast({ title: "Lot ID required", description: "Enter a lot/batch ID for grading." })
       return
     }
 
@@ -221,7 +204,7 @@ export default function QualityGradingTab() {
         body: JSON.stringify({
           locationId: selectedLocationId,
           grade_date: format(selectedDate, "yyyy-MM-dd"),
-          lot_id: lotId.trim(),
+          lot_id: null,
           coffee_type: coffeeType || null,
           process_type: processType || null,
           grade: grade || null,
@@ -269,7 +252,6 @@ export default function QualityGradingTab() {
   const loadRecord = (record: QualityRecord) => {
     setSelectedQualityRecord(record)
     setSelectedDate(new Date(record.grade_date))
-    setLotId(record.lot_id || "")
     setCoffeeType(record.coffee_type || "")
     setProcessType(record.process_type || "")
     setGrade(record.grade || "")
@@ -288,33 +270,6 @@ export default function QualityGradingTab() {
 
   return (
     <div className="space-y-6">
-      <Card>
-        <CardHeader>
-          <CardTitle>Fiscal Year</CardTitle>
-          <CardDescription>Select the accounting year to view (April 1 - March 31)</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <Select
-            value={selectedFiscalYear.label}
-            onValueChange={(value) => {
-              const fy = availableFiscalYears.find((f) => f.label === value)
-              if (fy) setSelectedFiscalYear(fy)
-            }}
-          >
-            <SelectTrigger className="w-full sm:w-[200px]">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {availableFiscalYears.map((fy) => (
-                <SelectItem key={fy.label} value={fy.label}>
-                  FY {fy.label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </CardContent>
-      </Card>
-
       <Card>
         <CardHeader className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
           <div>
@@ -353,13 +308,6 @@ export default function QualityGradingTab() {
                   <Calendar mode="single" selected={selectedDate} onSelect={(d) => d && setSelectedDate(d)} />
                 </PopoverContent>
               </Popover>
-            </div>
-            <div className="space-y-2">
-              <FieldLabel
-                label="Lot / Batch ID"
-                tooltip="Use the lot ID that matches processing and dispatch records."
-              />
-              <Input value={lotId} onChange={(event) => setLotId(event.target.value)} placeholder="LOT-001" />
             </div>
             <div className="space-y-2">
               <Label>Coffee Type</Label>
@@ -494,8 +442,7 @@ export default function QualityGradingTab() {
                 <div>
                   <p className="text-xs uppercase tracking-[0.2em] text-emerald-700">Quality Drill-Down</p>
                   <p className="font-medium text-foreground">
-                    {selectedQualityRecord.grade_date} · {selectedQualityRecord.lot_id || "No lot"} · Grade{" "}
-                    {selectedQualityRecord.grade || "-"}
+                    {selectedQualityRecord.grade_date} · Grade {selectedQualityRecord.grade || "-"}
                   </p>
                 </div>
                 <Button size="sm" variant="outline" className="bg-white" onClick={() => loadRecord(selectedQualityRecord)}>
@@ -529,7 +476,6 @@ export default function QualityGradingTab() {
                 <TableHeader>
                   <TableRow>
                     <TableHead>Date</TableHead>
-                    <TableHead>Lot</TableHead>
                     <TableHead>Grade</TableHead>
                     <TableHead>Moisture</TableHead>
                     <TableHead>Defects</TableHead>
@@ -547,7 +493,6 @@ export default function QualityGradingTab() {
                       onClick={() => setSelectedQualityRecord(record)}
                     >
                       <TableCell>{record.grade_date}</TableCell>
-                      <TableCell>{record.lot_id || "-"}</TableCell>
                       <TableCell>{record.grade || "-"}</TableCell>
                       <TableCell>{record.moisture_pct ?? "-"}</TableCell>
                       <TableCell>{record.defects_count ?? "-"}</TableCell>

@@ -17,7 +17,6 @@ import { CalendarIcon, Loader2, Save, Trash2 } from "lucide-react"
 import { format } from "date-fns"
 import { useToast } from "@/hooks/use-toast"
 import { useAuth } from "@/hooks/use-auth"
-import { getAvailableFiscalYears, getCurrentFiscalYear, type FiscalYear } from "@/lib/fiscal-year-utils"
 import { canAcceptNonNegative, isBlockedNumericKey } from "@/lib/number-input"
 import { cn } from "@/lib/utils"
 
@@ -52,13 +51,9 @@ export default function CuringTab() {
   const { toast } = useToast()
   const isAdmin = user?.role === "admin" || user?.role === "owner" || user?.role === "user"
 
-  const [selectedFiscalYear, setSelectedFiscalYear] = useState<FiscalYear>(getCurrentFiscalYear())
-  const availableFiscalYears = getAvailableFiscalYears()
-
   const [locations, setLocations] = useState<LocationOption[]>([])
   const [selectedLocationId, setSelectedLocationId] = useState("")
   const [selectedDate, setSelectedDate] = useState<Date>(new Date())
-  const [lotId, setLotId] = useState("")
   const [coffeeType, setCoffeeType] = useState("")
   const [processType, setProcessType] = useState("")
   const [intakeKg, setIntakeKg] = useState("")
@@ -134,9 +129,7 @@ export default function CuringTab() {
     if (!selectedLocationId) return
     setLoading(true)
     try {
-      const response = await fetch(
-        `/api/curing-records?locationId=${selectedLocationId}&fiscalYearStart=${selectedFiscalYear.startDate}&fiscalYearEnd=${selectedFiscalYear.endDate}`,
-      )
+      const response = await fetch(`/api/curing-records?locationId=${selectedLocationId}`)
       const data = await response.json()
       if (data.success) {
         setRecentRecords(data.records || [])
@@ -146,19 +139,17 @@ export default function CuringTab() {
     } finally {
       setLoading(false)
     }
-  }, [selectedFiscalYear.endDate, selectedFiscalYear.startDate, selectedLocationId])
+  }, [selectedLocationId])
 
   const fetchRecordForDate = useCallback(
     async (date: Date) => {
-      if (!selectedLocationId || !lotId.trim()) {
+      if (!selectedLocationId) {
         resetForm()
         return
       }
       try {
         const dateStr = format(date, "yyyy-MM-dd")
-        const response = await fetch(
-          `/api/curing-records?locationId=${selectedLocationId}&date=${dateStr}&lotId=${encodeURIComponent(lotId)}`,
-        )
+        const response = await fetch(`/api/curing-records?locationId=${selectedLocationId}&date=${dateStr}`)
         const data = await response.json()
         if (data.success && data.record) {
           const record = data.record as CuringRecord
@@ -182,7 +173,7 @@ export default function CuringTab() {
         console.error("Error fetching curing record:", error)
       }
     },
-    [lotId, resetForm, selectedLocationId],
+    [resetForm, selectedLocationId],
   )
 
   useEffect(() => {
@@ -205,20 +196,12 @@ export default function CuringTab() {
   }, [recentRecords])
 
   useEffect(() => {
-    if (!lotId.trim()) {
-      resetForm()
-      return
-    }
     fetchRecordForDate(selectedDate)
-  }, [fetchRecordForDate, lotId, resetForm, selectedDate])
+  }, [fetchRecordForDate, selectedDate])
 
   const handleSave = async () => {
     if (!selectedLocationId) {
       toast({ title: "Location required", description: "Select a location before saving.", variant: "destructive" })
-      return
-    }
-    if (!lotId.trim()) {
-      toast({ title: "Lot ID required", description: "Enter a lot/batch ID for curing." })
       return
     }
 
@@ -230,7 +213,7 @@ export default function CuringTab() {
         body: JSON.stringify({
           locationId: selectedLocationId,
           process_date: format(selectedDate, "yyyy-MM-dd"),
-          lot_id: lotId.trim(),
+          lot_id: null,
           coffee_type: coffeeType || null,
           process_type: processType || null,
           intake_kg: intakeKg ? Number(intakeKg) : null,
@@ -279,7 +262,6 @@ export default function CuringTab() {
   const loadRecord = (record: CuringRecord) => {
     setSelectedCuringRecord(record)
     setSelectedDate(new Date(record.process_date))
-    setLotId(record.lot_id || "")
     setCoffeeType(record.coffee_type || "")
     setProcessType(record.process_type || "")
     setIntakeKg(record.intake_kg?.toString() || "")
@@ -297,33 +279,6 @@ export default function CuringTab() {
 
   return (
     <div className="space-y-6">
-      <Card>
-        <CardHeader>
-          <CardTitle>Fiscal Year</CardTitle>
-          <CardDescription>Select the accounting year to view (April 1 - March 31)</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <Select
-            value={selectedFiscalYear.label}
-            onValueChange={(value) => {
-              const fy = availableFiscalYears.find((f) => f.label === value)
-              if (fy) setSelectedFiscalYear(fy)
-            }}
-          >
-            <SelectTrigger className="w-full sm:w-[200px]">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {availableFiscalYears.map((fy) => (
-                <SelectItem key={fy.label} value={fy.label}>
-                  FY {fy.label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </CardContent>
-      </Card>
-
       <Card>
         <CardHeader className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
           <div>
@@ -364,13 +319,6 @@ export default function CuringTab() {
               </Popover>
             </div>
             <div className="space-y-2">
-              <FieldLabel
-                label="Lot / Batch ID"
-                tooltip="Use the lot ID that matches processing and dispatch."
-              />
-              <Input value={lotId} onChange={(event) => setLotId(event.target.value)} placeholder="LOT-001" />
-            </div>
-            <div className="space-y-2">
               <Label>Coffee Type</Label>
               <Input value={coffeeType} onChange={(event) => setCoffeeType(event.target.value)} placeholder="Arabica" />
             </div>
@@ -381,7 +329,7 @@ export default function CuringTab() {
             <div className="space-y-2">
               <FieldLabel
                 label="Storage Bin"
-                tooltip="Warehouse bin or drying bay where this lot is cured."
+                tooltip="Warehouse bin or drying bay where this coffee is cured."
               />
               <Input value={storageBin} onChange={(event) => setStorageBin(event.target.value)} placeholder="Drying Bay A" />
             </div>
@@ -444,7 +392,7 @@ export default function CuringTab() {
             <div className="space-y-2">
               <FieldLabel
                 label="Drying Days"
-                tooltip="Total drying days for this lot."
+                tooltip="Total drying days for this record."
               />
               <Input
                 value={dryingDays}
@@ -520,8 +468,7 @@ export default function CuringTab() {
                 <div>
                   <p className="text-xs uppercase tracking-[0.2em] text-emerald-700">Curing Drill-Down</p>
                   <p className="font-medium text-foreground">
-                    {selectedCuringRecord.process_date} · {selectedCuringRecord.lot_id || "No lot"} ·{" "}
-                    {selectedLocation?.name || selectedLocation?.code || "Location"}
+                    {selectedCuringRecord.process_date} · {selectedLocation?.name || selectedLocation?.code || "Location"}
                   </p>
                 </div>
                 <Button size="sm" variant="outline" className="bg-white" onClick={() => loadRecord(selectedCuringRecord)}>
@@ -555,7 +502,6 @@ export default function CuringTab() {
                 <TableHeader>
                   <TableRow>
                     <TableHead>Date</TableHead>
-                    <TableHead>Lot</TableHead>
                     <TableHead>Input (KG)</TableHead>
                     <TableHead>Output (KG)</TableHead>
                     <TableHead>Moisture End</TableHead>
@@ -574,7 +520,6 @@ export default function CuringTab() {
                       onClick={() => setSelectedCuringRecord(record)}
                     >
                       <TableCell>{record.process_date}</TableCell>
-                      <TableCell>{record.lot_id || "-"}</TableCell>
                       <TableCell>{record.intake_kg ?? "-"}</TableCell>
                       <TableCell>{record.output_kg ?? "-"}</TableCell>
                       <TableCell>{record.moisture_end_pct ?? "-"}</TableCell>

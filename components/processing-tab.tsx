@@ -15,7 +15,6 @@ import { format } from "date-fns"
 import { cn } from "@/lib/utils"
 import { useToast } from "@/hooks/use-toast"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { getCurrentFiscalYear, getAvailableFiscalYears, type FiscalYear } from "@/lib/fiscal-year-utils"
 import { DEFAULT_COFFEE_VARIETIES } from "@/lib/crop-config"
 import { useAuth } from "@/hooks/use-auth"
 import { useTenantSettings } from "@/hooks/use-tenant-settings"
@@ -123,8 +122,6 @@ export default function ProcessingTab({ showDataToolsControls = false }: Process
   const { settings } = useTenantSettings()
   const bagWeightKg = Number(settings.bagWeightKg) || 50
   const canDelete = user?.role === "admin" || user?.role === "owner" || user?.role === "user"
-  const [selectedFiscalYear, setSelectedFiscalYear] = useState<FiscalYear>(getCurrentFiscalYear())
-  const availableFiscalYears = getAvailableFiscalYears()
 
   const [date, setDate] = useState<Date>(new Date())
   const [locations, setLocations] = useState<LocationOption[]>([])
@@ -263,8 +260,6 @@ export default function ProcessingTab({ showDataToolsControls = false }: Process
       const params = new URLSearchParams({
         locationId: selectedLocationId,
         coffeeType,
-        fiscalYearStart: selectedFiscalYear.startDate,
-        fiscalYearEnd: selectedFiscalYear.endDate,
         limit: recordsPageSize.toString(),
         offset: String(pageIndex * recordsPageSize),
       })
@@ -338,8 +333,6 @@ export default function ProcessingTab({ showDataToolsControls = false }: Process
   }, [
     coffeeType,
     recordsPageSize,
-    selectedFiscalYear.endDate,
-    selectedFiscalYear.startDate,
     selectedLocationId,
     toast,
   ])
@@ -434,10 +427,7 @@ export default function ProcessingTab({ showDataToolsControls = false }: Process
   const loadDashboardData = useCallback(async () => {
     setIsLoadingDashboard(true)
     try {
-      const { startDate, endDate } = selectedFiscalYear
-      const response = await fetch(
-        `/api/processing-records?summary=dashboard&fiscalYearStart=${startDate}&fiscalYearEnd=${endDate}`,
-      )
+      const response = await fetch("/api/processing-records?summary=dashboard")
       const data = await response.json()
 
       if (!data.success || !Array.isArray(data.records)) {
@@ -506,7 +496,7 @@ export default function ProcessingTab({ showDataToolsControls = false }: Process
     } finally {
       setIsLoadingDashboard(false)
     }
-  }, [selectedFiscalYear, toast])
+  }, [toast])
 
   useEffect(() => {
     loadLocations()
@@ -723,7 +713,6 @@ export default function ProcessingTab({ showDataToolsControls = false }: Process
 
       const headers = [
         "Date",
-        "Lot ID",
         "Crop Today (kg)",
         "Crop To Date (kg)",
         "Ripe Today (kg)",
@@ -757,7 +746,6 @@ export default function ProcessingTab({ showDataToolsControls = false }: Process
 
       const rows = processedRecords.map((rec: any) => [
         formatDateOnly(rec.process_date),
-        rec.lot_id || "",
         rec.crop_today ?? "",
         rec.crop_todate,
         rec.ripe_today ?? "",
@@ -840,40 +828,12 @@ export default function ProcessingTab({ showDataToolsControls = false }: Process
 
   return (
     <div className="container mx-auto space-y-8 px-4 pb-10 pt-6 sm:px-6 lg:px-8">
-      {/* Fiscal Year Selector */}
-      <Card className="border-border/70 bg-white/80">
-        <CardHeader>
-          <CardTitle>Fiscal Year</CardTitle>
-          <CardDescription>Select the accounting year to view (April 1 - March 31)</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <Select
-            value={selectedFiscalYear.label}
-            onValueChange={(value) => {
-              const fy = availableFiscalYears.find((f) => f.label === value)
-              if (fy) setSelectedFiscalYear(fy)
-            }}
-          >
-            <SelectTrigger className="w-full sm:w-[200px]">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {availableFiscalYears.map((fy) => (
-                <SelectItem key={fy.label} value={fy.label}>
-                  {fy.label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </CardContent>
-      </Card>
-
       {/* Processing Dashboard */}
       <Card className="border-border/70 bg-white/80">
         <CardHeader>
           <CardTitle>Processing Dashboard</CardTitle>
           <CardDescription>
-            Cumulative &quot;To Date&quot; values for all processing locations. Compare KPIs in Season View
+            Cumulative &quot;To Date&quot; values across all recorded processing locations. Compare KPIs in Season View
             against the &quot;Total All (All Types)&quot; row.
           </CardDescription>
         </CardHeader>
@@ -1034,17 +994,6 @@ export default function ProcessingTab({ showDataToolsControls = false }: Process
                   ))}
                 </SelectContent>
               </Select>
-            </div>
-            <div className="space-y-2">
-              <FieldLabel
-                label="Lot ID"
-                tooltip="Use the lot or batch ID that will carry through dispatch and sales."
-              />
-              <Input
-                value={record.lot_id ?? ""}
-                onChange={(e) => updateField("lot_id", e.target.value)}
-                placeholder="e.g. LOT-2026-001"
-              />
             </div>
             <div className="space-y-2">
               <Label>Date</Label>
@@ -1483,10 +1432,7 @@ export default function ProcessingTab({ showDataToolsControls = false }: Process
                   <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
                     <div>
                       <p className="text-xs uppercase tracking-[0.2em] text-emerald-700">Record Drill-Down</p>
-                      <p className="font-medium text-foreground">
-                        {formatDateOnly(selectedRecentRecord.process_date)}
-                        {selectedRecentRecord.lot_id ? ` · Lot ${selectedRecentRecord.lot_id}` : ""}
-                      </p>
+                      <p className="font-medium text-foreground">{formatDateOnly(selectedRecentRecord.process_date)}</p>
                     </div>
                     <Button
                       size="sm"
@@ -1529,7 +1475,6 @@ export default function ProcessingTab({ showDataToolsControls = false }: Process
                   <div className="flex w-full flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
                     <span className="font-medium">{formatDateOnly(rec.process_date)}</span>
                     <span className="text-xs text-muted-foreground sm:text-sm">
-                      {rec.lot_id ? `Lot: ${rec.lot_id} | ` : ""}
                       Crop: {rec.crop_today ?? 0}kg | Bags: {rec.dry_p_bags}
                       {rec.quality_grade ? ` | Grade: ${rec.quality_grade}` : ""}
                       {rec.moisture_pct ? ` | Moisture: ${rec.moisture_pct}%` : ""}

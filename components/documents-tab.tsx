@@ -76,7 +76,6 @@ export default function DocumentsTab() {
   const [title, setTitle] = useState("")
   const [uploadLocationId, setUploadLocationId] = useState("all")
   const [documentDate, setDocumentDate] = useState("")
-  const [lotId, setLotId] = useState("")
   const [buyerName, setBuyerName] = useState("")
   const [dispatchRecordId, setDispatchRecordId] = useState("")
   const [salesRecordId, setSalesRecordId] = useState("")
@@ -164,7 +163,6 @@ export default function DocumentsTab() {
       if (title.trim()) body.append("title", title.trim())
       if (uploadLocationId !== "all") body.append("locationId", uploadLocationId)
       if (documentDate) body.append("documentDate", documentDate)
-      if (lotId.trim()) body.append("lotId", lotId.trim())
       if (buyerName.trim()) body.append("buyerName", buyerName.trim())
       if (dispatchRecordId.trim()) body.append("dispatchRecordId", dispatchRecordId.trim())
       if (salesRecordId.trim()) body.append("salesRecordId", salesRecordId.trim())
@@ -180,7 +178,6 @@ export default function DocumentsTab() {
       setSelectedFile(null)
       setTitle("")
       setDocumentDate("")
-      setLotId("")
       setBuyerName("")
       setDispatchRecordId("")
       setSalesRecordId("")
@@ -269,11 +266,6 @@ export default function DocumentsTab() {
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="doc-lot">Lot ID (optional)</Label>
-              <Input id="doc-lot" value={lotId} onChange={(event) => setLotId(event.target.value)} placeholder="LOT-24-APR-017" />
-            </div>
-
-            <div className="space-y-2">
               <Label htmlFor="doc-buyer">Buyer (optional)</Label>
               <Input id="doc-buyer" value={buyerName} onChange={(event) => setBuyerName(event.target.value)} placeholder="Buyer name" />
             </div>
@@ -347,7 +339,7 @@ export default function DocumentsTab() {
       <Card className="border-border/70 bg-white/85">
         <CardHeader>
           <CardTitle>Recent Documents</CardTitle>
-          <CardDescription>Search and download records linked to lots, buyers, and dispatch/sales entries.</CardDescription>
+          <CardDescription>Search and download records linked to buyers and dispatch or sales entries.</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-[minmax(0,1fr)_220px_220px]">
@@ -357,7 +349,7 @@ export default function DocumentsTab() {
                 value={query}
                 onChange={(event) => setQuery(event.target.value)}
                 className="pl-9"
-                placeholder="Search by file, lot, buyer, or notes"
+                placeholder="Search by file, buyer, or notes"
               />
             </div>
             <Select value={listTypeFilter} onValueChange={setListTypeFilter}>
@@ -412,7 +404,7 @@ export default function DocumentsTab() {
                         {record.location_name ? ` · ${record.location_name}` : ""}
                       </p>
                       <p className="text-xs text-muted-foreground">
-                        {record.lot_id ? `Lot: ${record.lot_id}` : "Lot: -"} · {record.buyer_name ? `Buyer: ${record.buyer_name}` : "Buyer: -"}
+                        {record.buyer_name ? `Buyer: ${record.buyer_name}` : "Buyer: -"}
                       </p>
                       {(record.dispatch_record_id || record.sales_record_id || record.receivable_id) && (
                         <p className="text-xs text-muted-foreground">

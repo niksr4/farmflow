@@ -13,7 +13,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { useAuth } from "@/hooks/use-auth"
 import { useTenantSettings } from "@/hooks/use-tenant-settings"
 import { useToast } from "@/hooks/use-toast"
-import { getAvailableFiscalYears, getCurrentFiscalYear, getFiscalYearDateRange, type FiscalYear } from "@/lib/fiscal-year-utils"
+import { getCurrentFiscalYear, getFiscalYearDateRange } from "@/lib/fiscal-year-utils"
 import { useRouter, useSearchParams } from "next/navigation"
 
 type SeasonBreakdown = {
@@ -502,8 +502,7 @@ export default function SeasonDashboard() {
   const searchParams = useSearchParams()
   const focusedAlertId = (searchParams.get(DASHBOARD_SEASON_ALERT_ID_PARAM) || "").trim()
   const focusedMetric = (searchParams.get(DASHBOARD_SEASON_METRIC_PARAM) || "").trim()
-  const [selectedFiscalYear, setSelectedFiscalYear] = useState<FiscalYear>(getCurrentFiscalYear())
-  const availableFiscalYears = useMemo(() => getAvailableFiscalYears(), [])
+  const selectedFiscalYear = useMemo(() => getCurrentFiscalYear(), [])
   const [summary, setSummary] = useState<SeasonSummary | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -516,7 +515,6 @@ export default function SeasonDashboard() {
   const [briefCopied, setBriefCopied] = useState(false)
 
   const isAdmin = user?.role === "admin" || user?.role === "owner"
-  const lotLossThreshold = 0.03
 
   const zeroCoffeeTotals: SeasonCoffeeTotals = useMemo(
     () => ({
@@ -995,27 +993,6 @@ export default function SeasonDashboard() {
           </div>
         </div>
         <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
-          <div className="space-y-1">
-            <Label className="text-xs text-muted-foreground">Fiscal Year</Label>
-            <Select
-              value={selectedFiscalYear.label}
-              onValueChange={(value) => {
-                const fy = availableFiscalYears.find((year) => year.label === value)
-                if (fy) setSelectedFiscalYear(fy)
-              }}
-            >
-              <SelectTrigger className="w-full sm:w-[140px]">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {availableFiscalYears.map((fy) => (
-                  <SelectItem key={fy.label} value={fy.label}>
-                    FY {fy.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
           {isAdmin && (
             <div className="flex items-end gap-2">
               <div className="space-y-1">
@@ -1793,7 +1770,7 @@ export default function SeasonDashboard() {
             <Card>
               <CardHeader>
                 <CardTitle>Conversion & Yield KPIs</CardTitle>
-                <CardDescription>Stage-level efficiency and processing mix for the selected fiscal year.</CardDescription>
+                <CardDescription>Stage-level efficiency and processing mix for the current season.</CardDescription>
               </CardHeader>
               <CardContent>
                 <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
@@ -1900,7 +1877,7 @@ export default function SeasonDashboard() {
                 <BarChart3 className="h-4 w-4" />
                 Stock breakdown by coffee + bag type
               </CardTitle>
-              <CardDescription>Track processing, dispatch, and sales per lot type.</CardDescription>
+              <CardDescription>Track processing, dispatch, and sales by coffee stream.</CardDescription>
             </CardHeader>
             <CardContent>
               <Table>
@@ -1947,78 +1924,6 @@ export default function SeasonDashboard() {
 
           <Card>
             <CardHeader>
-              <CardTitle>Lot reconciliation</CardTitle>
-              <CardDescription>Follow each lot from processing to dispatch to sales.</CardDescription>
-            </CardHeader>
-            <CardContent>
-              {summary.lots.length === 0 ? (
-                <div className="text-sm text-muted-foreground">
-                  No lot IDs found yet. Add a Lot ID in processing, dispatch, or sales to start reconciling.
-                </div>
-              ) : (
-                <div className="overflow-x-auto">
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Lot</TableHead>
-                        <TableHead>Coffee</TableHead>
-                        <TableHead>Bag Type</TableHead>
-                        <TableHead className="text-right">Processed</TableHead>
-                        <TableHead className="text-right">Dispatched</TableHead>
-                        <TableHead className="text-right">Received</TableHead>
-                        <TableHead className="text-right">Sold</TableHead>
-                        <TableHead className="text-right">Available</TableHead>
-                        <TableHead className="text-right">Available to Sell</TableHead>
-                        <TableHead className="text-right">Loss</TableHead>
-                        <TableHead>Flags</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {summary.lots.map((lot) => {
-                        const lossHigh = lot.lossPct > lotLossThreshold
-                        const soldOver = lot.soldOverReceived
-                        return (
-                          <TableRow key={`${lot.lotId}-${lot.coffeeType}-${lot.bagType}`}>
-                            <TableCell className="font-medium">{lot.lotId}</TableCell>
-                            <TableCell>{lot.coffeeType}</TableCell>
-                            <TableCell>{lot.bagType}</TableCell>
-                            <TableCell className="text-right">
-                              {formatKgAndBags(lot.processedKgs, bagWeightKg)}
-                            </TableCell>
-                            <TableCell className="text-right">
-                              {formatKgAndBags(lot.dispatchedKgs, bagWeightKg)}
-                            </TableCell>
-                            <TableCell className="text-right">{formatKgAndBags(lot.receivedKgs, bagWeightKg)}</TableCell>
-                            <TableCell className="text-right">{formatKgAndBags(lot.soldKgs, bagWeightKg)}</TableCell>
-                            <TableCell className="text-right text-emerald-700">
-                              {formatKgAndBags(lot.availableKgs, bagWeightKg)}
-                            </TableCell>
-                            <TableCell className="text-right text-sky-700">
-                              {formatKgAndBags(lot.availableToSellKgs, bagWeightKg)}
-                            </TableCell>
-                            <TableCell className="text-right">{formatPercent(lot.lossPct)}</TableCell>
-                            <TableCell>
-                              {lossHigh || soldOver ? (
-                                <div className="space-y-1 text-xs">
-                                  {lossHigh && <div className="text-amber-700">Loss &gt; 3%</div>}
-                                  {soldOver && <div className="text-rose-700">Sold &gt; received</div>}
-                                </div>
-                              ) : (
-                                <span className="text-xs text-muted-foreground">OK</span>
-                              )}
-                            </TableCell>
-                          </TableRow>
-                        )
-                      })}
-                    </TableBody>
-                  </Table>
-                </div>
-              )}
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader>
               <CardTitle>Exception alerts</CardTitle>
               <CardDescription>Automated flags for losses, mismatches, and spend spikes.</CardDescription>
             </CardHeader>
@@ -2026,7 +1931,7 @@ export default function SeasonDashboard() {
               {summary.alerts.length === 0 ? (
                 <div className="flex items-center gap-2 text-sm text-muted-foreground">
                   <CheckCircle2 className="h-4 w-4 text-emerald-600" />
-                  No exceptions detected in this fiscal year.
+                  No exceptions detected in the current season.
                 </div>
               ) : (
                 summary.alerts.map((alert) => (

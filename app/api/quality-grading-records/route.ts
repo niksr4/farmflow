@@ -190,67 +190,78 @@ export async function POST(request: Request) {
       `,
     )
 
-    const result = await runTenantQuery(
-      sql,
-      tenantContext,
-      sql`
-        INSERT INTO quality_grading_records (
-          tenant_id,
-          location_id,
-          lot_id,
-          coffee_type,
-          process_type,
-          grade_date,
-          grade,
-          moisture_pct,
-          screen_size,
-          defects_count,
-          defect_notes,
-          sample_weight_g,
-          outturn_pct,
-          cup_score,
-          buyer_reference,
-          graded_by,
-          notes
+    const result = existing?.length
+      ? await runTenantQuery(
+          sql,
+          tenantContext,
+          sql`
+            UPDATE quality_grading_records
+            SET
+              lot_id = ${record.lot_id},
+              coffee_type = ${record.coffee_type},
+              process_type = ${record.process_type},
+              grade = ${record.grade},
+              moisture_pct = ${record.moisture_pct},
+              screen_size = ${record.screen_size},
+              defects_count = ${record.defects_count},
+              defect_notes = ${record.defect_notes},
+              sample_weight_g = ${record.sample_weight_g},
+              outturn_pct = ${record.outturn_pct},
+              cup_score = ${record.cup_score},
+              buyer_reference = ${record.buyer_reference},
+              graded_by = ${record.graded_by},
+              notes = ${record.notes},
+              updated_at = CURRENT_TIMESTAMP
+            WHERE tenant_id = ${tenantContext.tenantId}
+              AND id = ${existing[0].id}
+            RETURNING *
+          `,
         )
-        VALUES (
-          ${tenantContext.tenantId},
-          ${locationId},
-          ${record.lot_id},
-          ${record.coffee_type},
-          ${record.process_type},
-          ${record.grade_date}::date,
-          ${record.grade},
-          ${record.moisture_pct},
-          ${record.screen_size},
-          ${record.defects_count},
-          ${record.defect_notes},
-          ${record.sample_weight_g},
-          ${record.outturn_pct},
-          ${record.cup_score},
-          ${record.buyer_reference},
-          ${record.graded_by},
-          ${record.notes}
+      : await runTenantQuery(
+          sql,
+          tenantContext,
+          sql`
+            INSERT INTO quality_grading_records (
+              tenant_id,
+              location_id,
+              lot_id,
+              coffee_type,
+              process_type,
+              grade_date,
+              grade,
+              moisture_pct,
+              screen_size,
+              defects_count,
+              defect_notes,
+              sample_weight_g,
+              outturn_pct,
+              cup_score,
+              buyer_reference,
+              graded_by,
+              notes
+            )
+            VALUES (
+              ${tenantContext.tenantId},
+              ${locationId},
+              ${record.lot_id},
+              ${record.coffee_type},
+              ${record.process_type},
+              ${record.grade_date}::date,
+              ${record.grade},
+              ${record.moisture_pct},
+              ${record.screen_size},
+              ${record.defects_count},
+              ${record.defect_notes},
+              ${record.sample_weight_g},
+              ${record.outturn_pct},
+              ${record.cup_score},
+              ${record.buyer_reference},
+              ${record.graded_by},
+              ${record.notes}
+            )
+            RETURNING *
+          `,
         )
-        ON CONFLICT (tenant_id, location_id, grade_date, lot_id)
-        DO UPDATE SET
-          coffee_type = EXCLUDED.coffee_type,
-          process_type = EXCLUDED.process_type,
-          grade = EXCLUDED.grade,
-          moisture_pct = EXCLUDED.moisture_pct,
-          screen_size = EXCLUDED.screen_size,
-          defects_count = EXCLUDED.defects_count,
-          defect_notes = EXCLUDED.defect_notes,
-          sample_weight_g = EXCLUDED.sample_weight_g,
-          outturn_pct = EXCLUDED.outturn_pct,
-          cup_score = EXCLUDED.cup_score,
-          buyer_reference = EXCLUDED.buyer_reference,
-          graded_by = EXCLUDED.graded_by,
-          notes = EXCLUDED.notes,
-          updated_at = CURRENT_TIMESTAMP
-        RETURNING *
-      `,
-    )
 
     await logAuditEvent(sql, sessionUser, {
       action: existing?.length ? "update" : "create",

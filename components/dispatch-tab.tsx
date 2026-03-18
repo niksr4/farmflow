@@ -16,7 +16,6 @@ import { format } from "date-fns"
 import { cn } from "@/lib/utils"
 import { useToast } from "@/hooks/use-toast"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { getCurrentFiscalYear, getAvailableFiscalYears, getFiscalYearDateRange, type FiscalYear } from "@/lib/fiscal-year-utils"
 import { DEFAULT_COFFEE_VARIETIES } from "@/lib/crop-config"
 import { useAuth } from "@/hooks/use-auth"
 import { useTenantSettings } from "@/hooks/use-tenant-settings"
@@ -97,13 +96,10 @@ export default function DispatchTab({ showDataToolsControls = false }: DispatchT
   const { settings } = useTenantSettings()
   const bagWeightKg = Number(settings.bagWeightKg) || 50
   const canDelete = user?.role === "admin" || user?.role === "owner" || user?.role === "user"
-  const [selectedFiscalYear, setSelectedFiscalYear] = useState<FiscalYear>(getCurrentFiscalYear())
-  const availableFiscalYears = getAvailableFiscalYears()
   
   const [locations, setLocations] = useState<LocationOption[]>([])
   const [date, setDate] = useState<Date>(new Date())
   const [selectedLocationId, setSelectedLocationId] = useState<string>("")
-  const [lotId, setLotId] = useState<string>("")
   const [coffeeType, setCoffeeType] = useState<string>("Arabica")
   const [bagType, setBagType] = useState<string>("Dry Parchment")
   const [bagsDispatched, setBagsDispatched] = useState<string>("")
@@ -312,10 +308,6 @@ export default function DispatchTab({ showDataToolsControls = false }: DispatchT
         })
         if (options?.asOfDate) {
           params.set("fiscalYearEnd", options.asOfDate)
-        } else {
-          const { startDate, endDate } = getFiscalYearDateRange(selectedFiscalYear)
-          params.set("fiscalYearStart", startDate)
-          params.set("fiscalYearEnd", endDate)
         }
         if (resolvedLocation) {
           params.set("locationId", resolvedLocation)
@@ -358,7 +350,7 @@ export default function DispatchTab({ showDataToolsControls = false }: DispatchT
         scopeSetter?.(fallbackScope)
       }
     },
-    [selectedFiscalYear],
+    [],
   )
 
   const fetchDispatchSummary = useCallback(
@@ -376,10 +368,6 @@ export default function DispatchTab({ showDataToolsControls = false }: DispatchT
         })
         if (options?.asOfDate) {
           params.set("endDate", options.asOfDate)
-        } else {
-          const { startDate, endDate } = getFiscalYearDateRange(selectedFiscalYear)
-          params.set("startDate", startDate)
-          params.set("endDate", endDate)
         }
         if (resolvedLocation) {
           params.set("locationId", resolvedLocation)
@@ -399,7 +387,7 @@ export default function DispatchTab({ showDataToolsControls = false }: DispatchT
         scopeSetter?.(fallbackScope)
       }
     },
-    [selectedFiscalYear],
+    [],
   )
 
   // Fetch dispatch records
@@ -410,10 +398,7 @@ export default function DispatchTab({ showDataToolsControls = false }: DispatchT
       setIsLoading(true)
     }
     try {
-      const { startDate, endDate } = getFiscalYearDateRange(selectedFiscalYear)
       const params = new URLSearchParams({
-        startDate,
-        endDate,
         limit: dispatchPageSize.toString(),
         offset: String(pageIndex * dispatchPageSize),
       })
@@ -440,7 +425,7 @@ export default function DispatchTab({ showDataToolsControls = false }: DispatchT
         setIsLoading(false)
       }
     }
-  }, [dispatchPageSize, selectedFiscalYear])
+  }, [dispatchPageSize])
 
   useEffect(() => {
     loadLocations()
@@ -536,7 +521,7 @@ export default function DispatchTab({ showDataToolsControls = false }: DispatchT
           dispatch_date: format(date, "yyyy-MM-dd"),
           locationId: selectedLocationId,
           estate: locationLabel || null,
-          lot_id: lotId || null,
+          lot_id: null,
           coffee_type: coffeeType,
           bag_type: bagType,
           bags_dispatched: bagsValue,
@@ -559,8 +544,6 @@ export default function DispatchTab({ showDataToolsControls = false }: DispatchT
           bags_dispatched: bagsValue,
           kgs_received: kgsValue,
           location_id: selectedLocationId,
-          lot_id: lotId || null,
-          fiscal_year: selectedFiscalYear.label,
         })
         // Reset form
         resetForm()
@@ -595,7 +578,6 @@ export default function DispatchTab({ showDataToolsControls = false }: DispatchT
     setKgsReceived("")
     setNotes("")
     setEditingRecord(null)
-    setLotId("")
   }
 
   const handleEdit = (record: DispatchRecord) => {
@@ -605,7 +587,6 @@ export default function DispatchTab({ showDataToolsControls = false }: DispatchT
     const resolvedLocationId =
       record.location_id || resolveLocationIdFromLabel(record.location_name || record.location_code || record.estate)
     setSelectedLocationId(resolvedLocationId || "")
-    setLotId(record.lot_id ? String(record.lot_id) : "")
     setCoffeeType(record.coffee_type)
     setBagType(formatBagTypeLabel(record.bag_type))
     setBagsDispatched(record.bags_dispatched.toString())
@@ -661,8 +642,7 @@ export default function DispatchTab({ showDataToolsControls = false }: DispatchT
 
   const exportToCSV = () => {
     const runExport = async () => {
-      const { startDate, endDate } = getFiscalYearDateRange(selectedFiscalYear)
-      const response = await fetch(`/api/dispatch?startDate=${startDate}&endDate=${endDate}&all=true`, {
+      const response = await fetch("/api/dispatch?all=true", {
               })
       const data = await response.json()
 
@@ -673,7 +653,6 @@ export default function DispatchTab({ showDataToolsControls = false }: DispatchT
       const headers = [
         "Date",
         "Location",
-        "Lot ID",
         "Coffee Type",
         "Bag Type",
         "Bags Dispatched",
@@ -683,7 +662,6 @@ export default function DispatchTab({ showDataToolsControls = false }: DispatchT
       const rows = data.records.map((record: DispatchRecord) => [
         format(new Date(record.dispatch_date), "yyyy-MM-dd"),
         getLocationLabel(record),
-        record.lot_id || "",
         record.coffee_type,
         formatBagTypeLabel(record.bag_type),
         record.bags_dispatched.toString(),
@@ -699,11 +677,10 @@ export default function DispatchTab({ showDataToolsControls = false }: DispatchT
       const url = URL.createObjectURL(blob)
       const a = document.createElement("a")
       a.href = url
-      a.download = `dispatch_records_${selectedFiscalYear.label.replace("/", "-")}.csv`
+      a.download = "dispatch_records.csv"
       a.click()
       URL.revokeObjectURL(url)
       posthog.capture("dispatch_csv_exported", {
-        fiscal_year: selectedFiscalYear.label,
         record_count: data.records.length,
       })
     }
@@ -824,34 +801,10 @@ export default function DispatchTab({ showDataToolsControls = false }: DispatchT
 
   return (
     <div className="flex flex-col gap-8">
-      {/* Fiscal Year Selector */}
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h2 className="text-xl font-semibold text-foreground">Coffee Bag Dispatch</h2>
           <p className="text-sm text-muted-foreground">Track outbound bags and reconcile location availability.</p>
-        </div>
-        <div className="flex items-center gap-2">
-          <Label htmlFor="fiscal-year" className="text-xs uppercase tracking-[0.2em] text-muted-foreground">
-            Fiscal Year:
-          </Label>
-          <Select
-            value={selectedFiscalYear.label}
-            onValueChange={(value) => {
-              const fy = availableFiscalYears.find((y) => y.label === value)
-              if (fy) setSelectedFiscalYear(fy)
-            }}
-          >
-            <SelectTrigger className="w-full sm:w-[140px]">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {availableFiscalYears.map((fy) => (
-                <SelectItem key={fy.label} value={fy.label}>
-                  FY {fy.label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
         </div>
       </div>
 
@@ -1104,19 +1057,6 @@ export default function DispatchTab({ showDataToolsControls = false }: DispatchT
               </p>
             </div>
 
-            {/* Lot ID */}
-            <div className="space-y-2">
-              <FieldLabel
-                label="Lot ID"
-                tooltip="Match the lot/batch ID used in processing for traceability."
-              />
-              <Input
-                placeholder="e.g. LOT-2026-001"
-                value={lotId}
-                onChange={(e) => setLotId(e.target.value)}
-              />
-            </div>
-
             {/* Coffee Type */}
             <div className="space-y-2">
               <Label>Coffee Type</Label>
@@ -1278,10 +1218,7 @@ export default function DispatchTab({ showDataToolsControls = false }: DispatchT
               <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
                 <div>
                   <p className="text-xs uppercase tracking-[0.2em] text-emerald-700">Dispatch Drill-Down</p>
-                  <p className="font-medium text-foreground">
-                    {formatDateOnly(selectedDispatchRecord.dispatch_date)} · {getLocationLabel(selectedDispatchRecord)}
-                    {selectedDispatchRecord.lot_id ? ` · Lot ${selectedDispatchRecord.lot_id}` : ""}
-                  </p>
+                  <p className="font-medium text-foreground">{formatDateOnly(selectedDispatchRecord.dispatch_date)} · {getLocationLabel(selectedDispatchRecord)}</p>
                 </div>
                 <Button
                   size="sm"
@@ -1345,10 +1282,6 @@ export default function DispatchTab({ showDataToolsControls = false }: DispatchT
                           <p className="font-medium text-foreground">{formatBagTypeLabel(record.bag_type)}</p>
                         </div>
                         <div className="rounded-md border border-black/5 bg-white px-2 py-1.5">
-                          <p className="text-[11px] uppercase tracking-wide text-muted-foreground">Lot</p>
-                          <p className="font-medium text-foreground">{record.lot_id || "-"}</p>
-                        </div>
-                        <div className="rounded-md border border-black/5 bg-white px-2 py-1.5">
                           <p className="text-[11px] uppercase tracking-wide text-muted-foreground">Bags</p>
                           <p className="font-medium text-foreground">{formatNumber(Number(record.bags_dispatched) || 0)}</p>
                         </div>
@@ -1403,7 +1336,6 @@ export default function DispatchTab({ showDataToolsControls = false }: DispatchT
                     <TableRow>
                       <TableHead className="sticky top-0 bg-muted/70 backdrop-blur">Date</TableHead>
                       <TableHead className="sticky top-0 bg-muted/70 backdrop-blur">Location</TableHead>
-                      <TableHead className="sticky top-0 bg-muted/70 backdrop-blur">Lot ID</TableHead>
                       <TableHead className="sticky top-0 bg-muted/70 backdrop-blur">Coffee Type</TableHead>
                       <TableHead className="sticky top-0 bg-muted/70 backdrop-blur">Bag Type</TableHead>
                       <TableHead className="text-right sticky top-0 bg-muted/70 backdrop-blur">Bags</TableHead>
@@ -1424,7 +1356,6 @@ export default function DispatchTab({ showDataToolsControls = false }: DispatchT
                       >
                         <TableCell>{formatDateOnly(record.dispatch_date)}</TableCell>
                         <TableCell>{getLocationLabel(record)}</TableCell>
-                        <TableCell>{record.lot_id || "-"}</TableCell>
                         <TableCell>{record.coffee_type}</TableCell>
                         <TableCell>{formatBagTypeLabel(record.bag_type)}</TableCell>
                         <TableCell className="text-right">{formatNumber(Number(record.bags_dispatched) || 0)}</TableCell>
