@@ -42,6 +42,11 @@ export const metadata: Metadata = {
   description: "Coffee estate operations with traceability, yields, and buyer-ready reporting.",
   generator: "v0.dev",
   applicationName: "FarmFlow",
+  appleWebApp: {
+    capable: true,
+    title: "FarmFlow",
+    statusBarStyle: "default",
+  },
   formatDetection: {
     telephone: false,
     email: false,
@@ -74,6 +79,9 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" suppressHydrationWarning>
+      <head>
+        <meta name="apple-mobile-web-app-capable" content="yes" />
+      </head>
       <body className={`${bodyFont.variable} ${displayFont.variable} font-body`} suppressHydrationWarning>
         <ThemeProvider attribute="class" defaultTheme="light" enableSystem disableTransitionOnChange>
           <AuthProvider>

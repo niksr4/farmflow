@@ -1,7 +1,7 @@
 export interface Transaction {
   id?: number
   item_type: string
-  quantity: number
+  quantity: number | ""
   transaction_type: "restock" | "deplete"
   notes?: string
   transaction_date?: string

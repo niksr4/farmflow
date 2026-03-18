@@ -55,7 +55,7 @@ export const parseJsonResponse = async (res: Response) => {
 export const createDefaultTransaction = (): Transaction => {
   return {
     item_type: "",
-    quantity: 0,
+    quantity: "",
     transaction_type: "deplete",
     notes: "",
     transaction_date: new Date().toISOString(),

@@ -385,11 +385,13 @@ export default function InventorySystem() {
     event.currentTarget.blur()
   }
   const normalizeQuantityValue = (value: unknown) => {
+    if (value === "" || value === null || value === undefined) return null
     const numeric = Number(value)
     if (!Number.isFinite(numeric) || numeric < 0) return null
     return Number((Math.round((numeric + Number.EPSILON) * 100) / 100).toFixed(2))
   }
   const coerceNonNegativeNumber = (value: string) => {
+    if (!value.trim()) return ""
     return normalizeQuantityValue(value)
   }
   const isModuleEnabled = useCallback(
@@ -922,6 +924,29 @@ export default function InventorySystem() {
     ),
   ).sort()
   const hasMovementItemTypes = allItemTypesForDropdown.length > 0
+  const movementUnitByItemType = useMemo(() => {
+    const units = new Map<string, string>()
+    inventory.forEach((item) => {
+      const itemType = normalizeInventoryItemType(item.name)
+      const unit = String(item.unit || "").trim() || "kg"
+      if (itemType && !units.has(itemType)) {
+        units.set(itemType, unit)
+      }
+    })
+    return units
+  }, [inventory])
+  const resolveInventoryUnitForItemType = useCallback(
+    (itemType: string, fallbackUnit?: string) => {
+      const normalizedItemType = normalizeInventoryItemType(itemType)
+      if (!normalizedItemType) return String(fallbackUnit || "").trim() || "kg"
+      return movementUnitByItemType.get(normalizedItemType) || String(fallbackUnit || "").trim() || "kg"
+    },
+    [movementUnitByItemType],
+  )
+  const selectedMovementUnit = useMemo(
+    () => resolveInventoryUnitForItemType(newTransaction?.item_type || "", newTransaction?.unit),
+    [newTransaction?.item_type, newTransaction?.unit, resolveInventoryUnitForItemType],
+  )
 
   const filteredAndSortedInventory = inventory
     .filter((item) => item.name && item.name.toLowerCase().includes(inventorySearchTerm.toLowerCase()))
@@ -2007,9 +2032,10 @@ export default function InventorySystem() {
 
   // helpers for transaction object safety
   const ensureTransactionSafety = (transaction: Transaction | null): Transaction => {
+    const safeQuantity = transaction?.quantity === "" ? "" : safeGet(normalizeQuantityValue(transaction?.quantity), 0)
     return {
       item_type: String(safeGet(transaction?.item_type, "")).trim(),
-      quantity: safeGet(Number(transaction?.quantity), 0),
+      quantity: safeQuantity,
       transaction_type: safeGet(transaction?.transaction_type, "deplete"),
       notes: safeGet(transaction?.notes, ""),
       transaction_date: safeGet(transaction?.transaction_date, new Date().toISOString()),
@@ -2051,6 +2077,7 @@ export default function InventorySystem() {
       return
     }
     tx.quantity = normalizedQty
+    tx.unit = resolveInventoryUnitForItemType(tx.item_type, tx.unit)
     tx.total_cost = (Number(tx.price) || 0) * normalizedQty
 
     const locationSource = locationOverride ?? transactionLocationId
@@ -4316,8 +4343,7 @@ export default function InventorySystem() {
             value={newTransaction?.item_type || ""}
             onValueChange={(value) => {
               handleFieldChange("item_type", value)
-              const u = inventory.find((i) => normalizeInventoryItemType(i.name) === value)?.unit || "kg"
-              handleFieldChange("unit", u)
+              handleFieldChange("unit", resolveInventoryUnitForItemType(value))
             }}
           >
             <SelectTrigger
@@ -4343,6 +4369,11 @@ export default function InventorySystem() {
           {!hasMovementItemTypes && (
             <p className="text-xs text-neutral-500">
               No inventory item types yet. Add an inventory item or restock first.
+            </p>
+          )}
+          {newTransaction?.item_type && (
+            <p className="text-xs text-neutral-500">
+              Current inventory unit: <span className="font-medium text-neutral-700">{selectedMovementUnit}</span>
             </p>
           )}
         </div>
@@ -4419,7 +4450,7 @@ export default function InventorySystem() {
               className="h-11 rounded-xl border-black/5 bg-white pr-12 focus-visible:ring-2 focus-visible:ring-emerald-200"
             />
             <div className="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none text-neutral-500 text-sm">
-              {newTransaction?.unit || "kg"}
+              {selectedMovementUnit}
             </div>
           </div>
         </div>
@@ -6405,7 +6436,7 @@ export default function InventorySystem() {
                         </div>
                         <div className="flex items-center justify-between">
                           <span>Units</span>
-                          <span className="text-neutral-900">{newTransaction?.unit || "kg"}</span>
+                          <span className="text-neutral-900">{selectedMovementUnit}</span>
                         </div>
                         <div className="border-t border-black/5 pt-2 text-[11px] leading-relaxed text-neutral-500">
                           Click any inventory item card to open full drill-down and recent transaction timeline.
