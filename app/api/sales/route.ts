@@ -77,7 +77,7 @@ async function resolveSlotStock(
   const [dispatchRows, salesRows] = await runTenantQueries(db, tenantContext, [
     db`
       SELECT
-        COALESCE(SUM(COALESCE(NULLIF(kgs_received, 0), bags_dispatched * ${input.bagWeightKg})), 0) AS received_kgs
+        COALESCE(SUM(NULLIF(kgs_received, 0)), 0) AS received_kgs
       FROM dispatch_records
       WHERE tenant_id = ${tenantContext.tenantId}
         AND lower(coffee_type) LIKE ${coffeePattern}

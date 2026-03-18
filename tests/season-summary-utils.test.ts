@@ -17,9 +17,9 @@ describe("season summary utils", () => {
     expect(toLocationBucket("", "")).toBe("Unknown")
   })
 
-  it("resolves dispatch and sales KGs with correct fallback order", () => {
+  it("uses confirmed dispatch KGs and sales fallback order", () => {
     expect(resolveDispatchReceivedKgs({ kgs_received: 210, bags_dispatched: 2 }, 50)).toBe(210)
-    expect(resolveDispatchReceivedKgs({ kgs_received: 0, bags_dispatched: 2 }, 50)).toBe(100)
+    expect(resolveDispatchReceivedKgs({ kgs_received: 0, bags_dispatched: 2 }, 50)).toBe(0)
 
     expect(resolveSalesKgs({ sold_kgs: 120, bags_sold: 3 }, 50)).toBe(120)
     expect(resolveSalesKgs({ sold_kgs: 0, kgs: 75, bags_sold: 3 }, 50)).toBe(75)

@@ -11,21 +11,6 @@ import { resolveLocationCompatibility } from "@/lib/server/location-compatibilit
 export const dynamic = "force-dynamic"
 export const revalidate = 0
 
-async function resolveBagWeightKg(tenantId: string, role: string) {
-  const tenantContext = normalizeTenantContext(tenantId, role)
-  const rows = await runTenantQuery(
-    sql,
-    tenantContext,
-    sql`
-      SELECT bag_weight_kg
-      FROM tenants
-      WHERE id = ${tenantContext.tenantId}
-      LIMIT 1
-    `,
-  )
-  return Number(rows?.[0]?.bag_weight_kg) || 50
-}
-
 const canonicalizeCoffeeType = (value: string | null | undefined) => {
   const normalized = String(value || "").trim().toLowerCase()
   if (!normalized) return null
@@ -65,8 +50,6 @@ export async function GET(request: Request) {
         : null
     const isLegacyPooledScope = Boolean(locationId && legacyLocationCutover)
     const locationScope = isLegacyPooledScope ? "legacy_pool" : locationId ? "location" : "all"
-    const bagWeightKg = await resolveBagWeightKg(sessionUser.tenantId, sessionUser.role)
-
     const locationClause =
       !locationId
         ? sql``
@@ -117,7 +100,7 @@ export async function GET(request: Request) {
             ELSE COALESCE(NULLIF(trim(bag_type), ''), 'Unknown')
           END as bag_type,
           COALESCE(SUM(bags_dispatched), 0) as bags_dispatched,
-          COALESCE(SUM(COALESCE(NULLIF(kgs_received, 0), bags_dispatched * ${bagWeightKg})), 0) as kgs_received
+          COALESCE(SUM(NULLIF(kgs_received, 0)), 0) as kgs_received
         FROM dispatch_records
         WHERE tenant_id = ${tenantContext.tenantId}
           ${dateClause}

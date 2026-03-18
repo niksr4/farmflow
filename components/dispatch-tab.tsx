@@ -80,11 +80,12 @@ const normalizeBagTypeKey = (value: string) => {
   return "dry_parchment"
 }
 const formatBagTypeLabel = (value: string) => (normalizeBagTypeKey(value) === "dry_cherry" ? "Dry Cherry" : "Dry Parchment")
-const resolveDispatchRecordReceivedKgs = (record: Pick<DispatchRecord, "kgs_received" | "bags_dispatched">, bagWeightKg: number) => {
+const resolveDispatchRecordNominalKgs = (record: Pick<DispatchRecord, "bags_dispatched">, bagWeightKg: number) =>
+  (Number(record.bags_dispatched) || 0) * bagWeightKg
+const resolveDispatchRecordReceivedKgs = (record: Pick<DispatchRecord, "kgs_received" | "bags_dispatched">, _bagWeightKg: number) => {
   const kgsReceivedValue = Number(record.kgs_received) || 0
   if (kgsReceivedValue > 0) return kgsReceivedValue
-  const bagsValue = Number(record.bags_dispatched) || 0
-  return bagsValue * bagWeightKg
+  return 0
 }
 
 type DispatchTabProps = {
@@ -785,7 +786,7 @@ export default function DispatchTab({ showDataToolsControls = false }: DispatchT
     ? resolveDispatchRecordReceivedKgs(selectedDispatchRecord, bagWeightKg)
     : 0
   const selectedDispatchNominalKgs = selectedDispatchRecord
-    ? (Number(selectedDispatchRecord.bags_dispatched) || 0) * bagWeightKg
+    ? resolveDispatchRecordNominalKgs(selectedDispatchRecord, bagWeightKg)
     : 0
   const selectedDispatchVarianceKgs = selectedDispatchResolvedKgs - selectedDispatchNominalKgs
   const processedNominalBagsTotal =
@@ -880,7 +881,7 @@ export default function DispatchTab({ showDataToolsControls = false }: DispatchT
             <p className="mt-1 text-xs text-muted-foreground">{formatNumber(dispatchedNominalBagsTotal * bagWeightKg)} KGs</p>
           </div>
           <div className="rounded-lg border border-border/60 bg-white/80 p-3">
-            <p className="text-xs text-muted-foreground">Received for sales</p>
+            <p className="text-xs text-muted-foreground">Confirmed received for sales</p>
             <p className="mt-1 text-sm font-semibold text-foreground">{formatNumber(dispatchedReceivedKgsTotal)} KGs</p>
             <p className={cn("mt-1 text-xs", dispatchVarianceKgsTotal >= 0 ? "text-emerald-700" : "text-rose-700")}>
               Variance vs nominal dispatch: {dispatchVarianceKgsTotal >= 0 ? "+" : ""}
@@ -920,7 +921,7 @@ export default function DispatchTab({ showDataToolsControls = false }: DispatchT
               {formatNumber(dispatchedTotals.arabica_dry_parchment * bagWeightKg)} KGs)
             </div>
             <div className="text-xs text-muted-foreground mt-1">
-              Received (sales basis): {formatNumber(dispatchReceivedKgsTotals.arabica_dry_parchment)} KGs
+              Confirmed received: {formatNumber(dispatchReceivedKgsTotals.arabica_dry_parchment)} KGs
             </div>
             <div
               className={cn(
@@ -955,7 +956,7 @@ export default function DispatchTab({ showDataToolsControls = false }: DispatchT
               {formatNumber(dispatchedTotals.arabica_dry_cherry * bagWeightKg)} KGs)
             </div>
             <div className="text-xs text-muted-foreground mt-1">
-              Received (sales basis): {formatNumber(dispatchReceivedKgsTotals.arabica_dry_cherry)} KGs
+              Confirmed received: {formatNumber(dispatchReceivedKgsTotals.arabica_dry_cherry)} KGs
             </div>
             <div
               className={cn(
@@ -990,7 +991,7 @@ export default function DispatchTab({ showDataToolsControls = false }: DispatchT
               {formatNumber(dispatchedTotals.robusta_dry_parchment * bagWeightKg)} KGs)
             </div>
             <div className="text-xs text-muted-foreground mt-1">
-              Received (sales basis): {formatNumber(dispatchReceivedKgsTotals.robusta_dry_parchment)} KGs
+              Confirmed received: {formatNumber(dispatchReceivedKgsTotals.robusta_dry_parchment)} KGs
             </div>
             <div
               className={cn(
@@ -1025,7 +1026,7 @@ export default function DispatchTab({ showDataToolsControls = false }: DispatchT
               {formatNumber(dispatchedTotals.robusta_dry_cherry * bagWeightKg)} KGs)
             </div>
             <div className="text-xs text-muted-foreground mt-1">
-              Received (sales basis): {formatNumber(dispatchReceivedKgsTotals.robusta_dry_cherry)} KGs
+              Confirmed received: {formatNumber(dispatchReceivedKgsTotals.robusta_dry_cherry)} KGs
             </div>
             <div
               className={cn(
@@ -1206,7 +1207,7 @@ export default function DispatchTab({ showDataToolsControls = false }: DispatchT
                 </p>
               ) : (
                 <p className="text-xs text-muted-foreground">
-                  Blank means fallback to {formatNumber(bagsDispatchedValue * bagWeightKg)} KGs ({bagWeightKg} KG per bag).
+                  Leave blank until receipt is confirmed. Unconfirmed dispatch stays out of sales availability.
                 </p>
               )}
             </div>

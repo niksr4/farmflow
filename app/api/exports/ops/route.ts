@@ -578,7 +578,7 @@ const loadReconciliationRows = async (
           COALESCE(NULLIF(d.lot_id, ''), 'UNSPECIFIED') AS lot_id,
           COALESCE(d.coffee_type, 'Unknown') AS coffee_type,
           COALESCE(d.bag_type, 'Unknown') AS bag_type,
-          COALESCE(SUM(COALESCE(NULLIF(d.kgs_received, 0), d.bags_dispatched * bw.bag_weight_kg)), 0) AS dispatch_kgs
+          COALESCE(SUM(NULLIF(d.kgs_received, 0)), 0) AS dispatch_kgs
         FROM dispatch_records d
         CROSS JOIN bag_weight bw
         WHERE d.tenant_id = ${tenantId}

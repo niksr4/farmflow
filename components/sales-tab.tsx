@@ -1181,10 +1181,10 @@ export default function SalesTab({
             Selection: {selectionScopeLabel} · {coffeeType} · {bagType} · {selectedFiscalYear.label}
           </p>
           <p className="text-xs text-muted-foreground">
-            Available for this selection is strict stock for this exact slot. All coffee types in this scope is broader context only.
+            Available for this selection is confirmed received stock for this exact slot. Unconfirmed dispatch is not sellable.
           </p>
           <p className="text-xs text-muted-foreground">
-            Note: validation uses stock in the selected fiscal year scope to match the availability cards below.
+            Note: validation uses confirmed received KGs in the selected fiscal year scope to match the availability cards below.
           </p>
           {isLegacyPooledAvailability && (
             <p className="text-xs font-medium text-amber-700">

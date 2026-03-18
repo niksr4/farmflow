@@ -186,12 +186,7 @@ async function collectTenantFindings(input: { tenantId: string; tenantName: stri
           dispatched AS (
             SELECT
               COALESCE(
-                SUM(
-                  COALESCE(
-                    NULLIF(kgs_received, 0),
-                    bags_dispatched * $2
-                  )
-                ),
+                SUM(NULLIF(kgs_received, 0)),
                 0
               ) AS dispatch_kgs
             FROM dispatch_records

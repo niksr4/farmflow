@@ -131,7 +131,7 @@ export async function GET(request: Request) {
             SELECT
               coffee_type,
               bag_type,
-              COALESCE(SUM(COALESCE(NULLIF(kgs_received, 0), bags_dispatched * ${bagWeightKg})), 0) AS received_kgs
+              COALESCE(SUM(NULLIF(kgs_received, 0)), 0) AS received_kgs
             FROM dispatch_records
             WHERE tenant_id = ${tenantContext.tenantId}
               AND dispatch_date >= ${startDateIso}::date

@@ -3,16 +3,18 @@ import { describe, expect, it } from "vitest"
 import {
   computeRemainingKgs,
   hasSufficientStock,
+  resolveDispatchNominalKgs,
   resolveDispatchReceivedKgs,
   resolveSalesKgs,
   summarizeSlotStock,
 } from "../lib/sales-math"
 
 describe("sales + dispatch reconciliation math", () => {
-  it("uses dispatch received KGs first, then falls back to bags x bagWeight", () => {
+  it("uses only confirmed dispatch received KGs for sellable stock", () => {
     expect(resolveDispatchReceivedKgs({ kgs_received: 2480, bags_dispatched: 60 }, 50)).toBe(2480)
-    expect(resolveDispatchReceivedKgs({ kgs_received: 0, bags_dispatched: 60 }, 50)).toBe(3000)
-    expect(resolveDispatchReceivedKgs({ bags_dispatched: 12.5 }, 50)).toBe(625)
+    expect(resolveDispatchReceivedKgs({ kgs_received: 0, bags_dispatched: 60 }, 50)).toBe(0)
+    expect(resolveDispatchReceivedKgs({ bags_dispatched: 12.5 }, 50)).toBe(0)
+    expect(resolveDispatchNominalKgs({ bags_dispatched: 12.5 }, 50)).toBe(625)
   })
 
   it("resolves sold KGs with correct precedence chain", () => {
@@ -37,10 +39,10 @@ describe("sales + dispatch reconciliation math", () => {
       50,
     )
 
-    expect(slot.receivedKgs).toBe(7500)
+    expect(slot.receivedKgs).toBe(2500)
     expect(slot.soldKgs).toBe(3000)
-    expect(slot.rawRemainingKgs).toBe(4500)
-    expect(slot.remainingKgs).toBe(4500)
+    expect(slot.rawRemainingKgs).toBe(-500)
+    expect(slot.remainingKgs).toBe(0)
   })
 
   it("supports edit checks by excluding current sale from sold total", () => {
@@ -61,4 +63,3 @@ describe("sales + dispatch reconciliation math", () => {
     expect(hasSufficientStock(receivedKgs, soldKgs, requestedKgs)).toBe(true)
   })
 })
-

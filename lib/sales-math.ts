@@ -21,10 +21,14 @@ export type SaleLike = {
   bags_sold?: NumberLike
 }
 
-export const resolveDispatchReceivedKgs = (row: DispatchLike, bagWeightKg: number) => {
+export const resolveDispatchNominalKgs = (row: Pick<DispatchLike, "bags_dispatched">, bagWeightKg: number) => {
+  return toNumber(row.bags_dispatched) * bagWeightKg
+}
+
+export const resolveDispatchReceivedKgs = (row: DispatchLike, _bagWeightKg: number) => {
   const received = toNumber(row.kgs_received)
   if (received > 0) return received
-  return toNumber(row.bags_dispatched) * bagWeightKg
+  return 0
 }
 
 export const resolveSalesKgs = (row: SaleLike, bagWeightKg: number) => {
@@ -75,4 +79,3 @@ export const summarizeSlotStock = (
     remainingKgs: Math.max(0, rawRemainingKgs),
   }
 }
-

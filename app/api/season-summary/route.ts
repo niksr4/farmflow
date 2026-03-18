@@ -95,7 +95,7 @@ export async function GET(request: NextRequest) {
           coffee_type,
           bag_type,
           COALESCE(SUM(bags_dispatched), 0) AS bags_dispatched,
-          COALESCE(SUM(COALESCE(NULLIF(kgs_received, 0), bags_dispatched * ${bagWeightKg})), 0) AS kgs_received
+          COALESCE(SUM(NULLIF(kgs_received, 0)), 0) AS kgs_received
         FROM dispatch_records
         WHERE tenant_id = $1
           AND dispatch_date >= $2::date
@@ -212,7 +212,7 @@ export async function GET(request: NextRequest) {
           coffee_type,
           bag_type,
           COALESCE(SUM(bags_dispatched), 0) AS bags_dispatched,
-          COALESCE(SUM(COALESCE(NULLIF(kgs_received, 0), bags_dispatched * ${bagWeightKg})), 0) AS kgs_received
+          COALESCE(SUM(NULLIF(kgs_received, 0)), 0) AS kgs_received
         FROM dispatch_records
         WHERE tenant_id = $1
           AND dispatch_date >= $2::date
@@ -271,7 +271,7 @@ export async function GET(request: NextRequest) {
           COALESCE(l.name, l.code, dr.estate, 'Unknown') AS location_name,
           COALESCE(l.code, '') AS location_code,
           COALESCE(SUM(dr.bags_dispatched), 0) AS bags_dispatched,
-          COALESCE(SUM(COALESCE(NULLIF(dr.kgs_received, 0), dr.bags_dispatched * ${bagWeightKg})), 0) AS kgs_received
+          COALESCE(SUM(NULLIF(dr.kgs_received, 0)), 0) AS kgs_received
         FROM dispatch_records dr
         LEFT JOIN locations l ON l.id = dr.location_id
         WHERE dr.tenant_id = $1

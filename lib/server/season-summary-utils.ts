@@ -25,11 +25,10 @@ export const toLocationBucket = (locationName?: string | null, locationCode?: st
   return rawCode || rawName
 }
 
-export const resolveDispatchReceivedKgs = (row: Record<string, unknown>, bagWeightKg: number) => {
+export const resolveDispatchReceivedKgs = (row: Record<string, unknown>, _bagWeightKg: number) => {
   const received = Number(row.kgs_received) || 0
   if (received > 0) return received
-  const bags = Number(row.bags_dispatched) || 0
-  return bags * bagWeightKg
+  return 0
 }
 
 export const resolveSalesKgs = (row: Record<string, unknown>, bagWeightKg: number) => {
