@@ -24,6 +24,7 @@ import { formatCurrency, formatNumber } from "@/lib/format"
 import { canAcceptNonNegative, isBlockedNumericKey } from "@/lib/number-input"
 import { buildSalesCsv } from "@/lib/sales-export"
 import { resolveDispatchReceivedKgs as resolveDispatchReceivedKgsValue, resolveSalesKgs } from "@/lib/sales-math"
+import OtherSalesTab from "@/components/other-sales-tab"
 import posthog from "posthog-js"
 
 interface SalesRecord {
@@ -112,9 +113,22 @@ const resolveSalesRecordKgs = (
 
 type SalesTabProps = {
   showDataToolsControls?: boolean
+  coffeeSalesEnabled?: boolean
+  otherSalesEnabled?: boolean
+  activeWorkspaceView?: SalesWorkspaceView
+  onWorkspaceViewChange?: (view: SalesWorkspaceView) => void
 }
 
-export default function SalesTab({ showDataToolsControls = false }: SalesTabProps) {
+type SalesWorkspaceView = "coffee" | "other-sales"
+type OtherSalesTotals = { totalRevenue: number; totalCount: number }
+
+export default function SalesTab({
+  showDataToolsControls = false,
+  coffeeSalesEnabled = true,
+  otherSalesEnabled = false,
+  activeWorkspaceView,
+  onWorkspaceViewChange,
+}: SalesTabProps) {
   const { user } = useAuth()
   const { settings } = useTenantSettings()
   const [selectedFiscalYear, setSelectedFiscalYear] = useState<FiscalYear>(getCurrentFiscalYear())
@@ -150,6 +164,7 @@ export default function SalesTab({ showDataToolsControls = false }: SalesTabProp
   const [salesSummary, setSalesSummary] = useState<SalesSummaryRow[]>([])
   const [salesTotalCount, setSalesTotalCount] = useState(0)
   const [salesTotals, setSalesTotals] = useState<SalesTotals | null>(null)
+  const [otherSalesTotals, setOtherSalesTotals] = useState<OtherSalesTotals>({ totalRevenue: 0, totalCount: 0 })
   const [dispatchSummaryScope, setDispatchSummaryScope] = useState<LocationScope>("location")
   const [salesSummaryScope, setSalesSummaryScope] = useState<LocationScope>("location")
   const [salesPage, setSalesPage] = useState(0)
@@ -159,11 +174,27 @@ export default function SalesTab({ showDataToolsControls = false }: SalesTabProp
   const [editingRecord, setEditingRecord] = useState<SalesRecord | null>(null)
   const [isLoading, setIsLoading] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
+  const [internalWorkspaceView, setInternalWorkspaceView] = useState<SalesWorkspaceView>("coffee")
   const salesSaveStateRef = useRef({ canSubmitSale: false, isSaving: false })
   const salesSaveHandlerRef = useRef<(() => Promise<void> | void) | null>(null)
   const [saveFeedback, setSaveFeedback] = useState<{ type: "success" | "error"; message: string } | null>(null)
   const { toast } = useToast()
   const salesPageSize = 25
+  const currentWorkspaceView = otherSalesEnabled ? activeWorkspaceView || internalWorkspaceView : "coffee"
+  const resolvedWorkspaceView: SalesWorkspaceView =
+    !coffeeSalesEnabled && otherSalesEnabled ? "other-sales" : currentWorkspaceView
+  const setCurrentWorkspaceView = useCallback(
+    (view: SalesWorkspaceView) => {
+      if (!coffeeSalesEnabled && view === "coffee") return
+      if (!otherSalesEnabled && view === "other-sales") return
+      if (onWorkspaceViewChange) {
+        onWorkspaceViewChange(view)
+        return
+      }
+      setInternalWorkspaceView(view)
+    },
+    [coffeeSalesEnabled, onWorkspaceViewChange, otherSalesEnabled],
+  )
   const blockInvalidNumberKey = (event: ReactKeyboardEvent<HTMLInputElement>) => {
     if (isBlockedNumericKey(event.key)) {
       event.preventDefault()
@@ -257,6 +288,14 @@ export default function SalesTab({ showDataToolsControls = false }: SalesTabProp
 
   // Fetch sales records
   const fetchSalesRecords = useCallback(async (pageIndex = 0, append = false) => {
+    if (!coffeeSalesEnabled) {
+      setSalesRecords([])
+      setSalesTotals({ totalBagsSold: 0, totalKgsSold: 0, totalRevenue: 0 })
+      setSalesTotalCount(0)
+      setSalesHasMore(false)
+      setSalesPage(0)
+      return
+    }
     if (append) {
       setIsLoadingMore(true)
     } else {
@@ -301,9 +340,14 @@ export default function SalesTab({ showDataToolsControls = false }: SalesTabProp
         setIsLoading(false)
       }
     }
-  }, [salesFilterLocationId, salesPageSize, selectedFiscalYear])
+  }, [coffeeSalesEnabled, salesFilterLocationId, salesPageSize, selectedFiscalYear])
 
   const fetchDispatchSummary = useCallback(async () => {
+    if (!coffeeSalesEnabled) {
+      setDispatchSummary([])
+      setDispatchSummaryScope("all")
+      return
+    }
     try {
       const params = new URLSearchParams({
         summaryOnly: "true",
@@ -326,9 +370,14 @@ export default function SalesTab({ showDataToolsControls = false }: SalesTabProp
       setDispatchSummary([])
       setDispatchSummaryScope("all")
     }
-  }, [selectedFiscalRange.endDate, selectedFiscalRange.startDate])
+  }, [coffeeSalesEnabled, selectedFiscalRange.endDate, selectedFiscalRange.startDate])
 
   const fetchSalesSummary = useCallback(async () => {
+    if (!coffeeSalesEnabled) {
+      setSalesSummary([])
+      setSalesSummaryScope("all")
+      return
+    }
     try {
       const params = new URLSearchParams({
         summaryOnly: "true",
@@ -350,9 +399,13 @@ export default function SalesTab({ showDataToolsControls = false }: SalesTabProp
       setSalesSummary([])
       setSalesSummaryScope("all")
     }
-  }, [selectedFiscalRange.endDate, selectedFiscalRange.startDate])
+  }, [coffeeSalesEnabled, selectedFiscalRange.endDate, selectedFiscalRange.startDate])
 
   const fetchOverviewDispatchSummary = useCallback(async () => {
+    if (!coffeeSalesEnabled) {
+      setOverviewDispatchSummary([])
+      return
+    }
     try {
       const { startDate, endDate } = getFiscalYearDateRange(selectedFiscalYear)
       const params = new URLSearchParams({
@@ -372,9 +425,13 @@ export default function SalesTab({ showDataToolsControls = false }: SalesTabProp
       console.error("Error fetching dispatch summary:", error)
       setOverviewDispatchSummary([])
     }
-  }, [selectedFiscalYear])
+  }, [coffeeSalesEnabled, selectedFiscalYear])
 
   const fetchOverviewSalesSummary = useCallback(async () => {
+    if (!coffeeSalesEnabled) {
+      setOverviewSalesSummary([])
+      return
+    }
     try {
       const { startDate, endDate } = getFiscalYearDateRange(selectedFiscalYear)
       const params = new URLSearchParams({
@@ -394,12 +451,55 @@ export default function SalesTab({ showDataToolsControls = false }: SalesTabProp
       console.error("Error fetching sales overview:", error)
       setOverviewSalesSummary([])
     }
-  }, [selectedFiscalYear])
+  }, [coffeeSalesEnabled, selectedFiscalYear])
 
   useEffect(() => {
     loadLocations()
     loadBuyerSuggestions()
   }, [loadBuyerSuggestions, loadLocations])
+
+  useEffect(() => {
+    if (!otherSalesEnabled) {
+      setOtherSalesTotals({ totalRevenue: 0, totalCount: 0 })
+      return
+    }
+
+    let ignore = false
+    const { startDate, endDate } = getFiscalYearDateRange(selectedFiscalYear)
+    const params = new URLSearchParams({
+      startDate,
+      endDate,
+      all: "true",
+    })
+    if (salesFilterLocationId && salesFilterLocationId !== LOCATION_ALL) {
+      params.set("locationId", salesFilterLocationId)
+    }
+
+    const loadOtherSalesTotals = async () => {
+      try {
+        const response = await fetch(`/api/other-sales?${params.toString()}`, { cache: "no-store" })
+        const data = await response.json()
+        if (ignore) return
+        if (!response.ok || !data.success) {
+          setOtherSalesTotals({ totalRevenue: 0, totalCount: 0 })
+          return
+        }
+        setOtherSalesTotals({
+          totalRevenue: Number(data.totals?.totalRevenue) || 0,
+          totalCount: Number(data.totalCount) || 0,
+        })
+      } catch (error) {
+        if (!ignore) {
+          setOtherSalesTotals({ totalRevenue: 0, totalCount: 0 })
+        }
+      }
+    }
+
+    void loadOtherSalesTotals()
+    return () => {
+      ignore = true
+    }
+  }, [otherSalesEnabled, salesFilterLocationId, selectedFiscalYear])
 
   useEffect(() => {
     fetchSalesRecords(0, false)
@@ -879,11 +979,11 @@ export default function SalesTab({ showDataToolsControls = false }: SalesTabProp
   const fallbackTotals = calculateTotals()
   const totalBagsSold = salesTotals?.totalBagsSold ?? fallbackTotals.totalBagsSold
   const totalKgsSold = salesTotals?.totalKgsSold ?? fallbackTotals.totalKgsSold
-  const totalRevenue = salesTotals?.totalRevenue ?? fallbackTotals.totalRevenue
+  const totalCoffeeRevenue = salesTotals?.totalRevenue ?? fallbackTotals.totalRevenue
   const totals = {
     totalBagsSold,
     totalKgsSold,
-    totalRevenue,
+    totalRevenue: totalCoffeeRevenue,
   }
   const pricePerBagByType = useMemo(() => {
     const totalsByKey: Record<string, { revenue: number; bags: number }> = {}
@@ -972,14 +1072,17 @@ export default function SalesTab({ showDataToolsControls = false }: SalesTabProp
   const selectedSalesPricePerBag = Number(selectedSalesRecord?.price_per_bag) || 0
   const selectedSalesPricePerKg = selectedSalesKgs > 0 ? (selectedSalesPricePerBag * selectedSalesBags) / selectedSalesKgs : 0
   const selectedSalesRevenue = Number(selectedSalesRecord?.revenue) || 0
+  const coffeeRevenue = totals.totalRevenue
+  const otherRevenue = otherSalesTotals.totalRevenue
+  const combinedRevenue = coffeeRevenue + otherRevenue
 
   return (
     <div className="flex flex-col gap-8">
       {/* Fiscal Year Selector */}
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h2 className="text-xl font-semibold text-foreground">Coffee Sales</h2>
-          <p className="text-sm text-muted-foreground">Track sales by location, buyer, and lot.</p>
+          <h2 className="text-xl font-semibold text-foreground">Sales</h2>
+          <p className="text-sm text-muted-foreground">Track coffee sales and other estate revenue from one workspace.</p>
         </div>
         <div className="flex items-center gap-2">
           <Label htmlFor="fiscal-year" className="text-xs uppercase tracking-[0.2em] text-muted-foreground">
@@ -1006,6 +1109,63 @@ export default function SalesTab({ showDataToolsControls = false }: SalesTabProp
         </div>
       </div>
 
+      <Card className="border-border/70 bg-white/90">
+        <CardHeader className="pb-3">
+          <CardTitle className="text-xs uppercase tracking-[0.2em] text-muted-foreground">Revenue Dashboard</CardTitle>
+          <CardDescription>
+            Fiscal year {selectedFiscalYear.label}
+            {salesFilterLocationId !== LOCATION_ALL ? " with estate filter applied." : " across all estates."}
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="grid gap-4 lg:grid-cols-[1.6fr_1fr]">
+          <div className="space-y-2">
+            <div>
+              <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">Coffee Revenue</p>
+              <p className="text-2xl font-semibold text-emerald-700">{formatCurrency(coffeeRevenue, 0)}</p>
+            </div>
+            <div>
+              <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">Other Revenue</p>
+              <p className="text-lg font-semibold text-amber-700">{formatCurrency(otherRevenue, 0)}</p>
+            </div>
+            <div className="border-t border-border/60 pt-2">
+              <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">Total Revenue</p>
+              <p className="text-xl font-semibold text-foreground">{formatCurrency(combinedRevenue, 0)}</p>
+              <p className="mt-1 text-xs text-muted-foreground">
+                Coffee entries: {resolvedSalesCount}
+                {otherSalesEnabled ? ` · Other sales: ${otherSalesTotals.totalCount}` : ""}
+              </p>
+            </div>
+          </div>
+          {otherSalesEnabled ? (
+            <div className="rounded-xl border border-border/60 bg-muted/20 p-3">
+              <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">Sales Workspace</p>
+              <div className={cn("mt-3 grid gap-2", coffeeSalesEnabled ? "grid-cols-2" : "grid-cols-1")}>
+                {coffeeSalesEnabled ? (
+                  <Button
+                    type="button"
+                    variant={resolvedWorkspaceView === "coffee" ? "default" : "outline"}
+                    className={cn(resolvedWorkspaceView === "coffee" ? "bg-emerald-700 hover:bg-emerald-800" : "bg-white")}
+                    onClick={() => setCurrentWorkspaceView("coffee")}
+                  >
+                    Coffee Sales
+                  </Button>
+                ) : null}
+                <Button
+                  type="button"
+                  variant={resolvedWorkspaceView === "other-sales" ? "default" : "outline"}
+                  className={cn(resolvedWorkspaceView === "other-sales" ? "bg-emerald-700 hover:bg-emerald-800" : "bg-white")}
+                  onClick={() => setCurrentWorkspaceView("other-sales")}
+                >
+                  Other Sales
+                </Button>
+              </div>
+            </div>
+          ) : null}
+        </CardContent>
+      </Card>
+
+      {resolvedWorkspaceView === "coffee" ? (
+        <>
       <Card
         className={cn(
           "order-2 bg-white/90",
@@ -1172,18 +1332,18 @@ export default function SalesTab({ showDataToolsControls = false }: SalesTabProp
 
       {/* Summary Cards */}
       <div className="order-4 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-        {/* Total Revenue */}
+        {/* Coffee Revenue */}
         <Card className="border-border/60 bg-white/85">
           <CardHeader className="pb-2">
-            <CardTitle className="text-xs uppercase tracking-[0.2em] text-muted-foreground">Total Revenue</CardTitle>
+            <CardTitle className="text-xs uppercase tracking-[0.2em] text-muted-foreground">Coffee Revenue</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-semibold text-emerald-700">{formatCurrency(totals.totalRevenue, 0)}</div>
+            <div className="text-2xl font-semibold text-emerald-700">{formatCurrency(coffeeRevenue, 0)}</div>
             <div className="text-sm text-muted-foreground mt-1">
               {resolvedSalesCount} sales recorded
             </div>
             <div className="text-sm text-muted-foreground mt-1">
-              Pricing by type below
+              Combined total is shown above with other sales
             </div>
           </CardContent>
         </Card>
@@ -1810,6 +1970,17 @@ export default function SalesTab({ showDataToolsControls = false }: SalesTabProp
           )}
         </CardContent>
       </Card>
+        </>
+      ) : (
+        <OtherSalesTab
+          showOverviewCard={false}
+          hideFiscalYearControl
+          selectedFiscalYear={selectedFiscalYear}
+          onSelectedFiscalYearChange={setSelectedFiscalYear}
+          locationFilterId={salesFilterLocationId}
+          onLocationFilterChange={setSalesFilterLocationId}
+        />
+      )}
     </div>
   )
 }

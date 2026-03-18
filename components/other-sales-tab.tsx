@@ -79,11 +79,27 @@ const newDefaultForm = () => ({
   notes: "",
 })
 
-export default function OtherSalesTab() {
+type OtherSalesTabProps = {
+  showOverviewCard?: boolean
+  hideFiscalYearControl?: boolean
+  selectedFiscalYear?: FiscalYear
+  onSelectedFiscalYearChange?: (value: FiscalYear) => void
+  locationFilterId?: string
+  onLocationFilterChange?: (value: string) => void
+}
+
+export default function OtherSalesTab({
+  showOverviewCard = true,
+  hideFiscalYearControl = false,
+  selectedFiscalYear: controlledFiscalYear,
+  onSelectedFiscalYearChange,
+  locationFilterId,
+  onLocationFilterChange,
+}: OtherSalesTabProps) {
   const { toast } = useToast()
   const { user } = useAuth()
   const canDelete = user?.role === "admin" || user?.role === "owner" || user?.role === "user"
-  const [selectedFiscalYear, setSelectedFiscalYear] = useState<FiscalYear>(getCurrentFiscalYear())
+  const [internalSelectedFiscalYear, setInternalSelectedFiscalYear] = useState<FiscalYear>(getCurrentFiscalYear())
   const availableFiscalYears = getAvailableFiscalYears()
 
   const [locations, setLocations] = useState<LocationOption[]>([])
@@ -94,7 +110,12 @@ export default function OtherSalesTab() {
   const [isSaving, setIsSaving] = useState(false)
   const [editingRecord, setEditingRecord] = useState<OtherSalesRecord | null>(null)
   const [form, setForm] = useState(newDefaultForm())
-  const [locationFilter, setLocationFilter] = useState<string>("all")
+  const [internalLocationFilter, setInternalLocationFilter] = useState<string>("all")
+
+  const selectedFiscalYear = controlledFiscalYear || internalSelectedFiscalYear
+  const setSelectedFiscalYear = onSelectedFiscalYearChange || setInternalSelectedFiscalYear
+  const locationFilter = locationFilterId ?? internalLocationFilter
+  const setLocationFilter = onLocationFilterChange || setInternalLocationFilter
 
   const selectedFiscalRange = useMemo(() => getFiscalYearDateRange(selectedFiscalYear), [selectedFiscalYear])
 
@@ -350,32 +371,34 @@ export default function OtherSalesTab() {
 
   return (
     <div className="space-y-6">
-      <Card className="border-emerald-100 bg-emerald-50/40">
-        <CardHeader>
-          <CardTitle>Other Sales</CardTitle>
-          <CardDescription>
-            Capture Pepper, Arecanut, Avocado, Coconut, and Other sales using either per-kg or contract mode.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          <div>
-            <p className="text-xs text-muted-foreground">Total revenue</p>
-            <p className="text-lg font-semibold">{formatCurrency(totals.totalRevenue)}</p>
-          </div>
-          <div>
-            <p className="text-xs text-muted-foreground">Per-kg revenue</p>
-            <p className="text-lg font-semibold text-emerald-700">{formatCurrency(totals.perKgRevenue)}</p>
-          </div>
-          <div>
-            <p className="text-xs text-muted-foreground">Contract revenue</p>
-            <p className="text-lg font-semibold text-amber-700">{formatCurrency(totals.contractRevenue)}</p>
-          </div>
-          <div>
-            <p className="text-xs text-muted-foreground">KGs sold</p>
-            <p className="text-lg font-semibold">{formatNumber(totals.totalKgsSold, 2)} kg</p>
-          </div>
-        </CardContent>
-      </Card>
+      {showOverviewCard ? (
+        <Card className="border-emerald-100 bg-emerald-50/40">
+          <CardHeader>
+            <CardTitle>Other Sales</CardTitle>
+            <CardDescription>
+              Capture Pepper, Arecanut, Avocado, Coconut, and Other sales using either per-kg or contract mode.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            <div>
+              <p className="text-xs text-muted-foreground">Total revenue</p>
+              <p className="text-lg font-semibold">{formatCurrency(totals.totalRevenue)}</p>
+            </div>
+            <div>
+              <p className="text-xs text-muted-foreground">Per-kg revenue</p>
+              <p className="text-lg font-semibold text-emerald-700">{formatCurrency(totals.perKgRevenue)}</p>
+            </div>
+            <div>
+              <p className="text-xs text-muted-foreground">Contract revenue</p>
+              <p className="text-lg font-semibold text-amber-700">{formatCurrency(totals.contractRevenue)}</p>
+            </div>
+            <div>
+              <p className="text-xs text-muted-foreground">KGs sold</p>
+              <p className="text-lg font-semibold">{formatNumber(totals.totalKgsSold, 2)} kg</p>
+            </div>
+          </CardContent>
+        </Card>
+      ) : null}
 
       <Card>
         <CardHeader>
@@ -551,24 +574,26 @@ export default function OtherSalesTab() {
             </CardDescription>
           </div>
           <div className="flex items-center gap-2">
-            <Select
-              value={selectedFiscalYear.label}
-              onValueChange={(value) => {
-                const nextYear = availableFiscalYears.find((fy) => fy.label === value) || getCurrentFiscalYear()
-                setSelectedFiscalYear(nextYear)
-              }}
-            >
-              <SelectTrigger className="w-[140px]">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {availableFiscalYears.map((fy) => (
-                  <SelectItem key={fy.label} value={fy.label}>
-                    {fy.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            {!hideFiscalYearControl ? (
+              <Select
+                value={selectedFiscalYear.label}
+                onValueChange={(value) => {
+                  const nextYear = availableFiscalYears.find((fy) => fy.label === value) || getCurrentFiscalYear()
+                  setSelectedFiscalYear(nextYear)
+                }}
+              >
+                <SelectTrigger className="w-[140px]">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {availableFiscalYears.map((fy) => (
+                    <SelectItem key={fy.label} value={fy.label}>
+                      {fy.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            ) : null}
             <Select value={locationFilter} onValueChange={setLocationFilter}>
               <SelectTrigger className="w-[180px]">
                 <SelectValue placeholder="Filter estate" />

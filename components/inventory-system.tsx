@@ -67,7 +67,6 @@ import DispatchTab from "@/components/dispatch-tab"
 import ProcessingTab from "@/components/processing-tab"
 import RainfallWeatherTab from "@/components/rainfall-weather-tab"
 import SalesTab from "@/components/sales-tab"
-import OtherSalesTab from "@/components/other-sales-tab"
 import NewsTab from "@/components/news-tab"
 import SeasonDashboard from "@/components/season-dashboard"
 import CuringTab from "@/components/curing-tab"
@@ -175,10 +174,14 @@ type TransactionWriteFailureSnapshot = {
 }
 
 export default function InventorySystem() {
+  type InventoryWorkspaceView = "inventory" | "transactions"
+  type SalesWorkspaceView = "coffee" | "other-sales"
   // UI / paging
   const [currentPage, setCurrentPage] = useState(1)
   const itemsPerPage = 10
   const [activeTab, setActiveTab] = useState(DASHBOARD_LAUNCHER_TAB)
+  const [inventoryWorkspaceView, setInventoryWorkspaceView] = useState<InventoryWorkspaceView>("inventory")
+  const [salesWorkspaceView, setSalesWorkspaceView] = useState<SalesWorkspaceView>("coffee")
   const [loadedTabs, setLoadedTabs] = useState<string[]>([DASHBOARD_LAUNCHER_TAB])
   const [dataToolsDataset, setDataToolsDataset] = useState<ExportDatasetId>("processing")
   const [isExportingDataTools, setIsExportingDataTools] = useState(false)
@@ -218,6 +221,12 @@ export default function InventorySystem() {
     robustaKgs: 0,
     totalSales: 0,
     totalRevenue: 0,
+    loading: false,
+    error: null as string | null,
+  })
+  const [otherSalesHeroTotals, setOtherSalesHeroTotals] = useState({
+    totalRevenue: 0,
+    totalCount: 0,
     loading: false,
     error: null as string | null,
   })
@@ -1409,13 +1418,16 @@ export default function InventorySystem() {
       },
     ]
 
-    const balanceNetBooked = salesHeroTotals.totalRevenue - accountsTotals.grandTotal
+    const totalBookedRevenue = salesHeroTotals.totalRevenue + otherSalesHeroTotals.totalRevenue
+    const totalBookedRevenueLoading = salesHeroTotals.loading || otherSalesHeroTotals.loading
+    const totalBookedRevenueError = salesHeroTotals.error || otherSalesHeroTotals.error
+    const balanceNetBooked = totalBookedRevenue - accountsTotals.grandTotal
     const balanceLivePosition = balanceNetBooked + receivablesHeroTotals.totalOutstanding
     const balanceSheetStats: HeroStat[] = [
       {
         label: "Booked inflow",
-        value: salesHeroTotals.loading ? "Loading..." : formatCurrency(salesHeroTotals.totalRevenue, 0),
-        metricValue: salesHeroTotals.loading || salesHeroTotals.error ? null : salesHeroTotals.totalRevenue,
+        value: totalBookedRevenueLoading ? "Loading..." : totalBookedRevenueError ? "Unavailable" : formatCurrency(totalBookedRevenue, 0),
+        metricValue: totalBookedRevenueLoading || totalBookedRevenueError ? null : totalBookedRevenue,
       },
       {
         label: "Booked outflow",
@@ -1425,11 +1437,13 @@ export default function InventorySystem() {
       {
         label: "Live position",
         value:
-          accountsTotalsLoading || receivablesHeroTotals.loading || salesHeroTotals.loading
+          accountsTotalsLoading || receivablesHeroTotals.loading || totalBookedRevenueLoading
             ? "Loading..."
+            : totalBookedRevenueError
+              ? "Unavailable"
             : formatCurrency(balanceLivePosition, 0),
         metricValue:
-          accountsTotalsLoading || receivablesHeroTotals.loading || salesHeroTotals.loading
+          accountsTotalsLoading || receivablesHeroTotals.loading || totalBookedRevenueLoading || totalBookedRevenueError
             ? null
             : balanceLivePosition,
       },
@@ -1978,6 +1992,9 @@ export default function InventorySystem() {
     salesHeroTotals.robustaKgs,
     salesHeroTotals.totalRevenue,
     salesHeroTotals.totalSales,
+    otherSalesHeroTotals.error,
+    otherSalesHeroTotals.loading,
+    otherSalesHeroTotals.totalRevenue,
     totalTransactions,
     unassignedLabel,
     unassignedTransactions,
@@ -2033,6 +2050,301 @@ export default function InventorySystem() {
       setCurrentPage(validatedCurrentPage)
     }
   }, [currentPage, validatedCurrentPage])
+
+  const renderTransactionHistoryPanel = () => (
+    <div className="rounded-2xl border border-black/5 bg-white/85 p-6 shadow-sm">
+      <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <h2 className="flex items-center text-lg font-semibold text-emerald-700">
+            <History className="mr-2 h-5 w-5" /> Transaction History
+          </h2>
+          <p className="text-xs text-muted-foreground">Inventory adjustments and usage across the estate.</p>
+        </div>
+        {showDataToolsControls && (
+          <div className="flex gap-2">
+            <Button size="sm" variant="outline" onClick={exportToCSV} className="h-10 bg-transparent">
+              <Download className="mr-2 h-4 w-4" /> Export
+            </Button>
+          </div>
+        )}
+      </div>
+
+      <div className="mb-5 flex flex-col gap-4 sm:flex-row sm:justify-between">
+        <div className="flex flex-col gap-3 sm:flex-row sm:flex-grow">
+          <div className="relative flex-grow">
+            <Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground/70" />
+            <Input
+              placeholder="Search transactions..."
+              value={transactionSearchTerm}
+              onChange={(e) => setTransactionSearchTerm(e.target.value)}
+              className="pl-10 h-10"
+            />
+          </div>
+          <Select value={filterType} onValueChange={setFilterType}>
+            <SelectTrigger className="w-full sm:w-40 h-10 border-border/70 bg-white/80">
+              <SelectValue placeholder="All Types" />
+            </SelectTrigger>
+            <SelectContent className="max-h-[40vh] overflow-y-auto">
+              <SelectItem value="All Types">All Types</SelectItem>
+              {allItemTypesForDropdown.map((type) => (
+                <SelectItem key={type} value={type}>
+                  {type}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <Select value={selectedLocationId} onValueChange={setSelectedLocationId}>
+            <SelectTrigger className="w-full sm:w-48 h-10 border-border/70 bg-white/80">
+              <SelectValue placeholder="All locations" />
+            </SelectTrigger>
+            <SelectContent className="max-h-[40vh] overflow-y-auto">
+              <SelectItem value={LOCATION_ALL}>All locations</SelectItem>
+              <SelectItem value={LOCATION_UNASSIGNED}>{UNASSIGNED_LABEL}</SelectItem>
+              {locations.map((loc) => (
+                <SelectItem key={loc.id} value={loc.id}>
+                  {loc.name || loc.code || "Unnamed location"}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={toggleTransactionSort}
+          className="flex h-10 w-full items-center justify-center gap-1 whitespace-nowrap bg-transparent sm:w-auto sm:justify-start"
+        >
+          {transactionSortOrder === "desc" ? (
+            <>
+              <SortDesc className="h-4 w-4 mr-1" /> Date: Newest First
+            </>
+          ) : (
+            <>
+              <SortAsc className="h-4 w-4 mr-1" /> Date: Oldest First
+            </>
+          )}
+        </Button>
+      </div>
+      {hasLegacyUnassignedTransactions && selectedLocationId !== LOCATION_UNASSIGNED && (
+        <div className="mb-4 flex flex-wrap items-center gap-2 text-xs text-emerald-700/80">
+          <span>Legacy transactions without location live under {UNASSIGNED_LABEL}.</span>
+          <Button
+            variant="link"
+            size="sm"
+            onClick={() => setSelectedLocationId(LOCATION_UNASSIGNED)}
+            className="h-auto p-0 text-emerald-700"
+          >
+            View unassigned
+          </Button>
+        </div>
+      )}
+
+      {isMobile ? (
+        <div className="space-y-3">
+          {transactions.length === 0 && (
+            <div className="rounded-lg border border-border/60 bg-white/80 py-10 text-center text-muted-foreground">
+              No transactions recorded yet.
+            </div>
+          )}
+          {transactions.length > 0 && filteredTransactions.length === 0 && (
+            <div className="rounded-lg border border-border/60 bg-white/80 py-10 text-center text-muted-foreground">
+              No transactions found matching your current filters.
+            </div>
+          )}
+          {currentTransactions.map((transaction, index) => {
+            const typeValue = String(transaction.transaction_type ?? "").toLowerCase()
+            const isDepleting = typeValue.includes("deplet")
+            const isRestocking = typeValue.includes("restock")
+            const typeLabel = isDepleting ? "Depleting" : isRestocking ? "Restocking" : transaction.transaction_type
+            const typeClass = isDepleting
+              ? "bg-red-100 text-red-700 border-red-200"
+              : isRestocking
+                ? "bg-green-100 text-green-700 border-green-200"
+                : "bg-blue-100 text-blue-700 border-blue-200"
+            const rowTone = index % 2 === 0 ? "bg-white/90" : "bg-muted/10"
+            return (
+              <div
+                key={transaction.id ?? `${transaction.item_type}-${transaction.transaction_date}`}
+                className={`rounded-xl border border-border/60 p-3 shadow-sm ${rowTone}`}
+              >
+                <div className="flex items-start justify-between gap-2">
+                  <div>
+                    <p className="text-sm font-semibold text-neutral-900">{transaction.item_type}</p>
+                    <p className="text-xs text-muted-foreground">{formatDate(transaction.transaction_date)}</p>
+                  </div>
+                  <Badge variant="outline" className={typeClass}>
+                    {typeLabel}
+                  </Badge>
+                </div>
+                <div className="mt-3 grid grid-cols-2 gap-2 text-xs">
+                  <div className="rounded-md border border-black/5 bg-white px-2 py-1.5">
+                    <p className="text-[11px] uppercase tracking-wide text-muted-foreground">Quantity</p>
+                    <p className="font-medium text-neutral-900">
+                      {formatNumber(Number(transaction.quantity) || 0)} {transaction.unit}
+                    </p>
+                  </div>
+                  <div className="rounded-md border border-black/5 bg-white px-2 py-1.5">
+                    <p className="text-[11px] uppercase tracking-wide text-muted-foreground">Location</p>
+                    <p className="font-medium text-neutral-900">
+                      {resolveLocationLabel(transaction.location_id, transaction.location_name || transaction.location_code)}
+                    </p>
+                  </div>
+                  <div className="rounded-md border border-black/5 bg-white px-2 py-1.5">
+                    <p className="text-[11px] uppercase tracking-wide text-muted-foreground">Price</p>
+                    <p className="font-medium text-neutral-900">
+                      {transaction.price ? formatCurrency(Number(transaction.price) || 0) : "-"}
+                    </p>
+                  </div>
+                  <div className="rounded-md border border-black/5 bg-white px-2 py-1.5">
+                    <p className="text-[11px] uppercase tracking-wide text-muted-foreground">User</p>
+                    <p className="font-medium text-neutral-900">{transaction.user_id || "-"}</p>
+                  </div>
+                </div>
+                {transaction.notes && (
+                  <p className="mt-2 rounded-md border border-black/5 bg-white px-2 py-1.5 text-xs text-muted-foreground">
+                    {transaction.notes}
+                  </p>
+                )}
+                <div className="mt-3 flex gap-2">
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => handleEditTransaction(transaction)}
+                    className="h-10 flex-1 justify-center gap-1.5 border-amber-200 bg-amber-50 text-amber-700 hover:bg-amber-100"
+                  >
+                    <Edit className="h-4 w-4" />
+                    Edit
+                  </Button>
+                  {canManageRecords && (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => handleDeleteConfirm(transaction.id)}
+                      className="h-10 flex-1 justify-center gap-1.5 border-red-200 bg-red-50 text-red-700 hover:bg-red-100"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                      Delete
+                    </Button>
+                  )}
+                </div>
+              </div>
+            )
+          })}
+        </div>
+      ) : (
+        <div className="border border-border/60 rounded-lg overflow-x-auto bg-white/80">
+          <table className="min-w-full">
+            <thead>
+              <tr className="bg-muted/60 text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground/80 border-b sticky top-0 backdrop-blur">
+                <th className="py-4 px-4 text-left">Date</th>
+                <th className="py-4 px-4 text-left">Location</th>
+                <th className="py-4 px-4 text-left">Item Type</th>
+                <th className="py-4 px-4 text-left">Quantity</th>
+                <th className="py-4 px-4 text-left">Transaction</th>
+                <th className="py-4 px-4 text-left">Price</th>
+                <th className="py-4 px-4 text-left">Notes</th>
+                <th className="py-4 px-4 text-left">User</th>
+                <th className="py-4 px-4 text-left">Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {currentTransactions.map((transaction, index) => {
+                const typeValue = String(transaction.transaction_type ?? "").toLowerCase()
+                const isDepleting = typeValue.includes("deplet")
+                const isRestocking = typeValue.includes("restock")
+                const typeLabel = isDepleting ? "Depleting" : isRestocking ? "Restocking" : transaction.transaction_type
+                const typeClass = isDepleting
+                  ? "bg-red-100 text-red-700 border-red-200"
+                  : isRestocking
+                    ? "bg-green-100 text-green-700 border-green-200"
+                    : "bg-blue-100 text-blue-700 border-blue-200"
+
+                return (
+                  <tr
+                    key={transaction.id ?? `${transaction.item_type}-${transaction.transaction_date}`}
+                    className={`border-b last:border-0 hover:bg-muted/30 ${index % 2 === 0 ? "bg-white/90" : "bg-muted/10"}`}
+                  >
+                    <td className="py-4 px-4">{formatDate(transaction.transaction_date)}</td>
+                    <td className="py-4 px-4">
+                      {resolveLocationLabel(transaction.location_id, transaction.location_name || transaction.location_code)}
+                    </td>
+                    <td className="py-4 px-4">{transaction.item_type}</td>
+                    <td className="py-4 px-4">
+                      {formatNumber(Number(transaction.quantity) || 0)} {transaction.unit}
+                    </td>
+                    <td className="py-4 px-4">
+                      <Badge variant="outline" className={typeClass}>
+                        {typeLabel}
+                      </Badge>
+                    </td>
+                    <td className="py-4 px-4">
+                      {transaction.price ? formatCurrency(Number(transaction.price) || 0) : "-"}
+                    </td>
+                    <td className="py-4 px-4 max-w-xs truncate" title={transaction.notes}>
+                      {transaction.notes}
+                    </td>
+                    <td className="py-4 px-4">{transaction.user_id}</td>
+                    <td className="py-4 px-4">
+                      <div className="flex gap-2">
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          onClick={() => handleEditTransaction(transaction)}
+                          className="text-amber-600 p-2 h-auto"
+                        >
+                          <Edit className="h-4 w-4" />
+                        </Button>
+                        {canManageRecords && (
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            onClick={() => handleDeleteConfirm(transaction.id)}
+                            className="text-red-600 p-2 h-auto"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        )}
+                      </div>
+                    </td>
+                  </tr>
+                )
+              })}
+            </tbody>
+          </table>
+          {transactions.length === 0 && (
+            <div className="text-center py-10 text-muted-foreground">No transactions recorded yet.</div>
+          )}
+          {transactions.length > 0 && filteredTransactions.length === 0 && (
+            <div className="text-center py-10 text-muted-foreground">
+              No transactions found matching your current filters.
+            </div>
+          )}
+        </div>
+      )}
+
+      {filteredTransactions.length > 0 && (
+        <div className="mt-4 flex items-center justify-between">
+          <div className="text-sm text-muted-foreground">
+            Showing {Math.min(startIndex + 1, filteredTransactions.length)} to {endIndex} of {filteredTransactions.length} transactions
+          </div>
+          <div className="flex gap-2">
+            <Button variant="outline" size="sm" onClick={() => setCurrentPage((prev) => Math.max(prev - 1, 1))} disabled={currentPage === 1}>
+              Previous
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setCurrentPage((prev) => Math.min(prev + 1, totalPages))}
+              disabled={currentPage === totalPages || totalPages === 0}
+            >
+              Next
+            </Button>
+          </div>
+        </div>
+      )}
+    </div>
+  )
 
   // helpers for transaction object safety
   const ensureTransactionSafety = (transaction: Transaction | null): Transaction => {
@@ -2626,6 +2938,7 @@ export default function InventorySystem() {
   const canShowDispatch = isModuleEnabled("dispatch")
   const canShowSales = isModuleEnabled("sales") && isAdmin
   const canShowOtherSales = isModuleEnabled("other-sales") && !isScopedUser
+  const canShowSalesWorkspace = canShowSales || canShowOtherSales
   const canShowCuring = isModuleEnabled("curing")
   const canShowQuality = isModuleEnabled("quality")
   const canShowRainfall = isModuleEnabled("rainfall")
@@ -2652,8 +2965,7 @@ export default function InventorySystem() {
     canShowCuring ||
     canShowQuality ||
     canShowDispatch ||
-    canShowSales ||
-    canShowOtherSales ||
+    canShowSalesWorkspace ||
     canShowPepper
   const showFinanceTabs =
     canShowAccounts || canShowBalanceSheet || canShowReceivables || canShowBilling
@@ -2673,25 +2985,21 @@ export default function InventorySystem() {
     () =>
       [
         canShowInventory ? { value: "inventory", label: "Inventory", icon: List } : null,
-        showTransactionHistory ? { value: "transactions", label: "Transaction History", icon: History } : null,
         canShowProcessing ? { value: "processing", label: "Processing", icon: Factory } : null,
         canShowCuring ? { value: "curing", label: "Curing", icon: Factory } : null,
         canShowQuality ? { value: "quality", label: "Quality", icon: CheckCircle2 } : null,
         canShowDispatch ? { value: "dispatch", label: "Dispatch", icon: Truck } : null,
-        canShowSales ? { value: "sales", label: "Sales", icon: TrendingUp } : null,
-        canShowOtherSales ? { value: "other-sales", label: "Other Sales", icon: TrendingUp } : null,
+        canShowSalesWorkspace ? { value: "sales", label: "Sales", icon: TrendingUp } : null,
         canShowPepper ? { value: "pepper", label: "Pepper", icon: Leaf } : null,
       ].filter(Boolean) as Array<{ value: string; label: string; icon: React.ComponentType<{ className?: string }> }>,
     [
       canShowCuring,
       canShowDispatch,
       canShowInventory,
-      canShowOtherSales,
       canShowPepper,
       canShowProcessing,
       canShowQuality,
-      canShowSales,
-      showTransactionHistory,
+      canShowSalesWorkspace,
     ],
   )
 
@@ -2855,7 +3163,12 @@ export default function InventorySystem() {
   const salesSoldKgsTotal = salesHeroTotals.arabicaKgs + salesHeroTotals.robustaKgs
   const saleableCoffeeKgs = Math.max(0, dispatchReceivedKgsTotal - salesSoldKgsTotal)
   const overdrawnCoffeeKgs = Math.max(0, salesSoldKgsTotal - dispatchReceivedKgsTotal)
-  const bookedNetPosition = salesHeroTotals.totalRevenue - accountsTotals.grandTotal
+  const coffeeRevenueTotal = salesHeroTotals.totalRevenue
+  const otherRevenueTotal = otherSalesHeroTotals.totalRevenue
+  const totalRevenueAmount = coffeeRevenueTotal + otherRevenueTotal
+  const revenueTotalsLoading = salesHeroTotals.loading || otherSalesHeroTotals.loading
+  const revenueTotalsError = salesHeroTotals.error || otherSalesHeroTotals.error
+  const bookedNetPosition = totalRevenueAmount - accountsTotals.grandTotal
   const reconciliationStatusLabel = overdrawnCoffeeKgs > 0 ? "Overdrawn" : "Healthy"
   const reconciliationStatusTone =
     overdrawnCoffeeKgs > 0 ? "text-rose-700 border-rose-200 bg-rose-50/70" : "text-emerald-700 border-emerald-200 bg-emerald-50/70"
@@ -2866,13 +3179,11 @@ export default function InventorySystem() {
   const visibleTabs = useMemo(() => {
     const tabs: string[] = ["home"]
     if (canShowInventory) tabs.push("inventory")
-    if (showTransactionHistory) tabs.push("transactions")
     if (canShowAccounts) tabs.push("accounts")
     if (canShowBalanceSheet) tabs.push("balance-sheet")
     if (canShowProcessing) tabs.push("processing")
     if (canShowDispatch) tabs.push("dispatch")
-    if (canShowSales) tabs.push("sales")
-    if (canShowOtherSales) tabs.push("other-sales")
+    if (canShowSalesWorkspace) tabs.push("sales")
     if (canShowCuring) tabs.push("curing")
     if (canShowQuality) tabs.push("quality")
     if (canShowSeason) tabs.push("season")
@@ -2896,7 +3207,6 @@ export default function InventorySystem() {
     canShowBilling,
     canShowDispatch,
     canShowDocuments,
-    canShowOtherSales,
     canShowActivityLog,
     canShowInventory,
     canShowJournal,
@@ -2909,10 +3219,9 @@ export default function InventorySystem() {
     canShowQuality,
     canShowRainfallSection,
     canShowReceivables,
-    canShowSales,
+    canShowSalesWorkspace,
     canShowSeason,
     canShowYieldForecast,
-    showTransactionHistory,
   ])
   const markTabAsLoaded = useCallback((tab: string) => {
     setLoadedTabs((previousTabs) => (previousTabs.includes(tab) ? previousTabs : [...previousTabs, tab]))
@@ -3428,6 +3737,52 @@ export default function InventorySystem() {
   }, [tenantId, canShowSales])
 
   useEffect(() => {
+    if (!tenantId || !canShowOtherSales) {
+      setOtherSalesHeroTotals({
+        totalRevenue: 0,
+        totalCount: 0,
+        loading: false,
+        error: null,
+      })
+      return
+    }
+
+    let ignore = false
+
+    const loadOtherSalesHeroTotals = async () => {
+      setOtherSalesHeroTotals((prev) => ({ ...prev, loading: true, error: null }))
+      try {
+        const res = await fetch("/api/other-sales?all=true", { cache: "no-store" })
+        const json = await res.json().catch(() => ({}))
+        if (!res.ok || !json?.success) {
+          throw new Error(json?.error || "Failed to load other sales totals")
+        }
+        if (!ignore) {
+          setOtherSalesHeroTotals({
+            totalRevenue: Number(json?.totals?.totalRevenue) || 0,
+            totalCount: Number(json?.totalCount) || 0,
+            loading: false,
+            error: null,
+          })
+        }
+      } catch (error: any) {
+        if (!ignore) {
+          setOtherSalesHeroTotals((prev) => ({
+            ...prev,
+            loading: false,
+            error: error?.message || "Failed to load other sales totals",
+          }))
+        }
+      }
+    }
+
+    loadOtherSalesHeroTotals()
+    return () => {
+      ignore = true
+    }
+  }, [tenantId, canShowOtherSales])
+
+  useEffect(() => {
     if (!tenantId || !canShowReceivables) return
     let ignore = false
 
@@ -3811,7 +4166,7 @@ export default function InventorySystem() {
       const text = String(input || "").toLowerCase()
       if (!text) return "home"
       if ((text.includes("dispatch") || text.includes("received")) && canShowDispatch) return "dispatch"
-      if ((text.includes("sale") || text.includes("buyer") || text.includes("revenue")) && canShowSales) return "sales"
+      if ((text.includes("sale") || text.includes("buyer") || text.includes("revenue")) && canShowSalesWorkspace) return "sales"
       if ((text.includes("receivable") || text.includes("outstanding") || text.includes("invoice")) && canShowReceivables) {
         return "receivables"
       }
@@ -3822,7 +4177,7 @@ export default function InventorySystem() {
       }
       return "home"
     },
-    [canShowAccounts, canShowDispatch, canShowProcessing, canShowReceivables, canShowSales, showTransactionHistory],
+    [canShowAccounts, canShowDispatch, canShowProcessing, canShowReceivables, canShowSalesWorkspace, showTransactionHistory],
   )
 
   const resolveExceptionDrilldownTab = useCallback(
@@ -3836,11 +4191,11 @@ export default function InventorySystem() {
         return canShowDispatch ? "dispatch" : canShowSeason ? "season" : "home"
       }
       if (["inventory_mismatch", "sales_spike"].includes(normalized)) {
-        return canShowSales ? "sales" : canShowSeason ? "season" : "home"
+        return canShowSalesWorkspace ? "sales" : canShowSeason ? "season" : "home"
       }
       return canShowSeason ? "season" : "home"
     },
-    [canShowDispatch, canShowProcessing, canShowSales, canShowSeason],
+    [canShowDispatch, canShowProcessing, canShowSalesWorkspace, canShowSeason],
   )
 
   type DrilldownOptions = {
@@ -3855,10 +4210,28 @@ export default function InventorySystem() {
   const openDrilldown = useCallback(
     (options: DrilldownOptions) => {
       const requestedTab = options.tab === "weather" ? "rainfall" : options.tab
+      let nextTabCandidate = requestedTab
+      let queryTab = requestedTab
+
+      if (requestedTab === "transactions") {
+        setInventoryWorkspaceView("transactions")
+        nextTabCandidate = "inventory"
+      } else if (requestedTab === "inventory") {
+        setInventoryWorkspaceView("inventory")
+      } else if (requestedTab === "other-sales") {
+        setSalesWorkspaceView("other-sales")
+        nextTabCandidate = "sales"
+      } else if (requestedTab === "sales") {
+        setSalesWorkspaceView(canShowSales ? "coffee" : "other-sales")
+      }
+
       const nextTab =
-        requestedTab === DASHBOARD_LAUNCHER_TAB || visibleTabs.includes(requestedTab)
-          ? requestedTab
+        nextTabCandidate === DASHBOARD_LAUNCHER_TAB || visibleTabs.includes(nextTabCandidate)
+          ? nextTabCandidate
           : getPreferredDefaultTab(visibleTabs)
+      if (nextTab !== nextTabCandidate) {
+        queryTab = nextTab
+      }
       setActiveTab(nextTab)
       markTabAsLoaded(nextTab)
 
@@ -3881,7 +4254,7 @@ export default function InventorySystem() {
       }
 
       const params = new URLSearchParams(searchParams.toString())
-      params.set("tab", nextTab)
+      params.set("tab", queryTab)
       const setOptional = (key: string, value?: string | null) => {
         const normalized = String(value || "").trim()
         if (normalized) params.set(key, normalized)
@@ -3912,13 +4285,25 @@ export default function InventorySystem() {
       const nextPath = nextQuery ? `/dashboard?${nextQuery}` : "/dashboard"
       router.replace(nextPath, { scroll: false })
     },
-    [allItemTypesForDropdown, getPreferredDefaultTab, locations, markTabAsLoaded, router, searchParams, visibleTabs],
+    [allItemTypesForDropdown, canShowSales, getPreferredDefaultTab, locations, markTabAsLoaded, router, searchParams, visibleTabs],
   )
   const handleTabChange = useCallback(
     (value: string) => {
-      openDrilldown({ tab: value })
+      let nextTab = value
+      if (value === "transactions") {
+        setInventoryWorkspaceView("transactions")
+        nextTab = "inventory"
+      } else if (value === "inventory") {
+        setInventoryWorkspaceView("inventory")
+      } else if (value === "other-sales") {
+        setSalesWorkspaceView("other-sales")
+        nextTab = "sales"
+      } else if (value === "sales") {
+        setSalesWorkspaceView(canShowSales ? "coffee" : "other-sales")
+      }
+      openDrilldown({ tab: nextTab })
     },
-    [openDrilldown],
+    [canShowSales, openDrilldown],
   )
 
   const handleExecutionOutcomeAction = useCallback(
@@ -3942,7 +4327,7 @@ export default function InventorySystem() {
       if (normalized.startsWith("/api/sales")) return canShowSales ? "sales" : "home"
       if (normalized.startsWith("/api/rainfall")) return canShowRainfall ? "rainfall" : "home"
       if (normalized.startsWith("/api/pepper-records")) return canShowPepper ? "pepper" : "home"
-      if (normalized.startsWith("/api/transactions-neon")) return showTransactionHistory ? "transactions" : "inventory"
+      if (normalized.startsWith("/api/transactions-neon")) return canShowInventory ? "inventory" : "home"
       if (normalized.startsWith("/api/inventory-neon")) return canShowInventory ? "inventory" : "home"
       if (normalized.startsWith("/api/locations")) return canShowInventory ? "inventory" : "home"
       if (normalized.startsWith("/api/labor-neon") || normalized.startsWith("/api/expenses-neon")) {
@@ -3960,7 +4345,6 @@ export default function InventorySystem() {
       canShowRainfall,
       canShowReceivables,
       canShowSales,
-      showTransactionHistory,
     ],
   )
 
@@ -4133,6 +4517,16 @@ export default function InventorySystem() {
     if (activeTab === DASHBOARD_LAUNCHER_TAB) {
       return
     }
+    if (activeTab === "transactions") {
+      setInventoryWorkspaceView("transactions")
+      setActiveTab("inventory")
+      return
+    }
+    if (activeTab === "other-sales") {
+      setSalesWorkspaceView("other-sales")
+      setActiveTab("sales")
+      return
+    }
     if (visibleTabs.length && !visibleTabs.includes(activeTab)) {
       const fallbackTab =
         activeTab === "weather" && visibleTabs.includes("rainfall")
@@ -4156,10 +4550,30 @@ export default function InventorySystem() {
       return
     }
     const requestedTab = tabParam === "weather" ? "rainfall" : tabParam
+    if (requestedTab === "transactions") {
+      setInventoryWorkspaceView("transactions")
+      if (activeTab !== "inventory") {
+        setActiveTab("inventory")
+      }
+      return
+    }
+    if (requestedTab === "other-sales") {
+      setSalesWorkspaceView("other-sales")
+      if (activeTab !== "sales") {
+        setActiveTab("sales")
+      }
+      return
+    }
+    if (requestedTab === "inventory") {
+      setInventoryWorkspaceView("inventory")
+    }
+    if (requestedTab === "sales") {
+      setSalesWorkspaceView(canShowSales ? "coffee" : "other-sales")
+    }
     if (visibleTabs.includes(requestedTab) && requestedTab !== activeTab) {
       setActiveTab(requestedTab)
     }
-  }, [activeTab, tabParam, visibleTabs])
+  }, [activeTab, canShowSales, tabParam, visibleTabs])
 
   useEffect(() => {
     if (!locationFilterParam) return
@@ -5615,16 +6029,42 @@ export default function InventorySystem() {
                 <>
                   <Card className="border-black/5 bg-white/90">
                     <CardHeader className="pb-2">
-                      <CardTitle className="text-sm font-medium text-neutral-600">Sales Revenue</CardTitle>
+                      <CardTitle className="text-sm font-medium text-neutral-600">Revenue Breakdown</CardTitle>
                     </CardHeader>
                     <CardContent>
-                      <p className="text-2xl font-semibold tabular-nums text-neutral-900">{formatCurrency(salesHeroTotals.totalRevenue, 0)}</p>
-                      <p className="text-xs text-muted-foreground">{formatCount(salesHeroTotals.totalSales)} sales entries</p>
+                      <div className="space-y-2">
+                        <div>
+                          <p className="text-[11px] uppercase tracking-[0.18em] text-muted-foreground">Coffee Revenue</p>
+                          <p className="text-lg font-semibold tabular-nums text-emerald-700">
+                            {revenueTotalsLoading ? "Loading..." : revenueTotalsError ? "Unavailable" : formatCurrency(coffeeRevenueTotal, 0)}
+                          </p>
+                        </div>
+                        <div>
+                          <p className="text-[11px] uppercase tracking-[0.18em] text-muted-foreground">Other Revenue</p>
+                          <p className="text-base font-semibold tabular-nums text-amber-700">
+                            {revenueTotalsLoading ? "Loading..." : revenueTotalsError ? "Unavailable" : formatCurrency(otherRevenueTotal, 0)}
+                          </p>
+                        </div>
+                        <div className="border-t border-black/5 pt-2">
+                          <p className="text-[11px] uppercase tracking-[0.18em] text-muted-foreground">Total Revenue</p>
+                          <p className="text-xl font-semibold tabular-nums text-neutral-900">
+                            {revenueTotalsLoading ? "Loading..." : revenueTotalsError ? "Unavailable" : formatCurrency(totalRevenueAmount, 0)}
+                          </p>
+                          <p className="text-xs text-muted-foreground">
+                            Coffee sales: {formatCount(salesHeroTotals.totalSales)} · Other sales: {formatCount(otherSalesHeroTotals.totalCount)}
+                          </p>
+                        </div>
+                      </div>
                       <Button
                         size="sm"
                         variant="ghost"
                         className="mt-2 h-7 px-2 text-xs"
-                        onClick={() => openDrilldown({ tab: canShowSales ? "sales" : "accounts", locationId: selectedLocationId })}
+                        onClick={() =>
+                          openDrilldown({
+                            tab: canShowSales || canShowOtherSales ? "sales" : "accounts",
+                            locationId: selectedLocationId,
+                          })
+                        }
                       >
                         Open revenue detail
                       </Button>
@@ -5636,7 +6076,7 @@ export default function InventorySystem() {
                     </CardHeader>
                     <CardContent>
                       <p className="text-2xl font-semibold tabular-nums text-neutral-900">{formatCurrency(bookedNetPosition, 0)}</p>
-                      <p className="text-xs text-muted-foreground">Sales revenue - labor - other expenses</p>
+                      <p className="text-xs text-muted-foreground">Total revenue - labor - other expenses</p>
                       {canShowReceivables && (
                         <p className="mt-1 text-xs text-muted-foreground">
                           Receivables outstanding: {formatCurrency(receivablesHeroTotals.totalOutstanding, 0)}
@@ -6151,6 +6591,64 @@ export default function InventorySystem() {
 
           {canShowInventory && (
             <TabsContent value="inventory" className="space-y-6" forceMount={isTabLoaded("inventory") ? true : undefined}>
+              <Card className="border-border/70 bg-white/90">
+                <CardHeader className="pb-3">
+                  <CardTitle className="text-xs uppercase tracking-[0.2em] text-muted-foreground">Inventory Dashboard</CardTitle>
+                  <CardDescription>
+                    {inventoryWorkspaceView === "transactions"
+                      ? "Review and correct movement history without leaving Inventory."
+                      : "Stock levels, movement shortcuts, and item drill-downs in one place."}
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="grid gap-4 lg:grid-cols-[1.6fr_1fr]">
+                  <div className="space-y-2">
+                    <div>
+                      <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">Current View</p>
+                      <p className="text-2xl font-semibold text-foreground">
+                        {inventoryWorkspaceView === "transactions" ? "Transaction History" : "Inventory"}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">Selected Estate</p>
+                      <p className="text-sm font-semibold text-foreground">{selectedLocationLabel}</p>
+                    </div>
+                    <div className="border-t border-border/60 pt-2">
+                      <p className="text-xs text-muted-foreground">
+                        {formatNumber(filteredInventoryTotals.itemCount)} items · {formatNumber(filteredInventoryTotals.totalQuantity)} {filteredInventoryTotals.unitLabel}
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        Inventory value {formatCurrency(filteredInventoryTotals.totalValue)} · Transactions in view {formatCount(filteredTransactions.length)}
+                      </p>
+                    </div>
+                  </div>
+                  {showTransactionHistory ? (
+                    <div className="rounded-xl border border-border/60 bg-muted/20 p-3">
+                      <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">Inventory Workspace</p>
+                      <div className="mt-3 grid grid-cols-2 gap-2">
+                        <Button
+                          type="button"
+                          variant={inventoryWorkspaceView === "inventory" ? "default" : "outline"}
+                          className={cn(inventoryWorkspaceView === "inventory" ? "bg-emerald-700 hover:bg-emerald-800" : "bg-white")}
+                          onClick={() => setInventoryWorkspaceView("inventory")}
+                        >
+                          Inventory
+                        </Button>
+                        <Button
+                          type="button"
+                          variant={inventoryWorkspaceView === "transactions" ? "default" : "outline"}
+                          className={cn(inventoryWorkspaceView === "transactions" ? "bg-emerald-700 hover:bg-emerald-800" : "bg-white")}
+                          onClick={() => setInventoryWorkspaceView("transactions")}
+                        >
+                          Transaction History
+                        </Button>
+                      </div>
+                    </div>
+                  ) : null}
+                </CardContent>
+              </Card>
+              {inventoryWorkspaceView === "transactions" && showTransactionHistory ? (
+                renderTransactionHistoryPanel()
+              ) : (
               <div className="grid grid-cols-1 gap-6 lg:grid-cols-12 lg:items-start">
                 <div className="order-2 space-y-6 lg:order-1 lg:col-span-8">
                   <div className="rounded-2xl border border-black/5 bg-white p-6 shadow-sm">
@@ -6491,7 +6989,7 @@ export default function InventorySystem() {
                       )}
                       <button
                         type="button"
-                        onClick={() => handleTabChange("transactions")}
+                        onClick={() => setInventoryWorkspaceView("transactions")}
                         className="flex w-full items-center justify-between rounded-xl border border-black/5 bg-white px-4 py-3 text-sm text-neutral-800 transition-colors hover:bg-neutral-50"
                       >
                         <span className="flex items-center gap-2">
@@ -6534,281 +7032,7 @@ export default function InventorySystem() {
                   </Card>
                 </div>
               </div>
-            </TabsContent>
-          )}
-
-          {showTransactionHistory && (
-            <TabsContent value="transactions" className="space-y-6" forceMount={isTabLoaded("transactions") ? true : undefined}>
-              {/* Transactions UI (search, filter, table) */}
-              <div className="rounded-2xl border border-black/5 bg-white/85 p-6 shadow-sm">
-                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between mb-5">
-                  <div>
-                    <h2 className="text-lg font-semibold text-emerald-700 flex items-center">
-                      <History className="mr-2 h-5 w-5" /> Transaction History
-                    </h2>
-                    <p className="text-xs text-muted-foreground">Inventory adjustments and usage across the estate.</p>
-                  </div>
-                  {showDataToolsControls && (
-                    <div className="flex gap-2">
-                      <Button size="sm" variant="outline" onClick={exportToCSV} className="h-10 bg-transparent"><Download className="mr-2 h-4 w-4" /> Export</Button>
-                    </div>
-                  )}
-                </div>
-
-                <div className="mb-5 flex flex-col gap-4 sm:flex-row sm:justify-between">
-                  <div className="flex flex-col gap-3 sm:flex-row sm:flex-grow">
-                    <div className="relative flex-grow">
-                      <Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground/70" />
-                      <Input
-                        placeholder="Search transactions..."
-                        value={transactionSearchTerm}
-                        onChange={(e) => setTransactionSearchTerm(e.target.value)}
-                        className="pl-10 h-10"
-                      />
-                    </div>
-                    <Select value={filterType} onValueChange={setFilterType}>
-                      <SelectTrigger className="w-full sm:w-40 h-10 border-border/70 bg-white/80">
-                        <SelectValue placeholder="All Types" />
-                      </SelectTrigger>
-                      <SelectContent className="max-h-[40vh] overflow-y-auto">
-                        <SelectItem value="All Types">All Types</SelectItem>
-                        {allItemTypesForDropdown.map((type) => <SelectItem key={type} value={type}>{type}</SelectItem>)}
-                      </SelectContent>
-                    </Select>
-                    <Select value={selectedLocationId} onValueChange={setSelectedLocationId}>
-                      <SelectTrigger className="w-full sm:w-48 h-10 border-border/70 bg-white/80">
-                        <SelectValue placeholder="All locations" />
-                      </SelectTrigger>
-                      <SelectContent className="max-h-[40vh] overflow-y-auto">
-                        <SelectItem value={LOCATION_ALL}>All locations</SelectItem>
-                        <SelectItem value={LOCATION_UNASSIGNED}>{UNASSIGNED_LABEL}</SelectItem>
-                        {locations.map((loc) => (
-                          <SelectItem key={loc.id} value={loc.id}>
-                            {loc.name || loc.code || "Unnamed location"}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={toggleTransactionSort}
-                    className="flex h-10 w-full items-center justify-center gap-1 whitespace-nowrap bg-transparent sm:w-auto sm:justify-start"
-                  >
-                    {transactionSortOrder === "desc" ? (<><SortDesc className="h-4 w-4 mr-1" /> Date: Newest First</>) : (<><SortAsc className="h-4 w-4 mr-1" /> Date: Oldest First</>)}
-                  </Button>
-                </div>
-                {hasLegacyUnassignedTransactions && selectedLocationId !== LOCATION_UNASSIGNED && (
-                  <div className="mb-4 flex flex-wrap items-center gap-2 text-xs text-emerald-700/80">
-                    <span>Legacy transactions without location live under {UNASSIGNED_LABEL}.</span>
-                    <Button
-                      variant="link"
-                      size="sm"
-                      onClick={() => setSelectedLocationId(LOCATION_UNASSIGNED)}
-                      className="h-auto p-0 text-emerald-700"
-                    >
-                      View unassigned
-                    </Button>
-                  </div>
-                )}
-
-                {isMobile ? (
-                  <div className="space-y-3">
-                    {transactions.length === 0 && (
-                      <div className="rounded-lg border border-border/60 bg-white/80 py-10 text-center text-muted-foreground">
-                        No transactions recorded yet.
-                      </div>
-                    )}
-                    {transactions.length > 0 && filteredTransactions.length === 0 && (
-                      <div className="rounded-lg border border-border/60 bg-white/80 py-10 text-center text-muted-foreground">
-                        No transactions found matching your current filters.
-                      </div>
-                    )}
-                    {currentTransactions.map((transaction, index) => {
-                      const typeValue = String(transaction.transaction_type ?? "").toLowerCase()
-                      const isDepleting = typeValue.includes("deplet")
-                      const isRestocking = typeValue.includes("restock")
-                      const typeLabel = isDepleting ? "Depleting" : isRestocking ? "Restocking" : transaction.transaction_type
-                      const typeClass = isDepleting
-                        ? "bg-red-100 text-red-700 border-red-200"
-                        : isRestocking
-                          ? "bg-green-100 text-green-700 border-green-200"
-                          : "bg-blue-100 text-blue-700 border-blue-200"
-                      const rowTone = index % 2 === 0 ? "bg-white/90" : "bg-muted/10"
-                      return (
-                        <div
-                          key={transaction.id ?? `${transaction.item_type}-${transaction.transaction_date}`}
-                          className={`rounded-xl border border-border/60 p-3 shadow-sm ${rowTone}`}
-                        >
-                          <div className="flex items-start justify-between gap-2">
-                            <div>
-                              <p className="text-sm font-semibold text-neutral-900">{transaction.item_type}</p>
-                              <p className="text-xs text-muted-foreground">{formatDate(transaction.transaction_date)}</p>
-                            </div>
-                            <Badge variant="outline" className={typeClass}>
-                              {typeLabel}
-                            </Badge>
-                          </div>
-                          <div className="mt-3 grid grid-cols-2 gap-2 text-xs">
-                            <div className="rounded-md border border-black/5 bg-white px-2 py-1.5">
-                              <p className="text-[11px] uppercase tracking-wide text-muted-foreground">Quantity</p>
-                              <p className="font-medium text-neutral-900">
-                                {formatNumber(Number(transaction.quantity) || 0)} {transaction.unit}
-                              </p>
-                            </div>
-                            <div className="rounded-md border border-black/5 bg-white px-2 py-1.5">
-                              <p className="text-[11px] uppercase tracking-wide text-muted-foreground">Location</p>
-                              <p className="font-medium text-neutral-900">
-                                {resolveLocationLabel(transaction.location_id, transaction.location_name || transaction.location_code)}
-                              </p>
-                            </div>
-                            <div className="rounded-md border border-black/5 bg-white px-2 py-1.5">
-                              <p className="text-[11px] uppercase tracking-wide text-muted-foreground">Price</p>
-                              <p className="font-medium text-neutral-900">
-                                {transaction.price ? formatCurrency(Number(transaction.price) || 0) : "-"}
-                              </p>
-                            </div>
-                            <div className="rounded-md border border-black/5 bg-white px-2 py-1.5">
-                              <p className="text-[11px] uppercase tracking-wide text-muted-foreground">User</p>
-                              <p className="font-medium text-neutral-900">{transaction.user_id || "-"}</p>
-                            </div>
-                          </div>
-                          {transaction.notes && (
-                            <p className="mt-2 rounded-md border border-black/5 bg-white px-2 py-1.5 text-xs text-muted-foreground">
-                              {transaction.notes}
-                            </p>
-                          )}
-                          <div className="mt-3 flex gap-2">
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              onClick={() => handleEditTransaction(transaction)}
-                              className="h-10 flex-1 justify-center gap-1.5 border-amber-200 bg-amber-50 text-amber-700 hover:bg-amber-100"
-                            >
-                              <Edit className="h-4 w-4" />
-                              Edit
-                            </Button>
-                            {canManageRecords && (
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                onClick={() => handleDeleteConfirm(transaction.id)}
-                                className="h-10 flex-1 justify-center gap-1.5 border-red-200 bg-red-50 text-red-700 hover:bg-red-100"
-                              >
-                                <Trash2 className="h-4 w-4" />
-                                Delete
-                              </Button>
-                            )}
-                          </div>
-                        </div>
-                      )
-                    })}
-                  </div>
-                ) : (
-                  <div className="border border-border/60 rounded-lg overflow-x-auto bg-white/80">
-                    <table className="min-w-full">
-                      <thead>
-                        <tr className="bg-muted/60 text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground/80 border-b sticky top-0 backdrop-blur">
-                          <th className="py-4 px-4 text-left">Date</th>
-                          <th className="py-4 px-4 text-left">Location</th>
-                          <th className="py-4 px-4 text-left">Item Type</th>
-                          <th className="py-4 px-4 text-left">Quantity</th>
-                          <th className="py-4 px-4 text-left">Transaction</th>
-                          <th className="py-4 px-4 text-left">Price</th>
-                          <th className="py-4 px-4 text-left">Notes</th>
-                          <th className="py-4 px-4 text-left">User</th>
-                          <th className="py-4 px-4 text-left">Actions</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {currentTransactions.map((transaction, index) => {
-                          const typeValue = String(transaction.transaction_type ?? "").toLowerCase()
-                          const isDepleting = typeValue.includes("deplet")
-                          const isRestocking = typeValue.includes("restock")
-                          const typeLabel = isDepleting ? "Depleting" : isRestocking ? "Restocking" : transaction.transaction_type
-                          const typeClass = isDepleting
-                            ? "bg-red-100 text-red-700 border-red-200"
-                            : isRestocking
-                              ? "bg-green-100 text-green-700 border-green-200"
-                              : "bg-blue-100 text-blue-700 border-blue-200"
-
-                          return (
-                            <tr
-                              key={transaction.id ?? `${transaction.item_type}-${transaction.transaction_date}`}
-                              className={`border-b last:border-0 hover:bg-muted/30 ${index % 2 === 0 ? "bg-white/90" : "bg-muted/10"}`}
-                            >
-                              <td className="py-4 px-4">{formatDate(transaction.transaction_date)}</td>
-                              <td className="py-4 px-4">
-                                {resolveLocationLabel(transaction.location_id, transaction.location_name || transaction.location_code)}
-                              </td>
-                              <td className="py-4 px-4">{transaction.item_type}</td>
-                              <td className="py-4 px-4">
-                                {formatNumber(Number(transaction.quantity) || 0)} {transaction.unit}
-                              </td>
-                              <td className="py-4 px-4">
-                                <Badge variant="outline" className={typeClass}>
-                                  {typeLabel}
-                                </Badge>
-                              </td>
-                              <td className="py-4 px-4">
-                                {transaction.price ? formatCurrency(Number(transaction.price) || 0) : "-"}
-                              </td>
-                              <td className="py-4 px-4 max-w-xs truncate" title={transaction.notes}>
-                                {transaction.notes}
-                              </td>
-                              <td className="py-4 px-4">{transaction.user_id}</td>
-                              <td className="py-4 px-4">
-                                <div className="flex gap-2">
-                                  <Button
-                                    size="sm"
-                                    variant="ghost"
-                                    onClick={() => handleEditTransaction(transaction)}
-                                    className="text-amber-600 p-2 h-auto"
-                                  >
-                                    <Edit className="h-4 w-4" />
-                                  </Button>
-                                  {canManageRecords && (
-                                    <Button
-                                      size="sm"
-                                      variant="ghost"
-                                      onClick={() => handleDeleteConfirm(transaction.id)}
-                                      className="text-red-600 p-2 h-auto"
-                                    >
-                                      <Trash2 className="h-4 w-4" />
-                                    </Button>
-                                  )}
-                                </div>
-                              </td>
-                            </tr>
-                          )
-                        })}
-                      </tbody>
-                    </table>
-                    {transactions.length === 0 && (
-                      <div className="text-center py-10 text-muted-foreground">No transactions recorded yet.</div>
-                    )}
-                    {transactions.length > 0 && filteredTransactions.length === 0 && (
-                      <div className="text-center py-10 text-muted-foreground">
-                        No transactions found matching your current filters.
-                      </div>
-                    )}
-                  </div>
-                )}
-
-                {filteredTransactions.length > 0 && (
-                  <div className="flex justify-between items-center mt-4">
-                    <div className="text-sm text-muted-foreground">
-                      Showing {Math.min(startIndex + 1, filteredTransactions.length)} to {endIndex} of {filteredTransactions.length} transactions
-                    </div>
-                    <div className="flex gap-2">
-                      <Button variant="outline" size="sm" onClick={() => setCurrentPage((prev) => Math.max(prev - 1, 1))} disabled={currentPage === 1}>Previous</Button>
-                      <Button variant="outline" size="sm" onClick={() => setCurrentPage((prev) => Math.min(prev + 1, totalPages))} disabled={currentPage === totalPages || totalPages === 0}>Next</Button>
-                    </div>
-                  </div>
-                )}
-              </div>
+              )}
             </TabsContent>
           )}
 
@@ -6844,14 +7068,15 @@ export default function InventorySystem() {
               <DispatchTab showDataToolsControls={showDataToolsControls} />
             </TabsContent>
           )}
-          {canShowSales && (
+          {canShowSalesWorkspace && (
             <TabsContent value="sales" className="space-y-6" forceMount={isTabLoaded("sales") ? true : undefined}>
-              <SalesTab showDataToolsControls={showDataToolsControls} />
-            </TabsContent>
-          )}
-          {canShowOtherSales && (
-            <TabsContent value="other-sales" className="space-y-6" forceMount={isTabLoaded("other-sales") ? true : undefined}>
-              <OtherSalesTab />
+              <SalesTab
+                showDataToolsControls={showDataToolsControls}
+                coffeeSalesEnabled={canShowSales}
+                otherSalesEnabled={canShowOtherSales}
+                activeWorkspaceView={salesWorkspaceView}
+                onWorkspaceViewChange={setSalesWorkspaceView}
+              />
             </TabsContent>
           )}
           {canShowCuring && (
