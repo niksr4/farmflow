@@ -71,4 +71,25 @@ describe("sales export helper", () => {
       '"RC","Robusta Cherry","1","8.00","380.00","640.00","80.00"',
     ])
   })
+
+  it("supports the shared ops export row shape with location and sold_kgs", () => {
+    const csv = buildSalesCsv(
+      [
+        {
+          sale_date: "2026-02-01",
+          location: "Honey Farm B",
+          coffee_type: "Arabica",
+          bag_type: "Dry Cherry",
+          bags_sold: 4,
+          sold_kgs: 180,
+          price_per_bag: 95,
+          revenue: 380,
+        },
+      ],
+      50,
+    )
+
+    expect(csv).toContain('"HFB","1","4.00","180.00","380.00","95.00"')
+    expect(csv).toContain('"AC","Arabica Cherry","1","4.00","180.00","380.00","95.00"')
+  })
 })

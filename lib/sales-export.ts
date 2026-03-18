@@ -7,6 +7,7 @@ type NumberLike = number | string | null | undefined
 export type SalesExportRecord = {
   sale_date: string
   batch_no?: string | null
+  location?: string | null
   location_name?: string | null
   location_code?: string | null
   estate?: string | null
@@ -17,6 +18,7 @@ export type SalesExportRecord = {
   bags_sold?: NumberLike
   price_per_bag?: NumberLike
   revenue?: NumberLike
+  sold_kgs?: NumberLike
   kgs_received?: NumberLike
   kgs?: NumberLike
   weight_kgs?: NumberLike
@@ -69,7 +71,7 @@ const csvEscape = (value: string | number | null | undefined) => `"${String(valu
 const csvRow = (values: Array<string | number | null | undefined>) => values.map(csvEscape).join(",")
 
 const getEstateTokens = (record: SalesExportRecord) =>
-  [record.location_code, record.location_name, record.estate].map(normalizeToken).filter(Boolean)
+  [record.location_code, record.location_name, record.location, record.estate].map(normalizeToken).filter(Boolean)
 
 export const resolveSalesEstateCode = (record: SalesExportRecord): SalesExportEstateCode | null => {
   const candidates = getEstateTokens(record)

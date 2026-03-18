@@ -4,6 +4,7 @@ import { getCurrentFiscalYear } from "@/lib/fiscal-year-utils"
 import { isModuleAccessError, requireAnyModuleAccess } from "@/lib/server/module-access"
 import { normalizeTenantContext, runTenantQuery } from "@/lib/server/tenant-db"
 import type { ExportDatasetId } from "@/lib/data-tools"
+import { buildSalesCsv, type SalesExportRecord } from "@/lib/sales-export"
 
 const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/
 const MAX_ROWS = 8000
@@ -819,6 +820,8 @@ export async function GET(request: NextRequest) {
     let csv = ""
     if (dataset === "rainfall") {
       csv = buildRainfallMatrixCsv(exportRows as Array<Record<string, unknown>>, startDate, endDate)
+    } else if (dataset === "sales") {
+      csv = buildSalesCsv(exportRows as SalesExportRecord[], DEFAULT_BAG_WEIGHT_KG)
     } else if (dataset === "pepper") {
       csv = buildPepperByLocationCsv(exportRows as Array<Record<string, unknown>>)
     } else {
