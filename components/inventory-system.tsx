@@ -88,6 +88,7 @@ import { isWithinLast24Hours } from "@/lib/date-utils"
 import { formatCurrency, formatNumber } from "@/lib/format"
 import { type AccountsExportFormat } from "@/lib/accounts-export"
 import { getCurrentFiscalYear } from "@/lib/fiscal-year-utils"
+import { normalizeInventoryItemType } from "@/lib/inventory-item-type"
 import { getModuleDefaultEnabled } from "@/lib/modules"
 import type { InventoryItem, Transaction } from "@/lib/inventory-types"
 import { cn } from "@/lib/utils"
@@ -917,9 +918,7 @@ export default function InventorySystem() {
   // computed lists
   const allItemTypesForDropdown = Array.from(
     new Set(
-      [...inventory.map((i) => String(i.name || "").trim()), ...transactions.map((t) => String(t.item_type || "").trim())].filter(
-        Boolean,
-      ),
+      [...inventory.map((i) => normalizeInventoryItemType(i.name)), ...transactions.map((t) => normalizeInventoryItemType(t.item_type))].filter(Boolean),
     ),
   ).sort()
   const hasMovementItemTypes = allItemTypesForDropdown.length > 0
@@ -936,7 +935,7 @@ export default function InventorySystem() {
   const transactionPricing = useMemo(() => {
     const agg: Record<string, { totalCost: number; totalQty: number }> = {}
     transactions.forEach((tx) => {
-      const itemName = String(tx.item_type || "").trim()
+      const itemName = normalizeInventoryItemType(tx.item_type)
       if (!itemName) return
       const qty = Number(tx.quantity) || 0
       if (!Number.isFinite(qty) || qty <= 0) return
@@ -4317,7 +4316,7 @@ export default function InventorySystem() {
             value={newTransaction?.item_type || ""}
             onValueChange={(value) => {
               handleFieldChange("item_type", value)
-              const u = inventory.find((i) => String(i.name || "").trim() === value)?.unit || "kg"
+              const u = inventory.find((i) => normalizeInventoryItemType(i.name) === value)?.unit || "kg"
               handleFieldChange("unit", u)
             }}
           >

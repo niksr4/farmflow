@@ -5,6 +5,7 @@ import { normalizeTenantContext, runTenantQuery } from "@/lib/server/tenant-db"
 import { resolveLocationCompatibility } from "@/lib/server/location-compatibility"
 import { canWriteModule } from "@/lib/permissions"
 import { logAuditEvent } from "@/lib/server/audit-log"
+import { normalizeInventoryItemType } from "@/lib/inventory-item-type"
 
 export const dynamic = "force-dynamic"
 
@@ -44,8 +45,6 @@ const normalizeQuantity = (value: unknown) => {
   return Number((Math.round((numeric + Number.EPSILON) * 100) / 100).toFixed(2))
 }
 
-const normalizeItemType = (value: unknown) => String(value || "").trim().replace(/\s+/g, " ")
-
 type InventorySlotMatch = {
   item_type: string
   quantity: number
@@ -65,7 +64,7 @@ const loadInventorySlotByNormalizedItem = async (
       SELECT item_type, COALESCE(quantity, 0) AS quantity, unit
       FROM current_inventory
       WHERE tenant_id = ${tenantContext.tenantId}
-        AND lower(btrim(item_type)) = lower(${normalizedItemType})
+        AND lower(regexp_replace(btrim(item_type), '\s+', ' ', 'g')) = lower(${normalizedItemType})
         AND location_id IS NOT DISTINCT FROM ${locationId}
       ORDER BY item_type ASC
       LIMIT 1
@@ -91,7 +90,7 @@ const loadAnyInventorySlotByNormalizedItem = async (
       SELECT item_type, COALESCE(quantity, 0) AS quantity, unit, location_id
       FROM current_inventory
       WHERE tenant_id = ${tenantContext.tenantId}
-        AND lower(btrim(item_type)) = lower(${normalizedItemType})
+        AND lower(regexp_replace(btrim(item_type), '\s+', ' ', 'g')) = lower(${normalizedItemType})
       ORDER BY location_id NULLS FIRST, item_type ASC
       LIMIT 1
     `,
@@ -431,7 +430,7 @@ export async function POST(request: NextRequest) {
     const body = await request.json()
 
     const { item_type, quantity, transaction_type, notes, price, location_id, unit } = body
-    const requestedItemType = normalizeItemType(item_type)
+    const requestedItemType = normalizeInventoryItemType(item_type)
 
     if (!requestedItemType || !quantity || !transaction_type) {
       return NextResponse.json(

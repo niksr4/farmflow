@@ -4,6 +4,7 @@ import { requireModuleAccess, isModuleAccessError } from "@/lib/server/module-ac
 import { canDeleteModule, canWriteModule } from "@/lib/permissions"
 import { logAuditEvent } from "@/lib/server/audit-log"
 import { normalizeTenantContext, runTenantQueries, runTenantQuery } from "@/lib/server/tenant-db"
+import { normalizeInventoryItemType } from "@/lib/inventory-item-type"
 
 export const dynamic = "force-dynamic"
 
@@ -274,8 +275,10 @@ export async function POST(request: NextRequest) {
     const body = await request.json()
 
     const { item_type, quantity, unit, price, notes, location_id } = body
+    const itemType = normalizeInventoryItemType(item_type)
+    const unitValue = String(unit || "").trim()
 
-    if (!item_type || !unit) {
+    if (!itemType || !unitValue) {
       return NextResponse.json(
         {
           success: false,
@@ -295,7 +298,7 @@ export async function POST(request: NextRequest) {
 
     // Ensure the item exists with the correct unit without double-counting inventory.
     // Fallback handles older tenant schemas that are missing the expected unique constraints.
-    await ensureInventorySlotExists(tenantContext, String(item_type), String(unit), locationValue)
+    await ensureInventorySlotExists(tenantContext, itemType, unitValue, locationValue)
 
 
     // Add initial transaction if quantity > 0 (trigger updates current_inventory)
@@ -317,16 +320,16 @@ export async function POST(request: NextRequest) {
             unit
           )
           VALUES (
-            ${item_type},
+            ${itemType},
             ${quantityValue},
             'restock',
-            ${notes || `New item added: ${item_type}`},
+            ${notes || `New item added: ${itemType}`},
             ${sessionUser.username || "system"},
             ${priceValue},
             ${total_cost},
             ${tenantContext.tenantId},
             ${locationValue},
-            ${unit}
+            ${unitValue}
           )
         `,
       )
@@ -335,11 +338,11 @@ export async function POST(request: NextRequest) {
     await logAuditEvent(inventorySql, sessionUser, {
       action: "create",
       entityType: "current_inventory",
-      entityId: item_type,
+      entityId: itemType,
       after: {
-        item_type,
+        item_type: itemType,
         quantity: quantityValue,
-        unit,
+        unit: unitValue,
         avg_price,
         total_cost,
       },
@@ -349,9 +352,9 @@ export async function POST(request: NextRequest) {
       success: true,
       message: "Item added successfully",
       item: {
-        name: item_type,
+        name: itemType,
         quantity: quantityValue,
-        unit,
+        unit: unitValue,
         avg_price,
         total_cost,
       },
@@ -558,7 +561,7 @@ export async function PUT(request: NextRequest) {
       )
     }
 
-    const resolvedName = String(new_item_type || item_type).trim()
+    const resolvedName = normalizeInventoryItemType(new_item_type || item_type)
     if (!resolvedName) {
       return NextResponse.json(
         {
