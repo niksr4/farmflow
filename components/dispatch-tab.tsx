@@ -127,6 +127,8 @@ export default function DispatchTab({ showDataToolsControls = false }: DispatchT
   const [isSaving, setIsSaving] = useState(false)
   const dispatchSaveStateRef = useRef({ canSubmitDispatch: false, isSaving: false })
   const dispatchSaveHandlerRef = useRef<(() => Promise<void> | void) | null>(null)
+  const dispatchFormRef = useRef<HTMLDivElement | null>(null)
+  const kgsReceivedInputRef = useRef<HTMLInputElement | null>(null)
   const { toast } = useToast()
   const dispatchPageSize = 25
   const asOfDate = useMemo(() => format(date, "yyyy-MM-dd"), [date])
@@ -472,6 +474,16 @@ export default function DispatchTab({ showDataToolsControls = false }: DispatchT
     fetchDispatchSummary(selectedLocationId, setFormDispatchSummary, setFormDispatchScope, { asOfDate })
   }, [asOfDate, fetchBagTotals, fetchDispatchSummary, selectedLocationId])
 
+  useEffect(() => {
+    if (!editingRecord) return
+    const timeoutId = window.setTimeout(() => {
+      dispatchFormRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })
+      kgsReceivedInputRef.current?.focus()
+      kgsReceivedInputRef.current?.select()
+    }, 100)
+    return () => window.clearTimeout(timeoutId)
+  }, [editingRecord])
+
   const handleSave = async () => {
     if (!selectedLocationId) {
       toast({
@@ -587,17 +599,16 @@ export default function DispatchTab({ showDataToolsControls = false }: DispatchT
 
   const handleEdit = (record: DispatchRecord) => {
     setEditingRecord(record)
+    setSelectedDispatchRecord(record)
     setDate(new Date(record.dispatch_date))
     const resolvedLocationId =
       record.location_id || resolveLocationIdFromLabel(record.location_name || record.location_code || record.estate)
-    if (resolvedLocationId) {
-      setSelectedLocationId(resolvedLocationId)
-    }
+    setSelectedLocationId(resolvedLocationId || "")
     setLotId(record.lot_id ? String(record.lot_id) : "")
     setCoffeeType(record.coffee_type)
     setBagType(formatBagTypeLabel(record.bag_type))
     setBagsDispatched(record.bags_dispatched.toString())
-    setKgsReceived(record.kgs_received ? record.kgs_received.toString() : "")
+    setKgsReceived(record.kgs_received === null || record.kgs_received === undefined ? "" : record.kgs_received.toString())
     setNotes(record.notes || "")
   }
 
@@ -1032,7 +1043,7 @@ export default function DispatchTab({ showDataToolsControls = false }: DispatchT
       </div>
 
       {/* Add Dispatch Form */}
-      <Card className="order-1 border-border/70 bg-white/85">
+      <Card ref={dispatchFormRef} className="order-1 border-border/70 bg-white/85">
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <Truck className="h-5 w-5" />
@@ -1043,6 +1054,11 @@ export default function DispatchTab({ showDataToolsControls = false }: DispatchT
               ? "Update the dispatch record"
               : "Record coffee bags sent from the selected location (availability follows processing output)."}
           </CardDescription>
+          {editingRecord ? (
+            <p className="text-xs text-emerald-700">
+              Editing {formatDateOnly(editingRecord.dispatch_date)} for {getLocationLabel(editingRecord)}.
+            </p>
+          ) : null}
         </CardHeader>
         <CardContent>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -1175,6 +1191,7 @@ export default function DispatchTab({ showDataToolsControls = false }: DispatchT
                 tooltip="Actual received weight from the buyer or warehouse for reconciliation."
               />
               <Input
+                ref={kgsReceivedInputRef}
                 type="number"
                 step="0.01"
                 min={0}
