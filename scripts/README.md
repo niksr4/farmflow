@@ -176,6 +176,9 @@ Run these scripts (in order) on the target database:
 22. `55-document-records.sql` (optional, tenant-scoped document upload trail for invoices/dispatch/lab/weighbridge files)
 23. `56-import-jobs.sql` (optional, validate/commit CSV imports with audit-trail job tokens)
 24. `57-import-jobs-hardening.sql` (optional, adds requester-user FK support, tighter import job checks, and retention metadata)
+25. `61-signup-requests.sql` (optional, stores pending self-serve signups before tenant creation)
+26. `62-signup-tokens.sql` (optional, stores email verification tokens for self-serve signups)
+27. `63-user-email-auth.sql` (optional, adds verified email identity fields for self-serve login)
 
 New tables:
 - `locations`

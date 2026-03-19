@@ -8,6 +8,7 @@ import { normalizeTenantContext, runTenantQuery } from "@/lib/server/tenant-db"
 import { hashPassword, verifyPassword } from "@/lib/passwords"
 import { logSecurityEvent } from "@/lib/server/security-events"
 import { checkRateLimit } from "@/lib/rate-limit"
+import { isEmailIdentifier, normalizeSignupEmail } from "@/lib/server/onboarding/utils"
 import { normalizeUsername, normalizeUsernameLookup } from "@/lib/usernames"
 
 type SessionMode = "app" | "web"
@@ -68,6 +69,107 @@ const isMissingPasswordResetColumnError = (error: unknown) => {
   return code === "42703" || message.includes('column "password_reset_required" does not exist')
 }
 
+const isMissingEmailIdentityColumnError = (error: unknown) => {
+  const code = String(asRecord(error).code || "")
+  const message = String(asRecord(error).message || "")
+  if (code !== "42703" && !message.includes('column "email"') && !message.includes('column "normalized_email"')) {
+    return false
+  }
+  return (
+    message.includes('column "email"') ||
+    message.includes('column "normalized_email"') ||
+    message.includes('column "email_verified_at"') ||
+    message.includes('column "preferred_locale"')
+  )
+}
+
+const ownerContext = normalizeTenantContext(undefined, "owner")
+
+const selectUsersByUsername = (identifier: string, normalizedIdentifier: string) => sql`
+  SELECT id, username, role, tenant_id, password_hash, password_reset_required
+  FROM users
+  WHERE LOWER(BTRIM(username)) = ${normalizedIdentifier}
+  ORDER BY
+    CASE WHEN BTRIM(username) = ${identifier} THEN 0 ELSE 1 END,
+    CASE role WHEN 'owner' THEN 0 WHEN 'admin' THEN 1 ELSE 2 END,
+    created_at ASC
+  LIMIT 25
+`
+
+const selectUsersByUsernameLegacy = (identifier: string, normalizedIdentifier: string) => sql`
+  SELECT id, username, role, tenant_id, password_hash
+  FROM users
+  WHERE LOWER(BTRIM(username)) = ${normalizedIdentifier}
+  ORDER BY
+    CASE WHEN BTRIM(username) = ${identifier} THEN 0 ELSE 1 END,
+    CASE role WHEN 'owner' THEN 0 WHEN 'admin' THEN 1 ELSE 2 END,
+    created_at ASC
+  LIMIT 25
+`
+
+const selectUsersByEmail = (normalizedEmail: string) => sql`
+  SELECT id, username, role, tenant_id, password_hash, password_reset_required
+  FROM users
+  WHERE normalized_email = ${normalizedEmail}
+  ORDER BY
+    CASE role WHEN 'owner' THEN 0 WHEN 'admin' THEN 1 ELSE 2 END,
+    created_at ASC
+  LIMIT 25
+`
+
+const selectUsersByEmailLegacy = (normalizedEmail: string) => sql`
+  SELECT id, username, role, tenant_id, password_hash
+  FROM users
+  WHERE normalized_email = ${normalizedEmail}
+  ORDER BY
+    CASE role WHEN 'owner' THEN 0 WHEN 'admin' THEN 1 ELSE 2 END,
+    created_at ASC
+  LIMIT 25
+`
+
+const loadUsersByUsername = async (identifier: string, normalizedIdentifier: string) => {
+  try {
+    return (await runTenantQuery(
+      sql,
+      ownerContext,
+      selectUsersByUsername(identifier, normalizedIdentifier),
+    )) as UserRow[]
+  } catch (error) {
+    if (!isMissingPasswordResetColumnError(error)) {
+      throw error
+    }
+    const fallbackUsers = (await runTenantQuery(
+      sql,
+      ownerContext,
+      selectUsersByUsernameLegacy(identifier, normalizedIdentifier),
+    )) as Array<Omit<UserRow, "password_reset_required">>
+    return fallbackUsers.map((row) => ({ ...row, password_reset_required: false }))
+  }
+}
+
+const loadUsersByEmail = async (normalizedEmail: string) => {
+  try {
+    return (await runTenantQuery(
+      sql,
+      ownerContext,
+      selectUsersByEmail(normalizedEmail),
+    )) as UserRow[]
+  } catch (error) {
+    if (isMissingEmailIdentityColumnError(error)) {
+      return [] as UserRow[]
+    }
+    if (!isMissingPasswordResetColumnError(error)) {
+      throw error
+    }
+    const fallbackUsers = (await runTenantQuery(
+      sql,
+      ownerContext,
+      selectUsersByEmailLegacy(normalizedEmail),
+    )) as Array<Omit<UserRow, "password_reset_required">>
+    return fallbackUsers.map((row) => ({ ...row, password_reset_required: false }))
+  }
+}
+
 export const authOptions: NextAuthOptions = {
   session: {
     strategy: "jwt",
@@ -98,18 +200,20 @@ export const authOptions: NextAuthOptions = {
         }
 
         const credentialValues = (credentials || {}) as CredentialsInput
-        const username = normalizeUsername(credentialValues.username)
+        const identifier = normalizeUsername(credentialValues.username)
         const password = String(credentialValues.password || "")
         const sessionMode = resolveSessionMode(credentialValues.sessionMode)
+        const isEmailLogin = isEmailIdentifier(identifier)
+        const normalizedEmail = normalizeSignupEmail(identifier)
         const headers = toRequestHeaders((req as { headers?: unknown } | undefined)?.headers)
         const ipAddress = getHeaderValue(headers, "x-forwarded-for") || getHeaderValue(headers, "x-real-ip") || null
         const userAgent = getHeaderValue(headers, "user-agent") || null
 
-        if (!username || !password) {
-          throw new Error("Username and password are required")
+        if (!identifier || !password) {
+          throw new Error("Email or username and password are required")
         }
 
-        const normalizedUsername = normalizeUsernameLookup(username)
+        const normalizedUsername = normalizeUsernameLookup(identifier)
 
         try {
           const rateLimit = await checkRateLimit("authLogin", `${String(ipAddress || "unknown")}::${normalizedUsername}`)
@@ -120,7 +224,7 @@ export const authOptions: NextAuthOptions = {
               source: "next-auth",
               ipAddress,
               userAgent,
-              metadata: { username, reason: "rate_limited" },
+              metadata: { identifier, reason: "rate_limited" },
             })
             return null
           }
@@ -128,43 +232,19 @@ export const authOptions: NextAuthOptions = {
           console.warn("Auth rate-limit check failed:", rateLimitError)
         }
 
-        const ownerContext = normalizeTenantContext(undefined, "owner")
         let users: UserRow[] = []
         try {
-          users = (await runTenantQuery(
-            sql,
-            ownerContext,
-            sql`
-              SELECT id, username, role, tenant_id, password_hash, password_reset_required
-              FROM users
-              WHERE LOWER(BTRIM(username)) = ${normalizedUsername}
-              ORDER BY
-                CASE WHEN BTRIM(username) = ${username} THEN 0 ELSE 1 END,
-                CASE role WHEN 'owner' THEN 0 WHEN 'admin' THEN 1 ELSE 2 END,
-                created_at ASC
-              LIMIT 25
-            `,
-          )) as UserRow[]
+          if (isEmailLogin) {
+            users = await loadUsersByEmail(normalizedEmail)
+          }
+          if (!users.length) {
+            users = await loadUsersByUsername(identifier, normalizedUsername)
+          }
         } catch (error) {
-          if (!isMissingPasswordResetColumnError(error)) {
+          if (!isMissingEmailIdentityColumnError(error)) {
             throw error
           }
-          // Backward compatibility for databases that haven't run password rotation migration yet.
-          const fallbackUsers = (await runTenantQuery(
-            sql,
-            ownerContext,
-            sql`
-              SELECT id, username, role, tenant_id, password_hash
-              FROM users
-              WHERE LOWER(BTRIM(username)) = ${normalizedUsername}
-              ORDER BY
-                CASE WHEN BTRIM(username) = ${username} THEN 0 ELSE 1 END,
-                CASE role WHEN 'owner' THEN 0 WHEN 'admin' THEN 1 ELSE 2 END,
-                created_at ASC
-              LIMIT 25
-            `,
-          )) as Array<Omit<UserRow, "password_reset_required">>
-          users = fallbackUsers.map((row) => ({ ...row, password_reset_required: false }))
+          users = await loadUsersByUsername(identifier, normalizedUsername)
         }
 
         if (!users || users.length === 0) {
@@ -174,7 +254,7 @@ export const authOptions: NextAuthOptions = {
             source: "next-auth",
             ipAddress,
             userAgent,
-            metadata: { username, reason: "user_not_found" },
+            metadata: { identifier, reason: "user_not_found" },
           })
           return null
         }
@@ -198,7 +278,7 @@ export const authOptions: NextAuthOptions = {
             source: "next-auth",
             ipAddress,
             userAgent,
-            metadata: { username, reason: "invalid_password", candidates: users.length },
+            metadata: { identifier, reason: "invalid_password", candidates: users.length },
           })
           return null
         }

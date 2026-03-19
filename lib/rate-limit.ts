@@ -7,7 +7,15 @@ const hasRedisConfig = Boolean(
 
 const redis = hasRedisConfig ? Redis.fromEnv() : null
 
-type RateLimitKey = "aiAnalysis" | "news" | "weather" | "authLogin" | "registerInterest"
+type RateLimitKey =
+  | "aiAnalysis"
+  | "news"
+  | "weather"
+  | "authLogin"
+  | "registerInterest"
+  | "authSignup"
+  | "authSignupResend"
+  | "authSignupVerify"
 
 type RateLimitResult = {
   success: boolean
@@ -22,6 +30,9 @@ const limiters: Record<RateLimitKey, Ratelimit | null> = {
   weather: redis ? new Ratelimit({ redis, limiter: Ratelimit.fixedWindow(30, "1 m") }) : null,
   authLogin: redis ? new Ratelimit({ redis, limiter: Ratelimit.fixedWindow(10, "10 m") }) : null,
   registerInterest: redis ? new Ratelimit({ redis, limiter: Ratelimit.fixedWindow(6, "10 m") }) : null,
+  authSignup: redis ? new Ratelimit({ redis, limiter: Ratelimit.fixedWindow(6, "10 m") }) : null,
+  authSignupResend: redis ? new Ratelimit({ redis, limiter: Ratelimit.fixedWindow(6, "10 m") }) : null,
+  authSignupVerify: redis ? new Ratelimit({ redis, limiter: Ratelimit.fixedWindow(20, "10 m") }) : null,
 }
 
 type LocalLimiterConfig = {
@@ -40,6 +51,9 @@ const localLimiterConfig: Record<RateLimitKey, LocalLimiterConfig> = {
   weather: { limit: 30, windowMs: 60_000 },
   authLogin: { limit: 10, windowMs: 10 * 60_000 },
   registerInterest: { limit: 6, windowMs: 10 * 60_000 },
+  authSignup: { limit: 6, windowMs: 10 * 60_000 },
+  authSignupResend: { limit: 6, windowMs: 10 * 60_000 },
+  authSignupVerify: { limit: 20, windowMs: 10 * 60_000 },
 }
 
 const localLimiterStore = new Map<string, LocalLimiterEntry>()

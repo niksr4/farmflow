@@ -36,31 +36,31 @@ export default function LoginPage() {
     e.preventDefault()
     if (isSubmitting) return
     setError("")
-    const normalizedUsername = username.trim()
-    if (!normalizedUsername || !password) {
-      setError("Enter your username and password.")
+    const normalizedIdentifier = username.trim()
+    if (!normalizedIdentifier || !password) {
+      setError("Enter your email or username and password.")
       return
     }
 
     try {
       setIsSubmitting(true)
-      const result = await login(normalizedUsername, password, sessionMode)
+      const result = await login(normalizedIdentifier, password, sessionMode)
       if (!result.ok) {
-        throw new Error(result.error || "Invalid username or password")
+        throw new Error(result.error || "Invalid email, username, or password")
       }
       const sessionResponse = await fetch("/api/auth/session", { cache: "no-store" })
       const sessionPayload = await sessionResponse.json().catch(() => null)
       const role = String(sessionPayload?.user?.role || "").toLowerCase()
       const tenantId = String(sessionPayload?.user?.tenantId || "")
-      const distinctId = `${tenantId || "global"}:${normalizedUsername}`
+      const distinctId = `${tenantId || "global"}:${normalizedIdentifier}`
       // Identify user in PostHog and capture sign-in event
       posthog.identify(distinctId, {
-        username: normalizedUsername,
+        username: normalizedIdentifier,
         role,
         tenant_id: tenantId || "global",
       })
       posthog.capture("user_signed_in", {
-        username: normalizedUsername,
+        username: normalizedIdentifier,
         role,
         tenant_id: tenantId || "global",
       })
@@ -73,7 +73,7 @@ export default function LoginPage() {
       posthog.captureException(err)
       const fallback = "Unable to sign in right now. Please try again."
       const message = String(err?.message || fallback)
-      const isCredentialError = message.includes("Invalid username or password")
+      const isCredentialError = message.includes("Invalid email, username, or password")
       const isAuthSystemError = message.includes("Authentication is temporarily unavailable")
       setError(isCredentialError || isAuthSystemError ? message : fallback)
     } finally {
@@ -120,7 +120,7 @@ export default function LoginPage() {
           <p className="text-xs text-muted-foreground">
             Need access?{" "}
             <Link href="/signup" className="underline">
-              Request access
+              Create your workspace
             </Link>
             .
           </p>
@@ -141,8 +141,8 @@ export default function LoginPage() {
           <form onSubmit={handleLogin} className="space-y-4">
             <div>
               <div className="flex items-center gap-2">
-                <Label htmlFor="username" className="block text-gray-700 mb-1">
-                  Username
+                    <Label htmlFor="username" className="block text-gray-700 mb-1">
+                  Email or Username
                 </Label>
                 <TooltipProvider>
                   <Tooltip>
@@ -155,7 +155,7 @@ export default function LoginPage() {
                         <Info className="h-3 w-3" />
                       </button>
                     </TooltipTrigger>
-                    <TooltipContent>Use the username created for your estate account.</TooltipContent>
+                    <TooltipContent>Use your verified email for new workspaces, or your existing username.</TooltipContent>
                   </Tooltip>
                 </TooltipProvider>
               </div>
@@ -172,7 +172,7 @@ export default function LoginPage() {
                     if (error) setError("")
                   }}
                   className="pl-10"
-                  placeholder="Enter username"
+                  placeholder="you@estate.com or username"
                   autoFocus
                   autoComplete="username"
                   autoCapitalize="none"
@@ -263,9 +263,9 @@ export default function LoginPage() {
           <p className="mt-2 text-xs text-gray-500">
             New to FarmFlow?{" "}
             <Link href="/signup" className="underline">
-              Request access
+              Create your workspace
             </Link>{" "}
-            and we will provision your tenant.
+            and verify your email to start using it.
           </p>
         </div>
       </div>

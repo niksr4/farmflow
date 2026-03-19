@@ -14,7 +14,7 @@ interface User {
 interface AuthContextType {
   user: User | null
   login: (
-    username: string,
+    identifier: string,
     password: string,
     sessionMode?: "app" | "web",
   ) => Promise<{ ok: boolean; error?: string }>
@@ -40,9 +40,9 @@ export function useAuth(): AuthContextType {
         }
     : null
 
-  const login = async (username: string, password: string, sessionMode: "app" | "web" = "web") => {
+  const login = async (identifier: string, password: string, sessionMode: "app" | "web" = "web") => {
     const result = await signIn("credentials", {
-      username,
+      username: identifier,
       password,
       sessionMode,
       redirect: false,
@@ -55,10 +55,10 @@ export function useAuth(): AuthContextType {
     const rawError = String(result?.error || "")
     const mappedError =
       rawError === "CredentialsSignin"
-        ? "Invalid username or password"
+        ? "Invalid email, username, or password"
         : rawError === "Configuration"
           ? "Authentication is temporarily unavailable"
-          : rawError || "Invalid username or password"
+          : rawError || "Invalid email, username, or password"
 
     return { ok: false, error: mappedError }
   }

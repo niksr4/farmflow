@@ -1,6 +1,7 @@
 "use client"
 
 import { useState } from "react"
+import { useRouter } from "next/navigation"
 import Link from "next/link"
 import posthog from "posthog-js"
 import { Button } from "@/components/ui/button"
@@ -11,14 +12,15 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/comp
 import { Info } from "lucide-react"
 
 export default function SignupRoute() {
-  const [submitted, setSubmitted] = useState(false)
+  const router = useRouter()
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [errorMessage, setErrorMessage] = useState("")
   const [form, setForm] = useState({
     name: "",
     email: "",
-    estate: "",
-    region: "",
+    password: "",
+    estateName: "",
+    country: "",
   })
 
   return (
@@ -30,73 +32,68 @@ export default function SignupRoute() {
       <div className="w-full max-w-md space-y-6 relative z-10">
         <Card className="border border-white/60 bg-white/85 backdrop-blur-md dark:bg-slate-900/75">
           <CardHeader>
-            <CardTitle className="font-display">Request Access</CardTitle>
+            <CardTitle className="font-display">Create Your Workspace</CardTitle>
             <CardDescription>
-              Tell us about your estate and we will set up your tenant, modules, and farmer-first traceability workflow.
+              Start your FarmFlow workspace with your email, then verify it to provision your tenant and sign in.
             </CardDescription>
           </CardHeader>
           <CardContent>
-            {submitted ? (
-              <div className="space-y-3">
-                <p className="text-sm text-muted-foreground">
-                  Thanks. We will reach out with your login details and onboarding plan shortly.
-                </p>
-                <Button asChild className="w-full">
-                  <Link href="/login">Go to Sign In</Link>
-                </Button>
-              </div>
-            ) : (
-              <form
-                className="space-y-4"
-                onSubmit={async (event) => {
-                  event.preventDefault()
-                  if (isSubmitting) return
-                  const normalized = {
-                    name: form.name.trim(),
-                    email: form.email.trim().toLowerCase(),
-                    estate: form.estate.trim(),
-                    region: form.region.trim(),
-                  }
-                  if (!normalized.name || !normalized.email || !normalized.estate) {
-                    setErrorMessage("Please fill in name, work email, and estate name.")
-                    return
-                  }
-                  setIsSubmitting(true)
-                  setErrorMessage("")
-                  try {
-                    const response = await fetch("/api/register-interest", {
-                      method: "POST",
-                      headers: { "Content-Type": "application/json" },
-                      body: JSON.stringify({
-                        name: normalized.name,
-                        email: normalized.email,
-                        estate: normalized.estate,
-                        region: normalized.region,
-                        organization: normalized.estate,
-                        source: "signup-page",
-                      }),
-                    })
-                    const data = await response.json()
-                    if (!response.ok || !data?.success) {
-                      throw new Error(data?.error || "Failed to submit request")
-                    }
-                    posthog.capture("access_requested", {
-                      estate: normalized.estate,
-                      region: normalized.region,
-                    })
-                    posthog.capture("funnel_signup_submitted", {
+            <form
+              className="space-y-4"
+              onSubmit={async (event) => {
+                event.preventDefault()
+                if (isSubmitting) return
+                const normalized = {
+                  name: form.name.trim(),
+                  email: form.email.trim().toLowerCase(),
+                  password: form.password,
+                  estateName: form.estateName.trim(),
+                  country: form.country.trim(),
+                  preferredLocale:
+                    typeof window !== "undefined" && window.navigator?.language ? String(window.navigator.language) : "en",
+                }
+                if (!normalized.name || !normalized.email || !normalized.password || !normalized.estateName) {
+                  setErrorMessage("Please fill in name, email, password, and estate name.")
+                  return
+                }
+                setIsSubmitting(true)
+                setErrorMessage("")
+                try {
+                  const response = await fetch("/api/auth/signup", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                      name: normalized.name,
+                      email: normalized.email,
+                      password: normalized.password,
+                      estateName: normalized.estateName,
+                      country: normalized.country,
+                      preferredLocale: normalized.preferredLocale,
                       source: "signup-page",
-                      has_region: Boolean(normalized.region),
-                    })
-                    setSubmitted(true)
-                  } catch (error: any) {
-                    posthog.captureException(error)
-                    setErrorMessage(error?.message || "Unable to submit right now. Please try again.")
-                  } finally {
-                    setIsSubmitting(false)
+                    }),
+                  })
+                  const data = await response.json()
+                  if (!response.ok || !data?.success) {
+                    throw new Error(data?.error || "Failed to create workspace")
                   }
-                }}
-              >
+                  posthog.capture("signup_started", {
+                    estate: normalized.estateName,
+                    country: normalized.country,
+                    source: "signup-page",
+                  })
+                  posthog.capture("funnel_signup_submitted", {
+                    source: "signup-page",
+                    has_country: Boolean(normalized.country),
+                  })
+                  router.push(`/verify-email?email=${encodeURIComponent(normalized.email)}`)
+                } catch (error: any) {
+                  posthog.captureException(error)
+                  setErrorMessage(error?.message || "Unable to create your workspace right now. Please try again.")
+                } finally {
+                  setIsSubmitting(false)
+                }
+              }}
+            >
                 <div className="space-y-2">
                   <div className="flex items-center gap-2">
                     <Label htmlFor="name">Name</Label>
@@ -157,7 +154,35 @@ export default function SignupRoute() {
                 </div>
                 <div className="space-y-2">
                   <div className="flex items-center gap-2">
-                    <Label htmlFor="estate">Estate Name</Label>
+                    <Label htmlFor="password">Password</Label>
+                    <TooltipProvider>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <button
+                            type="button"
+                            aria-label="Password help"
+                            className="inline-flex h-5 w-5 items-center justify-center rounded-full border border-slate-200 text-slate-500 hover:text-slate-700"
+                          >
+                            <Info className="h-3 w-3" />
+                          </button>
+                        </TooltipTrigger>
+                        <TooltipContent>At least 8 characters. You will use this after email verification.</TooltipContent>
+                      </Tooltip>
+                    </TooltipProvider>
+                  </div>
+                  <Input
+                    id="password"
+                    type="password"
+                    value={form.password}
+                    onChange={(event) => setForm((prev) => ({ ...prev, password: event.target.value }))}
+                    placeholder="Create password"
+                    autoComplete="new-password"
+                    required
+                  />
+                </div>
+                <div className="space-y-2">
+                  <div className="flex items-center gap-2">
+                    <Label htmlFor="estateName">Estate Name</Label>
                     <TooltipProvider>
                       <Tooltip>
                         <TooltipTrigger asChild>
@@ -169,14 +194,14 @@ export default function SignupRoute() {
                             <Info className="h-3 w-3" />
                           </button>
                         </TooltipTrigger>
-                        <TooltipContent>This name appears in dashboards and reports.</TooltipContent>
+                        <TooltipContent>This name appears in your dashboard and tenant profile.</TooltipContent>
                       </Tooltip>
                     </TooltipProvider>
                   </div>
                   <Input
-                    id="estate"
-                    value={form.estate}
-                    onChange={(event) => setForm((prev) => ({ ...prev, estate: event.target.value }))}
+                    id="estateName"
+                    value={form.estateName}
+                    onChange={(event) => setForm((prev) => ({ ...prev, estateName: event.target.value }))}
                     placeholder="Estate or cooperative name"
                     autoComplete="organization"
                     required
@@ -184,28 +209,28 @@ export default function SignupRoute() {
                 </div>
                 <div className="space-y-2">
                   <div className="flex items-center gap-2">
-                    <Label htmlFor="region">Region</Label>
+                    <Label htmlFor="country">Country / Region</Label>
                     <TooltipProvider>
                       <Tooltip>
                         <TooltipTrigger asChild>
                           <button
                             type="button"
-                            aria-label="Region help"
+                            aria-label="Country or region help"
                             className="inline-flex h-5 w-5 items-center justify-center rounded-full border border-slate-200 text-slate-500 hover:text-slate-700"
                           >
                             <Info className="h-3 w-3" />
                           </button>
                         </TooltipTrigger>
-                        <TooltipContent>Helps us tailor onboarding and regional reporting.</TooltipContent>
+                        <TooltipContent>Helps us shape onboarding and future localization.</TooltipContent>
                       </Tooltip>
                     </TooltipProvider>
                   </div>
                   <Input
-                    id="region"
-                    value={form.region}
-                    onChange={(event) => setForm((prev) => ({ ...prev, region: event.target.value }))}
-                    placeholder="Coorg, Chikmagalur, Wayanad..."
-                    autoComplete="address-level1"
+                    id="country"
+                    value={form.country}
+                    onChange={(event) => setForm((prev) => ({ ...prev, country: event.target.value }))}
+                    placeholder="India, Colombia, Brazil..."
+                    autoComplete="country-name"
                   />
                 </div>
                 {errorMessage && (
@@ -213,24 +238,25 @@ export default function SignupRoute() {
                     {errorMessage}
                   </p>
                 )}
-                <Button type="submit" className="w-full" disabled={isSubmitting || !form.name.trim() || !form.email.trim() || !form.estate.trim()}>
-                  {isSubmitting ? "Submitting..." : "Request Access"}
+                <Button
+                  type="submit"
+                  className="w-full"
+                  disabled={isSubmitting || !form.name.trim() || !form.email.trim() || !form.password || !form.estateName.trim()}
+                >
+                  {isSubmitting ? "Creating..." : "Create Account"}
                 </Button>
-                <p className="text-xs text-muted-foreground">Most requests are reviewed within one business day.</p>
+                <p className="text-xs text-muted-foreground">We will email a verification link before provisioning your workspace.</p>
                 <p className="text-xs text-muted-foreground">
-                  By requesting access, you acknowledge the{" "}
+                  By creating an account, you acknowledge the{" "}
                   <Link href="/privacy" className="underline">
                     Privacy Notice
                   </Link>
                   .
                 </p>
-              </form>
-            )}
-            {!submitted && (
-              <div className="mt-6 rounded-xl border border-emerald-200/70 bg-emerald-50/70 p-4 text-xs text-emerald-800">
-                We will set up: estate profile, module access, rainfall logging, quality notes, and buyer-ready exports.
-              </div>
-            )}
+            </form>
+            <div className="mt-6 rounded-xl border border-emerald-200/70 bg-emerald-50/70 p-4 text-xs text-emerald-800">
+              Verification comes first, then your tenant, starter access, and workspace are provisioned automatically.
+            </div>
           </CardContent>
         </Card>
         <div className="text-center text-sm text-muted-foreground">
