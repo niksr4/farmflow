@@ -3,6 +3,7 @@ import type { Metadata, Viewport } from "next"
 import { cookies } from "next/headers"
 import { Fraunces, Manrope } from "next/font/google"
 import Script from "next/script"
+import { Analytics } from "@vercel/analytics/next"
 import "./globals.css"
 import { ThemeProvider } from "@/components/theme-provider"
 import { AuthProvider } from "@/hooks/use-auth"
@@ -110,6 +111,7 @@ gtag('config', 'G-X0RB06WXE9');`}
               <BrandWatermark />
               <Toaster />
               <PwaRegister />
+              <Analytics />
             </LocaleProvider>
           </AuthProvider>
         </ThemeProvider>
