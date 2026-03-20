@@ -1,1433 +1,424 @@
 "use client"
 
-import { useEffect, useRef, useState, type FormEvent } from "react"
 import Link from "next/link"
 import Image from "next/image"
-import { Fraunces, Manrope } from "next/font/google"
-import { ArrowRight, CheckCircle2, Leaf, Shield, Sparkles, Truck, MessageCircle, Send, X, Droplets, Coffee, TrendingUp, Package, Cloudy } from "lucide-react"
+import {
+  ArrowRight,
+  BarChart3,
+  CheckCircle2,
+  CloudRain,
+  Coffee,
+  Leaf,
+  MapPin,
+  PackageCheck,
+  ShieldCheck,
+  Truck,
+  Users,
+  Wallet,
+} from "lucide-react"
+import { PublicSiteShell } from "@/components/public-site-shell"
+import { useLocale } from "@/components/locale-provider"
+import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Badge } from "@/components/ui/badge"
-import { Input } from "@/components/ui/input"
-import { Textarea } from "@/components/ui/textarea"
-import posthog from "posthog-js"
+import { MODULE_BUNDLES, MODULES } from "@/lib/modules"
 
-const display = Fraunces({ subsets: ["latin"], weight: ["600", "700", "800"] })
-const body = Manrope({ subsets: ["latin"], weight: ["400", "500", "600", "700"] })
-
-const HIGHLIGHTS = [
+const proofCards = [
   {
-    title: "End-to-End Lot Traceability",
-    description: "Track every lot from field intake to buyer shipment with a complete, auditable chain.",
-    icon: Shield,
+    title: "Stock and finance baseline",
+    description: "Know what is in store, what moved, and what it cost without reconciling three different ledgers.",
+    icon: Wallet,
   },
   {
-    title: "Inventory & Loss Control",
-    description: "Detect shrinkage and stock drift early before margin leaks.",
-    icon: Leaf,
+    title: "Processing to sales continuity",
+    description: "Run coffee from processing through dispatch confirmation and into saleable stock with fewer blind spots.",
+    icon: PackageCheck,
   },
   {
-    title: "Processing Yield Clarity",
-    description: "Monitor Arabica and Robusta throughput, moisture, and Cherry-to-Parchment conversion lot by lot in real time.",
-    icon: Sparkles,
-  },
-  {
-    title: "Dispatch + Sales Reconciliation",
-    description: "Reconcile coffee dispatch, received weight, and invoicing so every Arabica/Robusta bag has a financial trail.",
-    icon: Truck,
-  },
-  {
-    title: "Rainfall + Weather Intelligence",
-    description: "Combine rainfall logs and live forecasts to plan harvest and drying with confidence.",
-    icon: Droplets,
-  },
-  {
-    title: "Operational Intelligence + Pattern Alerts",
-    description: "Detect recurring yield dips, delay patterns, and cost spikes early with weekly pattern signals.",
-    icon: TrendingUp,
-  },
-  {
-    title: "Labor + Consumables Tracking",
-    description: "Track worker output, wages, fuel, fertilizer, and processing consumables across locations.",
-    icon: Package,
+    title: "Control and accountability",
+    description: "Keep roles, module access, and change history visible as teams and estates grow.",
+    icon: ShieldCheck,
   },
 ]
 
-const BULLETS = [
-  "Capture Arabica and Robusta intake, Cherry and Parchment processing, labor, consumables, dispatch, and sales in one live ledger",
-  "Track labor productivity, wages, and input usage by location",
-  "Spot recurring patterns in yield, delays, and spend before they become losses",
-  "Plan field and drying decisions with rainfall + weather context",
-  "Add curing and grading notes when your workflow needs them",
-]
-
-const CONTROL_SIGNALS = [
-  {
-    label: "Processing loss trend",
-    value: "2.9%",
-    description: "Shrinkage and repeat variance detected by stage and lot.",
-  },
-  {
-    label: "Yield conversion rate",
-    value: "46.4%",
-    description: "Ripe-to-dry output monitored weekly with baseline drift checks.",
-  },
-  {
-    label: "Receivables exposure",
-    value: "₹16.2L",
-    description: "Outstanding buyer cash at risk, with follow-up delay patterns flagged.",
-  },
-]
-
-const LIVE_METRICS = [
-  { label: "Lots tracked", value: 152, suffix: "" },
-  { label: "Avg yield", value: 46.4, suffix: "%", decimals: 1 },
-  { label: "Alerts resolved", value: 18, suffix: "" },
-  { label: "Cash protected", value: 24.8, suffix: "L", decimals: 1 },
-]
-
-const LIVE_UPDATES = [
-  {
-    title: "Moisture variance detected in wet parchment",
-    detail: "Drying plan adjusted automatically and lot flagged for supervisor follow-up.",
-  },
-  {
-    title: "Dispatch confirmation pending for 3 days",
-    detail: "Escalation reminder sent to logistics and buyer contacts.",
-  },
-  {
-    title: "Labor allocation shifted for processing peak",
-    detail: "Supervisor reassigned workers to high-throughput lots for faster turn-around.",
-  },
-  {
-    title: "Consumables threshold reached at primary location",
-    detail: "Fuel and processing input replenishment request generated.",
-  },
-]
-
-const ROLE_VALUE_CARDS = [
-  {
-    title: "Estate Owner",
-    icon: TrendingUp,
-    outcome: "Run the estate from one command view for processing output, labor cost, consumables burn, and cash flow.",
-    points: ["Season KPI command center", "Labor + consumable cost signals", "Cross-module reconciliation"],
-  },
-  {
-    title: "Operations Lead",
-    icon: Truck,
-    outcome: "Execute daily processing, labor rosters, dispatch, and stock movement without spreadsheet drift.",
-    points: ["Lot-level processing records", "Labor shifts + output tracking", "Consumables issue vs stock"],
-  },
-  {
-    title: "Admin & Finance",
-    icon: Shield,
-    outcome: "Manage access, accountability, and governance with clear controls and audit evidence.",
-    points: ["Role and module permissions", "User-level overrides", "Full activity log history"],
-  },
-]
-
-const MODULE_PATHWAYS = [
-  {
-    title: "Estate Owner Command",
-    description: "Best for estates running full coffee operations with Arabica/Robusta processing, labor, consumables, and revenue in one system.",
-    modules: ["Inventory", "Processing", "Dispatch", "Sales", "Season View", "Accounts", "Activity Log"],
-  },
-  {
-    title: "Estate + Curing Extension",
-    description: "Add curing and grading as secondary modules when your coffee estate also runs post-processing workflows for Cherry and Parchment lots.",
-    modules: ["Processing", "Curing", "Quality", "Rainfall", "Weather", "Dispatch", "Sales"],
-  },
-  {
-    title: "Inventory + Accounts Essentials",
-    description: "Start simple with stock and finance control, then expand modules as operations mature.",
-    modules: ["Inventory", "Accounts", "Transaction History"],
-  },
-]
-
-const WEEK_ONE_PLAN = [
-  {
-    day: "Day 1",
-    title: "Set up your workspace",
-    detail: "Configure locations, user roles, and module access for your estate team.",
-  },
-  {
-    day: "Day 2-3",
-    title: "Import baseline data",
-    detail: "Load inventory, consumables, Arabica/Robusta processing, Cherry/Parchment outputs, dispatch, and sales opening balances.",
-  },
-  {
-    day: "Day 4-5",
-    title: "Run daily operations",
-    detail: "Start recording intake, processing outputs, labor logs, consumable issues, dispatches, and sales.",
-  },
-  {
-    day: "Day 6-7",
-    title: "Close your first review",
-    detail: "Use Season View and exceptions to reconcile yield, stock movement, and cash.",
-  },
-]
-
-const ASSURANCE_POINTS = [
-  "Tenant-isolated architecture with role-based access control",
-  "Audit logs for every create, update, and delete action",
-  "Phased module rollout so teams adopt with minimal disruption",
-]
-
-const ESTATE_JOURNEY = [
-  {
-    title: "Harvest intake",
-    description: "Capture Coffee Cherry intake and sort split by ripe, green, and float.",
-    image: "/images/estate-journey-harvest.jpg",
-    alt: "Coffee harvest scene at an estate",
-  },
-  {
-    title: "Washed or natural processing",
-    description: "Track wet Parchment or dry Cherry output for Arabica and Robusta with moisture observations.",
-    image: "/images/estate-journey-processing.jpg",
-    alt: "Coffee processing scene with beans and equipment",
-  },
-  {
-    title: "Curing + quality",
-    description: "Record drying time, grade outcomes, defects, and quality evidence.",
-    image: "/images/estate-journey-curing.jpg",
-    alt: "Coffee beans drying during curing",
-  },
-  {
-    title: "Dispatch + sales",
-    description: "Dispatch coffee confidently, reconcile receipts, and close the revenue loop.",
-    image: "/images/estate-journey-dispatch.jpg",
-    alt: "Coffee delivery transport ready for dispatch",
-  },
-]
-
-const IMPACT_PILLARS = [
-  {
-    title: "Loss visibility that protects margin",
-    description: "Catch shrinkage and variance early before value is lost.",
-    icon: TrendingUp,
-  },
-  {
-    title: "Climate-aware operating decisions",
-    description: "Use rainfall logs and forecasts to plan drying, harvest, and processing windows.",
-    icon: Droplets,
-  },
-  {
-    title: "Buyer confidence through evidence",
-    description: "Moisture, defect, and quality records strengthen pricing conversations.",
-    icon: Shield,
-  },
-]
-
-const CHATBOT_FAQS = [
-  {
-    id: "capabilities",
-    question: "What can FarmFlow track?",
-    answer:
-      "FarmFlow tracks inventory, processing, dispatch, sales, labor, rainfall, and audit events across locations. It supports Arabica/Robusta and parchment/cherry outputs with quality notes.",
-  },
-  {
-    id: "pricing",
-    question: "How does pricing work?",
-    answer:
-      "Commercial plans are being finalized. Share your details in Register Interest and our team will contact you with rollout options.",
-  },
-  {
-    id: "onboarding",
-    question: "How fast can we get started?",
-    answer:
-      "Most estates can start in a day: set locations, load opening balances, then begin processing, dispatch, and sales with guided onboarding.",
-  },
-  {
-    id: "sustainability",
-    question: "Does FarmFlow track sustainability?",
-    answer:
-      "FarmFlow captures operational sustainability evidence like rainfall, moisture, and quality notes with lot traceability. Carbon and water accounting are planned.",
-  },
-  {
-    id: "security",
-    question: "Is coffee estate data isolated?",
-    answer:
-      "Yes. Every coffee estate is tenant-isolated with role-based access and audit logs to show who changed what and when.",
-  },
-  {
-    id: "exports",
-    question: "Can we export reports?",
-    answer:
-      "Yes. Export processing, dispatch, and sales records for buyer-ready compliance and reconciliation.",
-  },
-  {
-    id: "mobile",
-    question: "Does it work on mobile?",
-    answer: "Yes. The dashboard is responsive for phone and tablet field entries.",
-  },
-]
-
-const getChatbotReply = (input: string) => {
-  const text = input.toLowerCase()
-  const lookup = [
-    { keys: ["price", "pricing", "plan", "cost"], id: "pricing" },
-    { keys: ["start", "onboard", "setup", "begin"], id: "onboarding" },
-    { keys: ["sustain", "sustainability", "climate", "rainfall", "quality notes", "water"], id: "sustainability" },
-    { keys: ["security", "privacy", "tenant", "isolate", "audit"], id: "security" },
-    { keys: ["export", "csv", "report"], id: "exports" },
-    { keys: ["mobile", "phone", "tablet"], id: "mobile" },
-    { keys: ["track", "feature", "capability", "inventory", "processing"], id: "capabilities" },
-  ]
-
-  const match = lookup.find((entry) => entry.keys.some((key) => text.includes(key)))
-  const faq = CHATBOT_FAQS.find((item) => item.id === match?.id)
-  if (faq) return faq.answer
-
-  return "I can help with capabilities, onboarding, security, exports, and plans. Ask me anything about FarmFlow."
+const planBadges: Record<string, string> = {
+  basic: "Good first rollout",
+  core: "Recommended for estates",
+  enterprise: "Full module estate stack",
 }
 
+const moduleLabelById = new Map(MODULES.map((module) => [module.id, module.label]))
+
+const representativeEstateFlow = [
+  {
+    label: "Cherry intake",
+    value: "183,766 KG",
+    detail: "Recorded across 88 processing entries",
+    icon: Leaf,
+    accent: "bg-amber-100 text-amber-700",
+  },
+  {
+    label: "Dry output",
+    value: "50,229 KG",
+    detail: "27.3% cherry-to-dry conversion",
+    icon: PackageCheck,
+    accent: "bg-emerald-100 text-emerald-700",
+  },
+  {
+    label: "Confirmed receipts",
+    value: "19,347 KG",
+    detail: "88.4% of dispatched nominal weight",
+    icon: Truck,
+    accent: "bg-sky-100 text-sky-700",
+  },
+  {
+    label: "Coffee sold",
+    value: "11,910 KG",
+    detail: "₹55.6L booked coffee revenue",
+    icon: Wallet,
+    accent: "bg-violet-100 text-violet-700",
+  },
+]
+
+const representativeMonthlyDryOutput = [
+  { month: "Oct", value: 75 },
+  { month: "Nov", value: 2728 },
+  { month: "Dec", value: 16595 },
+  { month: "Jan", value: 30831 },
+]
+
+const representativeCoffeeMix = [
+  { label: "Robusta dry output", value: 43345, percent: 86.3, accent: "bg-emerald-600" },
+  { label: "Arabica dry output", value: 6884, percent: 13.7, accent: "bg-amber-500" },
+]
+
+const representativeOpsSignals = [
+  { label: "Locations live", value: "3", icon: MapPin },
+  { label: "Labor logs", value: "429", icon: Users },
+  { label: "Expense entries", value: "258", icon: Coffee },
+]
+
 export default function LandingPage() {
-  const beanLayerRef = useRef<HTMLDivElement | null>(null)
-  const chatEndRef = useRef<HTMLDivElement | null>(null)
-  const messageIdRef = useRef(0)
-  const [isChatOpen, setIsChatOpen] = useState(false)
-  const [draftMessage, setDraftMessage] = useState("")
-  const [activeUpdateIndex, setActiveUpdateIndex] = useState(0)
-  const [metricValues, setMetricValues] = useState<number[]>(() => LIVE_METRICS.map(() => 0))
-  const [interestForm, setInterestForm] = useState({
-    name: "",
-    email: "",
-    organization: "",
-    estateSize: "",
-    notes: "",
-  })
-  const [interestState, setInterestState] = useState<"idle" | "submitting" | "success" | "error">("idle")
-  const [interestError, setInterestError] = useState("")
-  type ChatMessage = { id: string; role: "bot" | "user"; text: string }
-  const [messages, setMessages] = useState<ChatMessage[]>([
-    {
-      id: "welcome",
-      role: "bot" as const,
-      text: "Welcome to FarmFlow. Ask me about modules, onboarding, plans, and data security.",
-    },
-  ])
-
-  useEffect(() => {
-    if (typeof window === "undefined") return
-
-    const layer = beanLayerRef.current
-    if (!layer) return
-    while (layer.firstChild) {
-      layer.removeChild(layer.firstChild)
-    }
-
-    const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches
-
-    const styleBean = (bean: HTMLSpanElement, top?: string) => {
-      bean.className = "coffee-bean"
-      bean.style.left = `${Math.random() * 92 + 4}%`
-      bean.style.opacity = `${Math.random() * 0.4 + 0.45}`
-      bean.style.transform = `rotate(${Math.random() * 180}deg)`
-      bean.style.width = `${Math.random() * 8 + 16}px`
-      bean.style.height = `${Math.random() * 10 + 22}px`
-      bean.style.filter = "drop-shadow(0 10px 16px rgba(35, 20, 10, 0.35))"
-      if (top) {
-        bean.style.top = top
-      }
-    }
-
-    if (reducedMotion) {
-      for (let i = 0; i < 8; i += 1) {
-        const bean = document.createElement("span")
-        styleBean(bean, `${Math.random() * 70 + 10}%`)
-        bean.style.animation = "none"
-        layer.appendChild(bean)
-      }
-      return
-    }
-
-    let lastSpawn = 0
-    const spawnBeans = () => {
-      const now = Date.now()
-      if (now - lastSpawn < 160) return
-      lastSpawn = now
-
-      const beanCount = Math.floor(Math.random() * 2) + 1
-      for (let i = 0; i < beanCount; i += 1) {
-        const bean = document.createElement("span")
-        styleBean(bean)
-        bean.style.animationDuration = `${Math.random() * 2.2 + 3.4}s`
-        layer.appendChild(bean)
-
-        window.setTimeout(() => {
-          bean.remove()
-        }, 5600)
-      }
-    }
-
-    window.addEventListener("scroll", spawnBeans, { passive: true })
-    window.addEventListener("touchmove", spawnBeans, { passive: true })
-    spawnBeans()
-
-    return () => {
-      window.removeEventListener("scroll", spawnBeans)
-      window.removeEventListener("touchmove", spawnBeans)
-    }
-  }, [])
-
-  useEffect(() => {
-    const interval = window.setInterval(() => {
-      setActiveUpdateIndex((prev) => (prev + 1) % LIVE_UPDATES.length)
-    }, 4200)
-
-    return () => {
-      window.clearInterval(interval)
-    }
-  }, [])
-
-  useEffect(() => {
-    if (typeof window === "undefined") return
-    const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches
-    if (reducedMotion) {
-      setMetricValues(LIVE_METRICS.map((metric) => metric.value))
-      return
-    }
-
-    let start: number | null = null
-    const duration = 1200
-    const step = (timestamp: number) => {
-      if (!start) start = timestamp
-      const progress = Math.min((timestamp - start) / duration, 1)
-      setMetricValues(
-        LIVE_METRICS.map((metric) => {
-          const value = metric.value * progress
-          if (metric.decimals) return Number(value.toFixed(metric.decimals))
-          return Math.round(value)
-        }),
-      )
-      if (progress < 1) {
-        window.requestAnimationFrame(step)
-      }
-    }
-
-    window.requestAnimationFrame(step)
-  }, [])
-
-  useEffect(() => {
-    if (typeof window === "undefined") return
-    const targets = Array.from(document.querySelectorAll("[data-reveal]")) as HTMLElement[]
-    if (targets.length === 0) return
-
-    const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches
-    if (reducedMotion) {
-      targets.forEach((el) => el.classList.add("reveal-visible"))
-      return
-    }
-
-    const observer = new IntersectionObserver(
-      (entries) => {
-        entries.forEach((entry) => {
-          if (entry.isIntersecting) {
-            entry.target.classList.add("reveal-visible")
-            observer.unobserve(entry.target)
-          }
-        })
-      },
-      { threshold: 0.18 },
-    )
-
-    targets.forEach((target) => observer.observe(target))
-    return () => observer.disconnect()
-  }, [])
-
-  useEffect(() => {
-    if (!isChatOpen || !chatEndRef.current) return
-    chatEndRef.current.scrollIntoView({ behavior: "smooth" })
-  }, [messages, isChatOpen])
-
-  const sendMessage = (text: string) => {
-    const trimmed = text.trim()
-    if (!trimmed) return
-    const userId = `u-${++messageIdRef.current}`
-    const botId = `b-${++messageIdRef.current}`
-    const userMessage = { id: userId, role: "user" as const, text: trimmed }
-    const botMessage = { id: botId, role: "bot" as const, text: getChatbotReply(trimmed) }
-    setMessages((prev) => [...prev, userMessage, botMessage])
-    setDraftMessage("")
-  }
-
-  const handleInterestSubmit = async (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault()
-    const normalized = {
-      name: interestForm.name.trim(),
-      email: interestForm.email.trim().toLowerCase(),
-      organization: interestForm.organization.trim(),
-      estateSize: interestForm.estateSize.trim(),
-      notes: interestForm.notes.trim(),
-    }
-    if (!normalized.name || !normalized.email) {
-      setInterestState("error")
-      setInterestError("Please enter your name and work email.")
-      return
-    }
-    setInterestError("")
-    setInterestState("submitting")
-    try {
-      const response = await fetch("/api/register-interest", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ...normalized, source: "landing-page" }),
-      })
-      const data = await response.json()
-      if (!response.ok || !data.success) {
-        throw new Error(data.error || "Failed to submit interest")
-      }
-      posthog.capture("funnel_signup_submitted", {
-        source: "landing-page",
-        has_estate_size: Boolean(normalized.estateSize),
-      })
-      setInterestState("success")
-      setInterestForm({
-        name: "",
-        email: "",
-        organization: "",
-        estateSize: "",
-        notes: "",
-      })
-    } catch (error: any) {
-      setInterestState("error")
-      setInterestError(error.message || "Unable to submit right now. Please try again.")
-    }
-  }
+  const { t } = useLocale()
+  const heroBullets = [
+    t("public.landing.bullet1"),
+    t("public.landing.bullet2"),
+    t("public.landing.bullet3"),
+    t("public.landing.bullet4"),
+    t("public.landing.bullet5"),
+  ]
+  const maxMonthlyDryOutput = Math.max(...representativeMonthlyDryOutput.map((item) => item.value))
 
   return (
-    <div
-      className={`${body.className} relative min-h-[100svh] overflow-x-hidden text-slate-900`}
-      style={{
-        ["--copper" as any]: "#0f6f66",
-        ["--sage" as any]: "#1f6b5d",
-        ["--sand" as any]: "#e8f6f3",
-        ["--ink" as any]: "#1b1a17",
-      }}
-    >
-      <div className="pointer-events-none absolute inset-0 overflow-hidden">
-        <div className="absolute -top-28 right-[-6%] h-[460px] w-[460px] rounded-full bg-[radial-gradient(circle_at_center,rgba(15,111,102,0.45),transparent_70%)] blur-[120px] glow-pulse" />
-        <div className="absolute top-[18%] left-[-8%] h-[380px] w-[380px] rounded-full bg-[radial-gradient(circle_at_center,rgba(31,107,93,0.35),transparent_70%)] blur-[140px] soft-shift" />
-        <div className="absolute bottom-[-18%] right-[8%] h-[420px] w-[420px] rounded-full bg-[radial-gradient(circle_at_center,rgba(232,246,243,0.8),transparent_70%)] blur-[140px]" />
-      </div>
-      <div ref={beanLayerRef} className="pointer-events-none absolute inset-0 z-30 overflow-hidden" />
-      <div className="relative z-10">
-        <header className="px-4 pt-4 sm:px-6 sm:pt-6">
-          <nav className="mx-auto flex w-full max-w-6xl flex-col gap-3 rounded-2xl border border-white/60 bg-white/75 px-3 py-3 backdrop-blur-md shadow-[0_24px_50px_-32px_rgba(15,23,42,0.6)] dark:border-white/10 dark:bg-slate-900/70 sm:flex-row sm:items-center sm:justify-between sm:px-4">
-            <div className="flex items-center gap-3">
-              <Image src="/brand-logo.svg" alt="FarmFlow" width={220} height={86} className="h-12 w-auto" priority />
+    <PublicSiteShell>
+      <div className="mx-auto w-full max-w-6xl space-y-10">
+        <section className="grid gap-6 lg:grid-cols-[1.05fr_0.95fr] lg:items-stretch">
+          <div className="flex h-full flex-col justify-between gap-6 rounded-[2rem] border border-white/60 bg-gradient-to-br from-[#0f6f66] via-[#0b4f49] to-[#083730] p-6 text-white shadow-[0_38px_95px_-48px_rgba(15,111,102,0.8)] sm:p-10">
+            <Badge className="w-fit border-white/25 bg-white/15 text-white">{t("public.landing.badge")}</Badge>
+            <div className="space-y-4">
+              <h1 className="max-w-3xl text-3xl font-semibold leading-tight sm:text-5xl">{t("public.landing.title")}</h1>
+              <p className="max-w-2xl text-sm text-white/85 sm:text-base">{t("public.landing.description")}</p>
             </div>
-            <div className="hidden lg:flex items-center gap-5 whitespace-nowrap text-sm text-muted-foreground">
-              <a href="#roles" className="whitespace-nowrap hover:text-foreground">
-                Solutions
-              </a>
-              <a href="#features" className="whitespace-nowrap hover:text-foreground">
-                Capabilities
-              </a>
-              <Link href="/journey" className="whitespace-nowrap hover:text-foreground">
-                Journey
-              </Link>
-              <Link href="/trust" className="whitespace-nowrap hover:text-foreground">
-                Trust
-              </Link>
-              <a href="#pricing" className="whitespace-nowrap hover:text-foreground">
-                Early Access
-              </a>
+            <div className="grid gap-3 sm:grid-cols-2">
+              {heroBullets.map((bullet) => (
+                <div key={bullet} className="flex items-start gap-2 text-sm text-white/86">
+                  <CheckCircle2 className="mt-0.5 h-4 w-4 text-emerald-200" />
+                  <span>{bullet}</span>
+                </div>
+              ))}
             </div>
-            <div className="flex items-center gap-2">
-              <Button variant="ghost" asChild>
-                <Link href="/login">Login</Link>
+            <div className="flex flex-wrap gap-3">
+              <Button size="lg" asChild>
+                <Link href="/signup">{t("public.landing.ctaPrimary")}</Link>
               </Button>
-              <Button asChild>
-                <Link href="/signup">Request Access</Link>
+              <Button size="lg" variant="secondary" asChild>
+                <Link href="/plans">See plans</Link>
               </Button>
             </div>
-          </nav>
-          <div className="mx-auto mt-3 flex w-full max-w-6xl gap-2 overflow-x-auto no-scrollbar lg:hidden">
-            {[
-              { href: "#roles", label: "Solutions" },
-              { href: "#features", label: "Capabilities" },
-              { href: "/journey", label: "Journey" },
-              { href: "/trust", label: "Trust" },
-              { href: "#pricing", label: "Early Access" },
-            ].map((item) => (
-              <Link
-                key={item.label}
-                href={item.href}
-                className="shrink-0 rounded-full border border-white/60 bg-white/80 px-3 py-1.5 text-xs text-slate-700"
-              >
-                {item.label}
-              </Link>
-            ))}
           </div>
-        </header>
 
-        <main className="px-4 pb-16 sm:px-6 sm:pb-20">
-          <section className="mx-auto mt-8 w-full max-w-6xl sm:mt-16">
-            <div className="relative overflow-hidden rounded-3xl border border-white/40 bg-gradient-to-br from-[#0f6f66] via-[#0b4f49] to-[#083730] p-5 sm:p-8 md:p-12 lg:p-16 shadow-[0_40px_100px_-40px_rgba(15,111,102,0.7)] grain">
-              {/* Coffee bean background pattern */}
-              <div className="pointer-events-none absolute inset-0 opacity-5">
-                <div className="absolute top-10 left-10 h-20 w-20 rounded-full bg-[color:var(--sand)]" />
-                <div className="absolute top-32 right-20 h-12 w-12 rounded-full bg-[color:var(--sand)]" />
-                <div className="absolute bottom-20 left-32 h-16 w-16 rounded-full bg-[color:var(--sand)]" />
-                <div className="absolute bottom-32 right-16 h-24 w-24 rounded-full bg-[color:var(--sand)]" />
-              </div>
-
-              <div className="relative z-10 grid gap-8 sm:gap-12 lg:grid-cols-2 items-center">
-                <div className="space-y-6 rise-in">
-                  <Badge className="border-white/30 bg-white/20 text-white text-sm sm:text-base backdrop-blur-md">
-                    <Coffee className="mr-2 h-3.5 w-3.5" />
-                    Built for Arabica and Robusta coffee estates managing processing, labor, and inputs daily
-                  </Badge>
-                  
-                  <h1 className={`${display.className} text-3xl sm:text-4xl md:text-5xl lg:text-6xl font-bold leading-tight text-white text-balance`}>
-                    The operating system for profitable, traceable coffee estates
-                  </h1>
-                  
-                  <p className="text-base sm:text-lg text-white/90 leading-relaxed">
-                    We built FarmFlow for coffee estate operations, not generic ERP screens.
-                    Run intake, Cherry-to-Parchment processing, labor tracking, consumables issuance, dispatch, and sales from one command center.
-                  </p>
-
-                  <div className="grid gap-4 sm:grid-cols-2 mt-2">
-                    {BULLETS.map((bullet) => (
-                      <div key={bullet} className="flex items-start gap-2 text-sm text-white/85">
-                        <CheckCircle2 className="mt-0.5 h-4 w-4 text-emerald-200" />
-                        <span>{bullet}</span>
+          <div className="h-full">
+            <Card className="flex h-full flex-col overflow-hidden border-white/70 bg-white/92 shadow-[0_28px_75px_-50px_rgba(15,111,102,0.4)]">
+              <div className="relative h-60 w-full border-b border-emerald-100/70 bg-emerald-50">
+                <Image
+                  src="/images/estate-journey-processing.jpg"
+                  alt="Coffee processing workflow"
+                  fill
+                  sizes="(min-width: 1024px) 46vw, 100vw"
+                  className="object-cover"
+                  priority
+                />
+                <div className="absolute inset-0 bg-gradient-to-t from-slate-950/75 via-slate-950/20 to-transparent" />
+                <div className="absolute inset-x-4 bottom-4 grid gap-2 sm:grid-cols-3">
+                  {representativeOpsSignals.map((signal) => {
+                    const Icon = signal.icon
+                    return (
+                      <div key={signal.label} className="rounded-2xl border border-white/20 bg-white/15 px-3 py-3 text-white backdrop-blur-md">
+                        <div className="flex items-center gap-2 text-xs uppercase tracking-[0.24em] text-white/70">
+                          <Icon className="h-3.5 w-3.5" />
+                          <span>{signal.label}</span>
+                        </div>
+                        <p className="mt-2 text-2xl font-semibold">{signal.value}</p>
                       </div>
-                    ))}
-                  </div>
-
-                  {/* Trust / credibility line */}
-                  <div className="mt-3 text-sm text-white/75 flex flex-wrap items-center gap-3">
-                    <span className="inline-block rounded-full bg-white/10 px-3 py-1">Pilot running with a multi-crop estate (coffee + pepper)</span>
-                    <span className="inline-block rounded-full bg-white/10 px-3 py-1">Designed with estate managers in Karnataka</span>
-                    <span className="inline-block rounded-full bg-white/10 px-3 py-1">Built with estates in Kodagu</span>
-                  </div>
-
-                  <div className="flex flex-col items-stretch gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:gap-4">
-                    <Button size="lg" className="w-full bg-white text-[#0f6f66] hover:bg-white/90 font-semibold group shadow-[0_20px_40px_-20px_rgba(255,255,255,0.5)] sm:w-auto">
-                      <Link href="/signup" className="flex items-center">
-                        Request Early Access <ArrowRight className="ml-2 h-4 w-4 group-hover:translate-x-1 transition-transform" />
-                      </Link>
-                    </Button>
-                    <Button size="lg" variant="outline" className="w-full border-white/30 bg-white/10 text-white hover:bg-white/20 backdrop-blur-sm sm:w-auto">
-                      <Link href="/login">Sign in to your workspace</Link>
-                    </Button>
-                  </div>
-
-                  {/* Quick stats */}
-                  <div className="grid grid-cols-1 gap-3 pt-4 sm:grid-cols-3 sm:gap-4">
-                    <div className="space-y-1">
-                      <div className="flex items-center gap-1.5">
-                        <Coffee className="h-4 w-4 text-white/70" />
-                        <p className={`${display.className} text-2xl font-bold text-white`}>152</p>
-                      </div>
-                      <p className="text-xs text-white/70">Lots tracked</p>
-                    </div>
-                    <div className="space-y-1">
-                      <div className="flex items-center gap-1.5">
-                        <TrendingUp className="h-4 w-4 text-white/70" />
-                        <p className={`${display.className} text-2xl font-bold text-white`}>46.4%</p>
-                      </div>
-                      <p className="text-xs text-white/70">Avg yield</p>
-                    </div>
-                    <div className="space-y-1">
-                      <div className="flex items-center gap-1.5">
-                        <Package className="h-4 w-4 text-white/70" />
-                        <p className={`${display.className} text-2xl font-bold text-white`}>100%</p>
-                      </div>
-                      <p className="text-xs text-white/70">Fully traceable</p>
-                    </div>
-                  </div>
-                  <p className="text-xs text-white/60">Illustrative metrics shown for product demonstration.</p>
-                </div>
-
-                {/* Right side - Enhanced coffee estate visual */}
-                <div className="relative rise-in-delayed">
-                  <div className="relative">
-                    {/* Main card with coffee estate data */}
-                    <Card className="relative border-white/30 bg-white/95 backdrop-blur-xl shadow-[0_40px_90px_-50px_rgba(0,0,0,0.9)] sheen">
-                      <CardHeader className="pb-3">
-                        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                          <div className="flex items-center gap-3">
-                            <div className="h-12 w-12 rounded-xl bg-gradient-to-br from-[#0f6f66] to-[#0b4f49] flex items-center justify-center">
-                              <Coffee className="h-6 w-6 text-white" />
-                            </div>
-                            <div>
-                              <CardTitle className={`${display.className} text-xl`}>Estate Dashboard</CardTitle>
-                              <CardDescription>Representative estate · Kodagu, India</CardDescription>
-                            </div>
-                          </div>
-                          <Badge className="w-fit bg-emerald-100 text-emerald-700 border-emerald-200">
-                            Live demo snapshot
-                          </Badge>
-                        </div>
-                      </CardHeader>
-                      <CardContent className="space-y-4">
-                        {/* Estate-specific quick indicators */}
-                        <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-                          <div className="rounded-xl border border-emerald-200/60 bg-white/95 p-3">
-                            <p className="text-xs font-medium text-emerald-800">Conversion (Cherry → Parchment)</p>
-                            <p className={`${display.className} text-2xl font-bold text-emerald-900`}>46.4%</p>
-                            <p className="text-xs text-muted-foreground">Lot-level conversion, updated daily</p>
-                          </div>
-                          <div className="rounded-xl border border-rose-200/60 bg-white/95 p-3">
-                            <p className="text-xs font-medium text-rose-800">Float / Quality Loss</p>
-                            <p className={`${display.className} text-2xl font-bold text-rose-900`}>3.2%</p>
-                            <p className="text-xs text-muted-foreground">Float % highlights suspect cherries</p>
-                          </div>
-                          <div className="rounded-xl border border-slate-200/60 bg-white/95 p-3">
-                            <p className="text-xs font-medium text-slate-700">Bags (Ready · Dispatched · Sold)</p>
-                            <p className={`${display.className} text-2xl font-bold text-slate-900`}>120 · 40 · 18</p>
-                            <p className="text-xs text-muted-foreground">Operational dispatch snapshot</p>
-                          </div>
-                        </div>
-
-                        {/* Current processing */}
-                        <div className="rounded-xl border border-amber-200/70 bg-gradient-to-br from-amber-50/80 to-orange-50/50 p-4">
-                          <div className="flex items-center justify-between mb-2">
-                            <p className="text-xs font-medium text-amber-900">Current Processing</p>
-                            <Sparkles className="h-4 w-4 text-amber-600" />
-                          </div>
-                          <p className={`${display.className} text-3xl font-bold text-amber-900`}>2,840 kg</p>
-                          <p className="text-xs text-amber-700 mt-1">Arabica Cherry → Parchment · Robusta Cherry → Parchment</p>
-                          <p className="text-xs text-amber-700 mt-1">Labor today: 42 workers · Fuel issued: 180 L</p>
-                          <div className="mt-3 h-2 rounded-full bg-amber-200/50 overflow-hidden">
-                            <div className="h-full w-[68%] rounded-full bg-gradient-to-r from-amber-400 to-orange-500 animate-pulse" />
-                          </div>
-                        </div>
-
-                        {/* Grid metrics */}
-                        <div className="grid grid-cols-2 gap-3">
-                          <div className="rounded-xl border border-emerald-200/70 bg-gradient-to-br from-emerald-50/80 to-green-50/50 p-3">
-                            <div className="flex items-center gap-1.5 mb-1">
-                              <Droplets className="h-3.5 w-3.5 text-emerald-600" />
-                              <p className="text-xs font-medium text-emerald-900">Rainfall Logs</p>
-                            </div>
-                            <p className={`${display.className} text-xl font-bold text-emerald-900`}>12</p>
-                            <p className="text-xs text-emerald-700">entries this month</p>
-                          </div>
-                          <div className="rounded-xl border border-blue-200/70 bg-gradient-to-br from-blue-50/80 to-sky-50/50 p-3">
-                            <div className="flex items-center gap-1.5 mb-1">
-                              <Package className="h-3.5 w-3.5 text-blue-600" />
-                              <p className="text-xs font-medium text-blue-900">Labor + Consumables</p>
-                            </div>
-                            <p className={`${display.className} text-xl font-bold text-blue-900`}>42</p>
-                            <p className="text-xs text-blue-700">workers today · ₹1.8L issued this month</p>
-                          </div>
-                        </div>
-
-                        {/* Revenue protected */}
-                        <div className="rounded-xl border border-slate-200/70 bg-gradient-to-br from-slate-50/80 to-slate-100/50 p-4">
-                          <p className="text-xs font-medium text-slate-700 mb-1">Season Revenue</p>
-                          <p className={`${display.className} text-2xl font-bold text-slate-900`}>₹24.8 Lakh</p>
-                          <div className="flex items-center gap-2 mt-2">
-                            <div className="flex-1 text-xs text-slate-600">Protected & traceable</div>
-                            <CheckCircle2 className="h-4 w-4 text-emerald-600" />
-                          </div>
-                        </div>
-                      </CardContent>
-                    </Card>
-
-                    {/* Floating alert card */}
-                    <div className="absolute -bottom-6 -left-6 hidden lg:block w-56 rounded-xl border border-orange-200/70 bg-white shadow-[0_20px_50px_-20px_rgba(234,88,12,0.4)] p-3">
-                      <div className="flex items-start gap-2">
-                        <div className="h-8 w-8 rounded-lg bg-orange-100 flex items-center justify-center flex-shrink-0">
-                          <span className="text-orange-600 text-sm font-bold">!</span>
-                        </div>
-                        <div>
-                          <p className="text-xs font-semibold text-slate-900">Yield alert</p>
-                          <p className="text-xs text-slate-600 mt-0.5">Lot LOT-847 below target by 3.2%</p>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
+                    )
+                  })}
                 </div>
               </div>
-            </div>
-          </section>
-
-          {/* Conversion extras: 3-step strip + Why it matters */}
-          <section id="conversion-extras" className="mx-auto mt-8 w-full max-w-6xl space-y-6 scroll-mt-24">
-            <div className="space-y-2">
-              <h2 className={`${display.className} text-2xl font-semibold`}>How it works — three simple steps</h2>
-              <p className="text-muted-foreground">Start with the daily record, run processing, and close the loop to dispatch and sales.</p>
-            </div>
-
-            <div className="grid gap-4 sm:grid-cols-3">
-              <div className="rounded-xl border border-white/70 bg-white/85 p-4">
-                <p className="text-xs font-medium text-foreground">1. Record daily intake + processing</p>
-                <p className="mt-2 text-sm text-muted-foreground">Capture lot intake, cherry splits, and processing outputs by location.</p>
-              </div>
-              <div className="rounded-xl border border-white/70 bg-white/85 p-4">
-                <p className="text-xs font-medium text-foreground">2. Track labour + consumables by location</p>
-                <p className="mt-2 text-sm text-muted-foreground">Associate wages, fuel, and input usage with lots to understand cost per kg.</p>
-              </div>
-              <div className="rounded-xl border border-white/70 bg-white/85 p-4">
-                <p className="text-xs font-medium text-foreground">3. Reconcile inventory → dispatch → sales automatically</p>
-                <p className="mt-2 text-sm text-muted-foreground">Close the financial and physical loop so every bag is accounted for.</p>
-              </div>
-            </div>
-
-            <div className="rounded-xl border border-emerald-200/60 bg-gradient-to-br from-emerald-50/70 to-white/90 p-4">
-              <h3 className={`${display.className} text-xl font-semibold`}>Why it matters</h3>
-              <div className="mt-3 grid gap-3 sm:grid-cols-3">
-                <div className="text-sm">
-                  <p className="font-medium">Fewer losses</p>
-                  <p className="text-muted-foreground text-xs">Detect shrinkage and process variance before margin is lost.</p>
-                </div>
-                <div className="text-sm">
-                  <p className="font-medium">Faster decisions in drying/processing</p>
-                  <p className="text-muted-foreground text-xs">Act on moisture and conversion signals to reduce quality drift.</p>
-                </div>
-                <div className="text-sm">
-                  <p className="font-medium">Cleaner books + traceability</p>
-                  <p className="text-muted-foreground text-xs">Automated reconciliation ties physical stock to invoices and payments.</p>
-                </div>
-              </div>
-            </div>
-          </section>
-
-          <section id="roles" className="mx-auto mt-12 w-full max-w-6xl space-y-6 scroll-mt-24">
-            <div className="space-y-2">
-              <h2 className={`${display.className} text-3xl font-semibold`}>Purpose-built for every estate role</h2>
-              <p className="text-muted-foreground">
-                Every team works differently. FarmFlow keeps everyone aligned to one live source of truth.
-              </p>
-            </div>
-            <div className="grid gap-4 lg:grid-cols-3">
-              {ROLE_VALUE_CARDS.map((card) => (
-                <Card key={card.title} className="border border-white/70 bg-white/85 backdrop-blur-md">
-                  <CardHeader className="space-y-3">
-                    <div className="h-10 w-10 rounded-xl bg-emerald-100 text-emerald-700 flex items-center justify-center">
-                      <card.icon className="h-5 w-5" />
-                    </div>
-                    <CardTitle className={`${display.className} text-xl`}>{card.title}</CardTitle>
-                    <CardDescription>{card.outcome}</CardDescription>
-                  </CardHeader>
-                  <CardContent className="space-y-2 text-sm text-muted-foreground">
-                    {card.points.map((point) => (
-                      <div key={point} className="flex items-center gap-2">
-                        <CheckCircle2 className="h-4 w-4 text-emerald-600" />
-                        <span>{point}</span>
-                      </div>
-                    ))}
-                  </CardContent>
-                </Card>
-              ))}
-            </div>
-          </section>
-
-          <section id="modules" className="mx-auto mt-12 w-full max-w-6xl space-y-6 scroll-mt-24">
-            <div className="space-y-2">
-              <h2 className={`${display.className} text-3xl font-semibold`}>Choose the module path that fits your business model</h2>
-              <p className="text-muted-foreground">
-                Start with essentials or run full operations with processing, labor, consumables, dispatch, and sales.
-              </p>
-            </div>
-            <div className="grid gap-4 lg:grid-cols-3">
-              {MODULE_PATHWAYS.map((pathway) => (
-                <Card key={pathway.title} className="border border-white/70 bg-white/85 backdrop-blur-md">
-                  <CardHeader className="space-y-3">
-                    <CardTitle className={`${display.className} text-xl`}>{pathway.title}</CardTitle>
-                    <CardDescription>{pathway.description}</CardDescription>
-                  </CardHeader>
-                  <CardContent className="flex flex-wrap gap-2">
-                    {pathway.modules.map((moduleName) => (
-                      <Badge key={moduleName} variant="secondary" className="bg-emerald-50 text-emerald-800 border-emerald-200">
-                        {moduleName}
-                      </Badge>
-                    ))}
-                  </CardContent>
-                </Card>
-              ))}
-            </div>
-          </section>
-
-          <section id="onboarding" className="mx-auto mt-12 w-full max-w-6xl space-y-4 scroll-mt-24">
-            <Card className="border border-emerald-200/70 bg-gradient-to-br from-emerald-50/70 to-white/90 backdrop-blur-md">
-              <CardHeader>
-                <CardTitle className={`${display.className} text-2xl`}>Launch in 7 days, not 7 months</CardTitle>
-                <CardDescription>
-                  A practical rollout for estates moving from spreadsheets and chat threads to one reliable system.
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-                {WEEK_ONE_PLAN.map((step) => (
-                  <div key={step.day} className="rounded-xl border border-emerald-200/60 bg-white/85 p-4">
-                    <p className="text-xs uppercase tracking-[0.2em] text-emerald-700">{step.day}</p>
-                    <p className="mt-1 font-semibold text-slate-900">{step.title}</p>
-                    <p className="mt-1 text-xs text-muted-foreground">{step.detail}</p>
-                  </div>
-                ))}
-              </CardContent>
-            </Card>
-            <div className="grid gap-3 md:grid-cols-3">
-              {ASSURANCE_POINTS.map((item) => (
-                <div
-                  key={item}
-                  className="rounded-xl border border-white/70 bg-white/80 px-4 py-3 text-sm text-slate-700 shadow-[0_20px_45px_-35px_rgba(15,23,42,0.5)]"
-                >
-                  <div className="flex items-start gap-2">
-                    <CheckCircle2 className="mt-0.5 h-4 w-4 text-emerald-600" />
-                    <span>{item}</span>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </section>
-
-          <section className="mx-auto mt-12 w-full max-w-6xl grid gap-4 md:grid-cols-3">
-            {CONTROL_SIGNALS.map((signal) => (
-              <div
-                key={signal.label}
-                className="rounded-2xl border border-white/70 bg-white/75 p-5 shadow-[0_20px_45px_-32px_rgba(15,111,102,0.4)] backdrop-blur-md"
-              >
-                <p className="text-xs uppercase tracking-[0.2em] text-[color:var(--copper)]">{signal.label}</p>
-                <p className={`${display.className} text-3xl font-semibold text-[color:var(--ink)]`}>{signal.value}</p>
-                <p className="text-xs text-muted-foreground">{signal.description}</p>
-              </div>
-            ))}
-          </section>
-
-          <section className="mx-auto mt-12 w-full max-w-6xl grid gap-6 lg:grid-cols-[1.2fr_0.8fr]">
-            <Card className="border border-white/70 bg-white/80 backdrop-blur-md signal-scan">
-              <CardHeader>
-                <CardTitle className={`${display.className} text-2xl`}>Live Operations Pulse</CardTitle>
-                <CardDescription>The signals your team sees before issues impact quality, inventory, or cash.</CardDescription>
-              </CardHeader>
-              <CardContent className="grid gap-4 sm:grid-cols-2">
-                {LIVE_METRICS.map((metric, index) => (
-                  <div key={metric.label} className="rounded-2xl border border-slate-200/60 bg-white/70 p-4">
-                    <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground">{metric.label}</p>
-                    <p className={`${display.className} text-3xl font-semibold text-[color:var(--ink)]`}>
-                      {metricValues[index]}
-                      {metric.suffix}
+              <CardContent className="flex flex-1 flex-col gap-5 p-5">
+                <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+                  <div className="max-w-2xl">
+                    <p className="text-sm font-medium text-emerald-700">Representative estate control board</p>
+                    <h2 className="mt-1 text-2xl font-semibold text-slate-900">{t("public.landing.visualFlowTitle")}</h2>
+                    <p className="mt-2 text-sm text-slate-600">
+                      This visual is based on the current estate data shape in the app: real intake, dry output, dispatch confirmations, sales, and operating workload.
                     </p>
-                    <p className="text-xs text-muted-foreground">Current season snapshot</p>
                   </div>
-                ))}
-              </CardContent>
-            </Card>
+                  <div className="rounded-2xl border border-emerald-200/70 bg-emerald-50/80 px-4 py-3 text-sm text-emerald-900">
+                    <p className="text-xs font-semibold uppercase tracking-[0.24em] text-emerald-700">Current dry-output peak</p>
+                    <p className="mt-2 text-2xl font-semibold">30,831 KG</p>
+                    <p className="mt-1 text-xs text-emerald-800/80">January was the strongest production month in the current dataset.</p>
+                  </div>
+                </div>
 
-            <Card className="border border-emerald-200/70 bg-emerald-50/70">
-              <CardHeader>
-                <div className="flex items-center gap-2 text-emerald-700 text-xs uppercase tracking-[0.3em]">
-                  <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
-                  Live feed
-                </div>
-                <CardTitle className={`${display.className} text-xl`}>{LIVE_UPDATES[activeUpdateIndex].title}</CardTitle>
-                <CardDescription>{LIVE_UPDATES[activeUpdateIndex].detail}</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="rounded-xl border border-emerald-200 bg-white/80 p-3 text-xs text-emerald-700">
-                  Updated a few seconds ago · Rolling 7-day baseline
-                </div>
-              </CardContent>
-            </Card>
-          </section>
+                <div className="grid flex-1 gap-4 xl:grid-cols-[1.1fr_0.9fr] xl:items-stretch">
+                  <div className="h-full rounded-3xl border border-slate-200/70 bg-slate-50/90 p-4">
+                    <div className="flex items-center justify-between gap-3">
+                      <div>
+                        <p className="text-xs font-semibold uppercase tracking-[0.24em] text-slate-500">Operational flow</p>
+                        <p className="mt-1 text-sm text-slate-600">The numbers below follow the same coffee chain the product manages.</p>
+                      </div>
+                      <Badge variant="secondary" className="bg-white text-slate-700">
+                        Live estate pattern
+                      </Badge>
+                    </div>
+                    <div className="mt-4 grid gap-3">
+                      {representativeEstateFlow.map((step, index) => {
+                        const Icon = step.icon
+                        return (
+                          <div key={step.label} className="rounded-2xl border border-white/80 bg-white px-4 py-4 shadow-sm">
+                            <div className="flex items-start gap-3">
+                              <div className={`mt-0.5 flex h-10 w-10 items-center justify-center rounded-2xl ${step.accent}`}>
+                                <Icon className="h-5 w-5" />
+                              </div>
+                              <div className="min-w-0 flex-1">
+                                <div className="flex flex-wrap items-center justify-between gap-2">
+                                  <p className="text-sm font-medium text-slate-600">{step.label}</p>
+                                  <p className="text-lg font-semibold text-slate-900">{step.value}</p>
+                                </div>
+                                <p className="mt-1 text-xs text-slate-500">{step.detail}</p>
+                              </div>
+                            </div>
+                            {index < representativeEstateFlow.length - 1 ? (
+                              <div className="ml-5 mt-3 h-5 w-px border-l border-dashed border-slate-300" />
+                            ) : null}
+                          </div>
+                        )
+                      })}
+                    </div>
+                  </div>
 
-        <section id="field-signals" className="mx-auto mt-16 w-full max-w-6xl space-y-6 scroll-mt-24 sm:mt-20">
-          <div className="text-center space-y-3">
-            <h2 className={`${display.className} text-3xl font-semibold`}>Field Signals & Climate Context</h2>
-            <p className="text-muted-foreground max-w-2xl mx-auto">
-              Connect field conditions to operational decisions with rainfall, weather, labor, and consumable activity.
-            </p>
-          </div>
-          <div className="grid gap-6 md:grid-cols-3">
-            <Card className="border border-emerald-200/70 bg-gradient-to-br from-emerald-50/80 to-white/80 backdrop-blur-md">
-              <CardHeader>
-                <div className="h-12 w-12 rounded-xl bg-emerald-100 text-emerald-700 flex items-center justify-center mb-2">
-                  <Droplets className="h-6 w-6" />
-                </div>
-                <CardTitle className={`${display.className} text-xl`}>Rainfall Logs</CardTitle>
-                <CardDescription>Daily rainfall entries tied to each estate location</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="rounded-xl border border-emerald-200 bg-white/70 p-4">
-                  <p className="text-2xl font-semibold text-emerald-700">Tracked</p>
-                  <p className="text-xs text-muted-foreground mt-1">Per day with notes and observations</p>
-                </div>
-              </CardContent>
-            </Card>
+                  <div className="flex h-full flex-col gap-4">
+                    <div className="rounded-3xl border border-slate-200/70 bg-slate-950 p-4 text-white">
+                      <div className="flex items-center justify-between gap-3">
+                        <div>
+                          <p className="text-xs font-semibold uppercase tracking-[0.24em] text-white/55">Monthly dry output</p>
+                          <p className="mt-1 text-sm text-white/75">A real estate curve, not a generic SaaS trend line.</p>
+                        </div>
+                        <BarChart3 className="h-5 w-5 text-emerald-300" />
+                      </div>
+                      <div className="mt-5 grid h-40 grid-cols-4 items-end gap-3">
+                        {representativeMonthlyDryOutput.map((item) => {
+                          const barHeight = Math.max((item.value / maxMonthlyDryOutput) * 100, 8)
+                          return (
+                            <div key={item.month} className="flex h-full flex-col justify-end gap-2">
+                              <div className="relative flex-1 rounded-t-2xl bg-white/5">
+                                <div
+                                  className="absolute inset-x-0 bottom-0 rounded-t-2xl bg-gradient-to-t from-emerald-400 via-emerald-300 to-emerald-200"
+                                  style={{ height: `${barHeight}%` }}
+                                />
+                              </div>
+                              <div className="text-center">
+                                <p className="text-[11px] font-semibold text-white">{item.month}</p>
+                                <p className="text-[11px] text-white/65">{item.value.toLocaleString("en-IN")}</p>
+                              </div>
+                            </div>
+                          )
+                        })}
+                      </div>
+                    </div>
 
-            <Card className="border border-blue-200/70 bg-gradient-to-br from-blue-50/80 to-white/80 backdrop-blur-md">
-              <CardHeader>
-                <div className="h-12 w-12 rounded-xl bg-blue-100 text-blue-700 flex items-center justify-center mb-2">
-                  <Cloudy className="h-6 w-6" />
-                </div>
-                <CardTitle className={`${display.className} text-xl`}>Weather Signals</CardTitle>
-                <CardDescription>Local forecasts for planning harvest, processing, and drying</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="rounded-xl border border-blue-200 bg-white/70 p-4">
-                  <p className="text-2xl font-semibold text-blue-700">Live</p>
-                  <p className="text-xs text-muted-foreground mt-1">Pulled from trusted weather data</p>
-                </div>
-              </CardContent>
-            </Card>
-
-            <Card className="border border-amber-200/70 bg-gradient-to-br from-amber-50/80 to-white/80 backdrop-blur-md">
-              <CardHeader>
-                <div className="h-12 w-12 rounded-xl bg-amber-100 text-amber-700 flex items-center justify-center mb-2">
-                  <Package className="h-6 w-6" />
-                </div>
-                <CardTitle className={`${display.className} text-xl`}>Labor & Input Logs</CardTitle>
-                <CardDescription>Track labor attendance, fuel, fertilizers, and processing consumables</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="rounded-xl border border-amber-200 bg-white/70 p-4">
-                  <p className="text-2xl font-semibold text-amber-700">Logged</p>
-                  <p className="text-xs text-muted-foreground mt-1">Curing and grading can be enabled as secondary records</p>
+                    <div className="flex-1 rounded-3xl border border-slate-200/70 bg-white p-4">
+                      <div className="flex items-center justify-between gap-3">
+                        <div>
+                          <p className="text-xs font-semibold uppercase tracking-[0.24em] text-slate-500">Coffee mix and dispatch reality</p>
+                          <p className="mt-1 text-sm text-slate-600">Robusta dominates output, and dispatch becomes sellable only after confirmed receipt.</p>
+                        </div>
+                        <Coffee className="h-5 w-5 text-emerald-700" />
+                      </div>
+                      <div className="mt-4 space-y-4">
+                        {representativeCoffeeMix.map((item) => (
+                          <div key={item.label}>
+                            <div className="flex items-center justify-between gap-3 text-sm">
+                              <span className="text-slate-600">{item.label}</span>
+                              <span className="font-semibold text-slate-900">
+                                {item.value.toLocaleString("en-IN")} KG
+                              </span>
+                            </div>
+                            <div className="mt-2 h-2.5 rounded-full bg-slate-100">
+                              <div className={`h-2.5 rounded-full ${item.accent}`} style={{ width: `${item.percent}%` }} />
+                            </div>
+                          </div>
+                        ))}
+                        <div className="rounded-2xl border border-sky-200/70 bg-sky-50/70 px-3 py-3">
+                          <div className="flex items-center justify-between gap-3 text-sm">
+                            <span className="text-sky-900">Dispatch receipts confirmed</span>
+                            <span className="font-semibold text-sky-950">19,347 / 21,884 KG</span>
+                          </div>
+                          <div className="mt-2 h-2.5 rounded-full bg-sky-100">
+                            <div className="h-2.5 w-[88.4%] rounded-full bg-sky-500" />
+                          </div>
+                          <p className="mt-2 text-xs text-sky-900/80">That is the same confirmation logic the app now uses before coffee becomes sellable stock.</p>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
                 </div>
               </CardContent>
             </Card>
           </div>
         </section>
 
-        <section id="features" className="mx-auto mt-16 w-full max-w-6xl space-y-6 scroll-mt-24 sm:mt-20">
-          <div className="space-y-2">
-            <h2 className={`${display.className} text-3xl font-semibold`}>One platform for processing, labor, stock, and cash</h2>
-            <p className="text-muted-foreground">
-              Run daily coffee workflows, control cost leakage, and improve buyer confidence across Arabica, Robusta, Cherry, and Parchment lots.
-            </p>
-            <p className="text-muted-foreground">
-              FarmFlow Intelligence continuously surfaces patterns, anomalies, and trend shifts so teams act before losses compound.
-            </p>
-          </div>
-          <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-            {HIGHLIGHTS.map((item) => (
-              <Card
-                key={item.title}
-                className="group border border-white/60 bg-white/75 backdrop-blur-md shadow-[0_16px_40px_-32px_rgba(15,23,42,0.6)] transition-all duration-300 hover:-translate-y-1 hover:shadow-[0_24px_60px_-32px_rgba(15,23,42,0.75)]"
-              >
-                <CardHeader className="flex flex-row items-center gap-3">
-                  <div className="h-10 w-10 rounded-xl bg-[color:var(--sand)] text-[color:var(--copper)] flex items-center justify-center shadow-[0_0_20px_rgba(15,111,102,0.2)]">
-                    <item.icon className="h-5 w-5" />
+        <section className="grid gap-5 lg:grid-cols-3">
+          {proofCards.map((card) => {
+            const Icon = card.icon
+            return (
+              <Card key={card.title} className="h-full border-white/70 bg-white/90">
+                <CardHeader className="h-full">
+                  <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-emerald-100 text-emerald-700">
+                    <Icon className="h-5 w-5" />
                   </div>
-                  <div>
-                    <CardTitle className="text-lg">{item.title}</CardTitle>
-                    <CardDescription>{item.description}</CardDescription>
-                  </div>
+                  <CardTitle>{card.title}</CardTitle>
+                  <CardDescription>{card.description}</CardDescription>
                 </CardHeader>
               </Card>
-            ))}
-          </div>
+            )
+          })}
         </section>
 
-        <section id="journey-preview" data-reveal className="mx-auto mt-16 w-full max-w-6xl space-y-6 scroll-mt-24 sm:mt-20">
-          <div className="flex flex-wrap items-end justify-between gap-4">
-            <div className="space-y-2">
-              <h2 className={`${display.className} text-3xl font-semibold`}>Estate journey, from cherry to buyer</h2>
-              <p className="text-muted-foreground max-w-2xl">
-                Explore the full workflow on a dedicated page with phase-by-phase guidance and module mapping.
+        <section className="rounded-[2rem] border border-white/70 bg-white/92 p-6 shadow-[0_30px_80px_-56px_rgba(15,111,102,0.55)] sm:p-8">
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+            <div>
+              <p className="text-sm font-medium text-emerald-700">Plans</p>
+              <h2 className="mt-1 text-2xl font-semibold text-slate-900 sm:text-3xl">Basic, Core, and Enterprise are now visible up front</h2>
+              <p className="mt-2 max-w-2xl text-sm text-slate-600">
+                The homepage now shows the rollout choices immediately, then the deeper detail lives on dedicated sub-pages instead of one long scroll.
               </p>
             </div>
-            <Button asChild>
-              <Link href="/journey">Explore Full Journey</Link>
+            <Button variant="outline" asChild>
+              <Link href="/plans">Open full plan comparison</Link>
             </Button>
           </div>
-          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-            {ESTATE_JOURNEY.map((step, index) => (
-              <Card key={step.title} className="border border-white/70 bg-white/85 backdrop-blur-md">
-                <div className="relative h-28 w-full overflow-hidden rounded-t-xl border-b border-emerald-100/60 bg-emerald-50/40">
-                  <Image src={step.image} alt={step.alt} fill sizes="(min-width: 1280px) 280px, (min-width: 768px) 50vw, 100vw" className="object-cover" />
-                </div>
-                <CardHeader className="space-y-2">
-                  <p className="text-xs uppercase tracking-[0.25em] text-emerald-700/70">Step {index + 1}</p>
-                  <CardTitle className={`${display.className} text-lg`}>{step.title}</CardTitle>
-                  <CardDescription>{step.description}</CardDescription>
-                </CardHeader>
-              </Card>
-            ))}
-          </div>
-        </section>
-
-        <section
-          id="traceability"
-          className="mx-auto mt-16 w-full max-w-6xl grid gap-10 lg:grid-cols-2 items-start scroll-mt-24 sm:mt-20"
-        >
-          <Card className="border border-white/50 bg-white/75 backdrop-blur-md">
-            <CardHeader>
-              <CardTitle className={`${display.className} text-2xl`}>Traceability that wins buyer confidence</CardTitle>
-              <CardDescription>
-                Give buyers and auditors a clear, searchable record for every Coffee lot and stock movement.
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-3 text-sm text-muted-foreground">
-              <p>
-                Capture Coffee harvest intake, Arabica/Robusta processing output, Cherry/Parchment records, labor logs, consumables usage, dispatch notes, and sales in one workflow.
-              </p>
-              <p>
-                Create a verifiable chain from estate to buyer with timestamps, user logs, and audit-ready evidence.
-              </p>
-            </CardContent>
-          </Card>
-
-          <div className="space-y-4">
-            <div className="rounded-2xl border border-emerald-200/60 bg-emerald-50/70 p-5">
-              <p className="text-xs text-emerald-700">Traceability Readiness</p>
-              <p className="text-3xl font-semibold text-emerald-700">A+</p>
-              <p className="text-xs text-emerald-600">Batch-level audit readiness</p>
-            </div>
-            <div className="rounded-2xl border border-white/50 bg-white/70 p-5 text-sm text-muted-foreground">
-              Export compliance-ready reports in one click and share with buyers in seconds.
-            </div>
-          </div>
-        </section>
-
-        <section
-          id="impact"
-          data-reveal
-          className="mx-auto mt-16 w-full max-w-6xl space-y-6 scroll-mt-24 sm:mt-20"
-        >
-          <div className="text-center space-y-3">
-            <h2 className={`${display.className} text-3xl font-semibold`}>Prove impact with operational evidence</h2>
-            <p className="text-muted-foreground max-w-2xl mx-auto">
-              FarmFlow turns the operational data you already collect into measurable, decision-ready impact signals.
-            </p>
-          </div>
-          <div className="grid gap-6 md:grid-cols-3">
-            {IMPACT_PILLARS.map((pillar) => (
+          <div className="mt-6 grid gap-5 lg:grid-cols-3">
+            {MODULE_BUNDLES.map((bundle) => (
               <Card
-                key={pillar.title}
-                className="border border-white/60 bg-white/80 backdrop-blur-md shadow-[0_20px_45px_-32px_rgba(15,23,42,0.6)]"
+                key={bundle.id}
+                className={`flex h-full flex-col border-slate-200/80 ${bundle.id === "core" ? "bg-emerald-50/70" : "bg-slate-50/70"}`}
               >
-                <CardHeader className="space-y-3">
-                  <div className="h-10 w-10 rounded-xl bg-emerald-100 text-emerald-700 flex items-center justify-center">
-                    <pillar.icon className="h-5 w-5" />
-                  </div>
-                  <CardTitle className="text-lg">{pillar.title}</CardTitle>
-                  <CardDescription>{pillar.description}</CardDescription>
+                <CardHeader>
+                  <Badge variant={bundle.id === "core" ? "default" : "secondary"}>{planBadges[bundle.id] || "Plan"}</Badge>
+                  <CardTitle>{bundle.label}</CardTitle>
+                  <CardDescription>{bundle.description}</CardDescription>
                 </CardHeader>
+                <CardContent className="mt-auto">
+                  <div className="flex flex-wrap gap-2">
+                    {bundle.modules.slice(0, 6).map((moduleId) => (
+                      <span key={moduleId} className="rounded-full bg-white px-2.5 py-1 text-xs text-slate-700">
+                        {moduleLabelById.get(moduleId) || moduleId}
+                      </span>
+                    ))}
+                    {bundle.modules.length > 6 ? (
+                      <span className="rounded-full bg-white px-2.5 py-1 text-xs text-slate-500">
+                        +{bundle.modules.length - 6} more
+                      </span>
+                    ) : null}
+                  </div>
+                </CardContent>
               </Card>
             ))}
           </div>
         </section>
 
-        <section id="pricing" className="mx-auto mt-16 w-full max-w-6xl space-y-6 scroll-mt-24 sm:mt-20">
-          <Card className="border border-emerald-200/70 bg-gradient-to-br from-emerald-50/70 to-white/90 backdrop-blur-md">
+        <section className="grid gap-5 lg:grid-cols-3">
+          <Card className="flex h-full flex-col border-white/70 bg-white/90">
             <CardHeader>
-              <Badge className="w-fit border-amber-200 bg-amber-100 text-amber-800">Coming soon</Badge>
-              <CardTitle className={`${display.className} text-3xl font-semibold`}>Plans are launching soon</CardTitle>
-              <CardDescription>
-                We are finalizing rollout packages by estate size and module mix. Register interest and our team will
-                contact you with early access options.
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="grid gap-6 lg:grid-cols-[1fr_1.1fr]">
-              <div className="space-y-3 text-sm text-muted-foreground">
-                <p>
-                  Deploy FarmFlow with core operations first, then expand modules as your team scales adoption.
-                  Early registrants receive priority onboarding and migration planning support.
-                </p>
-                <div className="space-y-2">
-                  <div className="flex items-center gap-2">
-                    <CheckCircle2 className="h-4 w-4 text-emerald-600" />
-                    <span>Priority onboarding call</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <CheckCircle2 className="h-4 w-4 text-emerald-600" />
-                    <span>Guidance on module mix for your estate</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <CheckCircle2 className="h-4 w-4 text-emerald-600" />
-                    <span>Data migration readiness checklist</span>
-                  </div>
-                </div>
+              <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-sky-100 text-sky-700">
+                <CloudRain className="h-5 w-5" />
               </div>
-
-              <form onSubmit={handleInterestSubmit} className="rounded-2xl border border-white/80 bg-white/90 p-4 space-y-3">
-                <div className="grid gap-3 sm:grid-cols-2">
-                  <div className="space-y-1.5">
-                    <label htmlFor="interest-name" className="text-xs uppercase tracking-wide text-muted-foreground">
-                      Full name
-                    </label>
-                    <Input
-                      id="interest-name"
-                      value={interestForm.name}
-                      onChange={(event) => setInterestForm((prev) => ({ ...prev, name: event.target.value }))}
-                      placeholder="Your name"
-                      autoComplete="name"
-                      required
-                    />
-                  </div>
-                  <div className="space-y-1.5">
-                    <label htmlFor="interest-email" className="text-xs uppercase tracking-wide text-muted-foreground">
-                      Work email
-                    </label>
-                    <Input
-                      id="interest-email"
-                      type="email"
-                      value={interestForm.email}
-                      onChange={(event) => setInterestForm((prev) => ({ ...prev, email: event.target.value }))}
-                      placeholder="name@estate.com"
-                      autoComplete="email"
-                      autoCapitalize="none"
-                      autoCorrect="off"
-                      spellCheck={false}
-                      required
-                    />
-                  </div>
-                </div>
-                <div className="grid gap-3 sm:grid-cols-2">
-                  <div className="space-y-1.5">
-                    <label htmlFor="interest-org" className="text-xs uppercase tracking-wide text-muted-foreground">
-                      Estate / company
-                    </label>
-                    <Input
-                      id="interest-org"
-                      value={interestForm.organization}
-                      onChange={(event) => setInterestForm((prev) => ({ ...prev, organization: event.target.value }))}
-                      placeholder="HoneyFarm Estate"
-                      autoComplete="organization"
-                    />
-                  </div>
-                  <div className="space-y-1.5">
-                    <label htmlFor="interest-size" className="text-xs uppercase tracking-wide text-muted-foreground">
-                      Approx. estate size
-                    </label>
-                    <Input
-                      id="interest-size"
-                      value={interestForm.estateSize}
-                      onChange={(event) => setInterestForm((prev) => ({ ...prev, estateSize: event.target.value }))}
-                      placeholder="Single estate / Multi-estate"
-                    />
-                  </div>
-                </div>
-                <div className="space-y-1.5">
-                  <label htmlFor="interest-notes" className="text-xs uppercase tracking-wide text-muted-foreground">
-                    Notes
-                  </label>
-                  <Textarea
-                    id="interest-notes"
-                    value={interestForm.notes}
-                    onChange={(event) => setInterestForm((prev) => ({ ...prev, notes: event.target.value }))}
-                    placeholder="What modules do you want first?"
-                    className="min-h-[90px]"
-                  />
-                </div>
-                {interestState === "success" && (
-                  <p className="rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-700" aria-live="polite">
-                    Thanks, your interest has been registered.
-                  </p>
-                )}
-                {interestState === "error" && (
-                  <p className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700" aria-live="polite">
-                    {interestError || "Failed to submit interest."}
-                  </p>
-                )}
-                <Button
-                  type="submit"
-                  className="w-full"
-                  disabled={interestState === "submitting" || !interestForm.name.trim() || !interestForm.email.trim()}
-                >
-                  {interestState === "submitting" ? "Submitting..." : "Request Early Access"}
-                </Button>
-                <p className="text-xs text-muted-foreground">We usually reply within one business day.</p>
-              </form>
+              <CardTitle>Capabilities</CardTitle>
+              <CardDescription>See the real operating surfaces and how the product supports the estate day to day.</CardDescription>
+            </CardHeader>
+            <CardContent className="mt-auto">
+              <Button variant="outline" asChild>
+                <Link href="/capabilities">
+                  Explore capabilities
+                  <ArrowRight className="ml-2 h-4 w-4" />
+                </Link>
+              </Button>
+            </CardContent>
+          </Card>
+          <Card className="flex h-full flex-col border-white/70 bg-white/90">
+            <CardHeader>
+              <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-amber-100 text-amber-700">
+                <PackageCheck className="h-5 w-5" />
+              </div>
+              <CardTitle>Journey</CardTitle>
+              <CardDescription>Walk the coffee chain from harvest intake through dispatch and buyer-facing evidence.</CardDescription>
+            </CardHeader>
+            <CardContent className="mt-auto">
+              <Button variant="outline" asChild>
+                <Link href="/journey">
+                  View the journey
+                  <ArrowRight className="ml-2 h-4 w-4" />
+                </Link>
+              </Button>
+            </CardContent>
+          </Card>
+          <Card className="flex h-full flex-col border-white/70 bg-white/90">
+            <CardHeader>
+              <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-emerald-100 text-emerald-700">
+                <ShieldCheck className="h-5 w-5" />
+              </div>
+              <CardTitle>Trust</CardTitle>
+              <CardDescription>Review privacy, governance, and how tenant isolation is handled across the product.</CardDescription>
+            </CardHeader>
+            <CardContent className="mt-auto">
+              <Button variant="outline" asChild>
+                <Link href="/trust">
+                  Read trust details
+                  <ArrowRight className="ml-2 h-4 w-4" />
+                </Link>
+              </Button>
             </CardContent>
           </Card>
         </section>
 
-        <section id="results" className="mx-auto mt-16 w-full max-w-6xl scroll-mt-24 sm:mt-20">
-          <Card className="border border-white/50 bg-white/80 backdrop-blur-md">
-            <CardHeader>
-              <CardTitle className={`${display.className} text-2xl`}>Ready to modernize your estate operations?</CardTitle>
-              <CardDescription>
-                Start with one estate, scale across locations, and keep every Arabica and Robusta kilogram traceable from Cherry to Parchment.
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="flex flex-wrap gap-4 items-center justify-between">
-              <div className="text-sm text-muted-foreground">
-                Get guided onboarding, module setup, and a dedicated workspace in minutes.
-              </div>
-              <div className="flex gap-3">
-                <Button asChild>
-                  <Link href="/signup">Request Access</Link>
-                </Button>
-                <Button variant="outline" asChild>
-                  <Link href="/login">Sign in</Link>
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
-        </section>
-
-        <section className="mx-auto mt-16 w-full max-w-6xl space-y-6 sm:mt-20">
-          <div className="space-y-2">
-            <h2 className={`${display.className} text-3xl font-semibold`}>Learn more about how we operate</h2>
-            <p className="text-muted-foreground">
-              Explore our principles and governance commitments in dedicated pages.
-            </p>
-          </div>
-          <div className="grid gap-6 lg:grid-cols-2">
-            <Card className="border border-white/50 bg-white/80 backdrop-blur-md">
-              <CardHeader>
-                <CardTitle className={`${display.className} text-xl`}>What We Stand For</CardTitle>
-                <CardDescription>
-                  Mission, vision, and the product principles guiding FarmFlow for estates, operators, and buyers.
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-3 text-sm text-muted-foreground">
-                <p>
-                  Understand the operating philosophy behind our decisions, from traceability-first workflows to practical
-                  adoption for field teams.
-                </p>
-                <Button asChild>
-                  <Link href="/standards">Open Standards Page</Link>
-                </Button>
-              </CardContent>
-            </Card>
-            <Card className="border border-white/50 bg-white/80 backdrop-blur-md">
-              <CardHeader>
-                <CardTitle className={`${display.className} text-xl`}>Trust, Privacy & Governance</CardTitle>
-                <CardDescription>
-                  Data ownership, privacy, terms, and accountability commitments in one place.
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-3 text-sm text-muted-foreground">
-                <p>
-                  Review how estate data is protected, how access is controlled, and what operational responsibilities are
-                  shared between FarmFlow and tenant admins.
-                </p>
-                <Button asChild>
-                  <Link href="/trust">Open Trust Page</Link>
-                </Button>
-              </CardContent>
-            </Card>
-          </div>
-        </section>
-      </main>
-
-        <footer className="border-t border-white/40 bg-white/70 backdrop-blur-md">
-          <div className="mx-auto flex w-full max-w-6xl flex-col gap-6 px-4 py-10 sm:px-6 md:flex-row md:items-center md:justify-between">
-            <div className="space-y-2">
-              <p className="text-sm font-semibold">FarmFlow</p>
-              <p className="text-xs text-muted-foreground">
-                Built for coffee estates today, and extensible to other specialty crops tomorrow.
-              </p>
+        <section className="rounded-[2rem] border border-slate-200/70 bg-slate-950 p-6 text-white shadow-[0_34px_90px_-60px_rgba(15,23,42,0.9)] sm:p-8">
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <p className="text-sm font-medium text-emerald-300">Self-serve onboarding</p>
+              <h2 className="mt-1 text-2xl font-semibold">Create the workspace, verify email, then finish setup with bag weight and locations.</h2>
             </div>
-            <div className="flex flex-wrap gap-4 text-sm text-muted-foreground">
-              <a href="#roles" className="hover:text-foreground">
-                Solutions
-              </a>
-              <a href="#onboarding" className="hover:text-foreground">
-                Go Live
-              </a>
-              <a href="#field-signals" className="hover:text-foreground">
-                Field Signals
-              </a>
-              <a href="#features" className="hover:text-foreground">
-                Capabilities
-              </a>
-              <a href="#modules" className="hover:text-foreground">
-                Module Paths
-              </a>
-              <Link href="/journey" className="hover:text-foreground">
-                Journey
-              </Link>
-              <a href="#impact" className="hover:text-foreground">
-                Impact
-              </a>
-              <a href="#pricing" className="hover:text-foreground">
-                Early Access
-              </a>
-              <Link href="/standards" className="hover:text-foreground">
-                What We Stand For
-              </Link>
-              <Link href="/trust" className="hover:text-foreground">
-                Trust
-              </Link>
-              <Link href="/privacy" className="hover:text-foreground">
-                Privacy Notice
-              </Link>
-              <Link href="/legal/terms" className="hover:text-foreground">
-                MSA / ToS
-              </Link>
-              <Link href="/legal/privacy" className="hover:text-foreground">
-                Privacy Policy
-              </Link>
-              <Link href="/legal/dpa" className="hover:text-foreground">
-                DPA
-              </Link>
-              <Link href="/legal/subprocessors" className="hover:text-foreground">
-                Subprocessors
-              </Link>
-            </div>
-          </div>
-        </footer>
-      </div>
-
-      <div className="fixed bottom-4 right-4 z-50 flex flex-col items-end gap-3 sm:bottom-6 sm:right-6">
-        {isChatOpen && (
-          <div className="w-[min(92vw,360px)] rounded-2xl border border-white/60 bg-white/90 shadow-[0_30px_60px_-40px_rgba(15,23,42,0.7)] backdrop-blur-xl">
-            <div className="flex items-center justify-between border-b border-slate-200/60 px-4 py-3">
-              <div>
-                <p className="text-sm font-semibold">FarmFlow Concierge</p>
-                <p className="text-xs text-muted-foreground">Ask about modules, onboarding, plans, or security.</p>
-              </div>
-              <Button variant="ghost" size="icon" onClick={() => setIsChatOpen(false)}>
-                <X className="h-4 w-4" />
+            <div className="flex flex-wrap gap-2">
+              <Button variant="secondary" asChild>
+                <Link href="/login">{t("common.login")}</Link>
+              </Button>
+              <Button asChild>
+                <Link href="/signup">{t("public.landing.ctaPrimary")}</Link>
               </Button>
             </div>
-            <div className="max-h-[320px] overflow-y-auto px-4 py-3 text-sm">
-              <div className="space-y-3">
-                {messages.map((message) => (
-                  <div
-                    key={message.id}
-                    className={`rounded-2xl px-3 py-2 ${message.role === "user" ? "ml-auto bg-[color:var(--sand)] text-[color:var(--ink)]" : "bg-white border border-slate-200/70 text-slate-700"}`}
-                  >
-                    {message.text}
-                  </div>
-                ))}
-                <div ref={chatEndRef} />
-              </div>
-            </div>
-            <div className="border-t border-slate-200/60 px-4 py-3">
-              <div className="flex flex-wrap gap-2 pb-3">
-                {CHATBOT_FAQS.slice(0, 3).map((faq) => (
-                  <button
-                    key={faq.id}
-                    onClick={() => sendMessage(faq.question)}
-                    className="rounded-full border border-slate-200/70 bg-white px-3 py-1.5 text-xs text-slate-600 hover:border-slate-300"
-                  >
-                    {faq.question}
-                  </button>
-                ))}
-              </div>
-              <form
-                className="flex items-center gap-2"
-                onSubmit={(event) => {
-                  event.preventDefault()
-                  sendMessage(draftMessage)
-                }}
-              >
-                <input
-                  value={draftMessage}
-                  onChange={(event) => setDraftMessage(event.target.value)}
-                  placeholder="Ask about modules, plans, onboarding..."
-                  className="flex-1 rounded-full border border-slate-200/70 bg-white px-4 py-2 text-sm outline-none focus:border-[color:var(--copper)]"
-                />
-                <Button size="icon" type="submit">
-                  <Send className="h-4 w-4" />
-                </Button>
-              </form>
-            </div>
           </div>
-        )}
-        {!isChatOpen && (
-          <Button
-            size="lg"
-            className="rounded-full shadow-[0_22px_50px_-30px_rgba(15,111,102,0.6)]"
-            onClick={() => setIsChatOpen(true)}
-          >
-            <MessageCircle className="mr-2 h-5 w-5" />
-            Chat with FarmFlow
-          </Button>
-        )}
+        </section>
       </div>
-    </div>
+    </PublicSiteShell>
   )
 }

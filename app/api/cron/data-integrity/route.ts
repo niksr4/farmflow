@@ -1,5 +1,7 @@
 import { NextResponse } from "next/server"
 import { runDataIntegrityAgent } from "@/lib/server/agents/data-integrity-agent"
+import { extractBearerToken, sharedSecretMatches } from "@/lib/server/request-security"
+import { logServerError } from "@/lib/server/safe-logging"
 
 export const dynamic = "force-dynamic"
 
@@ -28,8 +30,7 @@ async function handleCronInvocation(request: Request) {
       return NextResponse.json({ success: false, error: "CRON_SECRET is not configured" }, { status: 503 })
     }
 
-    const authHeader = request.headers.get("authorization") || ""
-    if (authHeader !== `Bearer ${secret}`) {
+    if (!sharedSecretMatches(secret, extractBearerToken(request.headers))) {
       return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 })
     }
 
@@ -42,6 +43,7 @@ async function handleCronInvocation(request: Request) {
 
     return NextResponse.json({ success: true, ...result.summary })
   } catch (error: any) {
+    logServerError("Data integrity cron invocation failed", error)
     const message = error?.message || "Data integrity agent failed"
     const status = isAgentTableMissing(error) ? 503 : 500
     return NextResponse.json({ success: false, error: message }, { status })

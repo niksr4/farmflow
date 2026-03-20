@@ -11,6 +11,13 @@ export type ModuleBundle = {
   modules: string[]
 }
 
+export type TenantPlanId = "basic" | "core" | "enterprise"
+
+export type ModuleState = ModuleDefinition & {
+  enabled: boolean
+  lockedByPlan: boolean
+}
+
 export const MODULES: ModuleDefinition[] = [
   { id: "inventory", label: "Inventory Management", defaultEnabled: true },
   { id: "transactions", label: "Transaction History", defaultEnabled: true },
@@ -38,9 +45,20 @@ export const MODULES: ModuleDefinition[] = [
 
 export const MODULE_BUNDLES: ModuleBundle[] = [
   {
-    id: "estate_ops",
-    label: "Estate Ops",
-    description: "Core estate operations from inventory to sales with rainfall context.",
+    id: "basic",
+    label: "Basic",
+    description: "Inventory, transaction history, accounts, and a live balance sheet for disciplined daily control.",
+    modules: [
+      "inventory",
+      "transactions",
+      "accounts",
+      "balance-sheet",
+    ],
+  },
+  {
+    id: "core",
+    label: "Core",
+    description: "Inventory, accounts, processing, dispatch, and sales for the main coffee operating workflow.",
     modules: [
       "inventory",
       "transactions",
@@ -50,52 +68,42 @@ export const MODULE_BUNDLES: ModuleBundle[] = [
       "dispatch",
       "sales",
       "other-sales",
-      "receivables",
-      "documents",
-      "rainfall",
-      "weather",
-      "journal",
-      "plant-health",
     ],
   },
   {
-    id: "exporter_ops",
-    label: "Exporter Ops",
-    description: "Dispatch, sales, and billing focus for exporter workflows.",
-    modules: [
-      "inventory",
-      "transactions",
-      "accounts",
-      "balance-sheet",
-      "dispatch",
-      "sales",
-      "other-sales",
-      "receivables",
-      "billing",
-      "documents",
-    ],
-  },
-  {
-    id: "curing_works",
-    label: "Curing Works",
-    description: "Processing, curing, and grading controls for quality-heavy estates.",
-    modules: ["inventory", "transactions", "processing", "curing", "quality", "dispatch"],
-  },
-  {
-    id: "simple_inventory",
-    label: "Simple Inventory Only",
-    description: "Lightweight tracking for stock movements and transactions.",
-    modules: ["inventory", "transactions"],
+    id: "enterprise",
+    label: "Enterprise",
+    description: "All FarmFlow modules, including advanced quality, finance, documents, insights, and climate tooling.",
+    modules: MODULES.map((module) => module.id),
   },
 ]
 
 export const MODULE_IDS = MODULES.map((module) => module.id)
+export const DEFAULT_TENANT_PLAN_ID: TenantPlanId = "core"
 export const DEFAULT_ENABLED_MODULE_IDS = MODULES.filter((module) => module.defaultEnabled === true).map(
   (module) => module.id,
 )
 
+const MODULE_BUNDLE_BY_ID = new Map(MODULE_BUNDLES.map((bundle) => [bundle.id, bundle]))
+
 export const getModuleDefaultEnabled = (moduleId: string) =>
   MODULES.find((module) => module.id === moduleId)?.defaultEnabled === true
+
+export const normalizeTenantPlanId = (value: unknown): TenantPlanId => {
+  const normalized = String(value || "").trim().toLowerCase()
+  if (normalized === "basic" || normalized === "core" || normalized === "enterprise") {
+    return normalized
+  }
+  return DEFAULT_TENANT_PLAN_ID
+}
+
+export const getModuleBundleById = (value: unknown) =>
+  MODULE_BUNDLE_BY_ID.get(normalizeTenantPlanId(value)) || MODULE_BUNDLES.find((bundle) => bundle.id === DEFAULT_TENANT_PLAN_ID) || MODULE_BUNDLES[0]
+
+export const getPlanModuleIds = (value: unknown) => getModuleBundleById(value)?.modules || []
+
+export const isModuleAllowedInPlan = (moduleId: string, planId: unknown) =>
+  getPlanModuleIds(planId).includes(moduleId)
 
 export const resolveEnabledModules = (rows?: Array<{ module: string; enabled: boolean }>) => {
   const byModule = new Map((rows || []).map((row) => [String(row.module), Boolean(row.enabled)]))
@@ -104,10 +112,55 @@ export const resolveEnabledModules = (rows?: Array<{ module: string; enabled: bo
   ).map((module) => module.id)
 }
 
-export const resolveModuleStates = (rows?: Array<{ module: string; enabled: boolean }>) => {
+export const resolveClosestBundleId = (enabledModules: string[]) => {
+  if (!enabledModules.length) {
+    return DEFAULT_TENANT_PLAN_ID
+  }
+
+  let winner = getModuleBundleById(DEFAULT_TENANT_PLAN_ID)
+  let bestScore = -1
+  for (const bundle of MODULE_BUNDLES) {
+    const score = bundle.modules.filter((moduleId) => enabledModules.includes(moduleId)).length
+    if (score > bestScore) {
+      winner = bundle
+      bestScore = score
+    }
+  }
+  return normalizeTenantPlanId(winner?.id)
+}
+
+export const clampEnabledModulesToPlan = (enabledModules: string[], planId: unknown) => {
+  const allowedModuleIds = new Set(getPlanModuleIds(planId))
+  return enabledModules.filter((moduleId) => allowedModuleIds.has(moduleId))
+}
+
+export const clampRequestedModuleStatesToPlan = (
+  requestedModules: Array<{ id?: string; enabled?: boolean }> | undefined,
+  planId: unknown,
+) => {
+  const requestedState = new Map(
+    (requestedModules || []).map((module) => [String(module?.id || ""), Boolean(module?.enabled)]),
+  )
+  const allowedModuleIds = new Set(getPlanModuleIds(planId))
+  return MODULES.map((module) => ({
+    id: module.id,
+    label: module.label,
+    enabled: allowedModuleIds.has(module.id) && Boolean(requestedState.get(module.id)),
+    lockedByPlan: !allowedModuleIds.has(module.id),
+  }))
+}
+
+export const resolveModuleStates = (
+  rows?: Array<{ module: string; enabled: boolean }>,
+  options?: { planId?: unknown },
+): ModuleState[] => {
   const byModule = new Map((rows || []).map((row) => [String(row.module), Boolean(row.enabled)]))
+  const allowedModuleIds = new Set(options?.planId ? getPlanModuleIds(options.planId) : MODULE_IDS)
   return MODULES.map((module) => ({
     ...module,
-    enabled: byModule.has(module.id) ? Boolean(byModule.get(module.id)) : module.defaultEnabled === true,
+    enabled:
+      allowedModuleIds.has(module.id) &&
+      (byModule.has(module.id) ? Boolean(byModule.get(module.id)) : module.defaultEnabled === true),
+    lockedByPlan: !allowedModuleIds.has(module.id),
   }))
 }

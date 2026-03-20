@@ -2,6 +2,7 @@ import "server-only"
 
 import type { NeonQueryFunction } from "@neondatabase/serverless"
 import { sql } from "@/lib/server/db"
+import { logServerWarning } from "@/lib/server/safe-logging"
 import { normalizeTenantContext, runTenantQuery } from "@/lib/server/tenant-db"
 
 type Severity = "info" | "warning" | "critical"
@@ -57,7 +58,7 @@ export async function logSecurityEvent(event: SecurityEvent) {
       actorUserId = await resolveActorId(client, tenantId, event.actorUsername)
     } catch (error) {
       if (!isMissingRelation(error, "users")) {
-        console.warn("Security event user lookup failed:", error)
+        logServerWarning("Security event user lookup failed", error)
       }
     }
   }
@@ -97,7 +98,7 @@ export async function logSecurityEvent(event: SecurityEvent) {
     )
   } catch (error) {
     if (!isMissingRelation(error, "security_events")) {
-      console.warn("Security event write failed:", error)
+      logServerWarning("Security event write failed", error)
     }
   }
 }

@@ -10,6 +10,7 @@ export interface ModulePermission {
   id: string
   label: string
   enabled: boolean
+  lockedByPlan?: boolean
 }
 
 export interface AuditLog {

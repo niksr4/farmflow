@@ -9,6 +9,9 @@ interface User {
   tenantId: string
   sessionMode?: "app" | "web"
   passwordResetRequired?: boolean
+  preferredLocale?: string
+  setupCompleted?: boolean
+  requiresGuidedSetup?: boolean
 }
 
 interface AuthContextType {
@@ -37,6 +40,9 @@ export function useAuth(): AuthContextType {
           tenantId: String(session.user.tenantId || ""),
           sessionMode: session.user.sessionMode,
           passwordResetRequired: Boolean(session.user.passwordResetRequired),
+          preferredLocale: session.user.preferredLocale,
+          setupCompleted: Boolean(session.user.setupCompleted),
+          requiresGuidedSetup: Boolean(session.user.requiresGuidedSetup),
         }
     : null
 

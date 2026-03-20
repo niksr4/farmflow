@@ -11,6 +11,9 @@ declare module "next-auth" {
       tenantId: string
       sessionMode?: SessionMode
       passwordResetRequired: boolean
+      preferredLocale?: string
+      setupCompleted?: boolean
+      requiresGuidedSetup?: boolean
     }
   }
 
@@ -20,6 +23,9 @@ declare module "next-auth" {
     tenantId: string
     sessionMode?: SessionMode
     passwordResetRequired?: boolean
+    preferredLocale?: string
+    setupCompleted?: boolean
+    requiresGuidedSetup?: boolean
   }
 }
 
@@ -30,5 +36,8 @@ declare module "next-auth/jwt" {
     tenantId?: string
     sessionMode?: SessionMode
     passwordResetRequired?: boolean
+    preferredLocale?: string
+    setupCompleted?: boolean
+    requiresGuidedSetup?: boolean
   }
 }

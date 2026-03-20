@@ -1,5 +1,9 @@
 import "server-only"
 
+import { mkdir, writeFile } from "node:fs/promises"
+import path from "node:path"
+
+import { fetchWithTimeout } from "@/lib/server/http"
 import { buildVerificationLink } from "@/lib/server/onboarding/utils"
 
 type SignupVerificationEmailInput = {
@@ -17,12 +21,43 @@ export type SignupVerificationEmailResult = {
 }
 
 const resolveSender = () => String(process.env.AUTH_EMAIL_FROM || process.env.ALERT_EMAIL_FROM || "").trim()
+const resolvePreviewDir = () => String(process.env.AUTH_EMAIL_PREVIEW_DIR || "").trim()
+
+const writePreviewEmail = async (input: SignupVerificationEmailInput, verificationLink: string) => {
+  const previewDir = resolvePreviewDir()
+  if (!previewDir) {
+    return null
+  }
+
+  const safeEmail = input.email.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "") || "preview"
+  const payload = {
+    type: "signup_verification",
+    email: input.email,
+    name: input.name,
+    estateName: input.estateName,
+    token: input.token,
+    verificationLink,
+    generatedAt: new Date().toISOString(),
+  }
+
+  await mkdir(previewDir, { recursive: true })
+  const filePath = path.join(previewDir, `${Date.now()}-${safeEmail}.json`)
+  await writeFile(filePath, `${JSON.stringify(payload, null, 2)}\n`, "utf8")
+  return filePath
+}
 
 export async function sendSignupVerificationEmail(
   input: SignupVerificationEmailInput,
 ): Promise<SignupVerificationEmailResult> {
   const resendKey = String(process.env.RESEND_API_KEY || "").trim()
   const from = resolveSender()
+
+  const verificationLink = buildVerificationLink(input.token)
+  const previewPath = await writePreviewEmail(input, verificationLink)
+  if (previewPath) {
+    return { sent: true, provider: "preview", reason: previewPath }
+  }
+
   if (!from) {
     return { sent: false, provider: "none", reason: "AUTH_EMAIL_FROM or ALERT_EMAIL_FROM not configured" }
   }
@@ -30,7 +65,6 @@ export async function sendSignupVerificationEmail(
     return { sent: false, provider: "none", reason: "RESEND_API_KEY not configured" }
   }
 
-  const verificationLink = buildVerificationLink(input.token)
   const subject = "Verify your FarmFlow email"
   const text = [
     `Hi ${input.name || "there"},`,
@@ -58,7 +92,7 @@ export async function sendSignupVerificationEmail(
   `
 
   try {
-    const response = await fetch("https://api.resend.com/emails", {
+    const response = await fetchWithTimeout("https://api.resend.com/emails", {
       method: "POST",
       headers: {
         Authorization: `Bearer ${resendKey}`,
@@ -71,6 +105,7 @@ export async function sendSignupVerificationEmail(
         text,
         html,
       }),
+      timeoutMs: 10_000,
     })
 
     if (!response.ok) {
@@ -92,4 +127,3 @@ export async function sendSignupVerificationEmail(
     }
   }
 }
-

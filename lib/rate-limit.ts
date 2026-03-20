@@ -9,13 +9,16 @@ const redis = hasRedisConfig ? Redis.fromEnv() : null
 
 type RateLimitKey =
   | "aiAnalysis"
+  | "aiAssistant"
   | "news"
   | "weather"
   | "authLogin"
+  | "accountPasswordChange"
   | "registerInterest"
   | "authSignup"
   | "authSignupResend"
   | "authSignupVerify"
+  | "opsErrorIngest"
 
 type RateLimitResult = {
   success: boolean
@@ -26,13 +29,16 @@ type RateLimitResult = {
 
 const limiters: Record<RateLimitKey, Ratelimit | null> = {
   aiAnalysis: redis ? new Ratelimit({ redis, limiter: Ratelimit.fixedWindow(5, "1 m") }) : null,
+  aiAssistant: redis ? new Ratelimit({ redis, limiter: Ratelimit.fixedWindow(12, "5 m") }) : null,
   news: redis ? new Ratelimit({ redis, limiter: Ratelimit.fixedWindow(30, "1 m") }) : null,
   weather: redis ? new Ratelimit({ redis, limiter: Ratelimit.fixedWindow(30, "1 m") }) : null,
   authLogin: redis ? new Ratelimit({ redis, limiter: Ratelimit.fixedWindow(10, "10 m") }) : null,
+  accountPasswordChange: redis ? new Ratelimit({ redis, limiter: Ratelimit.fixedWindow(6, "15 m") }) : null,
   registerInterest: redis ? new Ratelimit({ redis, limiter: Ratelimit.fixedWindow(6, "10 m") }) : null,
   authSignup: redis ? new Ratelimit({ redis, limiter: Ratelimit.fixedWindow(6, "10 m") }) : null,
   authSignupResend: redis ? new Ratelimit({ redis, limiter: Ratelimit.fixedWindow(6, "10 m") }) : null,
   authSignupVerify: redis ? new Ratelimit({ redis, limiter: Ratelimit.fixedWindow(20, "10 m") }) : null,
+  opsErrorIngest: redis ? new Ratelimit({ redis, limiter: Ratelimit.fixedWindow(20, "1 m") }) : null,
 }
 
 type LocalLimiterConfig = {
@@ -47,13 +53,16 @@ type LocalLimiterEntry = {
 
 const localLimiterConfig: Record<RateLimitKey, LocalLimiterConfig> = {
   aiAnalysis: { limit: 5, windowMs: 60_000 },
+  aiAssistant: { limit: 12, windowMs: 5 * 60_000 },
   news: { limit: 30, windowMs: 60_000 },
   weather: { limit: 30, windowMs: 60_000 },
   authLogin: { limit: 10, windowMs: 10 * 60_000 },
+  accountPasswordChange: { limit: 6, windowMs: 15 * 60_000 },
   registerInterest: { limit: 6, windowMs: 10 * 60_000 },
   authSignup: { limit: 6, windowMs: 10 * 60_000 },
   authSignupResend: { limit: 6, windowMs: 10 * 60_000 },
   authSignupVerify: { limit: 20, windowMs: 10 * 60_000 },
+  opsErrorIngest: { limit: 20, windowMs: 60_000 },
 }
 
 const localLimiterStore = new Map<string, LocalLimiterEntry>()

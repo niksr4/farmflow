@@ -5,12 +5,43 @@ import { normalizeTenantContext, runTenantQuery } from "@/lib/server/tenant-db"
 import { hashPassword, verifyPassword } from "@/lib/passwords"
 import { logAuditEvent } from "@/lib/server/audit-log"
 import { logSecurityEvent } from "@/lib/server/security-events"
+import { buildRateLimitHeaders, checkRateLimit } from "@/lib/rate-limit"
+import { extractClientIp } from "@/lib/server/request-security"
+import { logServerWarning } from "@/lib/server/safe-logging"
 
 export async function POST(request: Request) {
   try {
     const sessionUser = await requireSessionUser()
     if (!sql) {
       return NextResponse.json({ success: false, error: "Database not configured" }, { status: 500 })
+    }
+
+    const ipAddress = extractClientIp(request.headers)
+    try {
+      const rateLimit = await checkRateLimit(
+        "accountPasswordChange",
+        `${sessionUser.id || sessionUser.username}:${String(ipAddress || "unknown")}`,
+      )
+      const rateHeaders = buildRateLimitHeaders(rateLimit)
+      if (!rateLimit.success) {
+        await logSecurityEvent({
+          tenantId: sessionUser.tenantId,
+          actorUserId: sessionUser.id,
+          actorUsername: sessionUser.username,
+          actorRole: sessionUser.role,
+          eventType: "auth_password_change_denied",
+          severity: "warning",
+          source: "account/password",
+          ipAddress,
+          metadata: { reason: "rate_limited" },
+        })
+        return NextResponse.json(
+          { success: false, error: "Too many password change attempts. Please wait and try again." },
+          { status: 429, headers: rateHeaders },
+        )
+      }
+    } catch (rateLimitError) {
+      logServerWarning("Password change rate-limit check failed", rateLimitError)
     }
 
     const body = await request.json().catch(() => null)
@@ -98,6 +129,7 @@ export async function POST(request: Request) {
       eventType: "auth_password_changed",
       severity: "warning",
       source: "account/password",
+      ipAddress,
     })
 
     return NextResponse.json({ success: true })

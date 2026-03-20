@@ -26,6 +26,13 @@ type OnboardingChecklistProps = {
   completedCount: number
   totalCount: number
   steps: OnboardingStep[]
+  canManageEstateDefaults: boolean
+  estateName: string
+  bagWeightKg: string
+  onEstateNameChange: (value: string) => void
+  onBagWeightKgChange: (value: string) => void
+  onSaveEstateDefaults: () => void
+  isSavingEstateDefaults: boolean
   canCreateLocation: boolean
   locationName: string
   locationCode: string
@@ -45,6 +52,13 @@ export default function OnboardingChecklist({
   completedCount,
   totalCount,
   steps,
+  canManageEstateDefaults,
+  estateName,
+  bagWeightKg,
+  onEstateNameChange,
+  onBagWeightKgChange,
+  onSaveEstateDefaults,
+  isSavingEstateDefaults,
   canCreateLocation,
   locationName,
   locationCode,
@@ -100,6 +114,49 @@ export default function OnboardingChecklist({
 
         <CollapsibleContent>
           <CardContent className="space-y-4">
+            {canManageEstateDefaults && (
+              <div className="space-y-3 rounded-lg border bg-white/80 p-4">
+                <div>
+                  <p className="text-sm font-medium">Confirm estate defaults</p>
+                  <p className="text-xs text-muted-foreground">
+                    Set the estate name and standard bag weight your team uses before daily records begin.
+                  </p>
+                </div>
+                <div className="grid gap-3 md:grid-cols-[1.3fr_0.8fr_auto]">
+                  <div className="space-y-2">
+                    <Label htmlFor="onboarding-estate-name">Estate name</Label>
+                    <Input
+                      id="onboarding-estate-name"
+                      placeholder="Estate or cooperative name"
+                      value={estateName}
+                      onChange={(event) => onEstateNameChange(event.target.value)}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="onboarding-bag-weight">Standard bag weight (kg)</Label>
+                    <Input
+                      id="onboarding-bag-weight"
+                      type="number"
+                      min={40}
+                      max={70}
+                      step={1}
+                      placeholder="50"
+                      value={bagWeightKg}
+                      onChange={(event) => onBagWeightKgChange(event.target.value)}
+                    />
+                  </div>
+                  <div className="flex items-end">
+                    <Button onClick={onSaveEstateDefaults} disabled={isSavingEstateDefaults} className="w-full bg-green-700 hover:bg-green-800">
+                      {isSavingEstateDefaults ? "Saving..." : "Save Defaults"}
+                    </Button>
+                  </div>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Bag weight drives bag-to-kg math across processing, dispatch, sales, and exports.
+                </p>
+              </div>
+            )}
+
             <div className="grid gap-3">
               {steps.map((step) => (
                 <div

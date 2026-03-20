@@ -258,23 +258,35 @@ export function UserModuleOverridesSection({
         <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
           {userModulePermissions.map((module) => {
             const isLockedForRole = isSelectedUserRoleScoped && module.id === "balance-sheet"
+            const isLockedByPlan = Boolean(module.lockedByPlan)
             return (
-              <label key={module.id} className="flex items-center gap-2 rounded-lg border border-border/60 bg-white/80 p-3">
+              <label
+                key={module.id}
+                className={`flex items-center gap-2 rounded-lg border p-3 ${
+                  isLockedByPlan ? "border-dashed border-slate-200 bg-slate-50/80 text-slate-500" : "border-border/60 bg-white/80"
+                }`}
+              >
                 <input
                   type="checkbox"
                   checked={module.enabled}
                   onChange={() => onToggleUserModule(module.id)}
-                  disabled={isUserModulesLoading || isLockedForRole}
+                  disabled={isUserModulesLoading || isLockedForRole || isLockedByPlan}
                 />
                 <span>{module.label}</span>
-                {isLockedForRole ? <span className="ml-auto text-xs text-muted-foreground">Admin only</span> : null}
+                {isLockedByPlan ? (
+                  <span className="ml-auto text-xs text-muted-foreground">Plan locked</span>
+                ) : isLockedForRole ? (
+                  <span className="ml-auto text-xs text-muted-foreground">Admin only</span>
+                ) : null}
               </label>
             )
           })}
         </div>
-        {isSelectedUserRoleScoped ? (
+        {isSelectedUserRoleScoped || userModulePermissions.some((module) => module.lockedByPlan) ? (
           <p className="text-xs text-muted-foreground">
-            Live Balance Sheet is admin-only and remains disabled for user roles.
+            {isSelectedUserRoleScoped
+              ? "Live Balance Sheet is admin-only and remains disabled for user roles."
+              : "Plan-locked modules inherit the tenant subscription ceiling and cannot be granted per user."}
           </p>
         ) : null}
 

@@ -1,5 +1,8 @@
 import "server-only"
 
+import { fetchWithTimeout } from "@/lib/server/http"
+import { logServerWarning } from "@/lib/server/safe-logging"
+
 type AlertEmailInput = {
   subject: string
   text: string
@@ -35,7 +38,7 @@ export async function sendAgentAlertEmail(input: AlertEmailInput): Promise<Alert
   }
 
   try {
-    const response = await fetch("https://api.resend.com/emails", {
+    const response = await fetchWithTimeout("https://api.resend.com/emails", {
       method: "POST",
       headers: {
         Authorization: `Bearer ${resendKey}`,
@@ -48,11 +51,12 @@ export async function sendAgentAlertEmail(input: AlertEmailInput): Promise<Alert
         text: input.text,
         html: input.html || undefined,
       }),
+      timeoutMs: 10_000,
     })
 
     if (!response.ok) {
       const body = await response.text().catch(() => "")
-      console.warn("Agent alert email send failed:", response.status, body)
+      logServerWarning("Agent alert email send failed", { status: response.status, body })
       return {
         sent: false,
         provider: "resend",
@@ -63,7 +67,7 @@ export async function sendAgentAlertEmail(input: AlertEmailInput): Promise<Alert
 
     return { sent: true, provider: "resend", statusCode: response.status }
   } catch (error: any) {
-    console.warn("Agent alert email request failed:", error)
+    logServerWarning("Agent alert email request failed", error)
     return {
       sent: false,
       provider: "resend",

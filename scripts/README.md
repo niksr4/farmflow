@@ -179,6 +179,12 @@ Run these scripts (in order) on the target database:
 25. `61-signup-requests.sql` (optional, stores pending self-serve signups before tenant creation)
 26. `62-signup-tokens.sql` (optional, stores email verification tokens for self-serve signups)
 27. `63-user-email-auth.sql` (optional, adds verified email identity fields for self-serve login)
+28. `65-user-guided-setup.sql` (optional, tracks first-run setup completion for brand-new self-serve admins)
+29. `66-tenant-subscription-plan.sql` (optional, persists Basic/Core/Enterprise plan entitlements per tenant)
+
+Operational hardening helper scripts:
+- `pnpm security:passwords` audits password storage types and supports legacy remediation for existing users.
+- `pnpm test:e2e:onboarding` runs the self-serve signup -> verify -> login -> guided setup smoke test using local email previews.
 
 New tables:
 - `locations`

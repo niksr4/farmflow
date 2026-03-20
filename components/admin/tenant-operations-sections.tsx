@@ -21,9 +21,11 @@ type TenantsSectionProps = {
   selectedTenantId: string
   currentUserTenantId: string | undefined
   newTenantName: string
+  newTenantPlanId: string
   previewRole: "admin" | "user"
   isDeletingTenantId: string | null
   onNewTenantNameChange: (value: string) => void
+  onNewTenantPlanIdChange: (value: string) => void
   onCreateTenant: () => void
   onSelectedTenantIdChange: (value: string) => void
   onPreviewRoleChange: (value: "admin" | "user") => void
@@ -36,9 +38,11 @@ export function TenantsSection({
   selectedTenantId,
   currentUserTenantId,
   newTenantName,
+  newTenantPlanId,
   previewRole,
   isDeletingTenantId,
   onNewTenantNameChange,
+  onNewTenantPlanIdChange,
   onCreateTenant,
   onSelectedTenantIdChange,
   onPreviewRoleChange,
@@ -52,7 +56,7 @@ export function TenantsSection({
         <CardDescription>Create and manage estates/tenants.</CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
-        <div className="flex flex-col gap-3 md:flex-row">
+        <div className="grid gap-3 md:grid-cols-[1.4fr_220px_auto]">
           <div className="flex-1 space-y-2">
             <Label htmlFor="tenantName">New Tenant</Label>
             <Input
@@ -61,6 +65,21 @@ export function TenantsSection({
               value={newTenantName}
               onChange={(event) => onNewTenantNameChange(event.target.value)}
             />
+          </div>
+          <div className="space-y-2">
+            <Label>Starting Plan</Label>
+            <Select value={newTenantPlanId} onValueChange={onNewTenantPlanIdChange}>
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {MODULE_BUNDLES.map((bundle) => (
+                  <SelectItem key={bundle.id} value={bundle.id}>
+                    {bundle.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
           <div className="flex items-end">
             <Button onClick={onCreateTenant}>Create Tenant</Button>
@@ -236,6 +255,7 @@ type TenantModulesSectionProps = {
   modulePermissions: ModulePermission[]
   enabledModuleLabels: string[]
   selectedTenantId: string
+  tenantPlanId: string
   onApplyModuleBundle: (bundleId: string) => void
   onToggleModule: (moduleId: string) => void
   onSaveModules: () => void
@@ -245,10 +265,13 @@ export function TenantModulesSection({
   modulePermissions,
   enabledModuleLabels,
   selectedTenantId,
+  tenantPlanId,
   onApplyModuleBundle,
   onToggleModule,
   onSaveModules,
 }: TenantModulesSectionProps) {
+  const activePlan = MODULE_BUNDLES.find((bundle) => bundle.id === tenantPlanId) || MODULE_BUNDLES[0]
+
   return (
     <Card id="tenant-modules" className="scroll-mt-24 border-border/70 bg-white/85">
       <CardHeader>
@@ -256,6 +279,12 @@ export function TenantModulesSection({
         <CardDescription>Control which modules are available to users in this tenant.</CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
+        <div className="rounded-lg border border-slate-200 bg-slate-50/70 p-4 text-sm">
+          <p className="font-medium text-slate-900">Current plan: {activePlan?.label || "Core"}</p>
+          <p className="mt-1 text-xs text-muted-foreground">
+            Modules outside this plan stay locked. That gives you a clean entitlement boundary for future subscription upgrades.
+          </p>
+        </div>
         <div className="rounded-lg border border-emerald-100 bg-emerald-50/50 p-4 text-sm">
           <p className="font-medium text-emerald-900">Enabled modules ({enabledModuleLabels.length})</p>
           <p className="text-xs text-muted-foreground">These are active for the selected tenant.</p>
@@ -274,7 +303,7 @@ export function TenantModulesSection({
         <div className="space-y-3 rounded-lg border border-border/60 bg-muted/30 p-4">
           <div>
             <p className="text-sm font-medium text-foreground">Module bundles</p>
-            <p className="text-xs text-muted-foreground">Apply a preset, then adjust individual modules as needed.</p>
+            <p className="text-xs text-muted-foreground">Choose the tenant plan first, then fine-tune only the modules included in that plan.</p>
           </div>
           <div className="grid gap-3 md:grid-cols-2">
             {MODULE_BUNDLES.map((bundle) => (
@@ -292,9 +321,22 @@ export function TenantModulesSection({
         </div>
         <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
           {modulePermissions.map((module) => (
-            <label key={module.id} className="flex items-center gap-2 rounded-lg border border-border/60 bg-white/80 p-3">
-              <input type="checkbox" checked={module.enabled} onChange={() => onToggleModule(module.id)} />
-              <span>{module.label}</span>
+            <label
+              key={module.id}
+              className={`flex items-center justify-between gap-3 rounded-lg border p-3 ${
+                module.lockedByPlan ? "border-dashed border-slate-200 bg-slate-50/80 text-slate-500" : "border-border/60 bg-white/80"
+              }`}
+            >
+              <div className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  checked={module.enabled}
+                  disabled={module.lockedByPlan}
+                  onChange={() => onToggleModule(module.id)}
+                />
+                <span>{module.label}</span>
+              </div>
+              {module.lockedByPlan ? <span className="text-[11px] font-medium uppercase tracking-[0.18em]">Locked</span> : null}
             </label>
           ))}
         </div>

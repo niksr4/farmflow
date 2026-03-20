@@ -1,0 +1,156 @@
+"use client"
+
+import Link from "next/link"
+import { CheckCircle2, Layers3, ShieldCheck, Sparkles } from "lucide-react"
+import { PublicSiteShell } from "@/components/public-site-shell"
+import { Badge } from "@/components/ui/badge"
+import { Button } from "@/components/ui/button"
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { MODULES, MODULE_BUNDLES } from "@/lib/modules"
+
+const planNotes: Record<string, { eyebrow: string; audience: string; highlight: string }> = {
+  basic: {
+    eyebrow: "Start lean",
+    audience: "Best for estates that want stock and finance discipline first.",
+    highlight: "Inventory, transactions, accounts, and a live balance sheet.",
+  },
+  core: {
+    eyebrow: "Recommended",
+    audience: "Best for coffee estates running daily processing, dispatch, and sales in one flow.",
+    highlight: "The full coffee chain without the extra specialized modules.",
+  },
+  enterprise: {
+    eyebrow: "Scale deep",
+    audience: "Best for larger estates or groups that need every module and richer oversight.",
+    highlight: "All modules, including quality, documents, AI, climate, and finance extensions.",
+  },
+}
+
+const sharedIncluded = [
+  "Tenant-isolated workspace",
+  "Role-based access control",
+  "Audit trail and exportability",
+]
+
+export default function PlansPage() {
+  const moduleLabelById = new Map(MODULES.map((module) => [module.id, module.label]))
+
+  return (
+    <PublicSiteShell>
+      <div className="mx-auto w-full max-w-6xl space-y-10">
+        <section className="rounded-[2rem] border border-emerald-200/60 bg-gradient-to-br from-[#0f6f66] via-[#0b4f49] to-[#083730] p-6 text-white shadow-[0_36px_90px_-46px_rgba(15,111,102,0.78)] sm:p-10">
+          <Badge className="border-white/30 bg-white/15 text-white">Plans</Badge>
+          <h1 className="mt-4 max-w-3xl text-3xl font-semibold sm:text-5xl">Choose the rollout depth that matches the estate today</h1>
+          <p className="mt-4 max-w-3xl text-sm text-white/85 sm:text-base">
+            FarmFlow now starts with three clear bundles. You can start with discipline, move into full coffee operations, or unlock the whole estate stack.
+          </p>
+        </section>
+
+        <section className="grid gap-5 lg:grid-cols-3">
+          {MODULE_BUNDLES.map((bundle) => {
+            const note = planNotes[bundle.id]
+            const isRecommended = bundle.id === "core"
+            return (
+              <Card
+                key={bundle.id}
+                className={`border-white/70 bg-white/90 ${isRecommended ? "ring-2 ring-emerald-400 shadow-[0_28px_80px_-54px_rgba(16,185,129,0.9)]" : ""}`}
+              >
+                <CardHeader>
+                  <div className="flex items-center justify-between gap-3">
+                    <Badge variant={isRecommended ? "default" : "secondary"}>{note?.eyebrow || "Plan"}</Badge>
+                    {isRecommended ? <Sparkles className="h-4 w-4 text-emerald-600" /> : null}
+                  </div>
+                  <CardTitle className="text-2xl text-slate-900">{bundle.label}</CardTitle>
+                  <CardDescription>{note?.audience || bundle.description}</CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <p className="rounded-2xl bg-slate-50 px-4 py-3 text-sm text-slate-700">{note?.highlight || bundle.description}</p>
+                  <div className="space-y-2">
+                    {sharedIncluded.map((item) => (
+                      <div key={item} className="flex items-start gap-2 text-sm text-slate-700">
+                        <CheckCircle2 className="mt-0.5 h-4 w-4 text-emerald-600" />
+                        <span>{item}</span>
+                      </div>
+                    ))}
+                  </div>
+                  <div className="rounded-2xl border border-slate-200/70 bg-slate-50/80 p-4">
+                    <p className="text-xs font-semibold uppercase tracking-[0.25em] text-slate-500">Included modules</p>
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      {bundle.modules.map((moduleId) => (
+                        <span key={moduleId} className="rounded-full bg-white px-2.5 py-1 text-xs text-slate-700">
+                          {moduleLabelById.get(moduleId) || moduleId}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            )
+          })}
+        </section>
+
+        <section className="grid gap-6 lg:grid-cols-[0.8fr_1.2fr]">
+          <Card className="border-white/70 bg-white/90">
+            <CardHeader>
+              <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-emerald-100 text-emerald-700">
+                <Layers3 className="h-5 w-5" />
+              </div>
+              <CardTitle>How to choose</CardTitle>
+              <CardDescription>Pick the smallest bundle that still matches how the estate actually runs.</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-3 text-sm text-slate-700">
+              <p><strong>Basic</strong> is for estates that want inventory truth and cost visibility first.</p>
+              <p><strong>Core</strong> is for estates that process, dispatch, and sell coffee inside one operating rhythm.</p>
+              <p><strong>Enterprise</strong> is for teams that also need quality, documents, climate, analytics, and the full control surface.</p>
+            </CardContent>
+          </Card>
+
+          <Card className="border-white/70 bg-white/90">
+            <CardHeader>
+              <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-blue-100 text-blue-700">
+                <ShieldCheck className="h-5 w-5" />
+              </div>
+              <CardTitle>What stays consistent across plans</CardTitle>
+              <CardDescription>Even the leanest rollout keeps the operational baseline intact.</CardDescription>
+            </CardHeader>
+            <CardContent className="grid gap-4 sm:grid-cols-2">
+              <div className="rounded-2xl border border-slate-200/70 bg-slate-50/80 p-4">
+                <p className="font-medium text-slate-900">Secure tenant separation</p>
+                <p className="mt-2 text-sm text-slate-700">Each estate runs in its own workspace with explicit roles and audit history.</p>
+              </div>
+              <div className="rounded-2xl border border-slate-200/70 bg-slate-50/80 p-4">
+                <p className="font-medium text-slate-900">CSV exportability</p>
+                <p className="mt-2 text-sm text-slate-700">Operational records can still be exported for buyer, finance, or compliance workflows.</p>
+              </div>
+              <div className="rounded-2xl border border-slate-200/70 bg-slate-50/80 p-4">
+                <p className="font-medium text-slate-900">Upgrade path without reimplementation</p>
+                <p className="mt-2 text-sm text-slate-700">Start with the plan that fits now, then enable more modules as the estate matures.</p>
+              </div>
+              <div className="rounded-2xl border border-slate-200/70 bg-slate-50/80 p-4">
+                <p className="font-medium text-slate-900">Guided setup included</p>
+                <p className="mt-2 text-sm text-slate-700">New self-serve workspaces collect bag weight, primary location, language, and plan up front.</p>
+              </div>
+            </CardContent>
+          </Card>
+        </section>
+
+        <section className="rounded-[2rem] border border-emerald-200/60 bg-white/92 p-6 shadow-[0_28px_70px_-48px_rgba(15,111,102,0.45)] sm:p-8">
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <p className="text-sm font-medium text-emerald-700">Ready to create a workspace?</p>
+              <h2 className="mt-1 text-2xl font-semibold text-slate-900">Start with the plan that matches the estate, then refine it after launch.</h2>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <Button variant="outline" asChild>
+                <Link href="/capabilities">See capabilities</Link>
+              </Button>
+              <Button asChild>
+                <Link href="/signup">Create your workspace</Link>
+              </Button>
+            </div>
+          </div>
+        </section>
+      </div>
+    </PublicSiteShell>
+  )
+}

@@ -2,6 +2,7 @@ import "server-only"
 
 import { sql } from "@/lib/server/db"
 import { buildErrorFingerprint } from "@/lib/server/agents/utils"
+import { logServerWarning } from "@/lib/server/safe-logging"
 
 type ErrorEventInput = {
   tenantId?: string | null
@@ -61,7 +62,7 @@ export async function logAppErrorEvent(input: ErrorEventInput) {
     `
   } catch (error) {
     if (!isMissingRelation(error, "app_error_events")) {
-      console.warn("Error event write failed:", error)
+      logServerWarning("Error event write failed", error)
     }
   }
 }

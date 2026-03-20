@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server"
 import { sql } from "@/lib/server/db"
+import { decryptSensitiveText } from "@/lib/server/field-encryption"
 import { isModuleAccessError, requireModuleAccess } from "@/lib/server/module-access"
+import { logServerError } from "@/lib/server/safe-logging"
 import { normalizeTenantContext, runTenantQuery } from "@/lib/server/tenant-db"
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
@@ -48,7 +50,8 @@ export async function GET(_request: Request, context: { params: Promise<{ id: st
     }
 
     const row = rows[0]
-    const fileBytes = Buffer.from(String(row.file_data_base64 || ""), "base64")
+    const rawFileData = decryptSensitiveText(String(row.file_data_base64 || ""))
+    const fileBytes = Buffer.from(rawFileData, "base64")
     const fileName = sanitizeFileName(String(row.file_name || "document.bin"))
     const mimeType = String(row.mime_type || "application/octet-stream")
 
@@ -62,7 +65,7 @@ export async function GET(_request: Request, context: { params: Promise<{ id: st
       },
     })
   } catch (error: any) {
-    console.error("Error downloading document:", error)
+    logServerError("Error downloading document", error)
     if (isModuleAccessError(error)) {
       return NextResponse.json({ success: false, error: "Module access disabled" }, { status: 403 })
     }

@@ -1,13 +1,14 @@
 import { NextResponse } from "next/server"
 import { sql } from "@/lib/server/db"
 import { requireAdminSession } from "@/lib/server/mfa"
-import { MODULES, MODULE_IDS, resolveEnabledModules, resolveModuleStates } from "@/lib/modules"
+import { MODULES, MODULE_IDS, clampEnabledModulesToPlan, resolveEnabledModules, resolveModuleStates } from "@/lib/modules"
+import { resolveTenantPlanId } from "@/lib/server/tenant-subscriptions"
 import { normalizeTenantContext, runTenantQueries, runTenantQuery } from "@/lib/server/tenant-db"
 import { logAuditEvent } from "@/lib/server/audit-log"
 import { logSecurityEvent } from "@/lib/server/security-events"
 import { buildAdminErrorResponse, databaseNotConfiguredResponse } from "@/lib/server/route-utils"
 
-type ModuleState = { id: string; label: string; enabled: boolean }
+type ModuleState = { id: string; label: string; enabled: boolean; lockedByPlan?: boolean }
 const MODULE_LABEL_BY_ID = new Map(MODULES.map((module) => [module.id, module.label]))
 const SCOPED_ROLE_DISABLED_MODULES = new Set(["balance-sheet"])
 
@@ -63,14 +64,23 @@ export async function GET(request: Request) {
       return NextResponse.json({ success: false, error: "Forbidden" }, { status: 403 })
     }
 
-    const tenantEnabled = tenantModules?.length ? resolveEnabledModules(tenantModules) : resolveEnabledModules()
+    const tenantPlanId = await resolveTenantPlanId({
+      db: sql,
+      tenantId: targetTenantId,
+      role: sessionUser.role,
+      moduleRows: tenantModules as Array<{ module: string; enabled: boolean }>,
+    })
+    const tenantEnabled = clampEnabledModulesToPlan(
+      tenantModules?.length ? resolveEnabledModules(tenantModules) : resolveEnabledModules(),
+      tenantPlanId,
+    )
     const source = userModules?.length ? "user" : tenantModules?.length ? "tenant" : "default"
     const sourceRows = source === "user" ? userModules : source === "tenant" ? tenantModules : []
     const userMap =
       source === "user"
         ? new Map((userModules || []).map((row: any) => [String(row.module), Boolean(row.enabled)]))
         : null
-    const modules: ModuleState[] = resolveModuleStates(sourceRows).map((module) => ({
+    const modules: ModuleState[] = resolveModuleStates(sourceRows, { planId: tenantPlanId }).map((module) => ({
       ...module,
       enabled: applyUserRoleModulePolicy(
         targetRole,
@@ -136,7 +146,16 @@ export async function PUT(request: Request) {
         WHERE tenant_id = ${tenantId}
       `,
     )
-    const tenantEnabled = tenantModules?.length ? resolveEnabledModules(tenantModules) : resolveEnabledModules()
+    const tenantPlanId = await resolveTenantPlanId({
+      db: sql,
+      tenantId,
+      role: sessionUser.role,
+      moduleRows: tenantModules as Array<{ module: string; enabled: boolean }>,
+    })
+    const tenantEnabled = clampEnabledModulesToPlan(
+      tenantModules?.length ? resolveEnabledModules(tenantModules) : resolveEnabledModules(),
+      tenantPlanId,
+    )
 
     const beforeModules = await runTenantQuery(
       sql,

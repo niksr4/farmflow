@@ -118,7 +118,7 @@ export default function JourneyPage() {
                 <Link href="/login">Login</Link>
               </Button>
               <Button asChild>
-                <Link href="/signup">Sign Up</Link>
+                <Link href="/signup">Create Workspace</Link>
               </Button>
             </div>
           </nav>

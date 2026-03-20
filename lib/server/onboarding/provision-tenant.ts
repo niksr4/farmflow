@@ -2,9 +2,10 @@ import "server-only"
 
 import { randomBytes } from "crypto"
 
-import { MODULES } from "@/lib/modules"
+import { DEFAULT_TENANT_PLAN_ID, MODULES, clampRequestedModuleStatesToPlan } from "@/lib/modules"
 import { logSecurityEvent } from "@/lib/server/security-events"
 import { sql } from "@/lib/server/db"
+import { persistTenantPlanId } from "@/lib/server/tenant-subscriptions"
 import { normalizeTenantContext, runTenantQuery } from "@/lib/server/tenant-db"
 import type { SignupRequestRecord, SignupVerificationLookup, SignupVerificationResult } from "@/lib/server/onboarding/types"
 import {
@@ -114,6 +115,7 @@ const ensureTenant = async (signupRequest: SignupRequestRecord) => {
   )) as TenantRow[]
 
   const tenant = created[0]
+  await persistTenantPlanId(sql, tenant.id, "owner", DEFAULT_TENANT_PLAN_ID)
   await runTenantQuery(
     sql,
     ownerContext,
@@ -127,13 +129,21 @@ const ensureTenant = async (signupRequest: SignupRequestRecord) => {
 }
 
 const ensureTenantModules = async (tenantId: string) => {
-  for (const moduleEntry of MODULES) {
+  const starterModules = clampRequestedModuleStatesToPlan(
+    MODULES.map((moduleEntry) => ({
+      id: moduleEntry.id,
+      enabled: moduleEntry.defaultEnabled === true,
+    })),
+    DEFAULT_TENANT_PLAN_ID,
+  )
+
+  for (const moduleEntry of starterModules) {
     await runTenantQuery(
       sql,
       ownerContext,
       sql`
         INSERT INTO tenant_modules (tenant_id, module, enabled)
-        VALUES (${tenantId}, ${moduleEntry.id}, ${moduleEntry.defaultEnabled === true})
+        VALUES (${tenantId}, ${moduleEntry.id}, ${moduleEntry.enabled})
         ON CONFLICT (tenant_id, module) DO NOTHING
       `,
     )
@@ -239,7 +249,9 @@ const ensureUser = async (signupRequest: SignupRequestRecord, tenantId: string) 
             email = ${signupRequest.email},
             normalized_email = ${signupRequest.normalized_email},
             email_verified_at = CURRENT_TIMESTAMP,
-            preferred_locale = ${signupRequest.preferred_locale || "en"}
+            preferred_locale = ${signupRequest.preferred_locale || "en"},
+            requires_guided_setup = TRUE,
+            setup_completed_at = NULL
           WHERE id = ${existingUser.id}
         `,
       )
@@ -256,16 +268,18 @@ const ensureUser = async (signupRequest: SignupRequestRecord, tenantId: string) 
     await runTenantQuery(
       sql,
       ownerContext,
-      sql`
-        UPDATE users
-        SET
-          email = ${signupRequest.email},
-          normalized_email = ${signupRequest.normalized_email},
-          email_verified_at = CURRENT_TIMESTAMP,
-          preferred_locale = ${signupRequest.preferred_locale || "en"},
-          password_hash = ${signupRequest.password_hash},
-          password_reset_required = FALSE,
-          password_updated_at = CURRENT_TIMESTAMP
+        sql`
+          UPDATE users
+          SET
+            email = ${signupRequest.email},
+            normalized_email = ${signupRequest.normalized_email},
+            email_verified_at = CURRENT_TIMESTAMP,
+            preferred_locale = ${signupRequest.preferred_locale || "en"},
+            password_hash = ${signupRequest.password_hash},
+            password_reset_required = FALSE,
+            password_updated_at = CURRENT_TIMESTAMP,
+            requires_guided_setup = TRUE,
+            setup_completed_at = NULL
         WHERE id = ${existingUserByEmail.id}
       `,
     )
@@ -300,6 +314,8 @@ const ensureUser = async (signupRequest: SignupRequestRecord, tenantId: string) 
         password_hash,
         password_reset_required,
         password_updated_at,
+        requires_guided_setup,
+        setup_completed_at,
         role,
         tenant_id
       )
@@ -312,6 +328,8 @@ const ensureUser = async (signupRequest: SignupRequestRecord, tenantId: string) 
         ${signupRequest.password_hash},
         FALSE,
         CURRENT_TIMESTAMP,
+        TRUE,
+        NULL,
         'admin',
         ${tenantId}
       )

@@ -1,10 +1,19 @@
 "use client"
 
 import { useCallback, useEffect, useState } from "react"
+import { useSession } from "next-auth/react"
 import { useToast } from "@/hooks/use-toast"
 import { useAuth } from "@/hooks/use-auth"
 import { AlertThresholds, useTenantSettings } from "@/hooks/use-tenant-settings"
-import { MODULES, type ModuleBundle } from "@/lib/modules"
+import { useLocale } from "@/components/locale-provider"
+import {
+  DEFAULT_TENANT_PLAN_ID,
+  MODULES,
+  clampRequestedModuleStatesToPlan,
+  normalizeTenantPlanId,
+  type ModuleBundle,
+} from "@/lib/modules"
+import { normalizeAppLocale, type AppLocale } from "@/lib/i18n"
 import {
   DEFAULT_TENANT_FEATURE_FLAGS,
   DEFAULT_TENANT_UI_VARIANT,
@@ -14,6 +23,7 @@ import {
 import { roleLabel } from "@/lib/roles"
 import { AuditLogSection, PrivacySection } from "@/components/tenant-settings/governance-sections"
 import {
+  AccountLanguageSection,
   DataImportSection,
   DisplayPreferencesSection,
   EstateIdentitySection,
@@ -42,7 +52,9 @@ import type {
 
 export default function TenantSettingsPage() {
   const { user } = useAuth()
+  const { update: updateSession } = useSession()
   const { toast } = useToast()
+  const { setLocale } = useLocale()
   const { settings, updateSettings, loading: settingsLoading } = useTenantSettings()
   const tenantId = user?.tenantId || ""
 
@@ -60,9 +72,12 @@ export default function TenantSettingsPage() {
   const [isDeletingUserId, setIsDeletingUserId] = useState<string | null>(null)
 
   const [modulePermissions, setModulePermissions] = useState<ModulePermission[]>([])
+  const [tenantPlanId, setTenantPlanId] = useState<string>(DEFAULT_TENANT_PLAN_ID)
   const [isSavingModules, setIsSavingModules] = useState(false)
   const [uiPreferencesDraft, setUiPreferencesDraft] = useState<UiPreferencesDraft>({ hideEmptyMetrics: false })
   const [isSavingUiPreferences, setIsSavingUiPreferences] = useState(false)
+  const [accountPreferredLocale, setAccountPreferredLocale] = useState<AppLocale>(normalizeAppLocale(user?.preferredLocale))
+  const [isSavingAccountLanguage, setIsSavingAccountLanguage] = useState(false)
   const [uiVariantDraft, setUiVariantDraft] = useState<TenantUiVariant>(DEFAULT_TENANT_UI_VARIANT)
   const [featureFlagsDraft, setFeatureFlagsDraft] = useState<TenantFeatureFlags>(DEFAULT_TENANT_FEATURE_FLAGS)
   const [isSavingTenantExperience, setIsSavingTenantExperience] = useState(false)
@@ -111,6 +126,10 @@ export default function TenantSettingsPage() {
       hideEmptyMetrics: Boolean(settings.uiPreferences?.hideEmptyMetrics),
     })
   }, [settings.uiPreferences?.hideEmptyMetrics])
+
+  useEffect(() => {
+    setAccountPreferredLocale(normalizeAppLocale(user?.preferredLocale))
+  }, [user?.preferredLocale])
 
   useEffect(() => {
     setUiVariantDraft(settings.uiVariant || DEFAULT_TENANT_UI_VARIANT)
@@ -285,6 +304,7 @@ export default function TenantSettingsPage() {
         throw new Error(data.error || "Failed to load tenant modules")
       }
       setModulePermissions(data.modules || [])
+      setTenantPlanId(normalizeTenantPlanId(data.planId))
     } catch (error: any) {
       toast({ title: "Error", description: error.message || "Failed to load tenant modules", variant: "destructive" })
     }
@@ -484,22 +504,25 @@ export default function TenantSettingsPage() {
 
   const toggleModule = (moduleId: string) => {
     setModulePermissions((prev) =>
-      prev.map((module) => (module.id === moduleId ? { ...module, enabled: !module.enabled } : module)),
+      prev.map((module) =>
+        module.id === moduleId && !module.lockedByPlan ? { ...module, enabled: !module.enabled } : module,
+      ),
     )
   }
 
   const applyModuleBundle = useCallback(
     (bundle: ModuleBundle) => {
-      setModulePermissions(
+      setTenantPlanId(bundle.id)
+      setModulePermissions(clampRequestedModuleStatesToPlan(
         MODULES.map((module) => ({
           id: module.id,
-          label: module.label,
           enabled: bundle.modules.includes(module.id),
         })),
-      )
+        bundle.id,
+      ))
       toast({
         title: `${bundle.label} applied`,
-        description: "Review the checklist below and save to confirm module access.",
+        description: "Review the unlocked modules below and save to confirm tenant access.",
       })
     },
     [toast],
@@ -518,12 +541,14 @@ export default function TenantSettingsPage() {
       const response = await fetch("/api/admin/tenant-modules", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ tenantId, modules: modulePermissions }),
+        body: JSON.stringify({ tenantId, planId: tenantPlanId, modules: modulePermissions }),
       })
       const data = await response.json()
       if (!response.ok || !data.success) {
         throw new Error(data.error || "Failed to update modules")
       }
+      setModulePermissions(data.modules || [])
+      setTenantPlanId(normalizeTenantPlanId(data.planId))
       toast({ title: "Modules updated", description: "Tenant module access saved." })
     } catch (error: any) {
       toast({ title: "Error", description: error.message || "Failed to update modules", variant: "destructive" })
@@ -755,6 +780,28 @@ export default function TenantSettingsPage() {
     setFeatureFlagsDraft((prev) => ({ ...prev, [flagId]: enabled }))
   }
 
+  const handleSaveAccountLanguage = async () => {
+    setIsSavingAccountLanguage(true)
+    try {
+      const response = await fetch("/api/account/preferences", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ preferredLocale: accountPreferredLocale }),
+      })
+      const data = await response.json()
+      if (!response.ok || !data.success) {
+        throw new Error(data.error || "Failed to update language")
+      }
+      setLocale(accountPreferredLocale)
+      await updateSession({ preferredLocale: accountPreferredLocale })
+      toast({ title: "Language updated", description: "Your account language preference has been saved." })
+    } catch (error: any) {
+      toast({ title: "Error", description: error.message || "Failed to update language", variant: "destructive" })
+    } finally {
+      setIsSavingAccountLanguage(false)
+    }
+  }
+
   const enabledTenantModuleCount = modulePermissions.filter((module) => module.enabled).length
   const enabledUserModuleCount = userModulePermissions.filter((module) => module.enabled).length
   const selectedUser = users.find((u) => u.id === selectedUserId) || null
@@ -762,6 +809,7 @@ export default function TenantSettingsPage() {
   const roleDisplay = roleLabel(user?.role || "user")
   const sectionLinks: SectionLink[] = [
     { id: "estate-identity", label: "Estate" },
+    { id: "account-language", label: "Language" },
     { id: "display-preferences", label: "Display" },
     { id: "data-import", label: "Import" },
     { id: "thresholds", label: "Thresholds" },
@@ -801,6 +849,13 @@ export default function TenantSettingsPage() {
         settingsLoading={settingsLoading}
         onEstateNameChange={setEstateNameInput}
         onSaveEstateName={handleSaveEstateName}
+      />
+
+      <AccountLanguageSection
+        preferredLocale={accountPreferredLocale}
+        isSaving={isSavingAccountLanguage}
+        onPreferredLocaleChange={setAccountPreferredLocale}
+        onSave={handleSaveAccountLanguage}
       />
 
       {isAdminOrOwner && (
@@ -859,6 +914,7 @@ export default function TenantSettingsPage() {
         <TenantModulesSection
           modulePermissions={modulePermissions}
           tenantId={tenantId}
+          tenantPlanId={tenantPlanId}
           isSavingModules={isSavingModules}
           onApplyModuleBundle={applyModuleBundle}
           onToggleModule={toggleModule}

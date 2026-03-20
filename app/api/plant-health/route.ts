@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server"
 import { isModuleAccessError, requireAnyModuleAccess } from "@/lib/server/module-access"
+import { fetchWithTimeout } from "@/lib/server/http"
 
 export const dynamic = "force-dynamic"
 
@@ -135,19 +136,27 @@ export async function POST(request: Request) {
     const cropType = toTrimmed(formData.get("cropType"), 40).toLowerCase() || null
     const locationName = toTrimmed(formData.get("locationName"), 100) || null
     const notes = toTrimmed(formData.get("notes"), 240) || null
+    const apiUrl = getApiUrl()
+    if (!apiUrl.startsWith("https://")) {
+      return NextResponse.json(
+        { success: false, error: "Plant health API URL must use https." },
+        { status: 503 },
+      )
+    }
 
     const upstreamPayload = {
       images: [await toDataUri(image)],
       similar_images: false,
     }
 
-    const upstreamResponse = await fetch(getApiUrl(), {
+    const upstreamResponse = await fetchWithTimeout(apiUrl, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
         "Api-Key": apiKey,
       },
       body: JSON.stringify(upstreamPayload),
+      timeoutMs: 12_000,
     })
 
     const rawText = await upstreamResponse.text()

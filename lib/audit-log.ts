@@ -4,6 +4,7 @@ import type { NeonQueryFunction } from "@neondatabase/serverless"
 import { normalizeTenantContext, runTenantQuery } from "@/lib/server/tenant-db"
 import type { SessionUser } from "@/lib/server/auth"
 import { logSecurityEvent } from "@/lib/server/security-events"
+import { logServerWarning } from "@/lib/server/safe-logging"
 import { normalizeUsernameLookup } from "@/lib/usernames"
 
 type AuditAction = "create" | "update" | "delete" | "upsert"
@@ -58,7 +59,7 @@ export async function logAuditEvent(
       userId = userRows?.[0]?.id ?? null
     } catch (error) {
       if (!isMissingRelation(error, "users")) {
-        console.warn("Audit log user lookup failed:", error)
+        logServerWarning("Audit log user lookup failed", error)
       }
     }
   }
@@ -94,7 +95,7 @@ export async function logAuditEvent(
     )
   } catch (error) {
     if (!isMissingRelation(error, "audit_logs")) {
-      console.warn("Audit log write failed:", error)
+      logServerWarning("Audit log write failed", error)
     }
   }
 

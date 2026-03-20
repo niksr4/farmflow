@@ -3,6 +3,8 @@ import { logSecurityEvent } from "@/lib/server/security-events"
 import { logAppErrorEvent } from "@/lib/server/error-events"
 import { sendAgentAlertEmail } from "@/lib/server/agents/alert-email"
 import { buildRateLimitHeaders, checkRateLimit } from "@/lib/rate-limit"
+import { fetchWithTimeout } from "@/lib/server/http"
+import { logServerError, logServerWarning } from "@/lib/server/safe-logging"
 
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 
@@ -82,11 +84,15 @@ const notifySlack = async (payload: {
   ipAddress: string | null
 }) => {
   if (!NOTIFICATION_WEBHOOK_URL) return false
+  if (!NOTIFICATION_WEBHOOK_URL.startsWith("https://")) {
+    throw new Error("Register-interest webhook must use https")
+  }
 
-  const response = await fetch(NOTIFICATION_WEBHOOK_URL, {
+  const response = await fetchWithTimeout(NOTIFICATION_WEBHOOK_URL, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(buildSlackPayload(payload)),
+    timeoutMs: 5_000,
   })
 
   return response.ok
@@ -107,7 +113,7 @@ export async function POST(request: Request) {
         )
       }
     } catch (rateLimitError) {
-      console.warn("Register interest rate-limit check failed:", rateLimitError)
+      logServerWarning("Register interest rate-limit check failed", rateLimitError)
     }
 
     const body = await request.json().catch(() => null)
@@ -161,7 +167,7 @@ export async function POST(request: Request) {
         ipAddress,
       })
     } catch (notificationError) {
-      console.warn("Register interest Slack notify failed:", notificationError)
+      logServerWarning("Register interest Slack notify failed", notificationError)
       await logAppErrorEvent({
         source: "register-interest",
         endpoint: "/api/register-interest",
@@ -201,7 +207,7 @@ export async function POST(request: Request) {
 
     return NextResponse.json({ success: true, notified, emailed })
   } catch (error: any) {
-    console.error("Register interest error:", error)
+    logServerError("Register interest error", error)
     await logAppErrorEvent({
       source: "register-interest",
       endpoint: "/api/register-interest",

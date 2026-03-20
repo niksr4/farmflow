@@ -11,6 +11,8 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
+import { useLocale } from "@/components/locale-provider"
+import { shouldForceGuidedSetup } from "@/lib/guided-setup"
 import { useAuth } from "@/hooks/use-auth"
 import posthog from "posthog-js"
 
@@ -23,6 +25,7 @@ export default function LoginPage() {
   const [capsLockOn, setCapsLockOn] = useState(false)
   const [sessionMode, setSessionMode] = useState<"app" | "web">("web")
   const { login } = useAuth()
+  const { t } = useLocale()
   const router = useRouter()
 
   useEffect(() => {
@@ -68,7 +71,12 @@ export default function LoginPage() {
         role,
         tenant_id: tenantId || "global",
       })
-      router.push(role === "owner" ? "/admin/tenants" : "/dashboard")
+      const mustCompleteGuidedSetup = shouldForceGuidedSetup({
+        role,
+        requiresGuidedSetup: sessionPayload?.user?.requiresGuidedSetup,
+        setupCompleted: sessionPayload?.user?.setupCompleted,
+      })
+      router.push(role === "owner" ? "/admin/tenants" : mustCompleteGuidedSetup ? "/welcome" : "/dashboard")
     } catch (err: any) {
       posthog.captureException(err)
       const fallback = "Unable to sign in right now. Please try again."
@@ -93,34 +101,32 @@ export default function LoginPage() {
           <div className="inline-flex rounded-2xl border border-white/60 bg-white/75 px-3 py-2 shadow-sm backdrop-blur">
             <Image src="/brand-logo.svg" alt="FarmFlow" width={220} height={86} className="h-14 w-auto" priority />
           </div>
-          <h1 className="font-display text-3xl sm:text-4xl text-slate-900">
-            Welcome back to your estate workspace
-          </h1>
+          <h1 className="font-display text-3xl sm:text-4xl text-slate-900">{t("public.login.heroTitle")}</h1>
           <p className="text-muted-foreground">
-            Sign in to manage lots, yields, quality evidence, and farmer-first traceability across the season.
+            {t("public.login.heroDescription")}
           </p>
           <div className="space-y-2 text-sm text-slate-700">
             <div className="flex items-center gap-2">
               <CheckCircle2 className="h-4 w-4 text-emerald-600" />
-              <span>Traceability across lots and locations</span>
+              <span>{t("public.login.point1")}</span>
             </div>
             <div className="flex items-center gap-2">
               <CheckCircle2 className="h-4 w-4 text-emerald-600" />
-              <span>Processing, moisture, and quality notes</span>
+              <span>{t("public.login.point2")}</span>
             </div>
             <div className="flex items-center gap-2">
               <CheckCircle2 className="h-4 w-4 text-emerald-600" />
-              <span>Dispatch and sales reconciliation</span>
+              <span>{t("public.login.point3")}</span>
             </div>
             <div className="flex items-center gap-2">
               <CheckCircle2 className="h-4 w-4 text-emerald-600" />
-              <span>Rainfall and weather context</span>
+              <span>{t("public.login.point4")}</span>
             </div>
           </div>
           <p className="text-xs text-muted-foreground">
-            Need access?{" "}
+            {t("public.login.needAccess")}{" "}
             <Link href="/signup" className="underline">
-              Create your workspace
+              {t("public.login.createWorkspace")}
             </Link>
             .
           </p>
@@ -128,8 +134,8 @@ export default function LoginPage() {
 
         <div className="bg-white/90 dark:bg-slate-900/80 rounded-2xl border border-white/60 dark:border-white/10 shadow-2xl backdrop-blur-md p-6 sm:p-8">
           <div className="text-center mb-6">
-            <h1 className="text-2xl font-semibold text-emerald-700">Sign in</h1>
-            <p className="text-gray-600 mt-2">Access your estate operations workspace</p>
+            <h1 className="text-2xl font-semibold text-emerald-700">{t("public.login.title")}</h1>
+            <p className="text-gray-600 mt-2">{t("public.login.subtitle")}</p>
           </div>
 
           {error && (
@@ -142,7 +148,7 @@ export default function LoginPage() {
             <div>
               <div className="flex items-center gap-2">
                     <Label htmlFor="username" className="block text-gray-700 mb-1">
-                  Email or Username
+                  {t("public.login.identifier")}
                 </Label>
                 <TooltipProvider>
                   <Tooltip>
@@ -155,7 +161,7 @@ export default function LoginPage() {
                         <Info className="h-3 w-3" />
                       </button>
                     </TooltipTrigger>
-                    <TooltipContent>Use your verified email for new workspaces, or your existing username.</TooltipContent>
+                    <TooltipContent>{t("public.login.identifierHelp")}</TooltipContent>
                   </Tooltip>
                 </TooltipProvider>
               </div>
@@ -186,7 +192,7 @@ export default function LoginPage() {
             <div>
               <div className="flex items-center gap-2">
                 <Label htmlFor="password" className="block text-gray-700 mb-1">
-                  Password
+                  {t("public.login.password")}
                 </Label>
                 <TooltipProvider>
                   <Tooltip>
@@ -199,7 +205,7 @@ export default function LoginPage() {
                         <Info className="h-3 w-3" />
                       </button>
                     </TooltipTrigger>
-                    <TooltipContent>Credentials are unique to each estate tenant.</TooltipContent>
+                    <TooltipContent>{t("public.login.passwordHelp")}</TooltipContent>
                   </Tooltip>
                 </TooltipProvider>
               </div>
@@ -238,7 +244,7 @@ export default function LoginPage() {
             {capsLockOn && (
               <p className="flex items-center gap-2 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
                 <AlertTriangle className="h-3.5 w-3.5" />
-                Caps Lock is on. Passwords are case-sensitive.
+                {t("public.login.capsLock")}
               </p>
             )}
 
@@ -247,10 +253,10 @@ export default function LoginPage() {
               className="w-full bg-emerald-700 hover:bg-emerald-800"
               disabled={isSubmitting || !username.trim() || !password}
             >
-              {isSubmitting ? "Signing in..." : "Sign In"}
+              {isSubmitting ? "Signing in..." : t("public.login.title")}
             </Button>
             <p className="text-[11px] text-gray-500">
-              {sessionMode === "app" ? "App mode: stay signed in is enabled." : "Web mode: session expires sooner for safety."}
+              {sessionMode === "app" ? t("public.login.sessionModeApp") : t("public.login.sessionModeWeb")}
             </p>
           </form>
           <p className="mt-4 text-xs text-gray-500">
@@ -261,11 +267,11 @@ export default function LoginPage() {
             .
           </p>
           <p className="mt-2 text-xs text-gray-500">
-            New to FarmFlow?{" "}
+            {t("public.login.newToFarmFlow")}{" "}
             <Link href="/signup" className="underline">
-              Create your workspace
+              {t("public.login.createWorkspace")}
             </Link>{" "}
-            and verify your email to start using it.
+            {t("public.login.createAndVerify")}
           </p>
         </div>
       </div>

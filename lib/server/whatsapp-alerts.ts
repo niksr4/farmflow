@@ -1,5 +1,7 @@
 import "server-only"
 
+import { fetchWithTimeout } from "@/lib/server/http"
+
 type WhatsAppAlertInput = {
   text: string
   to?: string[] | string | null
@@ -87,13 +89,14 @@ const sendViaTwilio = async (input: {
     })
 
     try {
-      const response = await fetch(endpoint, {
+      const response = await fetchWithTimeout(endpoint, {
         method: "POST",
         headers: {
           Authorization: `Basic ${auth}`,
           "Content-Type": "application/x-www-form-urlencoded",
         },
         body: body.toString(),
+        timeoutMs: 10_000,
       })
 
       const responseText = await response.text()

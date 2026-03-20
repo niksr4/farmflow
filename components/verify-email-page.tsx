@@ -1,8 +1,9 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import Link from "next/link"
 
+import { useLocale } from "@/components/locale-provider"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
@@ -16,12 +17,24 @@ type VerifyEmailPageProps = {
 }
 
 export default function VerifyEmailPage({ initialToken = "", initialEmail = "" }: VerifyEmailPageProps) {
+  const { t } = useLocale()
   const [email, setEmail] = useState(initialEmail)
   const [verifyState, setVerifyState] = useState<VerifyState>(initialToken ? "verifying" : "idle")
-  const [message, setMessage] = useState(
-    initialToken ? "Verifying your email and provisioning your workspace..." : "Check your inbox to verify your FarmFlow workspace."
-  )
+  const [statusDetail, setStatusDetail] = useState("")
+  const [verifiedTenantName, setVerifiedTenantName] = useState("")
   const [isResending, setIsResending] = useState(false)
+  const message = useMemo(() => {
+    if (verifyState === "success") {
+      return t("public.verify.successMessage", { tenant: verifiedTenantName || "Your workspace" })
+    }
+    if (verifyState === "verifying") {
+      return t("public.verify.verifyingMessage")
+    }
+    if (statusDetail) {
+      return statusDetail
+    }
+    return t("public.verify.idleMessage")
+  }, [statusDetail, t, verifiedTenantName, verifyState])
 
   useEffect(() => {
     setEmail(initialEmail)
@@ -44,11 +57,12 @@ export default function VerifyEmailPage({ initialToken = "", initialEmail = "" }
           throw new Error(data?.error || "Verification failed")
         }
         setVerifyState("success")
-        setMessage(`Email verified. ${data.tenantName || "Your workspace"} is ready. Sign in with your email and password.`)
+        setVerifiedTenantName(String(data.tenantName || "Your workspace"))
+        setStatusDetail("")
       } catch (error: any) {
         if (cancelled) return
         setVerifyState("error")
-        setMessage(error?.message || "Verification failed. Request a new link below.")
+        setStatusDetail(error?.message || "Verification failed. Request a new link below.")
       }
     }
 
@@ -61,7 +75,7 @@ export default function VerifyEmailPage({ initialToken = "", initialEmail = "" }
   const handleResend = async () => {
     if (!email.trim()) {
       setVerifyState("error")
-      setMessage("Enter your email to resend the verification link.")
+      setStatusDetail(t("public.verify.resendPrompt"))
       return
     }
 
@@ -77,10 +91,10 @@ export default function VerifyEmailPage({ initialToken = "", initialEmail = "" }
         throw new Error(data?.error || "Unable to resend verification email")
       }
       setVerifyState("idle")
-      setMessage(`Verification email sent to ${data.maskedEmail || email.trim().toLowerCase()}.`)
+      setStatusDetail(t("public.verify.sentMessage", { email: data.maskedEmail || email.trim().toLowerCase() }))
     } catch (error: any) {
       setVerifyState("error")
-      setMessage(error?.message || "Unable to resend verification email")
+      setStatusDetail(error?.message || "Unable to resend verification email")
     } finally {
       setIsResending(false)
     }
@@ -97,30 +111,34 @@ export default function VerifyEmailPage({ initialToken = "", initialEmail = "" }
         <Card className="border border-white/60 bg-white/90 backdrop-blur-md dark:bg-slate-900/80">
           <CardHeader>
             <CardTitle className="font-display">
-              {verifyState === "success" ? "Workspace Ready" : initialToken ? "Verifying Email" : "Verify Your Email"}
+              {verifyState === "success"
+                ? t("public.verify.successTitle")
+                : initialToken
+                  ? t("public.verify.verifyingTitle")
+                  : t("public.verify.title")}
             </CardTitle>
             <CardDescription>{message}</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
             {verifyState === "verifying" ? (
               <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">
-                Setting up your tenant, access, and starter workspace...
+                {t("public.verify.provisioningHint")}
               </div>
             ) : null}
 
             {verifyState === "success" ? (
               <div className="space-y-3">
                 <Button asChild className="w-full">
-                  <Link href="/login">Sign In</Link>
+                  <Link href="/login">{t("public.verify.signIn")}</Link>
                 </Button>
                 <p className="text-xs text-muted-foreground">
-                  Use the same email and password you entered during signup.
+                  {t("public.verify.signInHelp")}
                 </p>
               </div>
             ) : (
               <div className="space-y-4">
                 <div className="space-y-2">
-                  <Label htmlFor="email">Email</Label>
+                  <Label htmlFor="email">{t("public.signup.email")}</Label>
                   <Input
                     id="email"
                     type="email"
@@ -134,12 +152,12 @@ export default function VerifyEmailPage({ initialToken = "", initialEmail = "" }
                   />
                 </div>
                 <Button type="button" variant="outline" className="w-full" onClick={handleResend} disabled={isResending}>
-                  {isResending ? "Resending..." : "Resend Verification Email"}
+                  {isResending ? `${t("public.verify.resend")}...` : t("public.verify.resend")}
                 </Button>
                 <p className="text-xs text-muted-foreground">
-                  Already verified?{" "}
+                  {t("public.verify.alreadyVerified")}{" "}
                   <Link href="/login" className="underline">
-                    Sign in
+                    {t("public.verify.signIn")}
                   </Link>
                   .
                 </p>

@@ -6,14 +6,17 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { LocaleSelector } from "@/components/locale-selector"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
+import { useLocale } from "@/components/locale-provider"
 import {
   TENANT_FEATURE_FLAG_DEFINITIONS,
   TENANT_UI_VARIANTS,
   type TenantFeatureFlags,
   type TenantUiVariant,
 } from "@/lib/tenant-experience"
+import type { AppLocale } from "@/lib/i18n"
 import type { SectionLink, UiPreferencesDraft } from "@/components/tenant-settings/types"
 
 type TenantSettingsOverviewProps = {
@@ -230,6 +233,40 @@ export function DisplayPreferencesSection({
         </label>
         <Button onClick={onSaveUiPreferences} disabled={isSavingUiPreferences || settingsLoading}>
           {isSavingUiPreferences ? "Saving..." : "Save Preferences"}
+        </Button>
+      </CardContent>
+    </Card>
+  )
+}
+
+type AccountLanguageSectionProps = {
+  preferredLocale: AppLocale
+  isSaving: boolean
+  onPreferredLocaleChange: (value: AppLocale) => void
+  onSave: () => void
+}
+
+export function AccountLanguageSection({
+  preferredLocale,
+  isSaving,
+  onPreferredLocaleChange,
+  onSave,
+}: AccountLanguageSectionProps) {
+  const { t } = useLocale()
+
+  return (
+    <Card id="account-language" className="scroll-mt-24 border-border/70 bg-white/85">
+      <CardHeader>
+        <CardTitle>{t("settings.languageTitle")}</CardTitle>
+        <CardDescription>{t("settings.languageDescription")}</CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        <div className="max-w-sm space-y-2">
+          <Label>{t("common.language")}</Label>
+          <LocaleSelector value={preferredLocale} onValueChange={onPreferredLocaleChange} />
+        </div>
+        <Button onClick={onSave} disabled={isSaving}>
+          {isSaving ? t("common.saving") : t("settings.saveLanguage")}
         </Button>
       </CardContent>
     </Card>

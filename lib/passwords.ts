@@ -3,17 +3,34 @@ import { createHash, randomBytes, randomInt, scryptSync, timingSafeEqual } from 
 const SCRYPT_PREFIX = "scrypt"
 const SCRYPT_KEY_LENGTH = 64
 const TEMP_PASSWORD_CHARS = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789@#$!"
+const SHA256_HEX_PATTERN = /^[a-f0-9]{64}$/i
 
 type VerifyResult = {
   matches: boolean
   needsRehash: boolean
 }
 
+export type StoredPasswordScheme = "scrypt" | "legacy_sha256" | "legacy_plaintext" | "unknown"
+
 function safeEqual(left: Buffer, right: Buffer) {
   if (left.length !== right.length) {
     return false
   }
   return timingSafeEqual(Uint8Array.from(left), Uint8Array.from(right))
+}
+
+export function classifyStoredPasswordHash(storedHash: string): StoredPasswordScheme {
+  const normalizedStored = String(storedHash || "").trim()
+  if (!normalizedStored) {
+    return "unknown"
+  }
+  if (normalizedStored.startsWith(`${SCRYPT_PREFIX}$`)) {
+    return "scrypt"
+  }
+  if (SHA256_HEX_PATTERN.test(normalizedStored)) {
+    return "legacy_sha256"
+  }
+  return "legacy_plaintext"
 }
 
 export function hashPassword(password: string) {
@@ -23,13 +40,14 @@ export function hashPassword(password: string) {
 }
 
 export function verifyPassword(password: string, storedHash: string): VerifyResult {
-  if (!storedHash) {
+  const storedScheme = classifyStoredPasswordHash(storedHash)
+  if (storedScheme === "unknown") {
     return { matches: false, needsRehash: false }
   }
 
-  if (storedHash.startsWith(`${SCRYPT_PREFIX}$`)) {
+  if (storedScheme === "scrypt") {
     try {
-      const parts = storedHash.split("$")
+      const parts = String(storedHash).split("$")
       if (parts.length !== 3) {
         return { matches: false, needsRehash: false }
       }
@@ -52,20 +70,15 @@ export function verifyPassword(password: string, storedHash: string): VerifyResu
     }
   }
 
-  const normalizedStored = String(storedHash).trim()
-  const legacyHash = createHash("sha256").update(password).digest("hex")
-
-  // Legacy compatibility:
-  // 1) SHA-256 hex records (case-insensitive)
-  // 2) historical plain-text records (rehash on successful login)
-  const shaMatches = normalizedStored.toLowerCase() === legacyHash
-  if (shaMatches) {
-    return { matches: true, needsRehash: true }
+  if (storedScheme === "legacy_sha256") {
+    const normalizedStored = String(storedHash).trim()
+    const legacyHash = createHash("sha256").update(password).digest("hex")
+    return { matches: normalizedStored.toLowerCase() === legacyHash, needsRehash: true }
   }
 
-  const plaintextMatches = safeEqual(Buffer.from(normalizedStored), Buffer.from(password))
-  if (plaintextMatches) {
-    return { matches: true, needsRehash: true }
+  if (storedScheme === "legacy_plaintext") {
+    const normalizedStored = String(storedHash).trim()
+    return { matches: safeEqual(Buffer.from(normalizedStored), Buffer.from(password)), needsRehash: true }
   }
 
   return { matches: false, needsRehash: false }

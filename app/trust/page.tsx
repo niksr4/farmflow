@@ -29,11 +29,11 @@ export default function TrustPage() {
           <Button variant="outline" asChild>
             <Link href="/">
               <ArrowLeft className="mr-2 h-4 w-4" />
-              Back to Home
+              Back to Landing
             </Link>
           </Button>
           <Button asChild>
-            <Link href="/signup">Request Access</Link>
+            <Link href="/signup">Create Workspace</Link>
           </Button>
         </div>
 

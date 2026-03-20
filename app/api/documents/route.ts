@@ -3,7 +3,9 @@ import { NextResponse } from "next/server"
 import { requireAdminRole } from "@/lib/permissions"
 import { logAuditEvent } from "@/lib/server/audit-log"
 import { sql } from "@/lib/server/db"
+import { encryptSensitiveText } from "@/lib/server/field-encryption"
 import { isModuleAccessError, requireModuleAccess } from "@/lib/server/module-access"
+import { logServerError } from "@/lib/server/safe-logging"
 import { normalizeTenantContext, runTenantQuery } from "@/lib/server/tenant-db"
 
 const MAX_FILE_BYTES = 10 * 1024 * 1024
@@ -221,7 +223,7 @@ export async function GET(request: Request) {
       },
     })
   } catch (error: any) {
-    console.error("Error fetching documents:", error)
+    logServerError("Error fetching documents", error)
     if (isModuleAccessError(error)) {
       return NextResponse.json({ success: false, error: "Module access disabled" }, { status: 403 })
     }
@@ -329,7 +331,7 @@ export async function POST(request: Request) {
     const mimeType = normalizeMimeType(file.type)
     const bytes = Buffer.from(await file.arrayBuffer())
     const fileSizeBytes = bytes.byteLength
-    const fileDataBase64 = bytes.toString("base64")
+    const fileDataBase64 = encryptSensitiveText(bytes.toString("base64"))
     const sha256Hex = createHash("sha256").update(new Uint8Array(bytes)).digest("hex")
 
     const rows = await runTenantQuery(
@@ -406,7 +408,7 @@ export async function POST(request: Request) {
 
     return NextResponse.json({ success: true, record: rows?.[0] ? formatDocumentRow(rows[0]) : null })
   } catch (error: any) {
-    console.error("Error creating document record:", error)
+    logServerError("Error creating document record", error)
     if (isModuleAccessError(error)) {
       return NextResponse.json({ success: false, error: "Module access disabled" }, { status: 403 })
     }

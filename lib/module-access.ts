@@ -2,8 +2,9 @@ import "server-only"
 
 import { cookies } from "next/headers"
 import { sql } from "@/lib/server/db"
-import { MODULE_IDS, resolveEnabledModules } from "@/lib/modules"
+import { MODULE_IDS, clampEnabledModulesToPlan, resolveEnabledModules } from "@/lib/modules"
 import { normalizeTenantContext, runTenantQuery } from "@/lib/server/tenant-db"
+import { resolveTenantPlanId } from "@/lib/server/tenant-subscriptions"
 import { requireSessionUser, type SessionUser } from "@/lib/server/auth"
 
 export class ModuleAccessError extends Error {
@@ -93,7 +94,16 @@ export async function getEnabledModules(sessionUser?: SessionUser): Promise<stri
       WHERE tenant_id = ${user.tenantId}
     `,
   )
-  const tenantEnabled = tenantModules?.length ? resolveEnabledModules(tenantModules) : resolveEnabledModules()
+  const tenantPlanId = await resolveTenantPlanId({
+    db: sql,
+    tenantId: user.tenantId,
+    role: user.role,
+    moduleRows: tenantModules as Array<{ module: string; enabled: boolean }>,
+  })
+  const tenantEnabled = clampEnabledModulesToPlan(
+    tenantModules?.length ? resolveEnabledModules(tenantModules) : resolveEnabledModules(),
+    tenantPlanId,
+  )
 
   if (user.role === "admin") {
     return tenantEnabled

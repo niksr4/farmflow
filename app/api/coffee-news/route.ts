@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server"
 import { requireModuleAccess, isModuleAccessError } from "@/lib/server/module-access"
 import { buildRateLimitHeaders, checkRateLimit } from "@/lib/rate-limit"
+import { fetchWithTimeout } from "@/lib/server/http"
+import { logServerError } from "@/lib/server/safe-logging"
 
 const POSITIVE_KEYWORDS = ["surge", "rally", "rise", "rises", "up", "higher", "gain", "jump", "spike", "record"]
 const NEGATIVE_KEYWORDS = ["drop", "fall", "falls", "down", "lower", "slump", "plunge", "decline", "weak"]
@@ -42,14 +44,16 @@ export async function GET() {
     const publishedAfter = encodeURIComponent("2024-01-01")
     const url = `https://api.thenewsapi.com/v1/news/all?search=${keywords}&language=en&limit=25&published_after=${publishedAfter}&sort=published_at&api_token=${apiKey}`
 
-    const response = await fetch(url, {
+    const response = await fetchWithTimeout(url, {
       next: { revalidate: 1800 },
+      timeoutMs: 8_000,
     })
 
     if (!response.ok) {
       const errorBody = await response.text()
+      logServerError("Coffee news upstream request failed", { status: response.status, errorBody })
       return NextResponse.json(
-        { success: false, error: `Failed to fetch news: ${response.status} ${errorBody}` },
+        { success: false, error: `Failed to fetch news: ${response.status}` },
         { status: response.status },
       )
     }
@@ -73,14 +77,14 @@ export async function GET() {
         const combined = `${title} ${description}`
         trendScore += scoreHeadline(combined)
 
-      const prices = extractPriceMentions(combined)
-      prices.forEach((value) => {
-        priceSignals.push({
-          title,
-          value,
-          source: article.source || "Unknown",
+        const prices = extractPriceMentions(combined)
+        prices.forEach((value) => {
+          priceSignals.push({
+            title,
+            value,
+            source: article.source || "Unknown",
+          })
         })
-      })
 
         return {
           title,
@@ -102,7 +106,7 @@ export async function GET() {
       priceSignals: priceSignals.slice(0, 6),
     }, { headers: rateHeaders })
   } catch (error: any) {
-    console.error("Error fetching coffee news:", error)
+    logServerError("Error fetching coffee news", error)
     if (isModuleAccessError(error)) {
       return NextResponse.json({ success: false, error: "Module access disabled" }, { status: 403 })
     }

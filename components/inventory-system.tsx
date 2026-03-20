@@ -359,10 +359,13 @@ export default function InventorySystem() {
   const [newLocationName, setNewLocationName] = useState("")
   const [newLocationCode, setNewLocationCode] = useState("")
   const [isCreatingLocation, setIsCreatingLocation] = useState(false)
+  const [onboardingEstateName, setOnboardingEstateName] = useState("")
+  const [onboardingBagWeightKg, setOnboardingBagWeightKg] = useState("")
+  const [isSavingOnboardingDefaults, setIsSavingOnboardingDefaults] = useState(false)
 
   // auth + router
   const { user, logout, status } = useAuth()
-  const { settings: tenantSettings, isFeatureEnabled } = useTenantExperience()
+  const { settings: tenantSettings, isFeatureEnabled, updateSettings } = useTenantExperience()
   const router = useRouter()
   const searchParams = useSearchParams()
   const tenantId = user?.tenantId || null
@@ -437,6 +440,15 @@ export default function InventorySystem() {
       inventoryValue: summary.total_inventory_value,
     }
   }, [inventory.length, locations.length, summary.total_inventory_value, transactions])
+
+  useEffect(() => {
+    setOnboardingEstateName(String(tenantSettings.estateName || ""))
+    setOnboardingBagWeightKg(
+      Number.isFinite(Number(tenantSettings.bagWeightKg)) && Number(tenantSettings.bagWeightKg) > 0
+        ? String(Number(tenantSettings.bagWeightKg))
+        : "50",
+    )
+  }, [tenantSettings.bagWeightKg, tenantSettings.estateName])
 
   useEffect(() => {
     if (!user) {
@@ -787,6 +799,51 @@ export default function InventorySystem() {
       })
     } finally {
       setIsCreatingLocation(false)
+    }
+  }
+
+  const handleSaveOnboardingDefaults = async () => {
+    const nextEstateName = onboardingEstateName.trim()
+    const nextBagWeightKg = Number(onboardingBagWeightKg)
+
+    if (!nextEstateName) {
+      toast({
+        title: "Estate name required",
+        description: "Enter the estate name before saving defaults.",
+        variant: "destructive",
+      })
+      return
+    }
+
+    if (!Number.isFinite(nextBagWeightKg) || nextBagWeightKg < 40 || nextBagWeightKg > 70) {
+      toast({
+        title: "Bag weight must be between 40 and 70 kg",
+        description: "Use the standard bag weight your estate actually works with.",
+        variant: "destructive",
+      })
+      return
+    }
+
+    setIsSavingOnboardingDefaults(true)
+    try {
+      const saved = await updateSettings({
+        estateName: nextEstateName,
+        bagWeightKg: nextBagWeightKg,
+      })
+      setOnboardingEstateName(saved.estateName)
+      setOnboardingBagWeightKg(String(saved.bagWeightKg))
+      toast({
+        title: "Estate defaults saved",
+        description: "Bag weight and estate name are now ready for daily operations.",
+      })
+    } catch (error: any) {
+      toast({
+        title: "Failed to save defaults",
+        description: error?.message || "Please try again.",
+        variant: "destructive",
+      })
+    } finally {
+      setIsSavingOnboardingDefaults(false)
     }
   }
 
@@ -5688,6 +5745,13 @@ export default function InventorySystem() {
               completedCount={onboardingCompletedCount}
               totalCount={onboardingTotalCount}
               steps={onboardingSteps}
+              canManageEstateDefaults={isAdmin && !isPreviewMode}
+              estateName={onboardingEstateName}
+              bagWeightKg={onboardingBagWeightKg}
+              onEstateNameChange={setOnboardingEstateName}
+              onBagWeightKgChange={setOnboardingBagWeightKg}
+              onSaveEstateDefaults={handleSaveOnboardingDefaults}
+              isSavingEstateDefaults={isSavingOnboardingDefaults}
               canCreateLocation={isAdmin && !isPreviewMode}
               locationName={newLocationName}
               locationCode={newLocationCode}
@@ -7130,25 +7194,29 @@ export default function InventorySystem() {
               <AiAnalysisCharts inventory={inventory} transactions={transactions} />
 
               <Card className="border-border/70 bg-white/85">
-                <CardHeader className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                <CardHeader className="gap-3">
                   <div>
                     <CardTitle className="flex items-center gap-2">
                       <Brain className="h-5 w-5 text-emerald-700" />
                       AI Inventory Analysis
                     </CardTitle>
-                    <CardDescription>Get AI-powered insights about your inventory patterns and usage trends.</CardDescription>
+                    <CardDescription>
+                      Run a broader one-shot review when you want a longer narrative on inventory, processing, costs, and season patterns.
+                    </CardDescription>
                   </div>
                   <Button onClick={generateAIAnalysis} disabled={isAnalyzing} className="bg-emerald-700 hover:bg-emerald-800">
                     {isAnalyzing ? "Analyzing..." : "Generate Analysis"}
                   </Button>
                 </CardHeader>
-                <CardContent>
-                  {analysisError && <div className="text-sm text-red-600 mb-3">{analysisError}</div>}
+                <CardContent className="space-y-3">
+                  {analysisError ? <div className="text-sm text-red-600">{analysisError}</div> : null}
                   {aiAnalysis ? (
-                    <div className="whitespace-pre-line text-sm text-foreground">{aiAnalysis}</div>
+                    <div className="max-h-[28rem] overflow-y-auto whitespace-pre-line text-sm text-foreground">
+                      {aiAnalysis}
+                    </div>
                   ) : (
                     <div className="text-sm text-muted-foreground">
-                      Run the AI analysis to see insights and recommendations.
+                      Run the AI analysis to see a longer recommendation set grounded in the current fiscal year data.
                     </div>
                   )}
                 </CardContent>

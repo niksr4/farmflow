@@ -3,7 +3,14 @@
 import { useCallback, useEffect, useMemo, useState } from "react"
 import { useToast } from "@/hooks/use-toast"
 import { useAuth } from "@/hooks/use-auth"
-import { MODULES, MODULE_BUNDLES, type ModuleBundle } from "@/lib/modules"
+import {
+  DEFAULT_TENANT_PLAN_ID,
+  MODULES,
+  MODULE_BUNDLES,
+  clampRequestedModuleStatesToPlan,
+  normalizeTenantPlanId,
+  type ModuleBundle,
+} from "@/lib/modules"
 import {
   DEFAULT_TENANT_FEATURE_FLAGS,
   DEFAULT_TENANT_UI_VARIANT,
@@ -60,6 +67,7 @@ export default function AdminPage() {
   const [selectedTenantId, setSelectedTenantId] = useState<string>("")
   const [previewRole, setPreviewRole] = useState<"admin" | "user">("admin")
   const [newTenantName, setNewTenantName] = useState("")
+  const [newTenantPlanId, setNewTenantPlanId] = useState<string>(DEFAULT_TENANT_PLAN_ID)
 
   const [users, setUsers] = useState<User[]>([])
   const [newUsername, setNewUsername] = useState("")
@@ -67,6 +75,7 @@ export default function AdminPage() {
   const [newRole, setNewRole] = useState("user")
 
   const [modulePermissions, setModulePermissions] = useState<ModulePermission[]>([])
+  const [tenantPlanId, setTenantPlanId] = useState<string>(DEFAULT_TENANT_PLAN_ID)
   const [tenantProfileDraft, setTenantProfileDraft] = useState<TenantProfile>({
     uiVariant: DEFAULT_TENANT_UI_VARIANT,
     featureFlags: DEFAULT_TENANT_FEATURE_FLAGS,
@@ -170,6 +179,7 @@ export default function AdminPage() {
         throw new Error(data.error || "Failed to load tenant modules")
       }
       setModulePermissions(data.modules || [])
+      setTenantPlanId(normalizeTenantPlanId(data.planId))
     } catch (error: any) {
       toast({ title: "Error", description: error.message || "Failed to load tenant modules", variant: "destructive" })
     }
@@ -531,13 +541,14 @@ export default function AdminPage() {
       const response = await fetch("/api/admin/tenants", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name: newTenantName.trim() }),
+        body: JSON.stringify({ name: newTenantName.trim(), planId: newTenantPlanId }),
       })
       const data = await response.json()
       if (!response.ok || !data.success) {
         throw new Error(data.error || "Failed to create tenant")
       }
       setNewTenantName("")
+      setNewTenantPlanId(DEFAULT_TENANT_PLAN_ID)
       await loadTenants()
       toast({ title: "Tenant created", description: `${data.tenant.name} is ready.` })
     } catch (error: any) {
@@ -615,22 +626,25 @@ export default function AdminPage() {
 
   const toggleModule = (moduleId: string) => {
     setModulePermissions((prev) =>
-      prev.map((module) => (module.id === moduleId ? { ...module, enabled: !module.enabled } : module)),
+      prev.map((module) =>
+        module.id === moduleId && !module.lockedByPlan ? { ...module, enabled: !module.enabled } : module,
+      ),
     )
   }
 
   const applyModuleBundle = useCallback(
     (bundle: ModuleBundle) => {
-      setModulePermissions(
+      setTenantPlanId(bundle.id)
+      setModulePermissions(clampRequestedModuleStatesToPlan(
         MODULES.map((module) => ({
           id: module.id,
-          label: module.label,
           enabled: bundle.modules.includes(module.id),
         })),
-      )
+        bundle.id,
+      ))
       toast({
         title: `${bundle.label} applied`,
-        description: "Review the checklist below and save to confirm module access.",
+        description: "Review the unlocked modules below and save to confirm tenant access.",
       })
     },
     [toast],
@@ -655,12 +669,14 @@ export default function AdminPage() {
       const response = await fetch("/api/admin/tenant-modules", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ tenantId: selectedTenantId, modules: modulePermissions }),
+        body: JSON.stringify({ tenantId: selectedTenantId, planId: tenantPlanId, modules: modulePermissions }),
       })
       const data = await response.json()
       if (!response.ok || !data.success) {
         throw new Error(data.error || "Failed to update modules")
       }
+      setModulePermissions(data.modules || [])
+      setTenantPlanId(normalizeTenantPlanId(data.planId))
       toast({ title: "Modules updated", description: "Tenant module access saved." })
     } catch (error: any) {
       toast({ title: "Error", description: error.message || "Failed to update modules", variant: "destructive" })
@@ -990,9 +1006,11 @@ export default function AdminPage() {
           selectedTenantId={selectedTenantId}
           currentUserTenantId={user?.tenantId}
           newTenantName={newTenantName}
+          newTenantPlanId={newTenantPlanId}
           previewRole={previewRole}
           isDeletingTenantId={isDeletingTenantId}
           onNewTenantNameChange={setNewTenantName}
+          onNewTenantPlanIdChange={setNewTenantPlanId}
           onCreateTenant={handleCreateTenant}
           onSelectedTenantIdChange={setSelectedTenantId}
           onPreviewRoleChange={setPreviewRole}
@@ -1082,6 +1100,7 @@ export default function AdminPage() {
           modulePermissions={modulePermissions}
           enabledModuleLabels={enabledModuleLabels}
           selectedTenantId={selectedTenantId}
+          tenantPlanId={tenantPlanId}
           onApplyModuleBundle={(bundleId) => {
             const bundle = MODULE_BUNDLES.find((entry) => entry.id === bundleId)
             if (bundle) {

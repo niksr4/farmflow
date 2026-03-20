@@ -1,6 +1,8 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { requireModuleAccess, isModuleAccessError } from "@/lib/server/module-access"
 import { buildRateLimitHeaders, checkRateLimit } from "@/lib/rate-limit"
+import { fetchWithTimeout } from "@/lib/server/http"
+import { logServerError } from "@/lib/server/safe-logging"
 
 export const dynamic = "force-dynamic"
 
@@ -32,8 +34,9 @@ export async function GET(_request: NextRequest) {
   // Fetch Weather Data
   if (weatherApiKey) {
     try {
-      const weatherResponse = await fetch(
+      const weatherResponse = await fetchWithTimeout(
         `https://api.weatherapi.com/v1/forecast.json?key=${weatherApiKey}&q=Sao%20Paulo&days=3`,
+        { timeoutMs: 8_000 },
       )
 
       const contentType = weatherResponse.headers.get("content-type") ?? ""
@@ -58,7 +61,7 @@ export async function GET(_request: NextRequest) {
         })),
       }
     } catch (error) {
-      console.error("Error fetching weather data:", error)
+      logServerError("Error fetching market-news weather data", error)
       formattedWeather = {
         location: "São Paulo, Brazil",
         error: "Failed to fetch live weather data.",
@@ -72,9 +75,14 @@ export async function GET(_request: NextRequest) {
   if (newsApiKey) {
     try {
       const newsQuery = encodeURIComponent("coffee AND (market OR price OR harvest OR commodity)")
-      const newsUrl = `https://newsapi.org/v2/everything?q=${newsQuery}&sortBy=publishedAt&language=en&pageSize=5&apiKey=${newsApiKey}`
+      const newsUrl = `https://newsapi.org/v2/everything?q=${newsQuery}&sortBy=publishedAt&language=en&pageSize=5`
 
-      const newsResponse = await fetch(newsUrl)
+      const newsResponse = await fetchWithTimeout(newsUrl, {
+        headers: {
+          "X-Api-Key": newsApiKey,
+        },
+        timeoutMs: 8_000,
+      })
       if (!newsResponse.ok) {
         const errorBody = await newsResponse.json()
         throw new Error(`Failed to fetch news data. Status: ${newsResponse.status}. Message: ${errorBody.message}`)
@@ -87,7 +95,7 @@ export async function GET(_request: NextRequest) {
         marketNews = ["No recent relevant coffee market news found."]
       }
     } catch (error) {
-      console.error("Error fetching news data:", error)
+      logServerError("Error fetching market news", error)
       marketNews = ["Error fetching real-time market news."]
     }
   } else {

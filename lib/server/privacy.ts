@@ -4,6 +4,7 @@ import type { NeonQueryFunction, NeonQueryPromise } from "@neondatabase/serverle
 import { sql } from "@/lib/server/db"
 import { normalizeTenantContext, runTenantQuery } from "@/lib/server/tenant-db"
 import type { SessionUser } from "@/lib/server/auth"
+import { decryptSensitiveJson, encryptSensitiveJson } from "@/lib/server/field-encryption"
 import { PRIVACY_NOTICE_VERSION, PRIVACY_RETENTION } from "@/lib/privacy-config"
 import {
   isReservedPlatformUsername,
@@ -294,6 +295,11 @@ export async function exportPersonalData(sessionUser: SessionUser) {
     [],
   )
 
+  const normalizedPrivacyRequests = privacyRequests.map((row: any) => ({
+    ...row,
+    request_details: decryptSensitiveJson(row.request_details),
+  }))
+
   return {
     generated_at: new Date().toISOString(),
     tenant_id: tenantContext.tenantId,
@@ -306,7 +312,7 @@ export async function exportPersonalData(sessionUser: SessionUser) {
       curing_records: curingRecords,
       quality_grading_records: qualityRecords,
       pepper_records: pepperRecords,
-      privacy_requests: privacyRequests,
+      privacy_requests: normalizedPrivacyRequests,
     },
   }
 }
@@ -420,6 +426,7 @@ export async function updateUsername(sessionUser: SessionUser, newUsername: stri
 export async function requestDeletion(sessionUser: SessionUser, reason?: string | null) {
   const db = ensureSql()
   const tenantContext = normalizeTenantContext(sessionUser.tenantId, sessionUser.role)
+  const encryptedDetails = encryptSensitiveJson(reason ? { reason } : null)
   await runTenantQuery(
     db,
     tenantContext,
@@ -434,7 +441,7 @@ export async function requestDeletion(sessionUser: SessionUser, reason?: string 
   await safeExec(
     db`
       INSERT INTO privacy_requests (tenant_id, user_id, username, request_type, request_details, status)
-      SELECT tenant_id, id, username, 'deletion', ${reason ? { reason } : null}::jsonb, 'open'
+      SELECT tenant_id, id, username, 'deletion', ${encryptedDetails ? JSON.stringify(encryptedDetails) : null}::jsonb, 'open'
       FROM users
       WHERE id = ${sessionUser.id}
         AND tenant_id = ${tenantContext.tenantId}

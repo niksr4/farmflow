@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server"
 import { runRetentionCleanup } from "@/lib/server/privacy"
 import { runImportJobRetentionCleanup } from "@/lib/server/import-jobs"
+import { extractBearerToken, sharedSecretMatches } from "@/lib/server/request-security"
+import { logServerError } from "@/lib/server/safe-logging"
 
 export const dynamic = "force-dynamic"
 
@@ -19,8 +21,7 @@ async function handleCronInvocation(request: Request) {
       )
     }
 
-    const authHeader = request.headers.get("authorization") || ""
-    if (authHeader !== `Bearer ${secret}`) {
+    if (!sharedSecretMatches(secret, extractBearerToken(request.headers))) {
       return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 })
     }
 
@@ -28,6 +29,7 @@ async function handleCronInvocation(request: Request) {
     const importJobs = await runImportJobRetentionCleanup()
     return NextResponse.json({ success: true, importJobs })
   } catch (error: any) {
+    logServerError("Retention cron invocation failed", error)
     return NextResponse.json(
       { success: false, error: error.message || "Retention cleanup failed" },
       { status: 500 },

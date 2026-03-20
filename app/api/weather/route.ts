@@ -1,6 +1,8 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { requireModuleAccess, isModuleAccessError } from "@/lib/server/module-access"
 import { buildRateLimitHeaders, checkRateLimit } from "@/lib/rate-limit"
+import { fetchWithTimeout } from "@/lib/server/http"
+import { logServerError } from "@/lib/server/safe-logging"
 
 // Default location if no region is provided (Madikeri, Kodagu).
 const LOCATION = "12.4244,75.7382"
@@ -29,8 +31,7 @@ export async function GET(request: NextRequest) {
     const apiKey = process.env.WEATHERAPI_API_KEY
 
     if (!apiKey) {
-      console.error("WEATHERAPI_API_KEY environment variable not set.")
-      return NextResponse.json({ error: "Weather service not configured. API key is missing." }, { status: 500, headers: rateHeaders })
+      return NextResponse.json({ error: "Weather service not configured. API key is missing." }, { status: 503, headers: rateHeaders })
     }
 
     const { searchParams } = new URL(request.url)
@@ -46,13 +47,14 @@ export async function GET(request: NextRequest) {
       locationQuery,
     )}&days=${FORECAST_DAYS}&aqi=no&alerts=no`
 
-    const response = await fetch(url, {
+    const response = await fetchWithTimeout(url, {
       next: { revalidate: 3600 }, // Revalidate every hour
+      timeoutMs: 8_000,
     })
 
     if (!response.ok) {
       const errorData = await response.json()
-      console.error("Error from WeatherAPI.com:", errorData)
+      logServerError("Error from WeatherAPI.com", errorData)
       const errorMessage = errorData?.error?.message || response.statusText
       return NextResponse.json({ error: `Failed to fetch weather data: ${errorMessage}` }, { status: response.status, headers: rateHeaders })
     }
@@ -60,7 +62,7 @@ export async function GET(request: NextRequest) {
     const data = await response.json()
     return NextResponse.json(data, { headers: rateHeaders })
   } catch (error) {
-    console.error("Error fetching weather data:", error)
+    logServerError("Error fetching weather data", error)
     if (isModuleAccessError(error)) {
       return NextResponse.json({ error: "Module access disabled" }, { status: 403 })
     }

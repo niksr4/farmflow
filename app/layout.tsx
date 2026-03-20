@@ -1,14 +1,18 @@
 import React, { Suspense } from "react"
 import type { Metadata, Viewport } from "next"
+import { cookies } from "next/headers"
 import { Fraunces, Manrope } from "next/font/google"
 import Script from "next/script"
 import "./globals.css"
 import { ThemeProvider } from "@/components/theme-provider"
 import { AuthProvider } from "@/hooks/use-auth"
 import BrandWatermark from "@/components/brand-watermark"
+import FloatingAiAssistant from "@/components/floating-ai-assistant"
 import { Toaster } from "@/components/ui/toaster"
 import PwaRegister from "@/components/pwa-register"
 import PostHogAuthSync from "@/components/posthog-auth-sync"
+import { LocaleProvider } from "@/components/locale-provider"
+import { LOCALE_COOKIE_KEY, normalizeAppLocale } from "@/lib/i18n"
 
 const bodyFont = Manrope({ subsets: ["latin"], display: "swap", variable: "--font-body" })
 const displayFont = Fraunces({ subsets: ["latin"], weight: ["600", "700", "800"], display: "swap", variable: "--font-display" })
@@ -72,33 +76,41 @@ export const viewport: Viewport = {
   viewportFit: "cover",
 }
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode
 }>) {
+  const cookieStore = await cookies()
+  const initialLocale = normalizeAppLocale(cookieStore.get(LOCALE_COOKIE_KEY)?.value || "en")
+
   return (
-    <html lang="en" suppressHydrationWarning>
+    <html lang={initialLocale} suppressHydrationWarning>
       <head>
         <meta name="apple-mobile-web-app-capable" content="yes" />
       </head>
       <body className={`${bodyFont.variable} ${displayFont.variable} font-body`} suppressHydrationWarning>
         <ThemeProvider attribute="class" defaultTheme="light" enableSystem disableTransitionOnChange>
           <AuthProvider>
-            <Suspense fallback={null}>
-              <PostHogAuthSync />
-            </Suspense>
-            <Script async src="https://www.googletagmanager.com/gtag/js?id=G-X0RB06WXE9" />
-            <Script id="ga4-google-tag">
-              {`window.dataLayer = window.dataLayer || [];
+            <LocaleProvider>
+              <Suspense fallback={null}>
+                <PostHogAuthSync />
+              </Suspense>
+              <Script async src="https://www.googletagmanager.com/gtag/js?id=G-X0RB06WXE9" />
+              <Script id="ga4-google-tag">
+                {`window.dataLayer = window.dataLayer || [];
 function gtag(){dataLayer.push(arguments);}
 gtag('js', new Date());
 gtag('config', 'G-X0RB06WXE9');`}
-            </Script>
-            {children}
-            <BrandWatermark />
-            <Toaster />
-            <PwaRegister />
+              </Script>
+              {children}
+              <Suspense fallback={null}>
+                <FloatingAiAssistant />
+              </Suspense>
+              <BrandWatermark />
+              <Toaster />
+              <PwaRegister />
+            </LocaleProvider>
           </AuthProvider>
         </ThemeProvider>
       </body>

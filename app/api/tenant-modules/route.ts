@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server"
 import { sql } from "@/lib/server/db"
 import { requireSessionUser } from "@/lib/server/auth"
-import { resolveEnabledModules } from "@/lib/modules"
+import { MODULE_BUNDLES, clampEnabledModulesToPlan, resolveEnabledModules } from "@/lib/modules"
+import { resolveTenantPlanId } from "@/lib/server/tenant-subscriptions"
 import { normalizeTenantContext, runTenantQuery } from "@/lib/server/tenant-db"
 
 export async function GET(_request: Request) {
@@ -20,7 +21,7 @@ export async function GET(_request: Request) {
       sql`
         SELECT id
         FROM users
-        WHERE username = ${sessionUser.username}
+        WHERE id = ${sessionUser.id}
           AND tenant_id = ${tenantId}
         LIMIT 1
       `,
@@ -37,7 +38,16 @@ export async function GET(_request: Request) {
       `,
     )
 
-    const tenantEnabled = tenantRows?.length ? resolveEnabledModules(tenantRows) : resolveEnabledModules()
+    const planId = await resolveTenantPlanId({
+      db: sql,
+      tenantId,
+      role: sessionUser.role,
+      moduleRows: tenantRows as Array<{ module: string; enabled: boolean }>,
+    })
+    const cappedTenantEnabled = clampEnabledModulesToPlan(
+      tenantRows?.length ? resolveEnabledModules(tenantRows) : resolveEnabledModules(),
+      planId,
+    )
 
     if (userId) {
       const userModules = await runTenantQuery(
@@ -51,14 +61,14 @@ export async function GET(_request: Request) {
       )
       if (userModules?.length) {
         const userMap = new Map(userModules.map((row: any) => [String(row.module), Boolean(row.enabled)]))
-        const effective = tenantEnabled.filter((moduleId) =>
+        const effective = cappedTenantEnabled.filter((moduleId) =>
           userMap.has(moduleId) ? Boolean(userMap.get(moduleId)) : true,
         )
-        return NextResponse.json({ success: true, modules: effective })
+        return NextResponse.json({ success: true, modules: effective, planId, plans: MODULE_BUNDLES })
       }
     }
 
-    return NextResponse.json({ success: true, modules: tenantEnabled })
+    return NextResponse.json({ success: true, modules: cappedTenantEnabled, planId, plans: MODULE_BUNDLES })
   } catch (error: any) {
     console.error("Error loading tenant modules:", error)
     return NextResponse.json({ success: false, error: error.message || "Failed to load modules" }, { status: 500 })

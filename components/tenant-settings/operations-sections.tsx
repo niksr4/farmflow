@@ -191,6 +191,7 @@ export function LocationsSection({
 type TenantModulesSectionProps = {
   modulePermissions: ModulePermission[]
   tenantId: string
+  tenantPlanId: string
   isSavingModules: boolean
   onApplyModuleBundle: (bundle: ModuleBundle) => void
   onToggleModule: (moduleId: string) => void
@@ -200,11 +201,14 @@ type TenantModulesSectionProps = {
 export function TenantModulesSection({
   modulePermissions,
   tenantId,
+  tenantPlanId,
   isSavingModules,
   onApplyModuleBundle,
   onToggleModule,
   onSaveModules,
 }: TenantModulesSectionProps) {
+  const activePlan = MODULE_BUNDLES.find((bundle) => bundle.id === tenantPlanId) || MODULE_BUNDLES[0]
+
   return (
     <Card id="tenant-modules" className="scroll-mt-24 border-border/70 bg-white/85">
       <CardHeader>
@@ -214,10 +218,16 @@ export function TenantModulesSection({
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
+        <div className="rounded-lg border border-slate-200 bg-slate-50/70 p-4 text-sm">
+          <p className="font-medium text-slate-900">Current plan: {activePlan?.label || "Core"}</p>
+          <p className="mt-1 text-xs text-muted-foreground">
+            Modules outside this plan stay locked. That gives you a clean entitlement boundary before you add billing.
+          </p>
+        </div>
         <div className="space-y-3 rounded-lg border border-border/60 bg-muted/30 p-4">
           <div>
             <p className="text-sm font-medium text-foreground">Module bundles</p>
-            <p className="text-xs text-muted-foreground">Start from a preset and then fine-tune the checklist below.</p>
+            <p className="text-xs text-muted-foreground">Choose the tenant plan first, then fine-tune only the modules included in that plan.</p>
           </div>
           <div className="grid gap-3 md:grid-cols-2">
             {MODULE_BUNDLES.map((bundle) => (
@@ -236,9 +246,22 @@ export function TenantModulesSection({
 
         <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
           {modulePermissions.map((module) => (
-            <label key={module.id} className="flex items-center gap-2 rounded-lg border border-border/60 bg-white/80 p-3">
-              <input type="checkbox" checked={module.enabled} onChange={() => onToggleModule(module.id)} />
-              <span>{module.label}</span>
+            <label
+              key={module.id}
+              className={`flex items-center justify-between gap-3 rounded-lg border p-3 ${
+                module.lockedByPlan ? "border-dashed border-slate-200 bg-slate-50/80 text-slate-500" : "border-border/60 bg-white/80"
+              }`}
+            >
+              <div className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  checked={module.enabled}
+                  disabled={module.lockedByPlan}
+                  onChange={() => onToggleModule(module.id)}
+                />
+                <span>{module.label}</span>
+              </div>
+              {module.lockedByPlan ? <span className="text-[11px] font-medium uppercase tracking-[0.18em]">Locked</span> : null}
             </label>
           ))}
         </div>
@@ -465,24 +488,36 @@ export function UserModuleOverridesSection({
         <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
           {userModulePermissions.map((module) => {
             const isLockedForRole = isSelectedUserRoleScoped && module.id === "balance-sheet"
+            const isLockedByPlan = Boolean(module.lockedByPlan)
             return (
-              <label key={module.id} className="flex items-center gap-2 rounded-lg border border-border/60 bg-white/80 p-3">
+              <label
+                key={module.id}
+                className={`flex items-center gap-2 rounded-lg border p-3 ${
+                  isLockedByPlan ? "border-dashed border-slate-200 bg-slate-50/80 text-slate-500" : "border-border/60 bg-white/80"
+                }`}
+              >
                 <input
                   type="checkbox"
                   checked={module.enabled}
                   onChange={() => onToggleUserModule(module.id)}
-                  disabled={isUserModulesLoading || isLockedForRole}
+                  disabled={isUserModulesLoading || isLockedForRole || isLockedByPlan}
                 />
                 <span>{module.label}</span>
-                {isLockedForRole && <span className="ml-auto text-xs text-muted-foreground">Admin only</span>}
+                {isLockedByPlan ? (
+                  <span className="ml-auto text-xs text-muted-foreground">Plan locked</span>
+                ) : isLockedForRole ? (
+                  <span className="ml-auto text-xs text-muted-foreground">Admin only</span>
+                ) : null}
               </label>
             )
           })}
         </div>
 
-        {isSelectedUserRoleScoped && (
+        {(isSelectedUserRoleScoped || userModulePermissions.some((module) => module.lockedByPlan)) && (
           <p className="text-xs text-muted-foreground">
-            Live Balance Sheet is admin-only and remains disabled for user roles.
+            {isSelectedUserRoleScoped
+              ? "Live Balance Sheet is admin-only and remains disabled for user roles."
+              : "Plan-locked modules inherit the tenant subscription ceiling and cannot be granted per user."}
           </p>
         )}
 

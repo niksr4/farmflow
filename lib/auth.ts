@@ -8,7 +8,10 @@ import { normalizeTenantContext, runTenantQuery } from "@/lib/server/tenant-db"
 import { hashPassword, verifyPassword } from "@/lib/passwords"
 import { logSecurityEvent } from "@/lib/server/security-events"
 import { checkRateLimit } from "@/lib/rate-limit"
+import { DEFAULT_APP_LOCALE, normalizeAppLocale } from "@/lib/i18n"
 import { isEmailIdentifier, normalizeSignupEmail } from "@/lib/server/onboarding/utils"
+import { assertCoreRuntimeConfig } from "@/lib/runtime-config"
+import { logServerWarning } from "@/lib/server/safe-logging"
 import { normalizeUsername, normalizeUsernameLookup } from "@/lib/usernames"
 
 type SessionMode = "app" | "web"
@@ -21,6 +24,9 @@ type UserRow = {
   tenant_id: string
   password_hash: string
   password_reset_required: boolean
+  preferred_locale: string | null
+  setup_completed_at: string | null
+  requires_guided_setup: boolean
 }
 
 type CredentialsInput = {
@@ -69,6 +75,24 @@ const isMissingPasswordResetColumnError = (error: unknown) => {
   return code === "42703" || message.includes('column "password_reset_required" does not exist')
 }
 
+const isMissingSetupCompletedColumnError = (error: unknown) => {
+  const code = String(asRecord(error).code || "")
+  const message = String(asRecord(error).message || "")
+  return code === "42703" || message.includes('column "setup_completed_at" does not exist')
+}
+
+const isMissingRequiresGuidedSetupColumnError = (error: unknown) => {
+  const code = String(asRecord(error).code || "")
+  const message = String(asRecord(error).message || "")
+  return code === "42703" || message.includes('column "requires_guided_setup" does not exist')
+}
+
+const isMissingPreferredLocaleColumnError = (error: unknown) => {
+  const code = String(asRecord(error).code || "")
+  const message = String(asRecord(error).message || "")
+  return code === "42703" || message.includes('column "preferred_locale" does not exist')
+}
+
 const isMissingEmailIdentityColumnError = (error: unknown) => {
   const code = String(asRecord(error).code || "")
   const message = String(asRecord(error).message || "")
@@ -85,8 +109,10 @@ const isMissingEmailIdentityColumnError = (error: unknown) => {
 
 const ownerContext = normalizeTenantContext(undefined, "owner")
 
+assertCoreRuntimeConfig()
+
 const selectUsersByUsername = (identifier: string, normalizedIdentifier: string) => sql`
-  SELECT id, username, role, tenant_id, password_hash, password_reset_required
+  SELECT id, username, role, tenant_id, password_hash, password_reset_required, preferred_locale, setup_completed_at, requires_guided_setup
   FROM users
   WHERE LOWER(BTRIM(username)) = ${normalizedIdentifier}
   ORDER BY
@@ -108,7 +134,7 @@ const selectUsersByUsernameLegacy = (identifier: string, normalizedIdentifier: s
 `
 
 const selectUsersByEmail = (normalizedEmail: string) => sql`
-  SELECT id, username, role, tenant_id, password_hash, password_reset_required
+  SELECT id, username, role, tenant_id, password_hash, password_reset_required, preferred_locale, setup_completed_at, requires_guided_setup
   FROM users
   WHERE normalized_email = ${normalizedEmail}
   ORDER BY
@@ -135,15 +161,26 @@ const loadUsersByUsername = async (identifier: string, normalizedIdentifier: str
       selectUsersByUsername(identifier, normalizedIdentifier),
     )) as UserRow[]
   } catch (error) {
-    if (!isMissingPasswordResetColumnError(error)) {
+    if (
+      !isMissingPasswordResetColumnError(error) &&
+      !isMissingPreferredLocaleColumnError(error) &&
+      !isMissingSetupCompletedColumnError(error) &&
+      !isMissingRequiresGuidedSetupColumnError(error)
+    ) {
       throw error
     }
     const fallbackUsers = (await runTenantQuery(
       sql,
       ownerContext,
       selectUsersByUsernameLegacy(identifier, normalizedIdentifier),
-    )) as Array<Omit<UserRow, "password_reset_required">>
-    return fallbackUsers.map((row) => ({ ...row, password_reset_required: false }))
+    )) as Array<Omit<UserRow, "password_reset_required" | "preferred_locale" | "setup_completed_at" | "requires_guided_setup">>
+    return fallbackUsers.map((row) => ({
+      ...row,
+      password_reset_required: false,
+      preferred_locale: DEFAULT_APP_LOCALE,
+      setup_completed_at: null,
+      requires_guided_setup: false,
+    }))
   }
 }
 
@@ -158,19 +195,31 @@ const loadUsersByEmail = async (normalizedEmail: string) => {
     if (isMissingEmailIdentityColumnError(error)) {
       return [] as UserRow[]
     }
-    if (!isMissingPasswordResetColumnError(error)) {
+    if (
+      !isMissingPasswordResetColumnError(error) &&
+      !isMissingPreferredLocaleColumnError(error) &&
+      !isMissingSetupCompletedColumnError(error) &&
+      !isMissingRequiresGuidedSetupColumnError(error)
+    ) {
       throw error
     }
     const fallbackUsers = (await runTenantQuery(
       sql,
       ownerContext,
       selectUsersByEmailLegacy(normalizedEmail),
-    )) as Array<Omit<UserRow, "password_reset_required">>
-    return fallbackUsers.map((row) => ({ ...row, password_reset_required: false }))
+    )) as Array<Omit<UserRow, "password_reset_required" | "preferred_locale" | "setup_completed_at" | "requires_guided_setup">>
+    return fallbackUsers.map((row) => ({
+      ...row,
+      password_reset_required: false,
+      preferred_locale: DEFAULT_APP_LOCALE,
+      setup_completed_at: null,
+      requires_guided_setup: false,
+    }))
   }
 }
 
 export const authOptions: NextAuthOptions = {
+  useSecureCookies: process.env.NODE_ENV === "production",
   session: {
     strategy: "jwt",
     maxAge: APP_SESSION_MAX_AGE_SECONDS,
@@ -229,7 +278,7 @@ export const authOptions: NextAuthOptions = {
             return null
           }
         } catch (rateLimitError) {
-          console.warn("Auth rate-limit check failed:", rateLimitError)
+          logServerWarning("Auth rate-limit check failed", rateLimitError)
         }
 
         let users: UserRow[] = []
@@ -298,7 +347,7 @@ export const authOptions: NextAuthOptions = {
               `,
             )
           } catch (error) {
-            console.warn("Password rehash failed:", error)
+            logServerWarning("Password rehash failed", error)
           }
         }
 
@@ -321,18 +370,35 @@ export const authOptions: NextAuthOptions = {
           tenantId: String(user.tenant_id),
           sessionMode,
           passwordResetRequired,
+          preferredLocale: normalizeAppLocale(user.preferred_locale || DEFAULT_APP_LOCALE),
+          setupCompleted: Boolean(user.setup_completed_at),
+          requiresGuidedSetup: Boolean(user.requires_guided_setup),
         }
       },
     }),
   ],
   callbacks: {
-    async jwt({ token, user }) {
+    async jwt({ token, user, trigger, session }) {
       if (user) {
         token.sub = String(user.id || token.sub || "")
         token.role = normalizeRole(user.role)
         token.tenantId = String(user.tenantId || "")
         token.sessionMode = resolveSessionMode(user.sessionMode)
         token.passwordResetRequired = Boolean(user.passwordResetRequired)
+        token.preferredLocale = normalizeAppLocale(user.preferredLocale || DEFAULT_APP_LOCALE)
+        token.setupCompleted = Boolean(user.setupCompleted)
+        token.requiresGuidedSetup = Boolean(user.requiresGuidedSetup)
+      } else if (trigger === "update" && session) {
+        const sessionUpdate = session as Record<string, unknown>
+        if ("preferredLocale" in sessionUpdate) {
+          token.preferredLocale = normalizeAppLocale(sessionUpdate.preferredLocale || DEFAULT_APP_LOCALE)
+        }
+        if ("setupCompleted" in sessionUpdate) {
+          token.setupCompleted = Boolean(sessionUpdate.setupCompleted)
+        }
+        if ("requiresGuidedSetup" in sessionUpdate) {
+          token.requiresGuidedSetup = Boolean(sessionUpdate.requiresGuidedSetup)
+        }
       } else {
         token.sessionMode = resolveSessionMode(token.sessionMode)
       }
@@ -345,6 +411,9 @@ export const authOptions: NextAuthOptions = {
         session.user.tenantId = String(token.tenantId || "")
         session.user.sessionMode = resolveSessionMode(token.sessionMode)
         session.user.passwordResetRequired = Boolean(token.passwordResetRequired)
+        session.user.preferredLocale = normalizeAppLocale(token.preferredLocale || DEFAULT_APP_LOCALE)
+        session.user.setupCompleted = Boolean(token.setupCompleted)
+        session.user.requiresGuidedSetup = Boolean(token.requiresGuidedSetup)
       }
       return session
     },

@@ -4,15 +4,18 @@ import { useState } from "react"
 import { useRouter } from "next/navigation"
 import Link from "next/link"
 import posthog from "posthog-js"
+import { useLocale } from "@/components/locale-provider"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
+import { DEFAULT_APP_LOCALE } from "@/lib/i18n"
 import { Info } from "lucide-react"
 
 export default function SignupRoute() {
   const router = useRouter()
+  const { t } = useLocale()
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [errorMessage, setErrorMessage] = useState("")
   const [form, setForm] = useState({
@@ -32,9 +35,9 @@ export default function SignupRoute() {
       <div className="w-full max-w-md space-y-6 relative z-10">
         <Card className="border border-white/60 bg-white/85 backdrop-blur-md dark:bg-slate-900/75">
           <CardHeader>
-            <CardTitle className="font-display">Create Your Workspace</CardTitle>
+            <CardTitle className="font-display">{t("public.signup.title")}</CardTitle>
             <CardDescription>
-              Start your FarmFlow workspace with your email, then verify it to provision your tenant and sign in.
+              {t("public.signup.description")}
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -49,11 +52,10 @@ export default function SignupRoute() {
                   password: form.password,
                   estateName: form.estateName.trim(),
                   country: form.country.trim(),
-                  preferredLocale:
-                    typeof window !== "undefined" && window.navigator?.language ? String(window.navigator.language) : "en",
+                  preferredLocale: DEFAULT_APP_LOCALE,
                 }
                 if (!normalized.name || !normalized.email || !normalized.password || !normalized.estateName) {
-                  setErrorMessage("Please fill in name, email, password, and estate name.")
+                  setErrorMessage(t("public.signup.requiredError"))
                   return
                 }
                 setIsSubmitting(true)
@@ -96,7 +98,7 @@ export default function SignupRoute() {
             >
                 <div className="space-y-2">
                   <div className="flex items-center gap-2">
-                    <Label htmlFor="name">Name</Label>
+                    <Label htmlFor="name">{t("public.signup.name")}</Label>
                     <TooltipProvider>
                       <Tooltip>
                         <TooltipTrigger asChild>
@@ -108,7 +110,7 @@ export default function SignupRoute() {
                             <Info className="h-3 w-3" />
                           </button>
                         </TooltipTrigger>
-                        <TooltipContent>Primary contact for estate onboarding.</TooltipContent>
+                        <TooltipContent>{t("public.signup.nameHelp")}</TooltipContent>
                       </Tooltip>
                     </TooltipProvider>
                   </div>
@@ -123,7 +125,7 @@ export default function SignupRoute() {
                 </div>
                 <div className="space-y-2">
                   <div className="flex items-center gap-2">
-                    <Label htmlFor="email">Work Email</Label>
+                    <Label htmlFor="email">{t("public.signup.email")}</Label>
                     <TooltipProvider>
                       <Tooltip>
                         <TooltipTrigger asChild>
@@ -135,7 +137,7 @@ export default function SignupRoute() {
                             <Info className="h-3 w-3" />
                           </button>
                         </TooltipTrigger>
-                        <TooltipContent>We send login details and onboarding updates here.</TooltipContent>
+                        <TooltipContent>{t("public.signup.emailHelp")}</TooltipContent>
                       </Tooltip>
                     </TooltipProvider>
                   </div>
@@ -154,7 +156,7 @@ export default function SignupRoute() {
                 </div>
                 <div className="space-y-2">
                   <div className="flex items-center gap-2">
-                    <Label htmlFor="password">Password</Label>
+                    <Label htmlFor="password">{t("public.signup.password")}</Label>
                     <TooltipProvider>
                       <Tooltip>
                         <TooltipTrigger asChild>
@@ -166,7 +168,7 @@ export default function SignupRoute() {
                             <Info className="h-3 w-3" />
                           </button>
                         </TooltipTrigger>
-                        <TooltipContent>At least 8 characters. You will use this after email verification.</TooltipContent>
+                        <TooltipContent>{t("public.signup.passwordHelp")}</TooltipContent>
                       </Tooltip>
                     </TooltipProvider>
                   </div>
@@ -179,10 +181,11 @@ export default function SignupRoute() {
                     autoComplete="new-password"
                     required
                   />
+                  <p className="text-xs text-muted-foreground">{t("public.signup.passwordHelp")}</p>
                 </div>
                 <div className="space-y-2">
                   <div className="flex items-center gap-2">
-                    <Label htmlFor="estateName">Estate Name</Label>
+                    <Label htmlFor="estateName">{t("public.signup.estateName")}</Label>
                     <TooltipProvider>
                       <Tooltip>
                         <TooltipTrigger asChild>
@@ -194,7 +197,7 @@ export default function SignupRoute() {
                             <Info className="h-3 w-3" />
                           </button>
                         </TooltipTrigger>
-                        <TooltipContent>This name appears in your dashboard and tenant profile.</TooltipContent>
+                        <TooltipContent>{t("public.signup.estateHelp")}</TooltipContent>
                       </Tooltip>
                     </TooltipProvider>
                   </div>
@@ -209,7 +212,7 @@ export default function SignupRoute() {
                 </div>
                 <div className="space-y-2">
                   <div className="flex items-center gap-2">
-                    <Label htmlFor="country">Country / Region</Label>
+                    <Label htmlFor="country">{t("public.signup.country")}</Label>
                     <TooltipProvider>
                       <Tooltip>
                         <TooltipTrigger asChild>
@@ -221,7 +224,7 @@ export default function SignupRoute() {
                             <Info className="h-3 w-3" />
                           </button>
                         </TooltipTrigger>
-                        <TooltipContent>Helps us shape onboarding and future localization.</TooltipContent>
+                        <TooltipContent>{t("public.signup.countryHelp")}</TooltipContent>
                       </Tooltip>
                     </TooltipProvider>
                   </div>
@@ -243,9 +246,9 @@ export default function SignupRoute() {
                   className="w-full"
                   disabled={isSubmitting || !form.name.trim() || !form.email.trim() || !form.password || !form.estateName.trim()}
                 >
-                  {isSubmitting ? "Creating..." : "Create Account"}
+                  {isSubmitting ? t("public.signup.creating") : t("public.signup.submit")}
                 </Button>
-                <p className="text-xs text-muted-foreground">We will email a verification link before provisioning your workspace.</p>
+                <p className="text-xs text-muted-foreground">{t("public.signup.footer")}</p>
                 <p className="text-xs text-muted-foreground">
                   By creating an account, you acknowledge the{" "}
                   <Link href="/privacy" className="underline">
@@ -255,14 +258,14 @@ export default function SignupRoute() {
                 </p>
             </form>
             <div className="mt-6 rounded-xl border border-emerald-200/70 bg-emerald-50/70 p-4 text-xs text-emerald-800">
-              Verification comes first, then your tenant, starter access, and workspace are provisioned automatically.
+              {t("public.signup.verifiedNext")}
             </div>
           </CardContent>
         </Card>
         <div className="text-center text-sm text-muted-foreground">
           Already have access?{" "}
           <Link href="/login" className="underline">
-            Sign in
+            {t("common.signIn")}
           </Link>
         </div>
       </div>

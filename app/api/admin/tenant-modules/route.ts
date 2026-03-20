@@ -2,7 +2,13 @@ import { NextResponse } from "next/server"
 import { sql } from "@/lib/server/db"
 import { requireAdminSession } from "@/lib/server/mfa"
 import { requireOwnerRole } from "@/lib/tenant"
-import { MODULES, resolveModuleStates } from "@/lib/modules"
+import {
+  MODULE_BUNDLES,
+  clampRequestedModuleStatesToPlan,
+  normalizeTenantPlanId,
+  resolveModuleStates,
+} from "@/lib/modules"
+import { persistTenantPlanId, resolveTenantPlanId } from "@/lib/server/tenant-subscriptions"
 import { normalizeTenantContext, runTenantQuery } from "@/lib/server/tenant-db"
 import { logAuditEvent } from "@/lib/server/audit-log"
 import { logSecurityEvent } from "@/lib/server/security-events"
@@ -38,9 +44,15 @@ export async function GET(request: Request) {
       `,
     )
 
-    const modules = resolveModuleStates(rows)
+    const planId = await resolveTenantPlanId({
+      db: sql,
+      tenantId,
+      role: sessionUser.role,
+      moduleRows: rows as Array<{ module: string; enabled: boolean }>,
+    })
+    const modules = resolveModuleStates(rows, { planId })
 
-    return NextResponse.json({ success: true, modules })
+    return NextResponse.json({ success: true, modules, planId, plans: MODULE_BUNDLES })
   } catch (error: any) {
     console.error("Error fetching tenant modules:", error)
     return buildAdminErrorResponse(error, "Failed to fetch tenant modules")
@@ -59,6 +71,7 @@ export async function PUT(request: Request) {
     const requestedTenantId = String(body.tenantId || "").trim()
     const tenantId = sessionUser.role === "owner" ? requestedTenantId : sessionUser.tenantId
     const modules = Array.isArray(body.modules) ? body.modules : []
+    const requestedPlanId = body.planId ? normalizeTenantPlanId(body.planId) : null
 
     if (!tenantId) {
       return NextResponse.json({ success: false, error: "tenantId is required" }, { status: 400 })
@@ -78,26 +91,40 @@ export async function PUT(request: Request) {
         WHERE tenant_id = ${tenantId}
       `,
     )
-    for (const moduleEntry of MODULES) {
-      const enabled = Boolean(modules.find((m: any) => m.id === moduleEntry.id)?.enabled)
+    const nextPlanId =
+      requestedPlanId ||
+      (await resolveTenantPlanId({
+        db: sql,
+        tenantId,
+        role: sessionUser.role,
+        moduleRows: beforeRows as Array<{ module: string; enabled: boolean }>,
+      }))
+    const effectiveModules = clampRequestedModuleStatesToPlan(modules, nextPlanId)
+
+    for (const moduleEntry of effectiveModules) {
       await runTenantQuery(
         sql,
         tenantContext,
         sql`
           INSERT INTO tenant_modules (tenant_id, module, enabled)
-          VALUES (${tenantId}, ${moduleEntry.id}, ${enabled})
+          VALUES (${tenantId}, ${moduleEntry.id}, ${moduleEntry.enabled})
           ON CONFLICT (tenant_id, module)
-          DO UPDATE SET enabled = ${enabled}
+          DO UPDATE SET enabled = ${moduleEntry.enabled}
         `,
       )
     }
+
+    await persistTenantPlanId(sql, tenantId, sessionUser.role, nextPlanId)
 
     await logAuditEvent(sql, sessionUser, {
       action: "update",
       entityType: "tenant_modules",
       entityId: tenantId,
       before: beforeRows ?? null,
-      after: modules,
+      after: {
+        planId: nextPlanId,
+        modules: effectiveModules,
+      },
     })
 
     await logSecurityEvent({
@@ -109,11 +136,12 @@ export async function PUT(request: Request) {
       source: "admin/tenant-modules",
       metadata: {
         action: "tenant_modules_updated",
-        moduleCount: modules.length,
+        moduleCount: effectiveModules.filter((module) => module.enabled).length,
+        planId: nextPlanId,
       },
     })
 
-    return NextResponse.json({ success: true })
+    return NextResponse.json({ success: true, modules: effectiveModules, planId: nextPlanId, plans: MODULE_BUNDLES })
   } catch (error: any) {
     console.error("Error updating tenant modules:", error)
     return buildAdminErrorResponse(error, "Failed to update tenant modules", { ownerRequired: true })

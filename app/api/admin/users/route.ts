@@ -8,6 +8,7 @@ import { logAuditEvent } from "@/lib/server/audit-log"
 import { logSecurityEvent } from "@/lib/server/security-events"
 import { isReservedPlatformUsername, isSystemUsername, normalizeUsername, normalizeUsernameLookup } from "@/lib/usernames"
 import { buildAdminErrorResponse, databaseNotConfiguredResponse } from "@/lib/server/route-utils"
+import { logServerError } from "@/lib/server/safe-logging"
 
 type UserRole = "admin" | "user" | "owner"
 
@@ -22,7 +23,7 @@ type UserRecord = {
 
 const createUserBodySchema = z.object({
   username: z.string().trim().min(1, "username is required"),
-  password: z.string().min(1, "password is required"),
+  password: z.string().min(8, "password must be at least 8 characters"),
   role: z.enum(["admin", "user", "owner"]).optional().default("user"),
   tenantId: z.string().trim().optional().default(""),
 })
@@ -85,7 +86,7 @@ export async function GET(request: Request) {
 
     return NextResponse.json({ success: true, users })
   } catch (error: unknown) {
-    console.error("Error fetching users:", error)
+    logServerError("Error fetching users", error)
     return buildAdminErrorResponse(error, "Failed to fetch users")
   }
 }
@@ -169,7 +170,7 @@ export async function POST(request: Request) {
 
     return NextResponse.json({ success: true, user: result[0] })
   } catch (error: unknown) {
-    console.error("Error creating user:", error)
+    logServerError("Error creating user", error)
     return buildAdminErrorResponse(error, "Failed to create user", {
       statusByMessage: { "Username already exists": 409 },
     })
@@ -261,7 +262,7 @@ export async function PATCH(request: Request) {
 
     return NextResponse.json({ success: true, user: result[0] })
   } catch (error: unknown) {
-    console.error("Error updating user role:", error)
+    logServerError("Error updating user role", error)
     return buildAdminErrorResponse(error, "Failed to update user role")
   }
 }
@@ -380,7 +381,7 @@ export async function PUT(request: Request) {
       message: "Temporary password generated. User must rotate password at next login.",
     })
   } catch (error: unknown) {
-    console.error("Error resetting user password:", error)
+    logServerError("Error resetting user password", error)
     return buildAdminErrorResponse(error, "Failed to reset password")
   }
 }
@@ -464,7 +465,7 @@ export async function DELETE(request: Request) {
 
     return NextResponse.json({ success: true })
   } catch (error: unknown) {
-    console.error("Error deleting user:", error)
+    logServerError("Error deleting user", error)
     return buildAdminErrorResponse(error, "Failed to delete user")
   }
 }

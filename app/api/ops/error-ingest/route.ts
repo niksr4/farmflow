@@ -1,5 +1,8 @@
 import { NextResponse } from "next/server"
 import { logAppErrorEvent } from "@/lib/server/error-events"
+import { buildRateLimitHeaders, checkRateLimit } from "@/lib/rate-limit"
+import { extractClientIp, extractSharedSecretToken, sharedSecretMatches } from "@/lib/server/request-security"
+import { logServerError, redactForLogs } from "@/lib/server/safe-logging"
 
 export const dynamic = "force-dynamic"
 const MAX_EVENTS_PER_REQUEST = 50
@@ -25,28 +28,34 @@ export async function POST(request: Request) {
       return NextResponse.json({ success: false, error: "LOG_INGEST_TOKEN is not configured" }, { status: 503 })
     }
 
-    const authHeader = request.headers.get("authorization") || ""
-    const headerToken = request.headers.get("x-agent-token") || ""
-    const bearerToken = authHeader.startsWith("Bearer ") ? authHeader.slice(7) : ""
-    const providedToken = headerToken || bearerToken
-
-    if (providedToken !== token) {
+    const providedToken = extractSharedSecretToken(request.headers)
+    if (!sharedSecretMatches(token, providedToken)) {
       return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 })
+    }
+
+    const ipAddress = extractClientIp(request.headers)
+    const rateLimit = await checkRateLimit("opsErrorIngest", `ops-error-ingest:${String(ipAddress || "unknown")}`)
+    const rateHeaders = buildRateLimitHeaders(rateLimit)
+    if (!rateLimit.success) {
+      return NextResponse.json(
+        { success: false, error: "Rate limit exceeded" },
+        { status: 429, headers: rateHeaders },
+      )
     }
 
     const body = await request.json().catch(() => null)
     if (body === null) {
-      return NextResponse.json({ success: false, error: "Invalid JSON body" }, { status: 400 })
+      return NextResponse.json({ success: false, error: "Invalid JSON body" }, { status: 400, headers: rateHeaders })
     }
 
     const events = toEvents(body)
     if (!events.length) {
-      return NextResponse.json({ success: false, error: "Provide at least one event object" }, { status: 400 })
+      return NextResponse.json({ success: false, error: "Provide at least one event object" }, { status: 400, headers: rateHeaders })
     }
     if (events.length > MAX_EVENTS_PER_REQUEST) {
       return NextResponse.json(
         { success: false, error: `Too many events. Limit is ${MAX_EVENTS_PER_REQUEST} per request.` },
-        { status: 413 },
+        { status: 413, headers: rateHeaders },
       )
     }
 
@@ -70,11 +79,18 @@ export async function POST(request: Request) {
     }
 
     if (inserted === 0) {
-      return NextResponse.json({ success: false, error: "At least one event must include a message" }, { status: 400 })
+      return NextResponse.json(
+        { success: false, error: "At least one event must include a message" },
+        { status: 400, headers: rateHeaders },
+      )
     }
 
-    return NextResponse.json({ success: true, inserted })
-  } catch (error: any) {
-    return NextResponse.json({ success: false, error: error?.message || "Failed to ingest events" }, { status: 500 })
+    return NextResponse.json({ success: true, inserted }, { headers: rateHeaders })
+  } catch (error: unknown) {
+    logServerError("Failed to ingest app error events", {
+      error,
+      body: redactForLogs({ endpoint: "/api/ops/error-ingest" }),
+    })
+    return NextResponse.json({ success: false, error: "Failed to ingest events" }, { status: 500 })
   }
 }

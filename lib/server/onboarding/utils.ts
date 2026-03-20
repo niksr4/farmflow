@@ -120,6 +120,9 @@ const hasMissingUserEmailColumn = (message: string) =>
   message.includes('column "email_verified_at"') ||
   message.includes('column "preferred_locale"')
 
+const hasMissingGuidedSetupColumn = (message: string) =>
+  message.includes('column "setup_completed_at"') || message.includes('column "requires_guided_setup"')
+
 export const normalizeOnboardingError = (error: unknown) => {
   const message = String((error as Error)?.message || error || "")
   if (isMissingRelation(error, "signup_requests") || isMissingRelation(error, "signup_tokens")) {
@@ -127,6 +130,9 @@ export const normalizeOnboardingError = (error: unknown) => {
   }
   if (hasMissingUserEmailColumn(message)) {
     return new Error("Email auth schema missing. Run scripts/63-user-email-auth.sql.")
+  }
+  if (hasMissingGuidedSetupColumn(message)) {
+    return new Error("Guided setup schema missing. Run scripts/65-user-guided-setup.sql.")
   }
   if (error instanceof Error) return error
   return new Error(message || "Self-serve onboarding failed")

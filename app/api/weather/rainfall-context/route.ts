@@ -3,6 +3,8 @@ import { sql } from "@/lib/server/db"
 import { requireAnyModuleAccess, isModuleAccessError } from "@/lib/server/module-access"
 import { normalizeTenantContext, runTenantQuery } from "@/lib/server/tenant-db"
 import { buildRateLimitHeaders, checkRateLimit } from "@/lib/rate-limit"
+import { fetchWithTimeout } from "@/lib/server/http"
+import { logServerError } from "@/lib/server/safe-logging"
 
 const LOCATION = "12.4244,75.7382"
 const FORECAST_DAYS = "8"
@@ -84,7 +86,7 @@ export async function GET(request: NextRequest) {
       locationQuery,
     )}&days=${FORECAST_DAYS}&aqi=no&alerts=no`
 
-    const weatherResponse = await fetch(url, { next: { revalidate: 1800 } })
+    const weatherResponse = await fetchWithTimeout(url, { next: { revalidate: 1800 }, timeoutMs: 8_000 })
     const weatherPayload = await weatherResponse.json().catch(() => ({}))
     if (!weatherResponse.ok) {
       const message = weatherPayload?.error?.message || weatherResponse.statusText
@@ -167,7 +169,7 @@ export async function GET(request: NextRequest) {
       { headers: rateHeaders },
     )
   } catch (error: any) {
-    console.error("Error building rainfall context:", error)
+    logServerError("Error building rainfall context", error)
     if (isModuleAccessError(error)) {
       return NextResponse.json({ success: false, error: "Module access disabled" }, { status: 403 })
     }

@@ -4,6 +4,7 @@ export interface Tenant {
   id: string
   name: string
   created_at: string
+  subscriptionPlan?: string
 }
 
 export interface User {
@@ -18,6 +19,7 @@ export interface ModulePermission {
   id: string
   label: string
   enabled: boolean
+  lockedByPlan?: boolean
 }
 
 export interface AuditLog {

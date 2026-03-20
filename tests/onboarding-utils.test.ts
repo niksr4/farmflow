@@ -71,5 +71,8 @@ describe("onboarding utils", () => {
     expect(
       normalizeOnboardingError(new Error('relation "signup_requests" does not exist')).message,
     ).toContain("scripts/61-signup-requests.sql")
+    expect(
+      normalizeOnboardingError(new Error('column "requires_guided_setup" does not exist')).message,
+    ).toContain("scripts/65-user-guided-setup.sql")
   })
 })
