@@ -29,7 +29,11 @@ const createUserBodySchema = z.object({
 
 const updateUserRoleSchema = z.object({
   userId: z.string().trim().min(1, "userId is required"),
-  role: z.enum(["admin", "user"]),
+  role: z.enum(["admin", "user"]).optional(),
+  username: z.string().trim().min(1, "username is required").optional(),
+}).refine((value) => value.role || value.username, {
+  message: "role or username is required",
+  path: ["role"],
 })
 
 const resetPasswordSchema = z.object({
@@ -37,21 +41,24 @@ const resetPasswordSchema = z.object({
   temporaryPassword: z.string().trim().optional(),
 })
 
-const findExistingUserByUsername = async (username: string) => {
-  if (!sql) return []
+const findConflictingUserByUsername = async (username: string, excludeUserId?: string) => {
+  if (!sql) return null
   const ownerContext = normalizeTenantContext(undefined, "owner")
-  return runTenantQuery(
+  const rows = (await runTenantQuery(
     sql,
     ownerContext,
     sql`
-      SELECT id, tenant_id
+      SELECT id, username, role, tenant_id, created_at
       FROM users
       WHERE LOWER(BTRIM(username)) = ${normalizeUsernameLookup(username)}
+        AND (${excludeUserId || null} IS NULL OR id <> ${excludeUserId || null})
+      ORDER BY created_at ASC
       LIMIT 1
     `,
-  ) as Promise<Array<{ id: string; tenant_id: string }>>
-}
+  )) as UserRecord[]
 
+  return rows[0] || null
+}
 export async function GET(request: Request) {
   try {
     const sessionUser = await requireAdminSession()
@@ -126,9 +133,9 @@ export async function POST(request: Request) {
       return NextResponse.json({ success: false, error: "Forbidden" }, { status: 403 })
     }
 
-    const existingUsers = await findExistingUserByUsername(username)
-    if (existingUsers.length) {
-      return NextResponse.json({ success: false, error: "Username already exists" }, { status: 409 })
+    const conflictingUser = await findConflictingUserByUsername(username)
+    if (conflictingUser) {
+      return NextResponse.json({ success: false, error: "Username is already in use" }, { status: 409 })
     }
 
     const passwordHash = hashPassword(password)
@@ -189,6 +196,7 @@ export async function PATCH(request: Request) {
     }
     const userId = parsedBody.data.userId
     const role = parsedBody.data.role
+    const username = parsedBody.data.username ? String(parsedBody.data.username).trim() : null
 
     const lookupContext = normalizeTenantContext(
       sessionUser.role === "owner" ? undefined : sessionUser.tenantId,
@@ -224,13 +232,31 @@ export async function PATCH(request: Request) {
       return NextResponse.json({ success: false, error: "Forbidden" }, { status: 403 })
     }
 
+    if (username) {
+      if (isSystemUsername(username)) {
+        return NextResponse.json({ success: false, error: "System usernames are reserved" }, { status: 400 })
+      }
+      if (isReservedPlatformUsername(username)) {
+        return NextResponse.json({ success: false, error: "Username 'owner' is reserved for the platform account" }, { status: 400 })
+      }
+
+      const conflictingUser = await findConflictingUserByUsername(username, userId)
+      if (conflictingUser) {
+        return NextResponse.json({ success: false, error: "Username is already in use" }, { status: 409 })
+      }
+    }
+
+    const nextRole = role || rows[0].role
+    const nextUsername = username || rows[0].username
+
     const tenantContext = normalizeTenantContext(targetTenantId, sessionUser.role)
     const result = (await runTenantQuery(
       sql,
       tenantContext,
       sql`
         UPDATE users
-        SET role = ${role}
+        SET role = ${nextRole},
+            username = ${nextUsername}
         WHERE id = ${userId}
         RETURNING id, username, role, tenant_id, created_at
       `,
@@ -253,16 +279,17 @@ export async function PATCH(request: Request) {
       severity: "info",
       source: "admin/users",
       metadata: {
-        action: "role_updated",
+        action: "user_updated",
         targetUserId: result?.[0]?.id ?? userId,
-        targetRole: role,
+        targetRole: nextRole,
+        targetUsername: nextUsername,
       },
     })
 
     return NextResponse.json({ success: true, user: result[0] })
   } catch (error: unknown) {
-    console.error("Error updating user role:", error)
-    return buildAdminErrorResponse(error, "Failed to update user role")
+    console.error("Error updating user:", error)
+    return buildAdminErrorResponse(error, "Failed to update user")
   }
 }
 

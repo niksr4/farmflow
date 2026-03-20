@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server"
+import { z } from "zod"
 import { sql } from "@/lib/server/db"
 import { requireOwnerRole } from "@/lib/tenant"
 import { requireAdminSession } from "@/lib/server/mfa"
@@ -6,6 +7,11 @@ import { MODULES } from "@/lib/modules"
 import { normalizeTenantContext, runTenantQuery } from "@/lib/server/tenant-db"
 import { logAuditEvent } from "@/lib/server/audit-log"
 import { buildAdminErrorResponse, databaseNotConfiguredResponse } from "@/lib/server/route-utils"
+
+const updateTenantBodySchema = z.object({
+  tenantId: z.string().trim().min(1, "tenantId is required"),
+  name: z.string().trim().min(1, "Tenant name is required").max(160, "Tenant name is too long"),
+})
 
 export async function GET(_request: Request) {
   try {
@@ -177,5 +183,64 @@ export async function DELETE(request: Request) {
   } catch (error: any) {
     console.error("Error deleting tenant:", error)
     return buildAdminErrorResponse(error, "Failed to delete tenant", { ownerRequired: true })
+  }
+}
+
+export async function PATCH(request: Request) {
+  try {
+    const sessionUser = await requireAdminSession()
+    requireOwnerRole(sessionUser.role)
+    if (!sql) {
+      return databaseNotConfiguredResponse()
+    }
+
+    const parsedBody = updateTenantBodySchema.safeParse(await request.json().catch(() => ({})))
+    if (!parsedBody.success) {
+      return NextResponse.json(
+        { success: false, error: parsedBody.error.issues[0]?.message || "Invalid request body" },
+        { status: 400 },
+      )
+    }
+
+    const { tenantId, name } = parsedBody.data
+    const adminContext = normalizeTenantContext(sessionUser.tenantId, sessionUser.role)
+    const existing = await runTenantQuery(
+      sql,
+      adminContext,
+      sql`
+        SELECT id, name, created_at
+        FROM tenants
+        WHERE id = ${tenantId}
+        LIMIT 1
+      `,
+    )
+
+    if (!existing?.length) {
+      return NextResponse.json({ success: false, error: "Tenant not found" }, { status: 404 })
+    }
+
+    const updated = await runTenantQuery(
+      sql,
+      adminContext,
+      sql`
+        UPDATE tenants
+        SET name = ${name}
+        WHERE id = ${tenantId}
+        RETURNING id, name, created_at
+      `,
+    )
+
+    await logAuditEvent(sql, sessionUser, {
+      action: "update",
+      entityType: "tenants",
+      entityId: tenantId,
+      before: existing[0] ?? null,
+      after: updated[0] ?? null,
+    })
+
+    return NextResponse.json({ success: true, tenant: updated[0] })
+  } catch (error: any) {
+    console.error("Error updating tenant:", error)
+    return buildAdminErrorResponse(error, "Failed to update tenant", { ownerRequired: true })
   }
 }
