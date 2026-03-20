@@ -26,6 +26,7 @@ type TenantUsersSectionProps = {
   newPassword: string
   newRole: string
   users: User[]
+  userNameDrafts: Record<string, string>
   userRoleDrafts: Record<string, string>
   isUpdatingUserId: string | null
   isDeletingUserId: string | null
@@ -34,8 +35,9 @@ type TenantUsersSectionProps = {
   onNewPasswordChange: (value: string) => void
   onNewRoleChange: (value: string) => void
   onCreateUser: () => void
+  onUsernameDraftChange: (userId: string, username: string) => void
   onRoleDraftChange: (userId: string, role: string) => void
-  onSaveUserRole: (user: User) => void
+  onSaveUserDetails: (user: User) => void
   onResetUserPassword: (user: User) => void
   onDeleteUser: (user: User) => void
 }
@@ -48,6 +50,7 @@ export function TenantUsersSection({
   newPassword,
   newRole,
   users,
+  userNameDrafts,
   userRoleDrafts,
   isUpdatingUserId,
   isDeletingUserId,
@@ -56,8 +59,9 @@ export function TenantUsersSection({
   onNewPasswordChange,
   onNewRoleChange,
   onCreateUser,
+  onUsernameDraftChange,
   onRoleDraftChange,
-  onSaveUserRole,
+  onSaveUserDetails,
   onResetUserPassword,
   onDeleteUser,
 }: TenantUsersSectionProps) {
@@ -122,17 +126,30 @@ export function TenantUsersSection({
                     normalizedUsername === "system" ||
                     normalizedUsername.startsWith("system_") ||
                     normalizedUsername.startsWith("system-")
+                  const draftUsername = String(userNameDrafts[user.id] ?? user.username)
+                  const nextUsername = draftUsername.trim()
+                  const nextRole = userRoleDrafts[user.id] ?? user.role
 
                   return (
                     <TableRow key={user.id}>
-                      <TableCell>{user.username}</TableCell>
+                      <TableCell>
+                        {isOwnerUser || isSystemUser ? (
+                          user.username
+                        ) : (
+                          <Input
+                            value={draftUsername}
+                            onChange={(event) => onUsernameDraftChange(user.id, event.target.value)}
+                            className="h-9"
+                          />
+                        )}
+                      </TableCell>
                       <TableCell>
                         {isOwnerUser ? (
                           <div className="text-sm font-medium text-emerald-700">{roleLabel(user.role)}</div>
                         ) : isSystemUser ? (
                           <div className="text-sm font-medium text-foreground">System Admin</div>
                         ) : (
-                          <Select value={userRoleDrafts[user.id] || user.role} onValueChange={(value) => onRoleDraftChange(user.id, value)}>
+                          <Select value={nextRole} onValueChange={(value) => onRoleDraftChange(user.id, value)}>
                             <SelectTrigger className="h-9">
                               <SelectValue />
                             </SelectTrigger>
@@ -155,12 +172,13 @@ export function TenantUsersSection({
                           <Button
                             size="sm"
                             variant="outline"
-                            onClick={() => onSaveUserRole(user)}
+                            onClick={() => onSaveUserDetails(user)}
                             disabled={
                               isOwnerUser ||
                               isSystemUser ||
                               isUpdatingUserId === user.id ||
-                              (userRoleDrafts[user.id] || user.role) === user.role
+                              !nextUsername ||
+                              (nextRole === user.role && nextUsername === user.username)
                             }
                           >
                             {isUpdatingUserId === user.id ? "Saving..." : "Save"}

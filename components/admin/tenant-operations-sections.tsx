@@ -18,34 +18,44 @@ import type { ModulePermission, Tenant, TenantProfile } from "@/components/admin
 
 type TenantsSectionProps = {
   tenants: Tenant[]
+  selectedTenant: Tenant | null
   selectedTenantId: string
   currentUserTenantId: string | undefined
   newTenantName: string
   newTenantPlanId: string
+  tenantNameDraft: string
   previewRole: "admin" | "user"
   isDeletingTenantId: string | null
+  isSavingTenantName: boolean
   onNewTenantNameChange: (value: string) => void
   onNewTenantPlanIdChange: (value: string) => void
   onCreateTenant: () => void
   onSelectedTenantIdChange: (value: string) => void
+  onTenantNameDraftChange: (value: string) => void
   onPreviewRoleChange: (value: "admin" | "user") => void
+  onSaveTenantName: () => void
   onOpenTenantPreview: (openInNewTab?: boolean) => void
   onDeleteTenant: (tenant: Tenant) => void
 }
 
 export function TenantsSection({
   tenants,
+  selectedTenant,
   selectedTenantId,
   currentUserTenantId,
   newTenantName,
   newTenantPlanId,
+  tenantNameDraft,
   previewRole,
   isDeletingTenantId,
+  isSavingTenantName,
   onNewTenantNameChange,
   onNewTenantPlanIdChange,
   onCreateTenant,
   onSelectedTenantIdChange,
+  onTenantNameDraftChange,
   onPreviewRoleChange,
+  onSaveTenantName,
   onOpenTenantPreview,
   onDeleteTenant,
 }: TenantsSectionProps) {
@@ -101,6 +111,30 @@ export function TenantsSection({
             </SelectContent>
           </Select>
         </div>
+
+        {selectedTenant ? (
+          <div className="grid grid-cols-1 gap-3 md:grid-cols-[minmax(0,1fr)_auto]">
+            <div className="space-y-2">
+              <Label htmlFor="selectedTenantName">Estate Name</Label>
+              <Input
+                id="selectedTenantName"
+                value={tenantNameDraft}
+                onChange={(event) => onTenantNameDraftChange(event.target.value)}
+                placeholder="Estate name"
+              />
+            </div>
+            <div className="flex items-end">
+              <Button
+                variant="outline"
+                className="bg-transparent"
+                onClick={onSaveTenantName}
+                disabled={isSavingTenantName || !tenantNameDraft.trim() || tenantNameDraft.trim() === selectedTenant.name}
+              >
+                {isSavingTenantName ? "Saving..." : "Save Estate Name"}
+              </Button>
+            </div>
+          </div>
+        ) : null}
 
         <div className="space-y-3 rounded-lg border border-emerald-100 bg-emerald-50/40 p-4">
           <div>

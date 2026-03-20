@@ -62,17 +62,19 @@ export default function AdminPage() {
   const { user, isOwner } = useAuth()
   const { toast } = useToast()
 
-
   const [tenants, setTenants] = useState<Tenant[]>([])
   const [selectedTenantId, setSelectedTenantId] = useState<string>("")
   const [previewRole, setPreviewRole] = useState<"admin" | "user">("admin")
   const [newTenantName, setNewTenantName] = useState("")
   const [newTenantPlanId, setNewTenantPlanId] = useState<string>(DEFAULT_TENANT_PLAN_ID)
+  const [tenantNameDraft, setTenantNameDraft] = useState("")
+  const [isSavingTenantName, setIsSavingTenantName] = useState(false)
 
   const [users, setUsers] = useState<User[]>([])
   const [newUsername, setNewUsername] = useState("")
   const [newPassword, setNewPassword] = useState("")
   const [newRole, setNewRole] = useState("user")
+  const [userNameDrafts, setUserNameDrafts] = useState<Record<string, string>>({})
 
   const [modulePermissions, setModulePermissions] = useState<ModulePermission[]>([])
   const [tenantPlanId, setTenantPlanId] = useState<string>(DEFAULT_TENANT_PLAN_ID)
@@ -130,6 +132,10 @@ export default function AdminPage() {
     [modulePermissions],
   )
 
+  useEffect(() => {
+    setTenantNameDraft(selectedTenant?.name || "")
+  }, [selectedTenant?.id, selectedTenant?.name])
+
   const loadTenants = useCallback(async () => {
     try {
       const response = await fetch("/api/admin/tenants")
@@ -162,10 +168,13 @@ export default function AdminPage() {
       }
       setUsers(data.users || [])
       const roleDrafts: Record<string, string> = {}
+      const usernameDrafts: Record<string, string> = {}
       ;(data.users || []).forEach((user: User) => {
         roleDrafts[user.id] = user.role
+        usernameDrafts[user.id] = user.username
       })
       setUserRoleDrafts(roleDrafts)
+      setUserNameDrafts(usernameDrafts)
     } catch (error: any) {
       toast({ title: "Error", description: error.message || "Failed to load users", variant: "destructive" })
     }
@@ -556,6 +565,47 @@ export default function AdminPage() {
     }
   }
 
+  const handleSaveTenantName = async () => {
+    if (!isOwner) {
+      toast({ title: "Platform owner only", description: "Only platform owners can rename tenants." })
+      return
+    }
+    if (!selectedTenantId || !selectedTenant) {
+      toast({ title: "Pick a tenant", description: "Select a tenant before editing its estate name." })
+      return
+    }
+
+    const nextName = tenantNameDraft.trim()
+    if (!nextName) {
+      toast({ title: "Missing name", description: "Estate name cannot be empty.", variant: "destructive" })
+      return
+    }
+    if (nextName === selectedTenant.name) {
+      return
+    }
+
+    setIsSavingTenantName(true)
+    try {
+      const response = await fetch("/api/admin/tenants", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ tenantId: selectedTenantId, name: nextName }),
+      })
+      const data = await response.json()
+      if (!response.ok || !data.success) {
+        throw new Error(data.error || "Failed to update tenant name")
+      }
+
+      setTenants((prev) => prev.map((tenant) => (tenant.id === selectedTenantId ? { ...tenant, name: data.tenant.name } : tenant)))
+      setTenantNameDraft(String(data.tenant?.name || nextName))
+      toast({ title: "Estate name updated", description: `${data.tenant.name} saved.` })
+    } catch (error: any) {
+      toast({ title: "Error", description: error.message || "Failed to update tenant name", variant: "destructive" })
+    } finally {
+      setIsSavingTenantName(false)
+    }
+  }
+
   const handleDeleteTenant = async (tenant: Tenant) => {
     if (!isOwner) {
       toast({ title: "Platform owner only", description: "Only platform owners can delete tenants." })
@@ -751,9 +801,18 @@ export default function AdminPage() {
     setUserRoleDrafts((prev) => ({ ...prev, [userId]: role }))
   }
 
-  const handleSaveUserRole = async (user: User) => {
+  const handleUsernameDraftChange = (userId: string, username: string) => {
+    setUserNameDrafts((prev) => ({ ...prev, [userId]: username }))
+  }
+
+  const handleSaveUserDetails = async (user: User) => {
     const nextRole = userRoleDrafts[user.id] || user.role
-    if (nextRole === user.role) {
+    const nextUsername = String(userNameDrafts[user.id] ?? user.username).trim()
+    if (!nextUsername) {
+      toast({ title: "Missing username", description: "Username cannot be empty.", variant: "destructive" })
+      return
+    }
+    if (nextRole === user.role && nextUsername === user.username) {
       return
     }
 
@@ -762,16 +821,19 @@ export default function AdminPage() {
       const response = await fetch("/api/admin/users", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ userId: user.id, role: nextRole }),
+        body: JSON.stringify({ userId: user.id, role: nextRole, username: nextUsername }),
       })
       const data = await response.json()
       if (!response.ok || !data.success) {
-        throw new Error(data.error || "Failed to update user role")
+        throw new Error(data.error || "Failed to update user")
       }
-      toast({ title: "Role updated", description: `${user.username} is now ${roleLabel(nextRole)}.` })
+      toast({
+        title: "User updated",
+        description: `${data.user.username} saved as ${roleLabel(data.user.role)}.`,
+      })
       await loadUsers(selectedTenantId)
     } catch (error: any) {
-      toast({ title: "Error", description: error.message || "Failed to update user role", variant: "destructive" })
+      toast({ title: "Error", description: error.message || "Failed to update user", variant: "destructive" })
     } finally {
       setIsUpdatingUserId(null)
     }
@@ -1003,17 +1065,24 @@ export default function AdminPage() {
       {isOwner ? (
         <TenantsSection
           tenants={tenants}
+          selectedTenant={selectedTenant}
           selectedTenantId={selectedTenantId}
           currentUserTenantId={user?.tenantId}
           newTenantName={newTenantName}
           newTenantPlanId={newTenantPlanId}
+          tenantNameDraft={tenantNameDraft}
           previewRole={previewRole}
           isDeletingTenantId={isDeletingTenantId}
+          isSavingTenantName={isSavingTenantName}
           onNewTenantNameChange={setNewTenantName}
           onNewTenantPlanIdChange={setNewTenantPlanId}
           onCreateTenant={handleCreateTenant}
           onSelectedTenantIdChange={setSelectedTenantId}
+          onTenantNameDraftChange={setTenantNameDraft}
           onPreviewRoleChange={setPreviewRole}
+          onSaveTenantName={() => {
+            void handleSaveTenantName()
+          }}
           onOpenTenantPreview={handleOpenTenantPreview}
           onDeleteTenant={handleDeleteTenant}
         />
@@ -1132,6 +1201,7 @@ export default function AdminPage() {
         newPassword={newPassword}
         newRole={newRole}
         users={users}
+        userNameDrafts={userNameDrafts}
         userRoleDrafts={userRoleDrafts}
         isUpdatingUserId={isUpdatingUserId}
         isDeletingUserId={isDeletingUserId}
@@ -1142,9 +1212,10 @@ export default function AdminPage() {
         onCreateUser={() => {
           void handleCreateUser()
         }}
+        onUsernameDraftChange={handleUsernameDraftChange}
         onRoleDraftChange={handleRoleDraftChange}
-        onSaveUserRole={(nextUser) => {
-          void handleSaveUserRole(nextUser)
+        onSaveUserDetails={(nextUser) => {
+          void handleSaveUserDetails(nextUser)
         }}
         onResetUserPassword={(nextUser) => {
           void handleResetUserPassword(nextUser)

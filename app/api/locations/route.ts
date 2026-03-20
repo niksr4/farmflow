@@ -27,6 +27,14 @@ function normalizeCode(value: string) {
   return value.trim().toUpperCase().replace(/\s+/g, "-")
 }
 
+function serializeLocation(row: Record<string, unknown>) {
+  return {
+    id: String(row.id || ""),
+    name: String(row.name || ""),
+    code: String(row.code || ""),
+  }
+}
+
 export async function GET(request: Request) {
   try {
     const sessionUser = await requireAnyModuleAccess(LOCATION_MODULES, await requireSessionUser())
@@ -46,7 +54,7 @@ export async function GET(request: Request) {
       `,
     )
 
-    return NextResponse.json({ success: true, locations })
+    return NextResponse.json({ success: true, locations: locations.map((row) => serializeLocation(row as Record<string, unknown>)) })
   } catch (error: any) {
     console.error("Error fetching locations:", error)
     if (isModuleAccessError(error)) {
@@ -98,7 +106,7 @@ export async function POST(request: Request) {
       after: result?.[0] ?? null,
     })
 
-    return NextResponse.json({ success: true, location: result[0] })
+    return NextResponse.json({ success: true, location: serializeLocation(result[0] as Record<string, unknown>) })
   } catch (error: any) {
     console.error("Error creating location:", error)
     if (isModuleAccessError(error)) {
@@ -129,8 +137,6 @@ export async function PATCH(request: Request) {
       return NextResponse.json({ success: false, error: "Location id and name are required" }, { status: 400 })
     }
 
-    const code = codeInput ? normalizeCode(codeInput) : normalizeCode(name)
-
     const existing = await runTenantQuery(
       sql,
       tenantContext,
@@ -146,6 +152,9 @@ export async function PATCH(request: Request) {
     if (!existing?.length) {
       return NextResponse.json({ success: false, error: "Location not found" }, { status: 404 })
     }
+
+    const existingCode = String(existing[0].code || "").trim()
+    const code = codeInput ? normalizeCode(codeInput) : existingCode ? normalizeCode(existingCode) : normalizeCode(name)
 
     const conflict = await runTenantQuery(
       sql,
@@ -184,7 +193,7 @@ export async function PATCH(request: Request) {
       after: result?.[0] ?? null,
     })
 
-    return NextResponse.json({ success: true, location: result[0] })
+    return NextResponse.json({ success: true, location: serializeLocation(result[0] as Record<string, unknown>) })
   } catch (error: any) {
     console.error("Error updating location:", error)
     if (isModuleAccessError(error)) {

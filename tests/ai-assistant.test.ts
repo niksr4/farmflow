@@ -21,7 +21,7 @@ describe("ai assistant helpers", () => {
 
   it("builds a readable workspace summary", () => {
     const summary = buildAssistantWorkspaceContextSummary({
-      currentWorkspaceLabel: "AI Analysis",
+      currentWorkspaceLabel: "Dashboard",
       availableWorkspaces: ["Dashboard", "Inventory", "Sales"],
       workspaceHints: [
         { label: "Inventory", detail: "Use Inventory for stock balances." },
@@ -29,7 +29,7 @@ describe("ai assistant helpers", () => {
       ],
     })
 
-    expect(summary).toContain("Current workspace: AI Analysis")
+    expect(summary).toContain("Current workspace: Dashboard")
     expect(summary).toContain("Available workspaces in this session: Dashboard, Inventory, Sales")
     expect(summary).toContain("- Inventory: Use Inventory for stock balances.")
     expect(summary).toContain("- Sales: Use Sales for coffee and other sales.")

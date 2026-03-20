@@ -61,10 +61,7 @@ export function buildAssistantWorkspaceContextSummary(context: AssistantWorkspac
     .filter((hint) => hint.label && hint.detail)
 
   if (workspaceHints.length > 0) {
-    sections.push(
-      "Navigation guidance:\n" +
-        workspaceHints.map((hint) => `- ${hint.label}: ${hint.detail}`).join("\n"),
-    )
+    sections.push("Navigation guidance:\n" + workspaceHints.map((hint) => `- ${hint.label}: ${hint.detail}`).join("\n"))
   }
 
   return sections.join("\n")
