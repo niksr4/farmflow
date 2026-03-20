@@ -91,11 +91,11 @@ export function LocationsSection({
             <HelpLabel
               htmlFor="location-name"
               label="Location name"
-              help="Use the exact names your team uses in the field."
+              help="Use the full place label your team recognizes day to day, for example Seshagiri A."
             />
             <Input
               id="location-name"
-              placeholder="Main Estate, Block A, Washing Station"
+              placeholder="Seshagiri A, Main Estate, Washing Station"
               value={newLocationName}
               onChange={(event) => onNewLocationNameChange(event.target.value)}
             />
@@ -105,11 +105,11 @@ export function LocationsSection({
             <HelpLabel
               htmlFor="location-code"
               label="Location code (optional)"
-              help="Short codes show up in exports and buyer docs."
+              help="Use a short shorthand like A, B, C or SG-A. This appears in exports and buyer-facing documents."
             />
             <Input
               id="location-code"
-              placeholder="MAIN"
+              placeholder="A or SG-A"
               value={newLocationCode}
               onChange={(event) => onNewLocationCodeChange(event.target.value)}
             />
@@ -121,6 +121,16 @@ export function LocationsSection({
             </Button>
           </div>
         </div>
+
+        <p className="text-xs text-muted-foreground">
+          Use <span className="font-medium text-foreground">Location name</span> for the full branch or unit label, such as
+          {" "}
+          <span className="font-medium text-foreground">Seshagiri A</span>. Use <span className="font-medium text-foreground">Location code</span>
+          {" "}
+          only for the short shorthand, such as <span className="font-medium text-foreground">A</span> or
+          {" "}
+          <span className="font-medium text-foreground">SG-A</span>.
+        </p>
 
         <div className="rounded-lg border border-border/60 bg-white/80">
           <Table>
@@ -158,7 +168,7 @@ export function LocationsSection({
                           onChange={(event) => onEditingLocationCodeChange(event.target.value)}
                         />
                       ) : (
-                        location.code
+                        location.code || "-"
                       )}
                     </TableCell>
                     <TableCell>

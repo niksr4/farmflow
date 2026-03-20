@@ -349,7 +349,14 @@ export default function TenantSettingsPage() {
       if (!response.ok || !data.success) {
         throw new Error(data.error || "Failed to load locations")
       }
-      setLocations(data.locations || [])
+      const nextLocations = Array.isArray(data.locations)
+        ? data.locations.map((location: any) => ({
+            id: String(location?.id || ""),
+            name: String(location?.name || ""),
+            code: String(location?.code || ""),
+          }))
+        : []
+      setLocations(nextLocations)
     } catch (error: any) {
       toast({ title: "Error", description: error.message || "Failed to load locations", variant: "destructive" })
     }
@@ -631,7 +638,7 @@ export default function TenantSettingsPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           name: newLocationName.trim(),
-          code: newLocationCode.trim() || undefined,
+          code: String(newLocationCode || "").trim() || undefined,
           tenantId,
         }),
       })
@@ -652,8 +659,8 @@ export default function TenantSettingsPage() {
 
   const startEditLocation = (location: LocationRow) => {
     setEditingLocationId(location.id)
-    setEditingLocationName(location.name)
-    setEditingLocationCode(location.code)
+    setEditingLocationName(String(location.name || ""))
+    setEditingLocationCode(String(location.code || ""))
   }
 
   const cancelEditLocation = () => {
@@ -668,6 +675,9 @@ export default function TenantSettingsPage() {
       toast({ title: "Missing name", description: "Location name is required." })
       return
     }
+    const currentLocation = locations.find((location) => location.id === editingLocationId) || null
+    const nextCodeInput = String(editingLocationCode || "").trim()
+    const fallbackCode = String(currentLocation?.code || "").trim()
     setIsUpdatingLocationId(editingLocationId)
     try {
       const response = await fetch("/api/locations", {
@@ -676,7 +686,7 @@ export default function TenantSettingsPage() {
         body: JSON.stringify({
           id: editingLocationId,
           name: editingLocationName.trim(),
-          code: editingLocationCode.trim() || undefined,
+          code: nextCodeInput || fallbackCode || undefined,
           tenantId,
         }),
       })
