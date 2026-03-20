@@ -47,6 +47,7 @@ export async function POST(req: Request) {
       "https://api.groq.com/openai/v1/chat/completions",
       {
         method: "POST",
+        timeoutMs: 18_000,
         headers: {
           Authorization: `Bearer ${groqApiKey}`,
           "Content-Type": "application/json",
@@ -75,7 +76,6 @@ Treat the tenant data above as the working dataset for ${fiscalYearLabel}. Use t
           temperature: 0.25,
         }),
       },
-      18_000,
     )
 
     if (!groqResponse.ok) {
