@@ -6,6 +6,7 @@ import "./globals.css"
 import { ThemeProvider } from "@/components/theme-provider"
 import { AuthProvider } from "@/hooks/use-auth"
 import BrandWatermark from "@/components/brand-watermark"
+import FloatingAiAssistant from "@/components/floating-ai-assistant"
 import { Toaster } from "@/components/ui/toaster"
 import PwaRegister from "@/components/pwa-register"
 import PostHogAuthSync from "@/components/posthog-auth-sync"
@@ -96,6 +97,9 @@ gtag('js', new Date());
 gtag('config', 'G-X0RB06WXE9');`}
             </Script>
             {children}
+            <Suspense fallback={null}>
+              <FloatingAiAssistant />
+            </Suspense>
             <BrandWatermark />
             <Toaster />
             <PwaRegister />

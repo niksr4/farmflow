@@ -7,7 +7,7 @@ const hasRedisConfig = Boolean(
 
 const redis = hasRedisConfig ? Redis.fromEnv() : null
 
-type RateLimitKey = "aiAnalysis" | "news" | "weather" | "authLogin" | "registerInterest"
+type RateLimitKey = "aiAnalysis" | "aiAssistant" | "news" | "weather" | "authLogin" | "registerInterest"
 
 type RateLimitResult = {
   success: boolean
@@ -18,6 +18,7 @@ type RateLimitResult = {
 
 const limiters: Record<RateLimitKey, Ratelimit | null> = {
   aiAnalysis: redis ? new Ratelimit({ redis, limiter: Ratelimit.fixedWindow(5, "1 m") }) : null,
+  aiAssistant: redis ? new Ratelimit({ redis, limiter: Ratelimit.fixedWindow(12, "5 m") }) : null,
   news: redis ? new Ratelimit({ redis, limiter: Ratelimit.fixedWindow(30, "1 m") }) : null,
   weather: redis ? new Ratelimit({ redis, limiter: Ratelimit.fixedWindow(30, "1 m") }) : null,
   authLogin: redis ? new Ratelimit({ redis, limiter: Ratelimit.fixedWindow(10, "10 m") }) : null,
@@ -36,6 +37,7 @@ type LocalLimiterEntry = {
 
 const localLimiterConfig: Record<RateLimitKey, LocalLimiterConfig> = {
   aiAnalysis: { limit: 5, windowMs: 60_000 },
+  aiAssistant: { limit: 12, windowMs: 5 * 60_000 },
   news: { limit: 30, windowMs: 60_000 },
   weather: { limit: 30, windowMs: 60_000 },
   authLogin: { limit: 10, windowMs: 10 * 60_000 },
