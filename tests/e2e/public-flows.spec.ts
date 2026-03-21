@@ -11,14 +11,14 @@ test("landing page shows concise header links and CTAs", async ({ page }) => {
   await expect(desktopNavLinks).toHaveCount(4)
 })
 
-test("self-serve signup submits and routes to verify email", async ({ page }) => {
+test("self-serve signup submits and routes to login", async ({ page }) => {
   let payload: any = null
   await page.route("**/api/auth/signup", async (route) => {
     payload = route.request().postDataJSON()
     await route.fulfill({
       status: 200,
       contentType: "application/json",
-      body: JSON.stringify({ success: true, signupRequestId: "signup-123" }),
+      body: JSON.stringify({ success: true, signupRequestId: "signup-123", verificationSent: false }),
     })
   })
 
@@ -30,8 +30,8 @@ test("self-serve signup submits and routes to verify email", async ({ page }) =>
   await page.locator("#country").fill("Coorg")
   await page.getByRole("button", { name: "Create Account" }).click()
 
-  await expect(page).toHaveURL(/\/verify-email\?email=regression\.qa%40example\.com/)
-  await expect(page.getByText("Verify Your Email")).toBeVisible()
+  await expect(page).toHaveURL(/\/login(?:\?|$)/)
+  await expect(page.getByRole("heading", { name: /sign in/i })).toBeVisible()
   expect(payload?.source).toBe("signup-page")
   expect(payload?.estateName).toBe("Regression Estate")
   expect(payload?.password).toBe("RegressionPass123!")

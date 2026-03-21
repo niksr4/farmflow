@@ -87,7 +87,7 @@ export default function SignupRoute() {
                     source: "signup-page",
                     has_country: Boolean(normalized.country),
                   })
-                  router.push(`/verify-email?email=${encodeURIComponent(normalized.email)}`)
+                  router.push("/login")
                 } catch (error: any) {
                   posthog.captureException(error)
                   setErrorMessage(error?.message || "Unable to create your workspace right now. Please try again.")
