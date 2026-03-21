@@ -1,11 +1,14 @@
 import { afterEach, describe, expect, it } from "vitest"
 
 import {
+  AUTH_EMAIL_SENDER_CONFIGURATION_MESSAGE,
   buildUsernameAttempt,
   buildUsernameSeeds,
   buildVerificationLink,
+  getAuthEmailSenderConfigurationError,
   hashSignupToken,
   isEmailIdentifier,
+  isResendTestSender,
   maskEmailAddress,
   normalizeLocale,
   normalizeOnboardingError,
@@ -58,6 +61,22 @@ describe("onboarding utils", () => {
     expect(maskEmailAddress("person@example.com")).toBe("pe****@example.com")
     expect(hashSignupToken("abc")).toBe(hashSignupToken("abc"))
     expect(hashSignupToken("abc")).not.toBe(hashSignupToken("xyz"))
+  })
+
+  it("detects resend test senders and keeps the auth sender guidance stable", () => {
+    expect(isResendTestSender("FarmFlow Alerts <onboarding@resend.dev>")).toBe(true)
+    expect(isResendTestSender("FarmFlow <hello@farmflow.app>")).toBe(false)
+    expect(AUTH_EMAIL_SENDER_CONFIGURATION_MESSAGE).toContain("AUTH_EMAIL_FROM")
+    expect(getAuthEmailSenderConfigurationError({ sender: "" })).toBe(AUTH_EMAIL_SENDER_CONFIGURATION_MESSAGE)
+    expect(getAuthEmailSenderConfigurationError({ sender: "FarmFlow Alerts <onboarding@resend.dev>" })).toBe(
+      AUTH_EMAIL_SENDER_CONFIGURATION_MESSAGE,
+    )
+    expect(
+      getAuthEmailSenderConfigurationError({
+        sender: "FarmFlow <hello@farmflow.app>",
+        providerMessage: "The farmflow.app domain is not verified.",
+      }),
+    ).toBe(AUTH_EMAIL_SENDER_CONFIGURATION_MESSAGE)
   })
 
   it("resolves verification links from configured app urls", () => {
