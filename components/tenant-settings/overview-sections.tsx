@@ -1,7 +1,7 @@
 "use client"
 
 import Link from "next/link"
-import { ArrowLeft, Info } from "lucide-react"
+import { ArrowLeft, BookOpen, Info } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
@@ -41,12 +41,20 @@ export function TenantSettingsOverview({
   return (
     <>
       <div className="flex items-center justify-start">
-        <Button asChild variant="outline" size="sm" className="bg-white/80">
-          <Link href="/dashboard" className="inline-flex items-center gap-2">
-            <ArrowLeft className="h-4 w-4" />
-            Back to Dashboard
-          </Link>
-        </Button>
+        <div className="flex flex-wrap items-center gap-2">
+          <Button asChild variant="outline" size="sm" className="bg-white/80">
+            <Link href="/dashboard" className="inline-flex items-center gap-2">
+              <ArrowLeft className="h-4 w-4" />
+              Back to Dashboard
+            </Link>
+          </Button>
+          <Button asChild variant="outline" size="sm" className="bg-white/80">
+            <Link href="/manuals" className="inline-flex items-center gap-2">
+              <BookOpen className="h-4 w-4" />
+              Open Manuals
+            </Link>
+          </Button>
+        </div>
       </div>
 
       <Card
