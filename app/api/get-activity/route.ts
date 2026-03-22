@@ -4,6 +4,7 @@ import { requireModuleAccess, isModuleAccessError } from "@/lib/server/module-ac
 import { normalizeTenantContext, runTenantQuery } from "@/lib/server/tenant-db"
 import { canDeleteModule, canWriteModule } from "@/lib/permissions"
 import { logAuditEvent } from "@/lib/server/audit-log"
+import { buildMissingAccountActivitySuggestions } from "@/lib/account-activity-suggestions"
 
 const normalizeCode = (value: unknown) => String(value || "").trim().toUpperCase()
 const normalizeReference = (value: unknown) => String(value || "").trim()
@@ -66,10 +67,10 @@ export async function GET(_request: Request) {
       )
     }
 
-
     return NextResponse.json({
       success: true,
       activities: result,
+      suggestions: buildMissingAccountActivitySuggestions((result || []).map((row: any) => row.code)),
     })
   } catch (error: any) {
     console.error("❌ Error fetching activity codes:", error.message)

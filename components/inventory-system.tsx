@@ -2892,12 +2892,13 @@ export default function InventorySystem() {
     })
   }, [selectedDataToolsTemplateConfig])
 
-  const handleDataToolsExport = useCallback(async () => {
+  const handleDataToolsExport = useCallback(async (format: "csv" | "xlsx" = "csv") => {
     setIsExportingDataTools(true)
     try {
       const exportResult = await exportOpsCsv({
         dataset: dataToolsDataset,
         exportConfig: selectedDataToolsConfig,
+        format,
         startDate: currentFiscalYear.startDate,
         endDate: currentFiscalYear.endDate,
         isPreviewMode,
@@ -2906,6 +2907,7 @@ export default function InventorySystem() {
       const { wasTruncated, maxRows, returnedRows } = exportResult
       posthog.capture("ops_export_downloaded", {
         dataset: dataToolsDataset,
+        format,
         truncated: wasTruncated,
         returned_rows: returnedRows,
         max_rows: maxRows,
@@ -2914,12 +2916,12 @@ export default function InventorySystem() {
       if (wasTruncated) {
         toast({
           title: "Export capped at row limit",
-          description: `${selectedDataToolsConfig.label} exported ${returnedRows || maxRows} rows (limit ${maxRows || "configured"}). Narrow date range for full data.`,
+          description: `${selectedDataToolsConfig.label} ${format.toUpperCase()} exported ${returnedRows || maxRows} rows (limit ${maxRows || "configured"}). Narrow date range for full data.`,
         })
       } else {
         toast({
           title: "Export ready",
-          description: `${selectedDataToolsConfig.label} CSV downloaded.`,
+          description: `${selectedDataToolsConfig.label} ${format.toUpperCase()} downloaded.`,
         })
       }
       setLastOpsExportFailure(null)
@@ -2927,6 +2929,7 @@ export default function InventorySystem() {
       const failureMessage = error instanceof Error ? error.message : "Unable to export now."
       posthog.capture("ops_export_failed", {
         dataset: dataToolsDataset,
+        format,
         source_tab: activeTab,
         message: failureMessage,
       })
@@ -2954,7 +2957,7 @@ export default function InventorySystem() {
   ])
 
   const handleRetryLastOpsExport = useCallback(() => {
-    void handleDataToolsExport()
+    void handleDataToolsExport("csv")
   }, [handleDataToolsExport])
 
   const handleOpenItemDrilldownHistory = () => {
@@ -5592,7 +5595,7 @@ export default function InventorySystem() {
                     <div>
                       <CardTitle className="text-base">Exports & Import</CardTitle>
                       <CardDescription>
-                        One clear export hub: CSV and QIF for accounts, plus tab-aware ops CSV and import templates.
+                        One clear export hub: CSV and XLSX for operations, plus CSV, XLSX, and QIF for accounts.
                       </CardDescription>
                     </div>
                     <Badge variant="outline" className="w-fit border-emerald-200 bg-white text-emerald-700">
@@ -5601,10 +5604,19 @@ export default function InventorySystem() {
                   </div>
                 </CardHeader>
                 <CardContent className="space-y-3">
-                  <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
-                    <Button onClick={handleDataToolsExport} disabled={isExportingDataTools} className="justify-start">
+                  <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-5">
+                    <Button onClick={() => void handleDataToolsExport("csv")} disabled={isExportingDataTools} className="justify-start">
                       <Download className="mr-2 h-4 w-4" />
-                      {isExportingDataTools ? "Exporting Ops CSV..." : "Ops CSV Export"}
+                      {isExportingDataTools ? "Exporting Ops..." : "Ops CSV Export"}
+                    </Button>
+                    <Button
+                      variant="outline"
+                      className="justify-start bg-white"
+                      onClick={() => void handleDataToolsExport("xlsx")}
+                      disabled={isExportingDataTools}
+                    >
+                      <Download className="mr-2 h-4 w-4" />
+                      Ops XLSX Export
                     </Button>
                     {canShowAccounts ? (
                       <>
@@ -5619,6 +5631,14 @@ export default function InventorySystem() {
                         <Button
                           variant="outline"
                           className="justify-start bg-white"
+                          onClick={() => handleRequestAccountsExport("xlsx")}
+                        >
+                          <FileText className="mr-2 h-4 w-4" />
+                          Accounts XLSX
+                        </Button>
+                        <Button
+                          variant="outline"
+                          className="justify-start bg-white"
                           onClick={() => handleRequestAccountsExport("qif")}
                         >
                           <Coins className="mr-2 h-4 w-4" />
@@ -5626,7 +5646,7 @@ export default function InventorySystem() {
                         </Button>
                       </>
                     ) : (
-                      <p className="rounded-lg border border-dashed border-neutral-300 bg-white px-3 py-2 text-xs text-muted-foreground sm:col-span-2">
+                      <p className="rounded-lg border border-dashed border-neutral-300 bg-white px-3 py-2 text-xs text-muted-foreground sm:col-span-2 xl:col-span-3">
                         Accounts module is disabled for this tenant.
                       </p>
                     )}

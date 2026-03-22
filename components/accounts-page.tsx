@@ -12,7 +12,7 @@ import { Label } from "@/components/ui/label"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { FileText, Coins, PlusCircle, Settings, Users, Receipt, Loader2, Pencil, Trash2, Check, X } from "lucide-react"
+import { FileSpreadsheet, FileText, Coins, PlusCircle, Settings, Users, Receipt, Loader2, Pencil, Trash2, Check, X } from "lucide-react"
 import { Skeleton } from "@/components/ui/skeleton"
 import LaborDeploymentTab from "./labor-deployment-tab"
 import OtherExpensesTab from "./other-expenses-tab"
@@ -24,10 +24,12 @@ import { cn } from "@/lib/utils"
 import {
   buildAccountsCsvFilename,
   buildAccountsQifFilename,
+  buildAccountsXlsxFilename,
   normalizeAccountsExportFormat,
   normalizeAccountsInterchangeFormat,
   type LegacyAccountsExportFormat,
 } from "@/lib/accounts-export"
+import { buildXlsxArrayBufferFromCsv, XLSX_MIME_TYPE } from "@/lib/spreadsheet"
 import posthog from "posthog-js"
 
 interface AccountActivity {
@@ -38,6 +40,11 @@ interface AccountActivity {
 }
 
 interface Activity {
+  code: string
+  reference: string
+}
+
+interface ActivitySuggestion {
   code: string
   reference: string
 }
@@ -96,8 +103,10 @@ export default function AccountsPage({
   const [exportEndDate, setExportEndDate] = useState<string>("")
   const [accountActivities, setAccountActivities] = useState<AccountActivity[]>([])
   const [activities, setActivities] = useState<Activity[]>([])
+  const [activitySuggestions, setActivitySuggestions] = useState<ActivitySuggestion[]>([])
   const [loadingActivities, setLoadingActivities] = useState(false)
   const [isAddingActivity, setIsAddingActivity] = useState(false)
+  const [showAllActivitySuggestions, setShowAllActivitySuggestions] = useState(false)
   const [newActivityCode, setNewActivityCode] = useState("")
   const [newActivityReference, setNewActivityReference] = useState("")
   const [isSubmitting, setIsSubmitting] = useState(false)
@@ -117,6 +126,7 @@ export default function AccountsPage({
   const [accountsIntelligenceError, setAccountsIntelligenceError] = useState<string | null>(null)
   const handledExportRequestRef = useRef<number | null>(null)
   const exportCombinedCSVRef = useRef<() => Promise<void>>(async () => undefined)
+  const exportCombinedXlsxRef = useRef<() => Promise<void>>(async () => undefined)
   const exportInterchangeRef = useRef<(format?: LegacyAccountsExportFormat) => Promise<void>>(async () => undefined)
   const exportDateRangeError = useMemo(() => {
     if ((exportStartDate && !exportEndDate) || (!exportStartDate && exportEndDate)) {
@@ -232,6 +242,14 @@ export default function AccountsPage({
         }))
         setActivities(mappedActivities)
       }
+      if (Array.isArray(data.suggestions)) {
+        setActivitySuggestions(
+          data.suggestions.map((item: any) => ({
+            code: String(item.code || ""),
+            reference: String(item.reference || item.activity || ""),
+          })),
+        )
+      }
     } catch (error) {
       console.error("Error fetching activities:", error)
     }
@@ -251,11 +269,25 @@ export default function AccountsPage({
         }))
         setAccountActivities(normalized)
       }
+      if (Array.isArray(data.suggestions)) {
+        setActivitySuggestions(
+          data.suggestions.map((item: any) => ({
+            code: String(item.code || ""),
+            reference: String(item.reference || item.activity || ""),
+          })),
+        )
+      }
     } catch (error) {
       console.error("Error fetching account activities:", error)
     } finally {
       setLoadingActivities(false)
     }
+  }
+
+  const applyActivitySuggestion = (suggestion: ActivitySuggestion) => {
+    setIsAddingActivity(true)
+    setNewActivityCode(suggestion.code)
+    setNewActivityReference(suggestion.reference)
   }
 
   const handleAddActivity = async (e: React.FormEvent) => {
@@ -477,23 +509,15 @@ export default function AccountsPage({
     return deploymentsToExport
   }
 
-  const exportCombinedCSV = async () => {
-    const escapeCsvField = (field: any): string => {
-      if (field === null || field === undefined) return ""
-      const stringField = String(field)
-      if (stringField.search(/("|,|\n)/g) >= 0) return `"${stringField.replace(/"/g, '""')}"`
-      return stringField
-    }
+  const escapeCsvField = (field: any): string => {
+    if (field === null || field === undefined) return ""
+    const stringField = String(field)
+    if (stringField.search(/("|,|\n)/g) >= 0) return `"${stringField.replace(/"/g, '""')}"`
+    return stringField
+  }
 
-    const deploymentsToExport = await getFilteredDeploymentsForExport()
-    if (!deploymentsToExport) return
-
-    deploymentsToExport.sort((a, b) => {
-      const dateA = new Date(a.date).getTime()
-      const dateB = new Date(b.date).getTime()
-      return dateB - dateA
-    })
-
+  const buildCombinedAccountsCsv = (deploymentsToExport: CombinedDeployment[]) => {
+    const sortedDeployments = [...deploymentsToExport].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
     const headers = [
       "Date",
       "Entry Type",
@@ -506,7 +530,7 @@ export default function AccountsPage({
       "Recorded By",
     ]
 
-    const rows = deploymentsToExport.map((d) => {
+    const rows = sortedDeployments.map((d) => {
       let hfLaborDetails = ""
       let outsideLaborDetails = ""
       if (d.entryType === "Labor" && d.laborEntries && d.laborEntries.length > 0) {
@@ -533,7 +557,7 @@ export default function AccountsPage({
       ]
     })
 
-    let csvContent = "data:text/csv;charset=utf-8," + headers.map(escapeCsvField).join(",") + "\n"
+    let csvContent = headers.map(escapeCsvField).join(",") + "\n"
     csvContent += rows.map((row) => row.join(",")).join("\n")
 
     let totalHfLaborCount = 0,
@@ -543,7 +567,7 @@ export default function AccountsPage({
     let totalConsumablesCost = 0
     const totalsByCode: { [code: string]: number } = {}
 
-    deploymentsToExport.forEach((d) => {
+    sortedDeployments.forEach((d) => {
       const expenditureAmount = d.entryType === "Labor" ? d.totalCost : (d as ConsumableDeployment).amount
       totalsByCode[d.code] = (totalsByCode[d.code] || 0) + expenditureAmount
 
@@ -613,13 +637,32 @@ export default function AccountsPage({
     Object.entries(totalsByCode)
       .sort(([codeA], [codeB]) => codeA.localeCompare(codeB))
       .forEach(([code, totalAmount]) => {
-        const deployment = deploymentsToExport.find((d) => d.code === code)
+        const deployment = sortedDeployments.find((d) => d.code === code)
         const reference = deployment?.reference || code
         const codeRow = [escapeCsvField(code), escapeCsvField(reference), escapeCsvField(totalAmount.toFixed(2))]
         csvContent += codeRow.join(",") + "\n"
       })
 
-    const encodedUri = encodeURI(csvContent)
+    return csvContent
+  }
+
+  const downloadBlob = (blob: Blob, filename: string) => {
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement("a")
+    link.href = url
+    link.download = filename
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+    URL.revokeObjectURL(url)
+  }
+
+  const exportCombinedCSV = async () => {
+    const deploymentsToExport = await getFilteredDeploymentsForExport()
+    if (!deploymentsToExport) return
+
+    const csvBody = buildCombinedAccountsCsv(deploymentsToExport)
+    const encodedUri = encodeURI("data:text/csv;charset=utf-8," + csvBody)
     const link = document.createElement("a")
     link.setAttribute("href", encodedUri)
     link.setAttribute("download", buildAccountsCsvFilename(exportStartDate, exportEndDate))
@@ -634,6 +677,38 @@ export default function AccountsPage({
       date_range_start: exportStartDate || null,
       date_range_end: exportEndDate || null,
     })
+  }
+
+  const exportCombinedXlsx = async () => {
+    posthog.capture("accounts_export_requested", {
+      format: "xlsx",
+      date_range_start: exportStartDate || null,
+      date_range_end: exportEndDate || null,
+    })
+
+    try {
+      const deploymentsToExport = await getFilteredDeploymentsForExport()
+      if (!deploymentsToExport) return
+      const csvBody = buildCombinedAccountsCsv(deploymentsToExport)
+      const workbookBytes = buildXlsxArrayBufferFromCsv(csvBody, "Accounts Export")
+      const blob = new Blob([workbookBytes], { type: XLSX_MIME_TYPE })
+      downloadBlob(blob, buildAccountsXlsxFilename(exportStartDate, exportEndDate))
+      toast.success(`Accounts XLSX exported (${deploymentsToExport.length} entries)`)
+
+      posthog.capture("accounts_export_downloaded", {
+        format: "xlsx",
+        rows_exported: deploymentsToExport.length,
+        date_range_start: exportStartDate || null,
+        date_range_end: exportEndDate || null,
+      })
+    } catch (error: any) {
+      console.error("Error exporting accounts xlsx file:", error)
+      toast.error(error?.message || "Failed to export XLSX file")
+      posthog.capture("accounts_export_failed", {
+        format: "xlsx",
+        reason: error?.message || "unknown",
+      })
+    }
   }
 
   const exportInterchange = async (format: LegacyAccountsExportFormat = "qif") => {
@@ -715,6 +790,7 @@ export default function AccountsPage({
   }
 
   exportCombinedCSVRef.current = exportCombinedCSV
+  exportCombinedXlsxRef.current = exportCombinedXlsx
   exportInterchangeRef.current = exportInterchange
 
   const totalEntries =
@@ -738,6 +814,7 @@ export default function AccountsPage({
   const topCostCodes = patterns?.topCostCodes?.slice(0, 5) || []
   const topFrequencyCodes = patterns?.mostFrequentCodes?.slice(0, 5) || []
   const topHighlights = (accountsIntelligence?.highlights || []).slice(0, 3)
+  const visibleActivitySuggestions = showAllActivitySuggestions ? activitySuggestions : activitySuggestions.slice(0, 12)
 
   useEffect(() => {
     if (!requestedExport) return
@@ -749,6 +826,8 @@ export default function AccountsPage({
         const normalizedFormat = normalizeAccountsExportFormat(requestedExport.format)
         if (normalizedFormat === "csv") {
           await exportCombinedCSVRef.current()
+        } else if (normalizedFormat === "xlsx") {
+          await exportCombinedXlsxRef.current()
         } else {
           await exportInterchangeRef.current(normalizedFormat)
         }
@@ -1005,6 +1084,15 @@ export default function AccountsPage({
               <FileText className="mr-2 h-4 w-4" /> Export CSV
             </Button>
             <Button
+              onClick={exportCombinedXlsx}
+              variant="outline"
+              size="sm"
+              disabled={!canExport}
+              className="w-full sm:w-auto bg-transparent"
+            >
+              <FileSpreadsheet className="mr-2 h-4 w-4" /> Export XLSX
+            </Button>
+            <Button
               onClick={() => void exportInterchange("qif")}
               variant="outline"
               size="sm"
@@ -1014,7 +1102,7 @@ export default function AccountsPage({
               <Coins className="mr-2 h-4 w-4" /> Export QIF
             </Button>
             <p className={cn("w-full text-xs", exportDateRangeError ? "text-rose-600" : "text-muted-foreground")}>
-              {exportDisabledReason || "Optional date filter applies to CSV and QIF exports."}
+              {exportDisabledReason || "Optional date filter applies to CSV, XLSX, and QIF exports."}
             </p>
           </CardContent>
         </Card>
@@ -1091,6 +1179,52 @@ export default function AccountsPage({
                 <p className="text-xs text-muted-foreground">
                   You have read-only access to activity codes.
                 </p>
+              )}
+
+              {activitySuggestions.length > 0 && (
+                <div className="space-y-3 rounded-lg border border-emerald-200/70 bg-emerald-50/60 p-4">
+                  <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                    <div>
+                      <p className="text-sm font-medium text-emerald-900">Starter suggestions from HoneyFarm and Seshagiri</p>
+                      <p className="text-xs text-emerald-800">
+                        Use these proven activity codes as a starting point instead of creating every category from scratch.
+                      </p>
+                    </div>
+                    {activitySuggestions.length > 12 && (
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        className="bg-white"
+                        onClick={() => setShowAllActivitySuggestions((current) => !current)}
+                      >
+                        {showAllActivitySuggestions ? "Show fewer" : `Show all ${activitySuggestions.length}`}
+                      </Button>
+                    )}
+                  </div>
+                  <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-3">
+                    {visibleActivitySuggestions.map((suggestion) => (
+                      <div key={suggestion.code} className="rounded-lg border border-emerald-200 bg-white/90 p-3">
+                        <div className="flex items-start justify-between gap-3">
+                          <div>
+                            <p className="font-mono text-xs font-semibold text-emerald-900">{suggestion.code}</p>
+                            <p className="mt-1 text-sm text-foreground">{suggestion.reference}</p>
+                          </div>
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            className="bg-white"
+                            onClick={() => applyActivitySuggestion(suggestion)}
+                            disabled={!canManageActivities}
+                          >
+                            Use
+                          </Button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
               )}
 
               {loadingActivities ? (

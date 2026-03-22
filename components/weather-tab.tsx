@@ -10,8 +10,11 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { ChartContainer, ChartTooltip, ChartTooltipContent, type ChartConfig } from "@/components/ui/chart"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Skeleton } from "@/components/ui/skeleton"
+import { useTenantSettings } from "@/hooks/use-tenant-settings"
 import { formatDateOnly } from "@/lib/date-utils"
 import { formatNumber } from "@/lib/format"
+import { buildTenantWeatherQuery, formatTenantWeatherCoordinates } from "@/lib/tenant-estate-profile"
+import { parseWeatherCoordinates, WEATHER_REGIONS, type WeatherRegion } from "@/lib/weather-config"
 
 // Type definitions for the WeatherAPI.com response
 interface WeatherApiData {
@@ -19,6 +22,8 @@ interface WeatherApiData {
     name: string
     region: string
     country: string
+    lat?: number
+    lon?: number
     localtime_epoch: number
   }
   current: {
@@ -70,12 +75,6 @@ interface RainfallContextData {
   }
 }
 
-type WeatherRegion = {
-  id: string
-  label: string
-  query: string
-}
-
 type ForecastInsightDay = {
   dateEpoch: number
   label: string
@@ -84,17 +83,6 @@ type ForecastInsightDay = {
   precipInches: number
   riskScore: number
 }
-
-// Use fixed coordinates for ambiguous place names that WeatherAPI resolves incorrectly.
-const WEATHER_REGIONS: WeatherRegion[] = [
-  { id: "kodagu", label: "Kodagu (Coorg)", query: "12.4244,75.7382" },
-  { id: "chikmagalur", label: "Chikmagalur", query: "13.3153,75.7754" },
-  { id: "wayanad", label: "Wayanad", query: "11.6854,76.1320" },
-  { id: "idukki", label: "Idukki", query: "9.8499,76.9730" },
-  { id: "nilgiris", label: "Nilgiris", query: "11.4064,76.6932" },
-  { id: "araku", label: "Araku", query: "18.3270,82.8772" },
-  { id: "bababudangiri", label: "Bababudangiri", query: "13.3902,75.7215" },
-]
 
 const MM_PER_INCH = 25.4
 
@@ -142,15 +130,36 @@ const findLongestDryWindow = (days: ForecastInsightDay[]) => {
 }
 
 export default function WeatherTab() {
+  const { settings } = useTenantSettings()
   const [weatherData, setWeatherData] = useState<WeatherApiData | null>(null)
   const [rainfallContext, setRainfallContext] = useState<RainfallContextData | null>(null)
   const [loading, setLoading] = useState(true)
   const [isRefreshing, setIsRefreshing] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [contextError, setContextError] = useState<string | null>(null)
-  const [selectedRegionId, setSelectedRegionId] = useState(WEATHER_REGIONS[0]?.id ?? "kodagu")
+  const [selectedRegionId, setSelectedRegionId] = useState("")
   const hasLoadedOnceRef = useRef(false)
-  const selectedRegion = WEATHER_REGIONS.find((region) => region.id === selectedRegionId) ?? WEATHER_REGIONS[0]
+  const tenantWeatherQuery = useMemo(() => buildTenantWeatherQuery(settings.estateProfile), [settings.estateProfile])
+  const tenantWeatherCoordinates = useMemo(
+    () => formatTenantWeatherCoordinates(settings.estateProfile),
+    [settings.estateProfile],
+  )
+  const weatherRegions = useMemo<WeatherRegion[]>(() => {
+    if (!tenantWeatherQuery) return WEATHER_REGIONS
+    const tenantLabel =
+      String(settings.estateProfile?.weatherLocationLabel || "").trim() ||
+      (tenantWeatherCoordinates ? `Estate coordinates (${tenantWeatherCoordinates})` : "Estate coordinates")
+    return [{ id: "tenant", label: tenantLabel, query: tenantWeatherQuery }, ...WEATHER_REGIONS]
+  }, [settings.estateProfile?.weatherLocationLabel, tenantWeatherCoordinates, tenantWeatherQuery])
+
+  useEffect(() => {
+    if (!weatherRegions.length) return
+    if (!selectedRegionId || !weatherRegions.some((region) => region.id === selectedRegionId)) {
+      setSelectedRegionId(weatherRegions[0].id)
+    }
+  }, [selectedRegionId, weatherRegions])
+
+  const selectedRegion = weatherRegions.find((region) => region.id === selectedRegionId) ?? weatherRegions[0] ?? WEATHER_REGIONS[0]
   const selectedRegionLabel = selectedRegion?.label ?? "Kodagu (Coorg)"
   const selectedRegionQuery = selectedRegion?.query ?? WEATHER_REGIONS[0].query
 
@@ -366,7 +375,18 @@ export default function WeatherTab() {
   const { location, current, forecast } = weatherData
   const todayForecast = forecast.forecastday[0]
   const locationLabel = [location.name, location.region, location.country].filter(Boolean).join(", ")
-  const hasProviderMismatch = Boolean(location.country) && String(location.country || "").toLowerCase() !== "india"
+  const providerCoordinates =
+    Number.isFinite(Number(location.lat)) && Number.isFinite(Number(location.lon))
+      ? `${Number(location.lat).toFixed(4)}, ${Number(location.lon).toFixed(4)}`
+      : "Unavailable"
+  const requestedCoordinates = parseWeatherCoordinates(selectedRegionQuery)
+  const providerCoordinatesMismatch =
+    requestedCoordinates && Number.isFinite(Number(location.lat)) && Number.isFinite(Number(location.lon))
+      ? Math.abs(requestedCoordinates.latitude - Number(location.lat)) > 0.35 ||
+        Math.abs(requestedCoordinates.longitude - Number(location.lon)) > 0.35
+      : false
+  const hasProviderMismatch =
+    providerCoordinatesMismatch || (Boolean(location.country) && String(location.country || "").toLowerCase() !== "india")
   const dryingRiskClass =
     rainfallContext?.dryingRisk === "high"
       ? "border-rose-200 bg-rose-50 text-rose-700"
@@ -382,17 +402,19 @@ export default function WeatherTab() {
             <div>
               <CardTitle>Current Weather in {selectedRegionLabel}</CardTitle>
               <CardDescription>
-                {locationLabel ? `Provider location: ${locationLabel} · ` : ""}
+                Exact coordinates: {selectedRegionQuery}
+                {locationLabel ? ` · Provider location: ${locationLabel}` : ""}
+                {" · "}
                 Last updated: {new Date(location.localtime_epoch * 1000).toLocaleTimeString("en-IN")}
               </CardDescription>
             </div>
             <div className="w-full sm:w-[220px]">
               <Select value={selectedRegionId} onValueChange={setSelectedRegionId}>
                 <SelectTrigger>
-                  <SelectValue placeholder="Select region" />
+                <SelectValue placeholder="Select region" />
                 </SelectTrigger>
                 <SelectContent>
-                  {WEATHER_REGIONS.map((region) => (
+                  {weatherRegions.map((region) => (
                     <SelectItem key={region.id} value={region.id}>
                       {region.label}
                     </SelectItem>
@@ -431,7 +453,7 @@ export default function WeatherTab() {
               <p className="text-muted-foreground capitalize">{current.condition.text}</p>
             </div>
           </div>
-          <div className="grid grid-cols-2 gap-4 text-sm">
+            <div className="grid grid-cols-2 gap-4 text-sm">
             <div className="flex items-center gap-2">
               <Thermometer className="h-5 w-5 text-muted-foreground" />
               <span>Feels like: {Math.round(current.feelslike_c)}°C</span>
@@ -447,6 +469,22 @@ export default function WeatherTab() {
             <div className="flex items-center gap-2">
               <Cloudy className="h-5 w-5 text-muted-foreground" />
               <span>Rain Chance: {Number(todayForecast?.day?.daily_chance_of_rain) || 0}%</span>
+            </div>
+          </div>
+          <div className="grid gap-3 md:col-span-2 md:grid-cols-2">
+            <div className="rounded-xl border border-border/60 bg-white/80 p-3 text-sm">
+              <p className="text-xs uppercase tracking-[0.16em] text-muted-foreground">Target Coordinates</p>
+              <p className="mt-1 font-medium">{selectedRegionQuery}</p>
+              <p className="mt-1 text-xs text-muted-foreground">
+                {selectedRegion.id === "tenant"
+                  ? "Using the exact estate coordinates saved in Settings."
+                  : "Using the selected regional fallback coordinates."}
+              </p>
+            </div>
+            <div className="rounded-xl border border-border/60 bg-white/80 p-3 text-sm">
+              <p className="text-xs uppercase tracking-[0.16em] text-muted-foreground">Provider Coordinates</p>
+              <p className="mt-1 font-medium">{providerCoordinates}</p>
+              <p className="mt-1 text-xs text-muted-foreground">This is where the forecast provider says it resolved your request.</p>
             </div>
           </div>
         </CardContent>

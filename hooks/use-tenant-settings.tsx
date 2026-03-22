@@ -5,6 +5,11 @@ import { useSearchParams } from "next/navigation"
 import { useAuth } from "@/hooks/use-auth"
 import { apiRequest } from "@/lib/api-client"
 import {
+  DEFAULT_TENANT_ESTATE_PROFILE,
+  mergeTenantEstateProfile,
+  type TenantEstateProfile,
+} from "@/lib/tenant-estate-profile"
+import {
   DEFAULT_TENANT_FEATURE_FLAGS,
   DEFAULT_TENANT_UI_VARIANT,
   mergeTenantFeatureFlags,
@@ -15,6 +20,7 @@ import {
 export type TenantSettings = {
   bagWeightKg: number
   estateName: string
+  estateProfile?: TenantEstateProfile
   alertThresholds?: AlertThresholds
   uiPreferences?: UiPreferences
   uiVariant?: TenantUiVariant
@@ -73,6 +79,7 @@ export function useTenantSettings() {
   const [settings, setSettings] = useState<TenantSettings>({
     bagWeightKg: DEFAULT_BAG_WEIGHT_KG,
     estateName: "",
+    estateProfile: DEFAULT_TENANT_ESTATE_PROFILE,
     alertThresholds: DEFAULT_ALERT_THRESHOLDS,
     uiPreferences: DEFAULT_UI_PREFERENCES,
     uiVariant: DEFAULT_TENANT_UI_VARIANT,
@@ -94,6 +101,7 @@ export function useTenantSettings() {
       const data = await apiRequest<{ success: boolean; settings: TenantSettings }>(endpoint)
       const bagWeightKg = Number(data.settings?.bagWeightKg) || DEFAULT_BAG_WEIGHT_KG
       const estateName = typeof data.settings?.estateName === "string" ? data.settings.estateName : ""
+      const estateProfile = mergeTenantEstateProfile(data.settings?.estateProfile)
       const alertThresholds =
         data.settings?.alertThresholds && typeof data.settings.alertThresholds === "object"
           ? { ...DEFAULT_ALERT_THRESHOLDS, ...data.settings.alertThresholds }
@@ -114,7 +122,7 @@ export function useTenantSettings() {
         data.settings?.featureFlags && typeof data.settings.featureFlags === "object"
           ? mergeTenantFeatureFlags(data.settings.featureFlags)
           : DEFAULT_TENANT_FEATURE_FLAGS
-      setSettings({ bagWeightKg, estateName, alertThresholds, uiPreferences, uiVariant, featureFlags })
+      setSettings({ bagWeightKg, estateName, estateProfile, alertThresholds, uiPreferences, uiVariant, featureFlags })
     } catch (err: any) {
       console.error("Error loading tenant settings:", err)
       setError(err.message || "Failed to load tenant settings")
@@ -141,6 +149,10 @@ export function useTenantSettings() {
       }
       const estateName =
         typeof nextSettings.estateName === "string" ? nextSettings.estateName.trim() : undefined
+      const estateProfile =
+        nextSettings.estateProfile && typeof nextSettings.estateProfile === "object"
+          ? mergeTenantEstateProfile({ ...settings.estateProfile, ...nextSettings.estateProfile })
+          : undefined
       const alertThresholds =
         nextSettings.alertThresholds && typeof nextSettings.alertThresholds === "object"
           ? nextSettings.alertThresholds
@@ -161,6 +173,7 @@ export function useTenantSettings() {
       const payload = {
         bagWeightKg,
         ...(estateName !== undefined ? { estateName } : {}),
+        ...(estateProfile ? { estateProfile } : {}),
         ...(alertThresholds ? { alertThresholds } : {}),
         ...(uiPreferences ? { uiPreferences } : {}),
         ...(uiVariant ? { uiVariant } : {}),
@@ -173,6 +186,7 @@ export function useTenantSettings() {
       const updatedBagWeightKg = Number(data.settings?.bagWeightKg) || payload.bagWeightKg
       const updatedEstateName =
         typeof data.settings?.estateName === "string" ? data.settings.estateName : settings.estateName
+      const updatedEstateProfile = mergeTenantEstateProfile(data.settings?.estateProfile ?? settings.estateProfile)
       const updatedAlertThresholds =
         data.settings?.alertThresholds && typeof data.settings.alertThresholds === "object"
           ? { ...DEFAULT_ALERT_THRESHOLDS, ...data.settings.alertThresholds }
@@ -198,6 +212,7 @@ export function useTenantSettings() {
       setSettings({
         bagWeightKg: updatedBagWeightKg,
         estateName: updatedEstateName,
+        estateProfile: updatedEstateProfile,
         alertThresholds: updatedAlertThresholds,
         uiPreferences: updatedUiPreferences,
         uiVariant: updatedUiVariant,
@@ -206,6 +221,7 @@ export function useTenantSettings() {
       return {
         bagWeightKg: updatedBagWeightKg,
         estateName: updatedEstateName,
+        estateProfile: updatedEstateProfile,
         alertThresholds: updatedAlertThresholds,
         uiPreferences: updatedUiPreferences,
         uiVariant: updatedUiVariant,
@@ -215,6 +231,7 @@ export function useTenantSettings() {
     [
       settings.bagWeightKg,
       settings.estateName,
+      settings.estateProfile,
       settings.alertThresholds,
       settings.uiPreferences,
       settings.uiVariant,

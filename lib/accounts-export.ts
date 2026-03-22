@@ -1,4 +1,4 @@
-export type AccountsExportFormat = "csv" | "qif"
+export type AccountsExportFormat = "csv" | "xlsx" | "qif"
 export type LegacyAccountsExportFormat = AccountsExportFormat | "cif"
 
 export const normalizeAccountsExportFormat = (value: unknown): AccountsExportFormat => {
@@ -7,6 +7,7 @@ export const normalizeAccountsExportFormat = (value: unknown): AccountsExportFor
     .toLowerCase()
 
   if (normalized === "csv") return "csv"
+  if (normalized === "xlsx" || normalized === "excel") return "xlsx"
   if (normalized === "qif" || normalized === "cif") return "qif"
   return "csv"
 }
@@ -18,6 +19,9 @@ export const buildAccountsExportDateSuffix = (startDate?: string, endDate?: stri
 
 export const buildAccountsCsvFilename = (startDate?: string, endDate?: string) =>
   `accounts_summary_${buildAccountsExportDateSuffix(startDate, endDate)}.csv`
+
+export const buildAccountsXlsxFilename = (startDate?: string, endDate?: string) =>
+  `accounts_summary_${buildAccountsExportDateSuffix(startDate, endDate)}.xlsx`
 
 export const buildAccountsQifFilename = (startDate?: string, endDate?: string) =>
   `accounts_export_${buildAccountsExportDateSuffix(startDate, endDate)}.qif`

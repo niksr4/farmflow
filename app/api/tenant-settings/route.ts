@@ -7,6 +7,12 @@ import { requireAdminRole } from "@/lib/permissions"
 import { logAuditEvent } from "@/lib/server/audit-log"
 import { loadTenantExperienceColumnStatus, parseJsonObject } from "@/lib/server/tenant-experience-db"
 import {
+  DEFAULT_TENANT_ESTATE_PROFILE,
+  mergeTenantEstateProfile,
+  sanitizeTenantEstateProfile,
+  validateTenantEstateProfile,
+} from "@/lib/tenant-estate-profile"
+import {
   DEFAULT_TENANT_FEATURE_FLAGS,
   DEFAULT_TENANT_UI_VARIANT,
   mergeTenantFeatureFlags,
@@ -90,6 +96,19 @@ const sanitizeUiPreferences = (input: any) => {
   return Object.keys(cleaned).length > 0 ? cleaned : null
 }
 
+const resolveStoredUiPreferences = (input: any) => ({
+  ...(input && typeof input === "object" ? input : {}),
+})
+
+const resolveDisplayPreferences = (input: any) => ({
+  hideEmptyMetrics:
+    typeof input?.hideEmptyMetrics === "boolean"
+      ? input.hideEmptyMetrics
+      : DEFAULT_UI_PREFERENCES.hideEmptyMetrics,
+})
+
+const resolveEstateProfile = (input: any) => mergeTenantEstateProfile(input?.estateProfile || DEFAULT_TENANT_ESTATE_PROFILE)
+
 export async function GET(request: Request) {
   try {
     if (!sql) {
@@ -132,7 +151,8 @@ export async function GET(request: Request) {
       alertThresholds.targets = { ...DEFAULT_ALERT_THRESHOLDS.targets, ...parsedThresholds.targets }
     }
     const parsedUiPreferences = parseJsonObject(rows?.[0]?.ui_preferences, "ui preferences JSON")
-    const uiPreferences = { ...DEFAULT_UI_PREFERENCES, ...(parsedUiPreferences || {}) }
+    const uiPreferences = resolveDisplayPreferences(parsedUiPreferences)
+    const estateProfile = resolveEstateProfile(parsedUiPreferences)
     const uiVariant = sanitizeTenantUiVariant(rows?.[0]?.ui_variant) || DEFAULT_TENANT_UI_VARIANT
     const parsedFeatureFlags = sanitizeTenantFeatureFlags(
       parseJsonObject(rows?.[0]?.feature_flags, "feature flags JSON"),
@@ -140,7 +160,7 @@ export async function GET(request: Request) {
     const featureFlags = mergeTenantFeatureFlags(parsedFeatureFlags || DEFAULT_TENANT_FEATURE_FLAGS)
     return NextResponse.json({
       success: true,
-      settings: { bagWeightKg, estateName, alertThresholds, uiPreferences, uiVariant, featureFlags },
+      settings: { bagWeightKg, estateName, estateProfile, alertThresholds, uiPreferences, uiVariant, featureFlags },
     })
   } catch (error: any) {
     console.error("Error loading tenant settings:", error)
@@ -164,6 +184,8 @@ export async function PUT(request: Request) {
     const body = await request.json()
     const bagWeightKg = Number(body.bagWeightKg)
     const estateNameInput = typeof body.estateName === "string" ? body.estateName.trim() : null
+    const estateProfileInput =
+      body.estateProfile === undefined ? null : sanitizeTenantEstateProfile(body.estateProfile)
     const alertThresholdsInput = sanitizeAlertThresholds(body.alertThresholds)
     const uiPreferencesInput = sanitizeUiPreferences(body.uiPreferences)
     const uiVariantInput = body.uiVariant === undefined ? null : sanitizeTenantUiVariant(body.uiVariant)
@@ -186,6 +208,10 @@ export async function PUT(request: Request) {
 
     if (body.featureFlags !== undefined && !featureFlagsInput) {
       return NextResponse.json({ success: false, error: "featureFlags are invalid" }, { status: 400 })
+    }
+
+    if (body.estateProfile !== undefined && !estateProfileInput) {
+      return NextResponse.json({ success: false, error: "estateProfile is invalid" }, { status: 400 })
     }
 
     const requestedTenantId = String(body.tenantId || "").trim()
@@ -232,6 +258,26 @@ export async function PUT(request: Request) {
           `,
         )
 
+    const existingUiPreferences = resolveStoredUiPreferences(
+      parseJsonObject(beforeRows?.[0]?.ui_preferences, "existing ui preferences"),
+    )
+    const mergedEstateProfile = mergeTenantEstateProfile({
+      ...resolveEstateProfile(existingUiPreferences),
+      ...(estateProfileInput || {}),
+    })
+    const estateProfileValidationError = validateTenantEstateProfile(mergedEstateProfile)
+    if (estateProfileValidationError) {
+      return NextResponse.json({ success: false, error: estateProfileValidationError }, { status: 400 })
+    }
+
+    // Persist estate profile under ui_preferences for backward-compatible
+    // tenant settings storage without requiring a tenant table migration.
+    const mergedUiPreferences = {
+      ...existingUiPreferences,
+      ...(uiPreferencesInput || {}),
+      estateProfile: mergedEstateProfile,
+    }
+
     const rows = columnStatus.hasUiVariant && columnStatus.hasFeatureFlags
       ? await runTenantQuery(
           sql,
@@ -241,7 +287,7 @@ export async function PUT(request: Request) {
             SET bag_weight_kg = ${bagWeightKg},
                 name = COALESCE(${estateNameInput}, name),
                 alert_thresholds = COALESCE(${alertThresholdsInput ? JSON.stringify(alertThresholdsInput) : null}::jsonb, alert_thresholds),
-                ui_preferences = COALESCE(${uiPreferencesInput ? JSON.stringify(uiPreferencesInput) : null}::jsonb, ui_preferences),
+                ui_preferences = ${JSON.stringify(mergedUiPreferences)}::jsonb,
                 ui_variant = COALESCE(${uiVariantInput}, ui_variant),
                 feature_flags = COALESCE(${featureFlagsInput ? JSON.stringify(featureFlagsInput) : null}::jsonb, feature_flags)
             WHERE id = ${tenantId}
@@ -256,7 +302,7 @@ export async function PUT(request: Request) {
             SET bag_weight_kg = ${bagWeightKg},
                 name = COALESCE(${estateNameInput}, name),
                 alert_thresholds = COALESCE(${alertThresholdsInput ? JSON.stringify(alertThresholdsInput) : null}::jsonb, alert_thresholds),
-                ui_preferences = COALESCE(${uiPreferencesInput ? JSON.stringify(uiPreferencesInput) : null}::jsonb, ui_preferences)
+                ui_preferences = ${JSON.stringify(mergedUiPreferences)}::jsonb
             WHERE id = ${tenantId}
             RETURNING bag_weight_kg, name, alert_thresholds, ui_preferences
           `,
@@ -270,7 +316,8 @@ export async function PUT(request: Request) {
       alertThresholds.targets = { ...DEFAULT_ALERT_THRESHOLDS.targets, ...parsedThresholds.targets }
     }
     const parsedUiPreferences = parseJsonObject(rows?.[0]?.ui_preferences, "stored ui preferences")
-    const uiPreferences = { ...DEFAULT_UI_PREFERENCES, ...(parsedUiPreferences || {}) }
+    const uiPreferences = resolveDisplayPreferences(parsedUiPreferences)
+    const estateProfile = resolveEstateProfile(parsedUiPreferences)
     const uiVariant = sanitizeTenantUiVariant(rows?.[0]?.ui_variant) || DEFAULT_TENANT_UI_VARIANT
     const parsedFeatureFlags = sanitizeTenantFeatureFlags(
       parseJsonObject(rows?.[0]?.feature_flags, "stored feature flags"),
@@ -289,7 +336,7 @@ export async function PUT(request: Request) {
 
     return NextResponse.json({
       success: true,
-      settings: { bagWeightKg: updated, estateName, alertThresholds, uiPreferences, uiVariant, featureFlags },
+      settings: { bagWeightKg: updated, estateName, estateProfile, alertThresholds, uiPreferences, uiVariant, featureFlags },
     })
   } catch (error: any) {
     console.error("Error updating tenant settings:", error)
