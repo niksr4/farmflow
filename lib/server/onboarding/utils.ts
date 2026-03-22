@@ -176,6 +176,9 @@ const hasMissingUserEmailColumn = (message: string) =>
 const hasMissingGuidedSetupColumn = (message: string) =>
   message.includes('column "setup_completed_at"') || message.includes('column "requires_guided_setup"')
 
+const hasMissingPasswordRotationColumn = (message: string) =>
+  message.includes('column "password_reset_required"') || message.includes('column "password_updated_at"')
+
 export const normalizeOnboardingError = (error: unknown) => {
   const message = String((error as Error)?.message || error || "")
   if (isMissingRelation(error, "signup_requests") || isMissingRelation(error, "signup_tokens")) {
@@ -186,6 +189,9 @@ export const normalizeOnboardingError = (error: unknown) => {
   }
   if (hasMissingGuidedSetupColumn(message)) {
     return new Error("Guided setup schema missing. Run scripts/65-user-guided-setup.sql.")
+  }
+  if (hasMissingPasswordRotationColumn(message)) {
+    return new Error("Password rotation schema missing. Run scripts/49-password-rotation.sql.")
   }
   if (error instanceof Error) return error
   return new Error(message || "Self-serve onboarding failed")

@@ -37,6 +37,11 @@ type UserRow = {
 
 const ownerContext = normalizeTenantContext(undefined, "owner")
 
+const isMissingPasswordRotationColumnError = (error: unknown) => {
+  const message = String((error as Error)?.message || error || "")
+  return message.includes('column "password_reset_required"') || message.includes('column "password_updated_at"')
+}
+
 const loadSignupVerification = async (tokenHash: string) =>
   (await runTenantQuery(
     sql,
@@ -285,6 +290,126 @@ const loadUserByEmail = async (normalizedEmail: string) =>
     `,
   )) as UserRow[]
 
+const updateExistingUserForSignup = async (signupRequest: SignupRequestRecord, userId: string) => {
+  try {
+    await runTenantQuery(
+      sql,
+      ownerContext,
+      sql`
+        UPDATE users
+        SET
+          email = ${signupRequest.email},
+          normalized_email = ${signupRequest.normalized_email},
+          email_verified_at = CURRENT_TIMESTAMP,
+          preferred_locale = ${signupRequest.preferred_locale || "en"},
+          password_hash = ${signupRequest.password_hash},
+          password_reset_required = FALSE,
+          password_updated_at = CURRENT_TIMESTAMP,
+          requires_guided_setup = TRUE,
+          setup_completed_at = NULL
+        WHERE id = ${userId}
+      `,
+    )
+  } catch (error) {
+    if (!isMissingPasswordRotationColumnError(error)) {
+      throw error
+    }
+
+    await runTenantQuery(
+      sql,
+      ownerContext,
+      sql`
+        UPDATE users
+        SET
+          email = ${signupRequest.email},
+          normalized_email = ${signupRequest.normalized_email},
+          email_verified_at = CURRENT_TIMESTAMP,
+          preferred_locale = ${signupRequest.preferred_locale || "en"},
+          password_hash = ${signupRequest.password_hash},
+          requires_guided_setup = TRUE,
+          setup_completed_at = NULL
+        WHERE id = ${userId}
+      `,
+    )
+  }
+}
+
+const createUserForSignup = async (signupRequest: SignupRequestRecord, username: string, tenantId: string) => {
+  try {
+    return (await runTenantQuery(
+      sql,
+      ownerContext,
+      sql`
+        INSERT INTO users (
+          username,
+          email,
+          normalized_email,
+          email_verified_at,
+          preferred_locale,
+          password_hash,
+          password_reset_required,
+          password_updated_at,
+          requires_guided_setup,
+          setup_completed_at,
+          role,
+          tenant_id
+        )
+        VALUES (
+          ${username},
+          ${signupRequest.email},
+          ${signupRequest.normalized_email},
+          CURRENT_TIMESTAMP,
+          ${signupRequest.preferred_locale || "en"},
+          ${signupRequest.password_hash},
+          FALSE,
+          CURRENT_TIMESTAMP,
+          TRUE,
+          NULL,
+          'admin',
+          ${tenantId}
+        )
+        RETURNING id, username, tenant_id, email
+      `,
+    )) as UserRow[]
+  } catch (error) {
+    if (!isMissingPasswordRotationColumnError(error)) {
+      throw error
+    }
+
+    return (await runTenantQuery(
+      sql,
+      ownerContext,
+      sql`
+        INSERT INTO users (
+          username,
+          email,
+          normalized_email,
+          email_verified_at,
+          preferred_locale,
+          password_hash,
+          requires_guided_setup,
+          setup_completed_at,
+          role,
+          tenant_id
+        )
+        VALUES (
+          ${username},
+          ${signupRequest.email},
+          ${signupRequest.normalized_email},
+          CURRENT_TIMESTAMP,
+          ${signupRequest.preferred_locale || "en"},
+          ${signupRequest.password_hash},
+          TRUE,
+          NULL,
+          'admin',
+          ${tenantId}
+        )
+        RETURNING id, username, tenant_id, email
+      `,
+    )) as UserRow[]
+  }
+}
+
 const ensureUser = async (signupRequest: SignupRequestRecord, tenantId: string) => {
   const existingUserId = String(signupRequest.user_id || "").trim()
   if (existingUserId) {
@@ -315,24 +440,7 @@ const ensureUser = async (signupRequest: SignupRequestRecord, tenantId: string) 
       throw new Error("This email is already linked to another tenant")
     }
 
-    await runTenantQuery(
-      sql,
-      ownerContext,
-        sql`
-          UPDATE users
-          SET
-            email = ${signupRequest.email},
-            normalized_email = ${signupRequest.normalized_email},
-            email_verified_at = CURRENT_TIMESTAMP,
-            preferred_locale = ${signupRequest.preferred_locale || "en"},
-            password_hash = ${signupRequest.password_hash},
-            password_reset_required = FALSE,
-            password_updated_at = CURRENT_TIMESTAMP,
-            requires_guided_setup = TRUE,
-            setup_completed_at = NULL
-        WHERE id = ${existingUserByEmail.id}
-      `,
-    )
+    await updateExistingUserForSignup(signupRequest, existingUserByEmail.id)
 
     await runTenantQuery(
       sql,
@@ -351,41 +459,7 @@ const ensureUser = async (signupRequest: SignupRequestRecord, tenantId: string) 
   }
 
   const username = signupRequest.generated_username || (await buildUniqueUsername(signupRequest))
-  const createdUsers = (await runTenantQuery(
-    sql,
-    ownerContext,
-    sql`
-      INSERT INTO users (
-        username,
-        email,
-        normalized_email,
-        email_verified_at,
-        preferred_locale,
-        password_hash,
-        password_reset_required,
-        password_updated_at,
-        requires_guided_setup,
-        setup_completed_at,
-        role,
-        tenant_id
-      )
-      VALUES (
-        ${username},
-        ${signupRequest.email},
-        ${signupRequest.normalized_email},
-        CURRENT_TIMESTAMP,
-        ${signupRequest.preferred_locale || "en"},
-        ${signupRequest.password_hash},
-        FALSE,
-        CURRENT_TIMESTAMP,
-        TRUE,
-        NULL,
-        'admin',
-        ${tenantId}
-      )
-      RETURNING id, username, tenant_id, email
-    `,
-  )) as UserRow[]
+  const createdUsers = await createUserForSignup(signupRequest, username, tenantId)
 
   const createdUser = createdUsers[0]
   await runTenantQuery(
