@@ -45,17 +45,27 @@ const resetPasswordSchema = z.object({
 const findConflictingUserByUsername = async (username: string, excludeUserId?: string) => {
   if (!sql) return null
   const ownerContext = normalizeTenantContext(undefined, "owner")
+  const normalizedUsername = normalizeUsernameLookup(username)
+  const query = excludeUserId
+    ? sql`
+        SELECT id, username, role, tenant_id, created_at
+        FROM users
+        WHERE LOWER(BTRIM(username)) = ${normalizedUsername}
+          AND id <> ${excludeUserId}
+        ORDER BY created_at ASC
+        LIMIT 1
+      `
+    : sql`
+        SELECT id, username, role, tenant_id, created_at
+        FROM users
+        WHERE LOWER(BTRIM(username)) = ${normalizedUsername}
+        ORDER BY created_at ASC
+        LIMIT 1
+      `
   const rows = (await runTenantQuery(
     sql,
     ownerContext,
-    sql`
-      SELECT id, username, role, tenant_id, created_at
-      FROM users
-      WHERE LOWER(BTRIM(username)) = ${normalizeUsernameLookup(username)}
-        AND (${excludeUserId || null} IS NULL OR id <> ${excludeUserId || null})
-      ORDER BY created_at ASC
-      LIMIT 1
-    `,
+    query,
   )) as UserRecord[]
 
   return rows[0] || null
