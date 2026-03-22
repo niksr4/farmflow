@@ -27,10 +27,10 @@ export async function GET(_request: NextRequest) {
     )
     return NextResponse.json({ success: true, records })
   } catch (error: any) {
-    console.error("[v0] Error fetching rainfall records:", error)
     if (isModuleAccessError(error)) {
       return NextResponse.json({ success: false, error: "Module access disabled" }, { status: 403 })
     }
+    console.error("[v0] Error fetching rainfall records:", error)
     return NextResponse.json({ success: false, error: error.message }, { status: 500 })
   }
 }
@@ -92,10 +92,10 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({ success: true, record: result[0] })
   } catch (error: any) {
-    console.error("[v0] Error saving rainfall record:", error)
     if (isModuleAccessError(error)) {
       return NextResponse.json({ success: false, error: "Module access disabled" }, { status: 403 })
     }
+    console.error("[v0] Error saving rainfall record:", error)
     return NextResponse.json({ success: false, error: error.message }, { status: 500 })
   }
 }
@@ -141,10 +141,10 @@ export async function DELETE(request: NextRequest) {
 
     return NextResponse.json({ success: true })
   } catch (error: any) {
-    console.error("[v0] Error deleting rainfall record:", error)
     if (isModuleAccessError(error)) {
       return NextResponse.json({ success: false, error: "Module access disabled" }, { status: 403 })
     }
+    console.error("[v0] Error deleting rainfall record:", error)
     return NextResponse.json({ success: false, error: error.message }, { status: 500 })
   }
 }

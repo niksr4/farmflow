@@ -76,6 +76,38 @@ const loadSignupVerification = async (tokenHash: string) =>
     `,
   )) as SignupVerificationLookup[]
 
+const loadSignupRequestById = async (signupRequestId: string) =>
+  (await runTenantQuery(
+    sql,
+    ownerContext,
+    sql`
+      SELECT
+        id,
+        name,
+        email,
+        normalized_email,
+        estate_name,
+        country,
+        preferred_locale,
+        password_hash,
+        status,
+        source,
+        tenant_id,
+        user_id,
+        generated_username,
+        verification_sent_at,
+        created_at,
+        verified_at,
+        provisioned_at,
+        provisioning_error,
+        last_ip_address,
+        last_user_agent
+      FROM signup_requests
+      WHERE id = ${signupRequestId}
+      LIMIT 1
+    `,
+  )) as SignupRequestRecord[]
+
 const markProvisioningError = async (signupRequestId: string, errorMessage: string) => {
   await runTenantQuery(
     sql,
@@ -372,6 +404,127 @@ const ensureUser = async (signupRequest: SignupRequestRecord, tenantId: string) 
   return createdUser
 }
 
+const provisionSignupRequestRecord = async (
+  signupRequest: SignupRequestRecord,
+  input: {
+    source: string
+    eventType: string
+    tokenId?: string | null
+  },
+): Promise<SignupVerificationResult> => {
+  if (signupRequest.status === "cancelled" || signupRequest.status === "expired") {
+    throw new Error("This signup request is no longer active")
+  }
+
+  const wasProvisioned = Boolean(signupRequest.provisioned_at)
+
+  try {
+    if (!signupRequest.verified_at || signupRequest.status !== "verified") {
+      await runTenantQuery(
+        sql,
+        ownerContext,
+        sql`
+          UPDATE signup_requests
+          SET
+            status = 'verified',
+            verified_at = CURRENT_TIMESTAMP,
+            provisioning_error = NULL
+          WHERE id = ${signupRequest.id}
+        `,
+      )
+      signupRequest.verified_at = new Date().toISOString()
+      signupRequest.status = "verified"
+    }
+
+    const tenant = await ensureTenant(signupRequest)
+    await ensureTenantModules(tenant.id)
+    await ensureStarterLocation(tenant.id, signupRequest.estate_name)
+    const user = await ensureUser(signupRequest, tenant.id)
+
+    await runTenantQuery(
+      sql,
+      ownerContext,
+      sql`
+        UPDATE signup_requests
+        SET
+          status = 'provisioned',
+          tenant_id = ${tenant.id},
+          user_id = ${user.id},
+          generated_username = ${user.username},
+          provisioned_at = COALESCE(provisioned_at, CURRENT_TIMESTAMP),
+          provisioning_error = NULL
+        WHERE id = ${signupRequest.id}
+      `,
+    )
+
+    if (input.tokenId) {
+      await runTenantQuery(
+        sql,
+        ownerContext,
+        sql`
+          UPDATE signup_tokens
+          SET consumed_at = COALESCE(consumed_at, CURRENT_TIMESTAMP)
+          WHERE id = ${input.tokenId}
+        `,
+      )
+    }
+
+    await logSecurityEvent({
+      tenantId: tenant.id,
+      actorUserId: user.id,
+      actorUsername: user.username,
+      actorRole: "admin",
+      eventType: input.eventType,
+      severity: "info",
+      source: input.source,
+      metadata: {
+        signupRequestId: signupRequest.id,
+      },
+    })
+
+    if (!wasProvisioned) {
+      await sendOwnerTenantCreatedAlert({
+        tenantId: tenant.id,
+        tenantName: tenant.name,
+        origin: "self-serve-signup",
+        actorName: signupRequest.name,
+        actorEmail: signupRequest.email,
+        username: user.username,
+        createdBy: user.username,
+        source: signupRequest.source,
+      })
+    }
+
+    return {
+      email: signupRequest.email,
+      tenantId: tenant.id,
+      tenantName: tenant.name,
+      userId: user.id,
+      username: user.username,
+      loginIdentifier: signupRequest.email,
+    }
+  } catch (error) {
+    const normalizedError = normalizeOnboardingError(error)
+    await markProvisioningError(signupRequest.id, normalizedError.message).catch(() => undefined)
+    throw normalizedError
+  }
+}
+
+export async function provisionSignupRequestById(signupRequestId: string): Promise<SignupVerificationResult> {
+  const signupRequest = (await loadSignupRequestById(signupRequestId).catch((error) => {
+    throw normalizeOnboardingError(error)
+  }))[0]
+
+  if (!signupRequest) {
+    throw new Error("Signup request not found")
+  }
+
+  return provisionSignupRequestRecord(signupRequest, {
+    source: "auth/signup",
+    eventType: "auth_signup_provisioned",
+  })
+}
+
 export async function verifySignupToken(rawToken: string): Promise<SignupVerificationResult> {
   const token = String(rawToken || "").trim()
   if (!token) {
@@ -398,85 +551,14 @@ export async function verifySignupToken(rawToken: string): Promise<SignupVerific
     throw new Error(stateError)
   }
 
-  try {
-    const tokenConsumed = await consumeSignupVerificationToken(signupVerification.token_id)
-    if (!tokenConsumed) {
-      throw new Error(SIGNUP_VERIFICATION_ALREADY_USED_MESSAGE)
-    }
-
-    if (!signupVerification.verified_at) {
-      await runTenantQuery(
-        sql,
-        ownerContext,
-        sql`
-          UPDATE signup_requests
-          SET
-            status = 'verified',
-            verified_at = CURRENT_TIMESTAMP,
-            provisioning_error = NULL
-          WHERE id = ${signupVerification.id}
-        `,
-      )
-      signupVerification.verified_at = new Date().toISOString()
-      signupVerification.status = "verified"
-    }
-
-    const tenant = await ensureTenant(signupVerification)
-    await ensureTenantModules(tenant.id)
-    await ensureStarterLocation(tenant.id, signupVerification.estate_name)
-    const user = await ensureUser(signupVerification, tenant.id)
-
-    await runTenantQuery(
-      sql,
-      ownerContext,
-      sql`
-        UPDATE signup_requests
-        SET
-          status = 'provisioned',
-          tenant_id = ${tenant.id},
-          user_id = ${user.id},
-          generated_username = ${user.username},
-          provisioned_at = COALESCE(provisioned_at, CURRENT_TIMESTAMP),
-          provisioning_error = NULL
-        WHERE id = ${signupVerification.id}
-      `,
-    )
-
-    await logSecurityEvent({
-      tenantId: tenant.id,
-      actorUserId: user.id,
-      actorUsername: user.username,
-      actorRole: "admin",
-      eventType: "auth_signup_verified",
-      severity: "info",
-      source: "auth/verify-email",
-      metadata: {
-        signupRequestId: signupVerification.id,
-      },
-    })
-
-    await sendOwnerTenantCreatedAlert({
-      tenantId: tenant.id,
-      tenantName: tenant.name,
-      origin: "self-serve-signup",
-      actorName: signupVerification.name,
-      actorEmail: signupVerification.email,
-      username: user.username,
-      createdBy: user.username,
-      source: signupVerification.source,
-    })
-
-    return {
-      email: signupVerification.email,
-      tenantId: tenant.id,
-      tenantName: tenant.name,
-      userId: user.id,
-      username: user.username,
-      loginIdentifier: signupVerification.email,
-    }
-  } catch (error) {
-    const normalizedError = normalizeOnboardingError(error)
-    await markProvisioningError(signupVerification.id, normalizedError.message).catch(() => undefined)
-    throw normalizedError
+  const tokenConsumed = await consumeSignupVerificationToken(signupVerification.token_id)
+  if (!tokenConsumed) {
+    throw new Error(SIGNUP_VERIFICATION_ALREADY_USED_MESSAGE)
   }
+
+  return provisionSignupRequestRecord(signupVerification, {
+    source: "auth/verify-email",
+    eventType: "auth_signup_verified",
+    tokenId: signupVerification.token_id,
+  })
 }

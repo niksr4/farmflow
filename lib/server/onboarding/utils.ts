@@ -6,6 +6,11 @@ export const SIGNUP_EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 const LOCALE_PATTERN = /^[a-z]{2}(?:-[A-Z]{2})?$/
 const USERNAME_MAX_LENGTH = 32
 
+export const AUTH_EMAIL_SENDER_CONFIGURATION_MESSAGE =
+  "Unable to send verification email. Configure AUTH_EMAIL_FROM with an address on a verified Resend domain."
+
+export const SIGNUP_VERIFICATION_ALREADY_USED_MESSAGE = "Verification link has already been used. Sign in instead."
+
 const toAscii = (value: string) =>
   value.normalize("NFKD").replace(/[\u0300-\u036f]/g, "")
 
@@ -109,8 +114,6 @@ export const maskEmailAddress = (email: string) => {
   return `${safeLocal}@${domain}`
 }
 
-export const SIGNUP_VERIFICATION_ALREADY_USED_MESSAGE = "Verification link has already been used. Sign in instead."
-
 type SignupVerificationState = {
   status?: string | null
   tokenConsumedAt?: string | null
@@ -138,6 +141,27 @@ export const getSignupVerificationStateError = (input: SignupVerificationState) 
   return null
 }
 
+export const isResendTestSender = (value: unknown) => String(value || "").trim().toLowerCase().includes("@resend.dev")
+
+export const getAuthEmailSenderConfigurationError = (input: {
+  sender?: string | null
+  providerMessage?: string | null
+}) => {
+  const sender = String(input.sender || "").trim()
+  if (!sender || isResendTestSender(sender)) {
+    return AUTH_EMAIL_SENDER_CONFIGURATION_MESSAGE
+  }
+
+  const providerMessage = String(input.providerMessage || "").toLowerCase()
+  if (
+    providerMessage.includes("you can only send testing emails to your own email address") ||
+    providerMessage.includes("domain is not verified")
+  ) {
+    return AUTH_EMAIL_SENDER_CONFIGURATION_MESSAGE
+  }
+
+  return null
+}
 export const isMissingRelation = (error: unknown, relation: string) => {
   const message = String((error as Error)?.message || error)
   return message.includes(`relation "${relation}" does not exist`)

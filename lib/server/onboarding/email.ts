@@ -4,7 +4,10 @@ import { mkdir, writeFile } from "node:fs/promises"
 import path from "node:path"
 
 import { fetchWithTimeout } from "@/lib/server/http"
-import { buildVerificationLink } from "@/lib/server/onboarding/utils"
+import {
+  buildVerificationLink,
+  getAuthEmailSenderConfigurationError,
+} from "@/lib/server/onboarding/utils"
 
 type SignupVerificationEmailInput = {
   email: string
@@ -20,7 +23,7 @@ export type SignupVerificationEmailResult = {
   statusCode?: number
 }
 
-const resolveSender = () => String(process.env.AUTH_EMAIL_FROM || process.env.ALERT_EMAIL_FROM || "").trim()
+const resolveSender = () => String(process.env.AUTH_EMAIL_FROM || "").trim()
 const resolvePreviewDir = () => String(process.env.AUTH_EMAIL_PREVIEW_DIR || "").trim()
 
 const writePreviewEmail = async (input: SignupVerificationEmailInput, verificationLink: string) => {
@@ -58,8 +61,9 @@ export async function sendSignupVerificationEmail(
     return { sent: true, provider: "preview", reason: previewPath }
   }
 
-  if (!from) {
-    return { sent: false, provider: "none", reason: "AUTH_EMAIL_FROM or ALERT_EMAIL_FROM not configured" }
+  const senderConfigurationError = getAuthEmailSenderConfigurationError({ sender: from })
+  if (senderConfigurationError) {
+    return { sent: false, provider: "none", reason: senderConfigurationError }
   }
   if (!resendKey) {
     return { sent: false, provider: "none", reason: "RESEND_API_KEY not configured" }
@@ -110,10 +114,14 @@ export async function sendSignupVerificationEmail(
 
     if (!response.ok) {
       const body = await response.text().catch(() => "")
+      const providerConfigurationError = getAuthEmailSenderConfigurationError({
+        sender: from,
+        providerMessage: body,
+      })
       return {
         sent: false,
         provider: "resend",
-        reason: body || "Failed to send verification email",
+        reason: providerConfigurationError || body || "Failed to send verification email",
         statusCode: response.status,
       }
     }
