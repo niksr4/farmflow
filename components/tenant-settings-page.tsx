@@ -6,6 +6,7 @@ import { useToast } from "@/hooks/use-toast"
 import { useAuth } from "@/hooks/use-auth"
 import { AlertThresholds, useTenantSettings } from "@/hooks/use-tenant-settings"
 import { useLocale } from "@/components/locale-provider"
+import { DEFAULT_TENANT_ESTATE_PROFILE, type TenantEstateProfile } from "@/lib/tenant-estate-profile"
 import {
   DEFAULT_TENANT_PLAN_ID,
   MODULES,
@@ -28,6 +29,7 @@ import {
   DataImportSection,
   DisplayPreferencesSection,
   EstateIdentitySection,
+  EstateProfileSection,
   OwnerToolsSection,
   TenantExperienceSection,
   TenantSettingsOverview,
@@ -61,6 +63,8 @@ export default function TenantSettingsPage() {
 
   const [estateNameInput, setEstateNameInput] = useState("")
   const [isSavingEstateName, setIsSavingEstateName] = useState(false)
+  const [estateProfileDraft, setEstateProfileDraft] = useState<TenantEstateProfile>(DEFAULT_TENANT_ESTATE_PROFILE)
+  const [isSavingEstateProfile, setIsSavingEstateProfile] = useState(false)
   const [thresholdDraft, setThresholdDraft] = useState<AlertThresholds | null>(null)
   const [isSavingThresholds, setIsSavingThresholds] = useState(false)
 
@@ -127,6 +131,10 @@ export default function TenantSettingsPage() {
       hideEmptyMetrics: Boolean(settings.uiPreferences?.hideEmptyMetrics),
     })
   }, [settings.uiPreferences?.hideEmptyMetrics])
+
+  useEffect(() => {
+    setEstateProfileDraft({ ...DEFAULT_TENANT_ESTATE_PROFILE, ...(settings.estateProfile || {}) })
+  }, [settings.estateProfile])
 
   useEffect(() => {
     setAccountPreferredLocale(normalizeAppLocale(user?.preferredLocale))
@@ -746,6 +754,29 @@ export default function TenantSettingsPage() {
     }
   }
 
+  const handleEstateProfileChange = (patch: Partial<TenantEstateProfile>) => {
+    setEstateProfileDraft((prev) => ({ ...prev, ...patch }))
+  }
+
+  const handleSaveEstateProfile = async () => {
+    setIsSavingEstateProfile(true)
+    try {
+      await updateSettings({ estateProfile: estateProfileDraft })
+      toast({
+        title: "Estate profile updated",
+        description: "Acreage and weather coordinates saved.",
+      })
+    } catch (error: any) {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to update acreage and weather coordinates",
+        variant: "destructive",
+      })
+    } finally {
+      setIsSavingEstateProfile(false)
+    }
+  }
+
   const updateThresholdField = (field: keyof AlertThresholds, value: string) => {
     if (!thresholdDraft) return
     const nextValue = Number(value)
@@ -820,6 +851,7 @@ export default function TenantSettingsPage() {
   const roleDisplay = roleLabel(user?.role || "user")
   const sectionLinks: SectionLink[] = [
     { id: "estate-identity", label: "Estate" },
+    { id: "estate-profile", label: "Footprint" },
     { id: "account-language", label: "Language" },
     { id: "display-preferences", label: "Display" },
     { id: "data-import", label: "Import" },
@@ -875,6 +907,14 @@ export default function TenantSettingsPage() {
         settingsLoading={settingsLoading}
         onEstateNameChange={setEstateNameInput}
         onSaveEstateName={handleSaveEstateName}
+      />
+
+      <EstateProfileSection
+        estateProfileDraft={estateProfileDraft}
+        isSavingEstateProfile={isSavingEstateProfile}
+        settingsLoading={settingsLoading}
+        onEstateProfileChange={handleEstateProfileChange}
+        onSaveEstateProfile={handleSaveEstateProfile}
       />
 
       <AccountLanguageSection

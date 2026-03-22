@@ -16,6 +16,7 @@ import {
   type TenantFeatureFlags,
   type TenantUiVariant,
 } from "@/lib/tenant-experience"
+import type { TenantEstateProfile } from "@/lib/tenant-estate-profile"
 import type { AppLocale } from "@/lib/i18n"
 import type { SectionLink, UiPreferencesDraft } from "@/components/tenant-settings/types"
 
@@ -190,6 +191,105 @@ export function EstateIdentitySection({
         ) : (
           <p className="text-xs text-muted-foreground">No estate name saved yet.</p>
         )}
+      </CardContent>
+    </Card>
+  )
+}
+
+type EstateProfileSectionProps = {
+  estateProfileDraft: TenantEstateProfile
+  isSavingEstateProfile: boolean
+  settingsLoading: boolean
+  onEstateProfileChange: (patch: Partial<TenantEstateProfile>) => void
+  onSaveEstateProfile: () => void
+}
+
+export function EstateProfileSection({
+  estateProfileDraft,
+  isSavingEstateProfile,
+  settingsLoading,
+  onEstateProfileChange,
+  onSaveEstateProfile,
+}: EstateProfileSectionProps) {
+  return (
+    <Card id="estate-profile" className="scroll-mt-24 border-border/70 bg-white/85">
+      <CardHeader>
+        <CardTitle>Estate Footprint & Weather</CardTitle>
+        <CardDescription>
+          Save acreage and the exact weather coordinates for this estate so planning views use the right baseline.
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+          <div className="space-y-2">
+            <Label htmlFor="estate-acreage">Acreage (acres)</Label>
+            <Input
+              id="estate-acreage"
+              type="number"
+              inputMode="decimal"
+              min="0"
+              step="0.01"
+              placeholder="e.g. 125"
+              value={estateProfileDraft.acreageAcres ?? ""}
+              onChange={(event) =>
+                onEstateProfileChange({
+                  acreageAcres: event.target.value === "" ? null : Number(event.target.value),
+                })
+              }
+            />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="weather-location-label">Weather location label</Label>
+            <Input
+              id="weather-location-label"
+              placeholder="e.g. Laxmi Main Estate"
+              value={estateProfileDraft.weatherLocationLabel || ""}
+              onChange={(event) => onEstateProfileChange({ weatherLocationLabel: event.target.value })}
+            />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="weather-latitude">Latitude</Label>
+            <Input
+              id="weather-latitude"
+              type="number"
+              inputMode="decimal"
+              min="-90"
+              max="90"
+              step="0.0001"
+              placeholder="12.4244"
+              value={estateProfileDraft.weatherLatitude ?? ""}
+              onChange={(event) =>
+                onEstateProfileChange({
+                  weatherLatitude: event.target.value === "" ? null : Number(event.target.value),
+                })
+              }
+            />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="weather-longitude">Longitude</Label>
+            <Input
+              id="weather-longitude"
+              type="number"
+              inputMode="decimal"
+              min="-180"
+              max="180"
+              step="0.0001"
+              placeholder="75.7382"
+              value={estateProfileDraft.weatherLongitude ?? ""}
+              onChange={(event) =>
+                onEstateProfileChange({
+                  weatherLongitude: event.target.value === "" ? null : Number(event.target.value),
+                })
+              }
+            />
+          </div>
+        </div>
+        <p className="text-xs text-muted-foreground">
+          Leave coordinates blank to use the default regional weather fallback. Add both latitude and longitude to lock the forecast to the exact estate.
+        </p>
+        <Button onClick={onSaveEstateProfile} disabled={isSavingEstateProfile || settingsLoading}>
+          {isSavingEstateProfile ? "Saving..." : "Save Estate Profile"}
+        </Button>
       </CardContent>
     </Card>
   )

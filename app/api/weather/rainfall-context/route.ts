@@ -5,21 +5,12 @@ import { normalizeTenantContext, runTenantQuery } from "@/lib/server/tenant-db"
 import { buildRateLimitHeaders, checkRateLimit } from "@/lib/rate-limit"
 import { fetchWithTimeout } from "@/lib/server/http"
 import { logServerError } from "@/lib/server/safe-logging"
+import { parseJsonObject } from "@/lib/server/tenant-experience-db"
+import { buildTenantWeatherQuery } from "@/lib/tenant-estate-profile"
+import { DEFAULT_WEATHER_QUERY, normalizeWeatherLocationQuery } from "@/lib/weather-config"
 
-const LOCATION = "12.4244,75.7382"
 const FORECAST_DAYS = "8"
 const MM_PER_INCH = 25.4
-
-const REGION_ALIASES: Record<string, string> = {
-  "kodagu, india": "12.4244,75.7382",
-  "coorg, india": "12.4244,75.7382",
-  "chikmagalur, india": "13.3153,75.7754",
-  "wayanad, india": "11.6854,76.1320",
-  "idukki, india": "9.8499,76.9730",
-  "nilgiris, india": "11.4064,76.6932",
-  "araku, india": "18.3270,82.8772",
-  "bababudangiri, india": "13.3902,75.7215",
-}
 
 const toInches = (millimeters: number) => millimeters / MM_PER_INCH
 const round2 = (value: number) => Math.round((value + Number.EPSILON) * 100) / 100
@@ -79,8 +70,26 @@ export async function GET(request: NextRequest) {
 
     const { searchParams } = new URL(request.url)
     const requestedRegion = (searchParams.get("region") || searchParams.get("q") || "").trim()
-    const normalizedRequestedRegion = requestedRegion.toLowerCase()
-    const locationQuery = requestedRegion.length > 0 ? REGION_ALIASES[normalizedRequestedRegion] ?? requestedRegion : LOCATION
+    const explicitLocationQuery = normalizeWeatherLocationQuery(requestedRegion)
+    if (requestedRegion.length > 0 && !explicitLocationQuery) {
+      return NextResponse.json({ success: false, error: "Region query too long." }, { status: 400, headers: rateHeaders })
+    }
+    const tenantContext = normalizeTenantContext(sessionUser.tenantId, sessionUser.role)
+    let locationQuery = explicitLocationQuery
+    if (!locationQuery) {
+      const profileRows = await runTenantQuery(
+        sql,
+        tenantContext,
+        sql`
+          SELECT ui_preferences
+          FROM tenants
+          WHERE id = ${tenantContext.tenantId}
+          LIMIT 1
+        `,
+      )
+      const parsedUiPreferences = parseJsonObject(profileRows?.[0]?.ui_preferences, "tenant weather ui preferences")
+      locationQuery = buildTenantWeatherQuery(parsedUiPreferences?.estateProfile) || DEFAULT_WEATHER_QUERY
+    }
 
     const url = `https://api.weatherapi.com/v1/forecast.json?key=${apiKey}&q=${encodeURIComponent(
       locationQuery,
@@ -112,7 +121,6 @@ export async function GET(request: NextRequest) {
 
     const todayIso = new Date().toISOString().slice(0, 10)
     const past30Iso = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10)
-    const tenantContext = normalizeTenantContext(sessionUser.tenantId, sessionUser.role)
     const rainfallRows = await runTenantQuery(
       sql,
       tenantContext,

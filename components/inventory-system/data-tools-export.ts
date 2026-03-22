@@ -57,6 +57,7 @@ export const downloadDataToolsTemplate = (templateConfig: ImportDatasetConfig) =
 export type ExportOpsCsvInput = {
   dataset: ExportDatasetId
   exportConfig: ExportDatasetConfig
+  format?: "csv" | "xlsx"
   startDate: string
   endDate: string
   isPreviewMode: boolean
@@ -75,6 +76,7 @@ export type ExportOpsCsvResult = {
 export const exportOpsCsv = async ({
   dataset,
   exportConfig,
+  format = "csv",
   startDate,
   endDate,
   isPreviewMode,
@@ -83,7 +85,7 @@ export const exportOpsCsv = async ({
 }: ExportOpsCsvInput): Promise<ExportOpsCsvResult> => {
   const params = new URLSearchParams({
     dataset,
-    format: "csv",
+    format,
   })
 
   if (dataset !== "inventory") {
@@ -114,7 +116,8 @@ export const exportOpsCsv = async ({
   const blob = await response.blob()
   const contentDisposition = response.headers.get("content-disposition") || ""
   const filenameMatch = contentDisposition.match(/filename="?([^"]+)"?/)
-  const fallbackName = dataset === "inventory" ? `${dataset}-snapshot.csv` : `${dataset}-${startDate}-to-${endDate}.csv`
+  const fallbackName =
+    dataset === "inventory" ? `${dataset}-snapshot.${format}` : `${dataset}-${startDate}-to-${endDate}.${format}`
   const filename = filenameMatch?.[1] || fallbackName
 
   triggerFileDownload(blob, filename)

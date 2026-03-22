@@ -5,6 +5,7 @@ import { isModuleAccessError, requireAnyModuleAccess } from "@/lib/server/module
 import { normalizeTenantContext, runTenantQuery } from "@/lib/server/tenant-db"
 import type { ExportDatasetId } from "@/lib/data-tools"
 import { buildSalesCsv, type SalesExportRecord } from "@/lib/sales-export"
+import { buildXlsxArrayBufferFromCsv, XLSX_MIME_TYPE } from "@/lib/spreadsheet"
 
 const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/
 const MAX_ROWS = 8000
@@ -799,9 +800,13 @@ export async function GET(request: NextRequest) {
     const exportRows = truncated ? rows.slice(0, MAX_ROWS) : rows
 
     const format = String(searchParams.get("format") || "csv").trim().toLowerCase()
+    if (!["csv", "xlsx", "json"].includes(format)) {
+      return NextResponse.json({ success: false, error: "format must be csv, xlsx, or json" }, { status: 400 })
+    }
+    const extension = format === "xlsx" ? "xlsx" : "csv"
     const filename = datasetUsesDateRange(dataset)
-      ? `${dataset}-${startDate}-to-${endDate}.csv`
-      : `${dataset}-snapshot.csv`
+      ? `${dataset}-${startDate}-to-${endDate}.${extension}`
+      : `${dataset}-snapshot.${extension}`
 
     if (format === "json") {
       return NextResponse.json({
@@ -826,6 +831,20 @@ export async function GET(request: NextRequest) {
       csv = buildPepperByLocationCsv(exportRows as Array<Record<string, unknown>>)
     } else {
       csv = toCsv(exportRows as Array<Record<string, unknown>>)
+    }
+
+    if (format === "xlsx") {
+      const workbookBytes = buildXlsxArrayBufferFromCsv(csv, dataset)
+      return new NextResponse(workbookBytes, {
+        status: 200,
+        headers: {
+          "Content-Type": XLSX_MIME_TYPE,
+          "Content-Disposition": `attachment; filename="${filename}"`,
+          "X-Export-Truncated": truncated ? "1" : "0",
+          "X-Export-Max-Rows": String(MAX_ROWS),
+          "X-Export-Returned-Rows": String(exportRows.length),
+        },
+      })
     }
 
     return new NextResponse(csv, {

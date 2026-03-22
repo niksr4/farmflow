@@ -562,6 +562,8 @@ export default function SeasonDashboard() {
   const robustaYield = yieldByType.find((item) => item.coffeeType.toLowerCase().includes("robusta"))
   const processingKpis = summary?.processingKpis
   const moduleKpis = summary?.moduleKpis
+  const acreageAcres = settings.estateProfile?.acreageAcres || null
+  const hasAcreage = Boolean(acreageAcres && acreageAcres > 0)
   const receivablesOutstanding = summary?.cash.receivablesOutstanding || moduleKpis?.receivables?.totalOutstanding || 0
   const benchmarkData = weeklyExceptions?.benchmarks
   const sparklineData = weeklyExceptions?.sparklines
@@ -601,6 +603,16 @@ export default function SeasonDashboard() {
   const coverageRatio =
     hasMarketSignal && hasBreakEvenSignal ? realizedPricePerKg / breakEvenPricePerKg : null
   const recommendedOfferFloorPerKg = hasBreakEvenSignal ? breakEvenPricePerKg * 1.08 : 0
+  const perAcreMetrics =
+    summary && acreageAcres && acreageAcres > 0
+      ? {
+          cropKgs: summary.yield.cropKgs / acreageAcres,
+          dryKgs: summary.yield.dryKgs / acreageAcres,
+          revenue: summary.totals.revenue / acreageAcres,
+          cost: summary.costs.total / acreageAcres,
+          soldKgs: summary.totals.soldKgs / acreageAcres,
+        }
+      : null
   const marketTrendDeltaPct =
     benchmarkData && benchmarkData.lastWeek.avgPricePerKg > 0
       ? ((benchmarkData.thisWeek.avgPricePerKg - benchmarkData.lastWeek.avgPricePerKg) /
@@ -1558,6 +1570,50 @@ export default function SeasonDashboard() {
               </CardContent>
             </Card>
           </div>
+
+          {hasAcreage && perAcreMetrics ? (
+            <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
+              <Card className="border-emerald-200/70">
+                <CardHeader className="pb-2">
+                  <CardDescription>Crop / acre</CardDescription>
+                  <CardTitle className="text-xl">{formatNumber(perAcreMetrics.cropKgs, 1)} KGs</CardTitle>
+                </CardHeader>
+                <CardContent className="text-xs text-muted-foreground">{formatNumber(Number(acreageAcres || 0), 2)} acres configured in Settings</CardContent>
+              </Card>
+              <Card className="border-emerald-200/70">
+                <CardHeader className="pb-2">
+                  <CardDescription>Dry output / acre</CardDescription>
+                  <CardTitle className="text-xl">{formatNumber(perAcreMetrics.dryKgs, 1)} KGs</CardTitle>
+                </CardHeader>
+                <CardContent className="text-xs text-muted-foreground">Dry parch + dry cherry per acre</CardContent>
+              </Card>
+              <Card className="border-sky-200/70">
+                <CardHeader className="pb-2">
+                  <CardDescription>Sold / acre</CardDescription>
+                  <CardTitle className="text-xl">{formatNumber(perAcreMetrics.soldKgs, 1)} KGs</CardTitle>
+                </CardHeader>
+                <CardContent className="text-xs text-muted-foreground">Actual sold volume per acre this FY</CardContent>
+              </Card>
+              <Card className="border-amber-200/70">
+                <CardHeader className="pb-2">
+                  <CardDescription>Revenue / acre</CardDescription>
+                  <CardTitle className="text-xl">{formatCurrency(perAcreMetrics.revenue)}</CardTitle>
+                </CardHeader>
+                <CardContent className="text-xs text-muted-foreground">Season revenue normalized by acreage</CardContent>
+              </Card>
+              <Card className="border-rose-200/70">
+                <CardHeader className="pb-2">
+                  <CardDescription>Cost / acre</CardDescription>
+                  <CardTitle className="text-xl">{formatCurrency(perAcreMetrics.cost)}</CardTitle>
+                </CardHeader>
+                <CardContent className="text-xs text-muted-foreground">Labor, expenses, and restock per acre</CardContent>
+              </Card>
+            </div>
+          ) : (
+            <div className="rounded-xl border border-dashed border-emerald-200 bg-emerald-50/40 px-4 py-3 text-sm text-emerald-900">
+              Add acreage in Settings to unlock per-acre season metrics.
+            </div>
+          )}
 
           {(moduleKpis?.curing || moduleKpis?.quality || moduleKpis?.journal || moduleKpis?.receivables) && (
             <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
