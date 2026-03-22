@@ -90,56 +90,57 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="relative min-h-screen overflow-hidden px-6 py-10">
+    <div className="relative min-h-screen overflow-hidden bg-[#07110f] px-6 py-10 text-stone-100">
       <div className="pointer-events-none absolute inset-0 overflow-hidden">
-        <div className="absolute -top-28 left-[-6%] h-[320px] w-[320px] rounded-full bg-[radial-gradient(circle_at_center,rgba(152,85,42,0.35),transparent_70%)] blur-[120px]" />
-        <div className="absolute bottom-[-18%] right-[10%] h-[320px] w-[320px] rounded-full bg-[radial-gradient(circle_at_center,rgba(70,120,90,0.3),transparent_70%)] blur-[120px]" />
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(16,185,129,0.14),transparent_24%),radial-gradient(circle_at_82%_12%,rgba(245,158,11,0.12),transparent_18%),linear-gradient(180deg,#07110f_0%,#091916_42%,#081310_100%)]" />
+        <div className="absolute -top-28 left-[-6%] h-[320px] w-[320px] rounded-full bg-[radial-gradient(circle_at_center,rgba(245,158,11,0.18),transparent_70%)] blur-[120px]" />
+        <div className="absolute bottom-[-18%] right-[10%] h-[320px] w-[320px] rounded-full bg-[radial-gradient(circle_at_center,rgba(16,185,129,0.16),transparent_70%)] blur-[120px]" />
       </div>
 
       <div className="relative z-10 mx-auto grid w-full max-w-5xl gap-10 lg:grid-cols-[1.05fr_0.95fr] items-center">
         <div className="space-y-6">
-          <div className="inline-flex rounded-2xl border border-white/60 bg-white/75 px-3 py-2 shadow-sm backdrop-blur">
+          <div className="inline-flex rounded-2xl border border-white/10 bg-[#081613]/75 px-3 py-2 shadow-sm backdrop-blur">
             <Image src="/brand-logo.svg" alt="FarmFlow" width={220} height={86} className="h-14 w-auto" priority />
           </div>
-          <h1 className="font-display text-3xl sm:text-4xl text-slate-900">{t("public.login.heroTitle")}</h1>
-          <p className="text-muted-foreground">
+          <h1 className="font-display text-3xl text-stone-50 sm:text-4xl">{t("public.login.heroTitle")}</h1>
+          <p className="text-stone-300">
             {t("public.login.heroDescription")}
           </p>
-          <div className="space-y-2 text-sm text-slate-700">
+          <div className="space-y-2 text-sm text-stone-300">
             <div className="flex items-center gap-2">
-              <CheckCircle2 className="h-4 w-4 text-emerald-600" />
+              <CheckCircle2 className="h-4 w-4 text-emerald-300" />
               <span>{t("public.login.point1")}</span>
             </div>
             <div className="flex items-center gap-2">
-              <CheckCircle2 className="h-4 w-4 text-emerald-600" />
+              <CheckCircle2 className="h-4 w-4 text-emerald-300" />
               <span>{t("public.login.point2")}</span>
             </div>
             <div className="flex items-center gap-2">
-              <CheckCircle2 className="h-4 w-4 text-emerald-600" />
+              <CheckCircle2 className="h-4 w-4 text-emerald-300" />
               <span>{t("public.login.point3")}</span>
             </div>
             <div className="flex items-center gap-2">
-              <CheckCircle2 className="h-4 w-4 text-emerald-600" />
+              <CheckCircle2 className="h-4 w-4 text-emerald-300" />
               <span>{t("public.login.point4")}</span>
             </div>
           </div>
-          <p className="text-xs text-muted-foreground">
+          <p className="text-xs text-stone-400">
             {t("public.login.needAccess")}{" "}
-            <Link href="/signup" className="underline">
+            <Link href="/signup" className="text-emerald-200 underline">
               {t("public.login.createWorkspace")}
             </Link>
             .
           </p>
         </div>
 
-        <div className="bg-white/90 dark:bg-slate-900/80 rounded-2xl border border-white/60 dark:border-white/10 shadow-2xl backdrop-blur-md p-6 sm:p-8">
+        <div className="rounded-2xl border border-white/10 bg-[#0a1714]/92 p-6 shadow-2xl backdrop-blur-md sm:p-8">
           <div className="text-center mb-6">
-            <h1 className="text-2xl font-semibold text-emerald-700">{t("public.login.title")}</h1>
-            <p className="text-gray-600 mt-2">{t("public.login.subtitle")}</p>
+            <h1 className="text-2xl font-semibold text-emerald-200">{t("public.login.title")}</h1>
+            <p className="mt-2 text-stone-300">{t("public.login.subtitle")}</p>
           </div>
 
           {error && (
-            <div className="mb-4 rounded-md bg-red-50 p-3 text-sm text-red-700" aria-live="polite">
+            <div className="mb-4 rounded-md border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-200" aria-live="polite">
               {error}
             </div>
           )}
@@ -147,7 +148,7 @@ export default function LoginPage() {
           <form onSubmit={handleLogin} className="space-y-4">
             <div>
               <div className="flex items-center gap-2">
-                    <Label htmlFor="username" className="block text-gray-700 mb-1">
+                <Label htmlFor="username" className="mb-1 block text-stone-200">
                   {t("public.login.identifier")}
                 </Label>
                 <TooltipProvider>
@@ -156,7 +157,7 @@ export default function LoginPage() {
                       <button
                         type="button"
                         aria-label="Username help"
-                        className="inline-flex h-5 w-5 items-center justify-center rounded-full border border-slate-200 text-slate-500 hover:text-slate-700"
+                        className="inline-flex h-5 w-5 items-center justify-center rounded-full border border-white/10 text-stone-400 hover:text-stone-200"
                       >
                         <Info className="h-3 w-3" />
                       </button>
@@ -167,7 +168,7 @@ export default function LoginPage() {
               </div>
               <div className="relative">
                 <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                  <User className="h-5 w-5 text-gray-400" />
+                  <User className="h-5 w-5 text-stone-500" />
                 </div>
                 <Input
                   id="username"
@@ -177,7 +178,7 @@ export default function LoginPage() {
                     setUsername(e.target.value)
                     if (error) setError("")
                   }}
-                  className="pl-10"
+                  className="border-white/10 bg-[#111d1a] pl-10 text-stone-100 placeholder:text-stone-500 focus-visible:bg-[#15231f]"
                   placeholder="you@estate.com or username"
                   autoFocus
                   autoComplete="username"
@@ -191,7 +192,7 @@ export default function LoginPage() {
 
             <div>
               <div className="flex items-center gap-2">
-                <Label htmlFor="password" className="block text-gray-700 mb-1">
+                <Label htmlFor="password" className="mb-1 block text-stone-200">
                   {t("public.login.password")}
                 </Label>
                 <TooltipProvider>
@@ -200,7 +201,7 @@ export default function LoginPage() {
                       <button
                         type="button"
                         aria-label="Password help"
-                        className="inline-flex h-5 w-5 items-center justify-center rounded-full border border-slate-200 text-slate-500 hover:text-slate-700"
+                        className="inline-flex h-5 w-5 items-center justify-center rounded-full border border-white/10 text-stone-400 hover:text-stone-200"
                       >
                         <Info className="h-3 w-3" />
                       </button>
@@ -211,7 +212,7 @@ export default function LoginPage() {
               </div>
               <div className="relative">
                 <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                  <Lock className="h-5 w-5 text-gray-400" />
+                  <Lock className="h-5 w-5 text-stone-500" />
                 </div>
                 <Input
                   id="password"
@@ -225,7 +226,7 @@ export default function LoginPage() {
                     setCapsLockOn(event.getModifierState("CapsLock"))
                   }}
                   onBlur={() => setCapsLockOn(false)}
-                  className="pl-10 pr-10"
+                  className="border-white/10 bg-[#111d1a] pl-10 pr-10 text-stone-100 placeholder:text-stone-500 focus-visible:bg-[#15231f]"
                   placeholder="Enter password"
                   autoComplete="current-password"
                   required
@@ -233,7 +234,7 @@ export default function LoginPage() {
                 <button
                   type="button"
                   aria-label={showPassword ? "Hide password" : "Show password"}
-                  className="absolute inset-y-0 right-0 flex items-center pr-3 text-slate-500 hover:text-slate-700"
+                  className="absolute inset-y-0 right-0 flex items-center pr-3 text-stone-400 hover:text-stone-200"
                   onClick={() => setShowPassword((prev) => !prev)}
                 >
                   {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
@@ -242,7 +243,7 @@ export default function LoginPage() {
             </div>
 
             {capsLockOn && (
-              <p className="flex items-center gap-2 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+              <p className="flex items-center gap-2 rounded-md border border-amber-300/30 bg-amber-400/10 px-3 py-2 text-xs text-amber-100">
                 <AlertTriangle className="h-3.5 w-3.5" />
                 {t("public.login.capsLock")}
               </p>
@@ -250,25 +251,25 @@ export default function LoginPage() {
 
             <Button
               type="submit"
-              className="w-full bg-emerald-700 hover:bg-emerald-800"
+              className="w-full border-emerald-300/40 bg-emerald-300 text-[#06110f] shadow-[0_18px_36px_-18px_rgba(110,231,183,0.6)] hover:bg-emerald-200"
               disabled={isSubmitting || !username.trim() || !password}
             >
               {isSubmitting ? "Signing in..." : t("public.login.title")}
             </Button>
-            <p className="text-[11px] text-gray-500">
+            <p className="text-[11px] text-stone-400">
               {sessionMode === "app" ? t("public.login.sessionModeApp") : t("public.login.sessionModeWeb")}
             </p>
           </form>
-          <p className="mt-4 text-xs text-gray-500">
+          <p className="mt-4 text-xs text-stone-400">
             By signing in, you acknowledge the{" "}
-            <Link href="/privacy" className="underline">
+            <Link href="/privacy" className="text-emerald-200 underline">
               Privacy Notice
             </Link>
             .
           </p>
-          <p className="mt-2 text-xs text-gray-500">
+          <p className="mt-2 text-xs text-stone-400">
             {t("public.login.newToFarmFlow")}{" "}
-            <Link href="/signup" className="underline">
+            <Link href="/signup" className="text-emerald-200 underline">
               {t("public.login.createWorkspace")}
             </Link>{" "}
             {t("public.login.createAndVerify")}
