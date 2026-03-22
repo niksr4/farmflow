@@ -82,6 +82,45 @@ Cron endpoint:
 Admin read endpoint:
 - `GET /api/admin/data-integrity-exceptions?status=open&limit=200`
 
+## Agent E: Tenant Smoke Agent
+
+Purpose:
+- Sign in to live tenant-admin workspaces.
+- Load the launcher, settings, manuals, and stable module-backed workspaces.
+- Exercise high-risk tenant-admin APIs such as users, locations, processing, dispatch, sales, rainfall, weather, and journal when enabled.
+- Create and delete a temporary tenant admin to catch create-user regressions.
+- Alert when any live tenant path fails.
+
+Cron endpoint:
+- `GET /api/cron/tenant-smoke` (Vercel Cron)
+- `POST /api/cron/tenant-smoke` (manual/test)
+- Auth: `Authorization: Bearer $CRON_SECRET`
+- Optional body/query: `{ "tenantSlug": "laxmi", "dryRun": true }`
+
+Admin read endpoint:
+- `GET /api/admin/tenant-smoke-findings`
+
+Required env vars:
+- `TENANT_SMOKE_TARGETS_JSON`
+- `TENANT_SMOKE_BASE_URL` (optional if `NEXT_PUBLIC_APP_URL` or `NEXTAUTH_URL` is already correct)
+
+Suggested `TENANT_SMOKE_TARGETS_JSON` shape:
+```json
+[
+  {
+    "slug": "honeyfarm",
+    "tenantName": "HoneyFarm",
+    "username": "tenant-admin",
+    "password": "secret",
+    "expectedPlanId": "enterprise"
+  }
+]
+```
+
+Optional controls:
+- `TENANT_SMOKE_TIMEOUT_MS` (defaults to `12000`)
+- `TENANT_SMOKE_ENABLE_USER_MUTATION_CHECKS` (defaults to `true`)
+
 ## Database Setup
 
 Run this once in Neon SQL Editor:
@@ -94,7 +133,8 @@ This migration is additive only (new tables/indexes), no destructive changes.
 Suggested Vercel Cron jobs:
 1. `0 2 * * *` -> `/api/cron/data-integrity`
 2. `0 8 * * *` -> `/api/cron/log-anomalies`
-3. `30 2 * * *` -> `/api/cron/retention` (privacy + import job cleanup)
+3. `30 */12 * * *` -> `/api/cron/tenant-smoke`
+4. `30 2 * * *` -> `/api/cron/retention` (privacy + import job cleanup)
 
 All should send:
 - Header `Authorization: Bearer $CRON_SECRET`

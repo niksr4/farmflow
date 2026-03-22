@@ -97,6 +97,7 @@ export async function GET() {
 
     let latestDataIntegrityRun: any = null
     let latestLogAnomalyRun: any = null
+    let latestTenantSmokeRun: any = null
     let openExceptions = 0
     let highSeverityExceptions = 0
     let failedImportsLast24h = 0
@@ -132,12 +133,27 @@ export async function GET() {
         ),
       )
       latestLogAnomalyRun = logAnomalyRows[0] || null
+
+      const tenantSmokeRows = asRows(
+        await sql.query(
+          `
+            SELECT id, status, started_at, completed_at, summary
+            FROM agent_runs
+            WHERE agent_name = $1
+            ORDER BY started_at DESC
+            LIMIT 1
+          `,
+          ["tenant-smoke-agent"],
+        ),
+      )
+      latestTenantSmokeRun = tenantSmokeRows[0] || null
     } catch (error) {
       if (!isMissingRelation(error, "agent_runs")) throw error
     }
 
     checks.push(buildAgentCheck("Data integrity agent", latestDataIntegrityRun, "/api/admin/data-integrity-exceptions"))
     checks.push(buildAgentCheck("Log anomaly agent", latestLogAnomalyRun, "/api/admin/log-anomaly-brief"))
+    checks.push(buildAgentCheck("Tenant smoke agent", latestTenantSmokeRun, "/api/admin/tenant-smoke-findings"))
 
     try {
       const exceptionRows = asRows(
@@ -279,6 +295,18 @@ export async function GET() {
               summary:
                 latestLogAnomalyRun.summary && typeof latestLogAnomalyRun.summary === "object"
                   ? latestLogAnomalyRun.summary
+                  : null,
+            }
+          : null,
+        tenantSmoke: latestTenantSmokeRun
+          ? {
+              id: String(latestTenantSmokeRun.id),
+              status: String(latestTenantSmokeRun.status),
+              startedAt: toIsoOrNull(latestTenantSmokeRun.started_at),
+              completedAt: toIsoOrNull(latestTenantSmokeRun.completed_at),
+              summary:
+                latestTenantSmokeRun.summary && typeof latestTenantSmokeRun.summary === "object"
+                  ? latestTenantSmokeRun.summary
                   : null,
             }
           : null,
