@@ -5241,6 +5241,12 @@ export default function InventorySystem() {
                 <span className="text-sm text-slate-700">{user.username}</span>
               </div>
               <div className="flex flex-wrap gap-2">
+                <Button variant="ghost" size="sm" asChild>
+                  <Link href="/manuals">
+                    <BookOpen className="h-4 w-4 mr-2" />
+                    Manuals
+                  </Link>
+                </Button>
                 {isOwner && (
                   <DropdownMenu>
                     <DropdownMenuTrigger asChild>
@@ -5346,6 +5352,9 @@ export default function InventorySystem() {
               </div>
               <div className="flex flex-wrap gap-2">
                 <Button onClick={() => handleTabChange("inventory")}>Start setup</Button>
+                <Button asChild variant="outline" className="bg-transparent">
+                  <Link href="/manuals">Open training manuals</Link>
+                </Button>
                 {isAdmin && (
                   <Button asChild variant="outline" className="bg-transparent">
                     <Link href="/settings">Manage users</Link>
@@ -5934,6 +5943,24 @@ export default function InventorySystem() {
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
+                <div className="flex flex-col gap-3 rounded-2xl border border-sky-200 bg-sky-50/80 p-4 md:flex-row md:items-center md:justify-between">
+                  <div className="space-y-1">
+                    <p className="flex items-center gap-2 text-sm font-semibold text-sky-950">
+                      <BookOpen className="h-4 w-4 text-sky-700" />
+                      Need the plain-language guide?
+                    </p>
+                    <p className="text-sm text-sky-900/80">
+                      Open the FarmFlow manuals for step-by-step help on every tab, with beginner-friendly wording.
+                    </p>
+                  </div>
+                  <Button
+                    asChild
+                    variant="outline"
+                    className={cn("border-sky-200 bg-white text-sky-900 hover:bg-sky-100", isMobile ? "w-full min-h-11" : "")}
+                  >
+                    <Link href="/manuals">Open training manuals</Link>
+                  </Button>
+                </div>
                 <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
                   {launcherSections.map((section) => {
                     const SectionIcon = section.icon
@@ -5982,6 +6009,9 @@ export default function InventorySystem() {
                 <div className="flex flex-wrap gap-2">
                   <Button variant="outline" className={cn("bg-white", isMobile ? "w-full min-h-11" : "")} onClick={() => handleTabChange("home")}>
                     Open Dashboard
+                  </Button>
+                  <Button asChild variant="outline" className={cn("bg-white", isMobile ? "w-full min-h-11" : "")}>
+                    <Link href="/manuals">Open manuals</Link>
                   </Button>
                 </div>
               </CardContent>

@@ -1,6 +1,7 @@
 "use client"
 
-import { Check, ChevronDown, ChevronUp, Clock, Info } from "lucide-react"
+import Link from "next/link"
+import { BookOpen, Check, ChevronDown, ChevronUp, Clock, Info } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
@@ -87,6 +88,12 @@ export default function OnboardingChecklist({
               <Badge className="border-emerald-200 bg-emerald-100 text-emerald-700">
                 {completedCount}/{totalCount} complete
               </Badge>
+              <Button variant="outline" size="sm" asChild className="bg-white">
+                <Link href="/manuals">
+                  <BookOpen className="mr-2 h-4 w-4" />
+                  Open manuals
+                </Link>
+              </Button>
               <Button
                 variant="outline"
                 size="sm"
