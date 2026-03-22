@@ -7,6 +7,7 @@ import { usePathname } from "next/navigation"
 
 const posthogKey = process.env.NEXT_PUBLIC_POSTHOG_KEY
 const posthogHost = process.env.NEXT_PUBLIC_POSTHOG_HOST
+const posthogDebug = process.env.NEXT_PUBLIC_POSTHOG_DEBUG === "true"
 let posthogInitialized = false
 
 function ensurePosthogInitialized() {
@@ -33,7 +34,9 @@ function ensurePosthogInitialized() {
         maskTextClass: "ph-mask",
         blockClass: "ph-no-capture",
       },
-      debug: process.env.NODE_ENV === "development",
+      // Keep PostHog logging opt-in so local dev consoles are not flooded by
+      // internal request timeout/abort noise from the analytics client itself.
+      debug: posthogDebug,
     })
   }
 
