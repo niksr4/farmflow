@@ -87,37 +87,38 @@ export default function JourneyPage() {
 
   return (
     <div
-      className={`${body.className} relative min-h-[100svh] overflow-x-hidden text-slate-900`}
+      className={`${body.className} relative min-h-[100svh] overflow-x-hidden bg-[#07110f] text-stone-100`}
       style={{
         ["--copper" as any]: "#0f6f66",
         ["--sage" as any]: "#1f6b5d",
-        ["--sand" as any]: "#e8f6f3",
-        ["--ink" as any]: "#1b1a17",
+        ["--sand" as any]: "#10211d",
+        ["--ink" as any]: "#f5f5f4",
       }}
     >
       <div className="pointer-events-none absolute inset-0 overflow-hidden">
-        <div className="absolute -top-28 right-[-6%] h-[460px] w-[460px] rounded-full bg-[radial-gradient(circle_at_center,rgba(15,111,102,0.45),transparent_70%)] blur-[120px]" />
-        <div className="absolute top-[18%] left-[-8%] h-[380px] w-[380px] rounded-full bg-[radial-gradient(circle_at_center,rgba(31,107,93,0.35),transparent_70%)] blur-[140px]" />
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(16,185,129,0.12),transparent_26%),radial-gradient(circle_at_82%_12%,rgba(245,158,11,0.1),transparent_18%),linear-gradient(180deg,#07110f_0%,#091916_42%,#081310_100%)]" />
+        <div className="absolute -top-28 right-[-6%] h-[460px] w-[460px] rounded-full bg-[radial-gradient(circle_at_center,rgba(16,185,129,0.2),transparent_70%)] blur-[120px]" />
+        <div className="absolute top-[18%] left-[-8%] h-[380px] w-[380px] rounded-full bg-[radial-gradient(circle_at_center,rgba(245,158,11,0.12),transparent_70%)] blur-[140px]" />
       </div>
 
       <div className="relative z-10">
         <header className="px-4 pt-4 sm:px-6 sm:pt-6">
-          <nav className="mx-auto flex w-full max-w-6xl flex-col gap-3 rounded-2xl border border-white/60 bg-white/75 px-3 py-3 backdrop-blur-md shadow-[0_24px_50px_-32px_rgba(15,23,42,0.6)] sm:flex-row sm:items-center sm:justify-between sm:px-4">
+          <nav className="mx-auto flex w-full max-w-6xl flex-col gap-3 rounded-2xl border border-white/10 bg-[#081613]/70 px-3 py-3 backdrop-blur-md shadow-[0_24px_50px_-32px_rgba(0,0,0,0.75)] sm:flex-row sm:items-center sm:justify-between sm:px-4">
             <div className="flex items-center gap-3">
               <Image src="/brand-logo.svg" alt="FarmFlow" width={210} height={82} className="h-11 w-auto" priority />
-              <p className="hidden text-xs text-muted-foreground sm:block">Estate Workflow Journey</p>
+              <p className="hidden text-xs text-stone-300 sm:block">Estate Workflow Journey</p>
             </div>
             <div className="flex flex-wrap items-center gap-2">
-              <Button variant="ghost" asChild>
+              <Button variant="ghost" className="border-white/10 text-stone-200 hover:bg-white/10 hover:text-white" asChild>
                 <Link href="/">
                   <ArrowLeft className="mr-2 h-4 w-4" />
                   Back to Landing
                 </Link>
               </Button>
-              <Button variant="ghost" asChild>
+              <Button variant="ghost" className="border-white/10 text-stone-200 hover:bg-white/10 hover:text-white" asChild>
                 <Link href="/login">Login</Link>
               </Button>
-              <Button asChild>
+              <Button className="border-emerald-300/40 bg-emerald-300 text-[#06110f] shadow-[0_18px_36px_-18px_rgba(110,231,183,0.6)] hover:bg-emerald-200" asChild>
                 <Link href="/signup">Create Workspace</Link>
               </Button>
             </div>
@@ -125,26 +126,26 @@ export default function JourneyPage() {
         </header>
 
         <main className="px-4 pb-16 sm:px-6 sm:pb-20">
-          <section className="mx-auto mt-8 w-full max-w-6xl rounded-3xl border border-white/40 bg-gradient-to-br from-[#0f6f66] via-[#0b4f49] to-[#083730] p-5 shadow-[0_40px_100px_-40px_rgba(15,111,102,0.7)] sm:mt-16 sm:p-12">
+          <section className="mx-auto mt-8 w-full max-w-6xl rounded-3xl border border-white/10 bg-gradient-to-br from-[#11433b] via-[#0d2a24] to-[#081613] p-5 shadow-[0_40px_100px_-40px_rgba(0,0,0,0.72)] sm:mt-16 sm:p-12">
             <Badge className="border-white/30 bg-white/20 text-white backdrop-blur-md">From cherry to buyer</Badge>
             <h1 className={`${display.className} mt-4 text-3xl font-bold leading-tight text-white md:text-5xl`}>
               The coffee workflow, mapped end to end
             </h1>
-            <p className="mt-4 max-w-3xl text-white/90">
+            <p className="mt-4 max-w-3xl text-stone-200">
               Use this journey to align teams, train operators, and show buyers how your estate runs with discipline.
             </p>
           </section>
 
           <section className="mx-auto mt-16 w-full max-w-6xl space-y-6">
             <div className="text-center space-y-3">
-              <h2 className={`${display.className} text-3xl font-semibold`}>Estate journey, from cherry to buyer</h2>
-              <p className="text-muted-foreground max-w-2xl mx-auto">
+              <h2 className={`${display.className} text-3xl font-semibold text-stone-50`}>Estate journey, from cherry to buyer</h2>
+              <p className="mx-auto max-w-2xl text-stone-300">
                 Document each stage so quality and accountability stay visible to managers, farmers, and buyers.
               </p>
             </div>
 
             <div ref={journeyRef} className="relative mt-10 space-y-12">
-              <div className="pointer-events-none absolute left-4 top-0 h-full w-[2px] bg-emerald-100/80 md:left-1/2 md:-translate-x-1/2" />
+              <div className="pointer-events-none absolute left-4 top-0 h-full w-[2px] bg-white/10 md:left-1/2 md:-translate-x-1/2" />
               <MotionDiv
                 className="pointer-events-none absolute left-4 top-0 h-full w-[3px] origin-top bg-gradient-to-b from-emerald-500 via-emerald-400 to-transparent md:left-1/2 md:-translate-x-1/2"
                 style={{
@@ -176,8 +177,8 @@ export default function JourneyPage() {
                             isLeft ? "md:right-[-3rem]" : "md:left-[-3rem]"
                           }`}
                         />
-                        <Card className="border border-white/70 bg-white/85 backdrop-blur-md shadow-[0_20px_45px_-35px_rgba(16,185,129,0.35)]">
-                          <div className="relative h-36 w-full overflow-hidden rounded-t-xl border-b border-emerald-100/60 bg-emerald-50/40">
+                        <Card className="border border-white/10 bg-[#0a1714]/90 backdrop-blur-md shadow-[0_20px_45px_-35px_rgba(0,0,0,0.75)]">
+                          <div className="relative h-36 w-full overflow-hidden rounded-t-xl border-b border-white/10 bg-[#091613]">
                             <Image
                               src={step.image}
                               alt={step.alt}
@@ -185,11 +186,12 @@ export default function JourneyPage() {
                               sizes="(min-width: 768px) 480px, 100vw"
                               className="object-cover"
                             />
+                            <div className="absolute inset-0 bg-gradient-to-t from-[#091613] via-[#091613]/15 to-transparent" />
                           </div>
                           <CardHeader className="space-y-2">
-                            <p className="text-xs uppercase tracking-[0.35em] text-emerald-700/70">Step {index + 1}</p>
-                            <CardTitle className={`${display.className} text-xl`}>{step.title}</CardTitle>
-                            <CardDescription>{step.description}</CardDescription>
+                            <p className="text-xs uppercase tracking-[0.35em] text-emerald-200">Step {index + 1}</p>
+                            <CardTitle className={`${display.className} text-xl text-stone-50`}>{step.title}</CardTitle>
+                            <CardDescription className="text-stone-300">{step.description}</CardDescription>
                           </CardHeader>
                         </Card>
                       </div>
@@ -201,37 +203,37 @@ export default function JourneyPage() {
           </section>
 
           <section className="mx-auto mt-16 w-full max-w-6xl grid gap-6 lg:grid-cols-[1.1fr_0.9fr]">
-            <Card className="border border-emerald-200/70 bg-emerald-50/70">
+            <Card className="border border-emerald-300/15 bg-emerald-300/10">
               <CardHeader>
-                <CardTitle className={`${display.className} text-xl`}>Buyer trust pack</CardTitle>
-                <CardDescription>Export-ready evidence for audits, buyers, and internal reviews.</CardDescription>
+                <CardTitle className={`${display.className} text-xl text-stone-50`}>Buyer trust pack</CardTitle>
+                <CardDescription className="text-stone-300">Export-ready evidence for audits, buyers, and internal reviews.</CardDescription>
               </CardHeader>
-              <CardContent className="space-y-4 text-sm text-emerald-800">
+              <CardContent className="space-y-4 text-sm text-stone-200">
                 {BUYER_TRUST_PACK.map((item) => (
                   <div key={item.title} className="flex items-start gap-2">
-                    <CheckCircle2 className="mt-0.5 h-4 w-4 text-emerald-600" />
+                    <CheckCircle2 className="mt-0.5 h-4 w-4 text-emerald-300" />
                     <div>
                       <p className="font-medium">{item.title}</p>
-                      <p className="text-xs text-emerald-700/80">{item.detail}</p>
+                      <p className="text-xs text-stone-300">{item.detail}</p>
                     </div>
                   </div>
                 ))}
               </CardContent>
             </Card>
 
-            <Card className="border border-white/70 bg-white/85 backdrop-blur-md">
+            <Card className="border border-white/10 bg-[#0a1714]/90 backdrop-blur-md">
               <CardHeader>
-                <CardTitle className={`${display.className} text-xl`}>Who should run which modules?</CardTitle>
-                <CardDescription>Select the stack that matches your estate operating model.</CardDescription>
+                <CardTitle className={`${display.className} text-xl text-stone-50`}>Who should run which modules?</CardTitle>
+                <CardDescription className="text-stone-300">Select the stack that matches your estate operating model.</CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
                 {MODULE_PATHWAYS.map((pathway) => (
-                  <div key={pathway.title} className="rounded-xl border border-slate-200/70 bg-white/90 p-3">
-                    <p className="font-semibold text-slate-900">{pathway.title}</p>
-                    <p className="mt-1 text-xs text-muted-foreground">{pathway.description}</p>
+                  <div key={pathway.title} className="rounded-xl border border-white/10 bg-[#111d1a] p-3">
+                    <p className="font-semibold text-stone-100">{pathway.title}</p>
+                    <p className="mt-1 text-xs text-stone-300">{pathway.description}</p>
                     <div className="mt-2 flex flex-wrap gap-1.5">
                       {pathway.modules.map((moduleName) => (
-                        <Badge key={moduleName} variant="secondary" className="bg-emerald-50 text-emerald-800 border-emerald-200">
+                        <Badge key={moduleName} className="border-white/10 bg-[#15231f] text-stone-200">
                           {moduleName}
                         </Badge>
                       ))}
@@ -243,18 +245,18 @@ export default function JourneyPage() {
           </section>
 
           <section className="mx-auto mt-16 w-full max-w-6xl">
-            <Card className="border border-white/60 bg-white/80 backdrop-blur-md">
+            <Card className="border border-white/10 bg-[#0a1714]/92 backdrop-blur-md">
               <CardHeader>
-                <CardTitle className={`${display.className} text-2xl`}>Choose your rollout path</CardTitle>
-                <CardDescription>
+                <CardTitle className={`${display.className} text-2xl text-stone-50`}>Choose your rollout path</CardTitle>
+                <CardDescription className="text-stone-300">
                   Start with essentials and expand into curing, quality, and full sales traceability as your team grows.
                 </CardDescription>
               </CardHeader>
               <CardContent className="flex flex-wrap gap-3">
-                <Button asChild>
+                <Button className="border-emerald-300/40 bg-emerald-300 text-[#06110f] shadow-[0_18px_36px_-18px_rgba(110,231,183,0.6)] hover:bg-emerald-200" asChild>
                   <Link href="/signup">Create Your Workspace</Link>
                 </Button>
-                <Button variant="outline" asChild>
+                <Button variant="ghost" className="border-white/10 bg-white/[0.04] text-stone-100 hover:bg-white/[0.08] hover:text-white" asChild>
                   <Link href="/">Back to Landing</Link>
                 </Button>
               </CardContent>

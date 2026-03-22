@@ -22,60 +22,63 @@ const TERMS_SUMMARY = [
 export default function TrustPage() {
   return (
     <div
-      className={`${body.className} min-h-[100svh] bg-gradient-to-br from-emerald-50 via-white to-slate-100 text-slate-900`}
+      className={`${body.className} min-h-[100svh] bg-[#07110f] text-stone-100`}
     >
-      <main className="mx-auto w-full max-w-6xl px-4 py-10 sm:px-6 sm:py-14 space-y-8">
+      <div className="pointer-events-none fixed inset-0 overflow-hidden">
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(16,185,129,0.12),transparent_26%),radial-gradient(circle_at_82%_12%,rgba(245,158,11,0.1),transparent_18%),linear-gradient(180deg,#07110f_0%,#091916_42%,#081310_100%)]" />
+      </div>
+      <main className="relative z-10 mx-auto w-full max-w-6xl space-y-8 px-4 py-10 sm:px-6 sm:py-14">
         <div className="flex items-center gap-3">
-          <Button variant="outline" asChild>
+          <Button variant="ghost" className="border-white/10 bg-white/[0.04] text-stone-100 hover:bg-white/[0.08] hover:text-white" asChild>
             <Link href="/">
               <ArrowLeft className="mr-2 h-4 w-4" />
               Back to Landing
             </Link>
           </Button>
-          <Button asChild>
+          <Button className="border-emerald-300/40 bg-emerald-300 text-[#06110f] shadow-[0_18px_36px_-18px_rgba(110,231,183,0.6)] hover:bg-emerald-200" asChild>
             <Link href="/signup">Create Workspace</Link>
           </Button>
         </div>
 
-        <section className="rounded-3xl border border-emerald-200/60 bg-white/85 p-6 shadow-[0_24px_60px_-40px_rgba(15,23,42,0.45)] sm:p-8">
-          <p className="text-xs uppercase tracking-[0.25em] text-emerald-700">FarmFlow</p>
-          <h1 className={`${display.className} mt-2 text-3xl font-semibold sm:text-4xl`}>Trust, Privacy & Governance</h1>
-          <p className="mt-3 max-w-3xl text-sm text-muted-foreground sm:text-base">
+        <section className="rounded-3xl border border-white/10 bg-[#0a1714]/92 p-6 shadow-[0_24px_60px_-40px_rgba(0,0,0,0.6)] sm:p-8">
+          <p className="text-xs uppercase tracking-[0.25em] text-emerald-200">FarmFlow</p>
+          <h1 className={`${display.className} mt-2 text-3xl font-semibold text-stone-50 sm:text-4xl`}>Trust, Privacy & Governance</h1>
+          <p className="mt-3 max-w-3xl text-sm text-stone-300 sm:text-base">
             Clear commitments for data ownership, access control, and accountability.
           </p>
         </section>
 
         <section className="grid gap-6 lg:grid-cols-2">
-          <Card className="border border-white/70 bg-white/85">
+          <Card className="border border-white/10 bg-[#0a1714]/92">
             <CardHeader>
-              <div className="mb-1 h-10 w-10 rounded-xl bg-emerald-100 text-emerald-700 flex items-center justify-center">
+              <div className="mb-1 flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-300/10 text-emerald-200">
                 <Shield className="h-5 w-5" />
               </div>
-              <CardTitle className={`${display.className} text-2xl`}>Privacy Commitments</CardTitle>
-              <CardDescription>Your estate data stays private, isolated, and under your control.</CardDescription>
+              <CardTitle className={`${display.className} text-2xl text-stone-50`}>Privacy Commitments</CardTitle>
+              <CardDescription className="text-stone-300">Your estate data stays private, isolated, and under your control.</CardDescription>
             </CardHeader>
             <CardContent className="space-y-3">
               {PRIVACY_COMMITMENTS.map((item) => (
-                <div key={item} className="flex items-start gap-2 text-sm text-muted-foreground">
-                  <CheckCircle2 className="mt-0.5 h-4 w-4 text-emerald-600" />
+                <div key={item} className="flex items-start gap-2 text-sm text-stone-300">
+                  <CheckCircle2 className="mt-0.5 h-4 w-4 text-emerald-300" />
                   <p>{item}</p>
                 </div>
               ))}
             </CardContent>
           </Card>
 
-          <Card className="border border-white/70 bg-white/85">
+          <Card className="border border-white/10 bg-[#0a1714]/92">
             <CardHeader>
-              <div className="mb-1 h-10 w-10 rounded-xl bg-slate-100 text-slate-700 flex items-center justify-center">
+              <div className="mb-1 flex h-10 w-10 items-center justify-center rounded-xl bg-white/[0.05] text-stone-200">
                 <FileText className="h-5 w-5" />
               </div>
-              <CardTitle className={`${display.className} text-2xl`}>Terms Summary</CardTitle>
-              <CardDescription>Transparent usage with clear responsibilities for both sides.</CardDescription>
+              <CardTitle className={`${display.className} text-2xl text-stone-50`}>Terms Summary</CardTitle>
+              <CardDescription className="text-stone-300">Transparent usage with clear responsibilities for both sides.</CardDescription>
             </CardHeader>
             <CardContent className="space-y-3">
               {TERMS_SUMMARY.map((item) => (
-                <div key={item} className="flex items-start gap-2 text-sm text-muted-foreground">
-                  <CheckCircle2 className="mt-0.5 h-4 w-4 text-emerald-600" />
+                <div key={item} className="flex items-start gap-2 text-sm text-stone-300">
+                  <CheckCircle2 className="mt-0.5 h-4 w-4 text-emerald-300" />
                   <p>{item}</p>
                 </div>
               ))}
@@ -84,28 +87,28 @@ export default function TrustPage() {
         </section>
 
         <section>
-          <Card className="border border-white/70 bg-white/85">
+          <Card className="border border-white/10 bg-[#0a1714]/92">
             <CardHeader>
-              <div className="mb-1 h-10 w-10 rounded-xl bg-blue-100 text-blue-700 flex items-center justify-center">
+              <div className="mb-1 flex h-10 w-10 items-center justify-center rounded-xl bg-sky-300/10 text-sky-200">
                 <KeyRound className="h-5 w-5" />
               </div>
-              <CardTitle className={`${display.className} text-2xl`}>Legal Documents</CardTitle>
-              <CardDescription>Detailed policy pages and agreements.</CardDescription>
+              <CardTitle className={`${display.className} text-2xl text-stone-50`}>Legal Documents</CardTitle>
+              <CardDescription className="text-stone-300">Detailed policy pages and agreements.</CardDescription>
             </CardHeader>
             <CardContent className="flex flex-wrap gap-2">
-              <Button variant="outline" asChild>
+              <Button variant="ghost" className="border-white/10 bg-white/[0.04] text-stone-100 hover:bg-white/[0.08] hover:text-white" asChild>
                 <Link href="/privacy">Privacy Notice</Link>
               </Button>
-              <Button variant="outline" asChild>
+              <Button variant="ghost" className="border-white/10 bg-white/[0.04] text-stone-100 hover:bg-white/[0.08] hover:text-white" asChild>
                 <Link href="/legal/privacy">Privacy Policy</Link>
               </Button>
-              <Button variant="outline" asChild>
+              <Button variant="ghost" className="border-white/10 bg-white/[0.04] text-stone-100 hover:bg-white/[0.08] hover:text-white" asChild>
                 <Link href="/legal/terms">MSA / ToS</Link>
               </Button>
-              <Button variant="outline" asChild>
+              <Button variant="ghost" className="border-white/10 bg-white/[0.04] text-stone-100 hover:bg-white/[0.08] hover:text-white" asChild>
                 <Link href="/legal/dpa">DPA</Link>
               </Button>
-              <Button variant="outline" asChild>
+              <Button variant="ghost" className="border-white/10 bg-white/[0.04] text-stone-100 hover:bg-white/[0.08] hover:text-white" asChild>
                 <Link href="/legal/subprocessors">Subprocessors</Link>
               </Button>
             </CardContent>
