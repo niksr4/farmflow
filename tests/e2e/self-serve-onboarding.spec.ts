@@ -1,10 +1,12 @@
 import { expect, test } from "@playwright/test"
 
+import { MODULE_BUNDLES } from "../../lib/modules"
 import { cleanupSelfServeSignup } from "./self-serve-db"
 
 test("self-serve signup provisions a basic workspace end to end", async ({ page }) => {
   test.setTimeout(120_000)
 
+  const basicBundle = MODULE_BUNDLES.find((bundle) => bundle.id === "basic")
   const stamp = Date.now()
   const email = `self-serve-${stamp}@example.com`
   const password = "SelfServePass123!"
@@ -41,7 +43,7 @@ test("self-serve signup provisions a basic workspace end to end", async ({ page 
     const modulesPayload = await modulesResponse.json()
     expect(modulesResponse.ok()).toBe(true)
     expect(modulesPayload.planId).toBe("basic")
-    expect(modulesPayload.modules).toEqual(["inventory", "transactions", "accounts", "balance-sheet"])
+    expect(modulesPayload.modules).toEqual(basicBundle?.modules || [])
   } finally {
     await cleanupSelfServeSignup(email)
   }

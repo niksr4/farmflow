@@ -2,6 +2,8 @@
 
 import { useMemo, useState } from "react"
 import Image from "next/image"
+import Link from "next/link"
+import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
@@ -242,6 +244,7 @@ const climateNotes = [
 ]
 
 const resourceSections = [
+  { id: "app-training", label: "App training" },
   { id: "agronomy-advisor", label: "Agronomy advisor" },
   { id: "nutrition-program", label: "Nutrition guide" },
   { id: "coffee-lifecycle", label: "Lifecycle" },
@@ -368,6 +371,51 @@ export default function ResourcesTab() {
               {section.label}
             </a>
           ))}
+        </CardContent>
+      </Card>
+
+      <Card id="app-training" className="scroll-mt-24 border-emerald-100 bg-white/95 shadow-sm">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2 text-lg">
+            <BookOpen className="h-4 w-4 text-emerald-700" />
+            FarmFlow app training manuals
+          </CardTitle>
+          <CardDescription>
+            Plain-language walkthroughs for first-time users who need help understanding what each part of the app is for.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="grid gap-4 lg:grid-cols-[1.2fr_0.8fr]">
+          <div className="space-y-3 text-sm text-muted-foreground">
+            <p>
+              Use the manuals when someone asks basic questions like “where do I record this?”, “what is this tab for?”, or
+              “what should I do first?”
+            </p>
+            <div className="flex flex-wrap gap-2">
+              <Badge variant="outline" className="border-emerald-200 bg-emerald-50 text-emerald-700">
+                Dashboard
+              </Badge>
+              <Badge variant="outline" className="border-emerald-200 bg-emerald-50 text-emerald-700">
+                Operations
+              </Badge>
+              <Badge variant="outline" className="border-amber-200 bg-amber-50 text-amber-700">
+                Finance
+              </Badge>
+              <Badge variant="outline" className="border-cyan-200 bg-cyan-50 text-cyan-700">
+                Insights
+              </Badge>
+              <Badge variant="outline" className="border-slate-200 bg-slate-50 text-slate-700">
+                Admin
+              </Badge>
+            </div>
+          </div>
+          <div className="flex flex-col gap-2 sm:flex-row lg:flex-col">
+            <Button asChild>
+              <Link href="/manuals">Open full manuals</Link>
+            </Button>
+            <Button asChild variant="outline" className="bg-white">
+              <Link href="/welcome">Open setup guide</Link>
+            </Button>
+          </div>
         </CardContent>
       </Card>
 

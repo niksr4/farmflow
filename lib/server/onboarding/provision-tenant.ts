@@ -7,15 +7,18 @@ import { logSecurityEvent } from "@/lib/server/security-events"
 import { sql } from "@/lib/server/db"
 import { persistTenantPlanId } from "@/lib/server/tenant-subscriptions"
 import { normalizeTenantContext, runTenantQuery } from "@/lib/server/tenant-db"
+import { sendOwnerTenantCreatedAlert } from "@/lib/server/onboarding/owner-alerts"
 import type { SignupRequestRecord, SignupVerificationLookup, SignupVerificationResult } from "@/lib/server/onboarding/types"
 import {
   buildStarterLocationCode,
   buildStarterLocationName,
   buildUsernameAttempt,
   buildUsernameSeeds,
+  getSignupVerificationStateError,
   hashSignupToken,
   normalizeOnboardingError,
   normalizeSignupEmail,
+  SIGNUP_VERIFICATION_ALREADY_USED_MESSAGE,
   slugifyText,
 } from "@/lib/server/onboarding/utils"
 import { normalizeUsernameLookup } from "@/lib/usernames"
@@ -115,6 +118,21 @@ const markProvisioningError = async (signupRequestId: string, errorMessage: stri
       WHERE id = ${signupRequestId}
     `,
   )
+}
+
+const consumeSignupVerificationToken = async (tokenId: string) => {
+  const rows = await runTenantQuery(
+    sql,
+    ownerContext,
+    sql`
+      UPDATE signup_tokens
+      SET consumed_at = CURRENT_TIMESTAMP
+      WHERE id = ${tokenId}
+        AND consumed_at IS NULL
+      RETURNING id
+    `,
+  )
+  return rows.length > 0
 }
 
 const loadTenant = async (tenantId: string) =>
@@ -398,6 +416,8 @@ const provisionSignupRequestRecord = async (
     throw new Error("This signup request is no longer active")
   }
 
+  const wasProvisioned = Boolean(signupRequest.provisioned_at)
+
   try {
     if (!signupRequest.verified_at || signupRequest.status !== "verified") {
       await runTenantQuery(
@@ -462,6 +482,19 @@ const provisionSignupRequestRecord = async (
       },
     })
 
+    if (!wasProvisioned) {
+      await sendOwnerTenantCreatedAlert({
+        tenantId: tenant.id,
+        tenantName: tenant.name,
+        origin: "self-serve-signup",
+        actorName: signupRequest.name,
+        actorEmail: signupRequest.email,
+        username: user.username,
+        createdBy: user.username,
+        source: signupRequest.source,
+      })
+    }
+
     return {
       email: signupRequest.email,
       tenantId: tenant.id,
@@ -508,10 +541,21 @@ export async function verifySignupToken(rawToken: string): Promise<SignupVerific
     throw new Error("Verification link is invalid")
   }
 
-  const expiresAt = new Date(signupVerification.token_expires_at).getTime()
-  if (Number.isFinite(expiresAt) && expiresAt < Date.now() && !signupVerification.provisioned_at) {
-    throw new Error("Verification link has expired. Request a new one.")
+  const stateError = getSignupVerificationStateError({
+    status: signupVerification.status,
+    tokenConsumedAt: signupVerification.token_consumed_at,
+    tokenExpiresAt: signupVerification.token_expires_at,
+    provisionedAt: signupVerification.provisioned_at,
+  })
+  if (stateError) {
+    throw new Error(stateError)
   }
+
+  const tokenConsumed = await consumeSignupVerificationToken(signupVerification.token_id)
+  if (!tokenConsumed) {
+    throw new Error(SIGNUP_VERIFICATION_ALREADY_USED_MESSAGE)
+  }
+
   return provisionSignupRequestRecord(signupVerification, {
     source: "auth/verify-email",
     eventType: "auth_signup_verified",

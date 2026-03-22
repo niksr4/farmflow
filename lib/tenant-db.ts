@@ -75,8 +75,9 @@ export async function runTenantQuery<T = any>(
     try {
       const results = await client.transaction([
         client`SELECT set_config('TimeZone', 'UTC', true)`,
-        client`SELECT set_config('app.tenant_id', ${context.tenantId}, true)`,
-        client`SELECT set_config('app.role', ${context.role}, true)`,
+  // Cast to text to avoid ambiguous parameter type errors in PostgreSQL drivers
+  client`SELECT set_config('app.tenant_id', ${context.tenantId}::text, true)`,
+  client`SELECT set_config('app.role', ${context.role}::text, true)`,
         query,
       ])
 
@@ -106,8 +107,9 @@ export async function runTenantQueries(
     try {
       const results = await client.transaction([
         client`SELECT set_config('TimeZone', 'UTC', true)`,
-        client`SELECT set_config('app.tenant_id', ${context.tenantId}, true)`,
-        client`SELECT set_config('app.role', ${context.role}, true)`,
+  // Cast to text to avoid ambiguous parameter type errors in PostgreSQL drivers
+  client`SELECT set_config('app.tenant_id', ${context.tenantId}::text, true)`,
+  client`SELECT set_config('app.role', ${context.role}::text, true)`,
         ...queries,
       ])
 

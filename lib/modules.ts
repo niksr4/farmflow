@@ -53,6 +53,8 @@ export const MODULE_BUNDLES: ModuleBundle[] = [
       "transactions",
       "accounts",
       "balance-sheet",
+      "rainfall",
+      "weather",
     ],
   },
   {
@@ -68,6 +70,10 @@ export const MODULE_BUNDLES: ModuleBundle[] = [
       "dispatch",
       "sales",
       "other-sales",
+      "rainfall",
+      "pepper",
+      "season",
+      "journal",
     ],
   },
   {

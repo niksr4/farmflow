@@ -332,10 +332,10 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json({ success: true, records, totalCount })
   } catch (error: any) {
-    console.error("Error fetching processing records:", error)
     if (isModuleAccessError(error)) {
       return NextResponse.json({ success: false, error: "Module access disabled", records: [] }, { status: 403 })
     }
+    console.error("Error fetching processing records:", error)
     return NextResponse.json({ success: false, error: error.message, records: [] }, { status: 500 })
   }
 }
@@ -479,10 +479,10 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({ success: true, record: savedRecord })
   } catch (error: any) {
-    console.error("Error saving processing record:", error)
     if (isModuleAccessError(error)) {
       return NextResponse.json({ success: false, error: "Module access disabled" }, { status: 403 })
     }
+    console.error("Error saving processing record:", error)
     if (isProcessingTriggerRecursionError(error)) {
       return NextResponse.json(
         {
@@ -557,10 +557,10 @@ export async function DELETE(request: NextRequest) {
 
     return NextResponse.json({ success: true })
   } catch (error: any) {
-    console.error("Error deleting processing record:", error)
     if (isModuleAccessError(error)) {
       return NextResponse.json({ success: false, error: "Module access disabled" }, { status: 403 })
     }
+    console.error("Error deleting processing record:", error)
     if (isProcessingTriggerRecursionError(error)) {
       return NextResponse.json(
         {
