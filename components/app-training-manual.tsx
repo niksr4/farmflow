@@ -3,121 +3,16 @@ import {
   ArrowRight,
   BarChart3,
   BookOpen,
-  Brain,
   CheckCircle2,
-  CloudRain,
   Factory,
-  FileText,
   LayoutDashboard,
-  Leaf,
-  NotebookPen,
-  Receipt,
   Scale,
-  Settings,
   ShieldCheck,
-  Truck,
-  Users,
 } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-
-const quickJumpSections = [
-  { id: "start-here", label: "Start here" },
-  { id: "where-to-go", label: "Where do I click?" },
-  { id: "daily-routines", label: "Daily routines" },
-  { id: "tab-manuals", label: "Every tab" },
-  { id: "glossary", label: "Plain words" },
-]
-
-const startHereSteps = [
-  {
-    title: "Finish Welcome Setup first",
-    detail: "Set your estate name, first location, and plan. Do not skip this. It decides where your first records go.",
-  },
-  {
-    title: "Use Dashboard to see what needs attention",
-    detail: "Dashboard is the summary screen. It is for checking status, not for entering every type of record.",
-  },
-  {
-    title: "If stock changed physically, use Operations",
-    detail: "Inventory, Pulping, Dispatch, Sales, Curing, and Quality are for things that happened to actual crop or goods.",
-  },
-  {
-    title: "If money changed, use Finance",
-    detail: "Accounts, Receivables, Billing, and Balance Sheet are for labor, expenses, invoices, money due, and owner reporting.",
-  },
-  {
-    title: "If you are reviewing trends, use Insights",
-    detail: "Season, Yield Forecast, Rainfall, Plant Health, AI Analysis, and News are for understanding the business, not creating the base records.",
-  },
-  {
-    title: "When in doubt, record the simple truth",
-    detail: "Enter the real date, correct location, and best available quantity first. Clean, basic records beat detailed but wrong records.",
-  },
-]
-
-const decisionRules = [
-  {
-    title: "Coffee or stock moved",
-    answer: "Go to Operations. Start with Inventory, Pulping, Dispatch, or Sales depending on what actually happened.",
-  },
-  {
-    title: "Money was spent, paid, billed, or collected",
-    answer: "Go to Finance. Start with Accounts, Billing, or Receivables.",
-  },
-  {
-    title: "You need proof, notes, or paperwork",
-    answer: "Use Documents for files and Journal for simple written notes.",
-  },
-  {
-    title: "You want trends, forecasts, weather, or crop health",
-    answer: "Go to Insights. These tabs help you understand the operation after the base records are already in.",
-  },
-  {
-    title: "You need to add users or change what people can see",
-    answer: "Go to Settings or the owner/admin console. Do not try to solve permissions from inside the data tabs.",
-  },
-]
-
-const dailyRoutines = [
-  {
-    title: "First-time admin",
-    steps: [
-      "Finish welcome setup.",
-      "Add locations and check user access.",
-      "Log the first real pulping or inventory record.",
-      "Confirm the dashboard numbers changed the way you expected.",
-    ],
-  },
-  {
-    title: "Estate supervisor",
-    steps: [
-      "Open Dashboard and see what is waiting.",
-      "Record pulping, curing, quality, dispatch, or sales as the day happens.",
-      "Add Journal notes or Documents if there is proof or context to keep.",
-      "Check that stock in FarmFlow still matches stock in the estate.",
-    ],
-  },
-  {
-    title: "Finance/admin operator",
-    steps: [
-      "Record labor, expenses, and attendance in Accounts.",
-      "Raise invoices in Billing when needed.",
-      "Track unpaid money in Receivables.",
-      "Use Balance Sheet as a management summary, not as the first place to enter data.",
-    ],
-  },
-  {
-    title: "Owner review",
-    steps: [
-      "Look at Dashboard first for the fast picture.",
-      "Check Finance for money position.",
-      "Use Season, Yield Forecast, Rainfall, and AI Analysis for trend review.",
-      "Use admin pages for tenants, access, and system health only if you are the platform owner.",
-    ],
-  },
-]
+import { DEFAULT_TENANT_PLAN_ID, getPlanModuleIds, type TenantPlanId } from "@/lib/modules"
 
 type ManualItem = {
   name: string
@@ -126,215 +21,28 @@ type ManualItem = {
   doneLooksLike: string
 }
 
-const manualGroups: Array<{
+type ManualGroup = {
   id: string
   title: string
   description: string
   icon: React.ComponentType<{ className?: string }>
   badgeClassName: string
   items: ManualItem[]
-}> = [
-  {
-    id: "core",
-    title: "Core workspace",
-    description: "The screens almost every user will touch.",
-    icon: LayoutDashboard,
-    badgeClassName: "border-emerald-200 bg-emerald-50 text-emerald-700",
-    items: [
-      {
-        name: "Dashboard",
-        whatItIs: "The main summary screen. It shows what is happening and what needs attention.",
-        openItWhen: "You are starting the day, checking progress, or trying to find the next action.",
-        doneLooksLike: "You know which area needs work next and you can move into the right module fast.",
-      },
-      {
-        name: "Welcome Setup",
-        whatItIs: "The first-run setup for estate basics like name, location, language, and plan.",
-        openItWhen: "You are setting up a new workspace or finishing onboarding.",
-        doneLooksLike: "Your estate basics are saved and users can start entering live records.",
-      },
-      {
-        name: "Settings and Users",
-        whatItIs: "User access, workspace settings, and module control.",
-        openItWhen: "Someone needs access, permissions changed, or the workspace setup needs adjusting.",
-        doneLooksLike: "The right people have the right access and the workspace matches how the estate works.",
-      },
-    ],
-  },
-  {
-    id: "operations",
-    title: "Operations",
-    description: "Use these tabs when crop, lots, or stock physically move.",
-    icon: Factory,
-    badgeClassName: "border-emerald-200 bg-emerald-50 text-emerald-700",
-    items: [
-      {
-        name: "Inventory",
-        whatItIs: "Your stock book. It tracks what you have and where it is.",
-        openItWhen: "Stock is added, moved, counted, corrected, or reviewed against transaction history.",
-        doneLooksLike: "FarmFlow stock matches the real estate stock closely enough to trust decisions.",
-      },
-      {
-        name: "Pulping",
-        whatItIs: "The coffee post-harvest tab for cherry intake, pulping, and output tracking.",
-        openItWhen: "Cherry intake, pulping, fermentation, drying progress, or output lot creation happens.",
-        doneLooksLike: "Each coffee lot has date, quantity, location, and traceable output.",
-      },
-      {
-        name: "Curing",
-        whatItIs: "Later-stage dry mill or conditioning work after processing.",
-        openItWhen: "Coffee moves through curing, final preparation, or conditioning.",
-        doneLooksLike: "The lot is traceable from processed stock into ready-for-sale form.",
-      },
-      {
-        name: "Quality",
-        whatItIs: "Grading and quality review for lots.",
-        openItWhen: "You are checking grade, defects, or readiness before selling or dispatching.",
-        doneLooksLike: "Each important lot has quality notes that can support commercial decisions.",
-      },
-      {
-        name: "Dispatch",
-        whatItIs: "Records for stock leaving a location, store, or estate.",
-        openItWhen: "Bags are loaded, transferred, or sent out to a buyer or another point.",
-        doneLooksLike: "You know what left, when it left, from where, and where it went.",
-      },
-      {
-        name: "Sales",
-        whatItIs: "Commercial sale records tied to what was sold and for how much.",
-        openItWhen: "A dispatch becomes a sale or any product is sold for revenue.",
-        doneLooksLike: "Revenue, sold quantities, and buyer-facing records line up with dispatch and stock.",
-      },
-      {
-        name: "Pepper Processing",
-        whatItIs: "A sub-tab inside Pulping for pepper picking and green-to-dry conversion.",
-        openItWhen: "Pepper harvest and drying need tracking without opening a separate main tab.",
-        doneLooksLike: "Pepper stays visible for the team without mixing into coffee pulping records.",
-      },
-    ],
-  },
-  {
-    id: "finance",
-    title: "Finance",
-    description: "Use these tabs when labor, expenses, invoices, or money due need control.",
-    icon: Scale,
-    badgeClassName: "border-amber-200 bg-amber-50 text-amber-700",
-    items: [
-      {
-        name: "Accounts",
-        whatItIs: "Labor, other expenses, attendance, and activity codes.",
-        openItWhen: "People worked, money was spent, or you need to maintain accounting categories.",
-        doneLooksLike: "Costs are captured with enough detail to explain the season and labor use.",
-      },
-      {
-        name: "Balance Sheet",
-        whatItIs: "A management summary of the financial position.",
-        openItWhen: "You want the owner view of assets, liabilities, and position.",
-        doneLooksLike: "You understand the financial snapshot without using this tab as the raw data entry screen.",
-      },
-      {
-        name: "Receivables",
-        whatItIs: "A list of money customers still owe you.",
-        openItWhen: "Invoices are unpaid and you need follow-up visibility.",
-        doneLooksLike: "Outstanding amounts are current and collections are easier to manage.",
-      },
-      {
-        name: "Billing",
-        whatItIs: "Invoice and billing workflow.",
-        openItWhen: "You need to issue bills, track billing records, or align invoicing with sales.",
-        doneLooksLike: "Billing documents match the commercial reality and are easy to follow up.",
-      },
-    ],
-  },
-  {
-    id: "insights",
-    title: "Insights and records",
-    description: "Use these tabs to explain, review, or support the operation after the base records exist.",
-    icon: BarChart3,
-    badgeClassName: "border-cyan-200 bg-cyan-50 text-cyan-700",
-    items: [
-      {
-        name: "Season View",
-        whatItIs: "A season scoreboard that pulls together operational patterns.",
-        openItWhen: "You want to review overall progress and compare how the season is moving.",
-        doneLooksLike: "You can explain where the season is strong, weak, or delayed.",
-      },
-      {
-        name: "Yield Forecast",
-        whatItIs: "A forward estimate of likely production.",
-        openItWhen: "You have enough real data to project upcoming output.",
-        doneLooksLike: "Forecasts are grounded in current season signals, not guesswork.",
-      },
-      {
-        name: "Rainfall and Weather",
-        whatItIs: "Climate context for field and production decisions.",
-        openItWhen: "You are explaining flowering, ripening, disease pressure, or yield swings.",
-        doneLooksLike: "Weather context helps explain what changed in the field or the factory.",
-      },
-      {
-        name: "Documents",
-        whatItIs: "A place to keep proof files like slips, receipts, or supporting paperwork.",
-        openItWhen: "You need evidence attached to how the estate operated.",
-        doneLooksLike: "Important documents are easy to find without searching outside FarmFlow.",
-      },
-      {
-        name: "Journal",
-        whatItIs: "A simple note log for events that matter but do not fit a stricter form.",
-        openItWhen: "You need to record a decision, issue, visit, observation, or follow-up note.",
-        doneLooksLike: "Context is captured in plain language so people remember why something happened.",
-      },
-      {
-        name: "Resources",
-        whatItIs: "The built-in library for field guides, training content, and references.",
-        openItWhen: "A team needs training, a checklist, or visual guidance.",
-        doneLooksLike: "Users can learn without needing a separate handbook outside the app.",
-      },
-      {
-        name: "Plant Health",
-        whatItIs: "Crop condition, disease, and health tracking.",
-        openItWhen: "You need to record plant issues or review crop-health patterns.",
-        doneLooksLike: "Plant-health notes are consistent enough to support field action.",
-      },
-      {
-        name: "AI Analysis",
-        whatItIs: "A narrative summary and recommendation layer.",
-        openItWhen: "You want a faster read of patterns across operations and finance.",
-        doneLooksLike: "It helps you ask better questions. It does not replace the source records.",
-      },
-      {
-        name: "News",
-        whatItIs: "Market or industry news reference.",
-        openItWhen: "You want outside context around the market, not when entering estate records.",
-        doneLooksLike: "The news informs decisions but does not distract from daily execution.",
-      },
-      {
-        name: "Activity Log",
-        whatItIs: "An audit trail of what changed and who changed it.",
-        openItWhen: "You are troubleshooting edits, checking history, or validating accountability.",
-        doneLooksLike: "You can explain important record changes without guessing.",
-      },
-    ],
-  },
-  {
-    id: "admin",
-    title: "Admin and platform controls",
-    description: "These are control surfaces, not daily data-entry tabs.",
-    icon: ShieldCheck,
-    badgeClassName: "border-slate-200 bg-slate-50 text-slate-700",
-    items: [
-      {
-        name: "Tenant admin",
-        whatItIs: "Tenant-level control of modules, users, and setup choices.",
-        openItWhen: "The estate needs a new user, changed permissions, or module updates.",
-        doneLooksLike: "The workspace stays clean and people only see what they should use.",
-      },
-      {
-        name: "Platform owner console",
-        whatItIs: "Multi-tenant control for platform owners only.",
-        openItWhen: "You run the whole platform, not just one estate.",
-        doneLooksLike: "Tenants, health checks, seed data, and access stay manageable at platform level.",
-      },
-    ],
-  },
+}
+
+type AppTrainingManualProps = {
+  enabledModules?: string[]
+  isTailored?: boolean
+  planId?: TenantPlanId
+  userRole?: "admin" | "owner" | "user" | null
+}
+
+const quickJumpSections = [
+  { id: "start-here", label: "Start here" },
+  { id: "where-to-go", label: "Where do I click?" },
+  { id: "daily-routines", label: "Daily routines" },
+  { id: "tab-manuals", label: "Every tab" },
+  { id: "glossary", label: "Plain words" },
 ]
 
 const glossary = [
@@ -364,7 +72,530 @@ const glossary = [
   },
 ]
 
-export default function AppTrainingManual() {
+const toPlanLabel = (planId: TenantPlanId) => `${planId.slice(0, 1).toUpperCase()}${planId.slice(1)}`
+
+const compact = <T,>(items: Array<T | null | undefined | false>) => items.filter(Boolean) as T[]
+
+const unique = (items: string[]) => Array.from(new Set(items.map((item) => String(item || "").trim()).filter(Boolean)))
+
+const joinReadableList = (items: string[]) => {
+  const values = unique(items)
+  if (values.length === 0) return ""
+  if (values.length === 1) return values[0]
+  if (values.length === 2) return `${values[0]} and ${values[1]}`
+  return `${values.slice(0, -1).join(", ")}, and ${values[values.length - 1]}`
+}
+
+const hasModule = (enabledModules: string[], moduleId: string) => enabledModules.includes(moduleId)
+
+const getOperationsOverviewLabels = (enabledModules: string[]) =>
+  compact([
+    hasModule(enabledModules, "inventory") ? "Inventory" : null,
+    hasModule(enabledModules, "processing") ? "Pulping" : null,
+    hasModule(enabledModules, "dispatch") ? "Dispatch" : null,
+    hasModule(enabledModules, "sales") ? "Sales" : null,
+    hasModule(enabledModules, "other-sales") ? "Other Sales" : null,
+    hasModule(enabledModules, "pepper") ? "Pepper Processing" : null,
+    hasModule(enabledModules, "curing") ? "Curing" : null,
+    hasModule(enabledModules, "quality") ? "Quality" : null,
+  ])
+
+const getFinanceEntryLabels = (enabledModules: string[]) =>
+  compact([
+    hasModule(enabledModules, "accounts") ? "Accounts" : null,
+    hasModule(enabledModules, "billing") ? "Billing" : null,
+    hasModule(enabledModules, "receivables") ? "Receivables" : null,
+  ])
+
+const getInsightLabels = (enabledModules: string[]) =>
+  compact([
+    hasModule(enabledModules, "season") ? "Season View" : null,
+    hasModule(enabledModules, "season") ? "Yield Forecast" : null,
+    hasModule(enabledModules, "rainfall") ? "Rainfall" : null,
+    hasModule(enabledModules, "weather") ? "Weather" : null,
+    hasModule(enabledModules, "plant-health") ? "Plant Health" : null,
+    hasModule(enabledModules, "ai-analysis") ? "AI Analysis" : null,
+    hasModule(enabledModules, "news") ? "News" : null,
+  ])
+
+const getSupportLabels = (enabledModules: string[]) =>
+  compact([
+    hasModule(enabledModules, "documents") ? "Documents" : null,
+    hasModule(enabledModules, "journal") ? "Journal" : null,
+    hasModule(enabledModules, "resources") ? "Resources" : null,
+  ])
+
+const buildStartHereSteps = (enabledModules: string[]) => {
+  const operationsOverview = joinReadableList(getOperationsOverviewLabels(enabledModules))
+  const financeEntries = joinReadableList(getFinanceEntryLabels(enabledModules))
+  const insightsOverview = joinReadableList(getInsightLabels(enabledModules))
+  const hasBalanceSheet = hasModule(enabledModules, "balance-sheet")
+
+  return [
+    {
+      title: "Finish Welcome Setup first",
+      detail: "Set your estate name, first location, and plan. Do not skip this. It decides where your first records go.",
+    },
+    {
+      title: "Use Dashboard to see what needs attention",
+      detail: "Dashboard is the summary screen. It is for checking status, not for entering every type of record.",
+    },
+    {
+      title: "If stock changed physically, use Operations",
+      detail: operationsOverview
+        ? `${operationsOverview} are for things that happened to actual crop or goods.`
+        : "Operations tabs are for things that happened to actual crop or goods.",
+    },
+    {
+      title: "If money changed, use Finance",
+      detail: financeEntries
+        ? `${financeEntries} are for labor, expenses, invoices, and money due.${hasBalanceSheet ? " Use Balance Sheet to review the summary after the source records are in." : ""}`
+        : hasBalanceSheet
+          ? "Balance Sheet is for review after the source records are in."
+          : "Finance tabs are for labor, expenses, invoices, and money due.",
+    },
+    {
+      title: "If you are reviewing trends, use Insights",
+      detail: insightsOverview
+        ? `${insightsOverview} help you understand the operation after the base records are already in.`
+        : "Insights tabs help you understand the operation after the base records are already in.",
+    },
+    {
+      title: "When in doubt, record the simple truth",
+      detail: "Enter the real date, correct location, and best available quantity first. Clean, basic records beat detailed but wrong records.",
+    },
+  ]
+}
+
+const buildDecisionRules = (
+  enabledModules: string[],
+  options: { isTailored: boolean; userRole: AppTrainingManualProps["userRole"] },
+) => {
+  const operationsEntryPoints = compact([
+    hasModule(enabledModules, "inventory") ? "Inventory" : null,
+    hasModule(enabledModules, "processing") ? "Pulping" : null,
+    hasModule(enabledModules, "dispatch") ? "Dispatch" : null,
+    hasModule(enabledModules, "sales") ? "Sales" : null,
+    hasModule(enabledModules, "other-sales") ? "Other Sales" : null,
+  ])
+  const financeEntryPoints = getFinanceEntryLabels(enabledModules)
+  const supportAnswers = compact([
+    hasModule(enabledModules, "documents") ? "Documents for files and supporting paperwork" : null,
+    hasModule(enabledModules, "journal") ? "Journal for simple written notes" : null,
+    hasModule(enabledModules, "resources") ? "Resources for training guides and references" : null,
+  ])
+  const insightLabels = getInsightLabels(enabledModules)
+  const settingsAnswer =
+    options.isTailored && options.userRole !== "owner"
+      ? "Go to Settings. Do not try to solve permissions from inside the data tabs."
+      : "Go to Settings or the owner/admin console. Do not try to solve permissions from inside the data tabs."
+
+  return [
+    {
+      title: "Coffee or stock moved",
+      answer: `Go to Operations. Start with ${joinReadableList(operationsEntryPoints) || "the matching operations tab"} depending on what actually happened.`,
+    },
+    {
+      title: "Money was spent, paid, billed, or collected",
+      answer: `Go to Finance. Start with ${joinReadableList(financeEntryPoints) || "Accounts"}.`,
+    },
+    {
+      title: "You need proof, notes, or paperwork",
+      answer: supportAnswers.length
+        ? `Use ${joinReadableList(supportAnswers)}.`
+        : "Keep a simple note or supporting file with the work if those tabs are enabled in your workspace.",
+    },
+    {
+      title: "You want trends, forecasts, weather, or crop health",
+      answer: insightLabels.length
+        ? `Go to Insights. Use ${joinReadableList(insightLabels)} after the base records are already in.`
+        : "Go to Insights after the base records are already in.",
+    },
+    {
+      title: "You need to add users or change what people can see",
+      answer: settingsAnswer,
+    },
+  ]
+}
+
+const buildDailyRoutines = (
+  enabledModules: string[],
+  options: { isTailored: boolean; userRole: AppTrainingManualProps["userRole"] },
+) => {
+  const supervisorActions = compact([
+    hasModule(enabledModules, "processing") ? "Pulping" : null,
+    hasModule(enabledModules, "pepper") ? "Pepper Processing" : null,
+    hasModule(enabledModules, "curing") ? "Curing" : null,
+    hasModule(enabledModules, "quality") ? "Quality" : null,
+    hasModule(enabledModules, "dispatch") ? "Dispatch" : null,
+    hasModule(enabledModules, "sales") ? "Sales" : null,
+    hasModule(enabledModules, "other-sales") ? "Other Sales" : null,
+  ])
+  const supportActions = compact([
+    hasModule(enabledModules, "journal") ? "Journal notes" : null,
+    hasModule(enabledModules, "documents") ? "Documents" : null,
+  ])
+  const ownerInsightLabels = getInsightLabels(enabledModules)
+
+  return [
+    {
+      title: "First-time admin",
+      steps: compact([
+        "Finish welcome setup.",
+        "Add locations and check user access.",
+        hasModule(enabledModules, "processing")
+          ? "Log the first real pulping or inventory record."
+          : hasModule(enabledModules, "inventory")
+            ? "Log the first real inventory record."
+            : "Log the first real record.",
+        "Confirm the dashboard numbers changed the way you expected.",
+      ]),
+    },
+    {
+      title: "Estate supervisor",
+      steps: compact([
+        "Open Dashboard and see what is waiting.",
+        supervisorActions.length ? `Record ${joinReadableList(supervisorActions)} as the day happens.` : null,
+        supportActions.length ? `Add ${joinReadableList(supportActions)} if there is proof or context to keep.` : null,
+        hasModule(enabledModules, "inventory")
+          ? "Check that stock in FarmFlow still matches stock in the estate."
+          : null,
+      ]),
+    },
+    {
+      title: "Finance/admin operator",
+      steps: compact([
+        hasModule(enabledModules, "accounts") ? "Record labor, expenses, and attendance in Accounts." : null,
+        hasModule(enabledModules, "billing") ? "Raise invoices in Billing when needed." : null,
+        hasModule(enabledModules, "receivables") ? "Track unpaid money in Receivables." : null,
+        hasModule(enabledModules, "balance-sheet")
+          ? "Use Balance Sheet as a management summary, not as the first place to enter data."
+          : null,
+      ]),
+    },
+    {
+      title: "Owner review",
+      steps: compact([
+        "Look at Dashboard first for the fast picture.",
+        hasModule(enabledModules, "accounts") || hasModule(enabledModules, "balance-sheet") ? "Check Finance for money position." : null,
+        ownerInsightLabels.length ? `Use ${joinReadableList(ownerInsightLabels)} for trend review.` : null,
+        options.isTailored && options.userRole !== "owner"
+          ? "Use Settings for users, locations, and workspace setup changes."
+          : "Use admin pages for tenants, access, and system health only if you are the platform owner.",
+      ]),
+    },
+  ]
+}
+
+const buildClimateManualItem = (enabledModules: string[]): ManualItem | null => {
+  const hasRainfall = hasModule(enabledModules, "rainfall")
+  const hasWeather = hasModule(enabledModules, "weather")
+
+  if (!hasRainfall && !hasWeather) {
+    return null
+  }
+
+  return {
+    name: hasRainfall && hasWeather ? "Rainfall and Weather" : hasWeather ? "Weather" : "Rainfall",
+    whatItIs: hasRainfall && hasWeather
+      ? "Climate context for field and production decisions."
+      : hasWeather
+        ? "A short-range weather view for field and drying decisions."
+        : "Rainfall context for field and production decisions.",
+    openItWhen: hasRainfall && hasWeather
+      ? "You are explaining flowering, ripening, disease pressure, drying windows, or yield swings."
+      : hasWeather
+        ? "You need the next weather window before field work, drying, or dispatch."
+        : "You are explaining flowering, ripening, disease pressure, or yield swings.",
+    doneLooksLike: "Climate context helps explain what changed in the field or the factory.",
+  }
+}
+
+const buildManualGroups = (
+  enabledModules: string[],
+  options: { isTailored: boolean; userRole: AppTrainingManualProps["userRole"] },
+): ManualGroup[] => {
+  const operationsItems = compact([
+    hasModule(enabledModules, "inventory")
+      ? {
+          name: "Inventory",
+          whatItIs: "Your stock book. It tracks what you have and where it is.",
+          openItWhen: "Stock is added, moved, counted, corrected, or reviewed against transaction history.",
+          doneLooksLike: "FarmFlow stock matches the real estate stock closely enough to trust decisions.",
+        }
+      : null,
+    hasModule(enabledModules, "processing")
+      ? {
+          name: "Pulping",
+          whatItIs: "The coffee post-harvest tab for cherry intake, pulping, and output tracking.",
+          openItWhen: "Cherry intake, pulping, fermentation, drying progress, or output lot creation happens.",
+          doneLooksLike: "Each coffee lot has date, quantity, location, and traceable output.",
+        }
+      : null,
+    hasModule(enabledModules, "curing")
+      ? {
+          name: "Curing",
+          whatItIs: "Later-stage dry mill or conditioning work after processing.",
+          openItWhen: "Coffee moves through curing, final preparation, or conditioning.",
+          doneLooksLike: "The lot is traceable from processed stock into ready-for-sale form.",
+        }
+      : null,
+    hasModule(enabledModules, "quality")
+      ? {
+          name: "Quality",
+          whatItIs: "Grading and quality review for lots.",
+          openItWhen: "You are checking grade, defects, or readiness before selling or dispatching.",
+          doneLooksLike: "Each important lot has quality notes that can support commercial decisions.",
+        }
+      : null,
+    hasModule(enabledModules, "dispatch")
+      ? {
+          name: "Dispatch",
+          whatItIs: "Records for stock leaving a location, store, or estate.",
+          openItWhen: "Bags are loaded, transferred, or sent out to a buyer or another point.",
+          doneLooksLike: "You know what left, when it left, from where, and where it went.",
+        }
+      : null,
+    hasModule(enabledModules, "sales")
+      ? {
+          name: "Sales",
+          whatItIs: "Commercial sale records tied to what was sold and for how much.",
+          openItWhen: "A dispatch becomes a sale or coffee is sold for revenue.",
+          doneLooksLike: "Revenue, sold quantities, and buyer-facing records line up with dispatch and stock.",
+        }
+      : null,
+    hasModule(enabledModules, "other-sales")
+      ? {
+          name: "Other Sales",
+          whatItIs: "Revenue records for non-coffee items inside the Sales workspace.",
+          openItWhen: "Pepper, fruit, timber, or any side-product is sold for revenue.",
+          doneLooksLike: "Non-coffee revenue is recorded without mixing it into coffee sales.",
+        }
+      : null,
+    hasModule(enabledModules, "pepper")
+      ? {
+          name: "Pepper Processing",
+          whatItIs: "A sub-view inside Pulping for pepper picking and green-to-dry conversion.",
+          openItWhen: "Pepper harvest and drying need tracking without opening a separate main tab.",
+          doneLooksLike: "Pepper stays visible for the team without mixing into coffee pulping records.",
+        }
+      : null,
+  ])
+
+  const financeItems = compact([
+    hasModule(enabledModules, "accounts")
+      ? {
+          name: "Accounts",
+          whatItIs: "Labor, other expenses, attendance, and activity codes.",
+          openItWhen: "People worked, money was spent, or you need to maintain accounting categories.",
+          doneLooksLike: "Costs are captured with enough detail to explain the season and labor use.",
+        }
+      : null,
+    hasModule(enabledModules, "balance-sheet")
+      ? {
+          name: "Balance Sheet",
+          whatItIs: "A management summary of the financial position.",
+          openItWhen: "You want the owner view of assets, liabilities, and position.",
+          doneLooksLike: "You understand the financial snapshot without using this tab as the raw data entry screen.",
+        }
+      : null,
+    hasModule(enabledModules, "receivables")
+      ? {
+          name: "Receivables",
+          whatItIs: "A list of money customers still owe you.",
+          openItWhen: "Invoices are unpaid and you need follow-up visibility.",
+          doneLooksLike: "Outstanding amounts are current and collections are easier to manage.",
+        }
+      : null,
+    hasModule(enabledModules, "billing")
+      ? {
+          name: "Billing",
+          whatItIs: "Invoice and billing workflow.",
+          openItWhen: "You need to issue bills, track billing records, or align invoicing with sales.",
+          doneLooksLike: "Billing documents match the commercial reality and are easy to follow up.",
+        }
+      : null,
+  ])
+
+  const insightItems = compact([
+    hasModule(enabledModules, "season")
+      ? {
+          name: "Season View",
+          whatItIs: "A season scoreboard that pulls together operational patterns.",
+          openItWhen: "You want to review overall progress and compare how the season is moving.",
+          doneLooksLike: "You can explain where the season is strong, weak, or delayed.",
+        }
+      : null,
+    hasModule(enabledModules, "season")
+      ? {
+          name: "Yield Forecast",
+          whatItIs: "A forward estimate of likely production.",
+          openItWhen: "You have enough real data to project upcoming output.",
+          doneLooksLike: "Forecasts are grounded in current season signals, not guesswork.",
+        }
+      : null,
+    buildClimateManualItem(enabledModules),
+    hasModule(enabledModules, "documents")
+      ? {
+          name: "Documents",
+          whatItIs: "A place to keep proof files like slips, receipts, or supporting paperwork.",
+          openItWhen: "You need evidence attached to how the estate operated.",
+          doneLooksLike: "Important documents are easy to find without searching outside FarmFlow.",
+        }
+      : null,
+    hasModule(enabledModules, "journal")
+      ? {
+          name: "Journal",
+          whatItIs: "A simple note log for events that matter but do not fit a stricter form.",
+          openItWhen: "You need to record a decision, issue, visit, observation, or follow-up note.",
+          doneLooksLike: "Context is captured in plain language so people remember why something happened.",
+        }
+      : null,
+    hasModule(enabledModules, "resources")
+      ? {
+          name: "Resources",
+          whatItIs: "The built-in library for field guides, training content, and references.",
+          openItWhen: "A team needs training, a checklist, or visual guidance.",
+          doneLooksLike: "Users can learn without needing a separate handbook outside the app.",
+        }
+      : null,
+    hasModule(enabledModules, "plant-health")
+      ? {
+          name: "Plant Health",
+          whatItIs: "Crop condition, disease, and health tracking.",
+          openItWhen: "You need to record plant issues or review crop-health patterns.",
+          doneLooksLike: "Plant-health notes are consistent enough to support field action.",
+        }
+      : null,
+    hasModule(enabledModules, "ai-analysis")
+      ? {
+          name: "AI Analysis",
+          whatItIs: "A narrative summary and recommendation layer.",
+          openItWhen: "You want a faster read of patterns across operations and finance.",
+          doneLooksLike: "It helps you ask better questions. It does not replace the source records.",
+        }
+      : null,
+    hasModule(enabledModules, "news")
+      ? {
+          name: "News",
+          whatItIs: "Market or industry news reference.",
+          openItWhen: "You want outside context around the market, not when entering estate records.",
+          doneLooksLike: "The news informs decisions but does not distract from daily execution.",
+        }
+      : null,
+    {
+      name: "Activity Log",
+      whatItIs: "An audit trail of what changed and who changed it.",
+      openItWhen: "You are troubleshooting edits, checking history, or validating accountability.",
+      doneLooksLike: "You can explain important record changes without guessing.",
+    },
+  ])
+
+  const adminItems = compact([
+    {
+      name: "Tenant admin",
+      whatItIs: "Tenant-level control of modules, users, and setup choices.",
+      openItWhen: "The estate needs a new user, changed permissions, or module updates.",
+      doneLooksLike: "The workspace stays clean and people only see what they should use.",
+    },
+    !options.isTailored || options.userRole === "owner"
+      ? {
+          name: "Platform owner console",
+          whatItIs: "Multi-tenant control for platform owners only.",
+          openItWhen: "You run the whole platform, not just one estate.",
+          doneLooksLike: "Tenants, health checks, seed data, and access stay manageable at platform level.",
+        }
+      : null,
+  ])
+
+  return compact([
+    {
+      id: "core",
+      title: "Core workspace",
+      description: "The screens almost every user will touch.",
+      icon: LayoutDashboard,
+      badgeClassName: "border-emerald-200 bg-emerald-50 text-emerald-700",
+      items: [
+        {
+          name: "Dashboard",
+          whatItIs: "The main summary screen. It shows what is happening and what needs attention.",
+          openItWhen: "You are starting the day, checking progress, or trying to find the next action.",
+          doneLooksLike: "You know which area needs work next and you can move into the right module fast.",
+        },
+        {
+          name: "Welcome Setup",
+          whatItIs: "The first-run setup for estate basics like name, location, language, and plan.",
+          openItWhen: "You are setting up a new workspace or finishing onboarding.",
+          doneLooksLike: "Your estate basics are saved and users can start entering live records.",
+        },
+        {
+          name: "Settings and Users",
+          whatItIs: "User access, workspace settings, and module control.",
+          openItWhen: "Someone needs access, permissions changed, or the workspace setup needs adjusting.",
+          doneLooksLike: "The right people have the right access and the workspace matches how the estate works.",
+        },
+      ],
+    },
+    operationsItems.length
+      ? {
+          id: "operations",
+          title: "Operations",
+          description: "Use these tabs when crop, lots, or stock physically move.",
+          icon: Factory,
+          badgeClassName: "border-emerald-200 bg-emerald-50 text-emerald-700",
+          items: operationsItems,
+        }
+      : null,
+    financeItems.length
+      ? {
+          id: "finance",
+          title: "Finance",
+          description: "Use these tabs when labor, expenses, invoices, or money due need control.",
+          icon: Scale,
+          badgeClassName: "border-amber-200 bg-amber-50 text-amber-700",
+          items: financeItems,
+        }
+      : null,
+    insightItems.length
+      ? {
+          id: "insights",
+          title: "Insights and records",
+          description: "Use these tabs to explain, review, or support the operation after the base records exist.",
+          icon: BarChart3,
+          badgeClassName: "border-cyan-200 bg-cyan-50 text-cyan-700",
+          items: insightItems,
+        }
+      : null,
+    adminItems.length
+      ? {
+          id: "admin",
+          title: "Admin and platform controls",
+          description: "These are control surfaces, not daily data-entry tabs.",
+          icon: ShieldCheck,
+          badgeClassName: "border-slate-200 bg-slate-50 text-slate-700",
+          items: adminItems,
+        }
+      : null,
+  ])
+}
+
+export default function AppTrainingManual({
+  enabledModules,
+  isTailored = false,
+  planId = DEFAULT_TENANT_PLAN_ID,
+  userRole = null,
+}: AppTrainingManualProps) {
+  const resolvedPlanId = planId || DEFAULT_TENANT_PLAN_ID
+  const visibleModules = unique(
+    enabledModules?.length ? enabledModules : getPlanModuleIds(resolvedPlanId),
+  )
+
+  const startHereSteps = buildStartHereSteps(visibleModules)
+  const decisionRules = buildDecisionRules(visibleModules, { isTailored, userRole })
+  const dailyRoutines = buildDailyRoutines(visibleModules, { isTailored, userRole })
+  const manualGroups = buildManualGroups(visibleModules, { isTailored, userRole })
+  const planLabel = toPlanLabel(resolvedPlanId)
+
   return (
     <div className="min-h-screen bg-[radial-gradient(circle_at_top_left,rgba(207,238,228,0.85),transparent_28%),linear-gradient(180deg,#f8fbfa_0%,#eef5f2_100%)] px-4 py-8">
       <div className="mx-auto max-w-7xl space-y-6">
@@ -375,14 +606,17 @@ export default function AppTrainingManual() {
                 Beginner-friendly manual
               </Badge>
               <Badge variant="outline" className="border-slate-200 bg-white text-slate-700">
-                Dashboard to admin
+                {isTailored ? `${planLabel} workspace guide` : "Core workspace focus"}
+              </Badge>
+              <Badge variant="outline" className="border-slate-200 bg-white text-slate-700">
+                Only enabled tabs shown
               </Badge>
             </div>
             <div className="space-y-2">
               <CardTitle className="font-display text-3xl text-slate-900">FarmFlow Training Manuals</CardTitle>
               <CardDescription className="max-w-3xl text-sm text-slate-600">
                 Plain-language guidance for first-time users. This explains what each major area does, when to open it,
-                and what a good record looks like.
+                and what a good record looks like. Tabs that are not enabled for this workspace stay out of this guide.
               </CardDescription>
             </div>
           </CardHeader>

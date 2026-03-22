@@ -9,6 +9,10 @@
       "schedule": "0 8 * * *"
     },
     {
+      "path": "/api/cron/tenant-smoke",
+      "schedule": "30 */12 * * *"
+    },
+    {
       "path": "/api/cron/retention",
       "schedule": "30 2 * * *"
     }
