@@ -5,6 +5,7 @@ import { logSecurityEvent } from "@/lib/server/security-events"
 import { sql } from "@/lib/server/db"
 import { normalizeTenantContext, runTenantQuery } from "@/lib/server/tenant-db"
 import { sendSignupVerificationEmail } from "@/lib/server/onboarding/email"
+import { sendOwnerSignupRequestedAlert } from "@/lib/server/onboarding/owner-alerts"
 import type { SignupRequestRecord, SignupRequestResult } from "@/lib/server/onboarding/types"
 import {
   generateSignupToken,
@@ -330,6 +331,15 @@ export async function createOrRefreshSignupRequest(input: CreateSignupRequestInp
     },
   })
 
+  await sendOwnerSignupRequestedAlert({
+    signupRequestId: signupRequest.id,
+    name,
+    email,
+    estateName,
+    source: source || "signup-page",
+    ipAddress,
+  })
+
   return {
     signupRequestId: signupRequest.id,
     email,
@@ -384,4 +394,3 @@ export async function resendSignupVerification(input: ResendSignupVerificationIn
     verificationSent: true,
   }
 }
-

@@ -1,1 +1,4 @@
-{}
+{
+  "mssql.autoDisableNonTSqlLanguageService": true,
+  "mssql.intelliSense.enableErrorChecking": false
+}

@@ -322,8 +322,8 @@ export function TenantUsersSection({
   return (
     <Card id="tenant-users" className="scroll-mt-24 border-border/70 bg-white/85">
       <CardHeader>
-        <CardTitle>Tenant Users</CardTitle>
-        <CardDescription>Invite admins or users and manage roles.</CardDescription>
+        <CardTitle>People and Roles</CardTitle>
+        <CardDescription>Add estate admins or estate users, then keep role assignments simple.</CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
         <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
@@ -357,6 +357,21 @@ export function TenantUsersSection({
         <Button onClick={onCreateUser} disabled={!tenantId}>
           Create User
         </Button>
+
+        <div className="grid gap-3 md:grid-cols-2">
+          <div className="rounded-lg border border-emerald-100 bg-emerald-50/50 p-3">
+            <p className="text-sm font-medium text-emerald-900">Estate Admin</p>
+            <p className="mt-1 text-xs text-emerald-800">
+              Best for supervisors or office staff who manage setup, people, locations, and day-to-day records.
+            </p>
+          </div>
+          <div className="rounded-lg border border-slate-200 bg-slate-50/70 p-3">
+            <p className="text-sm font-medium text-slate-900">Estate User</p>
+            <p className="mt-1 text-xs text-slate-700">
+              Best for staff who mainly enter daily work. Give this role first unless the person truly manages the workspace.
+            </p>
+          </div>
+        </div>
 
         <div className="rounded-lg border border-border/60 bg-white/80">
           <Table>
@@ -474,9 +489,15 @@ export function UserModuleOverridesSection({
     <Card id="user-module-overrides" className="scroll-mt-24 border-border/70 bg-white/85">
       <CardHeader>
         <CardTitle>User Module Overrides</CardTitle>
-        <CardDescription>Override tenant defaults for a single user.</CardDescription>
+        <CardDescription>Use this only when one person should have different access than the rest of the estate.</CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
+        <div className="rounded-lg border border-slate-200 bg-slate-50/70 p-4 text-sm">
+          <p className="font-medium text-slate-900">Keep access simple where possible</p>
+          <p className="mt-1 text-xs text-muted-foreground">
+            Most estates should leave users on tenant defaults. Use per-user overrides only for exceptions, because special rules are harder to explain and maintain.
+          </p>
+        </div>
         <div className="space-y-2">
           <Label>Select User</Label>
           <Select value={selectedUserId} onValueChange={onSelectedUserIdChange} disabled={!tenantId || users.length === 0}>

@@ -7,7 +7,7 @@ import { sql } from "@/lib/server/db"
 import { normalizeTenantContext, runTenantQuery } from "@/lib/server/tenant-db"
 import { hashPassword, verifyPassword } from "@/lib/passwords"
 import { logSecurityEvent } from "@/lib/server/security-events"
-import { checkRateLimit } from "@/lib/rate-limit"
+import { checkRateLimit, isRateLimitUnavailableError } from "@/lib/rate-limit"
 import { DEFAULT_APP_LOCALE, normalizeAppLocale } from "@/lib/i18n"
 import { isEmailIdentifier, normalizeSignupEmail } from "@/lib/server/onboarding/utils"
 import { assertCoreRuntimeConfig } from "@/lib/runtime-config"
@@ -279,6 +279,9 @@ export const authOptions: NextAuthOptions = {
           }
         } catch (rateLimitError) {
           logServerWarning("Auth rate-limit check failed", rateLimitError)
+          if (isRateLimitUnavailableError(rateLimitError)) {
+            throw rateLimitError
+          }
         }
 
         let users: UserRow[] = []

@@ -1,6 +1,7 @@
 "use client"
 
 import { useCallback, useEffect, useState } from "react"
+import Link from "next/link"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -17,6 +18,7 @@ import { cn } from "@/lib/utils"
 import { formatDateOnly } from "@/lib/date-utils"
 import { formatNumber } from "@/lib/format"
 import { useAuth } from "@/hooks/use-auth"
+import TaskGuideCard from "@/components/task-guide-card"
 
 interface LocationOption {
   id: string
@@ -66,6 +68,11 @@ export function PepperTab() {
   const selectedLocation = locations.find((loc) => loc.id === selectedLocationId) || null
   const canDeleteRecord = user?.role === "admin" || user?.role === "owner" || user?.role === "user"
   const showLocationColumn = selectedLocationId === LOCATION_ALL || selectedLocationId === LOCATION_UNASSIGNED
+  const scrollToEntryForm = useCallback(() => {
+    if (typeof window !== "undefined") {
+      window.scrollTo({ top: 0, behavior: "smooth" })
+    }
+  }, [])
 
   const loadLocations = useCallback(async () => {
     try {
@@ -386,6 +393,29 @@ export function PepperTab() {
 
   return (
     <div className="space-y-6">
+      <TaskGuideCard
+        eyebrow="Pepper guide"
+        title="Use this sub-tab for pepper picking and drying"
+        description="Keep pepper inside the same post-harvest workspace, but record it separately so coffee numbers stay clean."
+        bullets={[
+          "Pick a specific location before saving, not All locations.",
+          "Enter picked weight first, then green pepper, then dry pepper when it is ready.",
+          "Use notes for drying issues, delays, or anything that explains conversion changes.",
+        ]}
+        tip="Pepper stays near pulping because the team often records both on the same day, but the totals should never mix."
+        tone="operations"
+        actions={
+          <>
+            <Button variant="outline" className="bg-white" onClick={scrollToEntryForm}>
+              Go to form
+            </Button>
+            <Button asChild variant="outline" className="bg-white">
+              <Link href="/manuals">Manuals</Link>
+            </Button>
+          </>
+        }
+      />
+
       {/* Location and Date Selection */}
       <Card>
         <CardHeader>
@@ -393,7 +423,7 @@ export function PepperTab() {
             <Leaf className="h-5 w-5" />
             Pepper Processing Record
           </CardTitle>
-          <CardDescription>Record pepper picking and processing data</CardDescription>
+          <CardDescription>Record pepper picking, green weight, and dry conversion data</CardDescription>
         </CardHeader>
         <CardContent className="space-y-6">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">

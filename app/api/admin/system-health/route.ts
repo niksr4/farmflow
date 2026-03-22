@@ -1,8 +1,10 @@
 import { NextResponse } from "next/server"
 import { sql } from "@/lib/server/db"
+import { inspectPlatformSchemaReadiness } from "@/lib/schema-readiness"
 import { requireOwnerRole } from "@/lib/tenant"
 import { requireAdminSession } from "@/lib/server/mfa"
 import { buildAdminErrorResponse, databaseNotConfiguredResponse } from "@/lib/server/route-utils"
+import { logServerError } from "@/lib/server/safe-logging"
 
 type HealthStatus = "healthy" | "warning" | "critical" | "unknown"
 
@@ -103,6 +105,28 @@ export async function GET() {
     let activeValidatedImports = 0
     let criticalErrorsLast24h = 0
     let errorEventsLast24h = 0
+
+    try {
+      const schemaReadiness = await inspectPlatformSchemaReadiness(sql)
+      checks.push({
+        id: "schema-readiness",
+        label: "Platform schema readiness",
+        status: schemaReadiness.status,
+        value: schemaReadiness.value,
+        detail: schemaReadiness.detail,
+        actionPath: "/admin/inspect-databases",
+      })
+    } catch (error) {
+      checks.push({
+        id: "schema-readiness",
+        label: "Platform schema readiness",
+        status: "unknown",
+        value: "Unavailable",
+        detail: "Could not inspect information_schema for migration drift.",
+        actionPath: "/admin/inspect-databases",
+      })
+      logServerError("Schema readiness inspection failed", error)
+    }
 
     try {
       const dataIntegrityRows = asRows(
@@ -286,6 +310,7 @@ export async function GET() {
       staleThresholdHours: STALE_THRESHOLD_HOURS,
     })
   } catch (error: any) {
+    logServerError("Failed to load system health", error)
     return buildAdminErrorResponse(error, "Failed to load system health", { ownerRequired: true })
   }
 }

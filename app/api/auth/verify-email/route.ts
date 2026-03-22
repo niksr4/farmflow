@@ -1,10 +1,10 @@
 import { NextResponse } from "next/server"
 import { z } from "zod"
 
-import { buildRateLimitHeaders, checkRateLimit } from "@/lib/rate-limit"
+import { buildRateLimitHeaders, checkRateLimit, isRateLimitUnavailableError } from "@/lib/rate-limit"
 import { isDbConfigured } from "@/lib/server/db"
 import { verifySignupToken } from "@/lib/server/onboarding/provision-tenant"
-import { normalizeOnboardingError } from "@/lib/server/onboarding/utils"
+import { normalizeOnboardingError, SIGNUP_VERIFICATION_ALREADY_USED_MESSAGE } from "@/lib/server/onboarding/utils"
 import { databaseNotConfiguredResponse } from "@/lib/server/route-utils"
 
 const verifyBodySchema = z.object({
@@ -27,10 +27,24 @@ export async function POST(request: Request) {
     return NextResponse.json({ success: false, error: parsed.error.issues[0]?.message || "Invalid request body" }, { status: 400 })
   }
 
-  const rateLimit = await checkRateLimit("authSignupVerify", `auth-signup-verify:${ipAddress}`)
-  const headers = buildRateLimitHeaders(rateLimit)
-  if (!rateLimit.success) {
-    return NextResponse.json({ success: false, error: "Too many verification attempts. Please try again shortly." }, { status: 429, headers })
+  let headers: Record<string, string> = {}
+  try {
+    const rateLimit = await checkRateLimit("authSignupVerify", `auth-signup-verify:${ipAddress}`)
+    headers = buildRateLimitHeaders(rateLimit)
+    if (!rateLimit.success) {
+      return NextResponse.json(
+        { success: false, error: "Too many verification attempts. Please try again shortly." },
+        { status: 429, headers },
+      )
+    }
+  } catch (error) {
+    if (isRateLimitUnavailableError(error)) {
+      return NextResponse.json(
+        { success: false, error: "Email verification is temporarily unavailable. Please try again shortly." },
+        { status: 503 },
+      )
+    }
+    throw error
   }
 
   try {
@@ -53,6 +67,8 @@ export async function POST(request: Request) {
     const status =
       message === "Verification token is required" || message === "Verification link is invalid" || message.includes("expired")
         ? 400
+        : message === SIGNUP_VERIFICATION_ALREADY_USED_MESSAGE
+          ? 409
         : message === "This email is already linked to another tenant"
           ? 409
           : 500
@@ -60,4 +76,3 @@ export async function POST(request: Request) {
     return NextResponse.json({ success: false, error: message }, { status, headers })
   }
 }
-

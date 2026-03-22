@@ -176,12 +176,14 @@ type TransactionWriteFailureSnapshot = {
 export default function InventorySystem() {
   type InventoryWorkspaceView = "inventory" | "transactions"
   type SalesWorkspaceView = "coffee" | "other-sales"
+  type ProcessingWorkspaceView = "coffee" | "pepper"
   // UI / paging
   const [currentPage, setCurrentPage] = useState(1)
   const itemsPerPage = 10
   const [activeTab, setActiveTab] = useState(DASHBOARD_LAUNCHER_TAB)
   const [inventoryWorkspaceView, setInventoryWorkspaceView] = useState<InventoryWorkspaceView>("inventory")
   const [salesWorkspaceView, setSalesWorkspaceView] = useState<SalesWorkspaceView>("coffee")
+  const [processingWorkspaceView, setProcessingWorkspaceView] = useState<ProcessingWorkspaceView>("coffee")
   const [loadedTabs, setLoadedTabs] = useState<string[]>([DASHBOARD_LAUNCHER_TAB])
   const [dataToolsDataset, setDataToolsDataset] = useState<ExportDatasetId>("processing")
   const [isExportingDataTools, setIsExportingDataTools] = useState(false)
@@ -428,6 +430,46 @@ export default function InventorySystem() {
   const isStandaloneMode = useStandaloneMode()
   const isStandaloneMobileApp = isMobile && isStandaloneMode
   const currentFiscalYear = useMemo(() => getCurrentFiscalYear(), [])
+  const showTransactionHistory = isModuleEnabled("transactions")
+  const canShowInventory = isModuleEnabled("inventory")
+  const canShowAccounts = isModuleEnabled("accounts")
+  const canShowBalanceSheet = isModuleEnabled("balance-sheet") && (isAdmin || isOwner)
+  const canShowProcessing = isModuleEnabled("processing")
+  const canShowDispatch = isModuleEnabled("dispatch")
+  const canShowSales = isModuleEnabled("sales") && isAdmin
+  const canShowOtherSales = isModuleEnabled("other-sales") && !isScopedUser
+  const canShowInventoryWorkspace = canShowInventory || showTransactionHistory
+  const canShowSalesWorkspace = canShowSales || canShowOtherSales
+  const canShowCuring = isModuleEnabled("curing")
+  const canShowQuality = isModuleEnabled("quality")
+  const canShowRainfall = isModuleEnabled("rainfall")
+  const canShowPepper = isModuleEnabled("pepper")
+  const canShowAiAnalysis = isModuleEnabled("ai-analysis")
+  const canShowNews = isModuleEnabled("news")
+  const canShowWeather = isModuleEnabled("weather")
+  const canShowSeason = isModuleEnabled("season")
+  const canShowYieldForecast = canShowSeason
+  const canShowActivityLog = (isAdmin || isOwner) && isFeatureEnabled("showActivityLogTab")
+  const canShowReceivables = isModuleEnabled("receivables")
+  const canShowBilling = isModuleEnabled("billing")
+  const canShowDocuments = isModuleEnabled("documents")
+  const canShowJournal = isModuleEnabled("journal")
+  const canShowResources = isModuleEnabled("resources") && isFeatureEnabled("showResourcesTab")
+  const canShowPlantHealth = isOwner || isModuleEnabled("plant-health") || canShowResources || canShowAiAnalysis
+  const canShowWelcomeCard = isFeatureEnabled("showWelcomeCard")
+  const canShowRainfallSection = canShowRainfall || canShowWeather
+  const canShowIntelligence = !isScopedUser && (canShowDispatch || canShowSalesWorkspace || canShowAccounts || canShowSeason)
+  const canShowProcessingWorkspace = canShowProcessing || canShowPepper
+  const processingWorkspaceLabel = canShowProcessing ? "Pulping" : "Pepper Processing"
+  const processingWorkspaceIcon = canShowProcessing ? Factory : Leaf
+  const resolvedProcessingWorkspaceView =
+    processingWorkspaceView === "pepper" && canShowPepper
+      ? "pepper"
+      : canShowProcessing
+        ? "coffee"
+        : canShowPepper
+          ? "pepper"
+          : "coffee"
   const estateMetrics = useMemo(() => {
     const inventoryCount = inventory.length
     const locationCount = locations.length
@@ -440,6 +482,21 @@ export default function InventorySystem() {
       inventoryValue: summary.total_inventory_value,
     }
   }, [inventory.length, locations.length, summary.total_inventory_value, transactions])
+
+  useEffect(() => {
+    setProcessingWorkspaceView((currentView) => {
+      if (currentView === "pepper" && canShowPepper) {
+        return currentView
+      }
+      if (canShowProcessing) {
+        return "coffee"
+      }
+      if (canShowPepper) {
+        return "pepper"
+      }
+      return "coffee"
+    })
+  }, [canShowPepper, canShowProcessing])
 
   useEffect(() => {
     setOnboardingEstateName(String(tenantSettings.estateName || ""))
@@ -1580,7 +1637,7 @@ export default function InventorySystem() {
     ]
 
     const chipsProcessing: HeroChip[] = [
-      { icon: Factory, label: "Processing keeps yields consistent", metricValue: null },
+      { icon: Factory, label: "Clean pulping records keep yields consistent", metricValue: null },
       { icon: History, label: recentActivityLabel, metricValue: estateMetrics.recentActivity },
     ]
 
@@ -1778,10 +1835,21 @@ export default function InventorySystem() {
           stats: transactionStats,
         }
       case "processing":
+        if (resolvedProcessingWorkspaceView === "pepper") {
+          return {
+            badge: "Pepper Flow",
+            title: "Pepper harvest and conversion",
+            description: "Keep pepper close to coffee work without crowding the main Operations rail.",
+            chips: chipsPepper,
+            stats: pepperStats,
+          }
+        }
         return {
-          badge: "Processing Flow",
-          title: "Daily processing, yield, and conversion",
-          description: "Keep dispatch and sales aligned with real output.",
+          badge: "Coffee Pulping",
+          title: "Daily coffee pulping, yield, and conversion",
+          description: canShowPepper
+            ? "Keep coffee pulping first-class, with pepper tucked into the same workspace."
+            : "Keep dispatch and sales aligned with real coffee output.",
           chips: chipsProcessing,
           stats: processingTotalsStats,
         }
@@ -1837,8 +1905,8 @@ export default function InventorySystem() {
             {
               icon: TrendingUp,
               label: processingTotals.loading
-                ? "Processing trend loading..."
-                : `Processing to date: ${formatNumber(processingTotals.arabicaKg + processingTotals.robustaKg, 0)} kg`,
+                ? "Pulping trend loading..."
+                : `Pulping to date: ${formatNumber(processingTotals.arabicaKg + processingTotals.robustaKg, 0)} kg`,
               metricValue: processingTotals.loading ? null : processingTotals.arabicaKg + processingTotals.robustaKg,
             },
             {
@@ -1979,7 +2047,7 @@ export default function InventorySystem() {
         return {
           badge: "Estate Pulse",
           title: "Estate operations at a glance",
-          description: "Track inventory, processing, and sales from one view.",
+          description: "Track inventory, pulping, and sales from one view.",
           chips: chipsInventory,
           stats: inventoryStats,
         }
@@ -1992,6 +2060,7 @@ export default function InventorySystem() {
     accountsTotalsLoading,
     bagWeightLabel,
     bagWeightValue,
+    canShowPepper,
     currentFiscalYear.label,
     curingHeroTotals.avgDryingDays,
     curingHeroTotals.avgMoistureDrop,
@@ -2043,6 +2112,7 @@ export default function InventorySystem() {
     receivablesHeroTotals.totalOutstanding,
     receivablesHeroTotals.totalOverdue,
     recentActivityLabel,
+    resolvedProcessingWorkspaceView,
     resolvedInventoryValue,
     salesHeroTotals.arabicaBags,
     salesHeroTotals.arabicaKgs,
@@ -2990,43 +3060,13 @@ export default function InventorySystem() {
     }
   }
 
-  const showTransactionHistory = isModuleEnabled("transactions")
-  const canShowInventory = isModuleEnabled("inventory")
-  const canShowAccounts = isModuleEnabled("accounts")
-  const canShowBalanceSheet = isModuleEnabled("balance-sheet") && (isAdmin || isOwner)
-  const canShowProcessing = isModuleEnabled("processing")
-  const canShowDispatch = isModuleEnabled("dispatch")
-  const canShowSales = isModuleEnabled("sales") && isAdmin
-  const canShowOtherSales = isModuleEnabled("other-sales") && !isScopedUser
-  const canShowInventoryWorkspace = canShowInventory || showTransactionHistory
-  const canShowSalesWorkspace = canShowSales || canShowOtherSales
-  const canShowCuring = isModuleEnabled("curing")
-  const canShowQuality = isModuleEnabled("quality")
-  const canShowRainfall = isModuleEnabled("rainfall")
-  const canShowPepper = isModuleEnabled("pepper")
-  const canShowAiAnalysis = isModuleEnabled("ai-analysis")
-  const canShowNews = isModuleEnabled("news")
-  const canShowWeather = isModuleEnabled("weather")
-  const canShowSeason = isModuleEnabled("season")
-  const canShowYieldForecast = canShowSeason
-  const canShowActivityLog = (isAdmin || isOwner) && isFeatureEnabled("showActivityLogTab")
-  const canShowReceivables = isModuleEnabled("receivables")
-  const canShowBilling = isModuleEnabled("billing")
-  const canShowDocuments = isModuleEnabled("documents")
-  const canShowJournal = isModuleEnabled("journal")
-  const canShowResources = isModuleEnabled("resources") && isFeatureEnabled("showResourcesTab")
-  const canShowPlantHealth = isOwner || isModuleEnabled("plant-health") || canShowResources || canShowAiAnalysis
-  const canShowWelcomeCard = isFeatureEnabled("showWelcomeCard")
-  const canShowRainfallSection = canShowRainfall || canShowWeather
-  const canShowIntelligence = !isScopedUser && (canShowDispatch || canShowSalesWorkspace || canShowAccounts || canShowSeason)
   const showOperationsTabs =
     canShowInventoryWorkspace ||
-    canShowProcessing ||
+    canShowProcessingWorkspace ||
     canShowCuring ||
     canShowQuality ||
     canShowDispatch ||
-    canShowSalesWorkspace ||
-    canShowPepper
+    canShowSalesWorkspace
   const showFinanceTabs =
     canShowAccounts || canShowBalanceSheet || canShowReceivables || canShowBilling
   const showInsightsTabs =
@@ -3045,21 +3085,21 @@ export default function InventorySystem() {
     () =>
       [
         canShowInventoryWorkspace ? { value: "inventory", label: "Inventory", icon: List } : null,
-        canShowProcessing ? { value: "processing", label: "Processing", icon: Factory } : null,
+        canShowProcessingWorkspace ? { value: "processing", label: processingWorkspaceLabel, icon: processingWorkspaceIcon } : null,
         canShowCuring ? { value: "curing", label: "Curing", icon: Factory } : null,
         canShowQuality ? { value: "quality", label: "Quality", icon: CheckCircle2 } : null,
         canShowDispatch ? { value: "dispatch", label: "Dispatch", icon: Truck } : null,
         canShowSalesWorkspace ? { value: "sales", label: "Sales", icon: TrendingUp } : null,
-        canShowPepper ? { value: "pepper", label: "Pepper", icon: Leaf } : null,
       ].filter(Boolean) as Array<{ value: string; label: string; icon: React.ComponentType<{ className?: string }> }>,
     [
       canShowCuring,
       canShowDispatch,
       canShowInventoryWorkspace,
-      canShowPepper,
-      canShowProcessing,
+      canShowProcessingWorkspace,
       canShowQuality,
       canShowSalesWorkspace,
+      processingWorkspaceIcon,
+      processingWorkspaceLabel,
     ],
   )
 
@@ -3173,7 +3213,7 @@ export default function InventorySystem() {
         id: "processing-strip",
         tab: "processing",
         visible: canShowProcessing,
-        label: "Processing Output",
+        label: "Pulping Output",
         value: processingTotals.loading ? "Loading..." : `${formatNumber(processingTotalKg, 0)} kg`,
         subValue: processingTotals.loading
           ? "Updating totals"
@@ -3242,7 +3282,7 @@ export default function InventorySystem() {
     if (canShowInventoryWorkspace) tabs.push("inventory")
     if (canShowAccounts) tabs.push("accounts")
     if (canShowBalanceSheet) tabs.push("balance-sheet")
-    if (canShowProcessing) tabs.push("processing")
+    if (canShowProcessingWorkspace) tabs.push("processing")
     if (canShowDispatch) tabs.push("dispatch")
     if (canShowSalesWorkspace) tabs.push("sales")
     if (canShowCuring) tabs.push("curing")
@@ -3251,7 +3291,6 @@ export default function InventorySystem() {
     if (canShowYieldForecast) tabs.push("yield-forecast")
     if (canShowActivityLog) tabs.push("activity-log")
     if (canShowRainfallSection) tabs.push("rainfall")
-    if (canShowPepper) tabs.push("pepper")
     if (canShowDocuments) tabs.push("documents")
     if (canShowJournal) tabs.push("journal")
     if (canShowResources) tabs.push("resources")
@@ -3274,8 +3313,7 @@ export default function InventorySystem() {
     canShowPlantHealth,
     canShowResources,
     canShowNews,
-    canShowPepper,
-    canShowProcessing,
+    canShowProcessingWorkspace,
     canShowCuring,
     canShowQuality,
     canShowRainfallSection,
@@ -3309,7 +3347,7 @@ export default function InventorySystem() {
       ({
         home: { label: "Dashboard", icon: Home },
         inventory: { label: "Inventory", icon: List },
-        processing: { label: "Processing", icon: Factory },
+        processing: { label: processingWorkspaceLabel, icon: processingWorkspaceIcon },
         dispatch: { label: "Dispatch", icon: Truck },
         sales: { label: "Sales", icon: TrendingUp },
         pepper: { label: "Pepper", icon: Leaf },
@@ -3330,7 +3368,7 @@ export default function InventorySystem() {
         curing: { label: "Curing", icon: Factory },
         quality: { label: "Quality", icon: CheckCircle2 },
       }) as Record<string, { label: string; icon: React.ComponentType<{ className?: string }> }>,
-    [],
+    [processingWorkspaceIcon, processingWorkspaceLabel],
   )
   const mobileHomeQuickActions = useMemo(() => {
     const preferred = [
@@ -3506,12 +3544,12 @@ export default function InventorySystem() {
         title: "Better Harvest Records",
         goal: "Track harvest and processing output consistently through the season.",
         metric: !canShowProcessing
-          ? "Processing module is disabled."
+          ? "Pulping module is disabled."
           : processingTotals.loading
-            ? "Loading processing totals..."
+            ? "Loading pulping totals..."
             : `${formatNumber(harvestKg, 0)} kg harvest output logged`,
         status: harvestStatus,
-        actionLabel: "Open Processing",
+        actionLabel: "Open Pulping",
         actionTab: pickActionTab(["processing", "season"]),
       },
       {
@@ -4276,9 +4314,14 @@ export default function InventorySystem() {
         nextTabCandidate = "inventory"
       } else if (requestedTab === "inventory") {
         setInventoryWorkspaceView(canShowInventory ? "inventory" : "transactions")
+      } else if (requestedTab === "pepper") {
+        setProcessingWorkspaceView("pepper")
+        nextTabCandidate = "processing"
       } else if (requestedTab === "other-sales") {
         setSalesWorkspaceView("other-sales")
         nextTabCandidate = "sales"
+      } else if (requestedTab === "processing") {
+        setProcessingWorkspaceView(canShowProcessing ? "coffee" : "pepper")
       } else if (requestedTab === "sales") {
         setSalesWorkspaceView(canShowSales ? "coffee" : "other-sales")
       }
@@ -4343,7 +4386,7 @@ export default function InventorySystem() {
       const nextPath = nextQuery ? `/dashboard?${nextQuery}` : "/dashboard"
       router.replace(nextPath, { scroll: false })
     },
-    [allItemTypesForDropdown, canShowInventory, canShowSales, getPreferredDefaultTab, locations, markTabAsLoaded, router, searchParams, visibleTabs],
+    [allItemTypesForDropdown, canShowInventory, canShowProcessing, canShowSales, getPreferredDefaultTab, locations, markTabAsLoaded, router, searchParams, visibleTabs],
   )
   const handleTabChange = useCallback(
     (value: string) => {
@@ -4475,6 +4518,16 @@ export default function InventorySystem() {
     if (activeTabGroup === "insights") return insightsTabItems
     return []
   }, [activeTabGroup, financeTabItems, insightsTabItems, operationsTabItems])
+  const mobilePrimarySectionTabs = useMemo(() => {
+    if (activeSectionTabs.length <= 4) return activeSectionTabs
+    const primaryTabs = activeSectionTabs.slice(0, 3)
+    const activeSectionTab = activeSectionTabs.find((tab) => tab.value === activeTab)
+    if (activeSectionTab && !primaryTabs.some((tab) => tab.value === activeSectionTab.value)) {
+      return [...primaryTabs, activeSectionTab]
+    }
+    return [...primaryTabs, activeSectionTabs[3]]
+  }, [activeSectionTabs, activeTab])
+  const hiddenMobileSectionTabCount = Math.max(activeSectionTabs.length - mobilePrimarySectionTabs.length, 0)
 
   const mobileAppSectionGroups = useMemo(
     () =>
@@ -4494,7 +4547,7 @@ export default function InventorySystem() {
           ? {
               id: "operations" as const,
               label: "Operations",
-              description: "Daily execution across inventory, processing, dispatch, and sales.",
+              description: "Daily execution across inventory, pulping, dispatch, and sales.",
               icon: Factory,
               tabs: operationsTabItems as SectionTabItem[],
               cardClassName: "border-emerald-200/80 bg-emerald-50/50",
@@ -4581,6 +4634,11 @@ export default function InventorySystem() {
       setActiveTab("inventory")
       return
     }
+    if (activeTab === "pepper") {
+      setProcessingWorkspaceView("pepper")
+      setActiveTab("processing")
+      return
+    }
     if (activeTab === "other-sales") {
       setSalesWorkspaceView("other-sales")
       setActiveTab("sales")
@@ -4616,6 +4674,13 @@ export default function InventorySystem() {
       }
       return
     }
+    if (requestedTab === "pepper") {
+      setProcessingWorkspaceView("pepper")
+      if (activeTab !== "processing") {
+        setActiveTab("processing")
+      }
+      return
+    }
     if (requestedTab === "other-sales") {
       setSalesWorkspaceView("other-sales")
       if (activeTab !== "sales") {
@@ -4626,13 +4691,16 @@ export default function InventorySystem() {
     if (requestedTab === "inventory") {
       setInventoryWorkspaceView(canShowInventory ? "inventory" : "transactions")
     }
+    if (requestedTab === "processing") {
+      setProcessingWorkspaceView(canShowProcessing ? "coffee" : "pepper")
+    }
     if (requestedTab === "sales") {
       setSalesWorkspaceView(canShowSales ? "coffee" : "other-sales")
     }
     if (visibleTabs.includes(requestedTab) && requestedTab !== activeTab) {
       setActiveTab(requestedTab)
     }
-  }, [activeTab, canShowInventory, canShowSales, tabParam, visibleTabs])
+  }, [activeTab, canShowInventory, canShowProcessing, canShowSales, tabParam, visibleTabs])
 
   useEffect(() => {
     if (!locationFilterParam) return
@@ -4820,7 +4888,7 @@ export default function InventorySystem() {
       </div>
       <div className="mt-4 flex flex-wrap gap-2 text-xs">
         <Badge variant="outline" className="border-black/5 bg-neutral-50 text-neutral-600">
-          Harvest & processing
+          Harvest & pulping
         </Badge>
         <Badge variant="outline" className="border-black/5 bg-neutral-50 text-neutral-600">
           Restock or deplete
@@ -5241,6 +5309,12 @@ export default function InventorySystem() {
                 <span className="text-sm text-slate-700">{user.username}</span>
               </div>
               <div className="flex flex-wrap gap-2">
+                <Button variant="ghost" size="sm" asChild>
+                  <Link href="/manuals">
+                    <BookOpen className="h-4 w-4 mr-2" />
+                    Manuals
+                  </Link>
+                </Button>
                 {isOwner && (
                   <DropdownMenu>
                     <DropdownMenuTrigger asChild>
@@ -5332,7 +5406,7 @@ export default function InventorySystem() {
               <div>
                 <CardTitle>Welcome to your estate workspace</CardTitle>
                 <CardDescription>
-                  Start by adding locations and logging your first processing output. Everything else builds on those
+                  Start by adding locations and logging your first pulping output. Everything else builds on those
                   records.
                 </CardDescription>
               </div>
@@ -5346,6 +5420,9 @@ export default function InventorySystem() {
               </div>
               <div className="flex flex-wrap gap-2">
                 <Button onClick={() => handleTabChange("inventory")}>Start setup</Button>
+                <Button asChild variant="outline" className="bg-transparent">
+                  <Link href="/manuals">Open training manuals</Link>
+                </Button>
                 {isAdmin && (
                   <Button asChild variant="outline" className="bg-transparent">
                     <Link href="/settings">Manage users</Link>
@@ -5822,7 +5899,7 @@ export default function InventorySystem() {
                         activeTabGroup === "operations" ? "text-emerald-100" : "text-emerald-700/80",
                       )}
                     >
-                      Inventory, processing, dispatch, sales
+                      Inventory, pulping, dispatch, sales
                     </p>
                   </div>
                 </button>
@@ -5997,7 +6074,7 @@ export default function InventorySystem() {
             >
               <Card className="border-black/5 bg-white/90">
                 <CardHeader className="pb-2">
-                  <CardTitle className="text-sm font-medium text-neutral-600">Processing Output</CardTitle>
+                  <CardTitle className="text-sm font-medium text-neutral-600">Pulping Output</CardTitle>
                 </CardHeader>
                 <CardContent>
                   <p className="text-2xl font-semibold tabular-nums text-neutral-900">
@@ -7108,9 +7185,67 @@ export default function InventorySystem() {
             </TabsContent>
           )}
 
-          {canShowProcessing && (
+          {canShowProcessingWorkspace && (
             <TabsContent value="processing" className="space-y-6" forceMount={isTabLoaded("processing") ? true : undefined}>
-              <ProcessingTab showDataToolsControls={showDataToolsControls} />
+              {canShowProcessing && canShowPepper ? (
+                <Tabs
+                  value={resolvedProcessingWorkspaceView}
+                  onValueChange={(value) => setProcessingWorkspaceView(value as ProcessingWorkspaceView)}
+                  className="space-y-6"
+                >
+                  <Card className="border-border/70 bg-white/90">
+                    <CardHeader className="pb-3">
+                    <CardTitle className="text-xs uppercase tracking-[0.2em] text-muted-foreground">Pulping Workspace</CardTitle>
+                      <CardDescription>
+                        Keep coffee pulping as the main estate flow, with pepper one tap away inside the same workspace.
+                      </CardDescription>
+                    </CardHeader>
+                    <CardContent className="grid gap-4 lg:grid-cols-[1.6fr_1fr]">
+                      <div className="space-y-2">
+                        <div>
+                          <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">Current View</p>
+                          <p className="text-2xl font-semibold text-foreground">
+                            {resolvedProcessingWorkspaceView === "coffee" ? "Coffee Pulping" : "Pepper Processing"}
+                          </p>
+                        </div>
+                        <div>
+                          <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">Use This For</p>
+                          <p className="text-sm font-semibold text-foreground">
+                            {resolvedProcessingWorkspaceView === "coffee"
+                              ? "Cherry intake, pulping, parchment, dry cherry, and daily output."
+                              : "Pepper picking, green-to-dry conversion, and location-wise pepper yield."}
+                          </p>
+                        </div>
+                      </div>
+                      <div className="rounded-xl border border-border/60 bg-muted/20 p-3">
+                        <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">Crop Flow</p>
+                        <TabsList className="mt-3 grid w-full grid-cols-2 rounded-xl border border-border/60 bg-white p-1 shadow-none">
+                          <TabsTrigger value="coffee" className="min-h-10 rounded-lg">
+                            Coffee Pulping
+                          </TabsTrigger>
+                          <TabsTrigger value="pepper" className="min-h-10 rounded-lg">
+                            Pepper Processing
+                          </TabsTrigger>
+                        </TabsList>
+                        <p className="mt-3 text-xs text-muted-foreground">
+                          Older teams can stay on one Operations rail and switch crops only when they need to.
+                        </p>
+                      </div>
+                    </CardContent>
+                  </Card>
+
+                  <TabsContent value="coffee" className="space-y-6">
+                    <ProcessingTab showDataToolsControls={showDataToolsControls} />
+                  </TabsContent>
+                  <TabsContent value="pepper" className="space-y-6">
+                    <PepperTab />
+                  </TabsContent>
+                </Tabs>
+              ) : canShowPepper && !canShowProcessing ? (
+                <PepperTab />
+              ) : (
+                <ProcessingTab showDataToolsControls={showDataToolsControls} />
+              )}
             </TabsContent>
           )}
           {canShowDispatch && (
@@ -7167,11 +7302,6 @@ export default function InventorySystem() {
           {canShowDocuments && (
             <TabsContent value="documents" className="space-y-6" forceMount={isTabLoaded("documents") ? true : undefined}>
               <DocumentsTab />
-            </TabsContent>
-          )}
-          {canShowPepper && (
-            <TabsContent value="pepper" className="space-y-6" forceMount={isTabLoaded("pepper") ? true : undefined}>
-              <PepperTab />
             </TabsContent>
           )}
           {canShowJournal && (
@@ -7277,7 +7407,7 @@ export default function InventorySystem() {
 
                 {showMobileSectionRail && (
                   <div className="flex items-center gap-2 overflow-x-auto no-scrollbar">
-                    {activeSectionTabs.map((tab) => {
+                    {mobilePrimarySectionTabs.map((tab) => {
                       const TabIcon = tab.icon
                       const isActive = activeTab === tab.value
                       return (
@@ -7297,12 +7427,21 @@ export default function InventorySystem() {
                         </button>
                       )
                     })}
+                    {hiddenMobileSectionTabCount > 0 && (
+                      <button
+                        type="button"
+                        onClick={goToWorkspaceNavigator}
+                        className="flex min-h-11 min-w-[8.25rem] items-center justify-center rounded-xl border border-dashed border-black/15 bg-white px-3 py-2 text-xs font-semibold text-neutral-700 transition-colors touch-manipulation hover:border-emerald-200 hover:text-emerald-700"
+                      >
+                        More tabs
+                      </button>
+                    )}
                   </div>
                 )}
               </div>
             ) : (
               <div className="mx-auto flex max-w-7xl items-center gap-2 overflow-x-auto px-3 pb-[calc(0.5rem+env(safe-area-inset-bottom))] pt-2 no-scrollbar">
-                {activeSectionTabs.map((tab) => {
+                {mobilePrimarySectionTabs.map((tab) => {
                   const TabIcon = tab.icon
                   const isActive = activeTab === tab.value
                   return (
@@ -7322,6 +7461,15 @@ export default function InventorySystem() {
                     </button>
                   )
                 })}
+                {hiddenMobileSectionTabCount > 0 && (
+                  <button
+                    type="button"
+                    onClick={goToWorkspaceNavigator}
+                    className="flex min-h-11 min-w-[8.25rem] items-center justify-center rounded-xl border border-dashed border-black/15 bg-white px-3 py-2 text-xs font-semibold text-neutral-700 transition-colors touch-manipulation hover:border-emerald-200 hover:text-emerald-700"
+                  >
+                    More tabs
+                  </button>
+                )}
               </div>
             )}
           </div>

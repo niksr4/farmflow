@@ -5,7 +5,7 @@ import { normalizeTenantContext, runTenantQuery } from "@/lib/server/tenant-db"
 import { hashPassword, verifyPassword } from "@/lib/passwords"
 import { logAuditEvent } from "@/lib/server/audit-log"
 import { logSecurityEvent } from "@/lib/server/security-events"
-import { buildRateLimitHeaders, checkRateLimit } from "@/lib/rate-limit"
+import { buildRateLimitHeaders, checkRateLimit, isRateLimitUnavailableError } from "@/lib/rate-limit"
 import { extractClientIp } from "@/lib/server/request-security"
 import { logServerWarning } from "@/lib/server/safe-logging"
 
@@ -42,6 +42,12 @@ export async function POST(request: Request) {
       }
     } catch (rateLimitError) {
       logServerWarning("Password change rate-limit check failed", rateLimitError)
+      if (isRateLimitUnavailableError(rateLimitError)) {
+        return NextResponse.json(
+          { success: false, error: "Password change is temporarily unavailable. Please try again shortly." },
+          { status: 503 },
+        )
+      }
     }
 
     const body = await request.json().catch(() => null)

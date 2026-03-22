@@ -42,5 +42,6 @@
 
 ## Abuse / DDoS Controls
 - App-level controls now include request-size caps, auth/public/internal rate limits, and explicit outbound HTTP timeouts.
+- Sensitive production rate limits (login, signup, password change, internal ingest) require Redis-backed distributed enforcement; local in-memory fallback is development-only.
 - Cheap rejection is handled in middleware using `Content-Length` before expensive request parsing where possible.
 - Volumetric DDoS protection still belongs at the CDN/WAF/load-balancer layer, not inside the Next.js app.

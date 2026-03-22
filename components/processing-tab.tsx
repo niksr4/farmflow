@@ -1,6 +1,7 @@
 "use client"
 
 import { useCallback, useEffect, useState, type ChangeEvent, type KeyboardEvent } from "react"
+import Link from "next/link"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -21,6 +22,7 @@ import { useTenantSettings } from "@/hooks/use-tenant-settings"
 import { formatDateOnly } from "@/lib/date-utils"
 import { formatNumber } from "@/lib/format"
 import { canAcceptNonNegative, isBlockedNumericKey } from "@/lib/number-input"
+import TaskGuideCard from "@/components/task-guide-card"
 
 interface ProcessingRecord {
   id?: number
@@ -572,7 +574,7 @@ export default function ProcessingTab({ showDataToolsControls = false }: Process
       if (data.success) {
         toast({
           title: "Success",
-          description: `Processing record saved successfully for ${selectedLocation?.name || "estate"}`,
+          description: `Coffee pulping record saved successfully for ${selectedLocation?.name || "estate"}`,
         })
         setHasExistingRecord(true)
 
@@ -589,7 +591,7 @@ export default function ProcessingTab({ showDataToolsControls = false }: Process
       console.error("Save error:", error)
       toast({
         title: "Error",
-        description: error.message || "Failed to save processing record",
+        description: error.message || "Failed to save coffee pulping record",
         variant: "destructive",
       })
     } finally {
@@ -785,7 +787,7 @@ export default function ProcessingTab({ showDataToolsControls = false }: Process
       link.setAttribute("href", url)
       link.setAttribute(
         "download",
-        `${(selectedLocation?.name || "estate").replace(/\s+/g, "-")}-${coffeeType.toLowerCase()}-processing-records-${format(
+        `${(selectedLocation?.name || "estate").replace(/\s+/g, "-")}-${coffeeType.toLowerCase()}-pulping-records-${format(
           new Date(),
           "yyyy-MM-dd",
         )}.csv`,
@@ -797,7 +799,7 @@ export default function ProcessingTab({ showDataToolsControls = false }: Process
 
       toast({
         title: "Success",
-        description: `Processing records exported to CSV for ${selectedLocation?.name || "location"}`,
+        description: `Coffee pulping records exported to CSV for ${selectedLocation?.name || "location"}`,
       })
     } catch (error: any) {
       console.error("Export error:", error)
@@ -825,15 +827,43 @@ export default function ProcessingTab({ showDataToolsControls = false }: Process
       if (!canAcceptNonNegative(nextValue)) return
       updateField(field, nextValue === "" ? null : Number.parseFloat(nextValue))
     }
+  const scrollToEntryForm = useCallback(() => {
+    if (typeof window !== "undefined") {
+      window.scrollTo({ top: 0, behavior: "smooth" })
+    }
+  }, [])
 
   return (
     <div className="container mx-auto space-y-8 px-4 pb-10 pt-6 sm:px-6 lg:px-8">
-      {/* Processing Dashboard */}
+      <TaskGuideCard
+        eyebrow="Pulping guide"
+        title="Use this tab for coffee pulping and output"
+        description="This screen is best for supervisors and clerks entering coffee intake, pulping progress, and processed output. Keep each record tied to the real date, location, and coffee type."
+        bullets={[
+          "Select the estate location first so stock lands in the right place.",
+          "Record what came in today and what came out today, even if the numbers are small.",
+          "If the team is unsure, enter the physical truth first and add notes instead of guessing.",
+        ]}
+        tip="Good pulping records make dispatch, sales, and season reporting easier later. Wrong dates or wrong locations cause most downstream confusion."
+        tone="operations"
+        actions={
+          <>
+            <Button variant="outline" className="bg-white" onClick={scrollToEntryForm}>
+              Go to form
+            </Button>
+            <Button asChild variant="outline" className="bg-white">
+              <Link href="/manuals">Manuals</Link>
+            </Button>
+          </>
+        }
+      />
+
+      {/* Coffee Pulping Dashboard */}
       <Card className="border-border/70 bg-white/80">
         <CardHeader>
-          <CardTitle>Processing Dashboard</CardTitle>
+          <CardTitle>Coffee Pulping Dashboard</CardTitle>
           <CardDescription>
-            Cumulative &quot;To Date&quot; values across all recorded processing locations. Compare KPIs in Season View
+            Cumulative &quot;To Date&quot; values across all recorded coffee locations. Compare KPIs in Season View
             against the &quot;Total All (All Types)&quot; row.
           </CardDescription>
         </CardHeader>
@@ -938,13 +968,13 @@ export default function ProcessingTab({ showDataToolsControls = false }: Process
         </CardContent>
       </Card>
 
-      {/* Processing Records */}
+      {/* Coffee Pulping Records */}
       <Card className="border-border/70 bg-white/80">
         <CardHeader>
           <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
             <div>
-              <CardTitle>Processing Records</CardTitle>
-              <CardDescription>Track daily coffee processing from cherry to final bags</CardDescription>
+              <CardTitle>Coffee Pulping Records</CardTitle>
+              <CardDescription>Track daily coffee pulping from cherry intake to final bags</CardDescription>
             </div>
             {showDataToolsControls && (
               <Button onClick={handleExportCSV} disabled={isExporting} variant="outline">
@@ -1419,11 +1449,22 @@ export default function ProcessingTab({ showDataToolsControls = false }: Process
               <span>Loading recent records...</span>
             </div>
           ) : recentRecords.length === 0 ? (
-            <div className="text-center py-8 text-muted-foreground">
-              <p>No processing records yet</p>
-              <p className="text-sm mt-2">
-                Start by logging today’s intake and output so dispatch and sales stay aligned.
+            <div className="rounded-2xl border border-dashed border-emerald-200 bg-emerald-50/40 p-5 text-sm">
+              <p className="font-semibold text-foreground">No processing records yet</p>
+              <p className="mt-2 text-muted-foreground">
+                Start with one honest record for today. You only need the real location, coffee type, and today&apos;s intake/output.
               </p>
+              <ul className="ml-4 mt-3 list-disc space-y-1 text-muted-foreground">
+                <li>Pick the location your team actually used today.</li>
+                <li>Enter today&apos;s crop and the processed result you already know.</li>
+                <li>Save first, then come back later for extra detail like moisture or notes.</li>
+              </ul>
+              <div className="mt-4 flex flex-wrap gap-2">
+                <Button onClick={scrollToEntryForm}>Use form above</Button>
+                <Button asChild variant="outline" className="bg-white">
+                  <Link href="/manuals">Open manuals</Link>
+                </Button>
+              </div>
             </div>
           ) : (
             <div className="space-y-2">

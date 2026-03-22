@@ -1,12 +1,14 @@
 "use client"
 
 import { useEffect, useMemo, useState } from "react"
+import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { useSession } from "next-auth/react"
-import { ArrowRight, CheckCircle2, Globe2, MapPin, PackageCheck } from "lucide-react"
+import { ArrowRight, BookOpen, CheckCircle2, Globe2, MapPin, PackageCheck } from "lucide-react"
 import { LocaleSelector } from "@/components/locale-selector"
 import { useLocale } from "@/components/locale-provider"
 import { Button } from "@/components/ui/button"
+import { Badge } from "@/components/ui/badge"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -91,6 +93,29 @@ export default function WelcomeOnboardingPage() {
     () => moduleBundles.find((entry) => entry.id === draft?.moduleBundleId) || moduleBundles[0] || null,
     [draft?.moduleBundleId, moduleBundles],
   )
+  const setupBlockers = useMemo(() => {
+    if (!draft) return []
+    const blockers: string[] = []
+    if (!String(draft.estateName || "").trim()) blockers.push("Enter your estate name.")
+    if (!Number.isFinite(Number(draft.bagWeightKg)) || Number(draft.bagWeightKg) < 40 || Number(draft.bagWeightKg) > 70) {
+      blockers.push("Bag weight must be between 40 and 70 kg.")
+    }
+    if (!String(draft.primaryLocationName || "").trim()) blockers.push("Enter your first location name.")
+    if (!String(draft.primaryLocationCode || "").trim()) blockers.push("Enter a short location code.")
+    if (!String(draft.moduleBundleId || "").trim()) blockers.push("Choose a starting plan.")
+    return blockers
+  }, [draft])
+  const setupProgressPct = useMemo(() => {
+    if (!draft) return 0
+    const checks = [
+      Boolean(String(draft.estateName || "").trim()),
+      Number.isFinite(Number(draft.bagWeightKg)) && Number(draft.bagWeightKg) >= 40 && Number(draft.bagWeightKg) <= 70,
+      Boolean(String(draft.primaryLocationName || "").trim()),
+      Boolean(String(draft.primaryLocationCode || "").trim()),
+      Boolean(String(draft.moduleBundleId || "").trim()),
+    ]
+    return Math.round((checks.filter(Boolean).length / checks.length) * 100)
+  }, [draft])
 
   if (loading || !draft) {
     return (
@@ -135,6 +160,9 @@ export default function WelcomeOnboardingPage() {
             <div className="flex flex-wrap gap-2 text-xs text-slate-600">
               <span className="rounded-full bg-emerald-50 px-3 py-1">{draft.email}</span>
               <span className="rounded-full bg-slate-100 px-3 py-1">@{draft.username}</span>
+              <Badge variant="outline" className="border-emerald-200 bg-white text-emerald-700">
+                {setupProgressPct}% ready
+              </Badge>
             </div>
           </div>
           <div className="w-full max-w-[220px]">
@@ -245,13 +273,39 @@ export default function WelcomeOnboardingPage() {
                 </div>
               </div>
 
+              <div className="rounded-2xl border border-cyan-200 bg-cyan-50/60 p-4">
+                <div className="flex flex-wrap items-center gap-2">
+                  <Badge variant="outline" className={setupBlockers.length === 0 ? "border-emerald-200 bg-white text-emerald-700" : "border-cyan-200 bg-white text-cyan-700"}>
+                    {setupBlockers.length === 0 ? "Ready to continue" : `${setupBlockers.length} thing${setupBlockers.length === 1 ? "" : "s"} left`}
+                  </Badge>
+                  <Badge variant="outline" className="border-slate-200 bg-white text-slate-700">
+                    5-minute setup
+                  </Badge>
+                </div>
+                <p className="mt-3 text-sm text-slate-700">
+                  This setup saves your estate basics, creates or updates your first location, applies your starting plan,
+                  and then sends you to the dashboard.
+                </p>
+                {setupBlockers.length > 0 ? (
+                  <ul className="ml-4 mt-3 list-disc space-y-1 text-xs text-slate-700">
+                    {setupBlockers.map((blocker) => (
+                      <li key={blocker}>{blocker}</li>
+                    ))}
+                  </ul>
+                ) : (
+                  <p className="mt-3 text-xs text-emerald-700">
+                    Core setup looks complete. Review once, then continue to open the live workspace.
+                  </p>
+                )}
+              </div>
+
               {error ? (
                 <p className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>
               ) : null}
 
               <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
                 <Button
-                  disabled={submitting}
+                  disabled={submitting || setupBlockers.length > 0}
                   onClick={async () => {
                     if (submitting) return
                     setSubmitting(true)
@@ -274,7 +328,7 @@ export default function WelcomeOnboardingPage() {
                       })
                       router.push("/dashboard")
                     } catch (saveError: any) {
-                      setError(saveError?.message || "Failed to save onboarding setup")
+                      setError(saveError?.message || "Setup was not saved. Review the fields above and try again.")
                     } finally {
                       setSubmitting(false)
                     }
@@ -304,6 +358,26 @@ export default function WelcomeOnboardingPage() {
                 </CardContent>
               </Card>
             ))}
+
+            <Card className="border-emerald-100 bg-emerald-50/70">
+              <CardContent className="space-y-4 p-5">
+                <div className="flex gap-4">
+                  <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-white text-emerald-700 shadow-sm">
+                    <BookOpen className="h-5 w-5" />
+                  </div>
+                  <div className="space-y-1">
+                    <p className="font-semibold text-slate-900">Need a simple walkthrough?</p>
+                    <p className="text-sm text-muted-foreground">
+                      Open the beginner manuals for plain-language explanations of Dashboard, Operations, Finance,
+                      Insights, and admin screens.
+                    </p>
+                  </div>
+                </div>
+                <Button asChild variant="outline" className="w-full bg-white">
+                  <Link href="/manuals">Open training manuals</Link>
+                </Button>
+              </CardContent>
+            </Card>
           </div>
         </div>
       </div>

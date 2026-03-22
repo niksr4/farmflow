@@ -12,7 +12,13 @@ BEGIN
   END IF;
 END $$;
 
-GRANT CONNECT ON DATABASE current_database() TO app_readonly, app_writer;
+DO $$
+DECLARE
+  db_name TEXT := current_database();
+BEGIN
+  EXECUTE format('GRANT CONNECT ON DATABASE %I TO app_readonly, app_writer', db_name);
+END $$;
+
 GRANT USAGE ON SCHEMA public TO app_readonly, app_writer;
 
 GRANT SELECT ON ALL TABLES IN SCHEMA public TO app_readonly;

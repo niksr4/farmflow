@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useEffect, useCallback, useMemo, useRef, type ChangeEvent, type KeyboardEvent as ReactKeyboardEvent } from "react"
+import Link from "next/link"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -22,6 +23,7 @@ import { useTenantSettings } from "@/hooks/use-tenant-settings"
 import { formatDateOnly } from "@/lib/date-utils"
 import { formatNumber } from "@/lib/format"
 import { canAcceptNonNegative, isBlockedNumericKey } from "@/lib/number-input"
+import TaskGuideCard from "@/components/task-guide-card"
 import posthog from "posthog-js"
 
 interface DispatchRecord {
@@ -799,8 +801,37 @@ export default function DispatchTab({ showDataToolsControls = false }: DispatchT
     return () => window.removeEventListener("keydown", onKeyDown)
   }, [])
 
+  const scrollToEntryForm = useCallback(() => {
+    if (typeof window !== "undefined") {
+      window.scrollTo({ top: 0, behavior: "smooth" })
+    }
+  }, [])
+
   return (
     <div className="flex flex-col gap-8">
+      <TaskGuideCard
+        eyebrow="Dispatch guide"
+        title="Use this tab when bags or stock leave a location"
+        description="Dispatch is for real outbound movement. It should match what the team loaded, transferred, or handed over."
+        bullets={[
+          "Choose the correct location before entering bag movement.",
+          "Use received KGs when you know the actual received weight, because sales availability follows that number.",
+          "If the shipment is still unclear, save the bag movement and update notes later rather than waiting.",
+        ]}
+        tip="Think of dispatch as the bridge between processing stock and sales stock. Clear dispatch records stop inventory confusion."
+        tone="operations"
+        actions={
+          <>
+            <Button variant="outline" className="bg-white" onClick={scrollToEntryForm}>
+              Go to form
+            </Button>
+            <Button asChild variant="outline" className="bg-white">
+              <Link href="/manuals">Manuals</Link>
+            </Button>
+          </>
+        }
+      />
+
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h2 className="text-xl font-semibold text-foreground">Coffee Bag Dispatch</h2>
@@ -1249,9 +1280,22 @@ export default function DispatchTab({ showDataToolsControls = false }: DispatchT
               <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
             </div>
           ) : dispatchRecords.length === 0 ? (
-            <div className="text-center py-8 text-muted-foreground">
-              <p>No dispatch records yet</p>
-              <p className="text-sm mt-2">Log your first outbound shipment to reconcile inventory and sales.</p>
+            <div className="rounded-2xl border border-dashed border-emerald-200 bg-emerald-50/40 p-5 text-sm">
+              <p className="font-semibold text-foreground">No dispatch records yet</p>
+              <p className="mt-2 text-muted-foreground">
+                Start when the first bags leave an estate location. Dispatch should describe what physically went out, not what you hope to sell later.
+              </p>
+              <ul className="ml-4 mt-3 list-disc space-y-1 text-muted-foreground">
+                <li>Select the source location.</li>
+                <li>Enter the bag type and number of bags that actually left.</li>
+                <li>Add received KGs when the exact receiving weight is confirmed.</li>
+              </ul>
+              <div className="mt-4 flex flex-wrap gap-2">
+                <Button onClick={scrollToEntryForm}>Use form above</Button>
+                <Button asChild variant="outline" className="bg-white">
+                  <Link href="/manuals">Open manuals</Link>
+                </Button>
+              </div>
             </div>
           ) : (
             <div className="space-y-4">

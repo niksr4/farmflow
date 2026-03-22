@@ -55,10 +55,10 @@ export function TenantSettingsOverview({
       >
         <CardHeader>
           <CardTitle className="flex items-baseline gap-3">
-            Tenant Settings
+            Workspace Settings
             <span className="text-xs uppercase tracking-[0.3em] text-muted-foreground">FarmFlow</span>
           </CardTitle>
-          <CardDescription>Manage users, access, locations, thresholds, and tenant behavior in one place.</CardDescription>
+          <CardDescription>Manage estate basics, people, access, locations, and workspace behavior in one place.</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">

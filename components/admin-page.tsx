@@ -627,7 +627,17 @@ export default function AdminPage() {
       const response = await fetch(`/api/admin/tenants?tenantId=${tenant.id}`, { method: "DELETE" })
       const data = await response.json()
       if (!response.ok || !data.success) {
-        throw new Error(data.error || "Failed to delete tenant")
+        const blockingSummary = Array.isArray(data?.blockingDependencies)
+          ? data.blockingDependencies
+              .slice(0, 4)
+              .map((entry: any) => `${entry.label} (${entry.count})`)
+              .join(", ")
+          : ""
+        const errorMessage =
+          data?.error && blockingSummary
+            ? `${data.error} ${blockingSummary}.`
+            : data?.error || "Failed to delete tenant"
+        throw new Error(errorMessage)
       }
       toast({ title: "Tenant deleted", description: `${tenant.name} removed.` })
       await loadTenants()

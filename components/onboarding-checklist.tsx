@@ -73,6 +73,7 @@ export default function OnboardingChecklist({
   if (!isVisible) return null
 
   const nextPendingStep = steps.find((step) => !step.done) || null
+  const progressPct = totalCount > 0 ? Math.round((completedCount / totalCount) * 100) : 100
 
   return (
     <Card className="border-2 border-emerald-100 bg-emerald-50/40">
@@ -110,6 +111,20 @@ export default function OnboardingChecklist({
             </p>
           )}
           {error && <p className="text-xs text-red-600">{error}</p>}
+          <div className="space-y-2">
+            <div className="flex items-center justify-between text-xs text-muted-foreground">
+              <span>Launch progress</span>
+              <span>{progressPct}% ready</span>
+            </div>
+            <div className="h-2 overflow-hidden rounded-full bg-white/80">
+              <div className="h-full rounded-full bg-emerald-600 transition-all" style={{ width: `${progressPct}%` }} />
+            </div>
+            <p className="text-xs text-muted-foreground">
+              {nextPendingStep
+                ? `Do this next: ${nextPendingStep.title}.`
+                : "Core setup is complete. Your estate is ready for live records."}
+            </p>
+          </div>
         </CardHeader>
 
         <CollapsibleContent>

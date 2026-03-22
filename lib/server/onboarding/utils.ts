@@ -109,6 +109,35 @@ export const maskEmailAddress = (email: string) => {
   return `${safeLocal}@${domain}`
 }
 
+export const SIGNUP_VERIFICATION_ALREADY_USED_MESSAGE = "Verification link has already been used. Sign in instead."
+
+type SignupVerificationState = {
+  status?: string | null
+  tokenConsumedAt?: string | null
+  tokenExpiresAt?: string | null
+  provisionedAt?: string | null
+  nowMs?: number
+}
+
+export const getSignupVerificationStateError = (input: SignupVerificationState) => {
+  const status = String(input.status || "").trim().toLowerCase()
+  if (status === "cancelled" || status === "expired") {
+    return "This signup request is no longer active"
+  }
+
+  if (String(input.tokenConsumedAt || "").trim()) {
+    return SIGNUP_VERIFICATION_ALREADY_USED_MESSAGE
+  }
+
+  const expiresAt = new Date(String(input.tokenExpiresAt || "")).getTime()
+  const nowMs = Number.isFinite(input.nowMs) ? Math.floor(Number(input.nowMs)) : Date.now()
+  if (Number.isFinite(expiresAt) && expiresAt < nowMs && !input.provisionedAt) {
+    return "Verification link has expired. Request a new one."
+  }
+
+  return null
+}
+
 export const isMissingRelation = (error: unknown, relation: string) => {
   const message = String((error as Error)?.message || error)
   return message.includes(`relation "${relation}" does not exist`)

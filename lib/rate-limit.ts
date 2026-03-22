@@ -27,6 +27,35 @@ type RateLimitResult = {
   reset: number
 }
 
+const SENSITIVE_RATE_LIMIT_KEYS = new Set<RateLimitKey>([
+  "authLogin",
+  "accountPasswordChange",
+  "authSignup",
+  "authSignupResend",
+  "authSignupVerify",
+  "opsErrorIngest",
+])
+
+export const isSensitiveRateLimitKey = (key: RateLimitKey) => SENSITIVE_RATE_LIMIT_KEYS.has(key)
+
+export const requiresDistributedRateLimit = (key: RateLimitKey, env: NodeJS.ProcessEnv = process.env) =>
+  env.NODE_ENV === "production" && isSensitiveRateLimitKey(key)
+
+export class RateLimitUnavailableError extends Error {
+  key: RateLimitKey
+
+  constructor(key: RateLimitKey, cause?: unknown) {
+    super("Rate limiting is temporarily unavailable. Please try again shortly.", {
+      cause: cause instanceof Error ? cause : undefined,
+    })
+    this.name = "RateLimitUnavailableError"
+    this.key = key
+  }
+}
+
+export const isRateLimitUnavailableError = (error: unknown): error is RateLimitUnavailableError =>
+  Boolean(error && (error as Error).name === "RateLimitUnavailableError")
+
 const limiters: Record<RateLimitKey, Ratelimit | null> = {
   aiAnalysis: redis ? new Ratelimit({ redis, limiter: Ratelimit.fixedWindow(5, "1 m") }) : null,
   aiAssistant: redis ? new Ratelimit({ redis, limiter: Ratelimit.fixedWindow(12, "5 m") }) : null,
@@ -102,10 +131,20 @@ const runLocalRateLimit = (key: RateLimitKey, identifier: string): RateLimitResu
 export async function checkRateLimit(key: RateLimitKey, identifier: string): Promise<RateLimitResult> {
   const limiter = limiters[key]
   if (!limiter) {
+    if (requiresDistributedRateLimit(key)) {
+      throw new RateLimitUnavailableError(key)
+    }
     return runLocalRateLimit(key, identifier)
   }
 
-  return limiter.limit(identifier)
+  try {
+    return await limiter.limit(identifier)
+  } catch (error) {
+    if (requiresDistributedRateLimit(key)) {
+      throw new RateLimitUnavailableError(key, error)
+    }
+    return runLocalRateLimit(key, identifier)
+  }
 }
 
 export function buildRateLimitHeaders(result: RateLimitResult): Record<string, string> {

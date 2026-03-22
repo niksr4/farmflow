@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useEffect, useCallback, useMemo, useRef, type ChangeEvent, type KeyboardEvent as ReactKeyboardEvent } from "react"
+import Link from "next/link"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -24,6 +25,7 @@ import { canAcceptNonNegative, isBlockedNumericKey } from "@/lib/number-input"
 import { buildSalesCsv } from "@/lib/sales-export"
 import { resolveDispatchReceivedKgs as resolveDispatchReceivedKgsValue, resolveSalesKgs } from "@/lib/sales-math"
 import OtherSalesTab from "@/components/other-sales-tab"
+import TaskGuideCard from "@/components/task-guide-card"
 import posthog from "posthog-js"
 
 interface SalesRecord {
@@ -1047,9 +1049,37 @@ export default function SalesTab({
   const coffeeRevenue = totals.totalRevenue
   const otherRevenue = otherSalesTotals.totalRevenue
   const combinedRevenue = coffeeRevenue + otherRevenue
+  const scrollToEntryForm = useCallback(() => {
+    if (typeof window !== "undefined") {
+      window.scrollTo({ top: 0, behavior: "smooth" })
+    }
+  }, [])
 
   return (
     <div className="flex flex-col gap-8">
+      <TaskGuideCard
+        eyebrow="Sales guide"
+        title="Use this tab when a buyer, quantity, and price are real"
+        description="Sales should follow actual commercial events. Keep it simple: who bought, what was sold, how much was sold, and what price was agreed."
+        bullets={[
+          "Choose the correct location so sold stock matches dispatch and inventory.",
+          "Enter buyer and price only after they are confirmed, not as a rough guess.",
+          "If coffee sales are not final yet, use notes or wait instead of creating a fake sale.",
+        ]}
+        tip="A good sales record should be easy to explain to the owner, the buyer, and the accountant using the same numbers."
+        tone="operations"
+        actions={
+          <>
+            <Button variant="outline" className="bg-white" onClick={scrollToEntryForm}>
+              Go to form
+            </Button>
+            <Button asChild variant="outline" className="bg-white">
+              <Link href="/manuals">Manuals</Link>
+            </Button>
+          </>
+        }
+      />
+
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h2 className="text-xl font-semibold text-foreground">Sales</h2>
@@ -1699,9 +1729,22 @@ export default function SalesTab({
               <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
             </div>
           ) : salesRecords.length === 0 ? (
-            <div className="text-center py-8 text-muted-foreground">
-              <p>No sales recorded yet</p>
-              <p className="text-sm mt-2">Add your first buyer and price to start tracking revenue.</p>
+            <div className="rounded-2xl border border-dashed border-emerald-200 bg-emerald-50/40 p-5 text-sm">
+              <p className="font-semibold text-foreground">No sales recorded yet</p>
+              <p className="mt-2 text-muted-foreground">
+                Add the first real buyer and price only when the commercial details are known. Sales should support revenue tracking, not placeholder data.
+              </p>
+              <ul className="ml-4 mt-3 list-disc space-y-1 text-muted-foreground">
+                <li>Select the location the stock came from.</li>
+                <li>Enter the buyer, quantity, and final agreed price.</li>
+                <li>Use notes for terms or special conditions instead of hiding them.</li>
+              </ul>
+              <div className="mt-4 flex flex-wrap gap-2">
+                <Button onClick={scrollToEntryForm}>Use form above</Button>
+                <Button asChild variant="outline" className="bg-white">
+                  <Link href="/manuals">Open manuals</Link>
+                </Button>
+              </div>
             </div>
           ) : (
             <div className="space-y-4">

@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server"
 import { z } from "zod"
 
-import { buildRateLimitHeaders, checkRateLimit } from "@/lib/rate-limit"
+import { buildRateLimitHeaders, checkRateLimit, isRateLimitUnavailableError } from "@/lib/rate-limit"
 import { isDbConfigured } from "@/lib/server/db"
 import { resendSignupVerification } from "@/lib/server/onboarding/signup"
 import { SIGNUP_EMAIL_PATTERN, normalizeOnboardingError, normalizeSignupEmail } from "@/lib/server/onboarding/utils"
@@ -33,10 +33,24 @@ export async function POST(request: Request) {
     return NextResponse.json({ success: false, error: "Enter a valid email address" }, { status: 400 })
   }
 
-  const rateLimit = await checkRateLimit("authSignupResend", `auth-signup-resend:${ipAddress}::${email}`)
-  const headers = buildRateLimitHeaders(rateLimit)
-  if (!rateLimit.success) {
-    return NextResponse.json({ success: false, error: "Too many resend attempts. Please try again shortly." }, { status: 429, headers })
+  let headers: Record<string, string> = {}
+  try {
+    const rateLimit = await checkRateLimit("authSignupResend", `auth-signup-resend:${ipAddress}::${email}`)
+    headers = buildRateLimitHeaders(rateLimit)
+    if (!rateLimit.success) {
+      return NextResponse.json(
+        { success: false, error: "Too many resend attempts. Please try again shortly." },
+        { status: 429, headers },
+      )
+    }
+  } catch (error) {
+    if (isRateLimitUnavailableError(error)) {
+      return NextResponse.json(
+        { success: false, error: "Verification resend is temporarily unavailable. Please try again shortly." },
+        { status: 503 },
+      )
+    }
+    throw error
   }
 
   try {
@@ -70,4 +84,3 @@ export async function POST(request: Request) {
     return NextResponse.json({ success: false, error: message }, { status, headers })
   }
 }
-

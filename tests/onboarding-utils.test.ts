@@ -4,12 +4,14 @@ import {
   buildUsernameAttempt,
   buildUsernameSeeds,
   buildVerificationLink,
+  getSignupVerificationStateError,
   hashSignupToken,
   isEmailIdentifier,
   maskEmailAddress,
   normalizeLocale,
   normalizeOnboardingError,
   normalizeSignupEmail,
+  SIGNUP_VERIFICATION_ALREADY_USED_MESSAGE,
   slugifyText,
 } from "../lib/server/onboarding/utils"
 
@@ -58,6 +60,28 @@ describe("onboarding utils", () => {
     expect(maskEmailAddress("person@example.com")).toBe("pe****@example.com")
     expect(hashSignupToken("abc")).toBe(hashSignupToken("abc"))
     expect(hashSignupToken("abc")).not.toBe(hashSignupToken("xyz"))
+  })
+
+  it("treats consumed signup verification tokens as already used", () => {
+    expect(
+      getSignupVerificationStateError({
+        status: "verified",
+        tokenConsumedAt: "2026-03-19T10:00:00.000Z",
+        tokenExpiresAt: "2026-03-21T10:00:00.000Z",
+        provisionedAt: "2026-03-19T10:00:05.000Z",
+        nowMs: Date.parse("2026-03-20T00:00:00.000Z"),
+      }),
+    ).toBe(SIGNUP_VERIFICATION_ALREADY_USED_MESSAGE)
+
+    expect(
+      getSignupVerificationStateError({
+        status: "pending",
+        tokenConsumedAt: null,
+        tokenExpiresAt: "2026-03-19T10:00:00.000Z",
+        provisionedAt: null,
+        nowMs: Date.parse("2026-03-20T00:00:00.000Z"),
+      }),
+    ).toContain("expired")
   })
 
   it("resolves verification links from configured app urls", () => {

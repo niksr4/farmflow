@@ -181,9 +181,11 @@ Run these scripts (in order) on the target database:
 27. `63-user-email-auth.sql` (optional, adds verified email identity fields for self-serve login)
 28. `65-user-guided-setup.sql` (optional, tracks first-run setup completion for brand-new self-serve admins)
 29. `66-tenant-subscription-plan.sql` (optional, persists Basic/Core/Enterprise plan entitlements per tenant)
+30. `67-attendance.sql` (optional, adds employee roster + daily muster attendance tracking)
 
 Operational hardening helper scripts:
 - `pnpm security:passwords` audits password storage types and supports legacy remediation for existing users.
+- `pnpm schema:check` runs a read-only schema readiness audit against the active database URL (`.env.local` is supported) and fails on missing critical platform migrations.
 - `pnpm test:e2e:onboarding` runs the self-serve signup -> verify -> login -> guided setup smoke test using local email previews.
 
 New tables:
@@ -194,6 +196,7 @@ New tables:
 - `user_modules` (per-user module overrides)
 - `document_records` (optional upload trail with tenant/location links)
 - `import_jobs` (optional import dry-run + commit audit trail)
+- `attendance_workers` + `attendance_records` (optional morning muster and weekly days-present tracking)
 
 Legacy tables (`hf_arabica`, `hf_robusta`, `mv_robusta`, `pg_robusta`, `hf_pepper`, `mv_pepper`, `pg_pepper`) are kept for reference but should be treated as deprecated once migrated.
 Optional hardening: run `30-lock-legacy-tables.sql` to prevent writes to legacy tables after you confirm the app uses the normalized tables.

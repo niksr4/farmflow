@@ -14,6 +14,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { FileText, Coins, PlusCircle, Settings, Users, Receipt, Loader2, Pencil, Trash2, Check, X } from "lucide-react"
 import { Skeleton } from "@/components/ui/skeleton"
+import AttendanceTab from "./attendance-tab"
 import LaborDeploymentTab from "./labor-deployment-tab"
 import OtherExpensesTab from "./other-expenses-tab"
 import { toast } from "sonner"
@@ -1030,6 +1031,10 @@ export default function AccountsPage({
             <Receipt className="h-4 w-4" />
             Other Expenses
           </TabsTrigger>
+          <TabsTrigger value="attendance" className="flex items-center gap-2">
+            <Check className="h-4 w-4" />
+            Attendance
+          </TabsTrigger>
           <TabsTrigger value="activities" className="flex items-center gap-2">
             <Settings className="h-4 w-4" />
             Account Activities
@@ -1042,6 +1047,10 @@ export default function AccountsPage({
 
         <TabsContent value="expenses" className="mt-6">
             <OtherExpensesTab />
+          </TabsContent>
+
+        <TabsContent value="attendance" className="mt-6">
+            <AttendanceTab />
           </TabsContent>
 
         <TabsContent value="activities">

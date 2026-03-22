@@ -2,17 +2,92 @@ import { NextResponse } from "next/server"
 import { z } from "zod"
 import { sql } from "@/lib/server/db"
 import { requireOwnerRole } from "@/lib/tenant"
+import {
+  listTenantDeletionRequiredTables,
+  summarizeTenantDeletionCounts,
+  TENANT_DELETION_DEPENDENCIES,
+  type TenantDeletionDependencySpec,
+} from "@/lib/tenant-deletion"
 import { requireAdminSession } from "@/lib/server/mfa"
 import { DEFAULT_TENANT_PLAN_ID, MODULES, clampRequestedModuleStatesToPlan, normalizeTenantPlanId } from "@/lib/modules"
 import { persistTenantPlanId } from "@/lib/server/tenant-subscriptions"
-import { normalizeTenantContext, runTenantQuery } from "@/lib/server/tenant-db"
+import { normalizeTenantContext, runTenantQueries, runTenantQuery } from "@/lib/server/tenant-db"
 import { logAuditEvent } from "@/lib/server/audit-log"
+import { sendOwnerTenantCreatedAlert } from "@/lib/server/onboarding/owner-alerts"
 import { buildAdminErrorResponse, databaseNotConfiguredResponse } from "@/lib/server/route-utils"
+import { logServerError } from "@/lib/server/safe-logging"
 
 const updateTenantBodySchema = z.object({
   tenantId: z.string().trim().min(1, "tenantId is required"),
   name: z.string().trim().min(1, "Tenant name is required").max(160, "Tenant name is too long"),
 })
+
+const buildTenantDeletionCountQuery = (spec: TenantDeletionDependencySpec, tenantId: string) => {
+  switch (spec.strategy) {
+    case "signup_tokens":
+      return sql.query(
+        `
+          SELECT COUNT(*)::int AS count
+          FROM signup_tokens st
+          WHERE EXISTS (
+            SELECT 1
+            FROM signup_requests sr
+            WHERE sr.id = st.signup_request_id
+              AND sr.tenant_id = $1::uuid
+          )
+        `,
+        [tenantId],
+      )
+    case "user_modules":
+      return sql.query(
+        `
+          SELECT COUNT(*)::int AS count
+          FROM user_modules
+          WHERE tenant_id = $1::uuid
+             OR user_id IN (
+               SELECT id
+               FROM users
+               WHERE tenant_id = $1::uuid
+             )
+        `,
+        [tenantId],
+      )
+    default:
+      return sql.query(`SELECT COUNT(*)::int AS count FROM ${spec.table} WHERE tenant_id = $1::uuid`, [tenantId])
+  }
+}
+
+const buildTenantDeletionDeleteQuery = (spec: TenantDeletionDependencySpec, tenantId: string) => {
+  switch (spec.strategy) {
+    case "signup_tokens":
+      return sql.query(
+        `
+          DELETE FROM signup_tokens
+          WHERE signup_request_id IN (
+            SELECT id
+            FROM signup_requests
+            WHERE tenant_id = $1::uuid
+          )
+        `,
+        [tenantId],
+      )
+    case "user_modules":
+      return sql.query(
+        `
+          DELETE FROM user_modules
+          WHERE tenant_id = $1::uuid
+             OR user_id IN (
+               SELECT id
+               FROM users
+               WHERE tenant_id = $1::uuid
+             )
+        `,
+        [tenantId],
+      )
+    default:
+      return sql.query(`DELETE FROM ${spec.table} WHERE tenant_id = $1::uuid`, [tenantId])
+  }
+}
 
 export async function GET(_request: Request) {
   try {
@@ -35,7 +110,7 @@ export async function GET(_request: Request) {
 
     return NextResponse.json({ success: true, tenants })
   } catch (error: any) {
-    console.error("Error fetching tenants:", error)
+    logServerError("Error fetching tenants", error)
     return buildAdminErrorResponse(error, "Failed to fetch tenants", { ownerRequired: true })
   }
 }
@@ -102,6 +177,16 @@ export async function POST(request: Request) {
       },
     })
 
+    if (result?.[0]?.id && result?.[0]?.name) {
+      await sendOwnerTenantCreatedAlert({
+        tenantId: String(result[0].id),
+        tenantName: String(result[0].name),
+        origin: "owner-console",
+        createdBy: sessionUser.username || "owner-console",
+        source: "admin/tenants",
+      })
+    }
+
     return NextResponse.json({
       success: true,
       tenant: {
@@ -110,7 +195,7 @@ export async function POST(request: Request) {
       },
     })
   } catch (error: any) {
-    console.error("Error creating tenant:", error)
+    logServerError("Error creating tenant", error)
     return buildAdminErrorResponse(error, "Failed to create tenant", { ownerRequired: true })
   }
 }
@@ -152,37 +237,63 @@ export async function DELETE(request: Request) {
       return NextResponse.json({ success: false, error: "Tenant not found" }, { status: 404 })
     }
 
-    await runTenantQuery(
+    const requiredTables = listTenantDeletionRequiredTables()
+    const existingTableRows = await runTenantQuery(
       sql,
       adminContext,
-      sql`
-        DELETE FROM user_modules
-        WHERE tenant_id = ${tenantId}
-           OR user_id IN (
-             SELECT id
-             FROM users
-             WHERE tenant_id = ${tenantId}
-           )
-      `,
+      sql.query(
+        `
+          SELECT table_name
+          FROM information_schema.tables
+          WHERE table_schema = 'public'
+            AND table_name = ANY($1::text[])
+        `,
+        [requiredTables],
+      ),
+    )
+    const existingTables = new Set(existingTableRows.map((row: any) => String(row.table_name || "").trim()).filter(Boolean))
+
+    const availableSpecs = TENANT_DELETION_DEPENDENCIES.filter((spec) =>
+      (spec.requiredTables || [spec.table]).every((tableName) => existingTables.has(tableName)),
     )
 
-    await runTenantQuery(
-      sql,
-      adminContext,
-      sql`
-        DELETE FROM tenant_modules
-        WHERE tenant_id = ${tenantId}
-      `,
+    const countResults = availableSpecs.length
+      ? await runTenantQueries(
+          sql,
+          adminContext,
+          availableSpecs.map((spec) => buildTenantDeletionCountQuery(spec, tenantId)),
+        )
+      : []
+    const deletionSummary = summarizeTenantDeletionCounts(
+      availableSpecs.map((spec, index) => ({
+        table: spec.table,
+        label: spec.label,
+        category: spec.category,
+        count: Number(countResults[index]?.[0]?.count) || 0,
+      })),
     )
 
-    await runTenantQuery(
-      sql,
-      adminContext,
-      sql`
-        DELETE FROM users
-        WHERE tenant_id = ${tenantId}
-      `,
-    )
+    if (!deletionSummary.canDelete) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: "Tenant has operational data and cannot be deleted automatically.",
+          blockingDependencies: deletionSummary.blockingDependencies,
+          cleanupDependencies: deletionSummary.cleanupDependencies,
+          nextStep: "Archive this tenant or add an explicit data-purge workflow before deletion.",
+        },
+        { status: 409 },
+      )
+    }
+
+    const cleanupSpecs = availableSpecs.filter((spec) => spec.category === "cleanup")
+    if (cleanupSpecs.length) {
+      await runTenantQueries(
+        sql,
+        adminContext,
+        cleanupSpecs.map((spec) => buildTenantDeletionDeleteQuery(spec, tenantId)),
+      )
+    }
 
     await runTenantQuery(
       sql,
@@ -198,11 +309,17 @@ export async function DELETE(request: Request) {
       entityType: "tenants",
       entityId: tenantId,
       before: existing?.[0] ?? null,
+      after: {
+        deletedManagedDependencies: deletionSummary.cleanupDependencies,
+      },
     })
 
-    return NextResponse.json({ success: true })
+    return NextResponse.json({
+      success: true,
+      deletedManagedDependencies: deletionSummary.cleanupDependencies,
+    })
   } catch (error: any) {
-    console.error("Error deleting tenant:", error)
+    logServerError("Error deleting tenant", error)
     return buildAdminErrorResponse(error, "Failed to delete tenant", { ownerRequired: true })
   }
 }
@@ -261,7 +378,7 @@ export async function PATCH(request: Request) {
 
     return NextResponse.json({ success: true, tenant: updated[0] })
   } catch (error: any) {
-    console.error("Error updating tenant:", error)
+    logServerError("Error updating tenant", error)
     return buildAdminErrorResponse(error, "Failed to update tenant", { ownerRequired: true })
   }
 }

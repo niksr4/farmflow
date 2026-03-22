@@ -127,7 +127,7 @@ test.describe("day-in-life workflow regression", () => {
     await waitForDashboardReady(page)
     await applyPreviewTenantCookie(page, context.tenantId)
 
-    const requiredTabs = ["Processing", "Dispatch", "Sales", "Accounts"] as const
+    const requiredTabs = ["Pulping", "Dispatch", "Sales", "Accounts"] as const
     for (const tabName of requiredTabs) {
       const tab = page.getByRole("tab", { name: tabName })
       if ((await tab.count()) === 0) {
@@ -207,7 +207,7 @@ test.describe("day-in-life workflow regression", () => {
 
     await page.goto(buildDashboardRouteForTab(context, "processing"))
     await waitForDashboardReady(page)
-    await expect(page.getByRole("heading", { name: "Processing Records" })).toBeVisible()
+    await expect(page.getByRole("heading", { name: "Coffee Pulping Records" })).toBeVisible()
 
     await page.goto(buildDashboardRouteForTab(context, "dispatch"))
     await waitForDashboardReady(page)

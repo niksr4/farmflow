@@ -29,7 +29,7 @@ export function SystemHealthSection({
       <CardHeader className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
         <div>
           <CardTitle>System Health</CardTitle>
-          <CardDescription>Daily checks from data-integrity, log-anomaly, imports, and error telemetry.</CardDescription>
+          <CardDescription>Schema readiness, data-integrity, log-anomaly, imports, and error telemetry.</CardDescription>
         </div>
         <div className="flex items-center gap-2">
           {systemHealthGeneratedLabel ? (

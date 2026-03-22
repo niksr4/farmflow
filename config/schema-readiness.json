@@ -1,0 +1,52 @@
+[
+  {
+    "id": "self-serve-signup",
+    "label": "Self-serve signup intake",
+    "severity": "critical",
+    "requiredTables": ["signup_requests"],
+    "requiredColumns": {
+      "signup_requests": ["id", "tenant_id", "email", "status"]
+    },
+    "help": "Run scripts/61-signup-requests.sql."
+  },
+  {
+    "id": "signup-verification",
+    "label": "Signup email verification",
+    "severity": "critical",
+    "requiredTables": ["signup_tokens"],
+    "requiredColumns": {
+      "signup_tokens": ["signup_request_id", "token_hash", "expires_at", "consumed_at"]
+    },
+    "help": "Run scripts/62-signup-tokens.sql."
+  },
+  {
+    "id": "email-auth-identity",
+    "label": "Email auth identity",
+    "severity": "critical",
+    "requiredTables": ["users"],
+    "requiredColumns": {
+      "users": ["email", "normalized_email", "email_verified_at", "preferred_locale"]
+    },
+    "help": "Run scripts/63-user-email-auth.sql."
+  },
+  {
+    "id": "guided-setup",
+    "label": "Guided setup state",
+    "severity": "critical",
+    "requiredTables": ["users"],
+    "requiredColumns": {
+      "users": ["setup_completed_at", "requires_guided_setup"]
+    },
+    "help": "Run scripts/65-user-guided-setup.sql."
+  },
+  {
+    "id": "tenant-experience",
+    "label": "Tenant profile flags",
+    "severity": "warning",
+    "requiredTables": ["tenants"],
+    "requiredColumns": {
+      "tenants": ["ui_variant", "feature_flags"]
+    },
+    "help": "Run scripts/48-tenant-variants.sql."
+  }
+]

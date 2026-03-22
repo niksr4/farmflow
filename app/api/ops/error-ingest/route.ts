@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server"
 import { logAppErrorEvent } from "@/lib/server/error-events"
-import { buildRateLimitHeaders, checkRateLimit } from "@/lib/rate-limit"
+import { buildRateLimitHeaders, checkRateLimit, isRateLimitUnavailableError } from "@/lib/rate-limit"
 import { extractClientIp, extractSharedSecretToken, sharedSecretMatches } from "@/lib/server/request-security"
 import { logServerError, redactForLogs } from "@/lib/server/safe-logging"
 
@@ -34,13 +34,24 @@ export async function POST(request: Request) {
     }
 
     const ipAddress = extractClientIp(request.headers)
-    const rateLimit = await checkRateLimit("opsErrorIngest", `ops-error-ingest:${String(ipAddress || "unknown")}`)
-    const rateHeaders = buildRateLimitHeaders(rateLimit)
-    if (!rateLimit.success) {
-      return NextResponse.json(
-        { success: false, error: "Rate limit exceeded" },
-        { status: 429, headers: rateHeaders },
-      )
+    let rateHeaders: Record<string, string> = {}
+    try {
+      const rateLimit = await checkRateLimit("opsErrorIngest", `ops-error-ingest:${String(ipAddress || "unknown")}`)
+      rateHeaders = buildRateLimitHeaders(rateLimit)
+      if (!rateLimit.success) {
+        return NextResponse.json(
+          { success: false, error: "Rate limit exceeded" },
+          { status: 429, headers: rateHeaders },
+        )
+      }
+    } catch (error) {
+      if (isRateLimitUnavailableError(error)) {
+        return NextResponse.json(
+          { success: false, error: "Error ingest is temporarily unavailable. Please try again shortly." },
+          { status: 503 },
+        )
+      }
+      throw error
     }
 
     const body = await request.json().catch(() => null)
