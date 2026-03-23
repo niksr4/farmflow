@@ -396,7 +396,7 @@ const buildManualGroups = (
           name: "Balance Sheet",
           whatItIs: "A management summary of the financial position.",
           openItWhen: "You want the owner view of assets, liabilities, and position.",
-          doneLooksLike: "You understand the financial snapshot without using this tab as the raw data entry screen.",
+          doneLooksLike: "You understand the financial snapshot and know where the underlying records come from.",
         }
       : null,
     hasModule(enabledModules, "receivables")
@@ -500,7 +500,7 @@ const buildManualGroups = (
     },
     !options.isTailored || options.userRole === "owner"
       ? {
-          name: "Platform owner console",
+          name: "Owner Console",
           whatItIs: "Multi-tenant control for platform owners only.",
           openItWhen: "You run the whole platform, not just one estate.",
           doneLooksLike: "Tenants, health checks, seed data, and access stay manageable at platform level.",
@@ -569,8 +569,8 @@ const buildManualGroups = (
     adminItems.length
       ? {
           id: "admin",
-          title: "Admin and platform controls",
-          description: "These are control surfaces, not daily data-entry tabs.",
+          title: "Admin and owner controls",
+          description: "Use these areas for settings, access, and oversight rather than daily record entry.",
           icon: ShieldCheck,
           badgeClassName: "border-slate-200 bg-slate-50 text-slate-700",
           items: adminItems,

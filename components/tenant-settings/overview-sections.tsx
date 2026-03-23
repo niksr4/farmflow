@@ -211,8 +211,8 @@ export function OwnerToolsSection() {
   return (
     <Card id="owner-tools" className="scroll-mt-24 border-emerald-200/70 bg-emerald-50/60">
       <CardHeader>
-        <CardTitle>Platform Owner Tools</CardTitle>
-        <CardDescription>Tenant management and platform controls now live in a dedicated owner view.</CardDescription>
+        <CardTitle>Owner Tools</CardTitle>
+        <CardDescription>Tenant management and wider platform controls are available from a separate owner area.</CardDescription>
       </CardHeader>
       <CardContent className="flex flex-col gap-3 text-sm text-emerald-900">
         <div className="flex flex-wrap gap-2">
@@ -223,9 +223,7 @@ export function OwnerToolsSection() {
             <Link href="/admin/inspect-databases">Inspect Databases</Link>
           </Button>
         </div>
-        <p className="text-xs text-emerald-800">
-          Estate settings remain on this page. Platform-level controls are separated under the owner console.
-        </p>
+        <p className="text-xs text-emerald-800">Estate settings stay here. Wider platform controls are available from the owner area.</p>
       </CardContent>
     </Card>
   )

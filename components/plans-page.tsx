@@ -40,9 +40,9 @@ export default function PlansPage() {
       <div className="mx-auto w-full max-w-6xl space-y-10">
         <section className="rounded-[2rem] border border-white/10 bg-gradient-to-br from-[#11433b] via-[#0d2a24] to-[#081613] p-6 text-white shadow-[0_36px_90px_-46px_rgba(0,0,0,0.78)] sm:p-10">
           <Badge className="border-white/30 bg-white/15 text-white">Plans</Badge>
-          <h1 className="mt-4 max-w-3xl text-3xl font-semibold sm:text-5xl">Choose the rollout depth that matches the estate today</h1>
+          <h1 className="mt-4 max-w-3xl text-3xl font-semibold sm:text-5xl">Choose the plan that matches the estate today</h1>
           <p className="mt-4 max-w-3xl text-sm text-stone-200 sm:text-base">
-            FarmFlow now starts with three clear bundles. You can start with discipline, move into full coffee operations, or unlock the whole estate stack.
+            FarmFlow offers three clear bundles. Start with stock and finance discipline, move into full coffee operations, or unlock the complete estate stack.
           </p>
         </section>
 
@@ -103,7 +103,7 @@ export default function PlansPage() {
             <CardContent className="space-y-3 text-sm text-stone-300">
               <p><strong>Basic</strong> is for estates that want inventory truth and cost visibility first.</p>
               <p><strong>Core</strong> is for estates that process, dispatch, and sell coffee inside one operating rhythm.</p>
-              <p><strong>Enterprise</strong> is for teams that also need quality, documents, climate, analytics, and the full control surface.</p>
+              <p><strong>Enterprise</strong> is for teams that also need quality, documents, climate, analytics, and broader operational coverage.</p>
             </CardContent>
           </Card>
 
@@ -113,7 +113,7 @@ export default function PlansPage() {
                 <ShieldCheck className="h-5 w-5" />
               </div>
               <CardTitle className="text-stone-50">What stays consistent across plans</CardTitle>
-              <CardDescription className="text-stone-300">Even the leanest rollout keeps the operational baseline intact.</CardDescription>
+              <CardDescription className="text-stone-300">Every plan keeps the operational baseline intact.</CardDescription>
             </CardHeader>
             <CardContent className="grid gap-4 sm:grid-cols-2">
               <div className="rounded-2xl border border-white/10 bg-[#111d1a] p-4">

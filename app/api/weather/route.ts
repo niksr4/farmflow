@@ -7,9 +7,8 @@ import { logServerError } from "@/lib/server/safe-logging"
 import { parseJsonObject } from "@/lib/server/tenant-experience-db"
 import { normalizeTenantContext, runTenantQuery } from "@/lib/server/tenant-db"
 import { buildTenantWeatherQuery } from "@/lib/tenant-estate-profile"
+import { WEATHER_FORECAST_DAYS } from "@/lib/weather-guidance"
 import { DEFAULT_WEATHER_QUERY, normalizeWeatherLocationQuery } from "@/lib/weather-config"
-
-const FORECAST_DAYS = "8"
 
 export async function GET(request: NextRequest) {
   try {
@@ -50,7 +49,7 @@ export async function GET(request: NextRequest) {
 
     const url = `https://api.weatherapi.com/v1/forecast.json?key=${apiKey}&q=${encodeURIComponent(
       locationQuery,
-    )}&days=${FORECAST_DAYS}&aqi=no&alerts=no`
+    )}&days=${WEATHER_FORECAST_DAYS}&aqi=no&alerts=no`
 
     const response = await fetchWithTimeout(url, {
       next: { revalidate: 3600 }, // Revalidate every hour

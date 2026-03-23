@@ -1990,7 +1990,7 @@ export default function InventorySystem() {
           title: "Leaf scans and disease triage",
           description: "Upload field photos and review likely health issues with suggested actions.",
           chips: [
-            { icon: Leaf, label: "Leaf scans powered by Kindwise", metricValue: null },
+            { icon: Leaf, label: "Leaf scans with AI-assisted diagnosis", metricValue: null },
             { icon: AlertTriangle, label: "Use for early disease triage by location", metricValue: null },
           ],
           stats: [activeLocationsStat, recentActivityStat, unassignedStat],
@@ -6442,7 +6442,7 @@ export default function InventorySystem() {
                   <CardHeader>
                     <CardTitle>First 30 Days</CardTitle>
                     <CardDescription>
-                      A practical rollout path for new estates with clear weekly checkpoints.
+                      A first-month plan for new estates with clear weekly checkpoints.
                     </CardDescription>
                   </CardHeader>
                   <CardContent className="space-y-3">

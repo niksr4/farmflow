@@ -101,9 +101,9 @@ const estateOutcomeCards = [
     detail: "Sales, accounts, and journals stay anchored to what actually happened on the estate that day.",
   },
   {
-    eyebrow: "Team rollout",
+    eyebrow: "Team adoption",
     title: "Get staff live faster",
-    detail: "Guided setup, safer permissions, and in-product manuals reduce low-confidence mistakes during rollout.",
+    detail: "Guided setup, safer permissions, and in-product manuals help new teams go live with fewer mistakes.",
   },
 ]
 
@@ -239,9 +239,9 @@ export default function LandingPage() {
                       />
                       <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(5,12,10,0.18),rgba(5,12,10,0.72)_60%,rgba(5,12,10,0.96)_100%)]" />
                       <div className="absolute inset-x-4 top-4 flex items-start justify-between gap-3">
-                        <Badge className="border-emerald-300/20 bg-black/25 text-emerald-100 backdrop-blur">Estate command view</Badge>
+                        <Badge className="border-emerald-300/20 bg-black/25 text-emerald-100 backdrop-blur">Estate operations view</Badge>
                         <div className="rounded-full border border-white/10 bg-white/[0.05] px-3 py-1 text-[11px] uppercase tracking-[0.28em] text-stone-300">
-                          Live rollout pattern
+                          Estate workflow snapshot
                         </div>
                       </div>
                       <div className="absolute inset-x-4 bottom-4 grid gap-3 sm:grid-cols-3">
@@ -300,7 +300,7 @@ export default function LandingPage() {
                       <div className="flex items-center justify-between gap-3">
                         <div>
                           <p className="text-xs uppercase tracking-[0.28em] text-stone-400">Monthly dry output</p>
-                          <p className="mt-1 text-sm text-stone-300">A real estate shape, not a fake SaaS trendline.</p>
+                          <p className="mt-1 text-sm text-stone-300">A seasonal output pattern that managers can review at a glance.</p>
                         </div>
                         <BarChart3 className="h-5 w-5 text-emerald-200" />
                       </div>
@@ -359,9 +359,9 @@ export default function LandingPage() {
                     </div>
 
                     <div className="rounded-[1.6rem] border border-amber-200/10 bg-amber-300/10 p-4">
-                      <p className="text-xs uppercase tracking-[0.28em] text-amber-100/70">Launch principle</p>
+                      <p className="text-xs uppercase tracking-[0.28em] text-amber-100/70">Management clarity</p>
                       <p className="mt-2 text-lg font-semibold text-stone-50">
-                        Don’t sell “software.” Sell the fact that managers can finally trust what the estate says happened.
+                        Give managers one place to trust the numbers coming from the estate.
                       </p>
                     </div>
                   </div>
@@ -374,15 +374,15 @@ export default function LandingPage() {
         <MotionSection {...revealProps(0)} className="space-y-6">
           <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
             <div>
-              <p className="text-sm font-medium text-emerald-200">Why this page should feel different</p>
+              <p className="text-sm font-medium text-emerald-200">Why estates choose FarmFlow</p>
               <h2 className="mt-1 font-display text-3xl font-semibold text-stone-50 sm:text-4xl">
-                Dark, sharper, and more like an operating room than a brochure
+                Built for day-to-day estate control, not just static reporting
               </h2>
               <p className="mt-3 max-w-3xl text-sm leading-7 text-stone-300 sm:text-base">
-                The old page was clear but still too polite. This one leans into control, visibility, and confidence so the product feels closer to the job it actually does.
+                FarmFlow helps estates keep stock, processing, dispatch, rainfall, and finance connected so the team can act on clear numbers every day.
               </p>
             </div>
-            <Badge className="w-fit border-white/10 bg-white/[0.04] text-stone-200">Framer Motion powered</Badge>
+            <Badge className="w-fit border-white/10 bg-white/[0.04] text-stone-200">Built for estate teams</Badge>
           </div>
 
           <div className="grid gap-5 lg:grid-cols-3">
@@ -473,10 +473,10 @@ export default function LandingPage() {
             <div>
               <p className="text-sm font-medium text-emerald-200">Plans, still visible</p>
               <h2 className="mt-1 font-display text-3xl font-semibold text-stone-50 sm:text-4xl">
-                Keep the rollout choices clear without flattening the story
+                Choose the plan that fits the estate today
               </h2>
               <p className="mt-3 max-w-3xl text-sm leading-7 text-stone-300 sm:text-base">
-                The plan choice is important, but it should come after users feel the product’s operating shape. Core stays visually favored because it matches the main estate workflow.
+                Start with the bundle that matches current operations, then enable more as the estate grows.
               </p>
             </div>
             <Button
@@ -552,7 +552,7 @@ export default function LandingPage() {
                 Create the workspace, verify email, set bag weight, add locations, and go live without waiting on a deck.
               </h2>
               <p className="mt-3 text-sm leading-7 text-stone-300 sm:text-base">
-                The page now points straight into signup and plan choice, but the look does more work: it should feel like a real product system with operational gravity.
+                Start with the core setup, invite the team, and begin recording live estate activity with a guided setup flow that is easy to follow.
               </p>
             </div>
             <div className="flex flex-wrap gap-3">

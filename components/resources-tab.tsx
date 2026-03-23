@@ -343,8 +343,8 @@ export default function ResourcesTab() {
         </CardHeader>
         <CardContent className="grid gap-4 lg:grid-cols-[1.5fr_1fr]">
           <div className="text-sm text-muted-foreground">
-            Use this page as an operating playbook while entering records in Processing, Dispatch, Sales, and Journal. Keep guidance
-            estate-specific by defining your own ripeness cues, moisture thresholds, and handling SOPs.
+            Use these guides while recording work in Processing, Dispatch, Sales, and Journal. Keep them estate-specific by
+            defining your own ripeness cues, moisture thresholds, and handling SOPs.
           </div>
           <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
             {playbookHighlights.map((item) => (
@@ -387,8 +387,8 @@ export default function ResourcesTab() {
         <CardContent className="grid gap-4 lg:grid-cols-[1.2fr_0.8fr]">
           <div className="space-y-3 text-sm text-muted-foreground">
             <p>
-              Use the manuals when someone asks basic questions like “where do I record this?”, “what is this tab for?”, or
-              “what should I do first?”
+              Open the manuals when someone asks basic questions like “where do I record this?”, “what does this area do?”,
+              or “what should I do first?”
             </p>
             <div className="flex flex-wrap gap-2">
               <Badge variant="outline" className="border-emerald-200 bg-emerald-50 text-emerald-700">

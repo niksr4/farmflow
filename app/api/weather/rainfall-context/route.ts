@@ -7,47 +7,23 @@ import { fetchWithTimeout } from "@/lib/server/http"
 import { logServerError } from "@/lib/server/safe-logging"
 import { parseJsonObject } from "@/lib/server/tenant-experience-db"
 import { buildTenantWeatherQuery } from "@/lib/tenant-estate-profile"
+import {
+  buildWeatherOperationsGuidance,
+  deriveDryingRisk,
+  deriveIrrigationAdvice,
+  deriveWeatherAnomalySignal,
+  round2,
+  summarizeForecastWindow,
+  type ForecastGuidanceDay,
+  WEATHER_FORECAST_DAYS,
+} from "@/lib/weather-guidance"
 import { DEFAULT_WEATHER_QUERY, normalizeWeatherLocationQuery } from "@/lib/weather-config"
-
-const FORECAST_DAYS = "8"
-const MM_PER_INCH = 25.4
-
-const toInches = (millimeters: number) => millimeters / MM_PER_INCH
-const round2 = (value: number) => Math.round((value + Number.EPSILON) * 100) / 100
 
 type ForecastDay = {
   date: string
   day: {
     daily_chance_of_rain?: number
     totalprecip_mm?: number
-  }
-}
-
-const deriveDryingRisk = (rainInchesNext3: number, rainyDaysNext3: number) => {
-  if (rainyDaysNext3 >= 2 || rainInchesNext3 >= 1.2) return "high"
-  if (rainyDaysNext3 >= 1 || rainInchesNext3 >= 0.5) return "medium"
-  return "low"
-}
-
-const buildGuidance = (risk: string) => {
-  if (risk === "high") {
-    return {
-      drying: "High drying disruption risk. Prioritize covered drying areas and fast-turn micro lots.",
-      picking: "Keep picking selective and avoid building large wet backlog until rain window clears.",
-      operations: "Move ready parchment to protected storage and increase moisture checks.",
-    }
-  }
-  if (risk === "medium") {
-    return {
-      drying: "Moderate rain risk. Plan for intermittent cover and tighter turning cadence.",
-      picking: "Schedule picking in first half of day and process cherries quickly.",
-      operations: "Track moisture drift daily and keep dispatch plans flexible.",
-    }
-  }
-  return {
-    drying: "Low near-term rain risk. Strong window for drying throughput.",
-    picking: "Good window to run full picking schedule if labor is available.",
-    operations: "Use this period to clear pending lots before the next weather shift.",
   }
 }
 
@@ -93,7 +69,7 @@ export async function GET(request: NextRequest) {
 
     const url = `https://api.weatherapi.com/v1/forecast.json?key=${apiKey}&q=${encodeURIComponent(
       locationQuery,
-    )}&days=${FORECAST_DAYS}&aqi=no&alerts=no`
+    )}&days=${WEATHER_FORECAST_DAYS}&aqi=no&alerts=no`
 
     const weatherResponse = await fetchWithTimeout(url, { next: { revalidate: 1800 }, timeoutMs: 8_000 })
     const weatherPayload = await weatherResponse.json().catch(() => ({}))
@@ -105,19 +81,12 @@ export async function GET(request: NextRequest) {
     const forecastDays: ForecastDay[] = Array.isArray(weatherPayload?.forecast?.forecastday)
       ? weatherPayload.forecast.forecastday
       : []
-    const next3Days = forecastDays.slice(0, 3)
-    const next7Days = forecastDays.slice(0, 7)
-
-    const rainInchesNext3 = round2(
-      next3Days.reduce((sum, item) => sum + toInches(Number(item?.day?.totalprecip_mm) || 0), 0),
+    const forecastSummary = summarizeForecastWindow(
+      forecastDays.map<ForecastGuidanceDay>((item) => ({
+        chanceOfRainPct: Number(item?.day?.daily_chance_of_rain) || 0,
+        precipitationMm: Number(item?.day?.totalprecip_mm) || 0,
+      })),
     )
-    const rainInchesNext7 = round2(
-      next7Days.reduce((sum, item) => sum + toInches(Number(item?.day?.totalprecip_mm) || 0), 0),
-    )
-    const rainyDaysNext3 = next3Days.filter(
-      (item) => (Number(item?.day?.daily_chance_of_rain) || 0) >= 60 || (Number(item?.day?.totalprecip_mm) || 0) >= 2,
-    ).length
-    const maxChanceNext3 = next3Days.reduce((max, item) => Math.max(max, Number(item?.day?.daily_chance_of_rain) || 0), 0)
 
     const todayIso = new Date().toISOString().slice(0, 10)
     const past30Iso = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10)
@@ -146,24 +115,30 @@ export async function GET(request: NextRequest) {
         ? round2(previousRows.reduce((sum: number, row: any) => sum + (Number(row.rainfall_inches) || 0), 0) / previousRows.length)
         : 0
 
-    const dryingRisk = deriveDryingRisk(rainInchesNext3, rainyDaysNext3)
-    const guidance = buildGuidance(dryingRisk)
-    const anomalySignal =
-      rainInchesNext7 >= 1.8 && previousDailyAvgInches <= 0.08
-        ? "Rain spike vs recent trend"
-        : rainInchesNext7 <= 0.3 && previousDailyAvgInches >= 0.2
-          ? "Dry spell vs recent trend"
-          : "Near recent trend"
+    const dryingRisk = deriveDryingRisk(forecastSummary.next3DaysRainInches, forecastSummary.rainyDaysNext3)
+    const guidance = buildWeatherOperationsGuidance(dryingRisk)
+    const anomalySignal = deriveWeatherAnomalySignal({
+      next3DaysRainInches: forecastSummary.next3DaysRainInches,
+      recentDailyAverageInches: previousDailyAvgInches,
+    })
+    const irrigation = deriveIrrigationAdvice({
+      next3DaysRainInches: forecastSummary.next3DaysRainInches,
+      rainyDaysNext3: forecastSummary.rainyDaysNext3,
+      maxChanceNext3: forecastSummary.maxChanceNext3,
+      last7DaysRainInches: last7ActualInches,
+      recentDailyAverageInches: previousDailyAvgInches,
+      loggedDaysInLast30: rainfallRows.length,
+    })
 
     return NextResponse.json(
       {
         success: true,
         regionQuery: locationQuery,
         forecast: {
-          next3DaysRainInches: rainInchesNext3,
-          next7DaysRainInches: rainInchesNext7,
-          rainyDaysNext3,
-          maxChanceNext3,
+          daysReturned: forecastSummary.daysReturned,
+          next3DaysRainInches: forecastSummary.next3DaysRainInches,
+          rainyDaysNext3: forecastSummary.rainyDaysNext3,
+          maxChanceNext3: forecastSummary.maxChanceNext3,
         },
         actuals: {
           last7DaysRainInches: last7ActualInches,
@@ -173,6 +148,7 @@ export async function GET(request: NextRequest) {
         dryingRisk,
         anomalySignal,
         guidance,
+        irrigation,
       },
       { headers: rateHeaders },
     )

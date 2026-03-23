@@ -53,7 +53,7 @@ const MODULE_PATHWAYS = [
   },
   {
     title: "Inventory + Accounts Essentials",
-    description: "Best for simple rollout focused on stock control and finance discipline.",
+    description: "Best for estates starting with stock control and finance discipline.",
     modules: ["Inventory", "Accounts", "Transaction History"],
   },
 ]
@@ -247,7 +247,7 @@ export default function JourneyPage() {
           <section className="mx-auto mt-16 w-full max-w-6xl">
             <Card className="border border-white/10 bg-[#0a1714]/92 backdrop-blur-md">
               <CardHeader>
-                <CardTitle className={`${display.className} text-2xl text-stone-50`}>Choose your rollout path</CardTitle>
+                <CardTitle className={`${display.className} text-2xl text-stone-50`}>Choose your starting path</CardTitle>
                 <CardDescription className="text-stone-300">
                   Start with essentials and expand into curing, quality, and full sales traceability as your team grows.
                 </CardDescription>

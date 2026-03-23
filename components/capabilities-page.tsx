@@ -44,7 +44,7 @@ const visualProof = [
   },
   {
     title: "Buyer-facing evidence",
-    description: "Quality, dispatch, and sales records stay closer together so reviews are faster and cleaner.",
+    description: "Quality, dispatch, and sales records stay close together so reviews are faster and easier.",
     image: "/images/estate-journey-dispatch.jpg",
     alt: "Coffee prepared for dispatch",
   },
@@ -58,7 +58,7 @@ export default function CapabilitiesPage() {
           <Badge className="border-white/10 bg-white/[0.06] text-emerald-100">Capabilities</Badge>
           <h1 className="mt-4 max-w-3xl text-3xl font-semibold text-stone-50 sm:text-5xl">What FarmFlow actually helps an estate do each day</h1>
           <p className="mt-4 max-w-3xl text-sm text-stone-300 sm:text-base">
-            The product is strongest when it keeps operations, finance, and accountability in one place. These are the capabilities that matter most in the real workflow.
+            FarmFlow keeps operations, finance, and accountability connected in one place. These are the capabilities that matter most in day-to-day estate work.
           </p>
         </section>
 
@@ -103,8 +103,8 @@ export default function CapabilitiesPage() {
         </section>
 
         <section className="rounded-[2rem] border border-white/10 bg-gradient-to-br from-[#101b18] via-[#0d1715] to-[#081613] p-6 text-white shadow-[0_32px_80px_-52px_rgba(0,0,0,0.85)] sm:p-8">
-          <p className="text-sm font-medium text-emerald-300">The practical rollout path</p>
-          <h2 className="mt-2 text-2xl font-semibold">Start where the estate is weakest, not where the software is fanciest</h2>
+          <p className="text-sm font-medium text-emerald-300">A practical way to start</p>
+          <h2 className="mt-2 text-2xl font-semibold">Start with the area that needs the most control first</h2>
           <div className="mt-5 grid gap-4 sm:grid-cols-3">
             <div className="rounded-2xl border border-white/10 bg-white/[0.04] p-4">
               <p className="font-medium">1. Fix stock truth</p>
