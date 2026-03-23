@@ -56,8 +56,8 @@ interface WeatherApiData {
 interface RainfallContextData {
   success: boolean
   forecast: {
+    daysReturned: number
     next3DaysRainInches: number
-    next7DaysRainInches: number
     rainyDaysNext3: number
     maxChanceNext3: number
   }
@@ -72,6 +72,15 @@ interface RainfallContextData {
     drying: string
     picking: string
     operations: string
+  }
+  irrigation: {
+    status: "hold" | "irrigate" | "light" | "monitor"
+    urgency: "high" | "medium" | "low"
+    title: string
+    reason: string
+    recommendation: string
+    confidence: "high" | "medium" | "low"
+    confidenceReason: string
   }
 }
 
@@ -221,7 +230,7 @@ export default function WeatherTab() {
 
   const forecastInsightDays = useMemo<ForecastInsightDay[]>(
     () =>
-      (weatherData?.forecast?.forecastday || []).slice(0, 7).map((day, index) => {
+      (weatherData?.forecast?.forecastday || []).map((day, index) => {
         const rainChance = Number(day.day.daily_chance_of_rain) || 0
         const precipInches = round2(toInches(Number(day.day.totalprecip_mm) || 0))
         const riskScore = clamp(Math.round(rainChance * 0.64 + precipInches * 100 * 0.36), 0, 100)
@@ -387,12 +396,28 @@ export default function WeatherTab() {
       : false
   const hasProviderMismatch =
     providerCoordinatesMismatch || (Boolean(location.country) && String(location.country || "").toLowerCase() !== "india")
+  const forecastWindowDays = forecast.forecastday.length
+  const forecastWindowLabel = `${forecastWindowDays}-Day`
   const dryingRiskClass =
     rainfallContext?.dryingRisk === "high"
       ? "border-rose-200 bg-rose-50 text-rose-700"
       : rainfallContext?.dryingRisk === "medium"
         ? "border-amber-200 bg-amber-50 text-amber-700"
         : "border-emerald-200 bg-emerald-50 text-emerald-700"
+  const irrigationStatusClass =
+    rainfallContext?.irrigation.status === "hold"
+      ? "border-sky-200 bg-sky-50 text-sky-700"
+      : rainfallContext?.irrigation.status === "irrigate"
+        ? "border-rose-200 bg-rose-50 text-rose-700"
+        : rainfallContext?.irrigation.status === "light"
+          ? "border-amber-200 bg-amber-50 text-amber-700"
+          : "border-slate-200 bg-slate-50 text-slate-700"
+  const irrigationConfidenceClass =
+    rainfallContext?.irrigation.confidence === "high"
+      ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+      : rainfallContext?.irrigation.confidence === "medium"
+        ? "border-amber-200 bg-amber-50 text-amber-700"
+        : "border-slate-200 bg-slate-50 text-slate-700"
 
   return (
     <div className="space-y-5">
@@ -493,12 +518,14 @@ export default function WeatherTab() {
       <Card className="border-border/70 bg-white/90">
         <CardHeader>
           <CardTitle>Forecast Intelligence</CardTitle>
-          <CardDescription>Pattern score, disruption windows, and drying opportunity from the next 7 days.</CardDescription>
+          <CardDescription>
+            Pattern score, disruption windows, and irrigation pressure from the next {forecastWindowLabel.toLowerCase()}.
+          </CardDescription>
         </CardHeader>
         <CardContent className="space-y-3">
           <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
             <div className="rounded-xl border border-border/60 bg-white/80 p-3">
-              <p className="text-xs uppercase tracking-[0.16em] text-muted-foreground">7-Day Rain Load</p>
+              <p className="text-xs uppercase tracking-[0.16em] text-muted-foreground">{forecastWindowLabel} Rain Load</p>
               <p className="mt-2 text-2xl font-semibold tabular-nums">{formatNumber(insightSummary.totalRainInches, 2)} in</p>
               <p className="mt-1 text-xs text-muted-foreground">{insightSummary.heavyRainDays} high-risk rain day(s)</p>
             </div>
@@ -531,14 +558,35 @@ export default function WeatherTab() {
 
       <Card>
         <CardHeader>
-          <CardTitle>Rainfall Forecast Context</CardTitle>
-          <CardDescription>Use forecast + recent logs to plan drying and picking decisions.</CardDescription>
+          <CardTitle>Field Decision Context</CardTitle>
+          <CardDescription>
+            Use the next {forecastWindowLabel.toLowerCase()} forecast with recent rainfall logs to plan irrigation and field work.
+          </CardDescription>
         </CardHeader>
         <CardContent className="space-y-3">
           {contextError ? (
             <p className="text-sm text-muted-foreground">{contextError}</p>
           ) : rainfallContext ? (
             <>
+              <div className="rounded-xl border border-border/70 bg-slate-50/80 p-4">
+                <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+                  <div>
+                    <p className="text-xs uppercase tracking-[0.16em] text-muted-foreground">Irrigation advice</p>
+                    <p className="mt-1 text-lg font-semibold">{rainfallContext.irrigation.title}</p>
+                    <p className="mt-1 text-sm text-slate-700">{rainfallContext.irrigation.recommendation}</p>
+                    <p className="mt-2 text-xs text-muted-foreground">{rainfallContext.irrigation.reason}</p>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    <Badge variant="outline" className={irrigationStatusClass}>
+                      Action: {rainfallContext.irrigation.status.toUpperCase()}
+                    </Badge>
+                    <Badge variant="outline" className={irrigationConfidenceClass}>
+                      Confidence: {rainfallContext.irrigation.confidence.toUpperCase()}
+                    </Badge>
+                  </div>
+                </div>
+                <p className="mt-3 text-xs text-muted-foreground">{rainfallContext.irrigation.confidenceReason}</p>
+              </div>
               <div className="flex flex-wrap items-center gap-2">
                 <Badge variant="outline" className={dryingRiskClass}>
                   Drying risk: {String(rainfallContext.dryingRisk || "unknown").toUpperCase()}
@@ -564,8 +612,8 @@ export default function WeatherTab() {
                 </div>
               </div>
               <p className="text-xs text-muted-foreground">
-                Logged rain (last 7 days): {rainfallContext.actuals.last7DaysRainInches.toFixed(2)} in · Next 7 days forecast:{" "}
-                {rainfallContext.forecast.next7DaysRainInches.toFixed(2)} in
+                Logged rain (last 7 days): {rainfallContext.actuals.last7DaysRainInches.toFixed(2)} in · Forecast window (
+                {rainfallContext.forecast.daysReturned} days): {rainfallContext.forecast.next3DaysRainInches.toFixed(2)} in
               </p>
             </>
           ) : (
@@ -576,7 +624,7 @@ export default function WeatherTab() {
 
       <Card className="border-border/70 bg-white/90">
         <CardHeader>
-          <CardTitle>7-Day Rain Pattern Pulse</CardTitle>
+          <CardTitle>{forecastWindowLabel} Rain Pattern Pulse</CardTitle>
           <CardDescription>Chance, precipitation load, and operational risk by day.</CardDescription>
         </CardHeader>
         <CardContent>
@@ -650,7 +698,7 @@ export default function WeatherTab() {
       <Card>
         <CardHeader>
           <CardTitle>{forecast.forecastday.length}-Day Forecast</CardTitle>
-          <CardDescription>Weather forecast for the upcoming week in {selectedRegionLabel}.</CardDescription>
+          <CardDescription>Weather forecast for the next few days in {selectedRegionLabel}.</CardDescription>
         </CardHeader>
         <CardContent>
           <div className="space-y-4">
@@ -731,7 +779,7 @@ const WeatherSkeleton = () => (
         <Skeleton className="h-4 w-3/4" />
       </CardHeader>
       <CardContent className="space-y-4">
-        {Array.from({ length: 8 }).map((_, i) => (
+        {Array.from({ length: 3 }).map((_, i) => (
           <div key={i} className="flex items-center justify-between p-2">
             <div className="flex w-1/3 items-center gap-4">
               <Skeleton className="h-6 w-20" />
