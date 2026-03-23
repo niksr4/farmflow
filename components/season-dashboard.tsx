@@ -15,6 +15,7 @@ import { useTenantSettings } from "@/hooks/use-tenant-settings"
 import { useToast } from "@/hooks/use-toast"
 import { getCurrentFiscalYear, getFiscalYearDateRange } from "@/lib/fiscal-year-utils"
 import { useRouter, useSearchParams } from "next/navigation"
+import WorkspacePageShell from "@/components/workspace-page-shell"
 
 type SeasonBreakdown = {
   coffeeType: string
@@ -982,51 +983,78 @@ export default function SeasonDashboard() {
     }
   }
 
+  const seasonShellStats = [
+    {
+      label: "Processed",
+      value: summary ? `${formatNumber(summary.totals.processedKgs, 0)} KGs` : loading ? "Loading..." : "No data",
+      detail: "Dry output to date this fiscal year",
+    },
+    {
+      label: "Revenue",
+      value: summary ? formatCurrency(summary.totals.revenue) : loading ? "Loading..." : "No data",
+      detail: "Realized commercial value to date",
+      tone: summary && summary.totals.revenue > 0 ? ("positive" as const) : ("default" as const),
+    },
+    {
+      label: "Available To Sell",
+      value: summary ? `${formatNumber(summary.totals.availableToSellKgs, 0)} KGs` : loading ? "Loading..." : "No data",
+      detail: "Confirmed dispatch-received stock minus sold",
+    },
+    {
+      label: "Exceptions",
+      value: weeklyLoading ? "Loading..." : formatNumber(weeklyExceptions?.alerts.length || 0, 0),
+      detail: weeklyError ? "Weekly checks unavailable" : "Rolling 7-day alert count",
+      tone:
+        !weeklyLoading && (weeklyExceptions?.alerts.length || 0) > 0 ? ("warning" as const) : ("default" as const),
+    },
+  ]
+
   return (
-    <div className="space-y-6">
-      <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
-        <div>
-          <h2 className="text-2xl font-semibold">Season View</h2>
-          <p className="text-sm text-muted-foreground">
-            A weekly pulse on stock, cash, yield, and exceptions across the estate.
-          </p>
-          <div className="mt-2 text-xs text-muted-foreground">
-            {weeklyLoading ? (
-              <span>Loading exceptions…</span>
-            ) : weeklyError ? (
-              <span>Exceptions unavailable.</span>
-            ) : weeklyExceptions ? (
-              <a href="#weekly-exceptions" className="text-amber-700 hover:underline">
-                ⚠️ {weeklyExceptions.alerts.length} exceptions this week
-              </a>
-            ) : (
-              <span>Exceptions unavailable.</span>
-            )}
-          </div>
+    <WorkspacePageShell
+      badge="Insights workspace"
+      title="Season View"
+      description="A weekly pulse on stock, cash, yield, and exceptions across the estate."
+      accent="sky"
+      className="space-y-0"
+      stats={seasonShellStats}
+      supportingContent={
+        <div className="text-xs">
+          {weeklyLoading ? (
+            <span>Loading exceptions...</span>
+          ) : weeklyError ? (
+            <span>Exceptions unavailable.</span>
+          ) : weeklyExceptions ? (
+            <a href="#weekly-exceptions" className="text-amber-700 hover:underline">
+              {formatNumber(weeklyExceptions.alerts.length, 0)} exceptions this week
+            </a>
+          ) : (
+            <span>Exceptions unavailable.</span>
+          )}
         </div>
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
-          {isAdmin && (
-            <div className="flex items-end gap-2">
-              <div className="space-y-1">
-                <Label className="text-xs text-muted-foreground">Bag Weight (KG)</Label>
-                <Input
-                  value={bagWeightInput}
-                  onChange={(event) => setBagWeightInput(event.target.value)}
-                  type="number"
-                  min="40"
-                  max="70"
-                  step="0.5"
-                  className="w-full sm:w-[140px]"
-                />
-              </div>
+      }
+      actions={
+        isAdmin ? (
+          <div className="rounded-2xl border border-sky-100/90 bg-white/85 p-3 shadow-sm">
+            <Label className="text-[11px] uppercase tracking-[0.18em] text-slate-500">Bag Weight (KG)</Label>
+            <div className="mt-2 flex items-end gap-2">
+              <Input
+                value={bagWeightInput}
+                onChange={(event) => setBagWeightInput(event.target.value)}
+                type="number"
+                min="40"
+                max="70"
+                step="0.5"
+                className="w-full min-w-[140px] bg-white"
+              />
               <Button size="sm" onClick={handleSaveBagWeight} disabled={isSaving}>
                 {isSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
                 <span className="ml-2">Save</span>
               </Button>
             </div>
-          )}
-        </div>
-      </div>
+          </div>
+        ) : null
+      }
+    >
 
       {error && (
         <Alert variant="destructive">
@@ -2002,6 +2030,6 @@ export default function SeasonDashboard() {
           </Card>
         </>
       )}
-    </div>
+    </WorkspacePageShell>
   )
 }

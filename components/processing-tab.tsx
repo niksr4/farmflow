@@ -837,7 +837,7 @@ export default function ProcessingTab({ showDataToolsControls = false }: Process
     <div className="container mx-auto space-y-8 px-4 pb-10 pt-6 sm:px-6 lg:px-8">
       <TaskGuideCard
         eyebrow="Pulping guide"
-        title="Use this tab for coffee pulping and output"
+        title="Record coffee pulping and output here"
         description="This screen is best for supervisors and clerks entering coffee intake, pulping progress, and processed output. Keep each record tied to the real date, location, and coffee type."
         bullets={[
           "Select the estate location first so stock lands in the right place.",

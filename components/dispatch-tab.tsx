@@ -24,6 +24,7 @@ import { formatDateOnly } from "@/lib/date-utils"
 import { formatNumber } from "@/lib/format"
 import { canAcceptNonNegative, isBlockedNumericKey } from "@/lib/number-input"
 import TaskGuideCard from "@/components/task-guide-card"
+import WorkspacePageShell from "@/components/workspace-page-shell"
 import posthog from "posthog-js"
 
 interface DispatchRecord {
@@ -785,6 +786,30 @@ export default function DispatchTab({ showDataToolsControls = false }: DispatchT
     dispatchReceivedKgsTotals.robusta_dry_cherry
   const pendingNominalBags = processedNominalBagsTotal - dispatchedNominalBagsTotal
   const dispatchVarianceKgsTotal = dispatchedReceivedKgsTotal - dispatchedNominalBagsTotal * bagWeightKg
+  const dispatchShellStats = [
+    {
+      label: "Processed Nominal",
+      value: `${formatNumber(processedNominalBagsTotal, 0)} bags`,
+      detail: `${formatNumber(processedNominalBagsTotal * bagWeightKg, 0)} KGs from processing`,
+    },
+    {
+      label: "Confirmed Received",
+      value: `${formatNumber(dispatchedReceivedKgsTotal, 0)} KGs`,
+      detail: "This is the sellable stock basis downstream",
+      tone: "positive" as const,
+    },
+    {
+      label: "Pending Dispatch",
+      value: `${formatNumber(Math.abs(pendingNominalBags), 0)} bags`,
+      detail: pendingNominalBags < 0 ? "Dispatch exceeds processed nominal" : "Still waiting in processed stock",
+      tone: pendingNominalBags < 0 ? ("critical" as const) : ("default" as const),
+    },
+    {
+      label: "Dispatch Records",
+      value: formatNumber(dispatchTotalCount || dispatchRecords.length, 0),
+      detail: bagTotalsScope === "legacy_pool" ? "Legacy pooled stock mode active" : "Location-aware stock flow",
+    },
+  ]
   dispatchSaveStateRef.current = { canSubmitDispatch, isSaving }
   dispatchSaveHandlerRef.current = handleSave
 
@@ -808,10 +833,22 @@ export default function DispatchTab({ showDataToolsControls = false }: DispatchT
   }, [])
 
   return (
-    <div className="flex flex-col gap-8">
+    <WorkspacePageShell
+      badge="Operations workspace"
+      title="Dispatch"
+      description="Track outbound coffee bags, reconcile received KGs, and keep stock flow clean between pulping and sales."
+      accent="emerald"
+      className="space-y-0"
+      stats={dispatchShellStats}
+      supportingContent={
+        <p>
+          Bags are the logistics unit here, but confirmed received KGs are what drive commercial availability later.
+        </p>
+      }
+    >
       <TaskGuideCard
         eyebrow="Dispatch guide"
-        title="Use this tab when bags or stock leave a location"
+        title="Record dispatch when bags or stock leave a location"
         description="Dispatch is for real outbound movement. It should match what the team loaded, transferred, or handed over."
         bullets={[
           "Choose the correct location before entering bag movement.",
@@ -831,13 +868,6 @@ export default function DispatchTab({ showDataToolsControls = false }: DispatchT
           </>
         }
       />
-
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <h2 className="text-xl font-semibold text-foreground">Coffee Bag Dispatch</h2>
-          <p className="text-sm text-muted-foreground">Track outbound bags and reconcile location availability.</p>
-        </div>
-      </div>
 
       {bagTotalsScope === "legacy_pool" && (
         <p className="order-2 text-xs text-amber-700">
@@ -1466,6 +1496,6 @@ export default function DispatchTab({ showDataToolsControls = false }: DispatchT
           )}
         </CardContent>
       </Card>
-    </div>
+    </WorkspacePageShell>
   )
 }

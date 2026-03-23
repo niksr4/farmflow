@@ -172,7 +172,7 @@ export function TenantSettingsOverview({
             <SettingsFlowCard
               eyebrow="Good next step"
               title="Add planning context once the basics are in"
-              description="Footprint, import, and language settings help reports and onboarding feel cleaner."
+              description="Footprint, import, and language settings add useful reporting and setup context."
               icon={CloudSun}
               tone="cyan"
               sections={nextSections}
@@ -476,7 +476,7 @@ export function DisplayPreferencesSection({
     <Card id="display-preferences" className="scroll-mt-24 border-border/70 bg-white/85">
       <CardHeader>
         <CardTitle>Dashboard Preferences</CardTitle>
-        <CardDescription>Trim empty highlights for a cleaner estate view.</CardDescription>
+        <CardDescription>Hide empty highlights on the dashboard.</CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
         <label className="flex items-start gap-3 rounded-lg border border-border/60 bg-white/80 p-3">

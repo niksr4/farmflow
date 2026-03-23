@@ -8,18 +8,45 @@ import { usePathname } from "next/navigation"
 const posthogKey = process.env.NEXT_PUBLIC_POSTHOG_KEY
 const posthogHost = process.env.NEXT_PUBLIC_POSTHOG_HOST
 const posthogDebug = process.env.NEXT_PUBLIC_POSTHOG_DEBUG === "true"
+const posthogAllowLocal = process.env.NEXT_PUBLIC_POSTHOG_ALLOW_LOCAL === "true"
 let posthogInitialized = false
+let posthogEnabled = false
+
+function isLocalHost(hostname: string) {
+  const normalized = String(hostname || "").toLowerCase()
+  return normalized === "localhost" || normalized === "127.0.0.1" || normalized === "[::1]" || normalized.endsWith(".local")
+}
+
+function resolveUiHost(host: string) {
+  return host.includes("eu.") ? "https://eu.posthog.com" : "https://app.posthog.com"
+}
+
+function resolveApiHost(host: string) {
+  if (typeof window !== "undefined" && isLocalHost(window.location.hostname)) {
+    return host
+  }
+  return "/ingest"
+}
 
 function ensurePosthogInitialized() {
-  if (posthogInitialized) return
-  if (!posthogKey || !posthogHost) return
+  if (posthogInitialized) return posthogEnabled
+  posthogInitialized = true
+
+  if (!posthogKey || !posthogHost) {
+    posthogEnabled = false
+    return false
+  }
+
+  if (typeof window !== "undefined" && isLocalHost(window.location.hostname) && !posthogAllowLocal) {
+    posthogEnabled = false
+    return false
+  }
 
   const loaded = Boolean((posthog as any).__loaded)
   if (!loaded) {
-    const uiHost = posthogHost.includes("eu.") ? "https://eu.posthog.com" : "https://app.posthog.com"
     posthog.init(posthogKey, {
-      api_host: "/ingest",
-      ui_host: uiHost,
+      api_host: resolveApiHost(posthogHost),
+      ui_host: resolveUiHost(posthogHost),
       defaults: "2026-01-30",
       capture_pageview: false,
       capture_pageleave: "if_capture_pageview",
@@ -34,13 +61,16 @@ function ensurePosthogInitialized() {
         maskTextClass: "ph-mask",
         blockClass: "ph-no-capture",
       },
-      // Keep PostHog logging opt-in so local dev consoles are not flooded by
-      // internal request timeout/abort noise from the analytics client itself.
       debug: posthogDebug,
     })
   }
 
-  posthogInitialized = true
+  posthogEnabled = true
+  return true
+}
+
+function isPosthogActive() {
+  return posthogEnabled
 }
 
 function getDistinctId(username: string, tenantId: string) {
@@ -58,6 +88,7 @@ export default function PostHogAuthSync() {
   }, [])
 
   useEffect(() => {
+    if (!isPosthogActive()) return
     if (status === "loading") return
 
     if (!user) {
@@ -84,6 +115,7 @@ export default function PostHogAuthSync() {
   }, [status, user])
 
   useEffect(() => {
+    if (!isPosthogActive()) return
     if (typeof window === "undefined") return
 
     const capturePageview = () => {

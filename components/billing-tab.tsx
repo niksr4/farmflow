@@ -230,7 +230,7 @@ export default function BillingTab({ showDataToolsControls = false }: BillingTab
     <div className="space-y-6">
       <TaskGuideCard
         eyebrow="Billing guide"
-        title="Use this tab when you need a clean invoice record"
+        title="Create a draft invoice record here"
         description="Billing is for draft invoices that match a real sale. Keep the customer name, state selection, and line descriptions clear enough for accounts and follow-up."
         bullets={[
           "Save only real invoice drafts, not placeholders for future deals.",

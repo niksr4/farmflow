@@ -23,6 +23,7 @@ import {
 } from "@/lib/tenant-experience"
 import { roleLabel } from "@/lib/roles"
 import TaskGuideCard from "@/components/task-guide-card"
+import WorkspacePageShell from "@/components/workspace-page-shell"
 import { AuditLogSection, PrivacySection } from "@/components/tenant-settings/governance-sections"
 import {
   AccountLanguageSection,
@@ -870,9 +871,43 @@ export default function TenantSettingsPage() {
   if (privacyFeatureEnabled) {
     sectionLinks.push({ id: "privacy-dpdp", label: "Privacy" })
   }
+  const settingsShellStats = [
+    {
+      label: "Your Role",
+      value: roleDisplay,
+      detail: isOwner ? "Owner controls unlocked" : "Estate-level settings access",
+    },
+    {
+      label: "Users",
+      value: String(users.length),
+      detail: "Tenant accounts configured",
+    },
+    {
+      label: "Locations",
+      value: String(locations.length),
+      detail: "Estate locations available for operations",
+    },
+    {
+      label: "Enabled Modules",
+      value: String(enabledTenantModuleCount),
+      detail: isOwner ? "Plan and module controls available" : "Owner-managed access bundle",
+    },
+  ]
 
   return (
-    <div className="space-y-8">
+    <WorkspacePageShell
+      badge="Settings workspace"
+      title="Estate Settings"
+      description="Set estate defaults, people, access, and reporting rules."
+      accent="slate"
+      className="space-y-0"
+      stats={settingsShellStats}
+      supportingContent={
+        <p>
+          Most estates only need identity, locations, people, and a few reporting defaults to get started.
+        </p>
+      }
+    >
       <TenantSettingsOverview
         tenantId={tenantId}
         userCount={users.length}
@@ -1057,6 +1092,6 @@ export default function TenantSettingsPage() {
           onRefreshAuditLogs={loadAuditLogs}
         />
       )}
-    </div>
+    </WorkspacePageShell>
   )
 }

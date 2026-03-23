@@ -26,6 +26,7 @@ import { buildSalesCsv } from "@/lib/sales-export"
 import { resolveDispatchReceivedKgs as resolveDispatchReceivedKgsValue, resolveSalesKgs } from "@/lib/sales-math"
 import OtherSalesTab from "@/components/other-sales-tab"
 import TaskGuideCard from "@/components/task-guide-card"
+import WorkspacePageShell from "@/components/workspace-page-shell"
 import posthog from "posthog-js"
 
 interface SalesRecord {
@@ -1049,6 +1050,31 @@ export default function SalesTab({
   const coffeeRevenue = totals.totalRevenue
   const otherRevenue = otherSalesTotals.totalRevenue
   const combinedRevenue = coffeeRevenue + otherRevenue
+  const salesShellStats = [
+    {
+      label: "Coffee Revenue",
+      value: formatCurrency(coffeeRevenue, 0),
+      detail: `${formatNumber(totalKgsSold, 0)} KGs sold to date`,
+      tone: "positive" as const,
+    },
+    {
+      label: "Other Revenue",
+      value: formatCurrency(otherRevenue, 0),
+      detail: otherSalesEnabled ? `${formatNumber(otherSalesTotals.totalCount, 0)} other-sales records` : "Module not enabled",
+    },
+    {
+      label: "Available To Sell",
+      value: `${formatNumber(selectionScopeAvailabilityTotals.totalAvailable, 0)} KGs`,
+      detail: "Confirmed dispatch-received stock",
+      tone:
+        selectionScopeAvailabilityTotals.totalAvailable > 0 ? ("default" as const) : ("warning" as const),
+    },
+    {
+      label: "Sales Records",
+      value: formatNumber(salesTotalCount || salesRecords.length, 0),
+      detail: buyerSuggestions.length > 0 ? `${buyerSuggestions.length} buyer suggestions saved` : "Build buyer history as you go",
+    },
+  ]
   const scrollToEntryForm = useCallback(() => {
     if (typeof window !== "undefined") {
       window.scrollTo({ top: 0, behavior: "smooth" })
@@ -1056,10 +1082,22 @@ export default function SalesTab({
   }, [])
 
   return (
-    <div className="flex flex-col gap-8">
+    <WorkspacePageShell
+      badge="Revenue workspace"
+      title="Sales"
+      description="Track coffee sales and other estate revenue."
+      accent="amber"
+      className="space-y-0"
+      stats={salesShellStats}
+      supportingContent={
+        <p>
+          Sales should stay tied to confirmed dispatch-received stock, real buyers, and agreed prices. Keep the record easy to explain later.
+        </p>
+      }
+    >
       <TaskGuideCard
         eyebrow="Sales guide"
-        title="Use this tab when a buyer, quantity, and price are real"
+        title="Record a sale after buyer, quantity, and price are confirmed"
         description="Sales should follow actual commercial events. Keep it simple: who bought, what was sold, how much was sold, and what price was agreed."
         bullets={[
           "Choose the correct location so sold stock matches dispatch and inventory.",
@@ -1079,13 +1117,6 @@ export default function SalesTab({
           </>
         }
       />
-
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <h2 className="text-xl font-semibold text-foreground">Sales</h2>
-          <p className="text-sm text-muted-foreground">Track coffee sales and other estate revenue from one workspace.</p>
-        </div>
-      </div>
 
       <Card className="border-border/70 bg-white/90">
         <CardHeader className="pb-3">
@@ -1952,6 +1983,6 @@ export default function SalesTab({
           onLocationFilterChange={setSalesFilterLocationId}
         />
       )}
-    </div>
+    </WorkspacePageShell>
   )
 }
