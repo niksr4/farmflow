@@ -16,6 +16,8 @@ import { FileSpreadsheet, FileText, Coins, PlusCircle, Settings, Users, Receipt,
 import { Skeleton } from "@/components/ui/skeleton"
 import LaborDeploymentTab from "./labor-deployment-tab"
 import OtherExpensesTab from "./other-expenses-tab"
+import TaskGuideCard from "@/components/task-guide-card"
+import WorkspacePageShell from "@/components/workspace-page-shell"
 import { toast } from "sonner"
 import { getCurrentFiscalYear, getAvailableFiscalYears, type FiscalYear } from "@/lib/fiscal-year-utils"
 import { formatDateForQIF, formatDateOnly } from "@/lib/date-utils"
@@ -845,6 +847,28 @@ export default function AccountsPage({
   const topFrequencyCodes = patterns?.mostFrequentCodes?.slice(0, 5) || []
   const topHighlights = (accountsIntelligence?.highlights || []).slice(0, 3)
   const visibleActivitySuggestions = showAllActivitySuggestions ? activitySuggestions : activitySuggestions.slice(0, 12)
+  const accountsShellStats = [
+    {
+      label: "Fiscal Year",
+      value: selectedFiscalYear.label,
+      detail: "April 1 to March 31 reporting window",
+    },
+    {
+      label: "Labor Tracked",
+      value: summaryLoading ? "Loading..." : formatCurrency(filteredLaborTotal),
+      detail: `${formatNumber(laborCount || laborDeployments.length, 0)} labor records in range`,
+    },
+    {
+      label: "Other Expenses",
+      value: summaryLoading ? "Loading..." : formatCurrency(filteredOtherExpensesTotal),
+      detail: `${formatNumber(consumablesCount || consumableDeployments.length, 0)} expense records in range`,
+    },
+    {
+      label: "Account Codes",
+      value: formatNumber(accountActivities.length || activities.length, 0),
+      detail: topCostCode ? `Top cost code: ${topCostCode.code}` : "Add estate codes for exports and summaries",
+    },
+  ]
 
   useEffect(() => {
     if (!requestedExport) return
@@ -869,43 +893,54 @@ export default function AccountsPage({
   }, [onRequestedExportHandled, requestedExport])
 
   return (
-    <div className="container mx-auto space-y-6 px-4 py-6 sm:p-6">
-      <div>
-        <h1 className="text-3xl font-bold">Accounts Management</h1>
-        <p className="text-muted-foreground">Track labor deployments and expense records</p>
-      </div>
-
-      <Card>
-        <CardHeader>
-          <CardTitle>Fiscal Year</CardTitle>
-          <CardDescription>Select the accounting year to view (April 1 - March 31)</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="flex flex-wrap gap-4">
-            <div className="flex items-center gap-2">
-              <Label>Fiscal Year</Label>
-              <Select
-                value={selectedFiscalYear.label}
-                onValueChange={(value) => {
-                  const fy = availableFiscalYears.find((f) => f.label === value)
-                  if (fy) setSelectedFiscalYear(fy)
-                }}
-              >
-                <SelectTrigger className="w-full sm:w-[200px]">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {availableFiscalYears.map((fy) => (
-                    <SelectItem key={fy.label} value={fy.label}>
-                      {fy.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
+    <WorkspacePageShell
+      className="container mx-auto px-4 py-6 sm:p-6"
+      badge="Finance workspace"
+      title="Accounts Management"
+      description="Track labor, expenses, attendance, and estate activity codes."
+      accent="amber"
+      stats={accountsShellStats}
+      supportingContent={
+        <p>
+          Record actual estate spend here, then export it in CSV, XLSX, or QIF when needed.
+        </p>
+      }
+      actions={
+        <div className="rounded-2xl border border-amber-100/90 bg-white/85 p-3 shadow-sm">
+          <Label className="text-[11px] uppercase tracking-[0.18em] text-slate-500">Fiscal Year</Label>
+          <Select
+            value={selectedFiscalYear.label}
+            onValueChange={(value) => {
+              const fy = availableFiscalYears.find((f) => f.label === value)
+              if (fy) setSelectedFiscalYear(fy)
+            }}
+          >
+            <SelectTrigger className="mt-2 w-full min-w-[220px] bg-white sm:min-w-[240px]">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {availableFiscalYears.map((fy) => (
+                <SelectItem key={fy.label} value={fy.label}>
+                  {fy.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+      }
+    >
+      <TaskGuideCard
+        eyebrow="Accounts guide"
+        title="Start with the main accounts records"
+        description="Most estates only need four habits here: record labor, record expenses, keep attendance clean, and use codes consistently."
+        bullets={[
+          "Use labor and expenses for real spend only, not estimates you may change later.",
+          "Keep account codes short and stable so exports stay clean for accountants.",
+          "Use attendance when you want daily people tracking, not as a replacement for payroll review.",
+        ]}
+        tip="If you only need a clear finance summary, keep the coding structure simple at the start."
+        tone="finance"
+      />
 
       <Card>
         <CardHeader>
@@ -1484,6 +1519,6 @@ export default function AccountsPage({
           </Card>
         </TabsContent>
       </Tabs>
-    </div>
+    </WorkspacePageShell>
   )
 }

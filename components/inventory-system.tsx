@@ -1864,7 +1864,7 @@ export default function InventorySystem() {
           badge: "Coffee Pulping",
           title: "Daily coffee pulping, yield, and conversion",
           description: canShowPepper
-            ? "Keep coffee pulping first-class, with pepper tucked into the same workspace."
+            ? "Keep coffee pulping and pepper processing together in one place."
             : "Keep dispatch and sales aligned with real coffee output.",
           chips: chipsProcessing,
           stats: processingTotalsStats,
@@ -3670,8 +3670,8 @@ export default function InventorySystem() {
       },
       {
         id: "less-chaos",
-        title: "Less Spreadsheet / WhatsApp Chaos",
-        goal: "Keep updates structured in-app with reusable exports.",
+        title: "Structured Daily Updates",
+        goal: "Keep updates recorded in FarmFlow with reusable exports.",
         metric:
           recentThirtyDayTransactions.length === 0
             ? `${availableExportDatasetCount} CSV exports ready for operations`
@@ -3682,7 +3682,7 @@ export default function InventorySystem() {
       },
       {
         id: "cleaner-reports",
-        title: "Cleaner Reports for Owner / Exporter / Manager",
+        title: "Reports for Owner, Exporter, and Manager",
         goal: "Ensure decision-ready views exist for each leadership role.",
         metric: `${audienceReadyCount}/3 role views covered (owner, exporter, manager)`,
         status: cleanerReportsStatus,
@@ -6144,9 +6144,9 @@ export default function InventorySystem() {
                     {Math.max(visibleTabs.length - 1, 0)} tabs available
                   </Badge>
                 </div>
-                <CardTitle className={cn("leading-tight", isMobile ? "text-xl" : "text-2xl")}>Open any tab in one tap</CardTitle>
+                <CardTitle className={cn("leading-tight", isMobile ? "text-xl" : "text-2xl")}>Choose where to work</CardTitle>
                 <CardDescription>
-                  This replaces the old duplicate launcher buttons. Choose by section below for a cleaner, faster flow.
+                  Choose the area you want to work in below.
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
@@ -7370,7 +7370,7 @@ export default function InventorySystem() {
                     <CardHeader className="pb-3">
                     <CardTitle className="text-xs uppercase tracking-[0.2em] text-muted-foreground">Pulping Workspace</CardTitle>
                       <CardDescription>
-                        Keep coffee pulping as the main estate flow, with pepper one tap away inside the same workspace.
+                        Use one workspace for coffee pulping and pepper processing.
                       </CardDescription>
                     </CardHeader>
                     <CardContent className="grid gap-4 lg:grid-cols-[1.6fr_1fr]">
@@ -7401,7 +7401,7 @@ export default function InventorySystem() {
                           </TabsTrigger>
                         </TabsList>
                         <p className="mt-3 text-xs text-muted-foreground">
-                          Older teams can stay on one Operations rail and switch crops only when they need to.
+                          Switch between coffee and pepper here when needed.
                         </p>
                       </div>
                     </CardContent>

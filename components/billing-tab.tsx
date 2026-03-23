@@ -1,6 +1,7 @@
 "use client"
 
 import { useEffect, useMemo, useState } from "react"
+import Link from "next/link"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -12,6 +13,7 @@ import { GST_STATES, computeInvoiceTotals } from "@/lib/billing"
 import { formatDateOnly } from "@/lib/date-utils"
 import { formatCurrency } from "@/lib/format"
 import { useAuth } from "@/hooks/use-auth"
+import TaskGuideCard from "@/components/task-guide-card"
 import { toast } from "@/components/ui/use-toast"
 
 type LineItem = {
@@ -201,8 +203,36 @@ export default function BillingTab({ showDataToolsControls = false }: BillingTab
     }
   }
 
+  const scrollToEntryForm = () => {
+    if (typeof window !== "undefined") {
+      window.scrollTo({ top: 0, behavior: "smooth" })
+    }
+  }
+
   return (
     <div className="space-y-6">
+      <TaskGuideCard
+        eyebrow="Billing guide"
+        title="Create a draft invoice record here"
+        description="Billing is for draft invoices that match a real sale. Keep the customer name, state selection, and line descriptions clear enough for accounts and follow-up."
+        bullets={[
+          "Save only real invoice drafts, not placeholders for future deals.",
+          "Supply state and place of supply decide the GST split, so double-check them.",
+          "Line item descriptions should be understandable to the buyer and accountant.",
+        ]}
+        tip="This screen saves draft invoices inside FarmFlow. It does not submit IRN or full e-invoicing yet."
+        tone="finance"
+        actions={
+          <>
+            <Button variant="outline" className="bg-white" onClick={scrollToEntryForm}>
+              Go to form
+            </Button>
+            <Button asChild variant="outline" className="bg-white">
+              <Link href="/manuals">Manuals</Link>
+            </Button>
+          </>
+        }
+      />
       <Card>
         <CardHeader>
           <CardTitle>GST Billing & Invoicing</CardTitle>
