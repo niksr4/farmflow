@@ -311,9 +311,9 @@ export default function WeatherTab() {
       forecastVsActualDelta === null
         ? `Rain load concentrated ${concentrationPct}% into two days.`
         : forecastVsActualDelta >= 0.8
-          ? `Wetter week likely: +${formatNumber(forecastVsActualDelta, 2)} in vs last 7 days.`
+          ? `Wetter next few days likely: +${formatNumber(forecastVsActualDelta, 2)} in vs the last 7 days.`
           : forecastVsActualDelta <= -0.8
-            ? `Drier week likely: ${formatNumber(Math.abs(forecastVsActualDelta), 2)} in lower than last 7 days.`
+            ? `Drier next few days likely: ${formatNumber(Math.abs(forecastVsActualDelta), 2)} in lower than the last 7 days.`
             : "Near recent rainfall trend with moderate day-to-day variability."
 
     return {
@@ -550,7 +550,7 @@ export default function WeatherTab() {
           <div className="rounded-xl border border-border/70 bg-slate-50/70 p-3 text-sm text-slate-700">
             <p>{insightSummary.patternSignal}</p>
             <p className="mt-1 text-xs text-muted-foreground">
-              Rain concentration: {formatNumber(insightSummary.concentrationPct, 1)}% of the week is concentrated in two days.
+              Rain concentration: {formatNumber(insightSummary.concentrationPct, 1)}% of the forecast window is concentrated in two days.
             </p>
           </div>
         </CardContent>
