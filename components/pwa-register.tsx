@@ -3,6 +3,8 @@
 import { useEffect } from "react"
 
 const OFFLINE_DB_NAME = "farmflow-offline-db"
+const RETIRED_MESSAGE = "farmflow-sw-retired"
+const RELOAD_GUARD_KEY = "farmflow-sw-retired-reload"
 
 const clearLegacyPwaArtifacts = async () => {
   if (typeof window === "undefined") return
@@ -38,6 +40,25 @@ const clearLegacyPwaArtifacts = async () => {
 export default function PwaRegister() {
   useEffect(() => {
     void clearLegacyPwaArtifacts()
+
+    if (typeof window === "undefined" || !("serviceWorker" in navigator)) return
+
+    const handleServiceWorkerMessage = (event: MessageEvent) => {
+      if (event?.data?.type !== RETIRED_MESSAGE) return
+      try {
+        if (window.sessionStorage.getItem(RELOAD_GUARD_KEY) === "1") return
+        window.sessionStorage.setItem(RELOAD_GUARD_KEY, "1")
+      } catch {
+        // Ignore storage issues and still reload once.
+      }
+      window.location.reload()
+    }
+
+    navigator.serviceWorker.addEventListener("message", handleServiceWorkerMessage)
+
+    return () => {
+      navigator.serviceWorker.removeEventListener("message", handleServiceWorkerMessage)
+    }
   }, [])
 
   return null
