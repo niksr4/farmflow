@@ -2,6 +2,7 @@ import { getServerSession } from "next-auth/next"
 import AppTrainingManual from "@/components/app-training-manual"
 import { authOptions } from "@/lib/auth"
 import { requireSessionUser } from "@/lib/server/auth"
+import { normalizeOwnerPreviewContext } from "@/lib/owner-preview"
 import { sql } from "@/lib/server/db"
 import { normalizeTenantContext, runTenantQuery } from "@/lib/server/tenant-db"
 import { resolveTenantPlanId } from "@/lib/server/tenant-subscriptions"
@@ -27,7 +28,17 @@ const FALLBACK_SCOPE: ManualScope = {
   userRole: null,
 }
 
-async function resolveManualScope(): Promise<ManualScope> {
+type ManualsPageRouteProps = {
+  searchParams: Promise<{
+    previewTenantId?: string | string[]
+    previewRole?: string | string[]
+    previewTenantName?: string | string[]
+  }>
+}
+
+const pickFirst = (value: string | string[] | undefined) => (Array.isArray(value) ? value[0] || "" : value || "")
+
+async function resolveManualScope(searchParams?: Awaited<ManualsPageRouteProps["searchParams"]>): Promise<ManualScope> {
   if (!sql) {
     return FALLBACK_SCOPE
   }
@@ -39,24 +50,36 @@ async function resolveManualScope(): Promise<ManualScope> {
 
   try {
     const sessionUser = await requireSessionUser()
-    const tenantId = String(sessionUser.tenantId || "").trim()
+    const previewContext =
+      sessionUser.role === "owner"
+        ? normalizeOwnerPreviewContext({
+            previewTenantId: pickFirst(searchParams?.previewTenantId),
+            previewRole: pickFirst(searchParams?.previewRole),
+            previewTenantName: pickFirst(searchParams?.previewTenantName),
+          })
+        : null
+    const effectiveRole = previewContext?.previewRole || sessionUser.role
+    const tenantId = String(previewContext?.previewTenantId || sessionUser.tenantId || "").trim()
     if (!tenantId) {
-      return { ...FALLBACK_SCOPE, userRole: sessionUser.role }
+      return { ...FALLBACK_SCOPE, userRole: effectiveRole }
     }
 
-    const tenantContext = normalizeTenantContext(tenantId, sessionUser.role)
-    const userRows = await runTenantQuery(
-      sql,
-      tenantContext,
-      sql`
-        SELECT id
-        FROM users
-        WHERE id = ${sessionUser.id}
-          AND tenant_id = ${tenantId}
-        LIMIT 1
-      `,
-    )
-    const userId = String(userRows?.[0]?.id || "").trim()
+    const tenantContext = normalizeTenantContext(tenantId, effectiveRole)
+    let userId = ""
+    if (!previewContext) {
+      const userRows = await runTenantQuery(
+        sql,
+        tenantContext,
+        sql`
+          SELECT id
+          FROM users
+          WHERE id = ${sessionUser.id}
+            AND tenant_id = ${tenantId}
+          LIMIT 1
+        `,
+      )
+      userId = String(userRows?.[0]?.id || "").trim()
+    }
 
     const tenantRows = await runTenantQuery(
       sql,
@@ -71,7 +94,7 @@ async function resolveManualScope(): Promise<ManualScope> {
     const planId = await resolveTenantPlanId({
       db: sql,
       tenantId,
-      role: sessionUser.role,
+      role: effectiveRole,
       moduleRows: tenantRows as Array<{ module: string; enabled: boolean }>,
     })
 
@@ -104,14 +127,15 @@ async function resolveManualScope(): Promise<ManualScope> {
       enabledModules,
       isTailored: true,
       planId,
-      userRole: sessionUser.role,
+      userRole: effectiveRole,
     }
   } catch {
     return FALLBACK_SCOPE
   }
 }
 
-export default async function ManualsPage() {
-  const manualScope = await resolveManualScope()
+export default async function ManualsPage({ searchParams }: ManualsPageRouteProps) {
+  const params = await searchParams
+  const manualScope = await resolveManualScope(params)
   return <AppTrainingManual {...manualScope} />
 }

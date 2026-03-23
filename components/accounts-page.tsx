@@ -31,6 +31,12 @@ import {
   type LegacyAccountsExportFormat,
 } from "@/lib/accounts-export"
 import { buildXlsxArrayBufferFromCsv, XLSX_MIME_TYPE } from "@/lib/spreadsheet"
+import {
+  buildAccountActivityReferenceCsv,
+  buildAccountActivityReferenceFilename,
+  buildAccountActivityReferencePdf,
+  type AccountActivityReferenceExportFormat,
+} from "@/lib/account-activity-suggestions"
 import posthog from "posthog-js"
 
 interface AccountActivity {
@@ -658,6 +664,30 @@ export default function AccountsPage({
     URL.revokeObjectURL(url)
   }
 
+  const downloadActivityReference = (format: AccountActivityReferenceExportFormat) => {
+    try {
+      const filename = buildAccountActivityReferenceFilename(format)
+
+      if (format === "csv") {
+        const csv = buildAccountActivityReferenceCsv()
+        downloadBlob(new Blob([csv], { type: "text/csv;charset=utf-8" }), filename)
+      } else if (format === "xlsx") {
+        const csv = buildAccountActivityReferenceCsv()
+        const workbookBytes = buildXlsxArrayBufferFromCsv(csv, "Activity Reference")
+        downloadBlob(new Blob([workbookBytes], { type: XLSX_MIME_TYPE }), filename)
+      } else {
+        const pdfBytes = buildAccountActivityReferencePdf()
+        downloadBlob(new Blob([pdfBytes], { type: "application/pdf" }), filename)
+      }
+
+      toast.success(`Activity reference ${format.toUpperCase()} downloaded`)
+      posthog.capture("account_activity_reference_downloaded", { format })
+    } catch (error: any) {
+      console.error("Error downloading activity reference:", error)
+      toast.error(error?.message || "Failed to download activity reference")
+    }
+  }
+
   const exportCombinedCSV = async () => {
     const deploymentsToExport = await getFilteredDeploymentsForExport()
     if (!deploymentsToExport) return
@@ -1199,18 +1229,43 @@ export default function AccountsPage({
                         Use these proven activity codes as a starting point instead of creating every category from scratch.
                       </p>
                     </div>
-                    {activitySuggestions.length > 12 && (
+                    <div className="flex flex-wrap gap-2">
                       <Button
                         type="button"
                         variant="outline"
                         size="sm"
                         className="bg-white"
-                        onClick={() => setShowAllActivitySuggestions((current) => !current)}
+                        onClick={() => downloadActivityReference("pdf")}
                       >
-                        {showAllActivitySuggestions ? "Show fewer" : `Show all ${activitySuggestions.length}`}
+                        <FileText className="mr-2 h-4 w-4" />
+                        Reference PDF
                       </Button>
-                    )}
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        className="bg-white"
+                        onClick={() => downloadActivityReference("xlsx")}
+                      >
+                        <FileSpreadsheet className="mr-2 h-4 w-4" />
+                        Excel
+                      </Button>
+                      {activitySuggestions.length > 12 && (
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          className="bg-white"
+                          onClick={() => setShowAllActivitySuggestions((current) => !current)}
+                        >
+                          {showAllActivitySuggestions ? "Show fewer" : `Show all ${activitySuggestions.length}`}
+                        </Button>
+                      )}
+                    </div>
                   </div>
+                  <p className="text-xs text-emerald-800/90">
+                    Download the printable reference if a new tenant wants the full starter list before deciding which codes to copy into their own estate.
+                  </p>
                   <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-3">
                     {visibleActivitySuggestions.map((suggestion) => (
                       <div key={suggestion.code} className="rounded-lg border border-emerald-200 bg-white/90 p-3">

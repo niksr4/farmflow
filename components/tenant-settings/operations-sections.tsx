@@ -1,6 +1,7 @@
 "use client"
 
 import { Info } from "lucide-react"
+import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
@@ -80,45 +81,63 @@ export function LocationsSection({
   onCancelEditLocation,
 }: LocationsSectionProps) {
   return (
-    <Card id="locations" className="scroll-mt-24 border-border/70 bg-white/85">
+    <Card id="locations" className="scroll-mt-24 overflow-hidden border-border/70 bg-white/85">
       <CardHeader>
         <CardTitle>Locations</CardTitle>
         <CardDescription>Add or edit estate locations used by your team.</CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
-        <div className="grid grid-cols-1 gap-3 md:grid-cols-[2fr_1fr_auto]">
-          <div className="space-y-2">
-            <HelpLabel
-              htmlFor="location-name"
-              label="Location name"
-              help="Use the full place label your team recognizes day to day, for example Seshagiri A."
-            />
-            <Input
-              id="location-name"
-              placeholder="Seshagiri A, Main Estate, Washing Station"
-              value={newLocationName}
-              onChange={(event) => onNewLocationNameChange(event.target.value)}
-            />
+        <div className="grid gap-3 xl:grid-cols-[minmax(0,1fr)_minmax(280px,0.8fr)]">
+          <div className="rounded-2xl border border-emerald-100 bg-gradient-to-br from-emerald-50/80 via-white to-emerald-50/40 p-4 shadow-sm">
+            <p className="text-sm font-semibold text-emerald-950">Set locations before the team starts entering daily work.</p>
+            <p className="mt-1 text-sm leading-6 text-emerald-900/80">
+              Each location becomes a reporting bucket across processing, dispatch, rainfall, and seasonal reporting.
+            </p>
           </div>
-
-          <div className="space-y-2">
-            <HelpLabel
-              htmlFor="location-code"
-              label="Location code (optional)"
-              help="Use a short shorthand like A, B, C or SG-A. This appears in exports and buyer-facing documents."
-            />
-            <Input
-              id="location-code"
-              placeholder="A or SG-A"
-              value={newLocationCode}
-              onChange={(event) => onNewLocationCodeChange(event.target.value)}
-            />
+          <div className="rounded-2xl border border-slate-200 bg-slate-50/80 p-4 shadow-sm">
+            <p className="text-sm font-semibold text-slate-900">Naming pattern that keeps things clean</p>
+            <p className="mt-1 text-sm leading-6 text-slate-700">
+              Use the full branch or unit name for staff-facing labels, and keep the optional code short for exports and
+              shorthand only.
+            </p>
           </div>
+        </div>
 
-          <div className="flex items-end">
-            <Button onClick={onCreateLocation} disabled={isCreatingLocation} className="w-full">
-              {isCreatingLocation ? "Adding..." : "Add Location"}
-            </Button>
+        <div className="rounded-2xl border border-border/60 bg-white/90 p-4 shadow-sm">
+          <div className="grid grid-cols-1 gap-3 md:grid-cols-[2fr_1fr_auto]">
+            <div className="space-y-2">
+              <HelpLabel
+                htmlFor="location-name"
+                label="Location name"
+                help="Use the full place label your team recognizes day to day, for example Seshagiri A."
+              />
+              <Input
+                id="location-name"
+                placeholder="Seshagiri A, Main Estate, Washing Station"
+                value={newLocationName}
+                onChange={(event) => onNewLocationNameChange(event.target.value)}
+              />
+            </div>
+
+            <div className="space-y-2">
+              <HelpLabel
+                htmlFor="location-code"
+                label="Location code (optional)"
+                help="Use a short shorthand like A, B, C or SG-A. This appears in exports and buyer-facing documents."
+              />
+              <Input
+                id="location-code"
+                placeholder="A or SG-A"
+                value={newLocationCode}
+                onChange={(event) => onNewLocationCodeChange(event.target.value)}
+              />
+            </div>
+
+            <div className="flex items-end">
+              <Button onClick={onCreateLocation} disabled={isCreatingLocation} className="w-full">
+                {isCreatingLocation ? "Adding..." : "Add Location"}
+              </Button>
+            </div>
           </div>
         </div>
 
@@ -131,6 +150,13 @@ export function LocationsSection({
           {" "}
           <span className="font-medium text-foreground">SG-A</span>.
         </p>
+
+        <div className="flex items-center justify-between">
+          <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground">Saved locations</p>
+          <Badge variant="outline" className="border-emerald-200 bg-white text-emerald-700">
+            {locations.length} total
+          </Badge>
+        </div>
 
         <div className="rounded-lg border border-border/60 bg-white/80">
           <Table>
@@ -218,6 +244,7 @@ export function TenantModulesSection({
   onSaveModules,
 }: TenantModulesSectionProps) {
   const activePlan = MODULE_BUNDLES.find((bundle) => bundle.id === tenantPlanId) || MODULE_BUNDLES[0]
+  const enabledModuleCount = modulePermissions.filter((module) => module.enabled).length
 
   return (
     <Card id="tenant-modules" className="scroll-mt-24 border-border/70 bg-white/85">
@@ -228,11 +255,21 @@ export function TenantModulesSection({
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
-        <div className="rounded-lg border border-slate-200 bg-slate-50/70 p-4 text-sm">
-          <p className="font-medium text-slate-900">Current plan: {activePlan?.label || "Core"}</p>
-          <p className="mt-1 text-xs text-muted-foreground">
-            Modules outside this plan stay locked. That gives you a clean entitlement boundary before you add billing.
-          </p>
+        <div className="grid gap-3 xl:grid-cols-[minmax(0,1fr)_minmax(280px,0.8fr)]">
+          <div className="rounded-2xl border border-slate-200 bg-slate-50/70 p-4 text-sm shadow-sm">
+            <p className="font-medium text-slate-900">Current plan: {activePlan?.label || "Core"}</p>
+            <p className="mt-1 text-xs leading-5 text-muted-foreground">
+              Modules outside this plan stay locked. That keeps access clean and prevents enabling flows the estate has
+              not paid for.
+            </p>
+          </div>
+          <div className="rounded-2xl border border-amber-100 bg-amber-50/70 p-4 text-sm shadow-sm">
+            <p className="font-medium text-amber-950">Keep module changes rare and intentional.</p>
+            <p className="mt-1 text-xs leading-5 text-amber-900/80">
+              Most estates should apply the right bundle, then only fine-tune inside the plan when there is a clear
+              operational reason.
+            </p>
+          </div>
         </div>
         <div className="space-y-3 rounded-lg border border-border/60 bg-muted/30 p-4">
           <div>
@@ -254,6 +291,13 @@ export function TenantModulesSection({
           </div>
         </div>
 
+        <div className="flex items-center justify-between">
+          <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground">Module access</p>
+          <Badge variant="outline" className="border-emerald-200 bg-white text-emerald-700">
+            {enabledModuleCount} enabled
+          </Badge>
+        </div>
+
         <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
           {modulePermissions.map((module) => (
             <label
@@ -269,7 +313,14 @@ export function TenantModulesSection({
                   disabled={module.lockedByPlan}
                   onChange={() => onToggleModule(module.id)}
                 />
-                <span>{module.label}</span>
+                <span className="flex items-center gap-2">
+                  <span>{module.label}</span>
+                  {module.enabled && !module.lockedByPlan ? (
+                    <Badge variant="outline" className="border-emerald-200 bg-emerald-50/80 text-emerald-700">
+                      Enabled
+                    </Badge>
+                  ) : null}
+                </span>
               </div>
               {module.lockedByPlan ? <span className="text-[11px] font-medium uppercase tracking-[0.18em]">Locked</span> : null}
             </label>
@@ -320,57 +371,83 @@ export function TenantUsersSection({
   onDeleteUser,
 }: TenantUsersSectionProps) {
   return (
-    <Card id="tenant-users" className="scroll-mt-24 border-border/70 bg-white/85">
+    <Card id="tenant-users" className="scroll-mt-24 overflow-hidden border-border/70 bg-white/85">
       <CardHeader>
         <CardTitle>People and Roles</CardTitle>
         <CardDescription>Add estate admins or estate users, then keep role assignments simple.</CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
-        <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
-          <div className="space-y-2">
-            <Label htmlFor="username">Username</Label>
-            <Input id="username" value={newUsername} onChange={(event) => onNewUsernameChange(event.target.value)} />
+        <div className="grid gap-4 xl:grid-cols-[minmax(0,1.15fr)_minmax(280px,0.85fr)]">
+          <div className="rounded-2xl border border-border/60 bg-white/90 p-4 shadow-sm">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <Badge variant="outline" className="border-emerald-200 bg-emerald-50/80 text-emerald-700">
+                Add only what you need
+              </Badge>
+              <p className="text-xs text-muted-foreground">Most estates only need 1 or 2 admins.</p>
+            </div>
+
+            <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-3">
+              <div className="space-y-2">
+                <Label htmlFor="username">Username</Label>
+                <Input id="username" value={newUsername} onChange={(event) => onNewUsernameChange(event.target.value)} />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="password">Password</Label>
+                <Input
+                  id="password"
+                  type="password"
+                  value={newPassword}
+                  onChange={(event) => onNewPasswordChange(event.target.value)}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>Role</Label>
+                <Select value={newRole} onValueChange={(value) => onNewRoleChange(value as RoleOption)}>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="admin">Estate Admin</SelectItem>
+                    <SelectItem value="user">Estate User</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+
+            <div className="mt-4">
+              <Button onClick={onCreateUser} disabled={!tenantId}>
+                Create User
+              </Button>
+            </div>
           </div>
-          <div className="space-y-2">
-            <Label htmlFor="password">Password</Label>
-            <Input
-              id="password"
-              type="password"
-              value={newPassword}
-              onChange={(event) => onNewPasswordChange(event.target.value)}
-            />
-          </div>
-          <div className="space-y-2">
-            <Label>Role</Label>
-            <Select value={newRole} onValueChange={(value) => onNewRoleChange(value as RoleOption)}>
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="admin">Estate Admin</SelectItem>
-                <SelectItem value="user">Estate User</SelectItem>
-              </SelectContent>
-            </Select>
+
+          <div className="space-y-3">
+            <div className="rounded-2xl border border-emerald-100 bg-emerald-50/60 p-4 shadow-sm">
+              <p className="text-sm font-medium text-emerald-900">Estate Admin</p>
+              <p className="mt-1 text-xs leading-5 text-emerald-800">
+                Best for supervisors or office staff who manage setup, people, locations, and day-to-day records.
+              </p>
+            </div>
+            <div className="rounded-2xl border border-slate-200 bg-slate-50/80 p-4 shadow-sm">
+              <p className="text-sm font-medium text-slate-900">Estate User</p>
+              <p className="mt-1 text-xs leading-5 text-slate-700">
+                Best for staff who mainly enter daily work. Give this role first unless the person truly manages the workspace.
+              </p>
+            </div>
+            <div className="rounded-2xl border border-amber-100 bg-amber-50/70 p-4 shadow-sm">
+              <p className="text-sm font-medium text-amber-950">Keep this simple</p>
+              <p className="mt-1 text-xs leading-5 text-amber-900/80">
+                Fewer admins means fewer accidental setting changes. Add admin access only for people who truly supervise the estate setup.
+              </p>
+            </div>
           </div>
         </div>
 
-        <Button onClick={onCreateUser} disabled={!tenantId}>
-          Create User
-        </Button>
-
-        <div className="grid gap-3 md:grid-cols-2">
-          <div className="rounded-lg border border-emerald-100 bg-emerald-50/50 p-3">
-            <p className="text-sm font-medium text-emerald-900">Estate Admin</p>
-            <p className="mt-1 text-xs text-emerald-800">
-              Best for supervisors or office staff who manage setup, people, locations, and day-to-day records.
-            </p>
-          </div>
-          <div className="rounded-lg border border-slate-200 bg-slate-50/70 p-3">
-            <p className="text-sm font-medium text-slate-900">Estate User</p>
-            <p className="mt-1 text-xs text-slate-700">
-              Best for staff who mainly enter daily work. Give this role first unless the person truly manages the workspace.
-            </p>
-          </div>
+        <div className="flex items-center justify-between">
+          <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground">Current users</p>
+          <Badge variant="outline" className="border-emerald-200 bg-white text-emerald-700">
+            {users.length} total
+          </Badge>
         </div>
 
         <div className="rounded-lg border border-border/60 bg-white/80">
@@ -492,9 +569,9 @@ export function UserModuleOverridesSection({
         <CardDescription>Use this only when one person should have different access than the rest of the estate.</CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
-        <div className="rounded-lg border border-slate-200 bg-slate-50/70 p-4 text-sm">
-          <p className="font-medium text-slate-900">Keep access simple where possible</p>
-          <p className="mt-1 text-xs text-muted-foreground">
+        <div className="rounded-2xl border border-amber-100 bg-amber-50/70 p-4 text-sm shadow-sm">
+          <p className="font-medium text-amber-950">Use this only for exceptions.</p>
+          <p className="mt-1 text-xs leading-5 text-amber-900/80">
             Most estates should leave users on tenant defaults. Use per-user overrides only for exceptions, because special rules are harder to explain and maintain.
           </p>
         </div>
@@ -512,8 +589,14 @@ export function UserModuleOverridesSection({
               ))}
             </SelectContent>
           </Select>
-          <p className="text-xs text-muted-foreground">Source: {formatUserModuleSource(userModuleSource)}</p>
-          <p className="text-xs text-muted-foreground">Enabled for selected user: {enabledUserModuleCount}</p>
+          <div className="flex flex-wrap items-center gap-2">
+            <Badge variant="outline" className="border-slate-200 bg-slate-50 text-slate-700">
+              Source: {formatUserModuleSource(userModuleSource)}
+            </Badge>
+            <Badge variant="outline" className="border-emerald-200 bg-white text-emerald-700">
+              {enabledUserModuleCount} enabled
+            </Badge>
+          </div>
         </div>
 
         <div className="grid grid-cols-1 gap-3 md:grid-cols-2">

@@ -1,6 +1,7 @@
 "use client"
 
 import { Info } from "lucide-react"
+import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
@@ -57,7 +58,7 @@ export function ThresholdsSection({
   onSaveThresholds,
 }: ThresholdsSectionProps) {
   return (
-    <Card id="thresholds" className="scroll-mt-24 border-border/70 bg-white/85">
+    <Card id="thresholds" className="scroll-mt-24 overflow-hidden border-border/70 bg-white/85">
       <CardHeader>
         <CardTitle>Exception Thresholds & Targets</CardTitle>
         <CardDescription>
@@ -69,127 +70,162 @@ export function ThresholdsSection({
           <div className="text-sm text-muted-foreground">Loading thresholds...</div>
         ) : (
           <>
-            <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-              <div className="space-y-2">
-                <HelpLabel
-                  htmlFor="threshold-float"
-                  label="Float rate increase (ratio)"
-                  help="Flags records when float rate jumps vs last week."
-                />
-                <Input
-                  id="threshold-float"
-                  type="number"
-                  step="0.01"
-                  value={thresholdDraft.floatRateIncreasePct}
-                  onChange={(event) => onThresholdFieldChange("floatRateIncreasePct", event.target.value)}
-                />
-                <p className="text-xs text-muted-foreground">Example: 0.15 = 15% above last week.</p>
+            <div className="grid gap-3 xl:grid-cols-[minmax(0,1fr)_minmax(280px,0.8fr)]">
+              <div className="rounded-2xl border border-slate-200 bg-slate-50/80 p-4 shadow-sm">
+                <p className="text-sm font-semibold text-slate-900">Most estates leave these close to default.</p>
+                <p className="mt-1 text-sm leading-6 text-slate-700">
+                  Thresholds are meant to catch weekly exceptions after the estate is already live, not to be tuned every day.
+                </p>
               </div>
-
-              <div className="space-y-2">
-                <HelpLabel
-                  htmlFor="threshold-yield"
-                  label="Dry parch yield drop (ratio)"
-                  help="Flags when dry-parch yield falls below last week."
-                />
-                <Input
-                  id="threshold-yield"
-                  type="number"
-                  step="0.01"
-                  value={thresholdDraft.yieldDropPct}
-                  onChange={(event) => onThresholdFieldChange("yieldDropPct", event.target.value)}
-                />
-                <p className="text-xs text-muted-foreground">Example: 0.12 = 12% below last week.</p>
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="threshold-loss-abs">Transit loss spike (absolute)</Label>
-                <Input
-                  id="threshold-loss-abs"
-                  type="number"
-                  step="0.01"
-                  value={thresholdDraft.lossSpikeAbsPct}
-                  onChange={(event) => onThresholdFieldChange("lossSpikeAbsPct", event.target.value)}
-                />
-                <p className="text-xs text-muted-foreground">Example: 0.02 = +2 percentage points.</p>
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="threshold-loss-rel">Transit loss spike (relative)</Label>
-                <Input
-                  id="threshold-loss-rel"
-                  type="number"
-                  step="0.1"
-                  value={thresholdDraft.lossSpikeRelPct}
-                  onChange={(event) => onThresholdFieldChange("lossSpikeRelPct", event.target.value)}
-                />
-                <p className="text-xs text-muted-foreground">Example: 0.5 = 50% above last week.</p>
-              </div>
-
-              <div className="space-y-2">
-                <HelpLabel
-                  htmlFor="threshold-mismatch"
-                  label="Inventory mismatch buffer (KGs)"
-                  help="Allowed gap between stock and transaction totals."
-                />
-                <Input
-                  id="threshold-mismatch"
-                  type="number"
-                  step="1"
-                  value={thresholdDraft.mismatchBufferKgs}
-                  onChange={(event) => onThresholdFieldChange("mismatchBufferKgs", event.target.value)}
-                />
-              </div>
-
-              <div className="space-y-2">
-                <HelpLabel
-                  htmlFor="threshold-dispatch"
-                  label="Dispatch unconfirmed days"
-                  help="Days before a shipment is flagged as unconfirmed."
-                />
-                <Input
-                  id="threshold-dispatch"
-                  type="number"
-                  step="1"
-                  value={thresholdDraft.dispatchUnconfirmedDays}
-                  onChange={(event) => onThresholdFieldChange("dispatchUnconfirmedDays", event.target.value)}
-                />
-              </div>
-
-              <div className="space-y-2">
-                <HelpLabel
-                  htmlFor="threshold-bagweight"
-                  label="Bag weight drift (ratio)"
-                  help="Flags when recorded bag weights deviate from standard."
-                />
-                <Input
-                  id="threshold-bagweight"
-                  type="number"
-                  step="0.01"
-                  value={thresholdDraft.bagWeightDriftPct}
-                  onChange={(event) => onThresholdFieldChange("bagWeightDriftPct", event.target.value)}
-                />
-                <p className="text-xs text-muted-foreground">Example: 0.05 = 5% drift.</p>
-              </div>
-
-              <div className="space-y-2">
-                <HelpLabel
-                  htmlFor="threshold-minkgs"
-                  label="Minimum KGs for signal"
-                  help="Ignore tiny volumes to avoid noisy alerts."
-                />
-                <Input
-                  id="threshold-minkgs"
-                  type="number"
-                  step="1"
-                  value={thresholdDraft.minKgsForSignal}
-                  onChange={(event) => onThresholdFieldChange("minKgsForSignal", event.target.value)}
-                />
+              <div className="rounded-2xl border border-amber-100 bg-amber-50/70 p-4 shadow-sm">
+                <p className="text-sm font-semibold text-amber-950">Change them only when the alert pattern is clearly wrong.</p>
+                <p className="mt-1 text-sm leading-6 text-amber-900/80">
+                  A good time to revisit these is after a few weeks of live data, when you can see which alerts are too noisy or too loose.
+                </p>
               </div>
             </div>
 
-            <div className="border-t pt-4">
-              <div className="text-sm font-medium">Season Targets (optional)</div>
+            <div className="rounded-2xl border border-border/60 bg-white/90 p-4 shadow-sm">
+              <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
+                <div>
+                  <p className="text-sm font-semibold text-foreground">Weekly exception rules</p>
+                  <p className="text-xs text-muted-foreground">These settings decide when the system should flag something unusual.</p>
+                </div>
+                <Badge variant="outline" className="border-slate-200 bg-slate-50 text-slate-700">
+                  Rarely edited
+                </Badge>
+              </div>
+
+              <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                <div className="space-y-2">
+                  <HelpLabel
+                    htmlFor="threshold-float"
+                    label="Float rate increase (ratio)"
+                    help="Flags records when float rate jumps vs last week."
+                  />
+                  <Input
+                    id="threshold-float"
+                    type="number"
+                    step="0.01"
+                    value={thresholdDraft.floatRateIncreasePct}
+                    onChange={(event) => onThresholdFieldChange("floatRateIncreasePct", event.target.value)}
+                  />
+                  <p className="text-xs text-muted-foreground">Example: 0.15 = 15% above last week.</p>
+                </div>
+
+                <div className="space-y-2">
+                  <HelpLabel
+                    htmlFor="threshold-yield"
+                    label="Dry parch yield drop (ratio)"
+                    help="Flags when dry-parch yield falls below last week."
+                  />
+                  <Input
+                    id="threshold-yield"
+                    type="number"
+                    step="0.01"
+                    value={thresholdDraft.yieldDropPct}
+                    onChange={(event) => onThresholdFieldChange("yieldDropPct", event.target.value)}
+                  />
+                  <p className="text-xs text-muted-foreground">Example: 0.12 = 12% below last week.</p>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="threshold-loss-abs">Transit loss spike (absolute)</Label>
+                  <Input
+                    id="threshold-loss-abs"
+                    type="number"
+                    step="0.01"
+                    value={thresholdDraft.lossSpikeAbsPct}
+                    onChange={(event) => onThresholdFieldChange("lossSpikeAbsPct", event.target.value)}
+                  />
+                  <p className="text-xs text-muted-foreground">Example: 0.02 = +2 percentage points.</p>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="threshold-loss-rel">Transit loss spike (relative)</Label>
+                  <Input
+                    id="threshold-loss-rel"
+                    type="number"
+                    step="0.1"
+                    value={thresholdDraft.lossSpikeRelPct}
+                    onChange={(event) => onThresholdFieldChange("lossSpikeRelPct", event.target.value)}
+                  />
+                  <p className="text-xs text-muted-foreground">Example: 0.5 = 50% above last week.</p>
+                </div>
+
+                <div className="space-y-2">
+                  <HelpLabel
+                    htmlFor="threshold-mismatch"
+                    label="Inventory mismatch buffer (KGs)"
+                    help="Allowed gap between stock and transaction totals."
+                  />
+                  <Input
+                    id="threshold-mismatch"
+                    type="number"
+                    step="1"
+                    value={thresholdDraft.mismatchBufferKgs}
+                    onChange={(event) => onThresholdFieldChange("mismatchBufferKgs", event.target.value)}
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <HelpLabel
+                    htmlFor="threshold-dispatch"
+                    label="Dispatch unconfirmed days"
+                    help="Days before a shipment is flagged as unconfirmed."
+                  />
+                  <Input
+                    id="threshold-dispatch"
+                    type="number"
+                    step="1"
+                    value={thresholdDraft.dispatchUnconfirmedDays}
+                    onChange={(event) => onThresholdFieldChange("dispatchUnconfirmedDays", event.target.value)}
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <HelpLabel
+                    htmlFor="threshold-bagweight"
+                    label="Bag weight drift (ratio)"
+                    help="Flags when recorded bag weights deviate from standard."
+                  />
+                  <Input
+                    id="threshold-bagweight"
+                    type="number"
+                    step="0.01"
+                    value={thresholdDraft.bagWeightDriftPct}
+                    onChange={(event) => onThresholdFieldChange("bagWeightDriftPct", event.target.value)}
+                  />
+                  <p className="text-xs text-muted-foreground">Example: 0.05 = 5% drift.</p>
+                </div>
+
+                <div className="space-y-2">
+                  <HelpLabel
+                    htmlFor="threshold-minkgs"
+                    label="Minimum KGs for signal"
+                    help="Ignore tiny volumes to avoid noisy alerts."
+                  />
+                  <Input
+                    id="threshold-minkgs"
+                    type="number"
+                    step="1"
+                    value={thresholdDraft.minKgsForSignal}
+                    onChange={(event) => onThresholdFieldChange("minKgsForSignal", event.target.value)}
+                  />
+                </div>
+              </div>
+            </div>
+
+            <div className="rounded-2xl border border-emerald-100 bg-gradient-to-br from-emerald-50/70 via-white to-emerald-50/40 p-4 shadow-sm">
+              <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
+                <div>
+                  <div className="text-sm font-medium">Season Targets (optional)</div>
+                  <p className="text-xs text-emerald-900/75">Use these only when you want a benchmark to compare the season against.</p>
+                </div>
+                <Badge variant="outline" className="border-emerald-200 bg-white text-emerald-700">
+                  Benchmark only
+                </Badge>
+              </div>
               <div className="mt-3 grid grid-cols-1 gap-4 md:grid-cols-2">
                 <div className="space-y-2">
                   <HelpLabel
@@ -257,9 +293,11 @@ export function ThresholdsSection({
               </div>
             </div>
 
-            <Button onClick={onSaveThresholds} disabled={isSavingThresholds || settingsLoading}>
-              {isSavingThresholds ? "Saving..." : "Save Thresholds"}
-            </Button>
+            <div className="flex justify-end">
+              <Button onClick={onSaveThresholds} disabled={isSavingThresholds || settingsLoading}>
+                {isSavingThresholds ? "Saving..." : "Save Thresholds"}
+              </Button>
+            </div>
           </>
         )}
       </CardContent>

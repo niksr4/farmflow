@@ -1,16 +1,14 @@
 "use client"
 
-import Link from "next/link"
 import { useEffect, useState } from "react"
 import { useSession } from "next-auth/react"
-import { ArrowLeft } from "lucide-react"
 import { AccountLanguageSection } from "@/components/tenant-settings/overview-sections"
-import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { useLocale } from "@/components/locale-provider"
 import { useAuth } from "@/hooks/use-auth"
 import { useToast } from "@/hooks/use-toast"
 import { normalizeAppLocale, type AppLocale } from "@/lib/i18n"
+import WorkspaceNavigatorBackButton from "@/components/workspace-navigator-back-button"
 
 export default function UserSettingsPage() {
   const { user } = useAuth()
@@ -49,12 +47,7 @@ export default function UserSettingsPage() {
   return (
     <div className="space-y-8">
       <div className="flex items-center justify-start">
-        <Button asChild variant="outline" size="sm" className="bg-white/80">
-          <Link href="/dashboard" className="inline-flex items-center gap-2">
-            <ArrowLeft className="h-4 w-4" />
-            Back to Dashboard
-          </Link>
-        </Button>
+        <WorkspaceNavigatorBackButton />
       </div>
 
       <Card className="border-emerald-200/80 bg-gradient-to-br from-emerald-50 via-white to-amber-50">

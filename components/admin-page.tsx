@@ -59,7 +59,7 @@ import {
 } from "@/components/admin/user-access-sections"
 
 export default function AdminPage() {
-  const { user, isOwner } = useAuth()
+  const { user, isOwner, logout } = useAuth()
   const { toast } = useToast()
 
   const [tenants, setTenants] = useState<Tenant[]>([])
@@ -979,6 +979,10 @@ export default function AdminPage() {
     window.location.assign(tenantPreviewUrl)
   }
 
+  const handleLogout = () => {
+    logout()
+  }
+
   const weeklyPeriodDays = weeklySummaryRange?.totalDays || 7
   const weeklyPeriodLabel = `${weeklyPeriodDays}d`
   const weeklyRangeLabel = weeklySummaryRange
@@ -1058,6 +1062,7 @@ export default function AdminPage() {
         auditTotalCount={auditTotalCount}
         ownerSectionLinks={ownerSectionLinks}
         onOpenTenantPreview={handleOpenTenantPreview}
+        onLogout={handleLogout}
       />
 
       {isOwner ? (

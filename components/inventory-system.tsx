@@ -89,6 +89,7 @@ import { type AccountsExportFormat } from "@/lib/accounts-export"
 import { getCurrentFiscalYear } from "@/lib/fiscal-year-utils"
 import { normalizeInventoryItemType } from "@/lib/inventory-item-type"
 import { getModuleDefaultEnabled } from "@/lib/modules"
+import { appendOwnerPreviewContext, normalizeOwnerPreviewContext } from "@/lib/owner-preview"
 import type { InventoryItem, Transaction } from "@/lib/inventory-types"
 import { cn } from "@/lib/utils"
 import { toast } from "@/components/ui/use-toast"
@@ -377,6 +378,17 @@ export default function InventorySystem() {
   const previewRole = previewRoleParam === "admin" || previewRoleParam === "user" ? previewRoleParam : null
   const isPlatformOwner = !!user?.role && user.role.toLowerCase() === "owner"
   const isPreviewMode = Boolean(isPlatformOwner && previewTenantId && previewRole)
+  const ownerPreviewContext = useMemo(
+    () =>
+      isPreviewMode
+        ? normalizeOwnerPreviewContext({
+            previewTenantId,
+            previewRole,
+            previewTenantName,
+          })
+        : null,
+    [isPreviewMode, previewRole, previewTenantId, previewTenantName],
+  )
   const effectiveRole = isPreviewMode ? previewRole : user?.role?.toLowerCase() || ""
   const roleBadgeLabel = isPreviewMode ? `Preview: ${roleLabel(effectiveRole)}` : roleLabel(user?.role)
   const tenantLabel = isPreviewMode
@@ -394,6 +406,10 @@ export default function InventorySystem() {
   const canManageRecords = !isPreviewMode && (isAdmin || isOwner || isScopedUser)
   const showDataToolsControls = canManageData && showDataToolsPanel
   const isTenantLoading = status === "loading"
+  const buildWorkspaceHref = useCallback(
+    (href: string) => appendOwnerPreviewContext(href, ownerPreviewContext),
+    [ownerPreviewContext],
+  )
   const preventNegativeKey = (event: React.KeyboardEvent<HTMLInputElement>) => {
     if (event.key === "-" || event.key === "e" || event.key === "E") {
       event.preventDefault()
@@ -4557,6 +4573,12 @@ export default function InventorySystem() {
               badgeClassName: "border-emerald-200 bg-white text-emerald-700",
               tabClassName: "border-emerald-200 bg-white text-emerald-900 hover:bg-emerald-50",
               iconClassName: "text-emerald-700",
+              activeCardClassName: "border-emerald-600 bg-emerald-600 text-white shadow-[0_14px_30px_-20px_rgba(5,150,105,0.9)]",
+              inactiveCardClassName: "border-emerald-200 bg-emerald-50/70 text-emerald-900 hover:border-emerald-300 hover:bg-emerald-50",
+              activeDescriptionClassName: "text-emerald-100",
+              inactiveDescriptionClassName: "text-emerald-700/80",
+              previewTabClassName: "border-emerald-200 bg-white/90 text-emerald-900 hover:bg-white",
+              previewTabActiveClassName: "border-white/30 bg-white/15 text-white",
             }
           : null,
         showFinanceTabs
@@ -4570,6 +4592,12 @@ export default function InventorySystem() {
               badgeClassName: "border-amber-200 bg-white text-amber-700",
               tabClassName: "border-amber-200 bg-white text-amber-900 hover:bg-amber-50",
               iconClassName: "text-amber-700",
+              activeCardClassName: "border-amber-500 bg-amber-500 text-white shadow-[0_14px_30px_-20px_rgba(217,119,6,0.95)]",
+              inactiveCardClassName: "border-amber-200 bg-amber-50/70 text-amber-900 hover:border-amber-300 hover:bg-amber-50",
+              activeDescriptionClassName: "text-amber-100",
+              inactiveDescriptionClassName: "text-amber-700/80",
+              previewTabClassName: "border-amber-200 bg-white/90 text-amber-900 hover:bg-white",
+              previewTabActiveClassName: "border-white/30 bg-white/15 text-white",
             }
           : null,
         showInsightsTabs
@@ -4583,6 +4611,12 @@ export default function InventorySystem() {
               badgeClassName: "border-cyan-200 bg-white text-cyan-700",
               tabClassName: "border-cyan-200 bg-white text-cyan-900 hover:bg-cyan-50",
               iconClassName: "text-cyan-700",
+              activeCardClassName: "border-cyan-600 bg-cyan-600 text-white shadow-[0_14px_30px_-20px_rgba(8,145,178,0.9)]",
+              inactiveCardClassName: "border-cyan-200 bg-cyan-50/70 text-cyan-900 hover:border-cyan-300 hover:bg-cyan-50",
+              activeDescriptionClassName: "text-cyan-100",
+              inactiveDescriptionClassName: "text-cyan-700/80",
+              previewTabClassName: "border-cyan-200 bg-white/90 text-cyan-900 hover:bg-white",
+              previewTabActiveClassName: "border-white/30 bg-white/15 text-white",
             }
           : null,
       ].filter(Boolean) as Array<{
@@ -4595,6 +4629,12 @@ export default function InventorySystem() {
         badgeClassName: string
         tabClassName: string
         iconClassName: string
+        activeCardClassName: string
+        inactiveCardClassName: string
+        activeDescriptionClassName: string
+        inactiveDescriptionClassName: string
+        previewTabClassName: string
+        previewTabActiveClassName: string
       }>,
     [financeTabItems, insightsTabItems, operationsTabItems, showFinanceTabs, showInsightsTabs, showOperationsTabs],
   )
@@ -5313,7 +5353,7 @@ export default function InventorySystem() {
               </div>
               <div className="flex flex-wrap gap-2">
                 <Button variant="ghost" size="sm" asChild>
-                  <Link href="/manuals">
+                  <Link href={buildWorkspaceHref("/manuals")}>
                     <BookOpen className="h-4 w-4 mr-2" />
                     Manuals
                   </Link>
@@ -5364,7 +5404,7 @@ export default function InventorySystem() {
                 )}
                 {isAdmin && !isOwner && (
                   <Button variant="ghost" size="sm" asChild>
-                    <Link href="/settings">
+                    <Link href={buildWorkspaceHref("/settings")}>
                       <Settings className="h-4 w-4 mr-2" />
                       Settings
                     </Link>
@@ -5424,11 +5464,11 @@ export default function InventorySystem() {
               <div className="flex flex-wrap gap-2">
                 <Button onClick={() => handleTabChange("inventory")}>Start setup</Button>
                 <Button asChild variant="outline" className="bg-transparent">
-                  <Link href="/manuals">Open training manuals</Link>
+                  <Link href={buildWorkspaceHref("/manuals")}>Open training manuals</Link>
                 </Button>
                 {isAdmin && (
                   <Button asChild variant="outline" className="bg-transparent">
-                    <Link href="/settings">Manage users</Link>
+                    <Link href={buildWorkspaceHref("/settings")}>Manage users</Link>
                   </Button>
                 )}
                 {canShowResources && (
@@ -5898,86 +5938,84 @@ export default function InventorySystem() {
                   : "grid grid-cols-1 gap-3 md:grid-cols-3",
               )}
             >
-              {showOperationsTabs && (
-                <button
-                  type="button"
-                  onClick={() => handleSectionSelect("operations")}
-                  className={cn(
-                    "flex items-center gap-3 rounded-2xl border text-left transition-all touch-manipulation shadow-sm",
-                    isMobile ? "min-h-[82px] min-w-[220px] max-w-[85vw] snap-start px-3.5 py-2.5" : "min-h-[96px] px-4 py-3.5",
-                    activeTabGroup === "operations"
-                      ? "border-emerald-600 bg-emerald-600 text-white shadow-[0_14px_30px_-20px_rgba(5,150,105,0.9)]"
-                      : "border-emerald-200 bg-emerald-50/70 text-emerald-900 hover:border-emerald-300 hover:bg-emerald-50",
-                  )}
-                >
-                  <Factory className={cn("h-5 w-5", activeTabGroup === "operations" ? "text-white" : "text-emerald-700")} />
-                  <div className="min-w-0">
-                    <p className="text-base font-semibold">Operations</p>
-                    <p
-                      className={cn(
-                        "text-xs whitespace-normal break-words leading-snug",
-                        activeTabGroup === "operations" ? "text-emerald-100" : "text-emerald-700/80",
-                      )}
-                    >
-                      Inventory, pulping, dispatch, sales
-                    </p>
-                  </div>
-                </button>
-              )}
+              {launcherSections.map((section) => {
+                const SectionIcon = section.icon
+                const isSectionActive = activeTabGroup === section.id
+                const previewTabs = isMobile ? [] : section.tabs.slice(0, 4)
+                const hiddenPreviewCount = Math.max(section.tabs.length - previewTabs.length, 0)
 
-              {showFinanceTabs && (
-                <button
-                  type="button"
-                  onClick={() => handleSectionSelect("finance")}
-                  className={cn(
-                    "flex items-center gap-3 rounded-2xl border text-left transition-all touch-manipulation shadow-sm",
-                    isMobile ? "min-h-[82px] min-w-[220px] max-w-[85vw] snap-start px-3.5 py-2.5" : "min-h-[96px] px-4 py-3.5",
-                    activeTabGroup === "finance"
-                      ? "border-amber-500 bg-amber-500 text-white shadow-[0_14px_30px_-20px_rgba(217,119,6,0.95)]"
-                      : "border-amber-200 bg-amber-50/70 text-amber-900 hover:border-amber-300 hover:bg-amber-50",
-                  )}
-                >
-                  <Scale className={cn("h-5 w-5", activeTabGroup === "finance" ? "text-white" : "text-amber-700")} />
-                  <div className="min-w-0">
-                    <p className="text-base font-semibold">Finance</p>
-                    <p
+                return (
+                  <div
+                    key={section.id}
+                    className={cn(
+                      "rounded-2xl border transition-all shadow-sm",
+                      isMobile ? "min-w-[220px] max-w-[85vw] snap-start px-3.5 py-2.5" : "px-4 py-3.5",
+                      isSectionActive ? section.activeCardClassName : section.inactiveCardClassName,
+                    )}
+                  >
+                    <button
+                      type="button"
+                      onClick={() => handleSectionSelect(section.id)}
                       className={cn(
-                        "text-xs whitespace-normal break-words leading-snug",
-                        activeTabGroup === "finance" ? "text-amber-100" : "text-amber-700/80",
+                        "flex w-full items-center gap-3 text-left transition-all touch-manipulation",
+                        isMobile ? "min-h-[72px]" : "min-h-[78px]",
                       )}
                     >
-                      Accounts, balance sheet, receivables
-                    </p>
-                  </div>
-                </button>
-              )}
+                      <SectionIcon className={cn("h-5 w-5", isSectionActive ? "text-white" : section.iconClassName)} />
+                      <div className="min-w-0">
+                        <p className="text-base font-semibold">{section.label}</p>
+                        <p
+                          className={cn(
+                            "text-xs whitespace-normal break-words leading-snug",
+                            isSectionActive ? section.activeDescriptionClassName : section.inactiveDescriptionClassName,
+                          )}
+                        >
+                          {section.description}
+                        </p>
+                      </div>
+                    </button>
 
-              {showInsightsTabs && (
-                <button
-                  type="button"
-                  onClick={() => handleSectionSelect("insights")}
-                  className={cn(
-                    "flex items-center gap-3 rounded-2xl border text-left transition-all touch-manipulation shadow-sm",
-                    isMobile ? "min-h-[82px] min-w-[220px] max-w-[85vw] snap-start px-3.5 py-2.5" : "min-h-[96px] px-4 py-3.5",
-                    activeTabGroup === "insights"
-                      ? "border-cyan-600 bg-cyan-600 text-white shadow-[0_14px_30px_-20px_rgba(8,145,178,0.9)]"
-                      : "border-cyan-200 bg-cyan-50/70 text-cyan-900 hover:border-cyan-300 hover:bg-cyan-50",
-                  )}
-                >
-                  <BarChart3 className={cn("h-5 w-5", activeTabGroup === "insights" ? "text-white" : "text-cyan-700")} />
-                  <div className="min-w-0">
-                    <p className="text-base font-semibold">Insights</p>
-                    <p
-                      className={cn(
-                        "text-xs whitespace-normal break-words leading-snug",
-                        activeTabGroup === "insights" ? "text-cyan-100" : "text-cyan-700/80",
-                      )}
-                    >
-                      Season patterns, rainfall, AI analysis
-                    </p>
+                    {!isMobile && previewTabs.length > 0 && (
+                      <div className={cn("mt-3 border-t pt-3", isSectionActive ? "border-white/15" : "border-black/10")}>
+                        <div className="flex flex-wrap gap-2">
+                          {previewTabs.map((tab) => {
+                            const TabIcon = tab.icon
+                            const isPreviewActive = activeTab === tab.value
+                            return (
+                              <button
+                                key={tab.value}
+                                type="button"
+                                onClick={() => handleTabChange(tab.value)}
+                                className={cn(
+                                  "inline-flex min-h-9 items-center gap-1.5 rounded-lg border px-3 py-2 text-xs font-semibold transition-colors",
+                                  isPreviewActive ? section.previewTabActiveClassName : section.previewTabClassName,
+                                )}
+                              >
+                                <TabIcon className="h-3.5 w-3.5" />
+                                <span>{tab.label}</span>
+                              </button>
+                            )
+                          })}
+                          {hiddenPreviewCount > 0 && (
+                            <button
+                              type="button"
+                              onClick={goToWorkspaceNavigator}
+                              className={cn(
+                                "inline-flex min-h-9 items-center rounded-lg border px-3 py-2 text-xs font-semibold transition-colors",
+                                isSectionActive
+                                  ? "border-white/20 bg-white/10 text-white hover:bg-white/15"
+                                  : "border-dashed border-black/15 bg-white/85 text-neutral-700 hover:border-emerald-200 hover:text-emerald-700",
+                              )}
+                            >
+                              +{hiddenPreviewCount} more
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    )}
                   </div>
-                </button>
-              )}
+                )
+              })}
             </div>
 
             {!isMobile && activeTabGroup !== "dashboard" && activeSectionTabs.length > 0 && (
@@ -6042,7 +6080,7 @@ export default function InventorySystem() {
                     </p>
                   </div>
                   <Button asChild variant="outline" className={cn("border-sky-200 bg-white text-sky-900 hover:bg-sky-100", isMobile ? "w-full min-h-11" : "")}>
-                    <Link href="/manuals">Open training manuals</Link>
+                    <Link href={buildWorkspaceHref("/manuals")}>Open training manuals</Link>
                   </Button>
                 </div>
                 <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
@@ -6095,7 +6133,7 @@ export default function InventorySystem() {
                     Open Dashboard
                   </Button>
                   <Button asChild variant="outline" className={cn("bg-white", isMobile ? "w-full min-h-11" : "")}>
-                    <Link href="/manuals">Open manuals</Link>
+                    <Link href={buildWorkspaceHref("/manuals")}>Open manuals</Link>
                   </Button>
                 </div>
               </CardContent>
