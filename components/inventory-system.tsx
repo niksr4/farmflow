@@ -3063,33 +3063,86 @@ export default function InventorySystem() {
   const operationsTabItems = useMemo(
     () =>
       [
-        canShowInventoryWorkspace ? { value: "inventory", label: "Inventory", icon: List } : null,
-        canShowProcessing ? { value: "processing", label: "Processing", icon: Factory } : null,
+        canShowInventoryWorkspace
+          ? {
+              value: "inventory",
+              label: "Inventory",
+              icon: List,
+              subtabs: showTransactionHistory ? ["Current Inventory", "Transaction History"] : ["Current Inventory"],
+            }
+          : null,
+        canShowProcessingWorkspace
+          ? {
+              value: "processing",
+              label: processingWorkspaceLabel,
+              icon: processingWorkspaceIcon,
+              subtabs:
+                canShowProcessing && canShowPepper
+                  ? ["Coffee Pulping", "Pepper Processing"]
+                  : canShowProcessing
+                    ? ["Coffee Pulping"]
+                    : ["Pepper Processing"],
+            }
+          : null,
         canShowCuring ? { value: "curing", label: "Curing", icon: Factory } : null,
         canShowQuality ? { value: "quality", label: "Quality", icon: CheckCircle2 } : null,
         canShowDispatch ? { value: "dispatch", label: "Dispatch", icon: Truck } : null,
-        canShowSalesWorkspace ? { value: "sales", label: "Sales", icon: TrendingUp } : null,
-        canShowPepper ? { value: "pepper", label: "Pepper", icon: Leaf } : null,
-      ].filter(Boolean) as Array<{ value: string; label: string; icon: React.ComponentType<{ className?: string }> }>,
+        canShowSalesWorkspace
+          ? {
+              value: "sales",
+              label: "Sales",
+              icon: TrendingUp,
+              subtabs:
+                canShowSales && canShowOtherSales
+                  ? ["Coffee Sales", "Other Sales"]
+                  : canShowSales
+                    ? ["Coffee Sales"]
+                    : ["Other Sales"],
+            }
+          : null,
+      ].filter(Boolean) as Array<{
+        value: string
+        label: string
+        icon: React.ComponentType<{ className?: string }>
+        subtabs?: string[]
+      }>,
     [
       canShowCuring,
       canShowDispatch,
       canShowInventoryWorkspace,
+      canShowOtherSales,
       canShowPepper,
-      canShowProcessing,
+      canShowProcessingWorkspace,
       canShowQuality,
+      canShowProcessing,
+      canShowSales,
       canShowSalesWorkspace,
+      processingWorkspaceIcon,
+      processingWorkspaceLabel,
+      showTransactionHistory,
     ],
   )
 
   const financeTabItems = useMemo(
     () =>
       [
-        canShowAccounts ? { value: "accounts", label: "Accounts", icon: Users } : null,
+        canShowAccounts
+          ? {
+              value: "accounts",
+              label: "Accounts",
+              icon: Users,
+              subtabs: ["Labor Deployments", "Other Expenses", "Attendance", "Account Activities"],
+            }
+          : null,
         canShowBalanceSheet ? { value: "balance-sheet", label: "Balance Sheet", icon: Scale } : null,
         canShowReceivables ? { value: "receivables", label: "Receivables", icon: Receipt } : null,
         canShowBilling ? { value: "billing", label: "Billing", icon: Receipt } : null,
-      ].filter(Boolean) as Array<{ value: string; label: string; icon: React.ComponentType<{ className?: string }> }>,
+      ].filter(Boolean) as Array<{
+        value: string
+        label: string
+        icon: React.ComponentType<{ className?: string }>
+        subtabs?: string[]
+      }>,
     [canShowAccounts, canShowBalanceSheet, canShowBilling, canShowReceivables],
   )
 
@@ -3099,14 +3152,31 @@ export default function InventorySystem() {
         canShowSeason ? { value: "season", label: "Season View", icon: BarChart3 } : null,
         canShowYieldForecast ? { value: "yield-forecast", label: "Yield Forecast", icon: TrendingUp } : null,
         canShowActivityLog ? { value: "activity-log", label: "Activity Log", icon: History } : null,
-        canShowRainfallSection ? { value: "rainfall", label: "Rainfall", icon: CloudRain } : null,
+        canShowRainfallSection
+          ? {
+              value: "rainfall",
+              label: canShowRainfall ? "Rainfall" : "Weather",
+              icon: CloudRain,
+              subtabs:
+                canShowRainfall && canShowWeather
+                  ? ["Rainfall Logs", "Weather"]
+                  : canShowWeather
+                    ? ["Forecast", "Estate Coordinates"]
+                    : ["Rainfall Logs"],
+            }
+          : null,
         canShowDocuments ? { value: "documents", label: "Documents", icon: FileText } : null,
         canShowJournal ? { value: "journal", label: "Journal", icon: NotebookPen } : null,
         canShowResources ? { value: "resources", label: "Resources", icon: BookOpen } : null,
         canShowPlantHealth ? { value: "plant-health", label: "Plant Health", icon: Leaf } : null,
         canShowAiAnalysis ? { value: "ai-analysis", label: "AI Analysis", icon: Brain } : null,
         canShowNews ? { value: "news", label: "News", icon: Newspaper } : null,
-      ].filter(Boolean) as Array<{ value: string; label: string; icon: React.ComponentType<{ className?: string }> }>,
+      ].filter(Boolean) as Array<{
+        value: string
+        label: string
+        icon: React.ComponentType<{ className?: string }>
+        subtabs?: string[]
+      }>,
     [
       canShowActivityLog,
       canShowAiAnalysis,
@@ -3114,9 +3184,11 @@ export default function InventorySystem() {
       canShowJournal,
       canShowNews,
       canShowPlantHealth,
+      canShowRainfall,
       canShowRainfallSection,
       canShowResources,
       canShowSeason,
+      canShowWeather,
       canShowYieldForecast,
     ],
   )
@@ -4478,7 +4550,12 @@ export default function InventorySystem() {
   }, [markTabAsLoaded, router, searchParams])
 
   type TabGroupKey = "dashboard" | "operations" | "finance" | "insights"
-  type SectionTabItem = { value: string; label: string; icon: React.ComponentType<{ className?: string }> }
+  type SectionTabItem = {
+    value: string
+    label: string
+    icon: React.ComponentType<{ className?: string }>
+    subtabs?: string[]
+  }
 
   const activeTabGroup = useMemo<TabGroupKey>(() => {
     if (activeTab === "home") return "dashboard"
@@ -4513,12 +4590,13 @@ export default function InventorySystem() {
           ? {
               id: "operations" as const,
               label: "Operations",
-              description: "Daily execution across inventory, processing, dispatch, and sales.",
+              description: "Daily execution across inventory, pulping, dispatch, and sales.",
               icon: Factory,
               tabs: operationsTabItems as SectionTabItem[],
               cardClassName: "border-emerald-200/80 bg-emerald-50/50",
               badgeClassName: "border-emerald-200 bg-white text-emerald-700",
               tabClassName: "border-emerald-200 bg-white text-emerald-900 hover:bg-emerald-50",
+              subtabChipClassName: "border-emerald-100 bg-emerald-100/70 text-emerald-800/80",
               iconClassName: "text-emerald-700",
               activeCardClassName: "border-emerald-600 bg-emerald-600 text-white shadow-[0_14px_30px_-20px_rgba(5,150,105,0.9)]",
               inactiveCardClassName: "border-emerald-200 bg-emerald-50/70 text-emerald-900 hover:border-emerald-300 hover:bg-emerald-50",
@@ -4538,6 +4616,7 @@ export default function InventorySystem() {
               cardClassName: "border-amber-200/80 bg-amber-50/50",
               badgeClassName: "border-amber-200 bg-white text-amber-700",
               tabClassName: "border-amber-200 bg-white text-amber-900 hover:bg-amber-50",
+              subtabChipClassName: "border-amber-100 bg-amber-100/70 text-amber-800/80",
               iconClassName: "text-amber-700",
               activeCardClassName: "border-amber-500 bg-amber-500 text-white shadow-[0_14px_30px_-20px_rgba(217,119,6,0.95)]",
               inactiveCardClassName: "border-amber-200 bg-amber-50/70 text-amber-900 hover:border-amber-300 hover:bg-amber-50",
@@ -4551,12 +4630,13 @@ export default function InventorySystem() {
           ? {
               id: "insights" as const,
               label: "Insights",
-              description: "Season monitoring, rainfall, AI, and trend intelligence.",
+              description: "Season monitoring, rainfall, weather, AI, and trend intelligence.",
               icon: BarChart3,
               tabs: insightsTabItems as SectionTabItem[],
               cardClassName: "border-cyan-200/80 bg-cyan-50/50",
               badgeClassName: "border-cyan-200 bg-white text-cyan-700",
               tabClassName: "border-cyan-200 bg-white text-cyan-900 hover:bg-cyan-50",
+              subtabChipClassName: "border-cyan-100 bg-cyan-100/70 text-cyan-800/80",
               iconClassName: "text-cyan-700",
               activeCardClassName: "border-cyan-600 bg-cyan-600 text-white shadow-[0_14px_30px_-20px_rgba(8,145,178,0.9)]",
               inactiveCardClassName: "border-cyan-200 bg-cyan-50/70 text-cyan-900 hover:border-cyan-300 hover:bg-cyan-50",
@@ -4575,6 +4655,7 @@ export default function InventorySystem() {
         cardClassName: string
         badgeClassName: string
         tabClassName: string
+        subtabChipClassName: string
         iconClassName: string
         activeCardClassName: string
         inactiveCardClassName: string
@@ -6036,7 +6117,7 @@ export default function InventorySystem() {
                             {section.tabs.length}
                           </Badge>
                         </div>
-                        <div className={cn("gap-2", isMobile ? "grid grid-cols-2" : "flex flex-wrap")}>
+                        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                           {section.tabs.map((tab) => {
                             const TabIcon = tab.icon
                             return (
@@ -6045,13 +6126,30 @@ export default function InventorySystem() {
                                 type="button"
                                 onClick={() => handleTabChange(tab.value)}
                                 className={cn(
-                                  "inline-flex min-h-10 items-center gap-1.5 rounded-lg border px-3 py-2 text-xs font-semibold transition-colors touch-manipulation",
-                                  isMobile ? "w-full justify-start rounded-xl px-3.5 py-2.5 text-sm" : "",
+                                  "flex min-h-14 w-full flex-col items-start justify-start gap-2 rounded-lg border px-3 py-2.5 text-left text-xs font-semibold transition-colors touch-manipulation",
+                                  isMobile ? "rounded-xl px-3.5 py-3 text-sm" : "",
                                   section.tabClassName,
                                 )}
                               >
-                                <TabIcon className={cn("h-3.5 w-3.5", section.iconClassName)} />
-                                <span>{tab.label}</span>
+                                <span className="inline-flex items-center gap-1.5">
+                                  <TabIcon className={cn("h-3.5 w-3.5", section.iconClassName)} />
+                                  <span>{tab.label}</span>
+                                </span>
+                                {tab.subtabs?.length ? (
+                                  <span className="ml-5 flex flex-wrap gap-1.5">
+                                    {tab.subtabs.map((subtab) => (
+                                      <span
+                                        key={`${tab.value}-${subtab}`}
+                                        className={cn(
+                                          "rounded-full border px-2 py-0.5 text-[10px] font-medium leading-4",
+                                          section.subtabChipClassName,
+                                        )}
+                                      >
+                                        {subtab}
+                                      </span>
+                                    ))}
+                                  </span>
+                                ) : null}
                               </button>
                             )
                           })}
