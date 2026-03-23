@@ -15,7 +15,7 @@ const APP_PATH_PREFIXES = ["/dashboard", "/settings", "/welcome"]
 const AVAILABLE_WORKSPACES = [
   "Dashboard",
   "Inventory",
-  "Processing",
+  "Pulping",
   "Dispatch",
   "Sales",
   "Accounts",
@@ -25,7 +25,7 @@ const AVAILABLE_WORKSPACES = [
 const WORKSPACE_HINTS: AssistantWorkspaceHint[] = [
   { label: "Dashboard", detail: "Use Dashboard for the estate overview, alerts, and top-level revenue cards." },
   { label: "Inventory", detail: "Use Inventory for stock balances and the Transaction History button for movement records." },
-  { label: "Processing", detail: "Use Processing for crop intake, ripe totals, and dry output by location." },
+  { label: "Pulping", detail: "Use Pulping for coffee intake, ripe totals, parchment or cherry output, and the Pepper sub-tab when needed." },
   { label: "Dispatch", detail: "Use Dispatch to record coffee sent out and later update KGs Received." },
   { label: "Sales", detail: "Use Sales for coffee sales and the Other Sales button inside that workspace when needed." },
   { label: "Accounts", detail: "Use Accounts for labor, expenses, and account activities." },

@@ -53,7 +53,7 @@ const getSetupActionTab = (access: OnboardingAccess) => {
 const getActionLabel = (tab: string) => {
   switch (tab) {
     case "processing":
-      return "Go to Processing"
+      return "Go to Pulping"
     case "dispatch":
       return "Go to Dispatch"
     default:
@@ -97,7 +97,7 @@ export const buildOnboardingSteps = (
     steps.push({
       key: "locations",
       title: "Add estate locations",
-      description: "Set up the coffee processing locations your estate uses.",
+      description: "Set up the estate locations where coffee pulping or dispatch work happens.",
       done: status.locations,
       actionLabel: getActionLabel(actionTab),
       actionTab,
@@ -118,10 +118,10 @@ export const buildOnboardingSteps = (
   if (access.canShowProcessing) {
     steps.push({
       key: "processing",
-      title: "Record processing output",
-      description: "Log today's coffee processing (parchment/cherry).",
+      title: "Record pulping output",
+      description: "Log today's coffee pulping output (parchment/cherry).",
       done: status.processing,
-      actionLabel: "Open Processing",
+      actionLabel: "Open Pulping",
       actionTab: "processing",
     })
   }
@@ -184,10 +184,10 @@ export const buildLaunchGuidePhases = (
     phases.push({
       id: "phase-2",
       label: "Week 2",
-      title: "Daily processing rhythm",
-      detail: "Capture Arabica and Robusta outputs every day with consistent operating notes.",
+      title: "Daily pulping rhythm",
+      detail: "Capture Arabica and Robusta pulping output every day with consistent operating notes.",
       done: status.processing,
-      actionLabel: "Open Processing",
+      actionLabel: "Open Pulping",
       actionTab: "processing",
     })
   }
