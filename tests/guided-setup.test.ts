@@ -65,6 +65,13 @@ describe("module bundles", () => {
     expect(enterprise?.modules).toEqual(MODULES.map((module) => module.id))
   })
 
+  it("keeps rainfall and weather in every commercial plan", () => {
+    for (const bundle of MODULE_BUNDLES) {
+      expect(bundle.modules).toContain("rainfall")
+      expect(bundle.modules).toContain("weather")
+    }
+  })
+
   it("normalizes unknown plans back to core", () => {
     expect(normalizeTenantPlanId("BASIC")).toBe("basic")
     expect(normalizeTenantPlanId("unknown")).toBe("core")
