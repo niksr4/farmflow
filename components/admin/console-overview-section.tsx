@@ -1,5 +1,6 @@
 "use client"
 
+import { LogOut } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import type { SectionLink, Tenant } from "@/components/admin/types"
@@ -15,6 +16,7 @@ type ConsoleOverviewSectionProps = {
   auditTotalCount: number
   ownerSectionLinks: SectionLink[]
   onOpenTenantPreview: (openInNewTab?: boolean) => void
+  onLogout: () => void
 }
 
 export function ConsoleOverviewSection({
@@ -28,6 +30,7 @@ export function ConsoleOverviewSection({
   auditTotalCount,
   ownerSectionLinks,
   onOpenTenantPreview,
+  onLogout,
 }: ConsoleOverviewSectionProps) {
   return (
     <Card
@@ -90,6 +93,10 @@ export function ConsoleOverviewSection({
             )}
             <Button asChild size="sm" variant="outline">
               <a href="/admin/register-interest">Request Access Inbox</a>
+            </Button>
+            <Button size="sm" variant="outline" onClick={onLogout}>
+              <LogOut className="mr-2 h-4 w-4" />
+              Logout
             </Button>
           </div>
         )}

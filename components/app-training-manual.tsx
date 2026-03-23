@@ -1,6 +1,5 @@
 import Link from "next/link"
 import {
-  ArrowRight,
   BarChart3,
   BookOpen,
   CheckCircle2,
@@ -12,6 +11,7 @@ import {
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import WorkspaceNavigatorBackButton from "@/components/workspace-navigator-back-button"
 import { DEFAULT_TENANT_PLAN_ID, getPlanModuleIds, type TenantPlanId } from "@/lib/modules"
 
 type ManualItem = {
@@ -626,12 +626,7 @@ export default function AppTrainingManual({
               use Finance. When you are only reviewing trends or health, use Insights.
             </div>
             <div className="flex flex-wrap gap-2 lg:justify-end">
-              <Button asChild>
-                <Link href="/dashboard">
-                  Open dashboard
-                  <ArrowRight className="ml-2 h-4 w-4" />
-                </Link>
-              </Button>
+              <WorkspaceNavigatorBackButton className="border-emerald-200 bg-white" />
               <Button asChild variant="outline" className="bg-white">
                 <Link href="/welcome">Open welcome setup</Link>
               </Button>

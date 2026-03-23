@@ -5,6 +5,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Label } from "@/components/ui/label"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
+import WorkspaceNavigatorBackButton from "@/components/workspace-navigator-back-button"
 import { useToast } from "@/hooks/use-toast"
 import { useAuth } from "@/hooks/use-auth"
 import posthog from "posthog-js"
@@ -64,7 +65,10 @@ export default function ResetPasswordPage() {
   }
 
   return (
-    <main className="mx-auto flex min-h-[calc(100vh-120px)] w-full max-w-lg items-center px-6 py-10">
+    <main className="mx-auto flex w-full max-w-lg flex-col gap-6 px-6 py-10">
+      <div className="flex items-center justify-start">
+        <WorkspaceNavigatorBackButton />
+      </div>
       <Card className="w-full border-emerald-200/70 bg-white/95">
         <CardHeader>
           <CardTitle>Password Rotation Required</CardTitle>
@@ -114,4 +118,3 @@ export default function ResetPasswordPage() {
     </main>
   )
 }
-

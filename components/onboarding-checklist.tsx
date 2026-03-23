@@ -1,6 +1,8 @@
 "use client"
 
 import Link from "next/link"
+import { useMemo } from "react"
+import { useSearchParams } from "next/navigation"
 import { BookOpen, Check, ChevronDown, ChevronUp, Clock, Info } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -9,6 +11,7 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/component
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
+import { appendOwnerPreviewContext, normalizeOwnerPreviewContext } from "@/lib/owner-preview"
 import { cn } from "@/lib/utils"
 
 export type OnboardingStep = {
@@ -71,6 +74,18 @@ export default function OnboardingChecklist({
   isExpanded,
   onExpandedChange,
 }: OnboardingChecklistProps) {
+  const searchParams = useSearchParams()
+  const previewContext = useMemo(
+    () =>
+      normalizeOwnerPreviewContext({
+        previewTenantId: searchParams.get("previewTenantId"),
+        previewRole: searchParams.get("previewRole"),
+        previewTenantName: searchParams.get("previewTenantName"),
+      }),
+    [searchParams],
+  )
+  const manualsHref = useMemo(() => appendOwnerPreviewContext("/manuals", previewContext), [previewContext])
+
   if (!isVisible) return null
 
   const nextPendingStep = steps.find((step) => !step.done) || null
@@ -89,7 +104,7 @@ export default function OnboardingChecklist({
                 {completedCount}/{totalCount} complete
               </Badge>
               <Button variant="outline" size="sm" asChild className="bg-white">
-                <Link href="/manuals">
+                <Link href={manualsHref}>
                   <BookOpen className="mr-2 h-4 w-4" />
                   Open manuals
                 </Link>

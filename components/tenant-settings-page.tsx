@@ -53,7 +53,7 @@ import type {
 } from "@/components/tenant-settings/types"
 
 export default function TenantSettingsPage() {
-  const { user } = useAuth()
+  const { user, logout } = useAuth()
   const { update: updateSession } = useSession()
   const { toast } = useToast()
   const { setLocale } = useLocale()
@@ -880,6 +880,7 @@ export default function TenantSettingsPage() {
         enabledTenantModuleCount={enabledTenantModuleCount}
         roleDisplay={roleDisplay}
         sectionLinks={sectionLinks}
+        onLogout={logout}
       />
 
       {isOwner && <OwnerToolsSection />}
