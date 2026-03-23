@@ -35,11 +35,11 @@ export const MODULES: ModuleDefinition[] = [
   { id: "journal", label: "Journal", defaultEnabled: false },
   { id: "resources", label: "Estate Resources", defaultEnabled: false },
   { id: "plant-health", label: "Plant Health", defaultEnabled: false },
-  { id: "rainfall", label: "Rainfall", defaultEnabled: false },
+  { id: "rainfall", label: "Rainfall", defaultEnabled: true },
   { id: "pepper", label: "Pepper", defaultEnabled: false },
   { id: "ai-analysis", label: "AI Analysis", defaultEnabled: false },
   { id: "news", label: "Market News", defaultEnabled: false },
-  { id: "weather", label: "Weather", defaultEnabled: false },
+  { id: "weather", label: "Weather", defaultEnabled: true },
   { id: "season", label: "Season View", defaultEnabled: false },
 ]
 
@@ -71,6 +71,7 @@ export const MODULE_BUNDLES: ModuleBundle[] = [
       "sales",
       "other-sales",
       "rainfall",
+      "weather",
       "pepper",
       "season",
       "journal",
