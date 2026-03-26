@@ -10,7 +10,7 @@
     },
     {
       "path": "/api/cron/tenant-smoke",
-      "schedule": "30 */12 * * *"
+      "schedule": "30 6 * * *"
     },
     {
       "path": "/api/cron/retention",
