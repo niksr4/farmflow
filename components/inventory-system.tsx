@@ -252,6 +252,11 @@ export default function InventorySystem() {
   const [isExportingDataTools, setIsExportingDataTools] = useState(false)
   const [showDataToolsPanel, setShowDataToolsPanel] = useState(false)
   const [navCollapsed, setNavCollapsed] = useState(false)
+  useEffect(() => {
+    const onScroll = () => setNavCollapsed(window.scrollY > 60)
+    window.addEventListener("scroll", onScroll, { passive: true })
+    return () => window.removeEventListener("scroll", onScroll)
+  }, [])
   const [accountsInitialTab, setAccountsInitialTab] = useState<"labor" | "expenses" | "attendance" | "activities" | undefined>(undefined)
   const [enabledModules, setEnabledModules] = useState<string[] | null>(null)
   const [currentPlanId, setCurrentPlanId] = useState<string | null>(null)
@@ -6124,7 +6129,7 @@ export default function InventorySystem() {
               )}
             >
             {activeTab !== DASHBOARD_LAUNCHER_TAB && (
-              <div className={cn("flex items-center", isMobile ? "justify-stretch" : "justify-between")}>
+              <div className={cn("flex", isMobile ? "justify-stretch" : "justify-start")}>
                 <Button
                   type="button"
                   variant="outline"
@@ -6135,25 +6140,16 @@ export default function InventorySystem() {
                   <Home className="mr-2 h-3.5 w-3.5" />
                   Workspace Navigator
                 </Button>
-                {!isMobile && (
-                  <button
-                    type="button"
-                    onClick={() => setNavCollapsed((prev) => !prev)}
-                    className="ml-2 rounded-lg border border-black/10 bg-white/80 p-1.5 text-neutral-500 hover:bg-neutral-100 hover:text-neutral-700 transition-colors"
-                    title={navCollapsed ? "Show sections" : "Hide sections"}
-                  >
-                    {navCollapsed ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronUp className="h-3.5 w-3.5" />}
-                  </button>
-                )}
               </div>
             )}
+            {!navCollapsed && (
+            <>
             {isMobile && (
               <div className="flex items-center justify-between px-1">
                 <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-neutral-500">Workspace Sections</p>
                 <p className="text-[11px] text-neutral-500">Swipe</p>
               </div>
             )}
-            {!navCollapsed && (
             <div
               className={cn(
                 "gap-2",
@@ -6241,8 +6237,6 @@ export default function InventorySystem() {
                 )
               })}
             </div>
-            )}
-
             {!isMobile && activeTabGroup !== "dashboard" && activeSectionTabs.length > 0 && (
               <TabsList
                 className={cn(
@@ -6269,6 +6263,8 @@ export default function InventorySystem() {
                   )
                 })}
               </TabsList>
+            )}
+            </>
             )}
             </div>
           )}
