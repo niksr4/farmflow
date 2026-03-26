@@ -37,6 +37,8 @@ import {
   Scale,
   FileText,
   Coins,
+  ChevronUp,
+  ChevronDown,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -939,29 +941,6 @@ export default function InventorySystem() {
     loadOnboardingStatus()
   }, [hasResolvedModules, tenantId, isOwner, loadOnboardingStatus])
 
-  // Collapse navigator section cards when scrolling down past threshold; expand on scroll up
-  useEffect(() => {
-    let lastStableY = window.scrollY
-    const COLLAPSE_AFTER = 180   // don't collapse until past this many px
-    const DOWN_THRESHOLD = 40    // must scroll down this much to collapse
-    const UP_THRESHOLD = 20      // must scroll up this much to expand
-
-    const onScroll = () => {
-      const currentY = window.scrollY
-      if (currentY < COLLAPSE_AFTER) {
-        setNavCollapsed(false)
-        lastStableY = currentY
-      } else if (currentY > lastStableY + DOWN_THRESHOLD) {
-        setNavCollapsed(true)
-        lastStableY = currentY
-      } else if (currentY < lastStableY - UP_THRESHOLD) {
-        setNavCollapsed(false)
-        lastStableY = currentY
-      }
-    }
-    window.addEventListener("scroll", onScroll, { passive: true })
-    return () => window.removeEventListener("scroll", onScroll)
-  }, [])
 
   const handleCreateLocation = async () => {
     if (!newLocationName.trim()) {
@@ -6143,31 +6122,36 @@ export default function InventorySystem() {
               )}
             >
             {activeTab !== DASHBOARD_LAUNCHER_TAB && (
-              <div className={cn("flex", isMobile ? "justify-stretch" : "justify-start")}>
+              <div className={cn("flex items-center", isMobile ? "justify-stretch" : "justify-between")}>
                 <Button
                   type="button"
                   variant="outline"
                   size="sm"
                   onClick={goToWorkspaceNavigator}
-                  className={cn("bg-white", isMobile ? "min-h-10 w-full justify-center" : "")}
+                  className={cn("bg-white", isMobile ? "min-h-10 flex-1 justify-center" : "")}
                 >
                   <Home className="mr-2 h-3.5 w-3.5" />
                   Workspace Navigator
                 </Button>
+                {!isMobile && (
+                  <button
+                    type="button"
+                    onClick={() => setNavCollapsed((prev) => !prev)}
+                    className="ml-2 rounded-lg border border-black/10 bg-white/80 p-1.5 text-neutral-500 hover:bg-neutral-100 hover:text-neutral-700 transition-colors"
+                    title={navCollapsed ? "Show sections" : "Hide sections"}
+                  >
+                    {navCollapsed ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronUp className="h-3.5 w-3.5" />}
+                  </button>
+                )}
               </div>
             )}
-            {isMobile && !navCollapsed && (
+            {isMobile && (
               <div className="flex items-center justify-between px-1">
                 <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-neutral-500">Workspace Sections</p>
                 <p className="text-[11px] text-neutral-500">Swipe</p>
               </div>
             )}
-            <div
-              className={cn(
-                "overflow-hidden transition-all duration-200",
-                navCollapsed && !isMobile ? "max-h-0 opacity-0 pointer-events-none" : "max-h-[600px] opacity-100",
-              )}
-            >
+            {!navCollapsed && (
             <div
               className={cn(
                 "gap-2",
@@ -6255,7 +6239,7 @@ export default function InventorySystem() {
                 )
               })}
             </div>
-            </div>
+            )}
 
             {!isMobile && activeTabGroup !== "dashboard" && activeSectionTabs.length > 0 && (
               <TabsList
