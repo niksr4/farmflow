@@ -3255,7 +3255,7 @@ export default function InventorySystem() {
               value: "inventory",
               label: "Inventory",
               icon: List,
-              subtabs: showTransactionHistory ? ["Current Inventory", "Transaction History"] : ["Current Inventory"],
+              subtabs: showTransactionHistory ? ["Restock Inventory", "Transaction History"] : ["Restock Inventory"],
             }
           : null,
       ].filter(Boolean) as Array<{
@@ -7122,7 +7122,7 @@ export default function InventorySystem() {
                       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                         <div className="space-y-1">
                           <h2 className="text-base font-semibold text-neutral-900 flex items-center">
-                            <List className="mr-2 h-5 w-5 text-emerald-600" /> Current Inventory Levels
+                            <List className="mr-2 h-5 w-5 text-emerald-600" /> Restock Inventory Levels
                           </h2>
                           <p className="text-xs text-neutral-500">Totals for {selectedLocationLabel}. Stock value shown here is not included in P&amp;L.</p>
                         </div>
