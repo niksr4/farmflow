@@ -252,6 +252,7 @@ export default function InventorySystem() {
   const [isExportingDataTools, setIsExportingDataTools] = useState(false)
   const [showDataToolsPanel, setShowDataToolsPanel] = useState(false)
   const [navCollapsed, setNavCollapsed] = useState(false)
+  const [accountsInitialTab, setAccountsInitialTab] = useState<"labor" | "expenses" | "attendance" | "activities" | undefined>(undefined)
   const [enabledModules, setEnabledModules] = useState<string[] | null>(null)
   const [currentPlanId, setCurrentPlanId] = useState<string | null>(null)
   const [isModulesLoading, setIsModulesLoading] = useState(false)
@@ -3216,14 +3217,6 @@ export default function InventorySystem() {
   const operationsTabItems = useMemo(
     () =>
       [
-        canShowInventoryWorkspace
-          ? {
-              value: "inventory",
-              label: "Inventory",
-              icon: List,
-              subtabs: showTransactionHistory ? ["Current Inventory", "Transaction History"] : ["Current Inventory"],
-            }
-          : null,
         canShowProcessingWorkspace
           ? {
               value: "processing",
@@ -3251,6 +3244,15 @@ export default function InventorySystem() {
                   : canShowSales
                     ? ["Coffee Sales"]
                     : ["Other Sales"],
+            }
+          : null,
+        // Inventory is for restocking only — placed last as it's the lowest-frequency task
+        canShowInventoryWorkspace
+          ? {
+              value: "inventory",
+              label: "Inventory",
+              icon: List,
+              subtabs: showTransactionHistory ? ["Current Inventory", "Transaction History"] : ["Current Inventory"],
             }
           : null,
       ].filter(Boolean) as Array<{
@@ -4762,31 +4764,11 @@ export default function InventorySystem() {
   const launcherSections = useMemo(
     () =>
       [
-        showOperationsTabs
-          ? {
-              id: "operations" as const,
-              label: "Operations",
-              description: "Daily execution across inventory, pulping, dispatch, and sales.",
-              icon: Factory,
-              tabs: operationsTabItems as SectionTabItem[],
-              cardClassName: "border-emerald-200/80 bg-emerald-50/50",
-              badgeClassName: "border-emerald-200 bg-white text-emerald-700",
-              tabClassName: "border-emerald-200 bg-white text-emerald-900 hover:bg-emerald-50",
-              subtabChipClassName: "border-emerald-100 bg-emerald-100/70 text-emerald-800/80",
-              iconClassName: "text-emerald-700",
-              activeCardClassName: "border-emerald-600 bg-emerald-600 text-white shadow-[0_14px_30px_-20px_rgba(5,150,105,0.9)]",
-              inactiveCardClassName: "border-emerald-200 bg-emerald-50/70 text-emerald-900 hover:border-emerald-300 hover:bg-emerald-50",
-              activeDescriptionClassName: "text-emerald-100",
-              inactiveDescriptionClassName: "text-emerald-700/80",
-              previewTabClassName: "border-emerald-200 bg-white/90 text-emerald-900 hover:bg-white",
-              previewTabActiveClassName: "border-white/30 bg-white/15 text-white",
-            }
-          : null,
         showFinanceTabs
           ? {
               id: "finance" as const,
               label: "Finance",
-              description: "Money flow, receivables, accounts, and fiscal control.",
+              description: "Record daily labor and expenses, track accounts, and review finances.",
               icon: Scale,
               tabs: financeTabItems as SectionTabItem[],
               cardClassName: "border-amber-200/80 bg-amber-50/50",
@@ -4799,6 +4781,26 @@ export default function InventorySystem() {
               activeDescriptionClassName: "text-amber-100",
               inactiveDescriptionClassName: "text-amber-700/80",
               previewTabClassName: "border-amber-200 bg-white/90 text-amber-900 hover:bg-white",
+              previewTabActiveClassName: "border-white/30 bg-white/15 text-white",
+            }
+          : null,
+        showOperationsTabs
+          ? {
+              id: "operations" as const,
+              label: "Operations",
+              description: "Pulping, dispatch, sales, and stock restocking.",
+              icon: Factory,
+              tabs: operationsTabItems as SectionTabItem[],
+              cardClassName: "border-emerald-200/80 bg-emerald-50/50",
+              badgeClassName: "border-emerald-200 bg-white text-emerald-700",
+              tabClassName: "border-emerald-200 bg-white text-emerald-900 hover:bg-emerald-50",
+              subtabChipClassName: "border-emerald-100 bg-emerald-100/70 text-emerald-800/80",
+              iconClassName: "text-emerald-700",
+              activeCardClassName: "border-emerald-600 bg-emerald-600 text-white shadow-[0_14px_30px_-20px_rgba(5,150,105,0.9)]",
+              inactiveCardClassName: "border-emerald-200 bg-emerald-50/70 text-emerald-900 hover:border-emerald-300 hover:bg-emerald-50",
+              activeDescriptionClassName: "text-emerald-100",
+              inactiveDescriptionClassName: "text-emerald-700/80",
+              previewTabClassName: "border-emerald-200 bg-white/90 text-emerald-900 hover:bg-white",
               previewTabActiveClassName: "border-white/30 bg-white/15 text-white",
             }
           : null,
@@ -6292,6 +6294,36 @@ export default function InventorySystem() {
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
+                {canShowAccounts && (
+                  <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                    <button
+                      type="button"
+                      onClick={() => { setAccountsInitialTab("expenses"); handleTabChange("accounts") }}
+                      className="flex items-center gap-3 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3.5 text-left transition-colors hover:bg-amber-100/80 touch-manipulation"
+                    >
+                      <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-amber-600 text-white shadow-sm">
+                        <Receipt className="h-4 w-4" />
+                      </div>
+                      <div>
+                        <p className="text-sm font-semibold text-amber-900">Record Expense</p>
+                        <p className="text-xs text-amber-700">Accounts → Other Expenses</p>
+                      </div>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => { setAccountsInitialTab("labor"); handleTabChange("accounts") }}
+                      className="flex items-center gap-3 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3.5 text-left transition-colors hover:bg-amber-100/80 touch-manipulation"
+                    >
+                      <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-amber-600 text-white shadow-sm">
+                        <Users className="h-4 w-4" />
+                      </div>
+                      <div>
+                        <p className="text-sm font-semibold text-amber-900">Record Labor</p>
+                        <p className="text-xs text-amber-700">Accounts → Labor Deployments</p>
+                      </div>
+                    </button>
+                  </div>
+                )}
                 <div className="flex flex-col gap-3 rounded-2xl border border-sky-200 bg-sky-50/80 p-4 md:flex-row md:items-center md:justify-between">
                   <div className="space-y-1">
                     <p className="flex items-center gap-2 text-sm font-semibold text-sky-950">
@@ -7484,6 +7516,7 @@ export default function InventorySystem() {
                 showDataToolsControls={showDataToolsControls}
                 requestedExport={accountsExportRequest}
                 onRequestedExportHandled={handleAccountsExportRequestHandled}
+                initialTab={accountsInitialTab}
               />
             </TabsContent>
           )}

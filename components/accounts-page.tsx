@@ -92,12 +92,14 @@ type AccountsPageProps = {
   showDataToolsControls?: boolean
   requestedExport?: { requestId: number; format: LegacyAccountsExportFormat } | null
   onRequestedExportHandled?: (requestId: number) => void
+  initialTab?: "labor" | "expenses" | "attendance" | "activities"
 }
 
 export default function AccountsPage({
   showDataToolsControls = false,
   requestedExport = null,
   onRequestedExportHandled,
+  initialTab,
 }: AccountsPageProps) {
   const { isAdmin, isOwner, user } = useAuth()
   const canManageActivities = isAdmin || isOwner || user?.role === "user"
@@ -1191,7 +1193,7 @@ export default function AccountsPage({
         </Card>
       )}
 
-      <Tabs defaultValue="labor" className="w-full space-y-4">
+      <Tabs defaultValue={initialTab ?? "labor"} className="w-full space-y-4">
         <TabsList className="w-full justify-start sm:justify-center">
           <TabsTrigger value="labor" className="flex items-center gap-2">
             <Users className="h-4 w-4" />
