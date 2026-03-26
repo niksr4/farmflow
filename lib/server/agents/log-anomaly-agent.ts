@@ -335,7 +335,7 @@ async function buildAiDailyBrief(clusters: EventCluster[]) {
     }))
 
     const { object } = await generateObject({
-      model,
+      model: model as any,
       temperature: 0.2,
       schema: BriefSchema,
       system:
