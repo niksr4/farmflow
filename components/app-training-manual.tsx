@@ -90,7 +90,7 @@ const hasModule = (enabledModules: string[], moduleId: string) => enabledModules
 
 const getOperationsOverviewLabels = (enabledModules: string[]) =>
   compact([
-    hasModule(enabledModules, "inventory") ? "Inventory" : null,
+    hasModule(enabledModules, "inventory") ? "Restock Inventory" : null,
     hasModule(enabledModules, "processing") ? "Pulping" : null,
     hasModule(enabledModules, "dispatch") ? "Dispatch" : null,
     hasModule(enabledModules, "sales") ? "Sales" : null,
@@ -137,8 +137,8 @@ const buildStartHereSteps = (enabledModules: string[]) => {
       detail: "Set your estate name, first location, and plan. Do not skip this. It decides where your first records go.",
     },
     {
-      title: "Use Dashboard to see what needs attention",
-      detail: "Dashboard is the summary screen. It is for checking status, not for entering every type of record.",
+      title: "Use the Workspace Navigator to find your way around",
+      detail: "The home screen shows three sections: Finance, Operations, and Restock Inventory. Finance comes first because daily work — recording labor and expenses — happens there most often. Tap a section card to open it, or use the quick-action shortcuts to jump straight to common tasks.",
     },
     {
       title: "If stock changed physically, use Operations",
@@ -172,7 +172,7 @@ const buildDecisionRules = (
   options: { isTailored: boolean; userRole: AppTrainingManualProps["userRole"] },
 ) => {
   const operationsEntryPoints = compact([
-    hasModule(enabledModules, "inventory") ? "Inventory" : null,
+    hasModule(enabledModules, "inventory") ? "Restock Inventory" : null,
     hasModule(enabledModules, "processing") ? "Pulping" : null,
     hasModule(enabledModules, "dispatch") ? "Dispatch" : null,
     hasModule(enabledModules, "sales") ? "Sales" : null,
@@ -193,7 +193,7 @@ const buildDecisionRules = (
   return [
     {
       title: "Coffee or stock moved",
-      answer: `Go to Operations. Start with ${joinReadableList(operationsEntryPoints) || "the matching operations tab"} depending on what actually happened.`,
+      answer: `Go to Operations. Start with ${joinReadableList(operationsEntryPoints) || "the matching operations tab"} depending on what actually happened. Use Restock Inventory only when adding new stock or correcting a count.`,
     },
     {
       title: "Money was spent, paid, billed, or collected",
@@ -258,14 +258,14 @@ const buildDailyRoutines = (
         supervisorActions.length ? `Record ${joinReadableList(supervisorActions)} as the day happens.` : null,
         supportActions.length ? `Add ${joinReadableList(supportActions)} if there is proof or context to keep.` : null,
         hasModule(enabledModules, "inventory")
-          ? "Check that stock in FarmFlow still matches stock in the estate."
+          ? "Use Restock Inventory when new stock arrives or a count needs correcting — not for every daily check."
           : null,
       ]),
     },
     {
       title: "Finance/admin operator",
       steps: compact([
-        hasModule(enabledModules, "accounts") ? "Record labor, expenses, and attendance in Accounts." : null,
+        hasModule(enabledModules, "accounts") ? "Use the 'Record Labor' or 'Record Expense' shortcuts on the home screen to jump straight into Accounts, or open Accounts directly from the Finance section." : null,
         hasModule(enabledModules, "billing") ? "Raise invoices in Billing when needed." : null,
         hasModule(enabledModules, "receivables") ? "Track unpaid money in Receivables." : null,
         hasModule(enabledModules, "balance-sheet")
@@ -318,9 +318,9 @@ const buildManualGroups = (
   const operationsItems = compact([
     hasModule(enabledModules, "inventory")
       ? {
-          name: "Inventory",
-          whatItIs: "Your stock book. It tracks what you have and where it is.",
-          openItWhen: "Stock is added, moved, counted, corrected, or reviewed against transaction history.",
+          name: "Restock Inventory",
+          whatItIs: "Your restocking record. Use it when new stock arrives or a count needs correcting — not for daily tracking.",
+          openItWhen: "Stock is being added, a quantity is wrong, or you need to review what is currently on hand.",
           doneLooksLike: "FarmFlow stock matches the real estate stock closely enough to trust decisions.",
         }
       : null,
@@ -386,9 +386,9 @@ const buildManualGroups = (
     hasModule(enabledModules, "accounts")
       ? {
           name: "Accounts",
-          whatItIs: "Labor, other expenses, attendance, and activity codes.",
+          whatItIs: "Labor, other expenses, attendance, and activity codes. Tap 'Cost Patterns' to reveal a spending analysis when you need it.",
           openItWhen: "People worked, money was spent, or you need to maintain accounting categories.",
-          doneLooksLike: "Costs are captured with enough detail to explain the season and labor use.",
+          doneLooksLike: "Costs are captured with enough detail to explain the season and labor use. Cost Patterns shows where money is going without cluttering the entry view.",
         }
       : null,
     hasModule(enabledModules, "balance-sheet")
@@ -516,6 +516,12 @@ const buildManualGroups = (
       icon: LayoutDashboard,
       badgeClassName: "border-emerald-200 bg-emerald-50 text-emerald-700",
       items: [
+        {
+          name: "Workspace Navigator",
+          whatItIs: "The home screen that organises the workspace into Finance, Operations, and Restock Inventory. Quick-action shortcuts let you jump straight to Record Labor or Record Expense without navigating manually.",
+          openItWhen: "You are starting a session, switching between sections, or want to use a quick shortcut.",
+          doneLooksLike: "You reach the right tab in one or two taps from the home screen.",
+        },
         {
           name: "Dashboard",
           whatItIs: "The main summary screen. It shows what is happening and what needs attention.",

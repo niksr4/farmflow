@@ -6229,14 +6229,11 @@ export default function InventorySystem() {
                 )
               })}
             </div>
-            {!isMobile && activeTabGroup !== "dashboard" && activeSectionTabs.length > 0 && (
+            </>
+            )}
+            {!isMobile && activeTab !== DASHBOARD_LAUNCHER_TAB && activeTabGroup !== "dashboard" && activeSectionTabs.length > 0 && (
               <TabsList
-                className={cn(
-                  "h-auto rounded-2xl border border-black/10 bg-neutral-50/90 p-2 shadow-inner",
-                  isMobile
-                    ? "flex-nowrap items-center gap-2 overflow-x-auto whitespace-nowrap no-scrollbar snap-x snap-mandatory [&>*]:shrink-0"
-                    : "flex-wrap items-center gap-2",
-                )}
+                className="h-auto flex-wrap items-center gap-2 rounded-2xl border border-black/10 bg-neutral-50/90 p-2 shadow-inner"
               >
                 {activeSectionTabs.map((tab) => {
                   const TabIcon = tab.icon
@@ -6244,10 +6241,7 @@ export default function InventorySystem() {
                     <TabsTrigger
                       key={tab.value}
                       value={tab.value}
-                      className={cn(
-                        "min-h-11 rounded-lg border border-black/10 bg-white/90 px-4 text-sm font-semibold data-[state=active]:border-emerald-600 data-[state=active]:bg-emerald-600 data-[state=active]:text-white data-[state=active]:shadow-[0_10px_20px_-14px_rgba(5,150,105,0.9)]",
-                        isMobile ? "min-h-12 snap-start touch-manipulation" : "",
-                      )}
+                      className="min-h-11 rounded-lg border border-black/10 bg-white/90 px-4 text-sm font-semibold data-[state=active]:border-emerald-600 data-[state=active]:bg-emerald-600 data-[state=active]:text-white data-[state=active]:shadow-[0_10px_20px_-14px_rgba(5,150,105,0.9)]"
                     >
                       <TabIcon className="mr-2 h-4 w-4" />
                       {tab.label}
@@ -6255,8 +6249,6 @@ export default function InventorySystem() {
                   )
                 })}
               </TabsList>
-            )}
-            </>
             )}
             </div>
           )}
