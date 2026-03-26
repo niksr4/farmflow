@@ -22,7 +22,6 @@ import {
   type TenantUiVariant,
 } from "@/lib/tenant-experience"
 import { roleLabel } from "@/lib/roles"
-import TaskGuideCard from "@/components/task-guide-card"
 import WorkspacePageShell from "@/components/workspace-page-shell"
 import { AuditLogSection, PrivacySection } from "@/components/tenant-settings/governance-sections"
 import {
@@ -858,15 +857,15 @@ export default function TenantSettingsPage() {
     { id: "data-import", label: "Import" },
     { id: "thresholds", label: "Thresholds" },
     { id: "locations", label: "Locations" },
-    { id: "tenant-users", label: "People" },
+    { id: "tenant-users", label: "Users" },
   ]
   if (canManageTenantExperience) {
     sectionLinks.push({ id: "tenant-experience", label: "Experience" })
   }
   if (isOwner) {
     sectionLinks.push({ id: "tenant-modules", label: "Modules" })
-    sectionLinks.push({ id: "user-module-overrides", label: "Access" })
-    sectionLinks.push({ id: "audit-log", label: "Audit history" })
+    sectionLinks.push({ id: "user-module-overrides", label: "User Access" })
+    sectionLinks.push({ id: "audit-log", label: "Audit" })
   }
   if (privacyFeatureEnabled) {
     sectionLinks.push({ id: "privacy-dpdp", label: "Privacy" })
@@ -917,21 +916,6 @@ export default function TenantSettingsPage() {
         roleDisplay={roleDisplay}
         sectionLinks={sectionLinks}
         onLogout={logout}
-      />
-
-      <TaskGuideCard
-        eyebrow="Admin guide"
-        title="Most estate admins only need a few settings first"
-        description="Start simple. Handle estate basics, locations, people, and access before changing deeper options."
-        bullets={[
-          "Use Estate and Locations first so day-to-day records land in the right place.",
-          "Use People when adding supervisors or data-entry staff.",
-          "Use Access only when one person should see less than the rest of the estate.",
-        ]}
-        tip={isOwner
-          ? "Modules, audit history, and experience controls are advanced tools. Most estates should not change them every day."
-          : "If you are unsure, stop after Estate, Locations, and People. Those sections cover most day-to-day admin work."}
-        tone="settings"
       />
 
       {isOwner && <OwnerToolsSection />}

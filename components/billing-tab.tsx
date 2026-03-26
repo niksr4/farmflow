@@ -1,6 +1,6 @@
 "use client"
 
-import { useCallback, useEffect, useMemo, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import Link from "next/link"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -13,8 +13,8 @@ import { GST_STATES, computeInvoiceTotals } from "@/lib/billing"
 import { formatDateOnly } from "@/lib/date-utils"
 import { formatCurrency } from "@/lib/format"
 import { useAuth } from "@/hooks/use-auth"
-import { toast } from "@/components/ui/use-toast"
 import TaskGuideCard from "@/components/task-guide-card"
+import { toast } from "@/components/ui/use-toast"
 
 type LineItem = {
   description: string
@@ -85,21 +85,6 @@ export default function BillingTab({ showDataToolsControls = false }: BillingTab
     placeOfSupply,
     billToState,
   ])
-  const billingSaveBlockers = useMemo(() => {
-    const blockers: string[] = []
-    if (!billToName.trim()) blockers.push("Add the customer name.")
-    if (!supplyState) blockers.push("Select your GST supply state.")
-    if (!(placeOfSupply || billToState)) blockers.push("Choose place of supply or bill-to state.")
-    if (!items.length || items.some((item) => !item.description.trim())) blockers.push("Add a description for every line item.")
-    if (items.some((item) => Number(item.quantity || 0) <= 0)) blockers.push("Each line item needs quantity above 0.")
-    return blockers
-  }, [billToName, billToState, items, placeOfSupply, supplyState])
-  const invoiceReady = billingSaveBlockers.length === 0
-  const scrollToEntryForm = useCallback(() => {
-    if (typeof window !== "undefined") {
-      window.scrollTo({ top: 0, behavior: "smooth" })
-    }
-  }, [])
 
   const loadInvoices = async () => {
     setLoading(true)
@@ -111,11 +96,7 @@ export default function BillingTab({ showDataToolsControls = false }: BillingTab
       }
       setInvoices(data.invoices || [])
     } catch (error: any) {
-      toast({
-        title: "Billing list not loaded",
-        description: error.message || "Invoices could not be loaded. No billing data was changed.",
-        variant: "destructive",
-      })
+      toast({ title: "Billing error", description: error.message || "Unable to load invoices", variant: "destructive" })
     } finally {
       setLoading(false)
     }
@@ -151,12 +132,16 @@ export default function BillingTab({ showDataToolsControls = false }: BillingTab
   }
 
   const submitInvoice = async () => {
-    if (billingSaveBlockers.length > 0) {
-      toast({
-        title: "Draft not saved",
-        description: billingSaveBlockers[0],
-        variant: "destructive",
-      })
+    if (!billToName.trim()) {
+      toast({ title: "Billing", description: "Bill-to name is required.", variant: "destructive" })
+      return
+    }
+    if (!supplyState || !(placeOfSupply || billToState)) {
+      toast({ title: "Billing", description: "Supply state and place of supply are required.", variant: "destructive" })
+      return
+    }
+    if (!items.length || items.some((item) => !item.description.trim())) {
+      toast({ title: "Billing", description: "Each line item needs a description.", variant: "destructive" })
       return
     }
 
@@ -189,15 +174,11 @@ export default function BillingTab({ showDataToolsControls = false }: BillingTab
       if (!response.ok || !data.success) {
         throw new Error(data.error || "Failed to create invoice")
       }
-      toast({ title: "Invoice created", description: "Draft invoice saved. You can review it below." })
+      toast({ title: "Invoice created", description: "Draft invoice saved." })
       resetForm()
       await loadInvoices()
     } catch (error: any) {
-      toast({
-        title: "Draft not saved",
-        description: error.message || "The invoice draft could not be saved.",
-        variant: "destructive",
-      })
+      toast({ title: "Billing error", description: error.message || "Failed to create invoice", variant: "destructive" })
     } finally {
       setIsSubmitting(false)
     }
@@ -218,11 +199,13 @@ export default function BillingTab({ showDataToolsControls = false }: BillingTab
       anchor.click()
       window.URL.revokeObjectURL(url)
     } catch (error: any) {
-      toast({
-        title: "Export failed",
-        description: error.message || "The invoice export could not be generated. The stored invoice was not changed.",
-        variant: "destructive",
-      })
+      toast({ title: "Export error", description: error.message || "Failed to export invoice", variant: "destructive" })
+    }
+  }
+
+  const scrollToEntryForm = () => {
+    if (typeof window !== "undefined") {
+      window.scrollTo({ top: 0, behavior: "smooth" })
     }
   }
 
@@ -250,7 +233,6 @@ export default function BillingTab({ showDataToolsControls = false }: BillingTab
           </>
         }
       />
-
       <Card>
         <CardHeader>
           <CardTitle>GST Billing & Invoicing</CardTitle>
@@ -259,41 +241,6 @@ export default function BillingTab({ showDataToolsControls = false }: BillingTab
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-6">
-          <div className="grid gap-3 lg:grid-cols-[1fr_0.8fr]">
-            <div className="rounded-xl border border-amber-200 bg-amber-50/70 p-4">
-              <div className="flex flex-wrap items-center gap-2">
-                <Badge variant="outline" className={invoiceReady ? "border-emerald-200 bg-white text-emerald-700" : "border-amber-200 bg-white text-amber-700"}>
-                  {invoiceReady ? "Ready to save" : `${billingSaveBlockers.length} item${billingSaveBlockers.length === 1 ? "" : "s"} to finish`}
-                </Badge>
-                <Badge variant="outline" className="border-slate-200 bg-white text-slate-700">
-                  Draft only
-                </Badge>
-              </div>
-              <p className="mt-3 text-sm text-slate-700">
-                Most billing mistakes come from wrong state selection or vague line descriptions. Fix those before saving.
-              </p>
-              {!invoiceReady ? (
-                <ul className="ml-4 mt-3 list-disc space-y-1 text-xs text-slate-700">
-                  {billingSaveBlockers.slice(0, 4).map((blocker) => (
-                    <li key={blocker}>{blocker}</li>
-                  ))}
-                </ul>
-              ) : (
-                <p className="mt-3 text-xs text-emerald-700">
-                  Required fields look complete enough for a first draft. Review totals once before saving.
-                </p>
-              )}
-            </div>
-            <div className="rounded-xl border border-slate-200 bg-slate-50/80 p-4 text-sm text-slate-700">
-              <p className="font-medium text-slate-900">What happens after save</p>
-              <ul className="ml-4 mt-3 list-disc space-y-1 text-xs text-slate-600">
-                <li>FarmFlow stores the invoice as a draft record.</li>
-                <li>The invoice appears in the recent invoices list below.</li>
-                <li>No IRN or government submission happens automatically yet.</li>
-              </ul>
-            </div>
-          </div>
-
           <div className="grid gap-4 md:grid-cols-2">
             <div className="space-y-2">
               <Label>Bill-to name</Label>
@@ -469,7 +416,7 @@ export default function BillingTab({ showDataToolsControls = false }: BillingTab
           </div>
 
           <div className="flex flex-col sm:flex-row gap-3">
-            <Button onClick={submitInvoice} disabled={isSubmitting || !canEdit || !invoiceReady}>
+            <Button onClick={submitInvoice} disabled={isSubmitting || !canEdit}>
               {isSubmitting ? "Saving..." : "Create Draft Invoice"}
             </Button>
             <Button variant="outline" onClick={resetForm}>
@@ -493,23 +440,7 @@ export default function BillingTab({ showDataToolsControls = false }: BillingTab
           {loading ? (
             <div className="text-sm text-muted-foreground">Loading invoices...</div>
           ) : invoices.length === 0 ? (
-            <div className="rounded-2xl border border-dashed border-amber-200 bg-amber-50/50 p-5 text-sm">
-              <p className="font-semibold text-foreground">No invoices created yet</p>
-              <p className="mt-2 text-muted-foreground">
-                Start when a real sale needs a buyer-facing invoice. Fill customer details, review the GST split, then save the draft.
-              </p>
-              <ul className="ml-4 mt-3 list-disc space-y-1 text-muted-foreground">
-                <li>Enter the buyer name and state details first.</li>
-                <li>Add one line item with a clear description and price.</li>
-                <li>Check the total once, then save the draft invoice.</li>
-              </ul>
-              <div className="mt-4 flex flex-wrap gap-2">
-                <Button onClick={scrollToEntryForm}>Create first draft</Button>
-                <Button asChild variant="outline" className="bg-white">
-                  <Link href="/manuals">Open manuals</Link>
-                </Button>
-              </div>
-            </div>
+            <div className="text-sm text-muted-foreground">No invoices created yet.</div>
           ) : (
             <div className="rounded-md border">
               <Table>

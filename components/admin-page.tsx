@@ -1,8 +1,11 @@
 "use client"
 
+import Link from "next/link"
 import { useCallback, useEffect, useMemo, useState } from "react"
+import { ArrowLeft, BookOpen } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 import { useAuth } from "@/hooks/use-auth"
+import { Button } from "@/components/ui/button"
 import {
   DEFAULT_TENANT_PLAN_ID,
   MODULES,
@@ -1051,6 +1054,21 @@ export default function AdminPage() {
 
   return (
     <div className="space-y-6">
+      <div className="flex flex-wrap items-center gap-2">
+        <Button asChild variant="outline" size="sm" className="bg-white/80">
+          <Link href="/dashboard" className="inline-flex items-center gap-2">
+            <ArrowLeft className="h-4 w-4" />
+            Back to Dashboard
+          </Link>
+        </Button>
+        <Button asChild variant="outline" size="sm" className="bg-white/80">
+          <Link href="/manuals" className="inline-flex items-center gap-2">
+            <BookOpen className="h-4 w-4" />
+            Open Manuals
+          </Link>
+        </Button>
+      </div>
+
       <ConsoleOverviewSection
         isOwner={isOwner}
         selectedTenant={selectedTenant}

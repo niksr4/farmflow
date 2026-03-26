@@ -117,5 +117,8 @@ describe("onboarding utils", () => {
     expect(
       normalizeOnboardingError(new Error('column "requires_guided_setup" does not exist')).message,
     ).toContain("scripts/65-user-guided-setup.sql")
+    expect(
+      normalizeOnboardingError(new Error('column "password_reset_required" does not exist')).message,
+    ).toContain("scripts/49-password-rotation.sql")
   })
 })
