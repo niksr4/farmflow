@@ -36,19 +36,19 @@ export async function GET(request: Request) {
     const offset = Math.max(Number.parseInt(offsetParam || "0", 10) || 0, 0)
 
     const params: any[] = [tenantContext.tenantId]
-    let whereClause = "tenant_id = $1"
+    let whereClause = "je.tenant_id = $1"
 
     if (date) {
       params.push(date)
-      whereClause += ` AND entry_date = $${params.length}::date`
+      whereClause += ` AND je.entry_date = $${params.length}::date`
     } else if (startDate && endDate) {
       params.push(startDate, endDate)
-      whereClause += ` AND entry_date >= $${params.length - 1}::date AND entry_date <= $${params.length}::date`
+      whereClause += ` AND je.entry_date >= $${params.length - 1}::date AND je.entry_date <= $${params.length}::date`
     }
 
     if (locationId) {
       params.push(locationId)
-      whereClause += ` AND location_id = $${params.length}`
+      whereClause += ` AND je.location_id = $${params.length}`
     }
 
     if (query) {
@@ -64,7 +64,7 @@ export async function GET(request: Request) {
       const searchClauses: string[] = []
       searchFields.forEach((field) => {
         params.push(`%${query}%`)
-        searchClauses.push(`COALESCE(${field}, '') ILIKE $${params.length}`)
+        searchClauses.push(`COALESCE(je.${field}, '') ILIKE $${params.length}`)
       })
       whereClause += ` AND (${searchClauses.join(" OR ")})`
     }
@@ -72,7 +72,7 @@ export async function GET(request: Request) {
     const countRows = await runTenantQuery(
       sql,
       tenantContext,
-      sql.query(`SELECT COUNT(*)::int AS count FROM journal_entries WHERE ${whereClause}`, params),
+      sql.query(`SELECT COUNT(*)::int AS count FROM journal_entries je WHERE ${whereClause}`, params),
     )
     const totalCount = Number(countRows?.[0]?.count) || 0
 
