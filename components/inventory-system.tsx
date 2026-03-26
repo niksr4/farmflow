@@ -249,12 +249,6 @@ export default function InventorySystem() {
   const [dataToolsDataset, setDataToolsDataset] = useState<ExportDatasetId>("processing")
   const [isExportingDataTools, setIsExportingDataTools] = useState(false)
   const [showDataToolsPanel, setShowDataToolsPanel] = useState(false)
-  const [navCollapsed, setNavCollapsed] = useState(false)
-  useEffect(() => {
-    const onScroll = () => setNavCollapsed(window.scrollY > 60)
-    window.addEventListener("scroll", onScroll, { passive: true })
-    return () => window.removeEventListener("scroll", onScroll)
-  }, [])
   const [accountsInitialTab, setAccountsInitialTab] = useState<"labor" | "expenses" | "attendance" | "activities" | undefined>(undefined)
   const [enabledModules, setEnabledModules] = useState<string[] | null>(null)
   const [currentPlanId, setCurrentPlanId] = useState<string | null>(null)
@@ -6119,7 +6113,7 @@ export default function InventorySystem() {
           </div>
         )}
         <Tabs value={activeTab} onValueChange={handleTabChange} className="w-full space-y-4">
-          {!isStandaloneMobileApp && !(navCollapsed && activeTab === DASHBOARD_LAUNCHER_TAB) && (
+          {!isStandaloneMobileApp && (
             <div
               className={cn(
                 "z-20 rounded-3xl border border-black/10 bg-gradient-to-br from-white/95 via-white to-neutral-100/80 shadow-[0_12px_30px_-24px_rgba(15,23,42,0.75)] backdrop-blur",
@@ -6140,7 +6134,7 @@ export default function InventorySystem() {
                 </Button>
               </div>
             )}
-            {!navCollapsed && (
+            {activeTab === DASHBOARD_LAUNCHER_TAB && (
             <>
             {isMobile && (
               <div className="flex items-center justify-between px-1">
