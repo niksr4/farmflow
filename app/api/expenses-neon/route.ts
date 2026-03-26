@@ -308,7 +308,7 @@ export async function POST(request: Request) {
             itemType: typeof it?.itemType === "string" ? it.itemType.trim() : "",
             quantity: Number.isFinite(Number(it?.quantity)) && Number(it?.quantity) > 0 ? Number(it.quantity) : 0,
           }))
-          .filter((it) => it.itemType && it.quantity > 0)
+          .filter((it: { itemType: string; quantity: number }) => it.itemType && it.quantity > 0)
       }
       // Legacy single-item fallback
       const itemType = typeof body.inventoryItemType === "string" ? body.inventoryItemType.trim() : ""
