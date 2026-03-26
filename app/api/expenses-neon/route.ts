@@ -42,7 +42,7 @@ async function tableHasInventoryLinkColumns() {
       AND table_name = 'expense_transactions'
       AND column_name IN ('inventory_item_type', 'inventory_quantity')
   `
-  return Number(rows?.[0]?.count) >= 2
+  return Number((rows as any[])?.[0]?.count) >= 2
 }
 
 async function fetchInventoryItemsForTenant(tenantId: string): Promise<Array<{ itemType: string; unit: string; quantity: number }>> {
@@ -448,7 +448,7 @@ export async function POST(request: Request) {
               AND item_type = ${inv.itemType}
             LIMIT 1
           `
-          const unit = String(itemRows?.[0]?.unit || "kg")
+          const unit = String((itemRows as any[])?.[0]?.unit || "kg")
           await accountsSql`
             INSERT INTO transaction_history (
               item_type,
