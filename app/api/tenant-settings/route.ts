@@ -20,6 +20,9 @@ import {
   sanitizeTenantUiVariant,
 } from "@/lib/tenant-experience"
 
+export const dynamic = "force-dynamic"
+export const revalidate = 0
+
 const DEFAULT_BAG_WEIGHT_KG = 50
 const MIN_BAG_WEIGHT_KG = 40
 const MAX_BAG_WEIGHT_KG = 70

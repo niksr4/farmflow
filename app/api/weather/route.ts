@@ -10,6 +10,9 @@ import { buildTenantWeatherQuery } from "@/lib/tenant-estate-profile"
 import { WEATHER_FORECAST_DAYS } from "@/lib/weather-guidance"
 import { DEFAULT_WEATHER_QUERY, normalizeWeatherLocationQuery } from "@/lib/weather-config"
 
+export const dynamic = "force-dynamic"
+export const revalidate = 0
+
 export async function GET(request: NextRequest) {
   try {
     const sessionUser = await requireModuleAccess("weather")

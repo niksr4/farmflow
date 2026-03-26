@@ -11,6 +11,8 @@ export interface ConsumableDeployment {
   amount: number
   notes: string
   user: string
+  inventoryItemType?: string | null
+  inventoryQuantity?: number | null
 }
 
 type ConsumablesDataOptions = {

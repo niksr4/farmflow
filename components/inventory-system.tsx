@@ -1,6 +1,7 @@
 "use client"
 
 import React, { useEffect, useState, useCallback, useMemo, useRef } from "react"
+import dynamic from "next/dynamic"
 import {
   Check,
   Download,
@@ -60,26 +61,6 @@ import { useStandaloneMode } from "@/hooks/use-standalone-mode"
 import { useAuth } from "@/hooks/use-auth"
 import { useTenantExperience } from "@/hooks/use-tenant-experience"
 import { useRouter, useSearchParams } from "next/navigation"
-import AiAnalysisCharts from "@/components/ai-analysis-charts"
-import AccountsPage from "@/components/accounts-page"
-import ActivityLogTab from "@/components/activity-log-tab"
-import DispatchTab from "@/components/dispatch-tab"
-import ProcessingTab from "@/components/processing-tab"
-import RainfallWeatherTab from "@/components/rainfall-weather-tab"
-import SalesTab from "@/components/sales-tab"
-import NewsTab from "@/components/news-tab"
-import SeasonDashboard from "@/components/season-dashboard"
-import CuringTab from "@/components/curing-tab"
-import QualityGradingTab from "@/components/quality-grading-tab"
-import BillingTab from "@/components/billing-tab"
-import ReceivablesTab from "@/components/receivables-tab"
-import BalanceSheetTab from "@/components/balance-sheet-tab"
-import JournalTab from "@/components/journal-tab"
-import ResourcesTab from "@/components/resources-tab"
-import PlantHealthTab from "@/components/plant-health-tab"
-import DocumentsTab from "@/components/documents-tab"
-import YieldForecastTab from "@/components/yield-forecast-tab"
-import { PepperTab } from "./pepper-tab"
 import OnboardingChecklist, { type OnboardingStep } from "@/components/onboarding-checklist"
 import Link from "next/link"
 import Image from "next/image"
@@ -114,7 +95,12 @@ import {
   PREVIEW_TENANT_COOKIE,
   UNASSIGNED_LABEL,
 } from "@/components/inventory-system/constants"
-import type { ExceptionSummaryAlert, IntelligenceBrief, LocationOption } from "@/components/inventory-system/types"
+import type {
+  ExceptionSummaryAlert,
+  IntelligenceBrief,
+  LocationOption,
+  WorkspaceBootstrapPayload,
+} from "@/components/inventory-system/types"
 import {
   buildTransactionDateFromInput,
   createDefaultTransaction,
@@ -139,6 +125,80 @@ import {
 import posthog from "posthog-js"
 
 const WRITE_QUEUE_STATUS_EVENT = "farmflow:write-queue-status"
+
+function TabPanelLoading({ label }: { label: string }) {
+  return (
+    <Card className="border border-dashed border-black/10 bg-white/80 shadow-none">
+      <CardContent className="flex min-h-[220px] items-center justify-center">
+        <div className="flex items-center gap-3 text-sm text-muted-foreground">
+          <Loader2 className="h-4 w-4 animate-spin" />
+          <span>Loading {label}...</span>
+        </div>
+      </CardContent>
+    </Card>
+  )
+}
+
+const AiAnalysisCharts = dynamic(() => import("@/components/ai-analysis-charts"), {
+  loading: () => <TabPanelLoading label="AI analysis" />,
+})
+const AccountsPage = dynamic(() => import("@/components/accounts-page"), {
+  loading: () => <TabPanelLoading label="Accounts" />,
+})
+const ActivityLogTab = dynamic(() => import("@/components/activity-log-tab"), {
+  loading: () => <TabPanelLoading label="Activity log" />,
+})
+const DispatchTab = dynamic(() => import("@/components/dispatch-tab"), {
+  loading: () => <TabPanelLoading label="Dispatch" />,
+})
+const ProcessingTab = dynamic(() => import("@/components/processing-tab"), {
+  loading: () => <TabPanelLoading label="Pulping" />,
+})
+const RainfallWeatherTab = dynamic(() => import("@/components/rainfall-weather-tab"), {
+  loading: () => <TabPanelLoading label="Rainfall and weather" />,
+})
+const SalesTab = dynamic(() => import("@/components/sales-tab"), {
+  loading: () => <TabPanelLoading label="Sales" />,
+})
+const NewsTab = dynamic(() => import("@/components/news-tab"), {
+  loading: () => <TabPanelLoading label="News" />,
+})
+const SeasonDashboard = dynamic(() => import("@/components/season-dashboard"), {
+  loading: () => <TabPanelLoading label="Season view" />,
+})
+const CuringTab = dynamic(() => import("@/components/curing-tab"), {
+  loading: () => <TabPanelLoading label="Curing" />,
+})
+const QualityGradingTab = dynamic(() => import("@/components/quality-grading-tab"), {
+  loading: () => <TabPanelLoading label="Quality" />,
+})
+const BillingTab = dynamic(() => import("@/components/billing-tab"), {
+  loading: () => <TabPanelLoading label="Billing" />,
+})
+const ReceivablesTab = dynamic(() => import("@/components/receivables-tab"), {
+  loading: () => <TabPanelLoading label="Receivables" />,
+})
+const BalanceSheetTab = dynamic(() => import("@/components/balance-sheet-tab"), {
+  loading: () => <TabPanelLoading label="Balance sheet" />,
+})
+const JournalTab = dynamic(() => import("@/components/journal-tab"), {
+  loading: () => <TabPanelLoading label="Journal" />,
+})
+const ResourcesTab = dynamic(() => import("@/components/resources-tab"), {
+  loading: () => <TabPanelLoading label="Resources" />,
+})
+const PlantHealthTab = dynamic(() => import("@/components/plant-health-tab"), {
+  loading: () => <TabPanelLoading label="Plant health" />,
+})
+const DocumentsTab = dynamic(() => import("@/components/documents-tab"), {
+  loading: () => <TabPanelLoading label="Documents" />,
+})
+const YieldForecastTab = dynamic(() => import("@/components/yield-forecast-tab"), {
+  loading: () => <TabPanelLoading label="Yield forecast" />,
+})
+const PepperTab = dynamic(() => import("./pepper-tab").then((module) => module.PepperTab), {
+  loading: () => <TabPanelLoading label="Pepper processing" />,
+})
 
 type WriteQueueBlockedEntry = {
   id: number
@@ -190,6 +250,7 @@ export default function InventorySystem() {
   const [isExportingDataTools, setIsExportingDataTools] = useState(false)
   const [showDataToolsPanel, setShowDataToolsPanel] = useState(false)
   const [enabledModules, setEnabledModules] = useState<string[] | null>(null)
+  const [currentPlanId, setCurrentPlanId] = useState<string | null>(null)
   const [isModulesLoading, setIsModulesLoading] = useState(false)
   const [hasResolvedModules, setHasResolvedModules] = useState(false)
 
@@ -478,6 +539,8 @@ export default function InventorySystem() {
   const canShowProcessingWorkspace = canShowProcessing || canShowPepper
   const processingWorkspaceLabel = canShowProcessing ? "Pulping" : "Pepper Processing"
   const processingWorkspaceIcon = canShowProcessing ? Factory : Leaf
+  const shouldLoadHomeMetrics = activeTab === "home"
+  const shouldLoadExceptionSummary = activeTab === "home" || activeTab === "season"
   const resolvedProcessingWorkspaceView =
     processingWorkspaceView === "pepper" && canShowPepper
       ? "pepper"
@@ -539,6 +602,35 @@ export default function InventorySystem() {
     document.cookie = `${PREVIEW_TENANT_COOKIE}=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT; SameSite=Lax`
   }, [isPreviewMode, previewTenantId])
 
+  const loadWorkspaceBootstrap = useCallback(async () => {
+    if (!tenantId || isOwner || isPreviewMode) {
+      return false
+    }
+
+    setHasResolvedModules(false)
+    setIsModulesLoading(true)
+    let resolved = false
+    try {
+      const response = await fetch("/api/dashboard/bootstrap", { cache: "no-store" })
+      const data = (await response.json()) as { success?: boolean; error?: string } & WorkspaceBootstrapPayload
+      if (!response.ok || !data.success) {
+        throw new Error(data.error || "Failed to load workspace bootstrap")
+      }
+
+      setEnabledModules(Array.isArray(data.modules) ? data.modules.map((moduleId) => String(moduleId)) : null)
+      setLocations(Array.isArray(data.locations) ? data.locations : [])
+      setCurrentPlanId(data.planId ? String(data.planId) : null)
+      resolved = true
+      return true
+    } catch (error) {
+      console.error("Failed to load workspace bootstrap:", error)
+      return false
+    } finally {
+      setIsModulesLoading(false)
+      setHasResolvedModules(resolved)
+    }
+  }, [isOwner, isPreviewMode, tenantId])
+
   const loadTenantModules = useCallback(async () => {
     if (isPreviewMode) {
       setHasResolvedModules(false)
@@ -598,10 +690,6 @@ export default function InventorySystem() {
     }
   }, [isOwner, isPreviewMode, previewTenantId, tenantId])
 
-  useEffect(() => {
-    loadTenantModules()
-  }, [loadTenantModules])
-
   const loadLocations = useCallback(async () => {
     if (!tenantId) return
     try {
@@ -619,8 +707,27 @@ export default function InventorySystem() {
   }, [isPreviewMode, previewTenantId, tenantId])
 
   useEffect(() => {
-    loadLocations()
-  }, [loadLocations])
+    if (!tenantId) return
+
+    let cancelled = false
+
+    const loadInitialWorkspaceState = async () => {
+      if (!isOwner && !isPreviewMode) {
+        const bootstrapped = await loadWorkspaceBootstrap()
+        if (bootstrapped || cancelled) {
+          return
+        }
+      }
+
+      await Promise.allSettled([loadTenantModules(), loadLocations()])
+    }
+
+    void loadInitialWorkspaceState()
+
+    return () => {
+      cancelled = true
+    }
+  }, [isOwner, isPreviewMode, loadLocations, loadTenantModules, loadWorkspaceBootstrap, tenantId])
 
   useEffect(() => {
     if (!tenantId) return
@@ -1551,7 +1658,9 @@ export default function InventorySystem() {
     const totalBookedRevenue = salesHeroTotals.totalRevenue + otherSalesHeroTotals.totalRevenue
     const totalBookedRevenueLoading = salesHeroTotals.loading || otherSalesHeroTotals.loading
     const totalBookedRevenueError = salesHeroTotals.error || otherSalesHeroTotals.error
-    const totalCostValue = accountsTotals.grandTotal + resolvedInventoryValue
+    // Inventory value is an asset, not a P&L expense — exclude it from booked outflow.
+    // Consumable usage costs flow through expense_transactions in Accounts instead.
+    const totalCostValue = accountsTotals.grandTotal
     const totalCostLoading = accountsTotalsLoading || loading
     const balanceNetBooked = totalBookedRevenue - totalCostValue
     const balanceLivePosition = balanceNetBooked + receivablesHeroTotals.totalOutstanding
@@ -3239,6 +3348,7 @@ export default function InventorySystem() {
       setIntelligenceError(null)
       return
     }
+    if (!shouldLoadHomeMetrics) return
     let ignore = false
 
     const loadIntelligenceBrief = async () => {
@@ -3290,7 +3400,7 @@ export default function InventorySystem() {
     return () => {
       ignore = true
     }
-  }, [canShowIntelligence, currentFiscalYear.endDate, currentFiscalYear.startDate, effectiveRole, tenantId])
+  }, [canShowIntelligence, currentFiscalYear.endDate, currentFiscalYear.startDate, effectiveRole, shouldLoadHomeMetrics, tenantId])
 
   const commandStripItems = useMemo(() => {
     const processingTotalKg = processingTotals.arabicaKg + processingTotals.robustaKg
@@ -3759,6 +3869,7 @@ export default function InventorySystem() {
 
   useEffect(() => {
     if (!tenantId || !canShowProcessing) return
+    if (!shouldLoadHomeMetrics) return
     let ignore = false
 
     const loadProcessingTotals = async () => {
@@ -3812,10 +3923,11 @@ export default function InventorySystem() {
     return () => {
       ignore = true
     }
-  }, [tenantId, canShowProcessing])
+  }, [tenantId, canShowProcessing, shouldLoadHomeMetrics])
 
   useEffect(() => {
     if (!tenantId || !canShowDispatch) return
+    if (!shouldLoadHomeMetrics) return
     let ignore = false
 
     const loadDispatchHeroTotals = async () => {
@@ -3866,10 +3978,11 @@ export default function InventorySystem() {
     return () => {
       ignore = true
     }
-  }, [tenantId, canShowDispatch])
+  }, [tenantId, canShowDispatch, shouldLoadHomeMetrics])
 
   useEffect(() => {
     if (!tenantId || !canShowSales) return
+    if (!shouldLoadHomeMetrics) return
     let ignore = false
 
     const loadSalesHeroTotals = async () => {
@@ -3921,7 +4034,7 @@ export default function InventorySystem() {
     return () => {
       ignore = true
     }
-  }, [tenantId, canShowSales])
+  }, [tenantId, canShowSales, shouldLoadHomeMetrics])
 
   useEffect(() => {
     if (!tenantId || !canShowOtherSales) {
@@ -3933,6 +4046,7 @@ export default function InventorySystem() {
       })
       return
     }
+    if (!shouldLoadHomeMetrics) return
 
     let ignore = false
 
@@ -3967,10 +4081,11 @@ export default function InventorySystem() {
     return () => {
       ignore = true
     }
-  }, [tenantId, canShowOtherSales])
+  }, [tenantId, canShowOtherSales, shouldLoadHomeMetrics])
 
   useEffect(() => {
     if (!tenantId || !canShowReceivables) return
+    if (!shouldLoadHomeMetrics) return
     let ignore = false
 
     const loadReceivablesHeroTotals = async () => {
@@ -4013,10 +4128,11 @@ export default function InventorySystem() {
     return () => {
       ignore = true
     }
-  }, [canShowReceivables, isPreviewMode, previewTenantId, tenantId])
+  }, [canShowReceivables, isPreviewMode, previewTenantId, shouldLoadHomeMetrics, tenantId])
 
   useEffect(() => {
     if (!tenantId || !canShowCuring) return
+    if (!shouldLoadHomeMetrics) return
     let ignore = false
 
     const loadCuringHeroTotals = async () => {
@@ -4094,10 +4210,11 @@ export default function InventorySystem() {
     return () => {
       ignore = true
     }
-  }, [tenantId, canShowCuring, currentFiscalYear.endDate, currentFiscalYear.startDate])
+  }, [tenantId, canShowCuring, currentFiscalYear.endDate, currentFiscalYear.startDate, shouldLoadHomeMetrics])
 
   useEffect(() => {
     if (!tenantId || !canShowQuality) return
+    if (!shouldLoadHomeMetrics) return
     let ignore = false
 
     const loadQualityHeroTotals = async () => {
@@ -4177,10 +4294,11 @@ export default function InventorySystem() {
     return () => {
       ignore = true
     }
-  }, [tenantId, canShowQuality, currentFiscalYear.endDate, currentFiscalYear.startDate])
+  }, [tenantId, canShowQuality, currentFiscalYear.endDate, currentFiscalYear.startDate, shouldLoadHomeMetrics])
 
   useEffect(() => {
     if (!tenantId || !canShowPepper) return
+    if (!shouldLoadHomeMetrics) return
     let ignore = false
 
     const loadPepperHeroTotals = async () => {
@@ -4240,10 +4358,11 @@ export default function InventorySystem() {
     return () => {
       ignore = true
     }
-  }, [tenantId, canShowPepper, currentFiscalYear.endDate, currentFiscalYear.startDate])
+  }, [tenantId, canShowPepper, currentFiscalYear.endDate, currentFiscalYear.startDate, shouldLoadHomeMetrics])
 
   useEffect(() => {
     if (!tenantId || !canShowRainfall) return
+    if (!shouldLoadHomeMetrics) return
     let ignore = false
 
     const loadRainfallHeroTotals = async () => {
@@ -4296,10 +4415,10 @@ export default function InventorySystem() {
     return () => {
       ignore = true
     }
-  }, [tenantId, canShowRainfall, currentFiscalYear.endDate, currentFiscalYear.startDate])
+  }, [tenantId, canShowRainfall, currentFiscalYear.endDate, currentFiscalYear.startDate, shouldLoadHomeMetrics])
 
   useEffect(() => {
-    if (!canShowSeason) return
+    if (!canShowSeason || !shouldLoadExceptionSummary) return
     let isActive = true
     const loadExceptions = async () => {
       setExceptionsLoading(true)
@@ -4346,7 +4465,7 @@ export default function InventorySystem() {
     return () => {
       isActive = false
     }
-  }, [canShowSeason])
+  }, [canShowSeason, shouldLoadExceptionSummary])
 
   const inferBriefTabFromText = useCallback(
     (input: string) => {
@@ -5220,7 +5339,7 @@ export default function InventorySystem() {
                     <Info className="h-3 w-3" />
                   </button>
                 </TooltipTrigger>
-                <TooltipContent>Restocking adds inventory, depleting records usage.</TooltipContent>
+                <TooltipContent>Restocking adds stock when goods arrive. Use Depleting only for losses, spillage, or corrections — regular usage should be recorded as an expense in Accounts.</TooltipContent>
               </Tooltip>
             </TooltipProvider>
           </div>
@@ -5232,18 +5351,24 @@ export default function InventorySystem() {
             className="flex flex-col gap-3 rounded-xl border border-black/5 bg-neutral-50/70 p-3 sm:flex-row sm:items-center"
           >
             <div className="flex items-center space-x-3">
-              <RadioGroupItem value="Depleting" id="depleting" className="h-5 w-5" />
-              <Label htmlFor="depleting" className="text-sm">
-                Depleting
+              <RadioGroupItem value="Restocking" id="restocking" className="h-5 w-5" />
+              <Label htmlFor="restocking" className="text-sm">
+                Restocking <span className="text-neutral-500 font-normal">(goods received)</span>
               </Label>
             </div>
             <div className="flex items-center space-x-3">
-              <RadioGroupItem value="Restocking" id="restocking" className="h-5 w-5" />
-              <Label htmlFor="restocking" className="text-sm">
-                Restocking
+              <RadioGroupItem value="Depleting" id="depleting" className="h-5 w-5" />
+              <Label htmlFor="depleting" className="text-sm">
+                Depleting <span className="text-neutral-500 font-normal">(losses &amp; corrections)</span>
               </Label>
             </div>
           </RadioGroup>
+          {newTransaction?.transaction_type !== "restock" && (
+            <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+              Recording regular consumable usage? Add it as an expense in{" "}
+              <strong>Accounts → Other Expenses</strong> instead — the inventory level updates automatically and the cost flows into your P&amp;L.
+            </p>
+          )}
         </div>
 
         <div className="space-y-2">
@@ -6889,7 +7014,7 @@ export default function InventorySystem() {
                   <CardDescription>
                     {resolvedInventoryWorkspaceView === "transactions"
                       ? "Review and correct movement history without leaving Inventory."
-                      : "Stock levels, movement shortcuts, and item drill-downs in one place."}
+                      : "Asset tracker — restock here when goods arrive. Record consumable usage as an expense in Accounts; the inventory level updates automatically."}
                   </CardDescription>
                 </CardHeader>
                 <CardContent className="grid gap-4 lg:grid-cols-[1.6fr_1fr]">
@@ -6956,7 +7081,7 @@ export default function InventorySystem() {
                           <h2 className="text-base font-semibold text-neutral-900 flex items-center">
                             <List className="mr-2 h-5 w-5 text-emerald-600" /> Current Inventory Levels
                           </h2>
-                          <p className="text-xs text-neutral-500">Totals for {selectedLocationLabel}.</p>
+                          <p className="text-xs text-neutral-500">Totals for {selectedLocationLabel}. Stock value shown here is not included in P&amp;L.</p>
                         </div>
                         <div className="flex flex-wrap gap-2">
                           {showDataToolsControls && (

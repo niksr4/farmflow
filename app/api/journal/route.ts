@@ -5,6 +5,9 @@ import { normalizeTenantContext, runTenantQuery } from "@/lib/server/tenant-db"
 import { canDeleteModule, canWriteModule } from "@/lib/permissions"
 import { logAuditEvent } from "@/lib/server/audit-log"
 
+export const dynamic = "force-dynamic"
+export const revalidate = 0
+
 const isMissingRelation = (error: unknown, relation: string) => {
   const message = String((error as Error)?.message || error)
   return message.includes(`relation \"${relation}\" does not exist`)

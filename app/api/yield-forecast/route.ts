@@ -4,6 +4,9 @@ import { requireModuleAccess, isModuleAccessError } from "@/lib/server/module-ac
 import { normalizeTenantContext, runTenantQueries, runTenantQuery } from "@/lib/server/tenant-db"
 import { getCurrentFiscalYear } from "@/lib/fiscal-year-utils"
 
+export const dynamic = "force-dynamic"
+export const revalidate = 0
+
 const DAY_MS = 24 * 60 * 60 * 1000
 const DEFAULT_BAG_WEIGHT_KG = 50
 const MAX_FORECAST_RANGE_DAYS = 400

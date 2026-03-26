@@ -1,9 +1,12 @@
 import { buildAssistantWorkspaceContextSummary, sanitizeAssistantMessages } from "@/lib/ai-assistant"
 import { buildRateLimitHeaders, checkRateLimit } from "@/lib/rate-limit"
 import { buildTenantAiDataSummary } from "@/lib/server/ai-analysis"
-import { fetchWithTimeout } from "@/lib/server/http"
+import { getClaudeClient, isClaudeConfigured, extractClaudeText, CLAUDE_HAIKU } from "@/lib/server/claude"
 import { requireModuleAccess, isModuleAccessError } from "@/lib/server/module-access"
 import { logServerError } from "@/lib/server/safe-logging"
+
+export const dynamic = "force-dynamic"
+export const revalidate = 0
 
 export async function POST(req: Request) {
   try {
@@ -38,53 +41,35 @@ export async function POST(req: Request) {
       role: sessionUser.role,
     })
 
-    const groqApiKey = String(process.env.GROQ_API_KEY || "").trim()
-    if (!groqApiKey) {
+    if (!isClaudeConfigured()) {
       return Response.json({ success: false, error: "AI assistant is not configured" }, { status: 503, headers: rateHeaders })
     }
 
-    const groqResponse = await fetchWithTimeout(
-      "https://api.groq.com/openai/v1/chat/completions",
-      {
-        method: "POST",
-        timeoutMs: 18_000,
-        headers: {
-          Authorization: `Bearer ${groqApiKey}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          model: "llama-3.3-70b-versatile",
-          messages: [
-            {
-              role: "system",
-              content:
-                "You are FarmFlow Assistant, a concise operations guide for coffee estates. Answer only from the tenant data and workspace guidance provided. Help users understand their data, explain discrepancies, and point them to the exact FarmFlow workspace or button they should use. If data is missing, say so plainly. Do not invent numbers or hidden features. Keep answers practical and easy to follow.",
-            },
-            {
-              role: "user",
-              content: `Grounding context for the current tenant:
+    const systemPrompt = `You are FarmFlow Assistant, a concise operations guide for coffee estates. Answer only from the tenant data and workspace guidance provided. Help users understand their data, explain discrepancies, and point them to the exact FarmFlow workspace or button they should use. If data is missing, say so plainly. Do not invent numbers or hidden features. Keep answers practical and easy to follow.`
+
+    const groundingMessage = `Grounding context for the current tenant:
 
 ${dataSummary}
-
 ${workspaceContextSummary ? `\n${workspaceContextSummary}\n` : ""}
+Treat the tenant data above as the working dataset for ${fiscalYearLabel}. Use the exact workspace labels from the navigation guidance when telling the user where to go.`
 
-Treat the tenant data above as the working dataset for ${fiscalYearLabel}. Use the exact workspace labels from the navigation guidance when telling the user where to go.`,
-            },
-            ...messages,
-          ],
-          max_tokens: 900,
-          temperature: 0.25,
-        }),
-      },
-    )
+    // Prepend grounding as the first user message, then alternate correctly for Claude
+    const claudeMessages: { role: "user" | "assistant"; content: string }[] = [
+      { role: "user", content: groundingMessage },
+      { role: "assistant", content: "Understood. I have your estate data and workspace context loaded. How can I help?" },
+      ...messages,
+    ]
 
-    if (!groqResponse.ok) {
-      const errorData = await groqResponse.json().catch(() => ({}))
-      throw new Error(errorData.error?.message || "Groq API request failed")
-    }
+    const client = getClaudeClient()
+    const claudeResponse = await client.messages.create({
+      model: CLAUDE_HAIKU,
+      max_tokens: 900,
+      temperature: 0.25,
+      system: systemPrompt,
+      messages: claudeMessages,
+    })
 
-    const groqData = await groqResponse.json()
-    const answer = String(groqData.choices?.[0]?.message?.content || "").trim()
+    const answer = extractClaudeText(claudeResponse).trim()
 
     return Response.json(
       {

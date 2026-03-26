@@ -14,6 +14,9 @@ import {
   toLocationBucket,
 } from "@/lib/server/season-summary-utils"
 
+export const dynamic = "force-dynamic"
+export const revalidate = 0
+
 export async function GET(request: NextRequest) {
   try {
     if (!sql) {
@@ -742,13 +745,14 @@ export async function GET(request: NextRequest) {
 
     const laborTotal = Number(laborRows?.[0]?.total_cost) || 0
     const expenseTotal = Number(expenseRows?.[0]?.total_amount) || 0
+    // restockTotal is inventory asset acquisition — excluded from P&L to prevent
+    // double-counting with expense_transactions entries for the same consumables.
     const restockTotal = Number(restockRows?.[0]?.total_cost) || 0
-    const totalCost = laborTotal + expenseTotal + restockTotal
+    const totalCost = laborTotal + expenseTotal
 
     const recentLabor = Number(recentLaborRows?.[0]?.total_cost) || 0
     const recentExpense = Number(recentExpenseRows?.[0]?.total_amount) || 0
-    const recentRestock = Number(recentRestockRows?.[0]?.total_cost) || 0
-    const recentCost = recentLabor + recentExpense + recentRestock
+    const recentCost = recentLabor + recentExpense
 
     const monthsElapsed = Math.max(
       1,

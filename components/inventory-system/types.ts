@@ -4,6 +4,13 @@ export interface LocationOption {
   code?: string | null
 }
 
+export interface WorkspaceBootstrapPayload {
+  modules: string[] | null
+  locations: LocationOption[]
+  planId?: string | null
+  plans?: import("@/lib/modules").ModuleBundle[]
+}
+
 export interface IntelligenceCodePattern {
   code: string
   reference: string

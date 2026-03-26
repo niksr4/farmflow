@@ -5,6 +5,9 @@ import { normalizeTenantContext, runTenantQuery } from "@/lib/server/tenant-db"
 import { canWriteModule } from "@/lib/permissions"
 import { logAuditEvent } from "@/lib/server/audit-log"
 
+export const dynamic = "force-dynamic"
+export const revalidate = 0
+
 const MAX_ACTIVITY_CODE_LENGTH = 10
 
 export async function POST(request: Request) {

@@ -3,6 +3,9 @@ import { sql } from "@/lib/server/db"
 import { requireModuleAccess, isModuleAccessError } from "@/lib/server/module-access"
 import { normalizeTenantContext, runTenantQueries, runTenantQuery } from "@/lib/server/tenant-db"
 
+export const dynamic = "force-dynamic"
+export const revalidate = 0
+
 const DEFAULT_BAG_WEIGHT_KG = 50
 const WINDOW_DAYS = 7
 

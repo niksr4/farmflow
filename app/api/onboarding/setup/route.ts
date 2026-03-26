@@ -1,5 +1,8 @@
 import { NextResponse } from "next/server"
 import { z } from "zod"
+
+export const dynamic = "force-dynamic"
+export const revalidate = 0
 import { shouldForceGuidedSetup } from "@/lib/guided-setup"
 import { normalizeAppLocale } from "@/lib/i18n"
 import { MODULE_BUNDLES } from "@/lib/modules"

@@ -6,6 +6,9 @@ import { normalizeTenantContext, runTenantQuery } from "@/lib/server/tenant-db"
 import { requireAdminRole } from "@/lib/permissions"
 import { logAuditEvent } from "@/lib/server/audit-log"
 
+export const dynamic = "force-dynamic"
+export const revalidate = 0
+
 const LOCATION_MODULES = [
   "inventory",
   "transactions",

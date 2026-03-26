@@ -5,6 +5,9 @@ import { normalizeTenantContext, runTenantQueries, runTenantQuery } from "@/lib/
 import { canDeleteModule, canWriteModule } from "@/lib/permissions"
 import { logAuditEvent } from "@/lib/server/audit-log"
 
+export const dynamic = "force-dynamic"
+export const revalidate = 0
+
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
 
 const isMissingColumnError = (error: unknown, columnName: string) => {
@@ -31,6 +34,37 @@ async function tableHasLocationColumn(tableName: string) {
   return Array.isArray(rows) && rows.length > 0
 }
 
+async function tableHasInventoryLinkColumns() {
+  const rows = await accountsSql`
+    SELECT COUNT(*) AS count
+    FROM information_schema.columns
+    WHERE table_schema = 'public'
+      AND table_name = 'expense_transactions'
+      AND column_name IN ('inventory_item_type', 'inventory_quantity')
+  `
+  return Number(rows?.[0]?.count) >= 2
+}
+
+async function fetchInventoryItemsForTenant(tenantId: string): Promise<Array<{ itemType: string; unit: string; quantity: number }>> {
+  try {
+    const rows = await accountsSql`
+      SELECT item_type, COALESCE(unit, 'kg') AS unit, COALESCE(SUM(quantity), 0) AS quantity
+      FROM current_inventory
+      WHERE tenant_id = ${tenantId}
+      GROUP BY item_type, unit
+      ORDER BY item_type ASC
+      LIMIT 200
+    `
+    return (Array.isArray(rows) ? rows : []).map((r: any) => ({
+      itemType: String(r.item_type || ""),
+      unit: String(r.unit || "kg"),
+      quantity: Number(r.quantity) || 0,
+    }))
+  } catch {
+    return []
+  }
+}
+
 async function validateLocationForTenant(
   tenantContext: { tenantId: string; role: string },
   locationId: string | null,
@@ -55,11 +89,21 @@ export async function GET(request: Request) {
     const sessionUser = await requireModuleAccess("accounts")
     const tenantContext = normalizeTenantContext(sessionUser.tenantId, sessionUser.role)
     const { searchParams } = new URL(request.url)
+
+    // Inventory items list endpoint — used by the expense form dropdown
+    if (searchParams.get("inventoryItems") === "1") {
+      const items = await fetchInventoryItemsForTenant(tenantContext.tenantId)
+      return NextResponse.json({ success: true, items })
+    }
+
     const requestedLocationId = normalizeLocationId(searchParams.get("locationId"))
     if (requestedLocationId === "invalid") {
       return NextResponse.json({ success: false, error: "Invalid locationId" }, { status: 400 })
     }
-    const supportsLocation = await tableHasLocationColumn("expense_transactions")
+    const [supportsLocation, supportsInventoryLink] = await Promise.all([
+      tableHasLocationColumn("expense_transactions"),
+      tableHasInventoryLinkColumns(),
+    ])
     const validLocationId = supportsLocation
       ? await validateLocationForTenant(tenantContext, requestedLocationId)
       : null
@@ -74,17 +118,19 @@ export async function GET(request: Request) {
     const limit = !all && limitParam ? Math.min(Math.max(Number.parseInt(limitParam, 10) || 0, 1), 500) : null
     const offset = !all && offsetParam ? Math.max(Number.parseInt(offsetParam, 10) || 0, 0) : 0
 
-    const deploymentRowsQuery = supportsLocation
+    const deploymentRowsQuery = supportsLocation && supportsInventoryLink
       ? limit
         ? accountsSql`
-            SELECT 
+            SELECT
               et.id,
               et.entry_date as date,
               et.code,
               COALESCE(aa.activity, et.code) as reference,
               et.total_amount as amount,
               et.notes,
-              et.location_id
+              et.location_id,
+              et.inventory_item_type,
+              et.inventory_quantity
             FROM expense_transactions et
             LEFT JOIN account_activities aa
               ON et.code = aa.code
@@ -95,14 +141,16 @@ export async function GET(request: Request) {
             LIMIT ${limit} OFFSET ${offset}
           `
         : accountsSql`
-            SELECT 
+            SELECT
               et.id,
               et.entry_date as date,
               et.code,
               COALESCE(aa.activity, et.code) as reference,
               et.total_amount as amount,
               et.notes,
-              et.location_id
+              et.location_id,
+              et.inventory_item_type,
+              et.inventory_quantity
             FROM expense_transactions et
             LEFT JOIN account_activities aa
               ON et.code = aa.code
@@ -111,38 +159,75 @@ export async function GET(request: Request) {
               ${locationFilterClause}
             ORDER BY et.entry_date DESC
           `
-      : limit
-        ? accountsSql`
-            SELECT 
-              et.id,
-              et.entry_date as date,
-              et.code,
-              COALESCE(aa.activity, et.code) as reference,
-              et.total_amount as amount,
-              et.notes
-            FROM expense_transactions et
-            LEFT JOIN account_activities aa
-              ON et.code = aa.code
-              AND aa.tenant_id = ${tenantContext.tenantId}
-            WHERE et.tenant_id = ${tenantContext.tenantId}
-            ORDER BY et.entry_date DESC
-            LIMIT ${limit} OFFSET ${offset}
-          `
-        : accountsSql`
-            SELECT 
-              et.id,
-              et.entry_date as date,
-              et.code,
-              COALESCE(aa.activity, et.code) as reference,
-              et.total_amount as amount,
-              et.notes
-            FROM expense_transactions et
-            LEFT JOIN account_activities aa
-              ON et.code = aa.code
-              AND aa.tenant_id = ${tenantContext.tenantId}
-            WHERE et.tenant_id = ${tenantContext.tenantId}
-            ORDER BY et.entry_date DESC
-          `
+      : supportsLocation
+        ? limit
+          ? accountsSql`
+              SELECT
+                et.id,
+                et.entry_date as date,
+                et.code,
+                COALESCE(aa.activity, et.code) as reference,
+                et.total_amount as amount,
+                et.notes,
+                et.location_id
+              FROM expense_transactions et
+              LEFT JOIN account_activities aa
+                ON et.code = aa.code
+                AND aa.tenant_id = ${tenantContext.tenantId}
+              WHERE et.tenant_id = ${tenantContext.tenantId}
+                ${locationFilterClause}
+              ORDER BY et.entry_date DESC
+              LIMIT ${limit} OFFSET ${offset}
+            `
+          : accountsSql`
+              SELECT
+                et.id,
+                et.entry_date as date,
+                et.code,
+                COALESCE(aa.activity, et.code) as reference,
+                et.total_amount as amount,
+                et.notes,
+                et.location_id
+              FROM expense_transactions et
+              LEFT JOIN account_activities aa
+                ON et.code = aa.code
+                AND aa.tenant_id = ${tenantContext.tenantId}
+              WHERE et.tenant_id = ${tenantContext.tenantId}
+                ${locationFilterClause}
+              ORDER BY et.entry_date DESC
+            `
+        : limit
+          ? accountsSql`
+              SELECT
+                et.id,
+                et.entry_date as date,
+                et.code,
+                COALESCE(aa.activity, et.code) as reference,
+                et.total_amount as amount,
+                et.notes
+              FROM expense_transactions et
+              LEFT JOIN account_activities aa
+                ON et.code = aa.code
+                AND aa.tenant_id = ${tenantContext.tenantId}
+              WHERE et.tenant_id = ${tenantContext.tenantId}
+              ORDER BY et.entry_date DESC
+              LIMIT ${limit} OFFSET ${offset}
+            `
+          : accountsSql`
+              SELECT
+                et.id,
+                et.entry_date as date,
+                et.code,
+                COALESCE(aa.activity, et.code) as reference,
+                et.total_amount as amount,
+                et.notes
+              FROM expense_transactions et
+              LEFT JOIN account_activities aa
+                ON et.code = aa.code
+                AND aa.tenant_id = ${tenantContext.tenantId}
+              WHERE et.tenant_id = ${tenantContext.tenantId}
+              ORDER BY et.entry_date DESC
+            `
 
     const queryList = [
       accountsSql`
@@ -175,6 +260,8 @@ export async function GET(request: Request) {
       amount: Number.parseFloat(row.amount),
       notes: row.notes || "",
       locationId: supportsLocation && row.location_id ? String(row.location_id) : null,
+      inventoryItemType: supportsInventoryLink && row.inventory_item_type ? String(row.inventory_item_type) : null,
+      inventoryQuantity: supportsInventoryLink && row.inventory_quantity != null ? Number(row.inventory_quantity) : null,
       user: "system",
     }))
 
@@ -213,7 +300,29 @@ export async function POST(request: Request) {
     if (requestedLocationId === "invalid") {
       return NextResponse.json({ success: false, error: "Invalid locationId" }, { status: 400 })
     }
-    const supportsLocation = await tableHasLocationColumn("expense_transactions")
+    // Accept either inventoryItems[] (new multi-item) or legacy single inventoryItemType/inventoryQuantity
+    const rawInventoryItems: Array<{ itemType: string; quantity: number }> = (() => {
+      if (Array.isArray(body.inventoryItems)) {
+        return body.inventoryItems
+          .map((it: any) => ({
+            itemType: typeof it?.itemType === "string" ? it.itemType.trim() : "",
+            quantity: Number.isFinite(Number(it?.quantity)) && Number(it?.quantity) > 0 ? Number(it.quantity) : 0,
+          }))
+          .filter((it) => it.itemType && it.quantity > 0)
+      }
+      // Legacy single-item fallback
+      const itemType = typeof body.inventoryItemType === "string" ? body.inventoryItemType.trim() : ""
+      const qty = Number.isFinite(Number(body.inventoryQuantity)) && Number(body.inventoryQuantity) > 0 ? Number(body.inventoryQuantity) : 0
+      return itemType && qty > 0 ? [{ itemType, quantity: qty }] : []
+    })()
+    // Keep legacy single fields for the DB column (first item, for backward compat)
+    const inventoryItemType = rawInventoryItems[0]?.itemType ?? null
+    const inventoryQuantity = rawInventoryItems[0]?.quantity ?? null
+
+    const [supportsLocation, supportsInventoryLink] = await Promise.all([
+      tableHasLocationColumn("expense_transactions"),
+      tableHasInventoryLinkColumns(),
+    ])
     const validLocationId = supportsLocation
       ? await validateLocationForTenant(tenantContext, requestedLocationId)
       : null
@@ -257,7 +366,7 @@ export async function POST(request: Request) {
       }
     }
 
-    const result = supportsLocation
+    const result = supportsLocation && supportsInventoryLink
       ? await runTenantQuery(
           accountsSql,
           tenantContext,
@@ -268,6 +377,8 @@ export async function POST(request: Request) {
               total_amount,
               notes,
               location_id,
+              inventory_item_type,
+              inventory_quantity,
               tenant_id
             ) VALUES (
               ${date}::timestamp,
@@ -275,31 +386,100 @@ export async function POST(request: Request) {
               ${amount},
               ${notes || ""},
               ${validLocationId}::uuid,
+              ${inventoryItemType},
+              ${inventoryQuantity},
               ${tenantContext.tenantId}
             )
             RETURNING id
           `,
         )
-      : await runTenantQuery(
-          accountsSql,
-          tenantContext,
-          accountsSql`
-            INSERT INTO expense_transactions (
-              entry_date,
-              code,
-              total_amount,
+      : supportsLocation
+        ? await runTenantQuery(
+            accountsSql,
+            tenantContext,
+            accountsSql`
+              INSERT INTO expense_transactions (
+                entry_date,
+                code,
+                total_amount,
+                notes,
+                location_id,
+                tenant_id
+              ) VALUES (
+                ${date}::timestamp,
+                ${code},
+                ${amount},
+                ${notes || ""},
+                ${validLocationId}::uuid,
+                ${tenantContext.tenantId}
+              )
+              RETURNING id
+            `,
+          )
+        : await runTenantQuery(
+            accountsSql,
+            tenantContext,
+            accountsSql`
+              INSERT INTO expense_transactions (
+                entry_date,
+                code,
+                total_amount,
+                notes,
+                tenant_id
+              ) VALUES (
+                ${date}::timestamp,
+                ${code},
+                ${amount},
+                ${notes || ""},
+                ${tenantContext.tenantId}
+              )
+              RETURNING id
+            `,
+          )
+
+    // Auto-deplete inventory for each linked item.
+    if (supportsInventoryLink && rawInventoryItems.length > 0 && result?.[0]?.id) {
+      for (const inv of rawInventoryItems) {
+        try {
+          const itemRows = await accountsSql`
+            SELECT COALESCE(unit, 'kg') AS unit
+            FROM current_inventory
+            WHERE tenant_id = ${tenantContext.tenantId}
+              AND item_type = ${inv.itemType}
+            LIMIT 1
+          `
+          const unit = String(itemRows?.[0]?.unit || "kg")
+          await accountsSql`
+            INSERT INTO transaction_history (
+              item_type,
+              quantity,
+              transaction_type,
               notes,
-              tenant_id
-            ) VALUES (
-              ${date}::timestamp,
-              ${code},
-              ${amount},
-              ${notes || ""},
-              ${tenantContext.tenantId}
+              user_id,
+              price,
+              total_cost,
+              tenant_id,
+              location_id,
+              unit
             )
-            RETURNING id
-          `,
-        )
+            VALUES (
+              ${inv.itemType},
+              ${inv.quantity},
+              'deplete',
+              ${`Used in expense: ${code}${notes ? ` — ${notes}` : ""}`},
+              ${sessionUser.username || "system"},
+              0,
+              0,
+              ${tenantContext.tenantId},
+              ${supportsLocation ? validLocationId : null},
+              ${unit}
+            )
+          `
+        } catch (depleteError) {
+          console.error("⚠️ Auto-depletion failed for expense", result[0].id, inv.itemType, depleteError)
+        }
+      }
+    }
 
     await logAuditEvent(accountsSql, sessionUser, {
       action: "create",
@@ -311,6 +491,8 @@ export async function POST(request: Request) {
         total_amount: amount,
         notes,
         location_id: supportsLocation ? validLocationId : null,
+        inventory_item_type: inventoryItemType,
+        inventory_quantity: inventoryQuantity,
       },
     })
 

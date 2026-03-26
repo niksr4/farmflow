@@ -10,7 +10,7 @@ import { Label } from "@/components/ui/label"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
-import { PlusCircle, Trash2, Edit2, Save, X, ChevronDown, ChevronUp } from "lucide-react"
+import { PlusCircle, Trash2, Edit2, Save, X, ChevronDown, ChevronUp, Plus } from "lucide-react"
 import { Textarea } from "@/components/ui/textarea"
 import { Badge } from "@/components/ui/badge"
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
@@ -20,6 +20,12 @@ import { formatCurrency } from "@/lib/format"
 interface ActivityCode {
   code: string
   reference: string
+}
+
+interface InventoryItem {
+  itemType: string
+  unit: string
+  quantity: number
 }
 
 export default function OtherExpensesTab({ locationId }: { locationId?: string }) {
@@ -40,7 +46,10 @@ export default function OtherExpensesTab({ locationId }: { locationId?: string }
   const [editingId, setEditingId] = useState<number | null>(null)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [activities, setActivities] = useState<ActivityCode[]>([])
+  const [inventoryItems, setInventoryItems] = useState<InventoryItem[]>([])
   const [expandedRows, setExpandedRows] = useState<Set<number>>(new Set())
+
+  type InventoryLineItem = { itemType: string; quantity: string | number }
 
   // Form state
   const [formData, setFormData] = useState({
@@ -50,6 +59,7 @@ export default function OtherExpensesTab({ locationId }: { locationId?: string }
     amount: 0,
     notes: "",
   })
+  const [invLines, setInvLines] = useState<InventoryLineItem[]>([])
 
   const fetchActivities = useCallback(async () => {
     try {
@@ -65,9 +75,22 @@ export default function OtherExpensesTab({ locationId }: { locationId?: string }
     }
   }, [locationId])
 
+  const fetchInventoryItems = useCallback(async () => {
+    try {
+      const response = await fetch("/api/expenses-neon?inventoryItems=1")
+      const data = await response.json()
+      if (data.success && Array.isArray(data.items)) {
+        setInventoryItems(data.items)
+      }
+    } catch (error) {
+      console.error("Error fetching inventory items:", error)
+    }
+  }, [])
+
   useEffect(() => {
     fetchActivities()
-  }, [fetchActivities])
+    fetchInventoryItems()
+  }, [fetchActivities, fetchInventoryItems])
 
   // Autofill reference when code changes
   const handleCodeChange = (code: string) => {
@@ -89,6 +112,7 @@ export default function OtherExpensesTab({ locationId }: { locationId?: string }
       amount: 0,
       notes: "",
     })
+    setInvLines([])
     setIsAdding(false)
     setEditingId(null)
   }
@@ -98,7 +122,11 @@ export default function OtherExpensesTab({ locationId }: { locationId?: string }
     if (isSubmitting) return
     setIsSubmitting(true)
 
-    const deployment = {
+    const validInvItems = invLines
+      .map((l) => ({ itemType: l.itemType.trim(), quantity: Number(l.quantity) || 0 }))
+      .filter((l) => l.itemType && l.quantity > 0)
+
+    const deployment: any = {
       date: formData.date,
       code: formData.code,
       reference: formData.reference,
@@ -106,12 +134,16 @@ export default function OtherExpensesTab({ locationId }: { locationId?: string }
       notes: formData.notes,
       user: "admin",
     }
+    if (validInvItems.length > 0) {
+      deployment.inventoryItems = validInvItems
+      // Keep legacy single fields for first item so the DB column stays populated
+      deployment.inventoryItemType = validInvItems[0].itemType
+      deployment.inventoryQuantity = validInvItems[0].quantity
+    }
 
     try {
       const success = editingId ? await updateDeployment(editingId, deployment) : await addDeployment(deployment)
-      if (success) {
-        resetForm()
-      }
+      if (success) resetForm()
     } finally {
       setIsSubmitting(false)
     }
@@ -125,9 +157,20 @@ export default function OtherExpensesTab({ locationId }: { locationId?: string }
       amount: deployment.amount,
       notes: deployment.notes || "",
     })
+    // Reconstruct inv lines from stored data (single item until multi-item API is in full use)
+    if (deployment.inventoryItemType) {
+      setInvLines([{ itemType: deployment.inventoryItemType, quantity: deployment.inventoryQuantity ?? "" }])
+    } else {
+      setInvLines([])
+    }
     setEditingId(deployment.id)
     setIsAdding(true)
   }
+
+  const addInvLine = () => setInvLines((prev) => [...prev, { itemType: "", quantity: "" }])
+  const removeInvLine = (idx: number) => setInvLines((prev) => prev.filter((_, i) => i !== idx))
+  const updateInvLine = (idx: number, field: keyof InventoryLineItem, value: string) =>
+    setInvLines((prev) => prev.map((l, i) => (i === idx ? { ...l, [field]: value } : l)))
 
   const toggleRow = (id: number) => {
     setExpandedRows((prev) => {
@@ -256,6 +299,87 @@ export default function OtherExpensesTab({ locationId }: { locationId?: string }
                 />
               </div>
 
+              {inventoryItems.length > 0 && (
+                <div className="space-y-3 border rounded-md p-3 bg-background">
+                  <div className="flex items-center justify-between">
+                    <p className="text-sm font-medium text-muted-foreground">
+                      Inventory used{" "}
+                      <span className="font-normal">(optional — auto-depletes stock)</span>
+                    </p>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      onClick={addInvLine}
+                      className="h-8 px-2 text-xs gap-1"
+                    >
+                      <Plus className="h-3.5 w-3.5" /> Add item
+                    </Button>
+                  </div>
+
+                  {invLines.length === 0 && (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={addInvLine}
+                      className="w-full h-9 text-sm bg-transparent"
+                    >
+                      <Plus className="h-4 w-4 mr-1" /> Link an inventory item
+                    </Button>
+                  )}
+
+                  {invLines.map((line, idx) => (
+                    <div key={idx} className="grid grid-cols-[1fr_6rem_2rem] gap-2 items-end">
+                      <div className="space-y-1">
+                        {idx === 0 && <Label className="text-xs text-muted-foreground">Item</Label>}
+                        <select
+                          value={line.itemType}
+                          onChange={(e) => updateInvLine(idx, "itemType", e.target.value)}
+                          className="flex h-10 w-full rounded-md border border-input bg-background px-2 py-1 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                        >
+                          <option value="">— Select —</option>
+                          {inventoryItems.map((item) => (
+                            <option key={item.itemType} value={item.itemType}>
+                              {item.itemType} ({item.quantity.toFixed(1)} {item.unit})
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                      <div className="space-y-1">
+                        {idx === 0 && <Label className="text-xs text-muted-foreground">Qty used</Label>}
+                        <Input
+                          type="number"
+                          min="0.001"
+                          step="0.001"
+                          value={line.quantity}
+                          onChange={(e) => updateInvLine(idx, "quantity", e.target.value)}
+                          placeholder="0"
+                          disabled={!line.itemType}
+                          className="h-10"
+                        />
+                      </div>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => removeInvLine(idx)}
+                        className="h-10 w-8 text-muted-foreground hover:text-destructive"
+                        aria-label="Remove item"
+                      >
+                        <X className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  ))}
+
+                  {invLines.some((l) => l.itemType) && (
+                    <p className="text-xs text-muted-foreground">
+                      Quantities will be deducted from inventory when saved.
+                    </p>
+                  )}
+                </div>
+              )}
+
               <div className="flex flex-col sm:flex-row gap-2">
                 <Button type="submit" className="flex-1 h-12 text-base" disabled={isSubmitting}>
                   <Save className="mr-2 h-5 w-5" />
@@ -317,6 +441,13 @@ export default function OtherExpensesTab({ locationId }: { locationId?: string }
                       </CollapsibleTrigger>
 
                       <CollapsibleContent className="pt-3 space-y-2">
+                        {deployment.inventoryItemType && (
+                          <div className="text-sm text-muted-foreground">
+                            <span className="font-medium">Inventory used:</span>{" "}
+                            {deployment.inventoryItemType}
+                            {deployment.inventoryQuantity != null ? ` × ${deployment.inventoryQuantity}` : ""}
+                          </div>
+                        )}
                         {deployment.notes && (
                           <div className="text-sm text-muted-foreground">
                             <span className="font-medium">Notes:</span> {deployment.notes}
@@ -355,6 +486,7 @@ export default function OtherExpensesTab({ locationId }: { locationId?: string }
                     <TableHead className="sticky top-0 bg-muted/60">Code</TableHead>
                     <TableHead className="sticky top-0 bg-muted/60">Reference</TableHead>
                     <TableHead className="text-right sticky top-0 bg-muted/60">Amount</TableHead>
+                    <TableHead className="sticky top-0 bg-muted/60">Inventory used</TableHead>
                     <TableHead className="sticky top-0 bg-muted/60">Notes</TableHead>
                     <TableHead className="w-[100px] sticky top-0 bg-muted/60">Actions</TableHead>
                   </TableRow>
@@ -366,6 +498,11 @@ export default function OtherExpensesTab({ locationId }: { locationId?: string }
                       <TableCell className="font-medium">{deployment.code}</TableCell>
                       <TableCell>{deployment.reference || deployment.code}</TableCell>
                       <TableCell className="text-right font-semibold">{formatCurrency(deployment.amount)}</TableCell>
+                      <TableCell className="text-sm">
+                        {deployment.inventoryItemType
+                          ? `${deployment.inventoryItemType}${deployment.inventoryQuantity != null ? ` × ${deployment.inventoryQuantity}` : ""}`
+                          : "-"}
+                      </TableCell>
                       <TableCell className="max-w-xs truncate">{deployment.notes || "-"}</TableCell>
                       <TableCell>
                         <TooltipProvider>

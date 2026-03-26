@@ -5,6 +5,9 @@ import { normalizeTenantContext, runTenantQuery } from "@/lib/server/tenant-db"
 import { canDeleteModule, canWriteModule } from "@/lib/permissions"
 import { logAuditEvent } from "@/lib/server/audit-log"
 
+export const dynamic = "force-dynamic"
+export const revalidate = 0
+
 const VALID_STATUSES = new Set(["unpaid", "partial", "paid", "overdue"])
 
 const toNumber = (value: any, fallback = 0) => {

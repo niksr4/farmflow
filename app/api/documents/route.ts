@@ -8,6 +8,9 @@ import { isModuleAccessError, requireModuleAccess } from "@/lib/server/module-ac
 import { logServerError } from "@/lib/server/safe-logging"
 import { normalizeTenantContext, runTenantQuery } from "@/lib/server/tenant-db"
 
+export const dynamic = "force-dynamic"
+export const revalidate = 0
+
 const MAX_FILE_BYTES = 10 * 1024 * 1024
 const MAX_LIMIT = 200
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i

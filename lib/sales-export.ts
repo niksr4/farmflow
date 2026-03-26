@@ -100,13 +100,16 @@ const resolveSalesCoffeeCode = (record: SalesExportRecord): SalesExportCoffeeCod
   return null
 }
 
-type SalesAggregate = { txCount: number; bags: number; kgs: number; revenue: number }
 
-const createEmptyAggregate = (): SalesAggregate => ({ txCount: 0, bags: 0, kgs: 0, revenue: 0 })
+const ESTATE_SORT_ORDER: Record<string, number> = Object.fromEntries(
+  SALES_EXPORT_ESTATE_ORDER.map((code, i) => [code, i]),
+)
+const TYPE_SORT_ORDER: Record<string, number> = Object.fromEntries(
+  SALES_EXPORT_TYPE_ORDER.map((code, i) => [code, i]),
+)
 
 export const buildSalesCsv = (recordsInput: SalesExportRecord[], bagWeightKg: number) => {
   const records = [...recordsInput]
-  records.sort((a, b) => new Date(a.sale_date).getTime() - new Date(b.sale_date).getTime())
 
   const detailHeaders = [
     "Date",
@@ -123,7 +126,7 @@ export const buildSalesCsv = (recordsInput: SalesExportRecord[], bagWeightKg: nu
     "Notes",
   ]
 
-  const detailRows = records.map((record) => [
+  const toDetailRow = (record: SalesExportRecord) => [
     format(new Date(record.sale_date), "yyyy-MM-dd"),
     record.batch_no || "",
     resolveSalesEstateDisplay(record),
@@ -136,77 +139,42 @@ export const buildSalesCsv = (recordsInput: SalesExportRecord[], bagWeightKg: nu
     toNumber(record.revenue).toString(),
     record.bank_account || "",
     record.notes || "",
-  ])
+  ]
 
-  const estateSummary = new Map<SalesExportEstateCode, SalesAggregate>(
-    SALES_EXPORT_ESTATE_ORDER.map((code) => [code, createEmptyAggregate()]),
-  )
-  const typeSummary = new Map<SalesExportCoffeeCode, SalesAggregate>(
-    SALES_EXPORT_TYPE_ORDER.map((code) => [code, createEmptyAggregate()]),
-  )
+  // Section 1: sorted by date
+  const byDate = [...records].sort((a, b) => new Date(a.sale_date).getTime() - new Date(b.sale_date).getTime())
 
-  records.forEach((record) => {
-    const estateCode = resolveSalesEstateCode(record)
-    if (estateCode) {
-      const current = estateSummary.get(estateCode) || createEmptyAggregate()
-      current.txCount += 1
-      current.bags += toNumber(record.bags_sold)
-      current.kgs += resolveSalesKgs(record, bagWeightKg)
-      current.revenue += toNumber(record.revenue)
-      estateSummary.set(estateCode, current)
-    }
-
-    const typeCode = resolveSalesCoffeeCode(record)
-    if (typeCode) {
-      const current = typeSummary.get(typeCode) || createEmptyAggregate()
-      current.txCount += 1
-      current.bags += toNumber(record.bags_sold)
-      current.kgs += resolveSalesKgs(record, bagWeightKg)
-      current.revenue += toNumber(record.revenue)
-      typeSummary.set(typeCode, current)
-    }
+  // Section 2: sorted by estate (C column), then date
+  const byEstate = [...records].sort((a, b) => {
+    const ea = ESTATE_SORT_ORDER[resolveSalesEstateCode(a) ?? ""] ?? 999
+    const eb = ESTATE_SORT_ORDER[resolveSalesEstateCode(b) ?? ""] ?? 999
+    if (ea !== eb) return ea - eb
+    return new Date(a.sale_date).getTime() - new Date(b.sale_date).getTime()
   })
 
-  const estateRows = SALES_EXPORT_ESTATE_ORDER.map((code) => {
-    const values = estateSummary.get(code) || createEmptyAggregate()
-    return [
-      code,
-      values.txCount.toString(),
-      values.bags.toFixed(2),
-      values.kgs.toFixed(2),
-      values.revenue.toFixed(2),
-      values.bags > 0 ? (values.revenue / values.bags).toFixed(2) : "0.00",
-    ]
-  })
-
-  const typeRows = SALES_EXPORT_TYPE_ORDER.map((code) => {
-    const values = typeSummary.get(code) || createEmptyAggregate()
-    return [
-      code,
-      SALES_EXPORT_TYPE_LABELS[code],
-      values.txCount.toString(),
-      values.bags.toFixed(2),
-      values.kgs.toFixed(2),
-      values.revenue.toFixed(2),
-      values.bags > 0 ? (values.revenue / values.bags).toFixed(2) : "0.00",
-    ]
+  // Section 3: sorted by coffee type code (AP/AC/RP/RC — derived from coffee type + bag type), then date
+  const byType = [...records].sort((a, b) => {
+    const ta = TYPE_SORT_ORDER[resolveSalesCoffeeCode(a) ?? ""] ?? 999
+    const tb = TYPE_SORT_ORDER[resolveSalesCoffeeCode(b) ?? ""] ?? 999
+    if (ta !== tb) return ta - tb
+    return new Date(a.sale_date).getTime() - new Date(b.sale_date).getTime()
   })
 
   const csvLines: string[] = []
 
-  csvLines.push(csvRow(["1. Sales by Date"]))
+  csvLines.push(csvRow(["1. All Transactions — by Date"]))
   csvLines.push(csvRow(detailHeaders))
-  detailRows.forEach((row) => csvLines.push(csvRow(row)))
+  byDate.forEach((r) => csvLines.push(csvRow(toDetailRow(r))))
   csvLines.push("")
 
-  csvLines.push(csvRow(["2. Segregated by Estate"]))
-  csvLines.push(csvRow(["Estate", "Transactions", "Bags Sold", "KGs Sold", "Revenue", "Avg Price / Bag"]))
-  estateRows.forEach((row) => csvLines.push(csvRow(row)))
+  csvLines.push(csvRow(["2. All Transactions — by Estate (HFA, HFB, HFC, MV)"]))
+  csvLines.push(csvRow(detailHeaders))
+  byEstate.forEach((r) => csvLines.push(csvRow(toDetailRow(r))))
   csvLines.push("")
 
-  csvLines.push(csvRow(["3. Segregated by Coffee Type"]))
-  csvLines.push(csvRow(["Type Code", "Type Label", "Transactions", "Bags Sold", "KGs Sold", "Revenue", "Avg Price / Bag"]))
-  typeRows.forEach((row) => csvLines.push(csvRow(row)))
+  csvLines.push(csvRow(["3. All Transactions — by Coffee Type (AP, AC, RP, RC)"]))
+  csvLines.push(csvRow(detailHeaders))
+  byType.forEach((r) => csvLines.push(csvRow(toDetailRow(r))))
 
   return csvLines.join("\n")
 }

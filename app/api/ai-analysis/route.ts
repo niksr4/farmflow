@@ -1,9 +1,47 @@
 import { buildRateLimitHeaders, checkRateLimit } from "@/lib/rate-limit"
-import { fetchWithTimeout } from "@/lib/server/http"
 import { buildTenantAiDataSummary } from "@/lib/server/ai-analysis"
 import { requireModuleAccess, isModuleAccessError } from "@/lib/server/module-access"
 import { logServerError } from "@/lib/server/safe-logging"
+import { getClaudeClient, isClaudeConfigured, extractClaudeText, CLAUDE_SONNET } from "@/lib/server/claude"
 import type { InventoryItem, Transaction } from "@/lib/inventory-types"
+
+export const dynamic = "force-dynamic"
+export const revalidate = 0
+
+const SYSTEM_PROMPT = `You are an expert agricultural business analyst specialising in multi-estate coffee and pepper operations in India.
+
+Your job is to analyse the provided estate operations data and deliver precise, actionable insights that help the estate manager make better decisions this week — not just understand history.
+
+Rules:
+- Ground every number in the data provided. Never invent figures, percentages, or trends that are not in the dataset.
+- When data is sparse or missing, say so plainly rather than speculating.
+- Use INR (₹) for currency. Use KG for weight.
+- Keep the tone professional but direct — estate managers are practical people.
+- Format with clear markdown headers (##) and bullet points.`
+
+const buildAnalysisPrompt = (dataSummary: string) => `Analyse the following FarmFlow estate operations data and provide actionable insights.
+
+${dataSummary}
+
+Provide a comprehensive analysis covering:
+
+## 1. Processing Performance
+Evaluate cherry-to-dry conversion efficiency by location and coffee type. Flag any ratios that look anomalous compared to the season average. Identify the strongest and weakest processing days.
+
+## 2. Labor & Cost Efficiency
+Review labor deployment — estate workers vs outside workers, cost per laborer per day, activity distribution. Identify weeks or periods where outside labor cost spiked relative to processing volume.
+
+## 3. Transaction & Inventory Patterns
+Analyse stock movement trends: top restocking spend, fastest-depleting items, months with unusual inflow/outflow ratios. Flag items that may need restocking soon.
+
+## 4. Dispatch & Sales
+Review dispatch volume, confirmation rates, and any pending unconfirmed dispatches. Analyse revenue by buyer — identify which buyers consistently pay above or below average price per kg.
+
+## 5. Rainfall & Operational Timing
+If rainfall data is present, correlate heavy rain periods with processing dips or labor adjustments. Suggest optimal upcoming windows for drying based on current rainfall patterns.
+
+## 6. Key Recommendations
+Provide 3–5 specific, actionable recommendations the estate manager can act on this week. Be concrete — name the location, coffee type, or cost code where relevant.`
 
 export async function POST(req: Request) {
   try {
@@ -12,6 +50,10 @@ export async function POST(req: Request) {
     const rateHeaders = buildRateLimitHeaders(rateLimit)
     if (!rateLimit.success) {
       return Response.json({ success: false, error: "Rate limit exceeded" }, { status: 429, headers: rateHeaders })
+    }
+
+    if (!isClaudeConfigured()) {
+      return Response.json({ success: false, error: "AI analysis is not configured" }, { status: 503, headers: rateHeaders })
     }
 
     const body = await req.json().catch(() => ({}))
@@ -25,68 +67,21 @@ export async function POST(req: Request) {
       transactions,
     })
 
-    const groqApiKey = String(process.env.GROQ_API_KEY || "").trim()
-    if (!groqApiKey) {
-      return Response.json({ success: false, error: "AI analysis is not configured" }, { status: 503, headers: rateHeaders })
-    }
-
-    const groqResponse = await fetchWithTimeout("https://api.groq.com/openai/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${groqApiKey}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        model: "llama-3.3-70b-versatile",
-        messages: [
-          {
-            role: "system",
-            content:
-              "You are an expert agricultural business analyst for a multi-estate coffee and pepper operation in India. Provide detailed, actionable insights based on the data provided.",
-          },
-          {
-            role: "user",
-            content: `Analyze the following data from the FarmFlow operations system and provide actionable insights.
-
-${dataSummary}
-
-Please provide a comprehensive analysis covering:
-
-0. **Transaction Patterns (priority)**: Focus on transaction history trends, volumes, and costs. Use current inventory only as a secondary snapshot.
-
-1. **Inventory Insights**: Analyze stock levels, consumption patterns, and restocking needs. Identify items that may need attention.
-
-2. **Processing Performance**: Evaluate coffee processing efficiency across locations and coffee types. Compare yields, dry parchment vs dry cherry output, and identify any anomalies or trends.
-
-3. **Labor & Cost Analysis**: Review labor deployment patterns - estate workers vs outside workers, cost per day, and activity distribution. Identify opportunities for cost optimization and labor efficiency.
-
-4. **Weather Impact**: If rainfall data is available, correlate it with processing activities and suggest optimal timing for various operations.
-
-5. **Cross-Tab Patterns**: Identify connections between different data points (e.g., labor costs vs processing output, inventory consumption vs processing volume, rainfall vs labor deployment).
-
-6. **Recommendations**: Provide 3-5 specific, actionable recommendations to improve operations, reduce costs, and increase efficiency.
-
-Format your response with clear sections using markdown headers (##). Keep the tone professional but accessible. Be specific with numbers and percentages where data allows.`,
-          },
-        ],
-        max_tokens: 2000,
-        temperature: 0.7,
-      }),
-      timeoutMs: 15_000,
+    const client = getClaudeClient()
+    const message = await client.messages.create({
+      model: CLAUDE_SONNET,
+      max_tokens: 2048,
+      temperature: 0.3,
+      system: SYSTEM_PROMPT,
+      messages: [{ role: "user", content: buildAnalysisPrompt(dataSummary) }],
     })
 
-    if (!groqResponse.ok) {
-      const errorData = await groqResponse.json().catch(() => ({}))
-      throw new Error(errorData.error?.message || "Groq API request failed")
-    }
+    const analysisText = extractClaudeText(message)
 
-    const groqData = await groqResponse.json()
-    const analysisText = groqData.choices?.[0]?.message?.content || "No analysis generated"
-
-    return Response.json({
-      success: true,
-      analysis: analysisText,
-    }, { headers: rateHeaders })
+    return Response.json(
+      { success: true, analysis: analysisText || "No analysis could be generated from the current data." },
+      { headers: rateHeaders },
+    )
   } catch (error) {
     logServerError("AI Analysis error", error)
     if (isModuleAccessError(error)) {

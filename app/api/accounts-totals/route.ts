@@ -3,6 +3,9 @@ import { accountsSql } from "@/lib/server/db"
 import { requireModuleAccess, isModuleAccessError } from "@/lib/server/module-access"
 import { normalizeTenantContext, runTenantQuery } from "@/lib/server/tenant-db"
 
+export const dynamic = "force-dynamic"
+export const revalidate = 0
+
 export async function GET(request: Request) {
   try {
     const sessionUser = await requireModuleAccess("accounts")

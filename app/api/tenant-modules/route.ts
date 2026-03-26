@@ -1,5 +1,8 @@
 import { NextResponse } from "next/server"
 import { sql } from "@/lib/server/db"
+
+export const dynamic = "force-dynamic"
+export const revalidate = 0
 import { requireSessionUser } from "@/lib/server/auth"
 import { MODULE_BUNDLES, clampEnabledModulesToPlan, resolveEnabledModules } from "@/lib/modules"
 import { resolveTenantPlanId } from "@/lib/server/tenant-subscriptions"

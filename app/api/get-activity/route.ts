@@ -6,6 +6,9 @@ import { canDeleteModule, canWriteModule } from "@/lib/permissions"
 import { logAuditEvent } from "@/lib/server/audit-log"
 import { buildMissingAccountActivitySuggestions } from "@/lib/account-activity-suggestions"
 
+export const dynamic = "force-dynamic"
+export const revalidate = 0
+
 const normalizeCode = (value: unknown) => String(value || "").trim().toUpperCase()
 const normalizeReference = (value: unknown) => String(value || "").trim()
 const MAX_ACTIVITY_CODE_LENGTH = 10

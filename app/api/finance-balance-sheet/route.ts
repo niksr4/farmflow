@@ -302,7 +302,10 @@ export async function GET(request: Request) {
     const receivablesOverdueLive = toAmount((receivablesLiveRow as any).total_overdue)
     const billingInvoiced = toAmount((billingRow as any).total_invoiced)
 
-    const totalOutflow = laborCost + expenseCost + inventoryRestockOutflow
+    // Inventory restock costs are asset purchases, not P&L expenses.
+    // Including them alongside expense_transactions double-counts consumable costs.
+    // They are shown as a separate reference line in modules[] below.
+    const totalOutflow = laborCost + expenseCost
     const netBooked = totalRevenueBooked - totalOutflow
     const liveNetPosition = netBooked + receivablesOutstandingLive
 
@@ -353,25 +356,25 @@ export async function GET(request: Request) {
       },
       {
         id: "inventory_restock",
-        label: "Inventory restock spend",
-        tab: "Transaction History",
-        direction: "outflow",
+        label: "Inventory restock spend (reference)",
+        tab: "Inventory",
+        direction: "memo",
         amount: inventoryRestockOutflow,
         records: toCount((inventoryRow as any).total_count),
-        includedInBookedNet: true,
+        includedInBookedNet: false,
         status: inventoryResult.available ? "available" : "missing",
-        note: "Restock entries from inventory transaction log.",
+        note: "Stock purchases recorded in the Inventory tab. Excluded from P&L — consumable usage is captured via expense entries in Accounts.",
       },
       {
         id: "inventory_usage",
-        label: "Inventory usage value",
-        tab: "Transaction History",
+        label: "Inventory usage value (reference)",
+        tab: "Inventory",
         direction: "memo",
         amount: inventoryDepleteValue,
         records: toCount((inventoryRow as any).total_count),
         includedInBookedNet: false,
         status: inventoryResult.available ? "available" : "missing",
-        note: "Deplete valuation for internal usage tracking (reference only).",
+        note: "Manual depletion entries for losses and corrections (reference only).",
       },
       {
         id: "receivables_live",

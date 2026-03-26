@@ -4,6 +4,9 @@ import { buildRateLimitHeaders, checkRateLimit } from "@/lib/rate-limit"
 import { fetchWithTimeout } from "@/lib/server/http"
 import { logServerError } from "@/lib/server/safe-logging"
 
+export const dynamic = "force-dynamic"
+export const revalidate = 0
+
 const POSITIVE_KEYWORDS = ["surge", "rally", "rise", "rises", "up", "higher", "gain", "jump", "spike", "record"]
 const NEGATIVE_KEYWORDS = ["drop", "fall", "falls", "down", "lower", "slump", "plunge", "decline", "weak"]
 

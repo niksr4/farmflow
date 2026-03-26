@@ -3,6 +3,9 @@ import { sql } from "@/lib/server/db"
 import { requireSessionUser } from "@/lib/server/auth"
 import { requireOwnerRole } from "@/lib/tenant"
 
+export const dynamic = "force-dynamic"
+export const revalidate = 0
+
 export async function GET() {
   return NextResponse.json({
     message: "POST to this endpoint to run the sales table migration"
