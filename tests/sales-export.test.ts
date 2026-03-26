@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest"
 import { buildSalesCsv } from "../lib/sales-export"
 
 describe("sales export helper", () => {
-  it("builds fixed estate and coffee-type sections in the requested order", () => {
+  it("builds three sorted detail sections in the requested order", () => {
     const csv = buildSalesCsv(
       [
         {
@@ -51,25 +51,24 @@ describe("sales export helper", () => {
 
     const lines = csv.split("\n")
 
-    expect(lines[0]).toBe('"1. Sales by Date"')
-    expect(lines).toContain('"2. Segregated by Estate"')
-    expect(lines).toContain('"3. Segregated by Coffee Type"')
+    // Section headers
+    expect(lines[0]).toBe('"1. All Transactions \u2014 by Date"')
+    expect(lines).toContain('"2. All Transactions \u2014 by Estate (HFA, HFB, HFC, MV)"')
+    expect(lines).toContain('"3. All Transactions \u2014 by Coffee Type (AP, AC, RP, RC)"')
 
-    const estateStart = lines.indexOf('"2. Segregated by Estate"')
-    expect(lines.slice(estateStart + 2, estateStart + 6)).toEqual([
-      '"MV","1","10.00","500.00","1000.00","100.00"',
-      '"HFA","1","8.00","380.00","640.00","80.00"',
-      '"HFB","0","0.00","0.00","0.00","0.00"',
-      '"HFC","0","0.00","0.00","0.00","0.00"',
-    ])
+    // Section 2: rows sorted MV → HFA → ZX (unknown estate last)
+    const estateStart = lines.indexOf('"2. All Transactions \u2014 by Estate (HFA, HFB, HFC, MV)"')
+    expect(lines[estateStart + 2]).toContain('"MV"')
+    expect(lines[estateStart + 2]).toContain('"Buyer 1"')
+    expect(lines[estateStart + 3]).toContain('"HFA"')
+    expect(lines[estateStart + 3]).toContain('"Buyer 2"')
+    expect(lines[estateStart + 4]).toContain('"ZX"')
 
-    const typeStart = lines.indexOf('"3. Segregated by Coffee Type"')
-    expect(lines.slice(typeStart + 2, typeStart + 6)).toEqual([
-      '"AP","Arabica Parchment","1","10.00","500.00","1000.00","100.00"',
-      '"AC","Arabica Cherry","1","6.00","300.00","540.00","90.00"',
-      '"RP","Robusta Parchment","0","0.00","0.00","0.00","0.00"',
-      '"RC","Robusta Cherry","1","8.00","380.00","640.00","80.00"',
-    ])
+    // Section 3: rows sorted AP → AC → RC (MV=AP, ZX=AC, HFA=RC)
+    const typeStart = lines.indexOf('"3. All Transactions \u2014 by Coffee Type (AP, AC, RP, RC)"')
+    expect(lines[typeStart + 2]).toContain('"Buyer 1"') // MV = AP
+    expect(lines[typeStart + 3]).toContain('"Buyer 3"') // ZX = AC
+    expect(lines[typeStart + 4]).toContain('"Buyer 2"') // HFA = RC
   })
 
   it("supports the shared ops export row shape with location and sold_kgs", () => {
@@ -89,7 +88,11 @@ describe("sales export helper", () => {
       50,
     )
 
-    expect(csv).toContain('"HFB","1","4.00","180.00","380.00","95.00"')
-    expect(csv).toContain('"AC","Arabica Cherry","1","4.00","180.00","380.00","95.00"')
+    // estate resolves to HFB via alias; detail rows appear in all three sections
+    expect(csv).toContain('"HFB"')
+    expect(csv).toContain('"180.00"')
+    expect(csv).toContain('"380"')
+    expect(csv).toContain('"95"')
+    expect(csv).toContain('"Dry Cherry"')
   })
 })
