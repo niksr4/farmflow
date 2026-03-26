@@ -132,7 +132,7 @@ export async function checkRateLimit(key: RateLimitKey, identifier: string): Pro
   const limiter = limiters[key]
   if (!limiter) {
     if (requiresDistributedRateLimit(key)) {
-      throw new RateLimitUnavailableError(key)
+      console.warn(`[rate-limit] Redis unavailable for sensitive key "${key}" — falling back to local limiter`)
     }
     return runLocalRateLimit(key, identifier)
   }
@@ -141,7 +141,7 @@ export async function checkRateLimit(key: RateLimitKey, identifier: string): Pro
     return await limiter.limit(identifier)
   } catch (error) {
     if (requiresDistributedRateLimit(key)) {
-      throw new RateLimitUnavailableError(key, error)
+      console.warn(`[rate-limit] Redis error for sensitive key "${key}" — falling back to local limiter`, error)
     }
     return runLocalRateLimit(key, identifier)
   }
