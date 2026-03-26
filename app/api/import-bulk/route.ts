@@ -9,10 +9,6 @@ import { resolveLocationInfo } from "@/lib/server/location-utils"
 import { recalculateInventoryForItem } from "@/lib/server/inventory-recalc"
 import { recomputeProcessingTotals, resolveBagWeightKg } from "@/lib/server/processing-utils"
 import {
-
-export const dynamic = "force-dynamic"
-export const revalidate = 0
-
   buildValidationErrors,
   CHUNK_SIZE,
   DATASET_MODULE_MAP,
@@ -34,6 +30,9 @@ export const revalidate = 0
   type ImportMode,
   type ImportValidationError,
 } from "@/lib/server/import-bulk-utils"
+
+export const dynamic = "force-dynamic"
+export const revalidate = 0
 
 type ValidationImportJobRow = {
   id: string

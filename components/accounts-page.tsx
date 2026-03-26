@@ -12,7 +12,7 @@ import { Label } from "@/components/ui/label"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { FileSpreadsheet, FileText, Coins, PlusCircle, Settings, Users, Receipt, Loader2, Pencil, Trash2, Check, X } from "lucide-react"
+import { FileSpreadsheet, FileText, Coins, PlusCircle, Settings, Users, Receipt, Loader2, Pencil, Trash2, Check, X, BarChart2, ChevronDown, ChevronUp } from "lucide-react"
 import { Skeleton } from "@/components/ui/skeleton"
 import AttendanceTab from "./attendance-tab"
 import LaborDeploymentTab from "./labor-deployment-tab"
@@ -116,6 +116,7 @@ export default function AccountsPage({
   const [loadingActivities, setLoadingActivities] = useState(false)
   const [isAddingActivity, setIsAddingActivity] = useState(false)
   const [showAllActivitySuggestions, setShowAllActivitySuggestions] = useState(false)
+  const [showCostPatterns, setShowCostPatterns] = useState(false)
   const [newActivityCode, setNewActivityCode] = useState("")
   const [newActivityReference, setNewActivityReference] = useState("")
   const [isSubmitting, setIsSubmitting] = useState(false)
@@ -943,6 +944,21 @@ export default function AccountsPage({
         tone="finance"
       />
 
+      <div className="flex justify-end">
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          onClick={() => setShowCostPatterns((prev) => !prev)}
+          className="bg-white text-xs"
+        >
+          <BarChart2 className="mr-1.5 h-3.5 w-3.5" />
+          Cost Patterns
+          {showCostPatterns ? <ChevronUp className="ml-1.5 h-3.5 w-3.5" /> : <ChevronDown className="ml-1.5 h-3.5 w-3.5" />}
+        </Button>
+      </div>
+
+      {showCostPatterns && (
       <Card>
         <CardHeader>
           <CardTitle>Smart Cost Patterns</CardTitle>
@@ -1090,6 +1106,7 @@ export default function AccountsPage({
           )}
         </CardContent>
       </Card>
+      )}
 
       {showDataToolsControls && (isAdmin || isOwner) && (
         <Card>

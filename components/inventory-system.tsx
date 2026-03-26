@@ -249,6 +249,7 @@ export default function InventorySystem() {
   const [dataToolsDataset, setDataToolsDataset] = useState<ExportDatasetId>("processing")
   const [isExportingDataTools, setIsExportingDataTools] = useState(false)
   const [showDataToolsPanel, setShowDataToolsPanel] = useState(false)
+  const [navCollapsed, setNavCollapsed] = useState(false)
   const [enabledModules, setEnabledModules] = useState<string[] | null>(null)
   const [currentPlanId, setCurrentPlanId] = useState<string | null>(null)
   const [isModulesLoading, setIsModulesLoading] = useState(false)
@@ -937,6 +938,24 @@ export default function InventorySystem() {
     if (!tenantId || isOwner || !hasResolvedModules) return
     loadOnboardingStatus()
   }, [hasResolvedModules, tenantId, isOwner, loadOnboardingStatus])
+
+  // Collapse navigator section cards when scrolling down; expand on scroll up
+  useEffect(() => {
+    let lastY = window.scrollY
+    const onScroll = () => {
+      const currentY = window.scrollY
+      if (currentY < 60) {
+        setNavCollapsed(false)
+      } else if (currentY > lastY + 4) {
+        setNavCollapsed(true)
+      } else if (currentY < lastY - 4) {
+        setNavCollapsed(false)
+      }
+      lastY = currentY
+    }
+    window.addEventListener("scroll", onScroll, { passive: true })
+    return () => window.removeEventListener("scroll", onScroll)
+  }, [])
 
   const handleCreateLocation = async () => {
     if (!newLocationName.trim()) {
@@ -5790,6 +5809,18 @@ export default function InventorySystem() {
                 Season View
               </Button>
             )}
+            {canManageData && (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => setShowDataToolsPanel((prev) => !prev)}
+                className="bg-white"
+              >
+                <Upload className="h-3 w-3 mr-1" />
+                {showDataToolsPanel ? "Hide Exports" : "Exports / Import"}
+              </Button>
+            )}
             <Button
               variant="default"
               size="sm"
@@ -5891,17 +5922,6 @@ export default function InventorySystem() {
 
         {canManageData && (
           <>
-            <div className="mb-4 flex justify-end">
-              <Button
-                type="button"
-                onClick={() => setShowDataToolsPanel((prev) => !prev)}
-                className="bg-emerald-700 hover:bg-emerald-800 text-white"
-              >
-                <Upload className="mr-2 h-4 w-4" />
-                {showDataToolsPanel ? "Hide Exports / Import" : "Exports / Import"}
-              </Button>
-            </div>
-
             {showDataToolsControls && (
               <Card className="mb-6 border border-emerald-200/70 bg-gradient-to-br from-emerald-50/70 to-white/95">
                 <CardHeader className="pb-3">
@@ -6130,12 +6150,18 @@ export default function InventorySystem() {
                 </Button>
               </div>
             )}
-            {isMobile && (
+            {isMobile && !navCollapsed && (
               <div className="flex items-center justify-between px-1">
                 <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-neutral-500">Workspace Sections</p>
                 <p className="text-[11px] text-neutral-500">Swipe</p>
               </div>
             )}
+            <div
+              className={cn(
+                "overflow-hidden transition-all duration-200",
+                navCollapsed && !isMobile ? "max-h-0 opacity-0 pointer-events-none" : "max-h-[600px] opacity-100",
+              )}
+            >
             <div
               className={cn(
                 "gap-2",
@@ -6222,6 +6248,7 @@ export default function InventorySystem() {
                   </div>
                 )
               })}
+            </div>
             </div>
 
             {!isMobile && activeTabGroup !== "dashboard" && activeSectionTabs.length > 0 && (
