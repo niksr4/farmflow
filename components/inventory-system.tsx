@@ -939,19 +939,25 @@ export default function InventorySystem() {
     loadOnboardingStatus()
   }, [hasResolvedModules, tenantId, isOwner, loadOnboardingStatus])
 
-  // Collapse navigator section cards when scrolling down; expand on scroll up
+  // Collapse navigator section cards when scrolling down past threshold; expand on scroll up
   useEffect(() => {
-    let lastY = window.scrollY
+    let lastStableY = window.scrollY
+    const COLLAPSE_AFTER = 180   // don't collapse until past this many px
+    const DOWN_THRESHOLD = 40    // must scroll down this much to collapse
+    const UP_THRESHOLD = 20      // must scroll up this much to expand
+
     const onScroll = () => {
       const currentY = window.scrollY
-      if (currentY < 60) {
+      if (currentY < COLLAPSE_AFTER) {
         setNavCollapsed(false)
-      } else if (currentY > lastY + 4) {
+        lastStableY = currentY
+      } else if (currentY > lastStableY + DOWN_THRESHOLD) {
         setNavCollapsed(true)
-      } else if (currentY < lastY - 4) {
+        lastStableY = currentY
+      } else if (currentY < lastStableY - UP_THRESHOLD) {
         setNavCollapsed(false)
+        lastStableY = currentY
       }
-      lastY = currentY
     }
     window.addEventListener("scroll", onScroll, { passive: true })
     return () => window.removeEventListener("scroll", onScroll)
