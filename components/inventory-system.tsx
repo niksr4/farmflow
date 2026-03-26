@@ -37,8 +37,6 @@ import {
   Scale,
   FileText,
   Coins,
-  ChevronUp,
-  ChevronDown,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -6121,7 +6119,7 @@ export default function InventorySystem() {
           </div>
         )}
         <Tabs value={activeTab} onValueChange={handleTabChange} className="w-full space-y-4">
-          {!isStandaloneMobileApp && (
+          {!isStandaloneMobileApp && !(navCollapsed && activeTab === DASHBOARD_LAUNCHER_TAB) && (
             <div
               className={cn(
                 "z-20 rounded-3xl border border-black/10 bg-gradient-to-br from-white/95 via-white to-neutral-100/80 shadow-[0_12px_30px_-24px_rgba(15,23,42,0.75)] backdrop-blur",
