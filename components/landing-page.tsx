@@ -407,21 +407,39 @@ export default function LandingPage() {
                       </Badge>
                     </div>
                     <p className="mt-3 text-sm leading-7 text-stone-400">{bundle.description}</p>
-                    <div className="mt-6 flex flex-wrap gap-2">
-                      {bundle.modules.slice(0, 7).map((moduleId) => (
-                        <span
-                          key={moduleId}
-                          className="rounded-full border border-white/[0.08] bg-white/[0.03] px-2.5 py-1 text-xs text-stone-400"
-                        >
-                          {moduleLabelById.get(moduleId) || moduleId}
-                        </span>
-                      ))}
-                      {bundle.modules.length > 7 && (
-                        <span className="rounded-full border border-white/[0.08] px-2.5 py-1 text-xs text-stone-600">
-                          +{bundle.modules.length - 7} more
-                        </span>
-                      )}
-                    </div>
+                    {(() => {
+                      const prevBundle = MODULE_BUNDLES[i - 1]
+                      const prevModuleSet = new Set(prevBundle?.modules || [])
+                      const displayModules = prevBundle
+                        ? bundle.modules.filter((id) => !prevModuleSet.has(id))
+                        : bundle.modules
+                      const shown = displayModules.slice(0, 7)
+                      const overflow = displayModules.length - shown.length
+                      return (
+                        <div className="mt-6 space-y-2">
+                          {prevBundle && (
+                            <p className="text-xs text-stone-500">
+                              Everything in {prevBundle.label}, plus:
+                            </p>
+                          )}
+                          <div className="flex flex-wrap gap-2">
+                            {shown.map((moduleId) => (
+                              <span
+                                key={moduleId}
+                                className="rounded-full border border-white/[0.08] bg-white/[0.03] px-2.5 py-1 text-xs text-stone-400"
+                              >
+                                {moduleLabelById.get(moduleId) || moduleId}
+                              </span>
+                            ))}
+                            {overflow > 0 && (
+                              <span className="rounded-full border border-white/[0.08] px-2.5 py-1 text-xs text-stone-600">
+                                +{overflow} more
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      )
+                    })()}
                     <div className="mt-auto pt-8">
                       <Button
                         asChild
