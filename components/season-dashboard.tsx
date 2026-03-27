@@ -151,14 +151,14 @@ type SeasonSummary = {
       totalLossKg: number
       avgDryingDays: number
       avgMoistureDrop: number
-    }
+    } | null
     quality?: {
       totalRecords: number
       avgCupScore: number
       avgOutturnPct: number
       avgDefects: number
       avgMoisturePct: number
-    }
+    } | null
     journal?: {
       totalEntries: number
       irrigationEntries: number
@@ -1645,49 +1645,57 @@ export default function SeasonDashboard() {
 
           {(moduleKpis?.curing || moduleKpis?.quality || moduleKpis?.journal || moduleKpis?.receivables) && (
             <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-              <Card className="border-indigo-200/70">
-                <CardHeader className="pb-2">
-                  <CardDescription>Curing KPIs</CardDescription>
-                  <CardTitle className="text-xl">{formatNumber(moduleKpis?.curing?.totalOutputKg || 0)} KGs</CardTitle>
-                </CardHeader>
-                <CardContent className="text-xs text-muted-foreground space-y-1">
-                  <div>Records: {formatNumber(moduleKpis?.curing?.totalRecords || 0, 0)}</div>
-                  <div>Avg drying days: {formatNumber(moduleKpis?.curing?.avgDryingDays || 0, 1)}</div>
-                  <div>Avg moisture drop: {formatNumber(moduleKpis?.curing?.avgMoistureDrop || 0, 1)}%</div>
-                </CardContent>
-              </Card>
-              <Card className="border-violet-200/70">
-                <CardHeader className="pb-2">
-                  <CardDescription>Quality KPIs</CardDescription>
-                  <CardTitle className="text-xl">{formatNumber(moduleKpis?.quality?.avgCupScore || 0, 1)}</CardTitle>
-                </CardHeader>
-                <CardContent className="text-xs text-muted-foreground space-y-1">
-                  <div>Grading records: {formatNumber(moduleKpis?.quality?.totalRecords || 0, 0)}</div>
-                  <div>Avg outturn: {formatNumber(moduleKpis?.quality?.avgOutturnPct || 0, 1)}%</div>
-                  <div>Avg defects: {formatNumber(moduleKpis?.quality?.avgDefects || 0, 1)}</div>
-                </CardContent>
-              </Card>
-              <Card className="border-teal-200/70">
-                <CardHeader className="pb-2">
-                  <CardDescription>Journal Coverage</CardDescription>
-                  <CardTitle className="text-xl">{formatNumber(moduleKpis?.journal?.totalEntries || 0, 0)} entries</CardTitle>
-                </CardHeader>
-                <CardContent className="text-xs text-muted-foreground space-y-1">
-                  <div>Irrigation logs: {formatNumber(moduleKpis?.journal?.irrigationEntries || 0, 0)}</div>
-                  <div>Active locations: {formatNumber(moduleKpis?.journal?.activeLocations || 0, 0)}</div>
-                </CardContent>
-              </Card>
-              <Card className="border-amber-200/70">
-                <CardHeader className="pb-2">
-                  <CardDescription>Receivables</CardDescription>
-                  <CardTitle className="text-xl">{formatCurrency(moduleKpis?.receivables?.totalOutstanding || 0)}</CardTitle>
-                </CardHeader>
-                <CardContent className="text-xs text-muted-foreground space-y-1">
-                  <div>Invoiced (FY): {formatCurrency(moduleKpis?.receivables?.totalInvoiced || 0)}</div>
-                  <div>Overdue: {formatCurrency(moduleKpis?.receivables?.totalOverdue || 0)}</div>
-                  <div>Invoices: {formatNumber(moduleKpis?.receivables?.totalCount || 0, 0)}</div>
-                </CardContent>
-              </Card>
+              {moduleKpis?.curing && (
+                <Card className="border-indigo-200/70">
+                  <CardHeader className="pb-2">
+                    <CardDescription>Curing KPIs</CardDescription>
+                    <CardTitle className="text-xl">{formatNumber(moduleKpis.curing.totalOutputKg)} KGs</CardTitle>
+                  </CardHeader>
+                  <CardContent className="text-xs text-muted-foreground space-y-1">
+                    <div>Records: {formatNumber(moduleKpis.curing.totalRecords, 0)}</div>
+                    <div>Avg drying days: {formatNumber(moduleKpis.curing.avgDryingDays, 1)}</div>
+                    <div>Avg moisture drop: {formatNumber(moduleKpis.curing.avgMoistureDrop, 1)}%</div>
+                  </CardContent>
+                </Card>
+              )}
+              {moduleKpis?.quality && (
+                <Card className="border-violet-200/70">
+                  <CardHeader className="pb-2">
+                    <CardDescription>Quality KPIs</CardDescription>
+                    <CardTitle className="text-xl">{formatNumber(moduleKpis.quality.avgCupScore, 1)}</CardTitle>
+                  </CardHeader>
+                  <CardContent className="text-xs text-muted-foreground space-y-1">
+                    <div>Grading records: {formatNumber(moduleKpis.quality.totalRecords, 0)}</div>
+                    <div>Avg outturn: {formatNumber(moduleKpis.quality.avgOutturnPct, 1)}%</div>
+                    <div>Avg defects: {formatNumber(moduleKpis.quality.avgDefects, 1)}</div>
+                  </CardContent>
+                </Card>
+              )}
+              {moduleKpis?.journal && (
+                <Card className="border-teal-200/70">
+                  <CardHeader className="pb-2">
+                    <CardDescription>Journal Coverage</CardDescription>
+                    <CardTitle className="text-xl">{formatNumber(moduleKpis.journal.totalEntries, 0)} entries</CardTitle>
+                  </CardHeader>
+                  <CardContent className="text-xs text-muted-foreground space-y-1">
+                    <div>Irrigation logs: {formatNumber(moduleKpis.journal.irrigationEntries, 0)}</div>
+                    <div>Active locations: {formatNumber(moduleKpis.journal.activeLocations, 0)}</div>
+                  </CardContent>
+                </Card>
+              )}
+              {moduleKpis?.receivables && (
+                <Card className="border-amber-200/70">
+                  <CardHeader className="pb-2">
+                    <CardDescription>Receivables</CardDescription>
+                    <CardTitle className="text-xl">{formatCurrency(moduleKpis.receivables.totalOutstanding)}</CardTitle>
+                  </CardHeader>
+                  <CardContent className="text-xs text-muted-foreground space-y-1">
+                    <div>Invoiced (FY): {formatCurrency(moduleKpis.receivables.totalInvoiced)}</div>
+                    <div>Overdue: {formatCurrency(moduleKpis.receivables.totalOverdue)}</div>
+                    <div>Invoices: {formatNumber(moduleKpis.receivables.totalCount, 0)}</div>
+                  </CardContent>
+                </Card>
+              )}
             </div>
           )}
 

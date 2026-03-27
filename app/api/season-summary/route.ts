@@ -374,7 +374,7 @@ export async function GET(request: NextRequest) {
       if (!isMissingRelation(error, "receivables")) throw error
     }
 
-    let curingKpis = { ...defaultCuringKpis }
+    let curingKpis: typeof defaultCuringKpis | null = null
     try {
       const curingRows = await runTenantQuery(
         sql,
@@ -412,7 +412,7 @@ export async function GET(request: NextRequest) {
       if (!isMissingRelation(error, "curing_records")) throw error
     }
 
-    let qualityKpis = { ...defaultQualityKpis }
+    let qualityKpis: typeof defaultQualityKpis | null = null
     try {
       const qualityRows = await runTenantQuery(
         sql,
