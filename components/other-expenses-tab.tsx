@@ -16,6 +16,8 @@ import { Badge } from "@/components/ui/badge"
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
 import { formatDateOnly } from "@/lib/date-utils"
 import { formatCurrency } from "@/lib/format"
+import { SkeletonTable } from "@/components/ui/skeleton"
+import { EmptyStateTable } from "@/components/ui/empty-state"
 
 interface ActivityCode {
   code: string
@@ -401,7 +403,7 @@ export default function OtherExpensesTab({ locationId }: { locationId?: string }
       </Card>
 
       {loading ? (
-        <div className="text-center py-8 text-muted-foreground">Loading expenses...</div>
+        <Card><CardContent className="p-0"><SkeletonTable rows={4} cols={5} /></CardContent></Card>
       ) : deployments.length > 0 ? (
         <Card>
           <CardHeader>
@@ -549,11 +551,11 @@ export default function OtherExpensesTab({ locationId }: { locationId?: string }
           </CardContent>
         </Card>
       ) : (
-        <Card>
-          <CardContent className="text-center py-8 text-muted-foreground">
-            No expenses recorded yet. Click &quot;Add Expense&quot; to get started.
-          </CardContent>
-        </Card>
+        <EmptyStateTable
+          title="No expenses recorded yet"
+          description="Add your first expense above to start tracking costs by activity code."
+          size="md"
+        />
       )}
     </div>
   )

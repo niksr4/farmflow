@@ -220,7 +220,7 @@ export default function BillingTab({ showDataToolsControls = false }: BillingTab
           "Supply state and place of supply decide the GST split, so double-check them.",
           "Line item descriptions should be understandable to the buyer and accountant.",
         ]}
-        tip="This screen saves draft invoices inside FarmFlow. It does not submit IRN or full e-invoicing yet."
+        tip="Draft invoices saved here are for your records. IRN filing and e-invoicing are handled through your government portal."
         tone="finance"
         actions={
           <>

@@ -24,6 +24,7 @@ import { formatDateOnly } from "@/lib/date-utils"
 import { formatNumber } from "@/lib/format"
 import { canAcceptNonNegative, isBlockedNumericKey } from "@/lib/number-input"
 import TaskGuideCard from "@/components/task-guide-card"
+import { SkeletonTable } from "@/components/ui/skeleton"
 import WorkspacePageShell from "@/components/workspace-page-shell"
 import posthog from "posthog-js"
 
@@ -855,7 +856,7 @@ export default function DispatchTab({ showDataToolsControls = false }: DispatchT
           "Use received KGs when you know the actual received weight, because sales availability follows that number.",
           "If the shipment is still unclear, save the bag movement and update notes later rather than waiting.",
         ]}
-        tip="Think of dispatch as the bridge between processing stock and sales stock. Clear dispatch records stop inventory confusion."
+        tip="Every bag that leaves a location should have a dispatch record. This keeps your stock balance accurate for sales and season-end."
         tone="operations"
         actions={
           <>
@@ -1306,9 +1307,7 @@ export default function DispatchTab({ showDataToolsControls = false }: DispatchT
             </div>
           )}
           {isLoading ? (
-            <div className="flex items-center justify-center py-8">
-              <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-            </div>
+            <SkeletonTable rows={5} cols={5} />
           ) : dispatchRecords.length === 0 ? (
             <div className="rounded-2xl border border-dashed border-emerald-200 bg-emerald-50/40 p-5 text-sm">
               <p className="font-semibold text-foreground">No dispatch records yet</p>

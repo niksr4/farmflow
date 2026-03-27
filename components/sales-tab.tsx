@@ -1098,7 +1098,7 @@ export default function SalesTab({
       <TaskGuideCard
         eyebrow="Sales guide"
         title="Record a sale after buyer, quantity, and price are confirmed"
-        description="Sales should follow actual commercial events. Keep it simple: who bought, what was sold, how much was sold, and what price was agreed."
+        description="Record each sale once the buyer, quantity, and price are confirmed. Keep it simple: who bought, what was sold, how much, and at what price."
         bullets={[
           "Choose the correct location so sold stock matches dispatch and inventory.",
           "Enter buyer and price only after they are confirmed, not as a rough guess.",

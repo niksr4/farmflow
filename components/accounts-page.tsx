@@ -13,7 +13,8 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { FileSpreadsheet, FileText, Coins, PlusCircle, Settings, Users, Receipt, Loader2, Pencil, Trash2, Check, X, BarChart2, ChevronDown, ChevronUp } from "lucide-react"
-import { Skeleton } from "@/components/ui/skeleton"
+import { Skeleton, SkeletonTable, SkeletonCard } from "@/components/ui/skeleton"
+import { EmptyStateTable } from "@/components/ui/empty-state"
 import AttendanceTab from "./attendance-tab"
 import LaborDeploymentTab from "./labor-deployment-tab"
 import OtherExpensesTab from "./other-expenses-tab"
@@ -118,7 +119,7 @@ export default function AccountsPage({
   const [loadingActivities, setLoadingActivities] = useState(false)
   const [isAddingActivity, setIsAddingActivity] = useState(false)
   const [showAllActivitySuggestions, setShowAllActivitySuggestions] = useState(false)
-  const [showCostPatterns, setShowCostPatterns] = useState(false)
+  const [showCostPatterns, setShowCostPatterns] = useState(true)
   const [newActivityCode, setNewActivityCode] = useState("")
   const [newActivityReference, setNewActivityReference] = useState("")
   const [isSubmitting, setIsSubmitting] = useState(false)
@@ -942,7 +943,7 @@ export default function AccountsPage({
           "Keep account codes short and stable so exports stay clean for accountants.",
           "Use attendance when you want daily people tracking, not as a replacement for payroll review.",
         ]}
-        tip="If you only need a clear finance summary, keep the coding structure simple at the start."
+        tip="Fewer, well-named codes make your end-of-season export far easier to read."
         tone="finance"
       />
 
@@ -968,9 +969,8 @@ export default function AccountsPage({
         </CardHeader>
         <CardContent className="space-y-4">
           {accountsIntelligenceLoading ? (
-            <div className="flex items-center gap-2 text-sm text-muted-foreground">
-              <Loader2 className="h-4 w-4 animate-spin" />
-              Building accounts intelligence...
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
+              {[1, 2, 3, 4].map((i) => <SkeletonCard key={i} />)}
             </div>
           ) : accountsIntelligenceError ? (
             <p className="text-sm text-rose-600">{accountsIntelligenceError}</p>
@@ -1053,9 +1053,12 @@ export default function AccountsPage({
               {topHighlights.length > 0 && (
                 <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
                   {topHighlights.map((highlight, index) => (
-                    <div key={`${highlight}-${index}`} className="rounded-xl border bg-card p-3">
-                      <p className="text-[10px] uppercase tracking-[0.18em] text-muted-foreground">Insight {index + 1}</p>
-                      <p className="mt-1 text-sm text-foreground">{highlight}</p>
+                    <div key={`${highlight}-${index}`} className="rounded-xl border border-amber-100 bg-amber-50/40 p-3">
+                      <div className="flex items-center gap-1.5 mb-1">
+                        <span className="h-1.5 w-1.5 rounded-full bg-amber-500 shrink-0" />
+                        <p className="text-[10px] uppercase tracking-[0.18em] text-amber-700">AI Signal {index + 1}</p>
+                      </div>
+                      <p className="text-sm text-neutral-800">{highlight}</p>
                     </div>
                   ))}
                 </div>
@@ -1346,7 +1349,7 @@ export default function AccountsPage({
               )}
 
               {loadingActivities ? (
-                <div className="text-center py-8 text-muted-foreground">Loading account activities...</div>
+                <SkeletonTable rows={4} cols={4} />
               ) : accountActivities.length > 0 ? (
                 <>
                   <div className="rounded-md border hidden md:block">
@@ -1538,10 +1541,11 @@ export default function AccountsPage({
                   </div>
                 </>
               ) : (
-                <div className="text-center py-8 text-gray-500">
-                  <p>No account activities yet</p>
-                  <p className="text-sm mt-2">Add labor or expense codes to start tracking estate spend.</p>
-                </div>
+                <EmptyStateTable
+                  title="No account activities yet"
+                  description="Add labor or expense codes to start tracking estate spend."
+                  size="md"
+                />
               )}
             </CardContent>
           </Card>

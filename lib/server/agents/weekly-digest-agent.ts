@@ -100,6 +100,60 @@ End with: "Powered by FarmFlow — your estate, always in view."`,
   }
 }
 
+function buildDigestHtml(ownerName: string, tenantName: string, digestText: string): string {
+  // Convert plain-text numbered sections to simple HTML paragraphs
+  const lines = digestText.split("\n").filter((l) => l.trim().length > 0)
+  const bodyHtml = lines
+    .map((line) => {
+      const trimmed = line.trim()
+      // Numbered section header e.g. "1. This Week at a Glance"
+      if (/^\d+\.\s+[A-Z]/.test(trimmed)) {
+        return `<p style="margin:20px 0 4px;font-size:11px;font-weight:600;letter-spacing:0.1em;text-transform:uppercase;color:#6b7280;">${trimmed}</p>`
+      }
+      // Bullet point
+      if (trimmed.startsWith("- ") || trimmed.startsWith("• ")) {
+        return `<p style="margin:4px 0 4px 16px;font-size:14px;color:#374151;">· ${trimmed.slice(2)}</p>`
+      }
+      // Powered-by footer line
+      if (trimmed.startsWith("Powered by")) {
+        return `<p style="margin-top:24px;font-size:12px;color:#9ca3af;">${trimmed}</p>`
+      }
+      return `<p style="margin:6px 0;font-size:14px;line-height:1.6;color:#374151;">${trimmed}</p>`
+    })
+    .join("\n")
+
+  return `<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
+<body style="margin:0;padding:0;background:#f9fafb;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;">
+  <table width="100%" cellpadding="0" cellspacing="0" style="background:#f9fafb;padding:32px 16px;">
+    <tr><td align="center">
+      <table width="100%" cellpadding="0" cellspacing="0" style="max-width:560px;">
+
+        <!-- Header -->
+        <tr><td style="background:#052e16;border-radius:12px 12px 0 0;padding:24px 32px;">
+          <p style="margin:0;font-size:11px;font-weight:600;letter-spacing:0.15em;text-transform:uppercase;color:#6ee7b7;">Weekly Digest</p>
+          <p style="margin:6px 0 0;font-size:22px;font-weight:700;color:#f9fafb;">${tenantName}</p>
+        </td></tr>
+
+        <!-- Body -->
+        <tr><td style="background:#ffffff;padding:28px 32px;border-left:1px solid #e5e7eb;border-right:1px solid #e5e7eb;">
+          <p style="margin:0 0 20px;font-size:14px;color:#6b7280;">Hi ${ownerName}, here is your weekly estate operations digest.</p>
+          ${bodyHtml}
+        </td></tr>
+
+        <!-- Footer -->
+        <tr><td style="background:#f3f4f6;border-radius:0 0 12px 12px;border:1px solid #e5e7eb;border-top:none;padding:16px 32px;">
+          <p style="margin:0;font-size:12px;color:#9ca3af;">You're receiving this because you're the estate owner on FarmFlow. Reply to unsubscribe.</p>
+        </td></tr>
+
+      </table>
+    </td></tr>
+  </table>
+</body>
+</html>`
+}
+
 async function sendDigestEmail(tenant: TenantDigestRow, digestText: string): Promise<boolean> {
   const resendKey = String(process.env.RESEND_API_KEY || "").trim()
   const from = String(process.env.DIGEST_EMAIL_FROM || process.env.ALERT_EMAIL_FROM || "").trim()
@@ -109,6 +163,7 @@ async function sendDigestEmail(tenant: TenantDigestRow, digestText: string): Pro
   const subject = `Your FarmFlow Weekly Digest — ${tenant.tenantName}`
   const greeting = `Hi ${tenant.ownerName},\n\nHere is your weekly estate operations digest.\n\n`
   const text = greeting + digestText
+  const html = buildDigestHtml(tenant.ownerName, tenant.tenantName, digestText)
 
   try {
     const response = await fetchWithTimeout("https://api.resend.com/emails", {
@@ -122,6 +177,7 @@ async function sendDigestEmail(tenant: TenantDigestRow, digestText: string): Pro
         to: [tenant.ownerEmail],
         subject,
         text,
+        html,
       }),
       timeoutMs: 10_000,
     })

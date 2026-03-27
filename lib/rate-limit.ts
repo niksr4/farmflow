@@ -10,6 +10,8 @@ const redis = hasRedisConfig ? Redis.fromEnv() : null
 type RateLimitKey =
   | "aiAnalysis"
   | "aiAssistant"
+  | "aiProactiveInsights"
+  | "aiSeasonCompare"
   | "news"
   | "weather"
   | "authLogin"
@@ -59,6 +61,8 @@ export const isRateLimitUnavailableError = (error: unknown): error is RateLimitU
 const limiters: Record<RateLimitKey, Ratelimit | null> = {
   aiAnalysis: redis ? new Ratelimit({ redis, limiter: Ratelimit.fixedWindow(5, "1 m") }) : null,
   aiAssistant: redis ? new Ratelimit({ redis, limiter: Ratelimit.fixedWindow(12, "5 m") }) : null,
+  aiProactiveInsights: redis ? new Ratelimit({ redis, limiter: Ratelimit.fixedWindow(4, "30 m") }) : null,
+  aiSeasonCompare: redis ? new Ratelimit({ redis, limiter: Ratelimit.fixedWindow(3, "1 h") }) : null,
   news: redis ? new Ratelimit({ redis, limiter: Ratelimit.fixedWindow(30, "1 m") }) : null,
   weather: redis ? new Ratelimit({ redis, limiter: Ratelimit.fixedWindow(30, "1 m") }) : null,
   authLogin: redis ? new Ratelimit({ redis, limiter: Ratelimit.fixedWindow(10, "10 m") }) : null,
@@ -83,6 +87,8 @@ type LocalLimiterEntry = {
 const localLimiterConfig: Record<RateLimitKey, LocalLimiterConfig> = {
   aiAnalysis: { limit: 5, windowMs: 60_000 },
   aiAssistant: { limit: 12, windowMs: 5 * 60_000 },
+  aiProactiveInsights: { limit: 4, windowMs: 30 * 60_000 },
+  aiSeasonCompare: { limit: 3, windowMs: 60 * 60_000 },
   news: { limit: 30, windowMs: 60_000 },
   weather: { limit: 30, windowMs: 60_000 },
   authLogin: { limit: 10, windowMs: 10 * 60_000 },

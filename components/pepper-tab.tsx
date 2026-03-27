@@ -402,7 +402,7 @@ export function PepperTab() {
           "Enter picked weight first, then green pepper, then dry pepper when it is ready.",
           "Use notes for drying issues, delays, or anything that explains conversion changes.",
         ]}
-        tip="Pepper stays near pulping because the team often records both on the same day, but the totals should never mix."
+        tip="Record pepper separately from coffee so your tonnage and revenue reports stay clean."
         tone="operations"
         actions={
           <>

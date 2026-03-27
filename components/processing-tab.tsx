@@ -23,6 +23,7 @@ import { formatDateOnly } from "@/lib/date-utils"
 import { formatNumber } from "@/lib/format"
 import { canAcceptNonNegative, isBlockedNumericKey } from "@/lib/number-input"
 import TaskGuideCard from "@/components/task-guide-card"
+import { SkeletonTable } from "@/components/ui/skeleton"
 
 interface ProcessingRecord {
   id?: number
@@ -141,6 +142,7 @@ export default function ProcessingTab({ showDataToolsControls = false }: Process
   const [recordsTotalCount, setRecordsTotalCount] = useState(0)
   const [hasMoreRecords, setHasMoreRecords] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
+  const [anomalyWarning, setAnomalyWarning] = useState<{ message: string; currentRate: number; historicalAvg: number } | null>(null)
   const [isExporting, setIsExporting] = useState(false)
   const [dashboardData, setDashboardData] = useState<DashboardData[]>([])
   const [isLoadingDashboard, setIsLoadingDashboard] = useState(false)
@@ -577,9 +579,37 @@ export default function ProcessingTab({ showDataToolsControls = false }: Process
           description: `Coffee pulping record saved successfully for ${selectedLocation?.name || "estate"}`,
         })
         setHasExistingRecord(true)
+        setAnomalyWarning(null)
 
         await loadRecentRecords(0, false)
         await loadDashboardData()
+
+        // Fire anomaly check in background — don't block the save flow
+        if (record.crop_today && record.crop_today > 0 && record.dry_parch != null) {
+          fetch("/api/processing-records/check-anomaly", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              cropToday: record.crop_today,
+              dryParch: record.dry_parch,
+              coffeeType,
+              locationId: selectedLocationId,
+            }),
+          })
+            .then((r) => r.json())
+            .then((result) => {
+              if (result?.anomaly && result?.message) {
+                setAnomalyWarning({
+                  message: result.message,
+                  currentRate: result.currentRate,
+                  historicalAvg: result.historicalAvg,
+                })
+              }
+            })
+            .catch(() => {
+              // Anomaly check is best-effort — silent failure is fine
+            })
+        }
 
         const nextDay = new Date(date)
         nextDay.setDate(nextDay.getDate() + 1)
@@ -838,13 +868,13 @@ export default function ProcessingTab({ showDataToolsControls = false }: Process
       <TaskGuideCard
         eyebrow="Pulping guide"
         title="Record coffee pulping and output here"
-        description="This screen is best for supervisors and clerks entering coffee intake, pulping progress, and processed output. Keep each record tied to the real date, location, and coffee type."
+        description="Enter each day's intake, pulping progress, and processed output. Keep every record tied to the actual date, location, and coffee type."
         bullets={[
           "Select the estate location first so stock lands in the right place.",
           "Record what came in today and what came out today, even if the numbers are small.",
           "If the team is unsure, enter the physical truth first and add notes instead of guessing.",
         ]}
-        tip="Good pulping records make dispatch, sales, and season reporting easier later. Wrong dates or wrong locations cause most downstream confusion."
+        tip="Accurate dates and locations here prevent reconciliation problems at dispatch and sales time."
         tone="operations"
         actions={
           <>
@@ -1425,6 +1455,28 @@ export default function ProcessingTab({ showDataToolsControls = false }: Process
                   </Button>
                 )}
               </div>
+
+              {anomalyWarning && (
+                <div className="rounded-xl border border-amber-200 bg-amber-50 p-4">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="space-y-1">
+                      <p className="text-sm font-medium text-amber-800">Conversion rate flagged</p>
+                      <p className="text-sm text-amber-700">{anomalyWarning.message}</p>
+                      <p className="text-xs text-amber-600">
+                        Today: {anomalyWarning.currentRate}% · 90-day avg: {anomalyWarning.historicalAvg}%
+                      </p>
+                    </div>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      className="h-6 px-2 text-amber-700 hover:bg-amber-100"
+                      onClick={() => setAnomalyWarning(null)}
+                    >
+                      Dismiss
+                    </Button>
+                  </div>
+                </div>
+              )}
             </>
           )}
         </CardContent>
@@ -1444,10 +1496,7 @@ export default function ProcessingTab({ showDataToolsControls = false }: Process
         </CardHeader>
         <CardContent>
           {isLoadingRecords ? (
-            <div className="flex items-center justify-center py-8">
-              <Loader2 className="h-6 w-6 animate-spin mr-2" />
-              <span>Loading recent records...</span>
-            </div>
+            <SkeletonTable rows={4} cols={5} />
           ) : recentRecords.length === 0 ? (
             <div className="rounded-2xl border border-dashed border-emerald-200 bg-emerald-50/40 p-5 text-sm">
               <p className="font-semibold text-foreground">No processing records yet</p>

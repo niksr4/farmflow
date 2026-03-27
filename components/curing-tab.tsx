@@ -14,6 +14,8 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/comp
 import { Calendar } from "@/components/ui/calendar"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { CalendarIcon, Loader2, Save, Trash2 } from "lucide-react"
+import { SkeletonTable } from "@/components/ui/skeleton"
+import { EmptyStateTable } from "@/components/ui/empty-state"
 import { format } from "date-fns"
 import { useToast } from "@/hooks/use-toast"
 import { useAuth } from "@/hooks/use-auth"
@@ -490,12 +492,13 @@ export default function CuringTab() {
             </div>
           )}
           {loading ? (
-            <div className="flex items-center gap-2 text-sm text-muted-foreground">
-              <Loader2 className="h-4 w-4 animate-spin" />
-              Loading records...
-            </div>
+            <SkeletonTable rows={4} cols={6} />
           ) : recentRecords.length === 0 ? (
-            <div className="text-sm text-muted-foreground">No curing records yet.</div>
+            <EmptyStateTable
+              title="No curing records yet"
+              description="Log your first curing batch above to start tracking moisture loss and output yields."
+              size="sm"
+            />
           ) : (
             <div className="overflow-x-auto">
               <Table>

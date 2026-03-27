@@ -10,6 +10,8 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { formatDateOnly } from "@/lib/date-utils"
 import { toast } from "sonner"
+import { Skeleton } from "@/components/ui/skeleton"
+import { EmptyState } from "@/components/ui/empty-state"
 
 type AttendanceWorker = {
   id: string
@@ -232,12 +234,17 @@ export default function AttendanceTab() {
         </CardHeader>
         <CardContent className="space-y-3">
           {loading ? (
-            <div className="flex items-center gap-2 text-sm text-muted-foreground">
-              <Loader2 className="h-4 w-4 animate-spin" />
-              Loading attendance...
+            <div className="space-y-2">
+              {[1, 2, 3].map((i) => (
+                <Skeleton key={i} className="h-16 w-full rounded-xl bg-stone-100" />
+              ))}
             </div>
           ) : workers.length === 0 ? (
-            <p className="text-sm text-muted-foreground">Add at least one employee to start taking attendance.</p>
+            <EmptyState
+              title="No employees added yet"
+              description="Add employees in the Workers tab to begin taking daily attendance."
+              size="sm"
+            />
           ) : (
             workers.map((worker) => {
               const isPresent = presentWorkerIdSet.has(worker.id)
@@ -274,12 +281,9 @@ export default function AttendanceTab() {
         </CardHeader>
         <CardContent>
           {loading ? (
-            <div className="flex items-center gap-2 text-sm text-muted-foreground">
-              <Loader2 className="h-4 w-4 animate-spin" />
-              Loading weekly summary...
-            </div>
+            <Skeleton className="h-32 w-full rounded-xl bg-stone-100" />
           ) : weeklySummary.length === 0 ? (
-            <p className="text-sm text-muted-foreground">No attendance data for this week yet.</p>
+            <EmptyState title="No data for this week" description="Mark attendance above to populate the weekly summary." size="sm" />
           ) : (
             <div className="overflow-x-auto">
               <Table>

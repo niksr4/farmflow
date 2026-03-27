@@ -16,6 +16,8 @@ import { Badge } from "@/components/ui/badge"
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
 import { formatDateOnly } from "@/lib/date-utils"
 import { formatCurrency, formatNumber } from "@/lib/format"
+import { SkeletonTable } from "@/components/ui/skeleton"
+import { EmptyStateTable } from "@/components/ui/empty-state"
 
 interface ActivityCode {
   code: string
@@ -405,7 +407,7 @@ export default function LaborDeploymentTab({ locationId }: { locationId?: string
       </Card>
 
       {loading ? (
-        <div className="text-center py-8 text-muted-foreground">Loading labor deployments...</div>
+        <Card><CardContent className="p-0"><SkeletonTable rows={4} cols={5} /></CardContent></Card>
       ) : deployments.length > 0 ? (
         <Card>
           <CardHeader>
@@ -564,11 +566,11 @@ export default function LaborDeploymentTab({ locationId }: { locationId?: string
           </CardContent>
         </Card>
       ) : (
-        <Card>
-          <CardContent className="text-center py-8 text-muted-foreground">
-            No labor deployments recorded yet. Click &quot;Add Labor Deployment&quot; to get started.
-          </CardContent>
-        </Card>
+        <EmptyStateTable
+          title="No labor deployments yet"
+          description="Record your first deployment above to start tracking labor costs by activity code."
+          size="md"
+        />
       )}
     </div>
   )
