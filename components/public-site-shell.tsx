@@ -32,6 +32,7 @@ export function PublicSiteShell({ children, theme = "light" }: PublicSiteShellPr
     { href: "/capabilities", label: t("public.landing.navCapabilities") },
     { href: "/journey", label: t("public.landing.navJourney") },
     { href: "/trust", label: t("public.landing.navTrust") },
+    { href: "/contact", label: "Contact" },
   ]
 
   return (
@@ -156,6 +157,9 @@ export function PublicSiteShell({ children, theme = "light" }: PublicSiteShellPr
             </Link>
             <Link href="/trust" className={isDark ? "hover:text-white" : "hover:text-slate-900"}>
               {t("public.landing.navTrust")}
+            </Link>
+            <Link href="/contact" className={isDark ? "hover:text-white" : "hover:text-slate-900"}>
+              Contact
             </Link>
           </div>
         </div>
