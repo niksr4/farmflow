@@ -461,6 +461,40 @@ export default function LandingPage() {
           </div>
         </MotionSection>
 
+        {/* ── Crop roadmap ── */}
+        <MotionSection {...reveal(0.04)}>
+          <div className="rounded-2xl border border-white/[0.06] bg-white/[0.02] px-6 py-8 text-center sm:px-10">
+            <p className="text-xs uppercase tracking-[0.25em] text-stone-600">Built for estates, not just coffee</p>
+            <p className="mx-auto mt-3 max-w-xl text-sm leading-7 text-stone-400">
+              FarmFlow starts with coffee — the crop with the most operational complexity. The same foundation is expanding to tea, cocoa, spices, and beyond as those communities come on board.
+            </p>
+            <div className="mt-6 flex flex-wrap items-center justify-center gap-3">
+              {[
+                { emoji: "☕", label: "Coffee", active: true },
+                { emoji: "🍵", label: "Tea" },
+                { emoji: "🍫", label: "Cocoa" },
+                { emoji: "🌿", label: "Spices" },
+                { emoji: "🌰", label: "Tree nuts" },
+                { emoji: "🌾", label: "Grains" },
+                { emoji: "🥦", label: "Horticulture" },
+              ].map((crop) => (
+                <span
+                  key={crop.label}
+                  className={`flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-medium ${
+                    crop.active
+                      ? "border-emerald-400/30 bg-emerald-400/[0.08] text-emerald-300"
+                      : "border-white/[0.06] bg-white/[0.02] text-stone-600"
+                  }`}
+                >
+                  <span>{crop.emoji}</span>
+                  {crop.label}
+                  {!crop.active && <span className="ml-0.5 text-[10px] text-stone-700">Soon</span>}
+                </span>
+              ))}
+            </div>
+          </div>
+        </MotionSection>
+
         {/* ── Final CTA ── */}
         <MotionSection {...reveal(0.08)} className="pb-12 text-center sm:pb-20">
           <div className="relative overflow-hidden rounded-3xl border border-emerald-400/15 bg-[linear-gradient(135deg,rgba(16,185,129,0.1),rgba(8,17,15,0.95)_50%)] px-8 py-20 sm:px-16">
