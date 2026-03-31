@@ -220,7 +220,7 @@ export default function LaborDeploymentTab({ locationId }: { locationId?: string
           description="Labor deployments need an activity code (e.g. 184 — Pepper Harvest, 140 — Arabica Harvesting). Account codes are set up in the Accounts Setup tab and tell FarmFlow what type of work each labor entry is for."
           bullets={[
             "Go to Accounts → Accounts Setup tab",
-            "Click "Add Activity" and enter your code and description",
+            'Click "Add Activity" and enter your code and description',
             "Come back here and log your first labor deployment",
           ]}
           tip="Your estate's chart of accounts is usually provided by your accountant or manager. Codes like 101–220 are common for coffee estates."
