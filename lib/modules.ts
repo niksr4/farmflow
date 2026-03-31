@@ -42,6 +42,7 @@ export const MODULES: ModuleDefinition[] = [
   { id: "weather", label: "Weather", defaultEnabled: true },
   { id: "season", label: "Season View", defaultEnabled: false },
   { id: "labor", label: "Labor Management", defaultEnabled: false },
+  { id: "picking", label: "Picking Log", defaultEnabled: false },
 ]
 
 export const MODULE_BUNDLES: ModuleBundle[] = [
@@ -77,6 +78,7 @@ export const MODULE_BUNDLES: ModuleBundle[] = [
       "pepper",
       "season",
       "journal",
+      "picking",
     ],
   },
   {

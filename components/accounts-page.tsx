@@ -95,16 +95,20 @@ interface AccountsIntelligence {
 
 type AccountsTabValue = "labor" | "expenses" | "attendance" | "activities" | "workers" | "picking" | "ledger" | "payroll"
 
-const LABOR_MANAGEMENT_TAB_VALUES = new Set<AccountsTabValue>(["workers", "picking", "ledger", "payroll"])
+const LABOR_MANAGEMENT_TAB_VALUES = new Set<AccountsTabValue>(["workers", "ledger", "payroll"])
 
 const normalizeAccountsTab = (
   initialTab: AccountsTabValue | undefined,
   showLaborManagement: boolean,
+  showPickingLog: boolean,
 ): AccountsTabValue => {
   if (!initialTab) {
     return "labor"
   }
   if (!showLaborManagement && LABOR_MANAGEMENT_TAB_VALUES.has(initialTab)) {
+    return "labor"
+  }
+  if (!showPickingLog && !showLaborManagement && initialTab === "picking") {
     return "labor"
   }
   return initialTab
@@ -116,6 +120,7 @@ type AccountsPageProps = {
   onRequestedExportHandled?: (requestId: number) => void
   initialTab?: AccountsTabValue
   showLaborManagement?: boolean
+  showPickingLog?: boolean
 }
 
 export default function AccountsPage({
@@ -124,6 +129,7 @@ export default function AccountsPage({
   onRequestedExportHandled,
   initialTab,
   showLaborManagement = false,
+  showPickingLog = false,
 }: AccountsPageProps) {
   const { isAdmin, isOwner, user } = useAuth()
   const canManageActivities = isAdmin || isOwner || user?.role === "user"
@@ -160,7 +166,7 @@ export default function AccountsPage({
   const [accountsIntelligence, setAccountsIntelligence] = useState<AccountsIntelligence | null>(null)
   const [accountsIntelligenceLoading, setAccountsIntelligenceLoading] = useState(false)
   const [accountsIntelligenceError, setAccountsIntelligenceError] = useState<string | null>(null)
-  const [activeTab, setActiveTab] = useState<AccountsTabValue>(() => normalizeAccountsTab(initialTab, showLaborManagement))
+  const [activeTab, setActiveTab] = useState<AccountsTabValue>(() => normalizeAccountsTab(initialTab, showLaborManagement, showPickingLog))
   const handledExportRequestRef = useRef<number | null>(null)
   const exportCombinedCSVRef = useRef<() => Promise<void>>(async () => undefined)
   const exportCombinedXlsxRef = useRef<() => Promise<void>>(async () => undefined)
@@ -185,8 +191,8 @@ export default function AccountsPage({
   }, [])
 
   useEffect(() => {
-    setActiveTab(normalizeAccountsTab(initialTab, showLaborManagement))
-  }, [initialTab, showLaborManagement])
+    setActiveTab(normalizeAccountsTab(initialTab, showLaborManagement, showPickingLog))
+  }, [initialTab, showLaborManagement, showPickingLog])
 
   useEffect(() => {
     const fetchTotals = async () => {
@@ -1242,15 +1248,17 @@ export default function AccountsPage({
             <Settings className="h-4 w-4" />
             Account Activities
           </TabsTrigger>
+          {(showPickingLog || showLaborManagement) && (
+            <TabsTrigger value="picking" className="flex items-center gap-2">
+              <Wheat className="h-4 w-4" />
+              Picking Log
+            </TabsTrigger>
+          )}
           {showLaborManagement && (
             <>
               <TabsTrigger value="workers" className="flex items-center gap-2">
                 <UserCheck className="h-4 w-4" />
                 Workers
-              </TabsTrigger>
-              <TabsTrigger value="picking" className="flex items-center gap-2">
-                <Wheat className="h-4 w-4" />
-                Picking Log
               </TabsTrigger>
               <TabsTrigger value="ledger" className="flex items-center gap-2">
                 <BookOpen className="h-4 w-4" />
@@ -1599,14 +1607,15 @@ export default function AccountsPage({
           </Card>
         </TabsContent>
 
+        {(showPickingLog || showLaborManagement) && (
+          <TabsContent value="picking" className="mt-6">
+            <PickingLogTab />
+          </TabsContent>
+        )}
         {showLaborManagement && (
           <>
             <TabsContent value="workers" className="mt-6">
               <WorkerProfilesTab />
-            </TabsContent>
-
-            <TabsContent value="picking" className="mt-6">
-              <PickingLogTab />
             </TabsContent>
 
             <TabsContent value="ledger" className="mt-6">
