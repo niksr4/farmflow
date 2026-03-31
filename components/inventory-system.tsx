@@ -545,7 +545,7 @@ export default function InventorySystem() {
   const canShowSeason = isModuleEnabled("season")
   const canShowYieldForecast = canShowSeason
   const canShowActivityLog = (isAdmin || isOwner) && isFeatureEnabled("showActivityLogTab")
-  const canShowLaborManagement = false // TODO: assign to plan before enabling — workers/picking/ledger/payroll tabs
+  const canShowLaborManagement = isModuleEnabled("labor")
   const canShowReceivables = isModuleEnabled("receivables")
   const canShowBilling = isModuleEnabled("billing")
   const canShowDocuments = isModuleEnabled("documents")

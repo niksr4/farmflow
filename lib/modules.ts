@@ -48,7 +48,7 @@ export const MODULE_BUNDLES: ModuleBundle[] = [
   {
     id: "basic",
     label: "Basic",
-    description: "Inventory, transaction history, accounts, and a live balance sheet for disciplined daily control.",
+    description: "Digital books for estates that don't need the full operational workflow yet. Inventory, accounts, and a live balance sheet.",
     modules: [
       "inventory",
       "transactions",
@@ -61,7 +61,7 @@ export const MODULE_BUNDLES: ModuleBundle[] = [
   {
     id: "core",
     label: "Core",
-    description: "Inventory, accounts, processing, dispatch, and sales for the main coffee operating workflow.",
+    description: "The full harvest-to-sale workflow for estates running their own pulping. Processing, dispatch, sales, accounts, and settlement tracking.",
     modules: [
       "inventory",
       "transactions",
@@ -71,6 +71,7 @@ export const MODULE_BUNDLES: ModuleBundle[] = [
       "dispatch",
       "sales",
       "other-sales",
+      "receivables",
       "rainfall",
       "weather",
       "pepper",
@@ -81,7 +82,7 @@ export const MODULE_BUNDLES: ModuleBundle[] = [
   {
     id: "enterprise",
     label: "Enterprise",
-    description: "All FarmFlow modules, including advanced quality, finance, documents, insights, and climate tooling.",
+    description: "Everything in Core, plus quality management, full labor payroll, advanced finance, and AI-powered insights for large or commercially ambitious estates.",
     modules: MODULES.map((module) => module.id),
   },
 ]
