@@ -3,6 +3,8 @@ export type TenantEstateProfile = {
   weatherLocationLabel: string
   weatherLatitude: number | null
   weatherLongitude: number | null
+  cropFamily: string | null       // e.g. "coffee" | "tea" | "cocoa" — matches CROP_FAMILIES id
+  primaryVarieties: string[]      // e.g. ["Arabica", "Robusta"] or ["Assam", "Darjeeling"]
 }
 
 export const DEFAULT_TENANT_ESTATE_PROFILE: TenantEstateProfile = {
@@ -10,6 +12,8 @@ export const DEFAULT_TENANT_ESTATE_PROFILE: TenantEstateProfile = {
   weatherLocationLabel: "",
   weatherLatitude: null,
   weatherLongitude: null,
+  cropFamily: null,
+  primaryVarieties: [],
 }
 
 const MAX_ACREAGE = 100_000
@@ -25,7 +29,33 @@ export const mergeTenantEstateProfile = (input?: Partial<TenantEstateProfile> | 
   ...DEFAULT_TENANT_ESTATE_PROFILE,
   ...(input || {}),
   weatherLocationLabel: String(input?.weatherLocationLabel || "").trim(),
+  cropFamily: typeof input?.cropFamily === "string" ? input.cropFamily.trim() || null : null,
+  primaryVarieties: Array.isArray(input?.primaryVarieties)
+    ? (input.primaryVarieties as unknown[]).filter((v): v is string => typeof v === "string" && v.trim().length > 0).map((v) => v.trim())
+    : [],
 })
+
+// Valid crop family ids — keep in sync with CROP_FAMILIES in crop-config.ts
+const VALID_CROP_FAMILIES = ["coffee", "tea", "cocoa", "spices", "tree_nuts", "grains", "horticulture"]
+
+export const getCropLabel = (profile?: TenantEstateProfile | null): string => {
+  const family = String(profile?.cropFamily || "coffee").trim().toLowerCase()
+  const labels: Record<string, string> = {
+    coffee: "coffee",
+    tea: "tea",
+    cocoa: "cocoa",
+    spices: "spices",
+    tree_nuts: "tree nuts",
+    grains: "grains",
+    horticulture: "horticulture",
+  }
+  return labels[family] ?? family
+}
+
+export const getCropVarietiesLabel = (profile?: TenantEstateProfile | null): string => {
+  if (!profile?.primaryVarieties?.length) return ""
+  return profile.primaryVarieties.join(", ")
+}
 
 export const sanitizeTenantEstateProfile = (input: unknown): Partial<TenantEstateProfile> | null => {
   if (!input || typeof input !== "object") return null
@@ -70,6 +100,25 @@ export const sanitizeTenantEstateProfile = (input: unknown): Partial<TenantEstat
     } else {
       return null
     }
+  }
+
+  if ("cropFamily" in value) {
+    if (value.cropFamily === null || value.cropFamily === "") {
+      cleaned.cropFamily = null
+    } else {
+      const family = String(value.cropFamily).trim().toLowerCase()
+      if (!VALID_CROP_FAMILIES.includes(family)) return null
+      cleaned.cropFamily = family
+    }
+  }
+
+  if ("primaryVarieties" in value) {
+    if (!Array.isArray(value.primaryVarieties)) return null
+    const varieties = (value.primaryVarieties as unknown[])
+      .filter((v): v is string => typeof v === "string" && v.trim().length > 0)
+      .map((v) => (v as string).trim())
+    if (varieties.some((v) => v.length > 80) || varieties.length > 10) return null
+    cleaned.primaryVarieties = varieties
   }
 
   return Object.keys(cleaned).length > 0 ? cleaned : null

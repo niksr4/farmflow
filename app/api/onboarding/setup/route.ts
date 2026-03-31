@@ -11,6 +11,8 @@ import { completeGuidedSetup, loadGuidedSetup } from "@/lib/server/onboarding/se
 import { buildErrorResponse, databaseNotConfiguredResponse } from "@/lib/server/route-utils"
 import { isDbConfigured } from "@/lib/server/db"
 
+const VALID_CROP_FAMILIES = ["coffee", "tea", "cocoa", "spices", "tree_nuts", "grains", "horticulture"]
+
 const setupBodySchema = z.object({
   estateName: z.string().trim().min(1, "Estate name is required").max(160, "Estate name is too long"),
   bagWeightKg: z.number().min(40, "Bag weight must be at least 40 kg").max(70, "Bag weight must be 70 kg or less"),
@@ -18,6 +20,8 @@ const setupBodySchema = z.object({
   primaryLocationName: z.string().trim().min(1, "Primary location name is required").max(120, "Location name is too long"),
   primaryLocationCode: z.string().trim().min(1, "Location code is required").max(24, "Location code is too long"),
   moduleBundleId: z.string().trim().min(1, "Module bundle is required"),
+  cropFamily: z.string().trim().refine((v) => !v || VALID_CROP_FAMILIES.includes(v), "Invalid crop type").nullable().optional(),
+  primaryVarieties: z.array(z.string().trim().max(80)).max(10).optional(),
 })
 
 export async function GET() {
@@ -72,6 +76,8 @@ export async function POST(request: Request) {
       primaryLocationName: parsed.data.primaryLocationName,
       primaryLocationCode: parsed.data.primaryLocationCode,
       moduleBundleId: parsed.data.moduleBundleId,
+      cropFamily: parsed.data.cropFamily ?? null,
+      primaryVarieties: parsed.data.primaryVarieties ?? [],
     })
 
     return NextResponse.json({ success: true, setup: saved })

@@ -1,10 +1,11 @@
-export type OnboardingStatusKey = "locations" | "inventory" | "processing" | "dispatch" | "sales"
+export type OnboardingStatusKey = "locations" | "inventory" | "labor" | "processing" | "dispatch" | "sales"
 
 export type OnboardingStatusSnapshot = Record<OnboardingStatusKey, boolean>
 
 export const INITIAL_ONBOARDING_STATUS: OnboardingStatusSnapshot = {
   locations: false,
   inventory: false,
+  labor: false,
   processing: false,
   dispatch: false,
   sales: false,
@@ -12,6 +13,7 @@ export const INITIAL_ONBOARDING_STATUS: OnboardingStatusSnapshot = {
 
 export type OnboardingAccess = {
   canShowInventory: boolean
+  canShowLabor: boolean
   canShowProcessing: boolean
   canShowDispatch: boolean
   canShowSales: boolean
@@ -73,6 +75,9 @@ export const getOnboardingStatusRequests = (
   if (access.canShowInventory) {
     requests.push({ key: "inventory", endpoint: "/api/inventory-neon" })
   }
+  if (access.canShowLabor) {
+    requests.push({ key: "labor", endpoint: "/api/labor-neon?limit=1&offset=0" })
+  }
   if (access.canShowProcessing) {
     requests.push({ key: "processing", endpoint: "/api/processing-records?limit=1&offset=0" })
   }
@@ -112,6 +117,17 @@ export const buildOnboardingSteps = (
       done: status.inventory,
       actionLabel: "Go to Inventory",
       actionTab: "inventory",
+    })
+  }
+
+  if (access.canShowLabor) {
+    steps.push({
+      key: "labor",
+      title: "Log first labor deployment",
+      description: "Track workers deployed for harvesting, pruning, irrigation, or any farm activity.",
+      done: status.labor,
+      actionLabel: "Go to Accounts",
+      actionTab: "accounts",
     })
   }
 
@@ -180,10 +196,22 @@ export const buildLaunchGuidePhases = (
     actionTab: foundationActionTab,
   })
 
+  if (access.canShowLabor) {
+    phases.push({
+      id: "phase-labor",
+      label: "Week 2",
+      title: "Labor tracking",
+      detail: "Log daily worker deployments by activity code so costs stay accurate from week one.",
+      done: status.labor,
+      actionLabel: "Open Accounts",
+      actionTab: "accounts",
+    })
+  }
+
   if (access.canShowProcessing) {
     phases.push({
       id: "phase-2",
-      label: "Week 2",
+      label: access.canShowLabor ? "Week 3" : "Week 2",
       title: "Daily pulping rhythm",
       detail: "Capture Arabica and Robusta pulping output every day with consistent operating notes.",
       done: status.processing,

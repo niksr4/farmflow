@@ -3,6 +3,7 @@ import { getFiscalYearDateRange, getCurrentFiscalYear } from "@/lib/fiscal-year-
 import { normalizeTenantContext, runTenantQuery } from "@/lib/server/tenant-db"
 import { logServerError } from "@/lib/server/safe-logging"
 import type { InventoryItem, Transaction } from "@/lib/inventory-types"
+import { getCropLabel, getCropVarietiesLabel, mergeTenantEstateProfile } from "@/lib/tenant-estate-profile"
 
 type TenantContext = ReturnType<typeof normalizeTenantContext>
 
@@ -50,6 +51,8 @@ interface DataSummaryInput {
     buyer_name: string
   }>
   fiscalYear: string
+  cropFamily?: string | null
+  primaryVarieties?: string[]
 }
 
 export async function buildTenantAiDataSummary({
@@ -67,7 +70,7 @@ export async function buildTenantAiDataSummary({
   const fiscalYear = getCurrentFiscalYear()
   const { startDate, endDate } = getFiscalYearDateRange(fiscalYear)
 
-  const [inventorySnapshot, laborData, processingData, rainfallData, expenseData, dispatchData, salesData, transactionHistory] =
+  const [inventorySnapshot, laborData, processingData, rainfallData, expenseData, dispatchData, salesData, transactionHistory, cropProfile] =
     await Promise.all([
       inventory.length > 0 ? Promise.resolve(inventory) : fetchInventorySnapshot(tenantContext),
       fetchLaborData(startDate, endDate, tenantContext),
@@ -77,6 +80,7 @@ export async function buildTenantAiDataSummary({
       fetchDispatchData(startDate, endDate, tenantContext),
       fetchSalesData(startDate, endDate, tenantContext),
       fetchTransactionHistory(startDate, endDate, tenantContext),
+      fetchCropProfile(tenantContext),
     ])
 
   const normalizedTransactions = transactions.map((transaction) => ({
@@ -89,6 +93,7 @@ export async function buildTenantAiDataSummary({
 
   return {
     fiscalYearLabel: fiscalYear.label,
+    cropProfile,
     dataSummary: buildDataSummary({
       inventory: inventorySnapshot,
       transactions: normalizedTransactions,
@@ -100,7 +105,27 @@ export async function buildTenantAiDataSummary({
       salesData,
       fiscalYear: fiscalYear.label,
       transactionHistory,
+      cropFamily: cropProfile.cropFamily,
+      primaryVarieties: cropProfile.primaryVarieties,
     }),
+  }
+}
+
+async function fetchCropProfile(tenantContext: TenantContext): Promise<{ cropFamily: string | null; primaryVarieties: string[] }> {
+  try {
+    const rows = await runTenantQuery(
+      sql,
+      tenantContext,
+      sql`SELECT ui_preferences FROM tenants WHERE id = ${tenantContext.tenantId} LIMIT 1`,
+    ) as Array<{ ui_preferences?: unknown }>
+    const raw = rows[0]?.ui_preferences
+    const prefs = raw && typeof raw === "object" ? raw as Record<string, unknown> : {}
+    const profile = mergeTenantEstateProfile(
+      prefs.estateProfile && typeof prefs.estateProfile === "object" ? prefs.estateProfile as Record<string, unknown> : null,
+    )
+    return { cropFamily: profile.cropFamily, primaryVarieties: profile.primaryVarieties }
+  } catch {
+    return { cropFamily: null, primaryVarieties: [] }
   }
 }
 
@@ -341,6 +366,10 @@ async function fetchTransactionHistory(startDate: string, endDate: string, tenan
 
 function buildDataSummary(data: DataSummaryInput): string {
   const sections: string[] = []
+
+  const cropLabel = getCropLabel({ cropFamily: data.cropFamily ?? null, primaryVarieties: data.primaryVarieties ?? [], acreageAcres: null, weatherLocationLabel: "", weatherLatitude: null, weatherLongitude: null })
+  const varietiesLabel = getCropVarietiesLabel({ cropFamily: data.cropFamily ?? null, primaryVarieties: data.primaryVarieties ?? [], acreageAcres: null, weatherLocationLabel: "", weatherLatitude: null, weatherLongitude: null })
+  sections.push(`## Crop: ${cropLabel}${varietiesLabel ? ` (${varietiesLabel})` : ""}`)
 
   sections.push(`## Fiscal Year: ${data.fiscalYear}`)
   sections.push(`## Analysis Date: ${new Date().toLocaleDateString("en-IN")}`)

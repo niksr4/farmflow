@@ -48,19 +48,28 @@ export async function POST(request: Request) {
       return NextResponse.json({ success: false, error: "Employee already exists" }, { status: 409 })
     }
 
+    const workerType = ["permanent", "seasonal", "contractor"].includes(String(body?.workerType || ""))
+      ? String(body.workerType)
+      : null
+    const dailyRate = body?.dailyRate != null && !Number.isNaN(Number(body.dailyRate)) ? Number(body.dailyRate) : null
+
     const insertedRows = await runTenantQuery(
       accountsSql,
       tenantContext,
       accountsSql`
         INSERT INTO attendance_workers (
           tenant_id,
-          full_name
+          full_name,
+          worker_type,
+          daily_rate
         )
         VALUES (
           ${tenantContext.tenantId},
-          ${name}
+          ${name},
+          ${workerType},
+          ${dailyRate}
         )
-        RETURNING id, full_name, created_at
+        RETURNING id, full_name, worker_type, daily_rate, created_at
       `,
     )
 
@@ -79,6 +88,8 @@ export async function POST(request: Request) {
         ? {
             id: String(worker.id),
             name: String(worker.full_name || ""),
+            workerType: worker.worker_type ? String(worker.worker_type) : null,
+            dailyRate: worker.daily_rate != null ? Number(worker.daily_rate) : null,
             createdAt: worker.created_at ? String(worker.created_at) : null,
           }
         : null,

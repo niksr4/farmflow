@@ -3,6 +3,7 @@ import "server-only"
 import { mkdir, writeFile } from "node:fs/promises"
 import path from "node:path"
 
+import { DEFAULT_ALERT_EMAIL_FROM, DEFAULT_AUTH_EMAIL_FROM } from "@/lib/email-addresses"
 import { fetchWithTimeout } from "@/lib/server/http"
 import {
   buildVerificationLink,
@@ -23,7 +24,8 @@ export type SignupVerificationEmailResult = {
   statusCode?: number
 }
 
-const resolveSender = () => String(process.env.AUTH_EMAIL_FROM || "").trim()
+const resolveSender = () =>
+  String(process.env.AUTH_EMAIL_FROM || process.env.ALERT_EMAIL_FROM || DEFAULT_AUTH_EMAIL_FROM || DEFAULT_ALERT_EMAIL_FROM).trim()
 const resolvePreviewDir = () => String(process.env.AUTH_EMAIL_PREVIEW_DIR || "").trim()
 
 const writePreviewEmail = async (input: SignupVerificationEmailInput, verificationLink: string) => {

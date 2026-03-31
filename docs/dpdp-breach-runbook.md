@@ -71,7 +71,7 @@ Subject: Important: Security Incident Affecting Your FarmFlow Account
 Hello,
 We detected a security incident that may have exposed some personal data in FarmFlow.
 We have contained the issue, are investigating, and will keep you informed.
-If you need help, contact us at privacy@farmflow.app.
+If you need help, contact us at support@thefarmflow.in.
 
 ## Post-Incident Review
 1. Root cause analysis and corrective actions.

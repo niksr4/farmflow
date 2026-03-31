@@ -14,6 +14,8 @@ import { logSecurityEvent } from "@/lib/server/security-events"
 import { persistTenantPlanId, resolveTenantPlanId } from "@/lib/server/tenant-subscriptions"
 import { normalizeTenantContext, runTenantQuery } from "@/lib/server/tenant-db"
 import { buildStarterLocationName } from "@/lib/server/onboarding/utils"
+import { mergeTenantEstateProfile } from "@/lib/tenant-estate-profile"
+import { parseJsonObject } from "@/lib/server/tenant-experience-db"
 
 const DEFAULT_BAG_WEIGHT_KG = 50
 const STARTER_LOCATION_CODE = "MAIN"
@@ -31,6 +33,7 @@ type TenantSetupRow = {
   id: string
   name: string
   bag_weight_kg: number | null
+  ui_preferences?: unknown
 }
 
 type LocationRow = {
@@ -49,6 +52,8 @@ export type GuidedSetupState = {
   primaryLocationName: string
   primaryLocationCode: string
   moduleBundleId: string
+  cropFamily: string | null
+  primaryVarieties: string[]
 }
 
 export type CompleteGuidedSetupInput = {
@@ -58,6 +63,8 @@ export type CompleteGuidedSetupInput = {
   primaryLocationName: string
   primaryLocationCode: string
   moduleBundleId: string
+  cropFamily?: string | null
+  primaryVarieties?: string[]
 }
 
 const normalizeLocationCode = (value: string) => value.trim().toUpperCase().replace(/\s+/g, "-")
@@ -81,7 +88,7 @@ const loadTenantSetupRow = async (tenantContext: { tenantId: string; role: strin
     sql,
     tenantContext,
     sql`
-      SELECT id, name, bag_weight_kg
+      SELECT id, name, bag_weight_kg, ui_preferences
       FROM tenants
       WHERE id = ${tenantContext.tenantId}
       LIMIT 1
@@ -142,6 +149,8 @@ export async function loadGuidedSetup(sessionUser: SessionUser): Promise<GuidedS
     role: tenantContext.role,
     moduleRows: enabledModules.map((moduleId) => ({ module: moduleId, enabled: true })),
   })
+  const prefs = parseJsonObject(tenant.ui_preferences, "ui_preferences") ?? {}
+  const estateProfile = mergeTenantEstateProfile((prefs as any).estateProfile ?? null)
   return {
     complete: !Boolean(account.requires_guided_setup),
     email: String(account.email || ""),
@@ -152,6 +161,8 @@ export async function loadGuidedSetup(sessionUser: SessionUser): Promise<GuidedS
     primaryLocationName: primaryLocation?.name || buildStarterLocationName(String(tenant.name || "")),
     primaryLocationCode: primaryLocation?.code || STARTER_LOCATION_CODE,
     moduleBundleId,
+    cropFamily: estateProfile.cropFamily,
+    primaryVarieties: estateProfile.primaryVarieties,
   }
 }
 
@@ -169,13 +180,25 @@ export async function completeGuidedSetup(sessionUser: SessionUser, input: Compl
 
   const before = await loadGuidedSetup(sessionUser)
 
+  // Load existing ui_preferences so we can merge crop into estateProfile without clobbering other settings
+  const existingTenantRows = await loadTenantSetupRow(tenantContext)
+  const existingPrefs = parseJsonObject(existingTenantRows[0]?.ui_preferences, "ui_preferences") ?? {}
+  const existingEstateProfile = mergeTenantEstateProfile((existingPrefs as any).estateProfile ?? null)
+  const mergedEstateProfile = {
+    ...existingEstateProfile,
+    ...(input.cropFamily !== undefined ? { cropFamily: input.cropFamily ?? null } : {}),
+    ...(input.primaryVarieties !== undefined ? { primaryVarieties: input.primaryVarieties } : {}),
+  }
+  const mergedUiPreferences = { ...(existingPrefs as object), estateProfile: mergedEstateProfile }
+
   await runTenantQuery(
     sql,
     tenantContext,
     sql`
       UPDATE tenants
       SET name = ${input.estateName},
-          bag_weight_kg = ${input.bagWeightKg}
+          bag_weight_kg = ${input.bagWeightKg},
+          ui_preferences = ${JSON.stringify(mergedUiPreferences)}::jsonb
       WHERE id = ${tenantContext.tenantId}
     `,
   )

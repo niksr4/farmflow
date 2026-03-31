@@ -5,7 +5,6 @@ import { logSecurityEvent } from "@/lib/server/security-events"
 import { sql } from "@/lib/server/db"
 import { normalizeTenantContext, runTenantQuery } from "@/lib/server/tenant-db"
 import { sendSignupVerificationEmail } from "@/lib/server/onboarding/email"
-import { provisionSignupRequestById } from "@/lib/server/onboarding/provision-tenant"
 import type { SignupRequestRecord, SignupRequestResult } from "@/lib/server/onboarding/types"
 import {
   generateSignupToken,
@@ -317,13 +316,25 @@ export async function createOrRefreshSignupRequest(input: CreateSignupRequestInp
     },
   })
 
-  await provisionSignupRequestById(signupRequest.id)
+  const issuedToken = await issueVerificationToken(signupRequest.id)
+  const emailResult = await sendSignupVerificationEmail({
+    email: signupRequest.email,
+    name: signupRequest.name,
+    estateName: signupRequest.estate_name,
+    token: issuedToken.token,
+  })
+
+  if (!emailResult.sent) {
+    throw new Error(emailResult.reason || "Unable to send verification email right now")
+  }
+
+  await markVerificationSent(signupRequest.id)
 
   return {
     signupRequestId: signupRequest.id,
     email,
     maskedEmail: maskEmailAddress(email),
-    verificationSent: false,
+    verificationSent: true,
   }
 }
 

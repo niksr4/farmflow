@@ -12,12 +12,16 @@ import { Label } from "@/components/ui/label"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { FileSpreadsheet, FileText, Coins, PlusCircle, Settings, Users, Receipt, Loader2, Pencil, Trash2, Check, X, BarChart2, ChevronDown, ChevronUp } from "lucide-react"
+import { FileSpreadsheet, FileText, Coins, PlusCircle, Settings, Users, Receipt, Loader2, Pencil, Trash2, Check, X, BarChart2, ChevronDown, ChevronUp, Wheat, BookOpen, DollarSign, UserCheck } from "lucide-react"
 import { Skeleton, SkeletonTable, SkeletonCard } from "@/components/ui/skeleton"
 import { EmptyStateTable } from "@/components/ui/empty-state"
 import AttendanceTab from "./attendance-tab"
 import LaborDeploymentTab from "./labor-deployment-tab"
 import OtherExpensesTab from "./other-expenses-tab"
+import WorkerProfilesTab from "./worker-profiles-tab"
+import PickingLogTab from "./picking-log-tab"
+import WorkerLedgerTab from "./worker-ledger-tab"
+import PayrollSummaryTab from "./payroll-summary-tab"
 import TaskGuideCard from "@/components/task-guide-card"
 import WorkspacePageShell from "@/components/workspace-page-shell"
 import { toast } from "sonner"
@@ -89,11 +93,29 @@ interface AccountsIntelligence {
   highlights: string[]
 }
 
+type AccountsTabValue = "labor" | "expenses" | "attendance" | "activities" | "workers" | "picking" | "ledger" | "payroll"
+
+const LABOR_MANAGEMENT_TAB_VALUES = new Set<AccountsTabValue>(["workers", "picking", "ledger", "payroll"])
+
+const normalizeAccountsTab = (
+  initialTab: AccountsTabValue | undefined,
+  showLaborManagement: boolean,
+): AccountsTabValue => {
+  if (!initialTab) {
+    return "labor"
+  }
+  if (!showLaborManagement && LABOR_MANAGEMENT_TAB_VALUES.has(initialTab)) {
+    return "labor"
+  }
+  return initialTab
+}
+
 type AccountsPageProps = {
   showDataToolsControls?: boolean
   requestedExport?: { requestId: number; format: LegacyAccountsExportFormat } | null
   onRequestedExportHandled?: (requestId: number) => void
-  initialTab?: "labor" | "expenses" | "attendance" | "activities"
+  initialTab?: AccountsTabValue
+  showLaborManagement?: boolean
 }
 
 export default function AccountsPage({
@@ -101,6 +123,7 @@ export default function AccountsPage({
   requestedExport = null,
   onRequestedExportHandled,
   initialTab,
+  showLaborManagement = false,
 }: AccountsPageProps) {
   const { isAdmin, isOwner, user } = useAuth()
   const canManageActivities = isAdmin || isOwner || user?.role === "user"
@@ -137,6 +160,7 @@ export default function AccountsPage({
   const [accountsIntelligence, setAccountsIntelligence] = useState<AccountsIntelligence | null>(null)
   const [accountsIntelligenceLoading, setAccountsIntelligenceLoading] = useState(false)
   const [accountsIntelligenceError, setAccountsIntelligenceError] = useState<string | null>(null)
+  const [activeTab, setActiveTab] = useState<AccountsTabValue>(() => normalizeAccountsTab(initialTab, showLaborManagement))
   const handledExportRequestRef = useRef<number | null>(null)
   const exportCombinedCSVRef = useRef<() => Promise<void>>(async () => undefined)
   const exportCombinedXlsxRef = useRef<() => Promise<void>>(async () => undefined)
@@ -159,6 +183,10 @@ export default function AccountsPage({
     fetchAllActivities()
     fetchAccountActivities()
   }, [])
+
+  useEffect(() => {
+    setActiveTab(normalizeAccountsTab(initialTab, showLaborManagement))
+  }, [initialTab, showLaborManagement])
 
   useEffect(() => {
     const fetchTotals = async () => {
@@ -1196,7 +1224,7 @@ export default function AccountsPage({
         </Card>
       )}
 
-      <Tabs defaultValue={initialTab ?? "labor"} className="w-full space-y-4">
+      <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as AccountsTabValue)} className="w-full space-y-4">
         <TabsList className="w-full justify-start sm:justify-center">
           <TabsTrigger value="labor" className="flex items-center gap-2">
             <Users className="h-4 w-4" />
@@ -1214,6 +1242,26 @@ export default function AccountsPage({
             <Settings className="h-4 w-4" />
             Account Activities
           </TabsTrigger>
+          {showLaborManagement && (
+            <>
+              <TabsTrigger value="workers" className="flex items-center gap-2">
+                <UserCheck className="h-4 w-4" />
+                Workers
+              </TabsTrigger>
+              <TabsTrigger value="picking" className="flex items-center gap-2">
+                <Wheat className="h-4 w-4" />
+                Picking Log
+              </TabsTrigger>
+              <TabsTrigger value="ledger" className="flex items-center gap-2">
+                <BookOpen className="h-4 w-4" />
+                Advances &amp; Deductions
+              </TabsTrigger>
+              <TabsTrigger value="payroll" className="flex items-center gap-2">
+                <DollarSign className="h-4 w-4" />
+                Payroll Summary
+              </TabsTrigger>
+            </>
+          )}
         </TabsList>
 
         <TabsContent value="labor" className="mt-6">
@@ -1550,6 +1598,26 @@ export default function AccountsPage({
             </CardContent>
           </Card>
         </TabsContent>
+
+        {showLaborManagement && (
+          <>
+            <TabsContent value="workers" className="mt-6">
+              <WorkerProfilesTab />
+            </TabsContent>
+
+            <TabsContent value="picking" className="mt-6">
+              <PickingLogTab />
+            </TabsContent>
+
+            <TabsContent value="ledger" className="mt-6">
+              <WorkerLedgerTab />
+            </TabsContent>
+
+            <TabsContent value="payroll" className="mt-6">
+              <PayrollSummaryTab />
+            </TabsContent>
+          </>
+        )}
       </Tabs>
     </WorkspacePageShell>
   )

@@ -34,6 +34,18 @@ async function tableHasLocationColumn(tableName: string) {
   return Array.isArray(rows) && rows.length > 0
 }
 
+async function tableHasTaskDescriptionColumn(tableName: string) {
+  const rows = await accountsSql`
+    SELECT 1
+    FROM information_schema.columns
+    WHERE table_schema = 'public'
+      AND table_name = ${tableName}
+      AND column_name = 'task_description'
+    LIMIT 1
+  `
+  return Array.isArray(rows) && rows.length > 0
+}
+
 async function validateLocationForTenant(
   tenantContext: { tenantId: string; role: string },
   locationId: string | null,
@@ -71,6 +83,7 @@ export async function GET(request: Request) {
     }
     const locationFilterClause =
       supportsLocation && validLocationId ? accountsSql` AND location_id = ${validLocationId}::uuid` : accountsSql``
+    const supportsTaskDescription = await tableHasTaskDescriptionColumn("labor_transactions")
     const all = searchParams.get("all") === "true"
     const limitParam = searchParams.get("limit")
     const offsetParam = searchParams.get("offset")
@@ -90,7 +103,8 @@ export async function GET(request: Request) {
               outside_cost_per_laborer,
               total_cost,
               notes,
-              location_id
+              location_id,
+              task_description
             FROM labor_transactions
             WHERE tenant_id = ${tenantContext.tenantId}
               ${locationFilterClause}
@@ -108,7 +122,8 @@ export async function GET(request: Request) {
               outside_cost_per_laborer,
               total_cost,
               notes,
-              location_id
+              location_id,
+              task_description
             FROM labor_transactions
             WHERE tenant_id = ${tenantContext.tenantId}
               ${locationFilterClause}
@@ -125,7 +140,8 @@ export async function GET(request: Request) {
               outside_laborers,
               outside_cost_per_laborer,
               total_cost,
-              notes
+              notes,
+              task_description
             FROM labor_transactions
             WHERE tenant_id = ${tenantContext.tenantId}
             ORDER BY deployment_date DESC
@@ -141,7 +157,8 @@ export async function GET(request: Request) {
               outside_laborers,
               outside_cost_per_laborer,
               total_cost,
-              notes
+              notes,
+              task_description
             FROM labor_transactions
             WHERE tenant_id = ${tenantContext.tenantId}
             ORDER BY deployment_date DESC
@@ -205,6 +222,7 @@ export async function GET(request: Request) {
         totalCost: Number.parseFloat(row.total_cost),
         notes: row.notes || "",
         locationId: supportsLocation && row.location_id ? String(row.location_id) : null,
+        taskDescription: supportsTaskDescription && row.task_description ? String(row.task_description) : null,
         user: "system",
       }
     })
@@ -262,6 +280,10 @@ export async function POST(request: Request) {
     const tenantContext = normalizeTenantContext(sessionUser.tenantId, sessionUser.role)
     const body = await request.json()
     const { date, code, laborEntries, notes } = body
+    const supportsTaskDescription = await tableHasTaskDescriptionColumn("labor_transactions")
+    const taskDescription = supportsTaskDescription
+      ? String(body?.taskDescription || "").trim().slice(0, 500) || null
+      : null
 
     const requestedLocationId = normalizeLocationId(body?.locationId)
     if (requestedLocationId === "invalid") {
@@ -340,6 +362,7 @@ export async function POST(request: Request) {
               total_cost,
               notes,
               location_id,
+              task_description,
               tenant_id
             ) VALUES (
               ${date}::timestamp,
@@ -351,6 +374,7 @@ export async function POST(request: Request) {
               ${computedTotalCost},
               ${notes},
               ${validLocationId}::uuid,
+              ${taskDescription},
               ${tenantContext.tenantId}
             )
             RETURNING id
@@ -369,6 +393,7 @@ export async function POST(request: Request) {
               outside_cost_per_laborer,
               total_cost,
               notes,
+              task_description,
               tenant_id
             ) VALUES (
               ${date}::timestamp,
@@ -379,6 +404,7 @@ export async function POST(request: Request) {
               ${outsideEntry?.costPerLabor || 0},
               ${computedTotalCost},
               ${notes},
+              ${taskDescription},
               ${tenantContext.tenantId}
             )
             RETURNING id
@@ -431,6 +457,10 @@ export async function PUT(request: Request) {
     const tenantContext = normalizeTenantContext(sessionUser.tenantId, sessionUser.role)
     const body = await request.json()
     const { id, date, code, laborEntries, notes } = body
+    const supportsTaskDescription = await tableHasTaskDescriptionColumn("labor_transactions")
+    const taskDescription = supportsTaskDescription
+      ? String(body?.taskDescription || "").trim().slice(0, 500) || null
+      : null
 
     const requestedLocationId = normalizeLocationId(body?.locationId)
     if (requestedLocationId === "invalid") {
@@ -481,6 +511,7 @@ export async function PUT(request: Request) {
             total_cost = ${computedTotalCost},
             notes = ${notes},
             location_id = ${validLocationId}::uuid,
+            task_description = ${taskDescription},
             tenant_id = ${tenantContext.tenantId}
           WHERE id = ${id}
             AND tenant_id = ${tenantContext.tenantId}
@@ -501,6 +532,7 @@ export async function PUT(request: Request) {
             outside_cost_per_laborer = ${outsideEntry?.costPerLabor || 0},
             total_cost = ${computedTotalCost},
             notes = ${notes},
+            task_description = ${taskDescription},
             tenant_id = ${tenantContext.tenantId}
           WHERE id = ${id}
             AND tenant_id = ${tenantContext.tenantId}

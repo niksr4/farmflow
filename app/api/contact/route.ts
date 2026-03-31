@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server"
 import { z } from "zod"
+import { DEFAULT_SUPPORT_EMAIL, DEFAULT_SUPPORT_EMAIL_FROM } from "@/lib/email-addresses"
 import { checkRateLimit, buildRateLimitHeaders, isRateLimitUnavailableError } from "@/lib/rate-limit"
 
 const contactBodySchema = z.object({
@@ -50,8 +51,8 @@ export async function POST(request: Request) {
   }
 
   const resendKey = String(process.env.RESEND_API_KEY || "").trim()
-  const to = String(process.env.ALERT_EMAIL_TO || "").trim()
-  const from = String(process.env.ALERT_EMAIL_FROM || "").trim()
+  const to = String(process.env.ALERT_EMAIL_TO || process.env.SUPPORT_EMAIL || DEFAULT_SUPPORT_EMAIL).trim()
+  const from = String(process.env.ALERT_EMAIL_FROM || DEFAULT_SUPPORT_EMAIL_FROM).trim()
 
   if (!resendKey || !to || !from) {
     // Email not configured — still acknowledge the submission gracefully

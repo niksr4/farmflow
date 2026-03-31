@@ -4,6 +4,7 @@ import { useState } from "react"
 import Link from "next/link"
 import { Fraunces, Manrope } from "next/font/google"
 import { ArrowLeft, Mail, MessageSquare, Send, CheckCircle2 } from "lucide-react"
+import { DEFAULT_SUPPORT_EMAIL } from "@/lib/email-addresses"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
@@ -95,11 +96,11 @@ export default function ContactPage() {
               </CardHeader>
               <CardContent>
                 <a
-                  href="mailto:hello@thefarmflow.in"
+                  href={`mailto:${DEFAULT_SUPPORT_EMAIL}`}
                   className="inline-flex items-center gap-2 rounded-xl border border-emerald-300/20 bg-emerald-300/[0.07] px-4 py-3 text-sm font-medium text-emerald-200 transition hover:border-emerald-300/40 hover:bg-emerald-300/[0.12]"
                 >
                   <Mail className="h-4 w-4" />
-                  hello@thefarmflow.in
+                  {DEFAULT_SUPPORT_EMAIL}
                 </a>
                 <p className="mt-3 text-xs text-stone-400">We aim to reply within one business day.</p>
               </CardContent>

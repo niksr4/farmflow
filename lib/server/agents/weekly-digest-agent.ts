@@ -1,16 +1,20 @@
 import "server-only"
 
+import { DEFAULT_ALERT_EMAIL_FROM, DEFAULT_DIGEST_EMAIL_FROM } from "@/lib/email-addresses"
 import { sql } from "@/lib/server/db"
 import { buildTenantAiDataSummary } from "@/lib/server/ai-analysis"
 import { getClaudeClient, isClaudeConfigured, extractClaudeText, CLAUDE_SONNET } from "@/lib/server/claude"
 import { fetchWithTimeout } from "@/lib/server/http"
 import { logServerWarning } from "@/lib/server/safe-logging"
+import { getCropLabel, getCropVarietiesLabel, mergeTenantEstateProfile } from "@/lib/tenant-estate-profile"
 
 type TenantDigestRow = {
   tenantId: string
   tenantName: string
   ownerEmail: string
   ownerName: string
+  cropFamily: string | null
+  primaryVarieties: string[]
 }
 
 type DigestResult = {
@@ -34,6 +38,7 @@ async function fetchTenantOwnersWithVerifiedEmail(): Promise<TenantDigestRow[]> 
     SELECT DISTINCT ON (t.id)
       t.id AS tenant_id,
       t.name AS tenant_name,
+      t.ui_preferences,
       u.email AS owner_email,
       COALESCE(u.username, u.email) AS owner_name
     FROM tenants t
@@ -45,12 +50,18 @@ async function fetchTenantOwnersWithVerifiedEmail(): Promise<TenantDigestRow[]> 
     ORDER BY t.id, CASE u.role WHEN 'owner' THEN 0 ELSE 1 END, u.created_at ASC
   `)
 
-  return toRows<any>(result).map((row: any) => ({
-    tenantId: String(row.tenant_id),
-    tenantName: String(row.tenant_name || "Your Estate"),
-    ownerEmail: String(row.owner_email),
-    ownerName: String(row.owner_name || "Estate Manager"),
-  }))
+  return toRows<any>(result).map((row: any) => {
+    const prefs = row.ui_preferences && typeof row.ui_preferences === "object" ? row.ui_preferences : {}
+    const profile = mergeTenantEstateProfile(prefs.estateProfile ?? null)
+    return {
+      tenantId: String(row.tenant_id),
+      tenantName: String(row.tenant_name || "Your Estate"),
+      ownerEmail: String(row.owner_email),
+      ownerName: String(row.owner_name || "Estate Manager"),
+      cropFamily: profile.cropFamily,
+      primaryVarieties: profile.primaryVarieties,
+    }
+  })
 }
 
 async function generateWeeklyDigestText(tenant: TenantDigestRow): Promise<string | null> {
@@ -60,17 +71,22 @@ async function generateWeeklyDigestText(tenant: TenantDigestRow): Promise<string
       role: "owner",
     })
 
+    const cropLabel = getCropLabel({ cropFamily: tenant.cropFamily, primaryVarieties: tenant.primaryVarieties, acreageAcres: null, weatherLocationLabel: "", weatherLatitude: null, weatherLongitude: null })
+    const varietiesLabel = getCropVarietiesLabel({ cropFamily: tenant.cropFamily, primaryVarieties: tenant.primaryVarieties, acreageAcres: null, weatherLocationLabel: "", weatherLatitude: null, weatherLongitude: null })
+    const cropContext = varietiesLabel ? `${cropLabel} (${varietiesLabel})` : cropLabel
+
     const client = getClaudeClient()
     const response = await client.messages.create({
       model: CLAUDE_SONNET,
       max_tokens: 1200,
       temperature: 0.3,
-      system: `You are FarmFlow Weekly Digest, an expert agricultural analyst summarising estate operations for coffee and pepper farmers in India.
+      system: `You are FarmFlow Weekly Digest, an expert agricultural analyst summarising estate operations for ${cropContext} estate managers.
 
 Rules:
 - Ground every number strictly in the provided data. Never invent figures.
 - When data is sparse or missing, say so plainly.
-- Use INR (₹) for currency and KG for weight.
+- Use the correct crop terminology: refer to the primary crop as "${cropLabel}", and use variety names where relevant.
+- Use INR (₹) for currency and KG for weight unless the data suggests otherwise.
 - Keep the tone warm, professional, and practical. Estate managers are busy.
 - This is a weekly email digest — keep it concise (under 400 words).
 - Format with clear sections using plain text (no markdown headers, no asterisks). Use numbered lists for recommendations.`,
@@ -156,7 +172,7 @@ function buildDigestHtml(ownerName: string, tenantName: string, digestText: stri
 
 async function sendDigestEmail(tenant: TenantDigestRow, digestText: string): Promise<boolean> {
   const resendKey = String(process.env.RESEND_API_KEY || "").trim()
-  const from = String(process.env.DIGEST_EMAIL_FROM || process.env.ALERT_EMAIL_FROM || "").trim()
+  const from = String(process.env.DIGEST_EMAIL_FROM || process.env.ALERT_EMAIL_FROM || DEFAULT_DIGEST_EMAIL_FROM || DEFAULT_ALERT_EMAIL_FROM).trim()
 
   if (!resendKey || !from) return false
 

@@ -151,8 +151,8 @@ Agents can email you when issues arise:
 - Log anomaly agent: new clusters since yesterday or critical ongoing clusters.
 
 Required env vars for email delivery:
-- `ALERT_EMAIL_TO` (comma-separated allowed; e.g. `nikchengappa@gmail.com`)
-- `ALERT_EMAIL_FROM` (e.g. `FarmFlow Alerts <onboarding@resend.dev>`)
+- `ALERT_EMAIL_TO` (comma-separated allowed; e.g. `support@thefarmflow.in`)
+- `ALERT_EMAIL_FROM` (e.g. `FarmFlow Alerts <support@thefarmflow.in>`)
 - `RESEND_API_KEY`
 
 Email sending is non-blocking: if email fails, agent runs still complete and findings remain stored.

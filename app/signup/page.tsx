@@ -88,7 +88,12 @@ export default function SignupRoute() {
                     source: "signup-page",
                     has_country: Boolean(normalized.country),
                   })
-                  router.push("/login")
+                  if (data.verificationSent) {
+                    const params = new URLSearchParams({ email: data.email || normalized.email })
+                    router.push(`/verify-email?${params.toString()}`)
+                  } else {
+                    router.push("/login")
+                  }
                 } catch (error: any) {
                   posthog.captureException(error)
                   setErrorMessage(error?.message || "Unable to create your workspace right now. Please try again.")

@@ -4,7 +4,8 @@ import { useEffect, useMemo, useState } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { useSession } from "next-auth/react"
-import { ArrowRight, BookOpen, CheckCircle2, Globe2, MapPin, PackageCheck } from "lucide-react"
+import { ArrowRight, BookOpen, CheckCircle2, Globe2, MapPin, PackageCheck, Sprout } from "lucide-react"
+import { CROP_FAMILIES } from "@/lib/crop-config"
 import { LocaleSelector } from "@/components/locale-selector"
 import { useLocale } from "@/components/locale-provider"
 import { Button } from "@/components/ui/button"
@@ -27,6 +28,8 @@ type GuidedSetupState = {
   primaryLocationName: string
   primaryLocationCode: string
   moduleBundleId: string
+  cropFamily: string | null
+  primaryVarieties: string[]
 }
 
 type OnboardingResponse = {
@@ -40,6 +43,11 @@ const setupHighlights = [
     icon: Globe2,
     title: "Choose your language",
     description: "Set the language for your setup and account surfaces from the start.",
+  },
+  {
+    icon: Sprout,
+    title: "Tell us your crop",
+    description: "Coffee, tea, cocoa, spices — the AI and weekly digest adapt to what your estate grows.",
   },
   {
     icon: MapPin,
@@ -232,6 +240,85 @@ export default function WelcomeOnboardingPage() {
                     }
                   />
                 </div>
+              </div>
+
+              <div className="space-y-3">
+                <div>
+                  <Label>Primary crop</Label>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    Select what your estate grows. This personalises the AI analysis, weekly digest, and processing labels.
+                  </p>
+                </div>
+                <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+                  {CROP_FAMILIES.map((crop) => {
+                    const selected = (draft.cropFamily ?? "coffee") === crop.id
+                    return (
+                      <button
+                        key={crop.id}
+                        type="button"
+                        onClick={() =>
+                          setDraft((current) =>
+                            current
+                              ? { ...current, cropFamily: crop.id, primaryVarieties: [] }
+                              : current,
+                          )
+                        }
+                        className={`rounded-xl border p-3 text-left text-sm transition ${
+                          selected
+                            ? "border-emerald-500 bg-emerald-50 shadow-sm"
+                            : "border-border/70 bg-white hover:border-emerald-200"
+                        }`}
+                      >
+                        <div className="flex items-center justify-between gap-1">
+                          <span className="font-medium text-slate-900">{crop.label}</span>
+                          {selected && <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-600" />}
+                        </div>
+                        <p className="mt-1 text-[11px] text-muted-foreground leading-tight">
+                          {crop.varieties.slice(0, 3).join(", ")}
+                          {crop.varieties.length > 3 ? "…" : ""}
+                        </p>
+                      </button>
+                    )
+                  })}
+                </div>
+                {(() => {
+                  const activeCrop = CROP_FAMILIES.find((c) => c.id === (draft.cropFamily ?? "coffee"))
+                  if (!activeCrop) return null
+                  return (
+                    <div className="space-y-2">
+                      <Label className="text-xs text-muted-foreground">
+                        Varieties grown <span className="font-normal">(select all that apply)</span>
+                      </Label>
+                      <div className="flex flex-wrap gap-2">
+                        {activeCrop.varieties.map((variety) => {
+                          const picked = draft.primaryVarieties.includes(variety)
+                          return (
+                            <button
+                              key={variety}
+                              type="button"
+                              onClick={() =>
+                                setDraft((current) => {
+                                  if (!current) return current
+                                  const next = picked
+                                    ? current.primaryVarieties.filter((v) => v !== variety)
+                                    : [...current.primaryVarieties, variety]
+                                  return { ...current, primaryVarieties: next }
+                                })
+                              }
+                              className={`rounded-full border px-3 py-1 text-xs transition ${
+                                picked
+                                  ? "border-emerald-400 bg-emerald-100 text-emerald-800"
+                                  : "border-border/70 bg-white text-slate-600 hover:border-emerald-200"
+                              }`}
+                            >
+                              {variety}
+                            </button>
+                          )
+                        })}
+                      </div>
+                    </div>
+                  )
+                })()}
               </div>
 
               <div className="space-y-3">

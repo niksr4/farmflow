@@ -238,6 +238,7 @@ export default function InventorySystem() {
   type InventoryWorkspaceView = "inventory" | "transactions"
   type SalesWorkspaceView = "coffee" | "other-sales"
   type ProcessingWorkspaceView = "coffee" | "pepper"
+  type AccountsWorkspaceTab = "labor" | "expenses" | "attendance" | "activities" | "workers" | "picking" | "ledger" | "payroll"
   // UI / paging
   const [currentPage, setCurrentPage] = useState(1)
   const itemsPerPage = 10
@@ -249,7 +250,7 @@ export default function InventorySystem() {
   const [dataToolsDataset, setDataToolsDataset] = useState<ExportDatasetId>("processing")
   const [isExportingDataTools, setIsExportingDataTools] = useState(false)
   const [showDataToolsPanel, setShowDataToolsPanel] = useState(false)
-  const [accountsInitialTab, setAccountsInitialTab] = useState<"labor" | "expenses" | "attendance" | "activities" | undefined>(undefined)
+  const [accountsInitialTab, setAccountsInitialTab] = useState<AccountsWorkspaceTab | undefined>(undefined)
   const [enabledModules, setEnabledModules] = useState<string[] | null>(null)
   const [currentPlanId, setCurrentPlanId] = useState<string | null>(null)
   const [isModulesLoading, setIsModulesLoading] = useState(false)
@@ -544,6 +545,7 @@ export default function InventorySystem() {
   const canShowSeason = isModuleEnabled("season")
   const canShowYieldForecast = canShowSeason
   const canShowActivityLog = (isAdmin || isOwner) && isFeatureEnabled("showActivityLogTab")
+  const canShowLaborManagement = isModuleEnabled("labor")
   const canShowReceivables = isModuleEnabled("receivables")
   const canShowBilling = isModuleEnabled("billing")
   const canShowDocuments = isModuleEnabled("documents")
@@ -877,6 +879,7 @@ export default function InventorySystem() {
     try {
       const onboardingAccess: OnboardingAccess = {
         canShowInventory: isModuleEnabled("inventory"),
+        canShowLabor: isModuleEnabled("accounts"),
         canShowProcessing: isModuleEnabled("processing"),
         canShowDispatch: isModuleEnabled("dispatch"),
         canShowSales: isAdmin && isModuleEnabled("sales"),
@@ -5159,6 +5162,7 @@ export default function InventorySystem() {
 
   const onboardingAccess: OnboardingAccess = {
     canShowInventory,
+    canShowLabor: canShowAccounts,
     canShowProcessing,
     canShowDispatch,
     canShowSales,
@@ -5622,14 +5626,22 @@ export default function InventorySystem() {
                   <h1 className="text-2xl font-display font-semibold text-[color:var(--foreground)]">
                     FarmFlow Workspace Navigator
                   </h1>
+                  {!isPreviewMode && tenantSettings.estateName && (
+                    <p className="mt-1 flex items-center gap-1.5 text-lg font-semibold text-emerald-700">
+                      <Leaf className="h-4.5 w-4.5" />
+                      {tenantSettings.estateName}
+                    </p>
+                  )}
                 </div>
                 <Badge className="bg-white/90 text-emerald-700 border-emerald-200">Estate Workspace</Badge>
               </div>
               <div className="flex flex-wrap items-center gap-3 text-sm text-muted-foreground">
-                <span className="inline-flex items-center gap-2 rounded-full border border-emerald-100 bg-white/80 px-3 py-1 text-xs text-emerald-700">
-                  <Leaf className="h-3.5 w-3.5" />
-                  {tenantLabel}
-                </span>
+                {(isPreviewMode || !tenantSettings.estateName) && (
+                  <span className="inline-flex items-center gap-2 rounded-full border border-emerald-100 bg-white/80 px-3 py-1 text-xs text-emerald-700">
+                    <Leaf className="h-3.5 w-3.5" />
+                    {tenantLabel}
+                  </span>
+                )}
                 <span className="text-xs text-emerald-700/70">Live operations with traceability</span>
               </div>
             </div>
@@ -7813,6 +7825,7 @@ export default function InventorySystem() {
                 requestedExport={accountsExportRequest}
                 onRequestedExportHandled={handleAccountsExportRequestHandled}
                 initialTab={accountsInitialTab}
+                showLaborManagement={canShowLaborManagement}
               />
             </TabsContent>
           )}

@@ -18,6 +18,7 @@ import { formatDateOnly } from "@/lib/date-utils"
 import { formatCurrency, formatNumber } from "@/lib/format"
 import { SkeletonTable } from "@/components/ui/skeleton"
 import { EmptyStateTable } from "@/components/ui/empty-state"
+import TaskGuideCard from "@/components/task-guide-card"
 
 interface ActivityCode {
   code: string
@@ -33,6 +34,7 @@ interface FormData {
   outsideLaborers: number
   outsideCostPerLaborer: number
   notes: string
+  taskDescription: string
 }
 
 export default function LaborDeploymentTab({ locationId }: { locationId?: string }) {
@@ -63,6 +65,7 @@ export default function LaborDeploymentTab({ locationId }: { locationId?: string
     outsideLaborers: 0,
     outsideCostPerLaborer: 450,
     notes: "",
+    taskDescription: "",
   })
 
   const formRef = useRef<HTMLFormElement>(null)
@@ -118,6 +121,7 @@ export default function LaborDeploymentTab({ locationId }: { locationId?: string
       outsideLaborers: 0,
       outsideCostPerLaborer: 450,
       notes: "",
+      taskDescription: "",
     })
     setIsAdding(false)
     setEditingId(null)
@@ -151,6 +155,7 @@ export default function LaborDeploymentTab({ locationId }: { locationId?: string
       laborEntries,
       totalCost: calculateTotal(),
       notes: formData.notes,
+      taskDescription: formData.taskDescription,
       user: "admin",
     }
 
@@ -178,6 +183,7 @@ export default function LaborDeploymentTab({ locationId }: { locationId?: string
       outsideLaborers: outsideEntry?.laborCount || 0,
       outsideCostPerLaborer: outsideEntry?.costPerLabor || 450,
       notes: deployment.notes || "",
+      taskDescription: deployment.taskDescription || "",
     })
     setEditingId(deployment.id)
     setIsAdding(true)
@@ -206,6 +212,20 @@ export default function LaborDeploymentTab({ locationId }: { locationId?: string
 
   return (
     <div className="space-y-4">
+      {!loading && activities.length === 0 && (
+        <TaskGuideCard
+          tone="onboarding"
+          eyebrow="Setup required"
+          title="Add account codes before logging labor"
+          description="Labor deployments need an activity code (e.g. 184 — Pepper Harvest, 140 — Arabica Harvesting). Account codes are set up in the Accounts Setup tab and tell FarmFlow what type of work each labor entry is for."
+          bullets={[
+            "Go to Accounts → Accounts Setup tab",
+            "Click "Add Activity" and enter your code and description",
+            "Come back here and log your first labor deployment",
+          ]}
+          tip="Your estate's chart of accounts is usually provided by your accountant or manager. Codes like 101–220 are common for coffee estates."
+        />
+      )}
       <Card>
         <CardHeader>
           <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
@@ -369,6 +389,20 @@ export default function LaborDeploymentTab({ locationId }: { locationId?: string
               </div>
 
               <div className="space-y-2">
+                <Label htmlFor="taskDescription" className="text-base">
+                  Task Description
+                </Label>
+                <Textarea
+                  id="taskDescription"
+                  value={formData.taskDescription}
+                  onChange={(e) => setFormData((prev) => ({ ...prev, taskDescription: e.target.value }))}
+                  placeholder="Describe the field task (e.g. Weeding block 3, Pruning section A)..."
+                  rows={2}
+                  className="text-base"
+                />
+              </div>
+
+              <div className="space-y-2">
                 <Label htmlFor="notes" className="text-base">
                   Notes
                 </Label>
@@ -455,6 +489,11 @@ export default function LaborDeploymentTab({ locationId }: { locationId?: string
                           <div className="text-sm">
                             <span className="font-medium">Outside Labor:</span> {formatLaborCount(Number(outsideEntry.laborCount) || 0)} @{" "}
                             {formatCurrency(outsideEntry.costPerLabor)}
+                          </div>
+                        )}
+                        {deployment.taskDescription && (
+                          <div className="text-sm text-muted-foreground">
+                            <span className="font-medium">Task:</span> {deployment.taskDescription}
                           </div>
                         )}
                         {deployment.notes && (

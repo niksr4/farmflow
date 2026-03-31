@@ -1,3 +1,5 @@
+import { DEFAULT_SUPPORT_EMAIL } from "@/lib/email-addresses"
+
 export const PRIVACY_NOTICE_VERSION = "2026-02-09"
 
 const parseDays = (value: string | undefined, fallback: number, min = 0) => {
@@ -14,4 +16,4 @@ export const PRIVACY_RETENTION = {
   securityEventsDays: parseDays(process.env.SECURITY_EVENT_RETENTION_DAYS, 365, 180),
 }
 
-export const PRIVACY_CONTACT_EMAIL = process.env.PRIVACY_CONTACT_EMAIL || "privacy@farmflow.app"
+export const PRIVACY_CONTACT_EMAIL = process.env.PRIVACY_CONTACT_EMAIL || process.env.SUPPORT_EMAIL || DEFAULT_SUPPORT_EMAIL

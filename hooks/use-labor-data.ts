@@ -17,6 +17,7 @@ export interface LaborDeployment {
   totalCost: number
   date: string
   notes?: string
+  taskDescription?: string
   user: string
   updatedAt?: string
 }

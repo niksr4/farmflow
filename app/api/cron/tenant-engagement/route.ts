@@ -1,0 +1,50 @@
+import { NextResponse } from "next/server"
+import { runTenantEngagementAgent } from "@/lib/server/agents/tenant-engagement-agent"
+import { extractBearerToken, sharedSecretMatches } from "@/lib/server/request-security"
+import { logServerError } from "@/lib/server/safe-logging"
+
+export const dynamic = "force-dynamic"
+
+const getCronSecret = () => process.env.CRON_SECRET || null
+
+const parseRequestBody = async (request: Request) => {
+  if (request.method === "GET") {
+    const { searchParams } = new URL(request.url)
+    return {
+      dryRun: searchParams.get("dryRun") === "1" || searchParams.get("dryRun") === "true",
+    }
+  }
+  return await request.json().catch(() => ({}))
+}
+
+async function handleCronInvocation(request: Request) {
+  try {
+    const secret = getCronSecret()
+    if (!secret) {
+      return NextResponse.json({ success: false, error: "CRON_SECRET is not configured" }, { status: 503 })
+    }
+
+    if (!sharedSecretMatches(secret, extractBearerToken(request.headers))) {
+      return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 })
+    }
+
+    const body = await parseRequestBody(request)
+    const result = await runTenantEngagementAgent({
+      triggerSource: "cron",
+      dryRun: Boolean(body?.dryRun),
+    })
+
+    return NextResponse.json({ success: true, ...result })
+  } catch (error: any) {
+    logServerError("Tenant engagement cron invocation failed", error)
+    return NextResponse.json({ success: false, error: error?.message || "Tenant engagement agent failed" }, { status: 500 })
+  }
+}
+
+export async function GET(request: Request) {
+  return handleCronInvocation(request)
+}
+
+export async function POST(request: Request) {
+  return handleCronInvocation(request)
+}

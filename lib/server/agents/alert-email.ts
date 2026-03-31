@@ -1,5 +1,6 @@
 import "server-only"
 
+import { DEFAULT_ALERT_EMAIL_FROM, DEFAULT_SUPPORT_EMAIL } from "@/lib/email-addresses"
 import { fetchWithTimeout } from "@/lib/server/http"
 import { logServerWarning } from "@/lib/server/safe-logging"
 
@@ -23,8 +24,8 @@ const splitRecipients = (value: string) =>
     .filter(Boolean)
 
 export async function sendAgentAlertEmail(input: AlertEmailInput): Promise<AlertEmailResult> {
-  const toRecipients = splitRecipients(process.env.ALERT_EMAIL_TO || "")
-  const from = String(process.env.ALERT_EMAIL_FROM || "").trim()
+  const toRecipients = splitRecipients(process.env.ALERT_EMAIL_TO || process.env.SUPPORT_EMAIL || DEFAULT_SUPPORT_EMAIL)
+  const from = String(process.env.ALERT_EMAIL_FROM || DEFAULT_ALERT_EMAIL_FROM).trim()
   const resendKey = String(process.env.RESEND_API_KEY || "").trim()
 
   if (!toRecipients.length) {
