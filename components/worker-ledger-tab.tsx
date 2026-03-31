@@ -10,6 +10,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Badge } from "@/components/ui/badge"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { EmptyStateTable } from "@/components/ui/empty-state"
+import { FieldLabel } from "@/components/ui/field-label"
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import { toast } from "sonner"
 import { canWriteModule, canDeleteModule, type UserRole } from "@/lib/permissions"
 import { useAuth } from "@/hooks/use-auth"
@@ -181,6 +183,7 @@ export default function WorkerLedgerTab() {
                 <span className="ml-2 text-xs">
                   Deductions: <span className="font-medium text-rose-400">{formatCurrency(workerBalance.totalDeductions)}</span>
                   {" · "}Adjustments: <span className="font-medium text-sky-400">{formatCurrency(workerBalance.totalAdjustments)}</span>
+                  <span className="text-muted-foreground"> (filtered period)</span>
                 </span>
               )}
             </CardDescription>
@@ -229,7 +232,10 @@ export default function WorkerLedgerTab() {
                   <Input type="date" value={form.entryDate} onChange={(e) => setForm((f) => ({ ...f, entryDate: e.target.value }))} />
                 </div>
                 <div className="space-y-1.5">
-                  <Label>Type *</Label>
+                  <FieldLabel
+                    label="Type *"
+                    tooltip="Advance: cash paid to the worker before payday — reduces net payable. Deduction: amount withheld (food, accommodation, loan repayment) — reduces net payable. Adjustment: bonus or correction — adds to net payable."
+                  />
                   <Select value={form.entryType} onValueChange={(v) => setForm((f) => ({ ...f, entryType: v as EntryType }))}>
                     <SelectTrigger><SelectValue placeholder="Select type" /></SelectTrigger>
                     <SelectContent>
@@ -244,7 +250,12 @@ export default function WorkerLedgerTab() {
                   <Input type="number" min={0} step={10} value={form.amount} onChange={(e) => setForm((f) => ({ ...f, amount: e.target.value }))} placeholder="500" />
                 </div>
               </div>
-              <Input value={form.description} onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))} placeholder="Description (optional — e.g. Food deduction)" className="text-sm" />
+              <Input
+                value={form.description}
+                onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))}
+                placeholder="Description (optional) — e.g. Food deduction, Festival advance, Bonus for extra harvest"
+                className="text-sm"
+              />
               <div className="flex justify-end gap-2">
                 <Button variant="ghost" size="sm" onClick={() => { setIsAdding(false); setForm(EMPTY_FORM) }}>
                   <X className="mr-1 h-4 w-4" /> Cancel
@@ -273,7 +284,7 @@ export default function WorkerLedgerTab() {
                     <TableHead>Worker</TableHead>
                     <TableHead>Type</TableHead>
                     <TableHead className="text-right">Amount</TableHead>
-                    <TableHead>Description</TableHead>
+                    <TableHead className="hidden sm:table-cell">Description</TableHead>
                     {(canWrite || canDelete) && <TableHead className="w-20" />}
                   </TableRow>
                 </TableHeader>
@@ -294,7 +305,7 @@ export default function WorkerLedgerTab() {
                           </Select>
                         </TableCell>
                         <TableCell><Input type="number" value={editForm.amount} onChange={(ev) => setEditForm((f) => ({ ...f, amount: ev.target.value }))} className="h-8 w-28 text-right" /></TableCell>
-                        <TableCell><Input value={editForm.description} onChange={(ev) => setEditForm((f) => ({ ...f, description: ev.target.value }))} className="h-8 w-48" /></TableCell>
+                        <TableCell className="hidden sm:table-cell"><Input value={editForm.description} onChange={(ev) => setEditForm((f) => ({ ...f, description: ev.target.value }))} className="h-8 w-48" placeholder="Description" /></TableCell>
                         <TableCell>
                           <div className="flex gap-1">
                             <Button size="icon" variant="ghost" className="h-7 w-7" disabled={saving} onClick={() => handleSaveEdit(e.id)}>
@@ -314,13 +325,29 @@ export default function WorkerLedgerTab() {
                           </Badge>
                         </TableCell>
                         <TableCell className="text-right text-sm font-medium">{formatCurrency(e.amount)}</TableCell>
-                        <TableCell className="text-xs text-muted-foreground max-w-[200px] truncate">{e.description || "—"}</TableCell>
+                        <TableCell className="hidden sm:table-cell text-xs text-muted-foreground max-w-[200px] truncate">{e.description || "—"}</TableCell>
                         {(canWrite || canDelete) && (
                           <TableCell>
-                            <div className="flex gap-1">
-                              {canWrite && <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => startEdit(e)}><Pencil className="h-3.5 w-3.5" /></Button>}
-                              {canDelete && <Button size="icon" variant="ghost" className="h-7 w-7 text-destructive hover:text-destructive" onClick={() => handleDelete(e.id)}><Trash2 className="h-3.5 w-3.5" /></Button>}
-                            </div>
+                            <TooltipProvider>
+                              <div className="flex gap-1">
+                                {canWrite && (
+                                  <Tooltip>
+                                    <TooltipTrigger asChild>
+                                      <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => startEdit(e)}><Pencil className="h-3.5 w-3.5" /></Button>
+                                    </TooltipTrigger>
+                                    <TooltipContent>Edit entry</TooltipContent>
+                                  </Tooltip>
+                                )}
+                                {canDelete && (
+                                  <Tooltip>
+                                    <TooltipTrigger asChild>
+                                      <Button size="icon" variant="ghost" className="h-7 w-7 text-destructive hover:text-destructive" onClick={() => handleDelete(e.id)}><Trash2 className="h-3.5 w-3.5" /></Button>
+                                    </TooltipTrigger>
+                                    <TooltipContent>Delete entry</TooltipContent>
+                                  </Tooltip>
+                                )}
+                              </div>
+                            </TooltipProvider>
                           </TableCell>
                         )}
                       </TableRow>

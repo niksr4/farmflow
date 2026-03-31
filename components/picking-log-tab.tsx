@@ -10,6 +10,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Textarea } from "@/components/ui/textarea"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { EmptyStateTable } from "@/components/ui/empty-state"
+import { FieldLabel } from "@/components/ui/field-label"
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import { toast } from "sonner"
 import { canWriteModule, canDeleteModule, type UserRole } from "@/lib/permissions"
 import { useAuth } from "@/hooks/use-auth"
@@ -226,7 +228,10 @@ export default function PickingLogTab() {
                   <Input type="date" value={form.pickDate} onChange={(e) => setForm((f) => ({ ...f, pickDate: e.target.value }))} />
                 </div>
                 <div className="space-y-1.5">
-                  <Label>Kg picked *</Label>
+                  <FieldLabel
+                    label="Kg picked *"
+                    tooltip="Total cherry weight this worker picked, in kilograms. Use decimals for precision — e.g. 48.5 kg."
+                  />
                   <Input
                     type="number" min={0} step={0.1}
                     value={form.kgPicked}
@@ -235,7 +240,10 @@ export default function PickingLogTab() {
                   />
                 </div>
                 <div className="space-y-1.5">
-                  <Label>Rate / kg (₹) *</Label>
+                  <FieldLabel
+                    label="Rate / kg (₹) *"
+                    tooltip="Piece rate paid per kg of cherry picked. Typically ₹3–₹6 per kg during harvest season. This rate is saved with the record."
+                  />
                   <Input
                     type="number" min={0} step={0.5}
                     value={form.ratePerKg}
@@ -252,7 +260,7 @@ export default function PickingLogTab() {
               <Textarea
                 value={form.notes}
                 onChange={(e) => setForm((f) => ({ ...f, notes: e.target.value }))}
-                placeholder="Notes (optional)"
+                placeholder="Notes (optional) — e.g. Block 3, Upper estate"
                 rows={2}
                 className="resize-none text-sm"
               />
@@ -285,7 +293,7 @@ export default function PickingLogTab() {
                     <TableHead className="text-right">Kg</TableHead>
                     <TableHead className="text-right">Rate</TableHead>
                     <TableHead className="text-right">Amount</TableHead>
-                    <TableHead>Notes</TableHead>
+                    <TableHead className="hidden sm:table-cell">Notes</TableHead>
                     {(canWrite || canDelete) && <TableHead className="w-20" />}
                   </TableRow>
                 </TableHeader>
@@ -298,7 +306,7 @@ export default function PickingLogTab() {
                         <TableCell><Input type="number" min={0} step={0.1} value={editForm.kgPicked} onChange={(e) => setEditForm((f) => ({ ...f, kgPicked: e.target.value }))} className="h-8 w-24 text-right" /></TableCell>
                         <TableCell><Input type="number" min={0} step={0.5} value={editForm.ratePerKg} onChange={(e) => setEditForm((f) => ({ ...f, ratePerKg: e.target.value }))} className="h-8 w-24 text-right" /></TableCell>
                         <TableCell className="text-right text-sm">{editForm.kgPicked && editForm.ratePerKg ? formatCurrency(Number(editForm.kgPicked) * Number(editForm.ratePerKg)) : "—"}</TableCell>
-                        <TableCell><Input value={editForm.notes} onChange={(e) => setEditForm((f) => ({ ...f, notes: e.target.value }))} className="h-8 w-40" placeholder="Notes" /></TableCell>
+                        <TableCell className="hidden sm:table-cell"><Input value={editForm.notes} onChange={(e) => setEditForm((f) => ({ ...f, notes: e.target.value }))} className="h-8 w-40" placeholder="Notes" /></TableCell>
                         <TableCell>
                           <div className="flex gap-1">
                             <Button size="icon" variant="ghost" className="h-7 w-7" disabled={saving} onClick={() => handleSaveEdit(r.id)}>
@@ -315,21 +323,33 @@ export default function PickingLogTab() {
                         <TableCell className="text-right text-sm">{r.kgPicked.toLocaleString("en-IN", { maximumFractionDigits: 1 })}</TableCell>
                         <TableCell className="text-right text-sm">₹{r.ratePerKg}</TableCell>
                         <TableCell className="text-right text-sm font-medium">{formatCurrency(r.amount)}</TableCell>
-                        <TableCell className="text-xs text-muted-foreground max-w-[160px] truncate">{r.notes || "—"}</TableCell>
+                        <TableCell className="hidden sm:table-cell text-xs text-muted-foreground max-w-[160px] truncate">{r.notes || "—"}</TableCell>
                         {(canWrite || canDelete) && (
                           <TableCell>
-                            <div className="flex gap-1">
-                              {canWrite && (
-                                <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => startEdit(r)}>
-                                  <Pencil className="h-3.5 w-3.5" />
-                                </Button>
-                              )}
-                              {canDelete && (
-                                <Button size="icon" variant="ghost" className="h-7 w-7 text-destructive hover:text-destructive" onClick={() => handleDelete(r.id)}>
-                                  <Trash2 className="h-3.5 w-3.5" />
-                                </Button>
-                              )}
-                            </div>
+                            <TooltipProvider>
+                              <div className="flex gap-1">
+                                {canWrite && (
+                                  <Tooltip>
+                                    <TooltipTrigger asChild>
+                                      <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => startEdit(r)}>
+                                        <Pencil className="h-3.5 w-3.5" />
+                                      </Button>
+                                    </TooltipTrigger>
+                                    <TooltipContent>Edit record</TooltipContent>
+                                  </Tooltip>
+                                )}
+                                {canDelete && (
+                                  <Tooltip>
+                                    <TooltipTrigger asChild>
+                                      <Button size="icon" variant="ghost" className="h-7 w-7 text-destructive hover:text-destructive" onClick={() => handleDelete(r.id)}>
+                                        <Trash2 className="h-3.5 w-3.5" />
+                                      </Button>
+                                    </TooltipTrigger>
+                                    <TooltipContent>Delete record</TooltipContent>
+                                  </Tooltip>
+                                )}
+                              </div>
+                            </TooltipProvider>
                           </TableCell>
                         )}
                       </TableRow>

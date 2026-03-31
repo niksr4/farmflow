@@ -4,12 +4,13 @@ import { useState, useEffect, useCallback } from "react"
 import { Plus, Pencil, UserX, Check, X, Loader2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Badge } from "@/components/ui/badge"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { EmptyStateTable } from "@/components/ui/empty-state"
+import { FieldLabel } from "@/components/ui/field-label"
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import { toast } from "sonner"
 import { canWriteModule, type UserRole } from "@/lib/permissions"
 import { useAuth } from "@/hooks/use-auth"
@@ -67,8 +68,6 @@ export default function WorkerProfilesTab() {
       const res = await fetch("/api/attendance?date=" + new Date().toISOString().slice(0, 10))
       const data = await res.json()
       if (data.success) {
-        // Use attendance endpoint but fetch full profiles individually if needed
-        // Workers list comes from attendance API
         setWorkers(
           (data.workers || []).map((w: any) => ({
             id: String(w.id),
@@ -196,7 +195,7 @@ export default function WorkerProfilesTab() {
           <CardContent className="border-t border-border/50 pt-4">
             <div className="grid gap-3 sm:grid-cols-3">
               <div className="space-y-1.5">
-                <Label>Full name *</Label>
+                <FieldLabel label="Full name *" />
                 <Input
                   value={form.name}
                   onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
@@ -205,7 +204,10 @@ export default function WorkerProfilesTab() {
                 />
               </div>
               <div className="space-y-1.5">
-                <Label>Type</Label>
+                <FieldLabel
+                  label="Type"
+                  tooltip="Permanent: on the estate year-round. Seasonal: hired for harvest season only. Contractor: paid by task or through a labour contractor, not tracked individually."
+                />
                 <Select
                   value={form.workerType}
                   onValueChange={(v) => setForm((f) => ({ ...f, workerType: v as WorkerType | "" }))}
@@ -219,7 +221,10 @@ export default function WorkerProfilesTab() {
                 </Select>
               </div>
               <div className="space-y-1.5">
-                <Label>Daily rate (₹)</Label>
+                <FieldLabel
+                  label="Daily rate (₹)"
+                  tooltip="Standard daily wage for this worker. Used to calculate attendance earnings in Payroll Summary. E.g. ₹500 per day."
+                />
                 <Input
                   type="number"
                   min={0}
@@ -247,7 +252,7 @@ export default function WorkerProfilesTab() {
               <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Loading workers…
             </div>
           ) : workers.length === 0 ? (
-            <EmptyStateTable title="No workers yet. Add your first worker above." />
+            <EmptyStateTable title="No workers yet — add your first worker to start tracking attendance and payroll." />
           ) : (
             <div className="overflow-x-auto">
               <Table>
@@ -256,9 +261,9 @@ export default function WorkerProfilesTab() {
                     <TableHead>Name</TableHead>
                     <TableHead>Type</TableHead>
                     <TableHead>Daily Rate</TableHead>
-                    <TableHead>Phone</TableHead>
-                    <TableHead>Bank</TableHead>
-                    {canWrite && <TableHead className="w-24" />}
+                    <TableHead className="hidden sm:table-cell">Phone</TableHead>
+                    <TableHead className="hidden md:table-cell">Bank</TableHead>
+                    {canWrite && <TableHead className="w-20" />}
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -269,7 +274,7 @@ export default function WorkerProfilesTab() {
                           <Input
                             value={editForm.name}
                             onChange={(e) => setEditForm((f) => ({ ...f, name: e.target.value }))}
-                            className="h-8 w-40"
+                            className="h-8 w-36"
                           />
                         </TableCell>
                         <TableCell>
@@ -294,7 +299,7 @@ export default function WorkerProfilesTab() {
                             placeholder="₹/day"
                           />
                         </TableCell>
-                        <TableCell>
+                        <TableCell className="hidden sm:table-cell">
                           <Input
                             value={editForm.phone}
                             onChange={(e) => setEditForm((f) => ({ ...f, phone: e.target.value }))}
@@ -302,13 +307,27 @@ export default function WorkerProfilesTab() {
                             placeholder="Phone"
                           />
                         </TableCell>
-                        <TableCell>
-                          <Input
-                            value={editForm.bankName}
-                            onChange={(e) => setEditForm((f) => ({ ...f, bankName: e.target.value }))}
-                            className="h-8 w-28"
-                            placeholder="Bank name"
-                          />
+                        <TableCell className="hidden md:table-cell">
+                          <div className="flex gap-1.5">
+                            <Input
+                              value={editForm.bankName}
+                              onChange={(e) => setEditForm((f) => ({ ...f, bankName: e.target.value }))}
+                              className="h-8 w-28"
+                              placeholder="Bank"
+                            />
+                            <Input
+                              value={editForm.bankAccount}
+                              onChange={(e) => setEditForm((f) => ({ ...f, bankAccount: e.target.value }))}
+                              className="h-8 w-32"
+                              placeholder="Account no."
+                            />
+                            <Input
+                              value={editForm.bankIfsc}
+                              onChange={(e) => setEditForm((f) => ({ ...f, bankIfsc: e.target.value }))}
+                              className="h-8 w-24"
+                              placeholder="IFSC"
+                            />
+                          </div>
                         </TableCell>
                         <TableCell>
                           <div className="flex gap-1">
@@ -336,18 +355,34 @@ export default function WorkerProfilesTab() {
                         <TableCell className="text-sm">
                           {w.dailyRate != null ? `₹${w.dailyRate.toLocaleString("en-IN")}` : <span className="text-xs text-muted-foreground">—</span>}
                         </TableCell>
-                        <TableCell className="text-sm text-muted-foreground">{w.phone || "—"}</TableCell>
-                        <TableCell className="text-sm text-muted-foreground">{w.bankName || "—"}</TableCell>
+                        <TableCell className="hidden sm:table-cell text-sm text-muted-foreground">{w.phone || "—"}</TableCell>
+                        <TableCell className="hidden md:table-cell text-sm text-muted-foreground">
+                          {w.bankName ? (
+                            <span>{w.bankName}{w.bankAccount ? ` · ${w.bankAccount}` : ""}{w.bankIfsc ? ` (${w.bankIfsc})` : ""}</span>
+                          ) : "—"}
+                        </TableCell>
                         {canWrite && (
                           <TableCell>
-                            <div className="flex gap-1">
-                              <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => startEdit(w)}>
-                                <Pencil className="h-3.5 w-3.5" />
-                              </Button>
-                              <Button size="icon" variant="ghost" className="h-7 w-7 text-destructive hover:text-destructive" onClick={() => handleDeactivate(w.id, w.name)}>
-                                <UserX className="h-3.5 w-3.5" />
-                              </Button>
-                            </div>
+                            <TooltipProvider>
+                              <div className="flex gap-1">
+                                <Tooltip>
+                                  <TooltipTrigger asChild>
+                                    <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => startEdit(w)}>
+                                      <Pencil className="h-3.5 w-3.5" />
+                                    </Button>
+                                  </TooltipTrigger>
+                                  <TooltipContent>Edit worker — update type, rate, phone, bank details</TooltipContent>
+                                </Tooltip>
+                                <Tooltip>
+                                  <TooltipTrigger asChild>
+                                    <Button size="icon" variant="ghost" className="h-7 w-7 text-destructive hover:text-destructive" onClick={() => handleDeactivate(w.id, w.name)}>
+                                      <UserX className="h-3.5 w-3.5" />
+                                    </Button>
+                                  </TooltipTrigger>
+                                  <TooltipContent>Deactivate — removes from muster, keeps historical records</TooltipContent>
+                                </Tooltip>
+                              </div>
+                            </TooltipProvider>
                           </TableCell>
                         )}
                       </TableRow>
