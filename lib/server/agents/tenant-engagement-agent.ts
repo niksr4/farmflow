@@ -5,6 +5,18 @@ import { sql } from "@/lib/server/db"
 import { fetchWithTimeout } from "@/lib/server/http"
 import { logServerWarning } from "@/lib/server/safe-logging"
 
+type YesterdayActivity = {
+  tenantId: string
+  loginsYesterday: number
+  laborYesterday: number
+  processingYesterday: number
+  dispatchYesterday: number
+  salesYesterday: number
+  expensesYesterday: number
+  pickingYesterday: number
+  attendanceYesterday: number
+}
+
 type TenantEngagementRow = {
   tenantId: string
   tenantName: string
@@ -29,6 +41,67 @@ const toRows = <T = any>(value: unknown): T[] => {
   if (Array.isArray(value)) return value as T[]
   const candidate = (value as any)?.rows
   return Array.isArray(candidate) ? (candidate as T[]) : []
+}
+
+async function fetchYesterdayActivity(): Promise<Map<string, YesterdayActivity>> {
+  if (!sql) return new Map()
+  try {
+    const result = await sql.query(`
+      SELECT
+        t.id AS tenant_id,
+        (SELECT COUNT(*) FROM security_events
+          WHERE tenant_id = t.id AND event_type = 'auth_login_success'
+            AND created_at >= (CURRENT_DATE - INTERVAL '1 day') AT TIME ZONE 'Asia/Kolkata'
+            AND created_at <  CURRENT_DATE AT TIME ZONE 'Asia/Kolkata')  AS logins_yesterday,
+        (SELECT COUNT(*) FROM labor_transactions
+          WHERE tenant_id = t.id
+            AND created_at >= (CURRENT_DATE - INTERVAL '1 day') AT TIME ZONE 'Asia/Kolkata'
+            AND created_at <  CURRENT_DATE AT TIME ZONE 'Asia/Kolkata') AS labor_yesterday,
+        (SELECT COUNT(*) FROM processing_records
+          WHERE tenant_id = t.id
+            AND created_at >= (CURRENT_DATE - INTERVAL '1 day') AT TIME ZONE 'Asia/Kolkata'
+            AND created_at <  CURRENT_DATE AT TIME ZONE 'Asia/Kolkata') AS processing_yesterday,
+        (SELECT COUNT(*) FROM dispatch_records
+          WHERE tenant_id = t.id
+            AND created_at >= (CURRENT_DATE - INTERVAL '1 day') AT TIME ZONE 'Asia/Kolkata'
+            AND created_at <  CURRENT_DATE AT TIME ZONE 'Asia/Kolkata') AS dispatch_yesterday,
+        (SELECT COUNT(*) FROM sales_records
+          WHERE tenant_id = t.id
+            AND created_at >= (CURRENT_DATE - INTERVAL '1 day') AT TIME ZONE 'Asia/Kolkata'
+            AND created_at <  CURRENT_DATE AT TIME ZONE 'Asia/Kolkata') AS sales_yesterday,
+        (SELECT COUNT(*) FROM expense_transactions
+          WHERE tenant_id = t.id
+            AND created_at >= (CURRENT_DATE - INTERVAL '1 day') AT TIME ZONE 'Asia/Kolkata'
+            AND created_at <  CURRENT_DATE AT TIME ZONE 'Asia/Kolkata') AS expenses_yesterday,
+        (SELECT COUNT(*) FROM picking_records
+          WHERE tenant_id = t.id
+            AND created_at >= (CURRENT_DATE - INTERVAL '1 day') AT TIME ZONE 'Asia/Kolkata'
+            AND created_at <  CURRENT_DATE AT TIME ZONE 'Asia/Kolkata') AS picking_yesterday,
+        (SELECT COUNT(*) FROM attendance_records
+          WHERE tenant_id = t.id
+            AND created_at >= (CURRENT_DATE - INTERVAL '1 day') AT TIME ZONE 'Asia/Kolkata'
+            AND created_at <  CURRENT_DATE AT TIME ZONE 'Asia/Kolkata') AS attendance_yesterday
+      FROM tenants t
+      WHERE t.parent_tenant_id IS NULL
+    `)
+    const map = new Map<string, YesterdayActivity>()
+    for (const row of toRows<any>(result)) {
+      map.set(String(row.tenant_id), {
+        tenantId: String(row.tenant_id),
+        loginsYesterday: Number(row.logins_yesterday) || 0,
+        laborYesterday: Number(row.labor_yesterday) || 0,
+        processingYesterday: Number(row.processing_yesterday) || 0,
+        dispatchYesterday: Number(row.dispatch_yesterday) || 0,
+        salesYesterday: Number(row.sales_yesterday) || 0,
+        expensesYesterday: Number(row.expenses_yesterday) || 0,
+        pickingYesterday: Number(row.picking_yesterday) || 0,
+        attendanceYesterday: Number(row.attendance_yesterday) || 0,
+      })
+    }
+    return map
+  } catch {
+    return new Map()
+  }
 }
 
 async function fetchTenantEngagementData(): Promise<TenantEngagementRow[]> {
@@ -123,7 +196,21 @@ function classifyTenant(row: TenantEngagementRow): TenantEngagementSummary {
   return { ...row, status, flags }
 }
 
-function buildAlertHtml(summaries: TenantEngagementSummary[], generatedAt: string): string {
+function buildActivitySummary(a: YesterdayActivity | undefined): string {
+  if (!a) return "—"
+  const parts: string[] = []
+  if (a.loginsYesterday) parts.push(`${a.loginsYesterday} login${a.loginsYesterday !== 1 ? "s" : ""}`)
+  if (a.processingYesterday) parts.push(`${a.processingYesterday} processing`)
+  if (a.dispatchYesterday) parts.push(`${a.dispatchYesterday} dispatch`)
+  if (a.salesYesterday) parts.push(`${a.salesYesterday} sales`)
+  if (a.laborYesterday) parts.push(`${a.laborYesterday} labor`)
+  if (a.attendanceYesterday) parts.push(`${a.attendanceYesterday} attendance`)
+  if (a.pickingYesterday) parts.push(`${a.pickingYesterday} picking`)
+  if (a.expensesYesterday) parts.push(`${a.expensesYesterday} expenses`)
+  return parts.length > 0 ? parts.join(" · ") : "No activity"
+}
+
+function buildAlertHtml(summaries: TenantEngagementSummary[], generatedAt: string, yesterdayActivity: Map<string, YesterdayActivity>): string {
   const statusBadge = (status: TenantStatus) => {
     const styles: Record<TenantStatus, string> = {
       active:  "background:#dcfce7;color:#166534;",
@@ -135,16 +222,21 @@ function buildAlertHtml(summaries: TenantEngagementSummary[], generatedAt: strin
     return `<span style="border-radius:4px;padding:2px 8px;font-size:11px;font-weight:600;${styles[status]}">${status.toUpperCase()}</span>`
   }
 
-  const rows = summaries.map((s) => `
+  const rows = summaries.map((s) => {
+    const activity = yesterdayActivity.get(s.tenantId)
+    const activityText = buildActivitySummary(activity)
+    const activityColor = activityText === "No activity" ? "#9ca3af" : "#374151"
+    return `
     <tr style="border-bottom:1px solid #e5e7eb;">
       <td style="padding:10px 12px;font-size:14px;font-weight:500;color:#111827;">${s.tenantName}</td>
       <td style="padding:10px 12px;">${statusBadge(s.status)}</td>
-      <td style="padding:10px 12px;font-size:13px;color:#374151;">${s.totalLogins} total / ${s.loginsLast7d} this week</td>
-      <td style="padding:10px 12px;font-size:13px;color:#374151;">${s.operationalDataCount} records</td>
+      <td style="padding:10px 12px;font-size:13px;color:${activityColor};">${activityText}</td>
+      <td style="padding:10px 12px;font-size:13px;color:#374151;">${s.loginsLast7d} this week</td>
       <td style="padding:10px 12px;font-size:13px;color:#374151;">${s.lastLoginAt ? s.lastLoginAt.toLocaleDateString("en-IN") : "—"}</td>
       <td style="padding:10px 12px;font-size:12px;color:#6b7280;">${s.flags.length > 0 ? s.flags.join(" · ") : "—"}</td>
     </tr>
-  `).join("")
+  `
+  }).join("")
 
   const attentionList = summaries
     .filter((s) => s.status === "stuck" || s.status === "quiet" || s.flags.length > 0)
@@ -182,8 +274,8 @@ function buildAlertHtml(summaries: TenantEngagementSummary[], generatedAt: strin
               <tr style="background:#f9fafb;">
                 <th style="padding:10px 12px;text-align:left;font-size:11px;font-weight:600;color:#6b7280;text-transform:uppercase;">Tenant</th>
                 <th style="padding:10px 12px;text-align:left;font-size:11px;font-weight:600;color:#6b7280;text-transform:uppercase;">Status</th>
-                <th style="padding:10px 12px;text-align:left;font-size:11px;font-weight:600;color:#6b7280;text-transform:uppercase;">Logins</th>
-                <th style="padding:10px 12px;text-align:left;font-size:11px;font-weight:600;color:#6b7280;text-transform:uppercase;">Data</th>
+                <th style="padding:10px 12px;text-align:left;font-size:11px;font-weight:600;color:#6b7280;text-transform:uppercase;">Yesterday</th>
+                <th style="padding:10px 12px;text-align:left;font-size:11px;font-weight:600;color:#6b7280;text-transform:uppercase;">Logins (7d)</th>
                 <th style="padding:10px 12px;text-align:left;font-size:11px;font-weight:600;color:#6b7280;text-transform:uppercase;">Last login</th>
                 <th style="padding:10px 12px;text-align:left;font-size:11px;font-weight:600;color:#6b7280;text-transform:uppercase;">Flags</th>
               </tr>
@@ -193,7 +285,7 @@ function buildAlertHtml(summaries: TenantEngagementSummary[], generatedAt: strin
         </td></tr>
 
         <tr><td style="background:#f3f4f6;border-radius:0 0 12px 12px;border:1px solid #e5e7eb;border-top:none;padding:16px 32px;">
-          <p style="margin:0;font-size:12px;color:#9ca3af;">FarmFlow platform report — sent daily at 07:00 UTC.</p>
+          <p style="margin:0;font-size:12px;color:#9ca3af;">FarmFlow platform report — sent daily at 07:00 UTC (12:30 IST). "Yesterday" counts entries created between 00:00–23:59 IST.</p>
         </td></tr>
 
       </table>
@@ -216,7 +308,10 @@ export async function runTenantEngagementAgent(input?: {
   dryRun: boolean
 }> {
   const dryRun = Boolean(input?.dryRun)
-  const rows = await fetchTenantEngagementData()
+  const [rows, yesterdayActivity] = await Promise.all([
+    fetchTenantEngagementData(),
+    fetchYesterdayActivity(),
+  ])
   const summaries = rows.map(classifyTenant)
 
   const stuck = summaries.filter((s) => s.status === "stuck").length
@@ -229,10 +324,11 @@ export async function runTenantEngagementAgent(input?: {
     ? `⚠️ FarmFlow: ${needsAttention} tenant${needsAttention === 1 ? "" : "s"} need attention`
     : `✅ FarmFlow: All tenants healthy — daily engagement report`
 
-  const html = buildAlertHtml(summaries, generatedAt)
-  const text = summaries.map((s) =>
-    `${s.tenantName} [${s.status.toUpperCase()}] — ${s.totalLogins} logins, ${s.operationalDataCount} records${s.flags.length > 0 ? " — " + s.flags.join("; ") : ""}`
-  ).join("\n")
+  const html = buildAlertHtml(summaries, generatedAt, yesterdayActivity)
+  const text = summaries.map((s) => {
+    const activity = buildActivitySummary(yesterdayActivity.get(s.tenantId))
+    return `${s.tenantName} [${s.status.toUpperCase()}] — yesterday: ${activity}${s.flags.length > 0 ? " — " + s.flags.join("; ") : ""}`
+  }).join("\n")
 
   let emailSent = false
   if (!dryRun) {
