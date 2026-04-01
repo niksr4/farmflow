@@ -192,17 +192,17 @@ export default function PickingLogTab() {
 
         <CardContent className="space-y-4">
           {/* Filters */}
-          <div className="flex flex-wrap gap-3">
+          <div className="flex flex-wrap gap-2 sm:gap-3">
             <div className="flex items-center gap-2">
               <Label className="shrink-0 text-xs">From</Label>
-              <Input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} className="h-8 w-36 text-sm" />
+              <Input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} className="h-8 w-32 sm:w-36 text-sm" />
             </div>
             <div className="flex items-center gap-2">
               <Label className="shrink-0 text-xs">To</Label>
-              <Input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} className="h-8 w-36 text-sm" />
+              <Input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} className="h-8 w-32 sm:w-36 text-sm" />
             </div>
             <Select value={filterWorker} onValueChange={setFilterWorker}>
-              <SelectTrigger className="h-8 w-44 text-sm"><SelectValue placeholder="All workers" /></SelectTrigger>
+              <SelectTrigger className="h-8 w-40 sm:w-44 text-sm"><SelectValue placeholder="All workers" /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="">All workers</SelectItem>
                 {workers.map((w) => <SelectItem key={w.id} value={w.id}>{w.name}</SelectItem>)}
@@ -335,7 +335,7 @@ export default function PickingLogTab() {
                                         <Pencil className="h-3.5 w-3.5" />
                                       </Button>
                                     </TooltipTrigger>
-                                    <TooltipContent>Edit record</TooltipContent>
+                                    <TooltipContent className="max-w-xs">Edit record</TooltipContent>
                                   </Tooltip>
                                 )}
                                 {canDelete && (
@@ -345,7 +345,7 @@ export default function PickingLogTab() {
                                         <Trash2 className="h-3.5 w-3.5" />
                                       </Button>
                                     </TooltipTrigger>
-                                    <TooltipContent>Delete record</TooltipContent>
+                                    <TooltipContent className="max-w-xs">Delete record</TooltipContent>
                                   </Tooltip>
                                 )}
                               </div>

@@ -31,7 +31,7 @@ export function FieldLabel({ htmlFor, label, tooltip, className, labelClassName 
                 <Info className="h-3 w-3" />
               </button>
             </TooltipTrigger>
-            <TooltipContent>{tooltip}</TooltipContent>
+            <TooltipContent className="max-w-xs">{tooltip}</TooltipContent>
           </Tooltip>
         </TooltipProvider>
       ) : null}

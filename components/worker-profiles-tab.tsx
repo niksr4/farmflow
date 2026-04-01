@@ -193,7 +193,7 @@ export default function WorkerProfilesTab() {
 
         {isAdding && (
           <CardContent className="border-t border-border/50 pt-4">
-            <div className="grid gap-3 sm:grid-cols-3">
+            <div className="grid gap-3 grid-cols-1 sm:grid-cols-2 md:grid-cols-3">
               <div className="space-y-1.5">
                 <FieldLabel label="Full name *" />
                 <Input
@@ -371,7 +371,7 @@ export default function WorkerProfilesTab() {
                                       <Pencil className="h-3.5 w-3.5" />
                                     </Button>
                                   </TooltipTrigger>
-                                  <TooltipContent>Edit worker — update type, rate, phone, bank details</TooltipContent>
+                                  <TooltipContent className="max-w-xs">Edit worker — update type, rate, phone, bank details</TooltipContent>
                                 </Tooltip>
                                 <Tooltip>
                                   <TooltipTrigger asChild>
@@ -379,7 +379,7 @@ export default function WorkerProfilesTab() {
                                       <UserX className="h-3.5 w-3.5" />
                                     </Button>
                                   </TooltipTrigger>
-                                  <TooltipContent>Deactivate — removes from muster, keeps historical records</TooltipContent>
+                                  <TooltipContent className="max-w-xs">Deactivate — removes from muster, keeps historical records</TooltipContent>
                                 </Tooltip>
                               </div>
                             </TooltipProvider>
