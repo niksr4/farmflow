@@ -857,14 +857,18 @@ export default function TenantSettingsPage() {
     { id: "data-import", label: "Import" },
     { id: "thresholds", label: "Thresholds" },
     { id: "locations", label: "Locations" },
-    { id: "tenant-users", label: "Users" },
   ]
   if (canManageTenantExperience) {
     sectionLinks.push({ id: "tenant-experience", label: "Experience" })
   }
   if (isOwner) {
-    sectionLinks.push({ id: "tenant-modules", label: "Modules" })
-    sectionLinks.push({ id: "user-module-overrides", label: "User Access" })
+    sectionLinks.push({ id: "tenant-modules", label: "Allowed Modules" })
+  }
+  sectionLinks.push({ id: "tenant-users", label: "People" })
+  if (isAdminOrOwner) {
+    sectionLinks.push({ id: "user-module-overrides", label: "User Exceptions" })
+  }
+  if (isOwner) {
     sectionLinks.push({ id: "audit-log", label: "Audit" })
   }
   if (privacyFeatureEnabled) {

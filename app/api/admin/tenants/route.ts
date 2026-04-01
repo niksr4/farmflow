@@ -3,9 +3,13 @@ import { z } from "zod"
 import { sql } from "@/lib/server/db"
 import { requireOwnerRole } from "@/lib/tenant"
 import {
+  buildTenantDeletionSchema,
+  isTenantDeletionDependencyAvailable,
   listTenantDeletionRequiredTables,
+  resolveTenantDeletionDependencyQueryMode,
   summarizeTenantDeletionCounts,
   TENANT_DELETION_DEPENDENCIES,
+  type TenantDeletionDependencyQueryMode,
   type TenantDeletionDependencySpec,
 } from "@/lib/tenant-deletion"
 import { requireAdminSession } from "@/lib/server/mfa"
@@ -22,8 +26,12 @@ const updateTenantBodySchema = z.object({
   name: z.string().trim().min(1, "Tenant name is required").max(160, "Tenant name is too long"),
 })
 
-const buildTenantDeletionCountQuery = (spec: TenantDeletionDependencySpec, tenantId: string) => {
-  switch (spec.strategy) {
+const buildTenantDeletionCountQuery = (
+  spec: TenantDeletionDependencySpec,
+  tenantId: string,
+  queryMode: TenantDeletionDependencyQueryMode,
+) => {
+  switch (queryMode) {
     case "signup_tokens":
       return sql.query(
         `
@@ -38,7 +46,29 @@ const buildTenantDeletionCountQuery = (spec: TenantDeletionDependencySpec, tenan
         `,
         [tenantId],
       )
-    case "user_modules":
+    case "user_modules_by_tenant":
+      return sql.query(
+        `
+          SELECT COUNT(*)::int AS count
+          FROM user_modules
+          WHERE tenant_id = $1::uuid
+        `,
+        [tenantId],
+      )
+    case "user_modules_by_user":
+      return sql.query(
+        `
+          SELECT COUNT(*)::int AS count
+          FROM user_modules
+          WHERE user_id IN (
+            SELECT id
+            FROM users
+            WHERE tenant_id = $1::uuid
+          )
+        `,
+        [tenantId],
+      )
+    case "user_modules_by_tenant_or_user":
       return sql.query(
         `
           SELECT COUNT(*)::int AS count
@@ -57,8 +87,12 @@ const buildTenantDeletionCountQuery = (spec: TenantDeletionDependencySpec, tenan
   }
 }
 
-const buildTenantDeletionDeleteQuery = (spec: TenantDeletionDependencySpec, tenantId: string) => {
-  switch (spec.strategy) {
+const buildTenantDeletionDeleteQuery = (
+  spec: TenantDeletionDependencySpec,
+  tenantId: string,
+  queryMode: TenantDeletionDependencyQueryMode,
+) => {
+  switch (queryMode) {
     case "signup_tokens":
       return sql.query(
         `
@@ -71,7 +105,27 @@ const buildTenantDeletionDeleteQuery = (spec: TenantDeletionDependencySpec, tena
         `,
         [tenantId],
       )
-    case "user_modules":
+    case "user_modules_by_tenant":
+      return sql.query(
+        `
+          DELETE FROM user_modules
+          WHERE tenant_id = $1::uuid
+        `,
+        [tenantId],
+      )
+    case "user_modules_by_user":
+      return sql.query(
+        `
+          DELETE FROM user_modules
+          WHERE user_id IN (
+            SELECT id
+            FROM users
+            WHERE tenant_id = $1::uuid
+          )
+        `,
+        [tenantId],
+      )
+    case "user_modules_by_tenant_or_user":
       return sql.query(
         `
           DELETE FROM user_modules
@@ -238,34 +292,54 @@ export async function DELETE(request: Request) {
     }
 
     const requiredTables = listTenantDeletionRequiredTables()
-    const existingTableRows = await runTenantQuery(
+    const [existingTableRows, existingColumnRows] = await runTenantQueries(
       sql,
       adminContext,
-      sql.query(
-        `
-          SELECT table_name
-          FROM information_schema.tables
-          WHERE table_schema = 'public'
-            AND table_name = ANY($1::text[])
-        `,
-        [requiredTables],
-      ),
+      [
+        sql.query(
+          `
+            SELECT table_name, table_type
+            FROM information_schema.tables
+            WHERE table_schema = 'public'
+              AND table_name = ANY($1::text[])
+          `,
+          [requiredTables],
+        ),
+        sql.query(
+          `
+            SELECT table_name, column_name
+            FROM information_schema.columns
+            WHERE table_schema = 'public'
+              AND table_name = ANY($1::text[])
+          `,
+          [requiredTables],
+        ),
+      ],
     )
-    const existingTables = new Set(existingTableRows.map((row: any) => String(row.table_name || "").trim()).filter(Boolean))
+    const deletionSchema = buildTenantDeletionSchema({
+      tables: existingTableRows as Array<{ table_name?: string | null; table_type?: string | null }>,
+      columns: existingColumnRows as Array<{ table_name?: string | null; column_name?: string | null }>,
+    })
 
-    const availableSpecs = TENANT_DELETION_DEPENDENCIES.filter((spec) =>
-      (spec.requiredTables || [spec.table]).every((tableName) => existingTables.has(tableName)),
+    const availableSpecs = TENANT_DELETION_DEPENDENCIES.map((spec) => ({
+      spec,
+      queryMode: resolveTenantDeletionDependencyQueryMode(spec, deletionSchema),
+    })).filter(
+      (
+        entry,
+      ): entry is { spec: TenantDeletionDependencySpec; queryMode: TenantDeletionDependencyQueryMode } =>
+        entry.queryMode !== null && isTenantDeletionDependencyAvailable(entry.spec, deletionSchema),
     )
 
     const countResults = availableSpecs.length
       ? await runTenantQueries(
           sql,
           adminContext,
-          availableSpecs.map((spec) => buildTenantDeletionCountQuery(spec, tenantId)),
+          availableSpecs.map(({ spec, queryMode }) => buildTenantDeletionCountQuery(spec, tenantId, queryMode)),
         )
       : []
     const deletionSummary = summarizeTenantDeletionCounts(
-      availableSpecs.map((spec, index) => ({
+      availableSpecs.map(({ spec }, index) => ({
         table: spec.table,
         label: spec.label,
         category: spec.category,
@@ -286,12 +360,12 @@ export async function DELETE(request: Request) {
       )
     }
 
-    const cleanupSpecs = availableSpecs.filter((spec) => spec.category === "cleanup")
+    const cleanupSpecs = availableSpecs.filter(({ spec }) => spec.category === "cleanup")
     if (cleanupSpecs.length) {
       await runTenantQueries(
         sql,
         adminContext,
-        cleanupSpecs.map((spec) => buildTenantDeletionDeleteQuery(spec, tenantId)),
+        cleanupSpecs.map(({ spec, queryMode }) => buildTenantDeletionDeleteQuery(spec, tenantId, queryMode)),
       )
     }
 

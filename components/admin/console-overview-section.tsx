@@ -42,7 +42,7 @@ export function ConsoleOverviewSection({
         <CardDescription>
           {isOwner
             ? "Manage tenants, preview experiences, seed demo data, and control platform access."
-            : "Manage users and module access for your tenant."}
+            : "Manage people, allowed modules, and rare per-user exceptions for your tenant."}
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">

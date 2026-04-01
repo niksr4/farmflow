@@ -115,6 +115,17 @@ export default function AdminPage() {
   const [isSystemHealthLoading, setIsSystemHealthLoading] = useState(false)
   const [systemHealthError, setSystemHealthError] = useState<string | null>(null)
 
+  const syncTenantSelection = useCallback((nextTenants: Tenant[], preferredTenantId?: string | null) => {
+    setTenants(nextTenants)
+    setSelectedTenantId((prev) => {
+      const nextSelectedTenantId = preferredTenantId ?? prev
+      if (nextSelectedTenantId && nextTenants.some((tenant) => tenant.id === nextSelectedTenantId)) {
+        return nextSelectedTenantId
+      }
+      return nextTenants[0]?.id || ""
+    })
+  }, [])
+
   const selectedTenant = useMemo(
     () => tenants.find((tenant) => tenant.id === selectedTenantId) || null,
     [tenants, selectedTenantId],
@@ -139,21 +150,18 @@ export default function AdminPage() {
     setTenantNameDraft(selectedTenant?.name || "")
   }, [selectedTenant?.id, selectedTenant?.name])
 
-  const loadTenants = useCallback(async () => {
+  const loadTenants = useCallback(async (preferredTenantId?: string | null) => {
     try {
-      const response = await fetch("/api/admin/tenants")
+      const response = await fetch("/api/admin/tenants", { cache: "no-store" })
       const data = await response.json()
       if (!response.ok || !data.success) {
         throw new Error(data.error || "Failed to load tenants")
       }
-      setTenants(data.tenants || [])
-      if (data.tenants?.length) {
-        setSelectedTenantId((prev) => prev || data.tenants[0].id)
-      }
+      syncTenantSelection(Array.isArray(data.tenants) ? data.tenants : [], preferredTenantId)
     } catch (error: any) {
       toast({ title: "Error", description: error.message || "Failed to load tenants", variant: "destructive" })
     }
-  }, [toast])
+  }, [syncTenantSelection, toast])
 
   useEffect(() => {
     if (isOwner) return
@@ -561,7 +569,7 @@ export default function AdminPage() {
       }
       setNewTenantName("")
       setNewTenantPlanId(DEFAULT_TENANT_PLAN_ID)
-      await loadTenants()
+      await loadTenants(String(data.tenant?.id || ""))
       toast({ title: "Tenant created", description: `${data.tenant.name} is ready.` })
     } catch (error: any) {
       toast({ title: "Error", description: error.message || "Failed to create tenant", variant: "destructive" })
@@ -643,7 +651,10 @@ export default function AdminPage() {
         throw new Error(errorMessage)
       }
       toast({ title: "Tenant deleted", description: `${tenant.name} removed.` })
-      await loadTenants()
+      const remainingTenants = tenants.filter((entry) => entry.id !== tenant.id)
+      const fallbackTenantId = tenant.id === selectedTenantId ? (remainingTenants[0]?.id ?? "") : selectedTenantId
+      syncTenantSelection(remainingTenants, fallbackTenantId)
+      await loadTenants(fallbackTenantId)
     } catch (error: any) {
       toast({ title: "Error", description: error.message || "Failed to delete tenant", variant: "destructive" })
     } finally {
@@ -1038,7 +1049,7 @@ export default function AdminPage() {
   }, [systemHealth?.checks])
   const ownerSectionLinks: SectionLink[] = [
     { id: "tenant-users", label: "Users" },
-    { id: "user-module-overrides", label: "User Access" },
+    { id: "user-module-overrides", label: "User Exceptions" },
   ]
   if (isOwner) {
     ownerSectionLinks.unshift(
@@ -1046,7 +1057,7 @@ export default function AdminPage() {
       { id: "weekly-summary", label: "Weekly KPI" },
       { id: "system-health", label: "System Health" },
       { id: "tenant-profile", label: "Profile" },
-      { id: "tenant-modules", label: "Modules" },
+      { id: "tenant-modules", label: "Allowed Modules" },
       { id: "seed-data", label: "Seed Data" },
       { id: "audit-log", label: "Audit" },
     )

@@ -9,7 +9,7 @@ import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
-import { MODULE_BUNDLES, type ModuleBundle } from "@/lib/modules"
+import { MODULE_BUNDLES, filterPlanVisibleModules, type ModuleBundle } from "@/lib/modules"
 import { formatDateOnly } from "@/lib/date-utils"
 import { roleLabel } from "@/lib/roles"
 import type { LocationRow, ModulePermission, RoleOption, User, UserModuleSource } from "@/components/tenant-settings/types"
@@ -244,14 +244,15 @@ export function TenantModulesSection({
   onSaveModules,
 }: TenantModulesSectionProps) {
   const activePlan = MODULE_BUNDLES.find((bundle) => bundle.id === tenantPlanId) || MODULE_BUNDLES[0]
-  const enabledModuleCount = modulePermissions.filter((module) => module.enabled).length
+  const visibleModulePermissions = filterPlanVisibleModules(modulePermissions)
+  const enabledModuleCount = visibleModulePermissions.filter((module) => module.enabled).length
 
   return (
     <Card id="tenant-modules" className="scroll-mt-24 border-border/70 bg-white/85">
       <CardHeader>
-        <CardTitle>Tenant Modules</CardTitle>
+        <CardTitle>Allowed Modules</CardTitle>
         <CardDescription>
-          Control which modules are available to users in this tenant (subject to your subscription plan).
+          Step 1. Choose the estate plan, then fine-tune only the modules that belong to that plan.
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
@@ -259,8 +260,8 @@ export function TenantModulesSection({
           <div className="rounded-2xl border border-slate-200 bg-slate-50/70 p-4 text-sm shadow-sm">
             <p className="font-medium text-slate-900">Current plan: {activePlan?.label || "Core"}</p>
             <p className="mt-1 text-xs leading-5 text-muted-foreground">
-              Modules outside this plan stay locked. That keeps access clean and prevents enabling flows the estate has
-              not paid for.
+              Only modules included in this plan are shown below. Anything outside the plan stays out of view until the
+              estate moves to a higher plan.
             </p>
           </div>
           <div className="rounded-2xl border border-amber-100 bg-amber-50/70 p-4 text-sm shadow-sm">
@@ -292,37 +293,40 @@ export function TenantModulesSection({
         </div>
 
         <div className="flex items-center justify-between">
-          <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground">Module access</p>
+          <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground">Modules In This Plan</p>
           <Badge variant="outline" className="border-emerald-200 bg-white text-emerald-700">
-            {enabledModuleCount} enabled
+            {enabledModuleCount} enabled / {visibleModulePermissions.length} shown
           </Badge>
         </div>
 
+        <div className="rounded-2xl border border-emerald-100 bg-emerald-50/60 p-4 text-sm shadow-sm">
+          <p className="font-medium text-emerald-900">Users inherit this list by default.</p>
+          <p className="mt-1 text-xs leading-5 text-emerald-800">
+            Set the estate-level access here first. Per-user changes belong in the exceptions section later.
+          </p>
+        </div>
+
         <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-          {modulePermissions.map((module) => (
+          {visibleModulePermissions.map((module) => (
             <label
               key={module.id}
-              className={`flex items-center justify-between gap-3 rounded-lg border p-3 ${
-                module.lockedByPlan ? "border-dashed border-slate-200 bg-slate-50/80 text-slate-500" : "border-border/60 bg-white/80"
-              }`}
+              className="flex items-center justify-between gap-3 rounded-lg border border-border/60 bg-white/80 p-3"
             >
               <div className="flex items-center gap-2">
                 <input
                   type="checkbox"
                   checked={module.enabled}
-                  disabled={module.lockedByPlan}
                   onChange={() => onToggleModule(module.id)}
                 />
                 <span className="flex items-center gap-2">
                   <span>{module.label}</span>
-                  {module.enabled && !module.lockedByPlan ? (
+                  {module.enabled ? (
                     <Badge variant="outline" className="border-emerald-200 bg-emerald-50/80 text-emerald-700">
                       Enabled
                     </Badge>
                   ) : null}
                 </span>
               </div>
-              {module.lockedByPlan ? <span className="text-[11px] font-medium uppercase tracking-[0.18em]">Locked</span> : null}
             </label>
           ))}
         </div>
@@ -374,7 +378,7 @@ export function TenantUsersSection({
     <Card id="tenant-users" className="scroll-mt-24 overflow-hidden border-border/70 bg-white/85">
       <CardHeader>
         <CardTitle>People and Roles</CardTitle>
-        <CardDescription>Add estate admins or estate users, then keep role assignments simple.</CardDescription>
+        <CardDescription>Step 2. Add people and roles. Everyone starts from the estate access set above.</CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
         <div className="grid gap-4 xl:grid-cols-[minmax(0,1.15fr)_minmax(280px,0.85fr)]">
@@ -562,17 +566,22 @@ export function UserModuleOverridesSection({
   onSaveUserModules,
   onResetUserModules,
 }: UserModuleOverridesSectionProps) {
+  const visibleUserModulePermissions = filterPlanVisibleModules(userModulePermissions)
+
   return (
     <Card id="user-module-overrides" className="scroll-mt-24 border-border/70 bg-white/85">
       <CardHeader>
-        <CardTitle>User Module Overrides</CardTitle>
-        <CardDescription>Use this only when one person should have different access than the rest of the estate.</CardDescription>
+        <CardTitle>Per-User Exceptions</CardTitle>
+        <CardDescription>
+          Step 3. Use this only when one person should have different access than the rest of the estate.
+        </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
         <div className="rounded-2xl border border-amber-100 bg-amber-50/70 p-4 text-sm shadow-sm">
           <p className="font-medium text-amber-950">Use this only for exceptions.</p>
           <p className="mt-1 text-xs leading-5 text-amber-900/80">
-            Most estates should leave users on tenant defaults. Use per-user overrides only for exceptions, because special rules are harder to explain and maintain.
+            Most estates should leave users on estate defaults. Only modules included in the current plan appear here,
+            and special rules are harder to explain and maintain.
           </p>
         </div>
         <div className="space-y-2">
@@ -594,32 +603,24 @@ export function UserModuleOverridesSection({
               Source: {formatUserModuleSource(userModuleSource)}
             </Badge>
             <Badge variant="outline" className="border-emerald-200 bg-white text-emerald-700">
-              {enabledUserModuleCount} enabled
+              {enabledUserModuleCount} enabled / {visibleUserModulePermissions.length} shown
             </Badge>
           </div>
         </div>
 
         <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-          {userModulePermissions.map((module) => {
+          {visibleUserModulePermissions.map((module) => {
             const isLockedForRole = isSelectedUserRoleScoped && module.id === "balance-sheet"
-            const isLockedByPlan = Boolean(module.lockedByPlan)
             return (
-              <label
-                key={module.id}
-                className={`flex items-center gap-2 rounded-lg border p-3 ${
-                  isLockedByPlan ? "border-dashed border-slate-200 bg-slate-50/80 text-slate-500" : "border-border/60 bg-white/80"
-                }`}
-              >
+              <label key={module.id} className="flex items-center gap-2 rounded-lg border border-border/60 bg-white/80 p-3">
                 <input
                   type="checkbox"
                   checked={module.enabled}
                   onChange={() => onToggleUserModule(module.id)}
-                  disabled={isUserModulesLoading || isLockedForRole || isLockedByPlan}
+                  disabled={isUserModulesLoading || isLockedForRole}
                 />
                 <span>{module.label}</span>
-                {isLockedByPlan ? (
-                  <span className="ml-auto text-xs text-muted-foreground">Plan locked</span>
-                ) : isLockedForRole ? (
+                {isLockedForRole ? (
                   <span className="ml-auto text-xs text-muted-foreground">Admin only</span>
                 ) : null}
               </label>
@@ -627,11 +628,9 @@ export function UserModuleOverridesSection({
           })}
         </div>
 
-        {(isSelectedUserRoleScoped || userModulePermissions.some((module) => module.lockedByPlan)) && (
+        {isSelectedUserRoleScoped && (
           <p className="text-xs text-muted-foreground">
-            {isSelectedUserRoleScoped
-              ? "Live Balance Sheet is admin-only and remains disabled for user roles."
-              : "Plan-locked modules inherit the tenant subscription ceiling and cannot be granted per user."}
+            Live Balance Sheet is admin-only and remains disabled for user roles.
           </p>
         )}
 

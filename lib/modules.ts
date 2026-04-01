@@ -161,6 +161,9 @@ export const clampRequestedModuleStatesToPlan = (
   }))
 }
 
+export const filterPlanVisibleModules = <T extends { lockedByPlan?: boolean }>(modules: T[]) =>
+  modules.filter((module) => !module.lockedByPlan)
+
 export const resolveModuleStates = (
   rows?: Array<{ module: string; enabled: boolean }>,
   options?: { planId?: unknown },

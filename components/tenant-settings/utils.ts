@@ -23,7 +23,7 @@ export const formatAuditPayload = (payload: unknown) => {
 }
 
 export const formatUserModuleSource = (source: UserModuleSource) => {
-  if (source === "user") return "User override"
-  if (source === "tenant") return "Tenant defaults"
+  if (source === "user") return "User exception"
+  if (source === "tenant") return "Estate defaults"
   return "System defaults"
 }

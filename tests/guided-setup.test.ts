@@ -6,6 +6,7 @@ import {
   MODULES,
   clampEnabledModulesToPlan,
   clampRequestedModuleStatesToPlan,
+  filterPlanVisibleModules,
   normalizeTenantPlanId,
 } from "../lib/modules"
 
@@ -93,5 +94,18 @@ describe("module bundles", () => {
 
     expect(states.find((module) => module.id === "inventory")).toMatchObject({ enabled: true, lockedByPlan: false })
     expect(states.find((module) => module.id === "quality")).toMatchObject({ enabled: false, lockedByPlan: true })
+  })
+
+  it("can hide modules that are outside the active plan", () => {
+    const states = clampRequestedModuleStatesToPlan(
+      [
+        { id: "inventory", enabled: true },
+        { id: "quality", enabled: true },
+      ],
+      "core",
+    )
+
+    expect(filterPlanVisibleModules(states).map((module) => module.id)).toContain("inventory")
+    expect(filterPlanVisibleModules(states).map((module) => module.id)).not.toContain("quality")
   })
 })

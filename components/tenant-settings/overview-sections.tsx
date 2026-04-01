@@ -180,7 +180,7 @@ export function TenantSettingsOverview({
             <SettingsFlowCard
               eyebrow="Advanced"
               title="Tune only when you have a clear reason"
-              description="Thresholds, module overrides, and experience controls are powerful, but they should stay simple by default."
+              description="Thresholds, allowed modules, per-user exceptions, and experience controls are powerful, but they should stay simple by default."
               icon={ShieldCheck}
               tone="slate"
               sections={advancedSections}

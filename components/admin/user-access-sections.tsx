@@ -7,6 +7,7 @@ import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { formatDateOnly } from "@/lib/date-utils"
+import { filterPlanVisibleModules } from "@/lib/modules"
 import { roleLabel } from "@/lib/roles"
 import type {
   AuditLog,
@@ -70,7 +71,11 @@ export function TenantUsersSection({
       <CardHeader>
         <CardTitle>Tenant Users</CardTitle>
         <CardDescription>
-          {selectedTenant ? `Users for ${selectedTenant.name}` : isOwner ? "Select a tenant" : "Users for your estate"}
+          {selectedTenant
+            ? `Step 2. Add or edit people for ${selectedTenant.name}. They inherit the tenant access settings by default.`
+            : isOwner
+              ? "Select a tenant"
+              : "Step 2. Add or edit people for your estate. They inherit the tenant access settings by default."}
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
@@ -242,13 +247,23 @@ export function UserModuleOverridesSection({
   onSaveUserModules,
   onResetUserModules,
 }: UserModuleOverridesSectionProps) {
+  const visibleUserModulePermissions = filterPlanVisibleModules(userModulePermissions)
+
   return (
     <Card id="user-module-overrides" className="scroll-mt-24 border-border/70 bg-white/85">
       <CardHeader>
-        <CardTitle>User Module Overrides</CardTitle>
-        <CardDescription>Override tenant defaults for a single user. Data remains shared within the estate.</CardDescription>
+        <CardTitle>Per-User Exceptions</CardTitle>
+        <CardDescription>
+          Step 3. Override tenant defaults only when one person needs exceptional access. Data remains shared within the estate.
+        </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
+        <div className="rounded-lg border border-amber-100 bg-amber-50/70 p-4 text-sm">
+          <p className="font-medium text-amber-950">Keep this rare.</p>
+          <p className="mt-1 text-xs text-amber-900/80">
+            Most users should stay on tenant defaults. Only modules included in the current plan are shown here.
+          </p>
+        </div>
         <div className="space-y-2">
           <Label>Select User</Label>
           <Select value={selectedUserId} onValueChange={onSelectedUserIdChange} disabled={!selectedTenantId || users.length === 0}>
@@ -265,46 +280,36 @@ export function UserModuleOverridesSection({
           </Select>
           <p className="text-xs text-muted-foreground">
             {userModuleSource
-              ? `Source: ${userModuleSource === "user" ? "User override" : userModuleSource === "tenant" ? "Tenant defaults" : "System defaults"}`
+              ? `Source: ${userModuleSource === "user" ? "User exception" : userModuleSource === "tenant" ? "Estate defaults" : "System defaults"}`
               : "Source: System defaults"}
           </p>
           <p className="text-xs text-muted-foreground">
-            Enabled for selected user: {userModulePermissions.filter((module) => module.enabled).length}
+            Enabled for selected user: {visibleUserModulePermissions.filter((module) => module.enabled).length} of {visibleUserModulePermissions.length} shown
           </p>
         </div>
 
         <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-          {userModulePermissions.map((module) => {
+          {visibleUserModulePermissions.map((module) => {
             const isLockedForRole = isSelectedUserRoleScoped && module.id === "balance-sheet"
-            const isLockedByPlan = Boolean(module.lockedByPlan)
             return (
-              <label
-                key={module.id}
-                className={`flex items-center gap-2 rounded-lg border p-3 ${
-                  isLockedByPlan ? "border-dashed border-slate-200 bg-slate-50/80 text-slate-500" : "border-border/60 bg-white/80"
-                }`}
-              >
+              <label key={module.id} className="flex items-center gap-2 rounded-lg border border-border/60 bg-white/80 p-3">
                 <input
                   type="checkbox"
                   checked={module.enabled}
                   onChange={() => onToggleUserModule(module.id)}
-                  disabled={isUserModulesLoading || isLockedForRole || isLockedByPlan}
+                  disabled={isUserModulesLoading || isLockedForRole}
                 />
                 <span>{module.label}</span>
-                {isLockedByPlan ? (
-                  <span className="ml-auto text-xs text-muted-foreground">Plan locked</span>
-                ) : isLockedForRole ? (
+                {isLockedForRole ? (
                   <span className="ml-auto text-xs text-muted-foreground">Admin only</span>
                 ) : null}
               </label>
             )
           })}
         </div>
-        {isSelectedUserRoleScoped || userModulePermissions.some((module) => module.lockedByPlan) ? (
+        {isSelectedUserRoleScoped ? (
           <p className="text-xs text-muted-foreground">
-            {isSelectedUserRoleScoped
-              ? "Live Balance Sheet is admin-only and remains disabled for user roles."
-              : "Plan-locked modules inherit the tenant subscription ceiling and cannot be granted per user."}
+            Live Balance Sheet is admin-only and remains disabled for user roles.
           </p>
         ) : null}
 

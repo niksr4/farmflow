@@ -6,7 +6,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { MODULE_BUNDLES } from "@/lib/modules"
+import { MODULE_BUNDLES, filterPlanVisibleModules } from "@/lib/modules"
 import {
   TENANT_FEATURE_FLAG_DEFINITIONS,
   TENANT_UI_VARIANTS,
@@ -305,18 +305,19 @@ export function TenantModulesSection({
   onSaveModules,
 }: TenantModulesSectionProps) {
   const activePlan = MODULE_BUNDLES.find((bundle) => bundle.id === tenantPlanId) || MODULE_BUNDLES[0]
+  const visibleModulePermissions = filterPlanVisibleModules(modulePermissions)
 
   return (
     <Card id="tenant-modules" className="scroll-mt-24 border-border/70 bg-white/85">
       <CardHeader>
-        <CardTitle>Tenant Modules</CardTitle>
-        <CardDescription>Control which modules are available to users in this tenant.</CardDescription>
+        <CardTitle>Allowed Modules</CardTitle>
+        <CardDescription>Step 1. Choose the tenant plan, then fine-tune only the modules included in that plan.</CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
         <div className="rounded-lg border border-slate-200 bg-slate-50/70 p-4 text-sm">
           <p className="font-medium text-slate-900">Current plan: {activePlan?.label || "Core"}</p>
           <p className="mt-1 text-xs text-muted-foreground">
-            Modules outside this plan stay locked. That gives you a clean entitlement boundary for future subscription upgrades.
+            Only modules included in this plan are shown below. Anything outside the plan stays hidden until the tenant moves to a higher plan.
           </p>
         </div>
         <div className="rounded-lg border border-emerald-100 bg-emerald-50/50 p-4 text-sm">
@@ -333,6 +334,12 @@ export function TenantModulesSection({
               ))
             )}
           </div>
+        </div>
+        <div className="rounded-lg border border-emerald-100 bg-emerald-50/50 p-4 text-sm">
+          <p className="font-medium text-emerald-900">Access order</p>
+          <p className="mt-1 text-xs text-muted-foreground">
+            Set estate-wide access here first, manage people next, and use per-user exceptions only after that.
+          </p>
         </div>
         <div className="space-y-3 rounded-lg border border-border/60 bg-muted/30 p-4">
           <div>
@@ -354,23 +361,16 @@ export function TenantModulesSection({
           </div>
         </div>
         <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-          {modulePermissions.map((module) => (
-            <label
-              key={module.id}
-              className={`flex items-center justify-between gap-3 rounded-lg border p-3 ${
-                module.lockedByPlan ? "border-dashed border-slate-200 bg-slate-50/80 text-slate-500" : "border-border/60 bg-white/80"
-              }`}
-            >
+          {visibleModulePermissions.map((module) => (
+            <label key={module.id} className="flex items-center justify-between gap-3 rounded-lg border border-border/60 bg-white/80 p-3">
               <div className="flex items-center gap-2">
                 <input
                   type="checkbox"
                   checked={module.enabled}
-                  disabled={module.lockedByPlan}
                   onChange={() => onToggleModule(module.id)}
                 />
                 <span>{module.label}</span>
               </div>
-              {module.lockedByPlan ? <span className="text-[11px] font-medium uppercase tracking-[0.18em]">Locked</span> : null}
             </label>
           ))}
         </div>
