@@ -250,7 +250,7 @@ export default function WelcomeOnboardingPage() {
                   </p>
                 </div>
                 <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-                  {CROP_FAMILIES.map((crop) => {
+                  {CROP_FAMILIES.filter((c) => c.id === "coffee").map((crop) => {
                     const selected = (draft.cropFamily ?? "coffee") === crop.id
                     return (
                       <button
