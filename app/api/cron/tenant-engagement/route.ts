@@ -4,6 +4,7 @@ import { extractBearerToken, sharedSecretMatches } from "@/lib/server/request-se
 import { logServerError } from "@/lib/server/safe-logging"
 
 export const dynamic = "force-dynamic"
+export const maxDuration = 300
 
 const getCronSecret = () => process.env.CRON_SECRET || null
 
