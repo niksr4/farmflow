@@ -10,28 +10,28 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 
 const capabilitySections = [
   {
-    title: "Inventory and accounts baseline",
-    description: "Keep stock, transactions, expenses, labor, and live finance views connected instead of spread across separate sheets.",
-    icon: Wallet,
-    bullets: ["Inventory ledger and movement history", "Accounts, expense, and labor visibility", "Live balance-sheet style overview"],
-  },
-  {
-    title: "Processing to dispatch chain",
-    description: "Run the daily coffee operation from intake through processing, dispatch confirmation, and sellable stock.",
+    title: "Cherry intake to parchment — the full pulping chain",
+    description: "Log every pulping batch, track parchment output by lot, and know your cherry-to-parchment conversion ratio without a spreadsheet.",
     icon: PackageCheck,
-    bullets: ["Processing records by coffee and output type", "Dispatch with received KGs confirmation", "Sales validated against confirmed received stock"],
+    bullets: ["Daily cherry intake by block or procurement source", "Pulping batch records — ripe, green, and float cherry", "Parchment output and drying yard stock", "Conversion ratio visible at any point in the season"],
   },
   {
-    title: "Governance and admin control",
-    description: "Keep access and changes reviewable as teams grow or multiple estates come online.",
+    title: "Labor, wages, and cost per kg",
+    description: "Plucker attendance, daily rates, and consumable issuance tracked by block — so your cost per kg of parchment is always a real number.",
+    icon: Wallet,
+    bullets: ["Plucker attendance and productivity by section", "Daily wage and plucking rate records", "Fertiliser and input issuance against the block", "Labor cost rolled into overall cost-per-kg view"],
+  },
+  {
+    title: "Dispatch, receipts, and sales",
+    description: "Nothing counts as sold until the buyer confirms the weight. Dispatch, receipt, and sale stay linked so saleable stock is always accurate.",
     icon: Shield,
-    bullets: ["Tenant and role-based access", "Audit logging", "Module-level enablement by workspace"],
+    bullets: ["Dispatch entries with vehicle and destination", "Buyer-confirmed received KG before stock is released", "Sales validated against confirmed received stock", "Revenue and accounts tied to actual dispatch records"],
   },
   {
-    title: "Climate and insight extensions",
-    description: "Add rainfall, weather, AI, and exception detection when the estate is ready for deeper decision support.",
+    title: "Rainfall, climate, and decision support",
+    description: "Rainfall logs, weather context, and AI-powered exception alerts — so you can plan drying windows and catch problems early.",
     icon: CloudRain,
-    bullets: ["Rainfall and weather context", "Exception alerts and intelligence briefs", "Season and performance support tools"],
+    bullets: ["Daily rainfall and weather records", "Exception alerts for processing or yield anomalies", "AI weekly digest and intelligence briefs", "Season performance and year-on-year comparison"],
   },
 ]
 
@@ -56,9 +56,9 @@ export default function CapabilitiesPage() {
       <div className="mx-auto w-full max-w-6xl space-y-10">
         <section className="rounded-[2rem] border border-white/10 bg-[linear-gradient(135deg,rgba(17,67,59,0.9),rgba(11,28,24,0.96)_48%,rgba(8,18,15,0.98))] p-6 shadow-[0_34px_85px_-52px_rgba(0,0,0,0.65)] sm:p-10">
           <Badge className="border-white/10 bg-white/[0.06] text-emerald-100">Capabilities</Badge>
-          <h1 className="mt-4 max-w-3xl text-3xl font-semibold text-stone-50 sm:text-5xl">What FarmFlow actually helps an estate do each day</h1>
+          <h1 className="mt-4 max-w-3xl text-3xl font-semibold text-stone-50 sm:text-5xl">Everything a coffee estate needs to run, in one place</h1>
           <p className="mt-4 max-w-3xl text-sm text-stone-300 sm:text-base">
-            FarmFlow keeps operations, finance, and accountability connected in one place. These are the capabilities that matter most in day-to-day estate work.
+            Cherry intake, pulping, parchment out, labor, dispatch, and sales — the parts that matter most in day-to-day estate work, connected so nothing falls through the cracks.
           </p>
         </section>
 
@@ -104,19 +104,19 @@ export default function CapabilitiesPage() {
 
         <section className="rounded-[2rem] border border-white/10 bg-gradient-to-br from-[#101b18] via-[#0d1715] to-[#081613] p-6 text-white shadow-[0_32px_80px_-52px_rgba(0,0,0,0.85)] sm:p-8">
           <p className="text-sm font-medium text-emerald-300">A practical way to start</p>
-          <h2 className="mt-2 text-2xl font-semibold">Start with the area that needs the most control first</h2>
+          <h2 className="mt-2 text-2xl font-semibold">Start where the biggest gap is</h2>
           <div className="mt-5 grid gap-4 sm:grid-cols-3">
             <div className="rounded-2xl border border-white/10 bg-white/[0.04] p-4">
-              <p className="font-medium">1. Fix stock truth</p>
-              <p className="mt-2 text-sm text-stone-300">Inventory, transactions, and accounts first if spreadsheets are drifting.</p>
+              <p className="font-medium">1. Start with pulping and labor</p>
+              <p className="mt-2 text-sm text-stone-300">Cherry intake, pulping records, and plucker wages — the core of every harvest season.</p>
             </div>
             <div className="rounded-2xl border border-white/10 bg-white/[0.04] p-4">
-              <p className="font-medium">2. Tighten the coffee chain</p>
-              <p className="mt-2 text-sm text-stone-300">Add processing, dispatch, and sales once the estate is ready for daily operational control.</p>
+              <p className="font-medium">2. Add dispatch and sales</p>
+              <p className="mt-2 text-sm text-stone-300">Once your parchment stock is accurate, link it to dispatch confirmations and sales.</p>
             </div>
             <div className="rounded-2xl border border-white/10 bg-white/[0.04] p-4">
-              <p className="font-medium">3. Add specialist modules</p>
-              <p className="mt-2 text-sm text-stone-300">Bring in climate, quality, documents, and AI when the team can actually use the signal.</p>
+              <p className="font-medium">3. Bring in climate and AI</p>
+              <p className="mt-2 text-sm text-stone-300">Rainfall logs, drying window planning, and weekly AI digests once the team is in a daily rhythm.</p>
             </div>
           </div>
           <div className="mt-6 flex flex-wrap gap-2">

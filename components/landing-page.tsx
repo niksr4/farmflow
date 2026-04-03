@@ -4,11 +4,9 @@ import Link from "next/link"
 import { motion, useReducedMotion } from "framer-motion"
 import {
   ArrowRight,
-  BarChart3,
   CheckCircle2,
   Coffee,
   PackageCheck,
-  ShieldCheck,
   Truck,
   Users,
   Wallet,
@@ -26,28 +24,28 @@ const representativeEstateFlow = [
   {
     label: "Cherry intake",
     value: "183,766 KG",
-    detail: "88 live processing entries",
+    detail: "88 pulping entries across the season",
     icon: Coffee,
     accentClassName: "bg-amber-400/15 text-amber-200 border-amber-300/20",
   },
   {
-    label: "Dry output",
+    label: "Parchment out",
     value: "50,229 KG",
-    detail: "27.3% cherry-to-dry ratio",
+    detail: "27.3% cherry-to-parchment ratio",
     icon: PackageCheck,
     accentClassName: "bg-emerald-400/15 text-emerald-200 border-emerald-300/20",
   },
   {
-    label: "Confirmed receipts",
+    label: "Dispatched & received",
     value: "19,347 KG",
-    detail: "Verified before saleable stock",
+    detail: "Buyer-confirmed before it counts as sold",
     icon: Truck,
     accentClassName: "bg-sky-400/15 text-sky-200 border-sky-300/20",
   },
   {
-    label: "Coffee sold",
-    value: "11,910 KG",
-    detail: "₹55.6L booked revenue",
+    label: "Revenue booked",
+    value: "₹55.6L",
+    detail: "11,910 KG at final sale",
     icon: Wallet,
     accentClassName: "bg-violet-400/15 text-violet-200 border-violet-300/20",
   },
@@ -55,85 +53,86 @@ const representativeEstateFlow = [
 
 const benefits = [
   {
-    title: "One source of truth",
+    title: "Know your conversion ratio every day",
     description:
-      "Stock, processing, dispatch, and money movement stay connected instead of drifting across separate spreadsheets.",
+      "Cherry in, parchment out — logged daily so you know exactly what your pulping yield is, not just at the end of the season when it's too late to act.",
+    icon: Coffee,
+  },
+  {
+    title: "Stop losing money to unrecorded labor",
+    description:
+      "Plucker attendance, plucking rates, and daily wages logged by block. At the end of the month, your cost per kg isn't a guess.",
+    icon: Users,
+  },
+  {
+    title: "Your season's numbers in one place",
+    description:
+      "Intake, dispatch, receipts, and sales stay connected. No more reconciling three notebooks and a spreadsheet to know where you stand.",
     icon: Wallet,
-  },
-  {
-    title: "Live chain visibility",
-    description:
-      "Follow coffee from intake to dry output, confirmed receipt, and saleable stock without losing the thread.",
-    icon: PackageCheck,
-  },
-  {
-    title: "Control that scales",
-    description:
-      "Roles, module access, and a full audit trail stay reviewable as the estate team grows.",
-    icon: ShieldCheck,
   },
 ]
 
 const howItWorks = [
   {
     step: "01",
-    title: "Create your workspace in 5 minutes",
+    title: "Set up your estate in one morning",
     detail:
-      "Guided setup walks through locations, crop types, and team access. New staff can record live entries the same day.",
+      "Add your blocks, pulping sections, and team. Staff can start logging cherry intake and labor the same day — no training needed.",
   },
   {
     step: "02",
-    title: "Teams record what happened, every day",
+    title: "Log the day's work as it happens",
     detail:
-      "Intake, processing, labor, dispatch — each entry is date-stamped, location-tagged, and linked to the next step in the chain.",
+      "Cherry intake, pulping batches, parchment out, plucker attendance, dispatch — each entry is date-stamped and tied to the block or lot it came from.",
   },
   {
     step: "03",
-    title: "Numbers stay connected all season",
+    title: "Your season's numbers make sense",
     detail:
-      "Conversion ratios, labor costs, and revenue trace back to the exact day they were recorded. No spreadsheet assembly.",
+      "Cherry-to-parchment ratio, cost per kg, revenue — all traceable to the exact day. No chasing notebooks at the end of harvest.",
   },
 ]
 
 const outcomeCards = [
   {
-    eyebrow: "Traceability",
-    title: "See the full coffee chain",
+    eyebrow: "Pulping & drying",
+    title: "Your conversion ratio, every day",
     detail:
-      "Intake, conversion, dispatch, receipt, and saleable stock — each step linked to the one before it.",
-    icon: BarChart3,
+      "Cherry intake into pulping batches, parchment out of the drying yard — tracked daily so you can spot a bad batch before it becomes a bad season.",
+    icon: Coffee,
   },
   {
-    eyebrow: "Finance discipline",
-    title: "Books tied to the work",
+    eyebrow: "Labor & costs",
+    title: "Know your cost per kg",
     detail:
-      "Sales, accounts, and journals stay anchored to what actually happened on the estate that day.",
+      "Plucker wages, fertiliser, and consumables logged against the block they were spent on. Cost per kg of parchment becomes a real number.",
     icon: Wallet,
   },
   {
-    eyebrow: "Team adoption",
-    title: "Get staff live faster",
+    eyebrow: "Dispatch & sales",
+    title: "Nothing leaves without a record",
     detail:
-      "Guided setup, role-based access, and in-product manuals help new teams go live without hand-holding.",
-    icon: Users,
+      "Dispatch entries, buyer receipts, and sales are linked. Saleable stock only counts once the buyer confirms the weight.",
+    icon: Truck,
   },
 ]
 
 const trustItems = [
-  { label: "5-min guided setup", icon: Zap },
+  { label: "Live in under 10 minutes", icon: Zap },
   { label: "Your data stays private", icon: Lock },
-  { label: "Works offline on mobile", icon: Smartphone },
-  { label: "No per-seat pricing", icon: CheckCircle2 },
+  { label: "Works on mobile, even offline", icon: Smartphone },
+  { label: "Flat pricing — no per-seat fees", icon: CheckCircle2 },
 ]
 
 const coreSurfacePills = [
-  "Processing",
+  "Cherry intake",
+  "Pulping records",
+  "Drying & parchment",
   "Dispatch",
   "Sales",
+  "Labor & wages",
   "Accounts",
-  "Inventory",
   "Rainfall",
-  "Journal",
 ]
 
 const planBadges: Record<string, string> = {
@@ -253,12 +252,12 @@ export default function LandingPage() {
         {/* ── Benefits ── */}
         <MotionSection {...reveal(0)} className="space-y-4">
           <div className="mb-14 text-center">
-            <p className="text-sm font-medium text-emerald-400">Why estates choose FarmFlow</p>
+            <p className="text-sm font-medium text-emerald-400">Why planters choose FarmFlow</p>
             <h2 className="mt-3 font-display text-4xl font-semibold text-stone-50 sm:text-5xl">
-              Built for control, not just reporting
+              Your season's numbers shouldn't live in three notebooks
             </h2>
             <p className="mx-auto mt-4 max-w-2xl text-base leading-7 text-stone-400">
-              FarmFlow keeps stock, processing, dispatch, and finance connected so the team acts on clean numbers every day — not once a season.
+              Most estates run on a mix of registers, WhatsApp forwards, and spreadsheets assembled at the end of the season. FarmFlow keeps it all in one place, updated daily.
             </p>
           </div>
           <div className="grid gap-5 lg:grid-cols-3">
@@ -286,10 +285,10 @@ export default function LandingPage() {
           <div className="mb-14 text-center">
             <p className="text-sm font-medium text-emerald-400">Simple by design</p>
             <h2 className="mt-3 font-display text-4xl font-semibold text-stone-50 sm:text-5xl">
-              Up and running in one morning
+              Up and running before the next pulping batch
             </h2>
             <p className="mx-auto mt-4 max-w-xl text-base leading-7 text-stone-400">
-              No consultants. No import scripts. No waiting. Estate teams go live the same day they sign up.
+              No consultants, no data migration, no waiting. Your team can start logging cherry intake the same day you sign up.
             </p>
           </div>
           <div className="grid gap-4 lg:grid-cols-3">
@@ -315,9 +314,9 @@ export default function LandingPage() {
         {/* ── What you get ── */}
         <MotionSection {...reveal(0.04)}>
           <div className="mb-14 text-center">
-            <p className="text-sm font-medium text-emerald-400">What estate teams actually get</p>
+            <p className="text-sm font-medium text-emerald-400">What planters actually get</p>
             <h2 className="mt-3 font-display text-4xl font-semibold text-stone-50 sm:text-5xl">
-              One operating surface for the whole estate
+              From first cherry to final sale — in one place
             </h2>
           </div>
           <div className="grid gap-4 lg:grid-cols-3">
@@ -464,9 +463,9 @@ export default function LandingPage() {
         {/* ── Crop roadmap ── */}
         <MotionSection {...reveal(0.04)}>
           <div className="rounded-2xl border border-white/[0.06] bg-white/[0.02] px-6 py-8 text-center sm:px-10">
-            <p className="text-xs uppercase tracking-[0.25em] text-stone-600">Built for estates, not just coffee</p>
+            <p className="text-xs uppercase tracking-[0.25em] text-stone-600">Starting with coffee, built to go further</p>
             <p className="mx-auto mt-3 max-w-xl text-sm leading-7 text-stone-400">
-              FarmFlow starts with coffee — the crop with the most operational complexity. The same foundation is expanding to tea, cocoa, spices, and beyond as those communities come on board.
+              Coffee is the hardest crop to run operationally — pulping, fermentation, drying, curing, grading, and traceability all in one season. We started here. Tea, cocoa, spices, and more are coming as those communities join.
             </p>
             <div className="mt-6 flex flex-wrap items-center justify-center gap-3">
               {[
@@ -503,12 +502,12 @@ export default function LandingPage() {
               <div className="absolute bottom-0 right-1/4 h-48 w-48 translate-x-1/2 rounded-full bg-[radial-gradient(circle,rgba(253,224,71,0.08),transparent_65%)] blur-3xl" />
             </div>
             <div className="relative z-10 space-y-6">
-              <p className="text-sm font-medium text-emerald-400">Self-serve. No sales call needed.</p>
+              <p className="text-sm font-medium text-emerald-400">No sales call. No setup fee. No waiting.</p>
               <h2 className="mx-auto max-w-3xl font-display text-4xl font-semibold text-stone-50 sm:text-5xl">
                 Your estate can be live today.
               </h2>
               <p className="mx-auto max-w-xl text-base leading-7 text-stone-400">
-                Create a workspace, verify your email, add your locations, and start recording. The whole setup takes less than ten minutes.
+                Sign up, add your blocks and team, and start logging cherry intake. Most estates are recording live entries within the hour.
               </p>
               <div className="flex flex-wrap items-center justify-center gap-3 pt-2">
                 <Button
