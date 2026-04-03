@@ -2,10 +2,36 @@ import "server-only"
 
 import { cookies } from "next/headers"
 import { sql } from "@/lib/server/db"
-import { MODULE_IDS, clampEnabledModulesToPlan, resolveEnabledModules } from "@/lib/modules"
+import { MODULE_IDS, resolveTenantEnabledModules } from "@/lib/modules"
 import { normalizeTenantContext, runTenantQuery } from "@/lib/server/tenant-db"
 import { resolveTenantPlanId } from "@/lib/server/tenant-subscriptions"
 import { requireSessionUser, type SessionUser } from "@/lib/server/auth"
+
+// In-process cache for module lists. Warm serverless instances reuse this,
+// eliminating 3 DB queries per API request. TTL = 5 minutes.
+const MODULE_CACHE = new Map<string, { modules: string[]; expiresAt: number }>()
+const CACHE_TTL_MS = 5 * 60 * 1000
+
+function getCachedModules(key: string): string[] | null {
+  const entry = MODULE_CACHE.get(key)
+  if (!entry || Date.now() > entry.expiresAt) {
+    MODULE_CACHE.delete(key)
+    return null
+  }
+  return entry.modules
+}
+
+function setCachedModules(key: string, modules: string[]): void {
+  MODULE_CACHE.set(key, { modules, expiresAt: Date.now() + CACHE_TTL_MS })
+}
+
+export function invalidateModuleCache(tenantId: string): void {
+  for (const key of MODULE_CACHE.keys()) {
+    if (key.startsWith(`${tenantId}:`)) {
+      MODULE_CACHE.delete(key)
+    }
+  }
+}
 
 export class ModuleAccessError extends Error {
   constructor(message = "Module access disabled") {
@@ -71,6 +97,10 @@ export async function getEnabledModules(sessionUser?: SessionUser): Promise<stri
     throw new Error("Database not configured")
   }
 
+  const cacheKey = `${user.tenantId}:${user.id}`
+  const cached = getCachedModules(cacheKey)
+  if (cached) return cached
+
   const tenantContext = normalizeTenantContext(user.tenantId, user.role)
   const userRows = await runTenantQuery(
     sql,
@@ -100,16 +130,17 @@ export async function getEnabledModules(sessionUser?: SessionUser): Promise<stri
     role: user.role,
     moduleRows: tenantModules as Array<{ module: string; enabled: boolean }>,
   })
-  const tenantEnabled = clampEnabledModulesToPlan(
-    tenantModules?.length ? resolveEnabledModules(tenantModules) : resolveEnabledModules(),
+  const tenantEnabled = resolveTenantEnabledModules(
+    tenantModules as Array<{ module: string; enabled: boolean }>,
     tenantPlanId,
+    { allowPlanOverrides: true },
   )
 
-  if (user.role === "admin") {
-    return tenantEnabled
-  }
+  let result: string[]
 
-  if (userId) {
+  if (user.role === "admin") {
+    result = tenantEnabled
+  } else if (userId) {
     try {
       const userModules = await runTenantQuery(
         sql,
@@ -122,18 +153,24 @@ export async function getEnabledModules(sessionUser?: SessionUser): Promise<stri
       )
       if (userModules?.length) {
         const userMap = new Map(userModules.map((row: any) => [String(row.module), Boolean(row.enabled)]))
-        return filterUserBlockedModules(
+        result = filterUserBlockedModules(
           tenantEnabled.filter((moduleId) => (userMap.has(moduleId) ? Boolean(userMap.get(moduleId)) : true)),
         )
+      } else {
+        result = filterUserBlockedModules(tenantEnabled)
       }
     } catch (error) {
       if (!isMissingRelation(error, "user_modules")) {
         throw error
       }
+      result = filterUserBlockedModules(tenantEnabled)
     }
+  } else {
+    result = filterUserBlockedModules(tenantEnabled)
   }
 
-  return filterUserBlockedModules(tenantEnabled)
+  setCachedModules(cacheKey, result)
+  return result
 }
 
 export async function requireModuleAccess(moduleId: string, sessionUser?: SessionUser): Promise<SessionUser> {

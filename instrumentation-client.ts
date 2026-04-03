@@ -1,4 +1,18 @@
+import * as Sentry from "@sentry/nextjs"
 import posthog from "posthog-js"
+
+const sentryDsn = process.env.NEXT_PUBLIC_SENTRY_DSN
+if (sentryDsn) {
+  Sentry.init({
+    dsn: sentryDsn,
+    environment: process.env.NEXT_PUBLIC_VERCEL_ENV ?? "development",
+    tracesSampleRate: 0.1,
+    replaysOnErrorSampleRate: 1.0,
+    replaysSessionSampleRate: 0,
+    ignoreErrors: ["Unauthorized", "Module access disabled"],
+    integrations: [Sentry.replayIntegration({ maskAllText: true, blockAllMedia: true })],
+  })
+}
 
 const posthogKey = process.env.NEXT_PUBLIC_POSTHOG_KEY
 const posthogHost = process.env.NEXT_PUBLIC_POSTHOG_HOST

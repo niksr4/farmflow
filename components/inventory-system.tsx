@@ -62,6 +62,7 @@ import { useAuth } from "@/hooks/use-auth"
 import { useTenantExperience } from "@/hooks/use-tenant-experience"
 import { useRouter, useSearchParams } from "next/navigation"
 import OnboardingChecklist, { type OnboardingStep } from "@/components/onboarding-checklist"
+import WorkspaceHints from "@/components/workspace-hints"
 import Link from "next/link"
 import Image from "next/image"
 import { isWithinLast24Hours } from "@/lib/date-utils"
@@ -5786,6 +5787,10 @@ export default function InventorySystem() {
           </Card>
         )}
 
+        {activeTab === "home" && !isOwner && (
+          <WorkspaceHints onTabChange={handleTabChange} />
+        )}
+
         {activeTab === "home" && (
           <div className="relative mb-6 overflow-hidden rounded-2xl border border-black/5 bg-white p-6 shadow-sm">
             <div className="relative flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between lg:gap-8">
@@ -6229,6 +6234,22 @@ export default function InventorySystem() {
             )}
             {activeTab === DASHBOARD_LAUNCHER_TAB && (
             <>
+            {canShowProcessingWorkspace && (
+              <button
+                type="button"
+                onClick={() => handleTabChange("processing")}
+                className="flex w-full items-center justify-between rounded-2xl border border-emerald-200 bg-emerald-50/70 px-4 py-3.5 text-left shadow-sm transition-colors hover:bg-emerald-100/80 touch-manipulation"
+              >
+                <div className="flex items-center gap-3">
+                  <Factory className="h-5 w-5 text-emerald-600" />
+                  <div>
+                    <p className="text-sm font-semibold text-emerald-900">Log today's processing</p>
+                    <p className="text-xs text-emerald-700/75">Cherry intake, pulping, and dry outputs</p>
+                  </div>
+                </div>
+                <span className="text-xs font-medium text-emerald-600">Open →</span>
+              </button>
+            )}
             {isMobile && (
               <div className="flex items-center justify-between px-1">
                 <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-neutral-500">Workspace Sections</p>
@@ -7366,6 +7387,28 @@ export default function InventorySystem() {
 
           {canShowInventoryWorkspace && (
             <TabsContent value="inventory" className="space-y-6" forceMount={isTabLoaded("inventory") ? true : undefined}>
+              {resolvedInventoryWorkspaceView !== "transactions" && (
+                <div className="flex flex-col gap-3 rounded-2xl border border-amber-200 bg-amber-50/80 px-4 py-3.5 sm:flex-row sm:items-center sm:justify-between">
+                  <div className="flex items-start gap-3">
+                    <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" />
+                    <div className="space-y-0.5">
+                      <p className="text-sm font-semibold text-amber-900">This tab is for restocking only</p>
+                      <p className="text-xs text-amber-800">
+                        To record fertiliser, chemicals, fuel, or any other consumable usage — go to <strong>Accounts → Other Expenses</strong>. The inventory level adjusts automatically and the cost flows into your P&amp;L.
+                      </p>
+                    </div>
+                  </div>
+                  {canShowAccounts && (
+                    <button
+                      type="button"
+                      onClick={() => { setAccountsInitialTab("expenses"); handleTabChange("accounts") }}
+                      className="shrink-0 rounded-lg border border-amber-300 bg-white px-3 py-2 text-xs font-semibold text-amber-800 transition-colors hover:bg-amber-100 touch-manipulation"
+                    >
+                      Go to Expenses →
+                    </button>
+                  )}
+                </div>
+              )}
               <Card className="border-border/70 bg-white/90">
                 <CardHeader className="pb-3">
                   <CardTitle className="text-xs uppercase tracking-[0.2em] text-muted-foreground">Inventory Dashboard</CardTitle>

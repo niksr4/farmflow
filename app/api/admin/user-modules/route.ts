@@ -1,12 +1,13 @@
 import { NextResponse } from "next/server"
 import { sql } from "@/lib/server/db"
 import { requireAdminSession } from "@/lib/server/mfa"
-import { MODULES, MODULE_IDS, clampEnabledModulesToPlan, resolveEnabledModules, resolveModuleStates } from "@/lib/modules"
+import { MODULES, MODULE_IDS, resolveModuleStates, resolveTenantEnabledModules } from "@/lib/modules"
 import { resolveTenantPlanId } from "@/lib/server/tenant-subscriptions"
 import { normalizeTenantContext, runTenantQueries, runTenantQuery } from "@/lib/server/tenant-db"
 import { logAuditEvent } from "@/lib/server/audit-log"
 import { logSecurityEvent } from "@/lib/server/security-events"
 import { buildAdminErrorResponse, databaseNotConfiguredResponse } from "@/lib/server/route-utils"
+import { invalidateModuleCache } from "@/lib/module-access"
 
 type ModuleState = { id: string; label: string; enabled: boolean; lockedByPlan?: boolean }
 const MODULE_LABEL_BY_ID = new Map(MODULES.map((module) => [module.id, module.label]))
@@ -24,6 +25,7 @@ export async function GET(request: Request) {
 
     const { searchParams } = new URL(request.url)
     const userId = searchParams.get("userId")
+    const allowPlanOverrides = sessionUser.role === "owner" && searchParams.get("includePlanOverrides") === "true"
 
     if (!userId) {
       return NextResponse.json({ success: false, error: "userId is required" }, { status: 400 })
@@ -70,9 +72,10 @@ export async function GET(request: Request) {
       role: sessionUser.role,
       moduleRows: tenantModules as Array<{ module: string; enabled: boolean }>,
     })
-    const tenantEnabled = clampEnabledModulesToPlan(
-      tenantModules?.length ? resolveEnabledModules(tenantModules) : resolveEnabledModules(),
+    const tenantEnabled = resolveTenantEnabledModules(
+      tenantModules as Array<{ module: string; enabled: boolean }>,
       tenantPlanId,
+      { allowPlanOverrides },
     )
     const source = userModules?.length ? "user" : tenantModules?.length ? "tenant" : "default"
     const sourceRows = source === "user" ? userModules : source === "tenant" ? tenantModules : []
@@ -80,7 +83,10 @@ export async function GET(request: Request) {
       source === "user"
         ? new Map((userModules || []).map((row: any) => [String(row.module), Boolean(row.enabled)]))
         : null
-    const modules: ModuleState[] = resolveModuleStates(sourceRows, { planId: tenantPlanId }).map((module) => ({
+    const modules: ModuleState[] = resolveModuleStates(sourceRows, {
+      planId: tenantPlanId,
+      allowPlanOverrides,
+    }).map((module) => ({
       ...module,
       enabled: applyUserRoleModulePolicy(
         targetRole,
@@ -107,6 +113,7 @@ export async function PUT(request: Request) {
     const body = await request.json()
     const userId = String(body.userId || "").trim()
     const modules = Array.isArray(body.modules) ? body.modules : []
+    const allowPlanOverrides = sessionUser.role === "owner" && body.allowPlanOverride === true
 
     if (!userId) {
       return NextResponse.json({ success: false, error: "userId is required" }, { status: 400 })
@@ -152,9 +159,10 @@ export async function PUT(request: Request) {
       role: sessionUser.role,
       moduleRows: tenantModules as Array<{ module: string; enabled: boolean }>,
     })
-    const tenantEnabled = clampEnabledModulesToPlan(
-      tenantModules?.length ? resolveEnabledModules(tenantModules) : resolveEnabledModules(),
+    const tenantEnabled = resolveTenantEnabledModules(
+      tenantModules as Array<{ module: string; enabled: boolean }>,
       tenantPlanId,
+      { allowPlanOverrides },
     )
 
     const beforeModules = await runTenantQuery(
@@ -207,9 +215,11 @@ export async function PUT(request: Request) {
       metadata: {
         action: "user_modules_updated",
         targetUserId: userId,
+        allowPlanOverrides,
       },
     })
 
+    invalidateModuleCache(tenantId)
     return NextResponse.json({ success: true })
   } catch (error: any) {
     console.error("Error updating user modules:", error)
@@ -294,6 +304,7 @@ export async function DELETE(request: Request) {
       },
     })
 
+    invalidateModuleCache(tenantId)
     return NextResponse.json({ success: true })
   } catch (error: any) {
     console.error("Error resetting user modules:", error)
