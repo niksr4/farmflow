@@ -41,7 +41,7 @@ export function ConsoleOverviewSection({
         <CardTitle>{isOwner ? "Owner Console" : "Admin Console"}</CardTitle>
         <CardDescription>
           {isOwner
-            ? "Manage tenants, preview experiences, seed demo data, and control platform access."
+            ? "Manage tenants, preview experiences, seed demo data, and control platform access including owner-only plan overrides."
             : "Manage people, allowed modules, and rare per-user exceptions for your tenant."}
         </CardDescription>
       </CardHeader>

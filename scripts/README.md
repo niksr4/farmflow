@@ -182,6 +182,8 @@ Run these scripts (in order) on the target database:
 28. `65-user-guided-setup.sql` (optional, tracks first-run setup completion for brand-new self-serve admins)
 29. `66-tenant-subscription-plan.sql` (optional, persists Basic/Core/Enterprise plan entitlements per tenant)
 30. `67-attendance.sql` (optional, adds employee roster + daily muster attendance tracking)
+31. `74-tenant-commercial-access.sql` (optional, adds SaaS trial/subscription state plus webhook event persistence)
+32. `75-product-intelligence-events.sql` (optional, adds first-party tenant usage and recommendation feedback events)
 
 Operational hardening helper scripts:
 - `pnpm security:passwords` audits password storage types and supports legacy remediation for existing users.

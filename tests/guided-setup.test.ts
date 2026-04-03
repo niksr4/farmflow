@@ -8,6 +8,8 @@ import {
   clampRequestedModuleStatesToPlan,
   filterPlanVisibleModules,
   normalizeTenantPlanId,
+  resolveModuleStates,
+  resolveTenantEnabledModules,
 } from "../lib/modules"
 
 describe("guided setup gate", () => {
@@ -107,5 +109,43 @@ describe("module bundles", () => {
 
     expect(filterPlanVisibleModules(states).map((module) => module.id)).toContain("inventory")
     expect(filterPlanVisibleModules(states).map((module) => module.id)).not.toContain("quality")
+  })
+
+  it("allows owner-level module overrides outside plan when explicitly requested", () => {
+    const states = clampRequestedModuleStatesToPlan(
+      [
+        { id: "inventory", enabled: true },
+        { id: "quality", enabled: true },
+      ],
+      "core",
+      { allowPlanOverrides: true },
+    )
+
+    expect(states.find((module) => module.id === "quality")).toMatchObject({ enabled: true, lockedByPlan: true })
+    expect(
+      resolveTenantEnabledModules(
+        states.map((module) => ({ module: module.id, enabled: module.enabled })),
+        "core",
+        { allowPlanOverrides: true },
+      ),
+    ).toContain("quality")
+  })
+
+  it("shows owner overrides outside plan only when override mode is enabled", () => {
+    const rows = [
+      { module: "inventory", enabled: true },
+      { module: "quality", enabled: true },
+    ]
+
+    expect(resolveModuleStates(rows, { planId: "core" }).find((module) => module.id === "quality")).toMatchObject({
+      enabled: false,
+      lockedByPlan: true,
+    })
+    expect(
+      resolveModuleStates(rows, { planId: "core", allowPlanOverrides: true }).find((module) => module.id === "quality"),
+    ).toMatchObject({
+      enabled: true,
+      lockedByPlan: true,
+    })
   })
 })

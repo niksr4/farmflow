@@ -8,9 +8,8 @@ import { normalizeTenantContext, runTenantQuery } from "@/lib/server/tenant-db"
 import { resolveTenantPlanId } from "@/lib/server/tenant-subscriptions"
 import {
   DEFAULT_TENANT_PLAN_ID,
-  clampEnabledModulesToPlan,
   getPlanModuleIds,
-  resolveEnabledModules,
+  resolveTenantEnabledModules,
   type TenantPlanId,
 } from "@/lib/modules"
 
@@ -98,9 +97,10 @@ async function resolveManualScope(searchParams?: Awaited<ManualsPageRouteProps["
       moduleRows: tenantRows as Array<{ module: string; enabled: boolean }>,
     })
 
-    const cappedTenantEnabled = clampEnabledModulesToPlan(
-      tenantRows?.length ? resolveEnabledModules(tenantRows as Array<{ module: string; enabled: boolean }>) : resolveEnabledModules(),
+    const cappedTenantEnabled = resolveTenantEnabledModules(
+      tenantRows as Array<{ module: string; enabled: boolean }>,
       planId,
+      { allowPlanOverrides: true },
     )
 
     let enabledModules = cappedTenantEnabled

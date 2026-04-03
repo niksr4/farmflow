@@ -193,7 +193,7 @@ export default function AdminPage() {
 
   const loadModules = useCallback(async (tenantId: string) => {
     try {
-      const response = await fetch(`/api/admin/tenant-modules?tenantId=${tenantId}`)
+      const response = await fetch(`/api/admin/tenant-modules?tenantId=${tenantId}&includePlanOverrides=true`)
       const data = await response.json()
       if (!response.ok || !data.success) {
         throw new Error(data.error || "Failed to load tenant modules")
@@ -524,7 +524,7 @@ export default function AdminPage() {
 
     setIsUserModulesLoading(true)
     try {
-      const response = await fetch(`/api/admin/user-modules?userId=${userId}`)
+      const response = await fetch(`/api/admin/user-modules?userId=${userId}&includePlanOverrides=true`)
       const data = await response.json()
       if (!response.ok || !data.success) {
         throw new Error(data.error || "Failed to load user modules")
@@ -700,9 +700,7 @@ export default function AdminPage() {
 
   const toggleModule = (moduleId: string) => {
     setModulePermissions((prev) =>
-      prev.map((module) =>
-        module.id === moduleId && !module.lockedByPlan ? { ...module, enabled: !module.enabled } : module,
-      ),
+      prev.map((module) => (module.id === moduleId ? { ...module, enabled: !module.enabled } : module)),
     )
   }
 
@@ -743,7 +741,12 @@ export default function AdminPage() {
       const response = await fetch("/api/admin/tenant-modules", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ tenantId: selectedTenantId, planId: tenantPlanId, modules: modulePermissions }),
+        body: JSON.stringify({
+          tenantId: selectedTenantId,
+          planId: tenantPlanId,
+          modules: modulePermissions,
+          allowPlanOverride: true,
+        }),
       })
       const data = await response.json()
       if (!response.ok || !data.success) {
@@ -806,7 +809,7 @@ export default function AdminPage() {
       const response = await fetch("/api/admin/user-modules", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ userId: selectedUserId, modules: userModulePermissions }),
+        body: JSON.stringify({ userId: selectedUserId, modules: userModulePermissions, allowPlanOverride: true }),
       })
       const data = await response.json()
       if (!response.ok || !data.success) {

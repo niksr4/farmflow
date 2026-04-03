@@ -3,8 +3,10 @@ import "server-only"
 import { randomBytes } from "crypto"
 
 import { DEFAULT_TENANT_PLAN_ID, MODULES, clampRequestedModuleStatesToPlan } from "@/lib/modules"
+import { logProductIntelligenceEvent } from "@/lib/server/product-intelligence-events"
 import { logSecurityEvent } from "@/lib/server/security-events"
 import { sql } from "@/lib/server/db"
+import { initializeTenantTrialAccess } from "@/lib/server/tenant-commercial-access"
 import { persistTenantPlanId } from "@/lib/server/tenant-subscriptions"
 import { normalizeTenantContext, runTenantQuery } from "@/lib/server/tenant-db"
 import { sendOwnerTenantCreatedAlert } from "@/lib/server/onboarding/owner-alerts"
@@ -511,6 +513,11 @@ const provisionSignupRequestRecord = async (
     }
 
     const tenant = await ensureTenant(signupRequest)
+    await initializeTenantTrialAccess(sql, tenant.id, "owner", {
+      planId: DEFAULT_TENANT_PLAN_ID,
+      trialDays: 30,
+      source: "self-serve-signup",
+    })
     await ensureTenantModules(tenant.id)
     await ensureStarterLocation(tenant.id, signupRequest.estate_name)
     const user = await ensureUser(signupRequest, tenant.id)
@@ -553,6 +560,19 @@ const provisionSignupRequestRecord = async (
       source: input.source,
       metadata: {
         signupRequestId: signupRequest.id,
+      },
+    })
+
+    await logProductIntelligenceEvent({
+      tenantId: tenant.id,
+      actorUserId: user.id,
+      actorUsername: user.username,
+      actorRole: "admin",
+      eventType: "self_serve_tenant_provisioned",
+      source: input.source,
+      metadata: {
+        signupRequestId: signupRequest.id,
+        planId: DEFAULT_TENANT_PLAN_ID,
       },
     })
 

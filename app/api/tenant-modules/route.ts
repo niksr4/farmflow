@@ -4,7 +4,7 @@ import { sql } from "@/lib/server/db"
 export const dynamic = "force-dynamic"
 export const revalidate = 0
 import { requireSessionUser } from "@/lib/server/auth"
-import { MODULE_BUNDLES, clampEnabledModulesToPlan, resolveEnabledModules } from "@/lib/modules"
+import { MODULE_BUNDLES, resolveTenantEnabledModules } from "@/lib/modules"
 import { resolveTenantPlanId } from "@/lib/server/tenant-subscriptions"
 import { normalizeTenantContext, runTenantQuery } from "@/lib/server/tenant-db"
 
@@ -47,9 +47,10 @@ export async function GET(_request: Request) {
       role: sessionUser.role,
       moduleRows: tenantRows as Array<{ module: string; enabled: boolean }>,
     })
-    const cappedTenantEnabled = clampEnabledModulesToPlan(
-      tenantRows?.length ? resolveEnabledModules(tenantRows) : resolveEnabledModules(),
+    const cappedTenantEnabled = resolveTenantEnabledModules(
+      tenantRows as Array<{ module: string; enabled: boolean }>,
       planId,
+      { allowPlanOverrides: true },
     )
 
     if (userId) {

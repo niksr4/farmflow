@@ -109,6 +109,9 @@ export default function TrustPage() {
                 <Link href="/legal/dpa">DPA</Link>
               </Button>
               <Button variant="ghost" className="border-white/10 bg-white/[0.04] text-stone-100 hover:bg-white/[0.08] hover:text-white" asChild>
+                <Link href="/legal/billing">Billing / Cancellation</Link>
+              </Button>
+              <Button variant="ghost" className="border-white/10 bg-white/[0.04] text-stone-100 hover:bg-white/[0.08] hover:text-white" asChild>
                 <Link href="/legal/subprocessors">Subprocessors</Link>
               </Button>
             </CardContent>

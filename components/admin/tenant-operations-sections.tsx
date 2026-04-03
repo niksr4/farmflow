@@ -6,7 +6,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { MODULE_BUNDLES, filterPlanVisibleModules } from "@/lib/modules"
+import { MODULE_BUNDLES } from "@/lib/modules"
 import {
   TENANT_FEATURE_FLAG_DEFINITIONS,
   TENANT_UI_VARIANTS,
@@ -305,19 +305,24 @@ export function TenantModulesSection({
   onSaveModules,
 }: TenantModulesSectionProps) {
   const activePlan = MODULE_BUNDLES.find((bundle) => bundle.id === tenantPlanId) || MODULE_BUNDLES[0]
-  const visibleModulePermissions = filterPlanVisibleModules(modulePermissions)
+  const planModulePermissions = modulePermissions.filter((module) => !module.lockedByPlan)
+  const ownerOverridePermissions = modulePermissions.filter((module) => module.lockedByPlan)
+  const enabledOwnerOverrideCount = ownerOverridePermissions.filter((module) => module.enabled).length
 
   return (
     <Card id="tenant-modules" className="scroll-mt-24 border-border/70 bg-white/85">
       <CardHeader>
         <CardTitle>Allowed Modules</CardTitle>
-        <CardDescription>Step 1. Choose the tenant plan, then fine-tune only the modules included in that plan.</CardDescription>
+        <CardDescription>
+          Step 1. Choose the tenant plan first. The owner console can still override that plan when you need to.
+        </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
         <div className="rounded-lg border border-slate-200 bg-slate-50/70 p-4 text-sm">
           <p className="font-medium text-slate-900">Current plan: {activePlan?.label || "Core"}</p>
           <p className="mt-1 text-xs text-muted-foreground">
-            Only modules included in this plan are shown below. Anything outside the plan stays hidden until the tenant moves to a higher plan.
+            The plan remains the default ceiling. If you need to expose something outside the plan for a specific tenant,
+            use the owner override section below.
           </p>
         </div>
         <div className="rounded-lg border border-emerald-100 bg-emerald-50/50 p-4 text-sm">
@@ -360,19 +365,56 @@ export function TenantModulesSection({
             ))}
           </div>
         </div>
-        <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-          {visibleModulePermissions.map((module) => (
-            <label key={module.id} className="flex items-center justify-between gap-3 rounded-lg border border-border/60 bg-white/80 p-3">
-              <div className="flex items-center gap-2">
-                <input
-                  type="checkbox"
-                  checked={module.enabled}
-                  onChange={() => onToggleModule(module.id)}
-                />
-                <span>{module.label}</span>
-              </div>
-            </label>
-          ))}
+        <div className="space-y-2">
+          <div className="flex items-center justify-between">
+            <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground">Modules In Plan</p>
+            <span className="text-xs text-muted-foreground">{planModulePermissions.filter((module) => module.enabled).length} enabled</span>
+          </div>
+          <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+            {planModulePermissions.map((module) => (
+              <label key={module.id} className="flex items-center justify-between gap-3 rounded-lg border border-border/60 bg-white/80 p-3">
+                <div className="flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    checked={module.enabled}
+                    onChange={() => onToggleModule(module.id)}
+                  />
+                  <span>{module.label}</span>
+                </div>
+              </label>
+            ))}
+          </div>
+        </div>
+
+        <div className="space-y-3 rounded-lg border border-amber-200 bg-amber-50/70 p-4">
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <p className="text-sm font-medium text-amber-950">Owner Overrides Outside Plan</p>
+              <p className="text-xs text-amber-900/80">
+                These modules are not part of the selected plan. Only the owner console can enable them.
+              </p>
+            </div>
+            <span className="rounded-full bg-white px-2.5 py-1 text-xs text-amber-900">{enabledOwnerOverrideCount} enabled</span>
+          </div>
+          <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+            {ownerOverridePermissions.map((module) => (
+              <label key={module.id} className="flex items-center justify-between gap-3 rounded-lg border border-amber-200 bg-white/90 p-3">
+                <div className="flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    checked={module.enabled}
+                    onChange={() => onToggleModule(module.id)}
+                  />
+                  <span className="flex items-center gap-2">
+                    <span>{module.label}</span>
+                    <span className="rounded-full bg-amber-50 px-2 py-0.5 text-[11px] uppercase tracking-[0.14em] text-amber-900">
+                      Outside plan
+                    </span>
+                  </span>
+                </div>
+              </label>
+            ))}
+          </div>
         </div>
         <Button onClick={onSaveModules} disabled={!selectedTenantId}>
           Save Module Access

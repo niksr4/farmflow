@@ -12,8 +12,10 @@ import { logAuditEvent } from "@/lib/server/audit-log"
 import { sql } from "@/lib/server/db"
 import { logSecurityEvent } from "@/lib/server/security-events"
 import { persistTenantPlanId, resolveTenantPlanId } from "@/lib/server/tenant-subscriptions"
+import { upsertTenantCommercialPlan } from "@/lib/server/tenant-commercial-access"
 import { normalizeTenantContext, runTenantQuery } from "@/lib/server/tenant-db"
 import { buildStarterLocationName } from "@/lib/server/onboarding/utils"
+import { logProductIntelligenceEvent } from "@/lib/server/product-intelligence-events"
 import { mergeTenantEstateProfile } from "@/lib/tenant-estate-profile"
 import { parseJsonObject } from "@/lib/server/tenant-experience-db"
 
@@ -249,6 +251,10 @@ export async function completeGuidedSetup(sessionUser: SessionUser, input: Compl
   }
 
   await persistTenantPlanId(sql, tenantContext.tenantId, tenantContext.role, bundle.id)
+  await upsertTenantCommercialPlan(sql, tenantContext.tenantId, tenantContext.role, bundle.id, {
+    billingProvider: "manual",
+    status: "active",
+  })
 
   await runTenantQuery(
     sql,
@@ -284,6 +290,22 @@ export async function completeGuidedSetup(sessionUser: SessionUser, input: Compl
       moduleBundleId: input.moduleBundleId,
       preferredLocale: input.preferredLocale,
       primaryLocationCode: nextLocationCode,
+    },
+  })
+
+  await logProductIntelligenceEvent({
+    tenantId: tenantContext.tenantId,
+    actorUserId: sessionUser.id,
+    actorUsername: sessionUser.username,
+    actorRole: sessionUser.role,
+    eventType: "guided_setup_completed",
+    source: "onboarding/setup",
+    metadata: {
+      moduleBundleId: input.moduleBundleId,
+      preferredLocale: input.preferredLocale,
+      primaryLocationCode: nextLocationCode,
+      cropFamily: input.cropFamily ?? null,
+      primaryVarieties: input.primaryVarieties ?? [],
     },
   })
 

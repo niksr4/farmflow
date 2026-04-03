@@ -148,6 +148,7 @@ export const clampEnabledModulesToPlan = (enabledModules: string[], planId: unkn
 export const clampRequestedModuleStatesToPlan = (
   requestedModules: Array<{ id?: string; enabled?: boolean }> | undefined,
   planId: unknown,
+  options?: { allowPlanOverrides?: boolean },
 ) => {
   const requestedState = new Map(
     (requestedModules || []).map((module) => [String(module?.id || ""), Boolean(module?.enabled)]),
@@ -156,7 +157,9 @@ export const clampRequestedModuleStatesToPlan = (
   return MODULES.map((module) => ({
     id: module.id,
     label: module.label,
-    enabled: allowedModuleIds.has(module.id) && Boolean(requestedState.get(module.id)),
+    enabled:
+      (allowedModuleIds.has(module.id) || options?.allowPlanOverrides === true) &&
+      Boolean(requestedState.get(module.id)),
     lockedByPlan: !allowedModuleIds.has(module.id),
   }))
 }
@@ -164,17 +167,41 @@ export const clampRequestedModuleStatesToPlan = (
 export const filterPlanVisibleModules = <T extends { lockedByPlan?: boolean }>(modules: T[]) =>
   modules.filter((module) => !module.lockedByPlan)
 
+export const resolveTenantEnabledModules = (
+  rows?: Array<{ module: string; enabled: boolean }>,
+  planId?: unknown,
+  options?: { allowPlanOverrides?: boolean },
+) => {
+  const byModule = new Map((rows || []).map((row) => [String(row.module), Boolean(row.enabled)]))
+  const allowedModuleIds = new Set(planId ? getPlanModuleIds(planId) : MODULE_IDS)
+
+  return MODULES.filter((module) => {
+    if (allowedModuleIds.has(module.id)) {
+      return byModule.has(module.id) ? Boolean(byModule.get(module.id)) : module.defaultEnabled === true
+    }
+
+    if (!options?.allowPlanOverrides) {
+      return false
+    }
+
+    return byModule.has(module.id) ? Boolean(byModule.get(module.id)) : false
+  }).map((module) => module.id)
+}
+
 export const resolveModuleStates = (
   rows?: Array<{ module: string; enabled: boolean }>,
-  options?: { planId?: unknown },
+  options?: { planId?: unknown; allowPlanOverrides?: boolean },
 ): ModuleState[] => {
   const byModule = new Map((rows || []).map((row) => [String(row.module), Boolean(row.enabled)]))
   const allowedModuleIds = new Set(options?.planId ? getPlanModuleIds(options.planId) : MODULE_IDS)
   return MODULES.map((module) => ({
     ...module,
     enabled:
-      allowedModuleIds.has(module.id) &&
-      (byModule.has(module.id) ? Boolean(byModule.get(module.id)) : module.defaultEnabled === true),
+      allowedModuleIds.has(module.id)
+        ? (byModule.has(module.id) ? Boolean(byModule.get(module.id)) : module.defaultEnabled === true)
+        : options?.allowPlanOverrides
+          ? (byModule.has(module.id) ? Boolean(byModule.get(module.id)) : false)
+          : false,
     lockedByPlan: !allowedModuleIds.has(module.id),
   }))
 }

@@ -191,10 +191,16 @@ export default function LoginPage() {
             </div>
 
             <div>
-              <div className="flex items-center gap-2">
+              <div className="flex items-center justify-between gap-2">
                 <Label htmlFor="password" className="mb-1 block text-stone-200">
                   {t("public.login.password")}
                 </Label>
+                <a
+                  href="mailto:support@thefarmflow.in?subject=Password%20Reset%20Request"
+                  className="mb-1 text-xs text-emerald-300 hover:text-emerald-200"
+                >
+                  Forgot password?
+                </a>
                 <TooltipProvider>
                   <Tooltip>
                     <TooltipTrigger asChild>

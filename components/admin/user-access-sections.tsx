@@ -7,7 +7,6 @@ import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { formatDateOnly } from "@/lib/date-utils"
-import { filterPlanVisibleModules } from "@/lib/modules"
 import { roleLabel } from "@/lib/roles"
 import type {
   AuditLog,
@@ -247,7 +246,9 @@ export function UserModuleOverridesSection({
   onSaveUserModules,
   onResetUserModules,
 }: UserModuleOverridesSectionProps) {
-  const visibleUserModulePermissions = filterPlanVisibleModules(userModulePermissions)
+  const planUserModulePermissions = userModulePermissions.filter((module) => !module.lockedByPlan)
+  const ownerOverridePermissions = userModulePermissions.filter((module) => module.lockedByPlan)
+  const enabledVisibleModuleCount = userModulePermissions.filter((module) => module.enabled).length
 
   return (
     <Card id="user-module-overrides" className="scroll-mt-24 border-border/70 bg-white/85">
@@ -261,7 +262,7 @@ export function UserModuleOverridesSection({
         <div className="rounded-lg border border-amber-100 bg-amber-50/70 p-4 text-sm">
           <p className="font-medium text-amber-950">Keep this rare.</p>
           <p className="mt-1 text-xs text-amber-900/80">
-            Most users should stay on tenant defaults. Only modules included in the current plan are shown here.
+            Most users should stay on tenant defaults. If the owner enabled extra modules outside the plan, they appear separately below.
           </p>
         </div>
         <div className="space-y-2">
@@ -284,29 +285,61 @@ export function UserModuleOverridesSection({
               : "Source: System defaults"}
           </p>
           <p className="text-xs text-muted-foreground">
-            Enabled for selected user: {visibleUserModulePermissions.filter((module) => module.enabled).length} of {visibleUserModulePermissions.length} shown
+            Enabled for selected user: {enabledVisibleModuleCount} of {userModulePermissions.length} shown
           </p>
         </div>
 
-        <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-          {visibleUserModulePermissions.map((module) => {
-            const isLockedForRole = isSelectedUserRoleScoped && module.id === "balance-sheet"
-            return (
-              <label key={module.id} className="flex items-center gap-2 rounded-lg border border-border/60 bg-white/80 p-3">
-                <input
-                  type="checkbox"
-                  checked={module.enabled}
-                  onChange={() => onToggleUserModule(module.id)}
-                  disabled={isUserModulesLoading || isLockedForRole}
-                />
-                <span>{module.label}</span>
-                {isLockedForRole ? (
-                  <span className="ml-auto text-xs text-muted-foreground">Admin only</span>
-                ) : null}
-              </label>
-            )
-          })}
+        <div className="space-y-2">
+          <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground">Modules In Plan</p>
+          <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+            {planUserModulePermissions.map((module) => {
+              const isLockedForRole = isSelectedUserRoleScoped && module.id === "balance-sheet"
+              return (
+                <label key={module.id} className="flex items-center gap-2 rounded-lg border border-border/60 bg-white/80 p-3">
+                  <input
+                    type="checkbox"
+                    checked={module.enabled}
+                    onChange={() => onToggleUserModule(module.id)}
+                    disabled={isUserModulesLoading || isLockedForRole}
+                  />
+                  <span>{module.label}</span>
+                  {isLockedForRole ? (
+                    <span className="ml-auto text-xs text-muted-foreground">Admin only</span>
+                  ) : null}
+                </label>
+              )
+            })}
+          </div>
         </div>
+
+        {ownerOverridePermissions.length > 0 ? (
+          <div className="space-y-2 rounded-lg border border-amber-200 bg-amber-50/70 p-4">
+            <p className="text-xs uppercase tracking-[0.2em] text-amber-900">Owner Override Modules</p>
+            <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+              {ownerOverridePermissions.map((module) => {
+                const isLockedForRole = isSelectedUserRoleScoped && module.id === "balance-sheet"
+                return (
+                  <label key={module.id} className="flex items-center gap-2 rounded-lg border border-amber-200 bg-white/90 p-3">
+                    <input
+                      type="checkbox"
+                      checked={module.enabled}
+                      onChange={() => onToggleUserModule(module.id)}
+                      disabled={isUserModulesLoading || isLockedForRole}
+                    />
+                    <span>{module.label}</span>
+                    {isLockedForRole ? (
+                      <span className="ml-auto text-xs text-muted-foreground">Admin only</span>
+                    ) : (
+                      <span className="ml-auto rounded-full bg-amber-50 px-2 py-0.5 text-[11px] uppercase tracking-[0.14em] text-amber-900">
+                        Outside plan
+                      </span>
+                    )}
+                  </label>
+                )
+              })}
+            </div>
+          </div>
+        ) : null}
         {isSelectedUserRoleScoped ? (
           <p className="text-xs text-muted-foreground">
             Live Balance Sheet is admin-only and remains disabled for user roles.
