@@ -74,6 +74,7 @@ import { getModuleDefaultEnabled } from "@/lib/modules"
 import { appendOwnerPreviewContext, normalizeOwnerPreviewContext } from "@/lib/owner-preview"
 import type { InventoryItem, Transaction } from "@/lib/inventory-types"
 import { cn } from "@/lib/utils"
+import { Skeleton, SkeletonCard, SkeletonTable } from "@/components/ui/skeleton"
 import { toast } from "@/components/ui/use-toast"
 import { roleLabel } from "@/lib/roles"
 import {
@@ -127,16 +128,16 @@ import posthog from "posthog-js"
 
 const WRITE_QUEUE_STATUS_EVENT = "farmflow:write-queue-status"
 
-function TabPanelLoading({ label }: { label: string }) {
+function TabPanelLoading({ label: _label }: { label: string }) {
   return (
-    <Card className="border border-dashed border-black/10 bg-white/80 shadow-none">
-      <CardContent className="flex min-h-[220px] items-center justify-center">
-        <div className="flex items-center gap-3 text-sm text-muted-foreground">
-          <Loader2 className="h-4 w-4 animate-spin" />
-          <span>Loading {label}...</span>
-        </div>
-      </CardContent>
-    </Card>
+    <div className="space-y-4">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        <SkeletonCard />
+        <SkeletonCard />
+        <SkeletonCard />
+      </div>
+      <SkeletonTable rows={6} cols={4} className="rounded-2xl border border-stone-100 bg-white" />
+    </div>
   )
 }
 
@@ -6551,19 +6552,28 @@ export default function InventorySystem() {
                   </div>
                 </CardHeader>
                 <CardContent>
-                  <p className="text-2xl font-semibold tabular-nums text-neutral-900">
-                    {formatNumber(processingTotals.arabicaKg + processingTotals.robustaKg, 0)} kg
-                  </p>
-                  <p className="text-xs text-muted-foreground">{currentFiscalYear.label}</p>
-                  {canShowProcessing && (
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      className="mt-2 h-7 px-2 text-xs"
-                      onClick={() => openDrilldown({ tab: "processing", locationId: selectedLocationId })}
-                    >
-                      Open records
-                    </Button>
+                  {processingTotals.loading ? (
+                    <div className="space-y-2">
+                      <Skeleton className="h-7 w-28" />
+                      <Skeleton className="h-3 w-20" />
+                    </div>
+                  ) : (
+                    <>
+                      <p className="text-2xl font-semibold tabular-nums text-neutral-900">
+                        {formatNumber(processingTotals.arabicaKg + processingTotals.robustaKg, 0)} kg
+                      </p>
+                      <p className="text-xs text-muted-foreground">{currentFiscalYear.label}</p>
+                      {canShowProcessing && (
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          className="mt-2 h-7 px-2 text-xs"
+                          onClick={() => openDrilldown({ tab: "processing", locationId: selectedLocationId })}
+                        >
+                          Open records
+                        </Button>
+                      )}
+                    </>
                   )}
                 </CardContent>
               </Card>
@@ -6579,22 +6589,31 @@ export default function InventorySystem() {
                   </div>
                 </CardHeader>
                 <CardContent>
-                  <p className="text-2xl font-semibold tabular-nums text-neutral-900">
-                    {formatNumber(dispatchReceivedKgsTotal, 0)} kg
-                  </p>
-                  <p className="text-xs text-muted-foreground">
-                    {formatNumber(dispatchHeroTotals.arabicaBags + dispatchHeroTotals.robustaBags, 0)} bags in{" "}
-                    {formatCount(dispatchHeroTotals.totalDispatches)} records
-                  </p>
-                  {canShowDispatch && (
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      className="mt-2 h-7 px-2 text-xs"
-                      onClick={() => openDrilldown({ tab: "dispatch", locationId: selectedLocationId })}
-                    >
-                      Open ledger
-                    </Button>
+                  {dispatchHeroTotals.loading ? (
+                    <div className="space-y-2">
+                      <Skeleton className="h-7 w-28" />
+                      <Skeleton className="h-3 w-36" />
+                    </div>
+                  ) : (
+                    <>
+                      <p className="text-2xl font-semibold tabular-nums text-neutral-900">
+                        {formatNumber(dispatchReceivedKgsTotal, 0)} kg
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        {formatNumber(dispatchHeroTotals.arabicaBags + dispatchHeroTotals.robustaBags, 0)} bags in{" "}
+                        {formatCount(dispatchHeroTotals.totalDispatches)} records
+                      </p>
+                      {canShowDispatch && (
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          className="mt-2 h-7 px-2 text-xs"
+                          onClick={() => openDrilldown({ tab: "dispatch", locationId: selectedLocationId })}
+                        >
+                          Open ledger
+                        </Button>
+                      )}
+                    </>
                   )}
                 </CardContent>
               </Card>

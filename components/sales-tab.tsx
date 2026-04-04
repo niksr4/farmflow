@@ -26,6 +26,7 @@ import { buildSalesCsv } from "@/lib/sales-export"
 import { resolveDispatchReceivedKgs as resolveDispatchReceivedKgsValue, resolveSalesKgs } from "@/lib/sales-math"
 import OtherSalesTab from "@/components/other-sales-tab"
 import TaskGuideCard from "@/components/task-guide-card"
+import { EmptyStateTable } from "@/components/ui/empty-state"
 import WorkspacePageShell from "@/components/workspace-page-shell"
 import posthog from "posthog-js"
 
@@ -1760,23 +1761,11 @@ export default function SalesTab({
               <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
             </div>
           ) : salesRecords.length === 0 ? (
-            <div className="rounded-2xl border border-dashed border-emerald-200 bg-emerald-50/40 p-5 text-sm">
-              <p className="font-semibold text-foreground">No sales recorded yet</p>
-              <p className="mt-2 text-muted-foreground">
-                Add the first real buyer and price only when the commercial details are known. Sales should support revenue tracking, not placeholder data.
-              </p>
-              <ul className="ml-4 mt-3 list-disc space-y-1 text-muted-foreground">
-                <li>Select the location the stock came from.</li>
-                <li>Enter the buyer, quantity, and final agreed price.</li>
-                <li>Use notes for terms or special conditions instead of hiding them.</li>
-              </ul>
-              <div className="mt-4 flex flex-wrap gap-2">
-                <Button onClick={scrollToEntryForm}>Use form above</Button>
-                <Button asChild variant="outline" className="bg-white">
-                  <Link href="/manuals">Open manuals</Link>
-                </Button>
-              </div>
-            </div>
+            <EmptyStateTable
+              title="No sales recorded yet"
+              description="Add a sale when buyer and price are confirmed — enter the location, buyer, quantity, and agreed price."
+              action={{ label: "Use form above", onClick: scrollToEntryForm }}
+            />
           ) : (
             <div className="space-y-4">
               <div className="space-y-3 md:hidden">

@@ -1,7 +1,13 @@
 "use client"
 
-import { useCallback, useEffect, useState } from "react"
+import { useCallback, useEffect, useRef, useState } from "react"
 import { useSession } from "next-auth/react"
+import { ChevronDown } from "lucide-react"
+import { cn } from "@/lib/utils"
+import { Button } from "@/components/ui/button"
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
 import { useToast } from "@/hooks/use-toast"
 import { useAuth } from "@/hooks/use-auth"
 import { AlertThresholds, useTenantSettings } from "@/hooks/use-tenant-settings"
@@ -53,6 +59,30 @@ import type {
   UserModuleSource,
 } from "@/components/tenant-settings/types"
 
+function SettingsGroup({
+  title,
+  children,
+  defaultOpen = true,
+}: {
+  title: string
+  children: React.ReactNode
+  defaultOpen?: boolean
+}) {
+  const [open, setOpen] = useState(defaultOpen)
+  return (
+    <div>
+      <button
+        onClick={() => setOpen((v) => !v)}
+        className="flex w-full items-center justify-between border-b border-stone-100 py-3 text-left text-[11px] font-semibold uppercase tracking-widest text-slate-400 transition-colors hover:text-slate-600"
+      >
+        {title}
+        <ChevronDown className={cn("h-3.5 w-3.5 transition-transform duration-200", open ? "" : "-rotate-90")} />
+      </button>
+      {open && <div className="space-y-4 pt-4">{children}</div>}
+    </div>
+  )
+}
+
 export default function TenantSettingsPage() {
   const { user, logout } = useAuth()
   const { update: updateSession } = useSession()
@@ -83,6 +113,8 @@ export default function TenantSettingsPage() {
   const [isSavingUiPreferences, setIsSavingUiPreferences] = useState(false)
   const [accountPreferredLocale, setAccountPreferredLocale] = useState<AppLocale>(normalizeAppLocale(user?.preferredLocale))
   const [isSavingAccountLanguage, setIsSavingAccountLanguage] = useState(false)
+  const [digestEmail, setDigestEmail] = useState(user?.email || "")
+  const [isSavingDigestEmail, setIsSavingDigestEmail] = useState(false)
   const [uiVariantDraft, setUiVariantDraft] = useState<TenantUiVariant>(DEFAULT_TENANT_UI_VARIANT)
   const [featureFlagsDraft, setFeatureFlagsDraft] = useState<TenantFeatureFlags>(DEFAULT_TENANT_FEATURE_FLAGS)
   const [isSavingTenantExperience, setIsSavingTenantExperience] = useState(false)
@@ -844,6 +876,29 @@ export default function TenantSettingsPage() {
     }
   }
 
+  const handleSaveDigestEmail = async () => {
+    const trimmed = digestEmail.trim()
+    if (!trimmed || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmed)) {
+      toast({ title: "Invalid email", description: "Enter a valid email address.", variant: "destructive" })
+      return
+    }
+    setIsSavingDigestEmail(true)
+    try {
+      const response = await fetch("/api/account/preferences", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ digestEmail: trimmed }),
+      })
+      const data = await response.json()
+      if (!response.ok || !data.success) throw new Error(data.error || "Failed to update email")
+      toast({ title: "Email updated", description: "The weekly digest will now go to this address." })
+    } catch (error: any) {
+      toast({ title: "Error", description: error.message || "Failed to update email", variant: "destructive" })
+    } finally {
+      setIsSavingDigestEmail(false)
+    }
+  }
+
   const enabledTenantModuleCount = modulePermissions.filter((module) => module.enabled).length
   const enabledUserModuleCount = userModulePermissions.filter((module) => module.enabled).length
   const selectedUser = users.find((u) => u.id === selectedUserId) || null
@@ -922,164 +977,195 @@ export default function TenantSettingsPage() {
         onLogout={logout}
       />
 
-      {isOwner && <OwnerToolsSection />}
+      <div className="space-y-2 pt-2">
 
-      <EstateIdentitySection
-        estateNameInput={estateNameInput}
-        savedEstateName={settings.estateName || ""}
-        isSavingEstateName={isSavingEstateName}
-        settingsLoading={settingsLoading}
-        onEstateNameChange={setEstateNameInput}
-        onSaveEstateName={handleSaveEstateName}
-      />
+        <SettingsGroup title="Profile">
+          <Card id="account-email" className="scroll-mt-24 border-border/70 bg-white/85">
+            <CardHeader>
+              <CardTitle>Digest Email</CardTitle>
+              <CardDescription>
+                The weekly digest and operational alerts go to this address. Updating it takes effect from the next send.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <div className="flex max-w-sm gap-2">
+                <Input
+                  type="email"
+                  value={digestEmail}
+                  onChange={(e) => setDigestEmail(e.target.value)}
+                  placeholder="admin@yourestate.com"
+                />
+                <Button onClick={handleSaveDigestEmail} disabled={isSavingDigestEmail}>
+                  {isSavingDigestEmail ? "Saving…" : "Save"}
+                </Button>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                This is your account email — it is not visible to other users.
+              </p>
+            </CardContent>
+          </Card>
+          <AccountLanguageSection
+            preferredLocale={accountPreferredLocale}
+            isSaving={isSavingAccountLanguage}
+            onPreferredLocaleChange={setAccountPreferredLocale}
+            onSave={handleSaveAccountLanguage}
+          />
+        </SettingsGroup>
 
-      <EstateProfileSection
-        estateProfileDraft={estateProfileDraft}
-        isSavingEstateProfile={isSavingEstateProfile}
-        settingsLoading={settingsLoading}
-        onEstateProfileChange={handleEstateProfileChange}
-        onSaveEstateProfile={handleSaveEstateProfile}
-      />
+        <SettingsGroup title="Estate">
+          <EstateIdentitySection
+            estateNameInput={estateNameInput}
+            savedEstateName={settings.estateName || ""}
+            isSavingEstateName={isSavingEstateName}
+            settingsLoading={settingsLoading}
+            onEstateNameChange={setEstateNameInput}
+            onSaveEstateName={handleSaveEstateName}
+          />
+          <EstateProfileSection
+            estateProfileDraft={estateProfileDraft}
+            isSavingEstateProfile={isSavingEstateProfile}
+            settingsLoading={settingsLoading}
+            onEstateProfileChange={handleEstateProfileChange}
+            onSaveEstateProfile={handleSaveEstateProfile}
+          />
+          {isAdminOrOwner && (
+            <DisplayPreferencesSection
+              uiPreferencesDraft={uiPreferencesDraft}
+              isSavingUiPreferences={isSavingUiPreferences}
+              settingsLoading={settingsLoading}
+              onHideEmptyMetricsChange={handleHideEmptyMetricsChange}
+              onSaveUiPreferences={handleSaveUiPreferences}
+            />
+          )}
+          <ThresholdsSection
+            thresholdDraft={thresholdDraft}
+            isSavingThresholds={isSavingThresholds}
+            settingsLoading={settingsLoading}
+            onThresholdFieldChange={updateThresholdField}
+            onTargetFieldChange={updateTargetField}
+            onSaveThresholds={handleSaveThresholds}
+          />
+        </SettingsGroup>
 
-      <AccountLanguageSection
-        preferredLocale={accountPreferredLocale}
-        isSaving={isSavingAccountLanguage}
-        onPreferredLocaleChange={setAccountPreferredLocale}
-        onSave={handleSaveAccountLanguage}
-      />
+        <SettingsGroup title="Operations">
+          <LocationsSection
+            locations={locations}
+            newLocationName={newLocationName}
+            newLocationCode={newLocationCode}
+            isCreatingLocation={isCreatingLocation}
+            editingLocationId={editingLocationId}
+            editingLocationName={editingLocationName}
+            editingLocationCode={editingLocationCode}
+            isUpdatingLocationId={isUpdatingLocationId}
+            onNewLocationNameChange={setNewLocationName}
+            onNewLocationCodeChange={setNewLocationCode}
+            onCreateLocation={handleCreateLocation}
+            onEditingLocationNameChange={setEditingLocationName}
+            onEditingLocationCodeChange={setEditingLocationCode}
+            onUpdateLocation={handleUpdateLocation}
+            onStartEditLocation={startEditLocation}
+            onCancelEditLocation={cancelEditLocation}
+          />
+          <DataImportSection />
+        </SettingsGroup>
 
-      {isAdminOrOwner && (
-        <DisplayPreferencesSection
-          uiPreferencesDraft={uiPreferencesDraft}
-          isSavingUiPreferences={isSavingUiPreferences}
-          settingsLoading={settingsLoading}
-          onHideEmptyMetricsChange={handleHideEmptyMetricsChange}
-          onSaveUiPreferences={handleSaveUiPreferences}
-        />
-      )}
+        <SettingsGroup title="User Access">
+          <TenantUsersSection
+            tenantId={tenantId}
+            users={users}
+            newUsername={newUsername}
+            newPassword={newPassword}
+            newRole={newRole}
+            userRoleDrafts={userRoleDrafts}
+            isUpdatingUserId={isUpdatingUserId}
+            isDeletingUserId={isDeletingUserId}
+            onNewUsernameChange={setNewUsername}
+            onNewPasswordChange={setNewPassword}
+            onNewRoleChange={setNewRole}
+            onCreateUser={handleCreateUser}
+            onRoleDraftChange={handleRoleDraftChange}
+            onSaveUserRole={handleSaveUserRole}
+            onDeleteUser={handleDeleteUser}
+          />
+          {isAdminOrOwner && (
+            <UserModuleOverridesSection
+              tenantId={tenantId}
+              users={users}
+              selectedUserId={selectedUserId}
+              userModuleSource={userModuleSource}
+              enabledUserModuleCount={enabledUserModuleCount}
+              userModulePermissions={userModulePermissions}
+              isSelectedUserRoleScoped={isSelectedUserRoleScoped}
+              isUserModulesLoading={isUserModulesLoading}
+              isSavingUserModules={isSavingUserModules}
+              onSelectedUserIdChange={setSelectedUserId}
+              onToggleUserModule={toggleUserModule}
+              onSaveUserModules={handleSaveUserModules}
+              onResetUserModules={handleResetUserModules}
+            />
+          )}
+          {isOwner && (
+            <TenantModulesSection
+              modulePermissions={modulePermissions}
+              tenantId={tenantId}
+              tenantPlanId={tenantPlanId}
+              isSavingModules={isSavingModules}
+              onApplyModuleBundle={applyModuleBundle}
+              onToggleModule={toggleModule}
+              onSaveModules={handleSaveModules}
+            />
+          )}
+        </SettingsGroup>
 
-      {canManageTenantExperience && (
-        <TenantExperienceSection
-          uiVariantDraft={uiVariantDraft}
-          featureFlagsDraft={featureFlagsDraft}
-          isSavingTenantExperience={isSavingTenantExperience}
-          settingsLoading={settingsLoading}
-          onUiVariantChange={setUiVariantDraft}
-          onFeatureFlagChange={handleFeatureFlagChange}
-          onSaveTenantExperience={handleSaveTenantExperience}
-        />
-      )}
+        <SettingsGroup title="Advanced" defaultOpen={false}>
+          {isOwner && <OwnerToolsSection />}
+          {canManageTenantExperience && (
+            <TenantExperienceSection
+              uiVariantDraft={uiVariantDraft}
+              featureFlagsDraft={featureFlagsDraft}
+              isSavingTenantExperience={isSavingTenantExperience}
+              settingsLoading={settingsLoading}
+              onUiVariantChange={setUiVariantDraft}
+              onFeatureFlagChange={handleFeatureFlagChange}
+              onSaveTenantExperience={handleSaveTenantExperience}
+            />
+          )}
 
-      <DataImportSection />
+          {privacyFeatureEnabled && (
+            <PrivacySection
+              tenantId={tenantId}
+              privacyStatus={privacyStatus}
+              privacyError={privacyError}
+              isPrivacyLoading={isPrivacyLoading}
+              isAcceptingNotice={isAcceptingNotice}
+              isExportingPersonalData={isExportingPersonalData}
+              correctionUsername={correctionUsername}
+              isSubmittingCorrection={isSubmittingCorrection}
+              isRequestingDeletion={isRequestingDeletion}
+              isUpdatingConsent={isUpdatingConsent}
+              onCorrectionUsernameChange={setCorrectionUsername}
+              onAcceptNotice={handleAcceptNotice}
+              onExportPersonalData={handleExportPersonalData}
+              onSubmitCorrection={handleSubmitCorrection}
+              onRequestDeletion={handleRequestDeletion}
+              onConsentToggle={handleConsentToggle}
+            />
+          )}
 
-      <ThresholdsSection
-        thresholdDraft={thresholdDraft}
-        isSavingThresholds={isSavingThresholds}
-        settingsLoading={settingsLoading}
-        onThresholdFieldChange={updateThresholdField}
-        onTargetFieldChange={updateTargetField}
-        onSaveThresholds={handleSaveThresholds}
-      />
+          {isOwner && (
+            <AuditLogSection
+              tenantId={tenantId}
+              auditEntityType={auditEntityType}
+              auditLogs={auditLogs}
+              auditTotalCount={auditTotalCount}
+              isAuditLoading={isAuditLoading}
+              onAuditEntityTypeChange={setAuditEntityType}
+              onRefreshAuditLogs={loadAuditLogs}
+            />
+          )}
+        </SettingsGroup>
 
-      <LocationsSection
-        locations={locations}
-        newLocationName={newLocationName}
-        newLocationCode={newLocationCode}
-        isCreatingLocation={isCreatingLocation}
-        editingLocationId={editingLocationId}
-        editingLocationName={editingLocationName}
-        editingLocationCode={editingLocationCode}
-        isUpdatingLocationId={isUpdatingLocationId}
-        onNewLocationNameChange={setNewLocationName}
-        onNewLocationCodeChange={setNewLocationCode}
-        onCreateLocation={handleCreateLocation}
-        onEditingLocationNameChange={setEditingLocationName}
-        onEditingLocationCodeChange={setEditingLocationCode}
-        onUpdateLocation={handleUpdateLocation}
-        onStartEditLocation={startEditLocation}
-        onCancelEditLocation={cancelEditLocation}
-      />
-
-      {isOwner && (
-        <TenantModulesSection
-          modulePermissions={modulePermissions}
-          tenantId={tenantId}
-          tenantPlanId={tenantPlanId}
-          isSavingModules={isSavingModules}
-          onApplyModuleBundle={applyModuleBundle}
-          onToggleModule={toggleModule}
-          onSaveModules={handleSaveModules}
-        />
-      )}
-
-      <TenantUsersSection
-        tenantId={tenantId}
-        users={users}
-        newUsername={newUsername}
-        newPassword={newPassword}
-        newRole={newRole}
-        userRoleDrafts={userRoleDrafts}
-        isUpdatingUserId={isUpdatingUserId}
-        isDeletingUserId={isDeletingUserId}
-        onNewUsernameChange={setNewUsername}
-        onNewPasswordChange={setNewPassword}
-        onNewRoleChange={setNewRole}
-        onCreateUser={handleCreateUser}
-        onRoleDraftChange={handleRoleDraftChange}
-        onSaveUserRole={handleSaveUserRole}
-        onDeleteUser={handleDeleteUser}
-      />
-
-      {isAdminOrOwner && (
-        <UserModuleOverridesSection
-          tenantId={tenantId}
-          users={users}
-          selectedUserId={selectedUserId}
-          userModuleSource={userModuleSource}
-          enabledUserModuleCount={enabledUserModuleCount}
-          userModulePermissions={userModulePermissions}
-          isSelectedUserRoleScoped={isSelectedUserRoleScoped}
-          isUserModulesLoading={isUserModulesLoading}
-          isSavingUserModules={isSavingUserModules}
-          onSelectedUserIdChange={setSelectedUserId}
-          onToggleUserModule={toggleUserModule}
-          onSaveUserModules={handleSaveUserModules}
-          onResetUserModules={handleResetUserModules}
-        />
-      )}
-
-      {privacyFeatureEnabled && (
-        <PrivacySection
-          tenantId={tenantId}
-          privacyStatus={privacyStatus}
-          privacyError={privacyError}
-          isPrivacyLoading={isPrivacyLoading}
-          isAcceptingNotice={isAcceptingNotice}
-          isExportingPersonalData={isExportingPersonalData}
-          correctionUsername={correctionUsername}
-          isSubmittingCorrection={isSubmittingCorrection}
-          isRequestingDeletion={isRequestingDeletion}
-          isUpdatingConsent={isUpdatingConsent}
-          onCorrectionUsernameChange={setCorrectionUsername}
-          onAcceptNotice={handleAcceptNotice}
-          onExportPersonalData={handleExportPersonalData}
-          onSubmitCorrection={handleSubmitCorrection}
-          onRequestDeletion={handleRequestDeletion}
-          onConsentToggle={handleConsentToggle}
-        />
-      )}
-
-      {isOwner && (
-        <AuditLogSection
-          tenantId={tenantId}
-          auditEntityType={auditEntityType}
-          auditLogs={auditLogs}
-          auditTotalCount={auditTotalCount}
-          isAuditLoading={isAuditLoading}
-          onAuditEntityTypeChange={setAuditEntityType}
-          onRefreshAuditLogs={loadAuditLogs}
-        />
-      )}
+      </div>
     </WorkspacePageShell>
   )
 }
