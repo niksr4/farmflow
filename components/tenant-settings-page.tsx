@@ -113,7 +113,7 @@ export default function TenantSettingsPage() {
   const [isSavingUiPreferences, setIsSavingUiPreferences] = useState(false)
   const [accountPreferredLocale, setAccountPreferredLocale] = useState<AppLocale>(normalizeAppLocale(user?.preferredLocale))
   const [isSavingAccountLanguage, setIsSavingAccountLanguage] = useState(false)
-  const [digestEmail, setDigestEmail] = useState(user?.email || "")
+  const [digestEmail, setDigestEmail] = useState("")
   const [isSavingDigestEmail, setIsSavingDigestEmail] = useState(false)
   const [uiVariantDraft, setUiVariantDraft] = useState<TenantUiVariant>(DEFAULT_TENANT_UI_VARIANT)
   const [featureFlagsDraft, setFeatureFlagsDraft] = useState<TenantFeatureFlags>(DEFAULT_TENANT_FEATURE_FLAGS)
@@ -171,6 +171,17 @@ export default function TenantSettingsPage() {
   useEffect(() => {
     setAccountPreferredLocale(normalizeAppLocale(user?.preferredLocale))
   }, [user?.preferredLocale])
+
+  useEffect(() => {
+    fetch("/api/account/preferences")
+      .then((r) => r.json())
+      .then((data) => {
+        if (data?.success && data.preferences?.email) {
+          setDigestEmail(data.preferences.email)
+        }
+      })
+      .catch(() => {})
+  }, [])
 
   useEffect(() => {
     setUiVariantDraft(settings.uiVariant || DEFAULT_TENANT_UI_VARIANT)

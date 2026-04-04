@@ -23,7 +23,7 @@ export async function GET() {
       sql,
       tenantContext,
       sql`
-        SELECT preferred_locale
+        SELECT preferred_locale, email
         FROM users
         WHERE id = ${sessionUser.id}
           AND tenant_id = ${tenantContext.tenantId}
@@ -35,6 +35,7 @@ export async function GET() {
       success: true,
       preferences: {
         preferredLocale: normalizeAppLocale(rows?.[0]?.preferred_locale || sessionUser.preferredLocale || "en"),
+        email: rows?.[0]?.email || null,
       },
     })
   } catch (error: any) {

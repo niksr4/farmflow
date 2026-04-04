@@ -338,6 +338,40 @@ export default function InventorySystem() {
     loading: false,
     error: null as string | null,
   })
+  const [costPerKgData, setCostPerKgData] = useState<{
+    laborCost: number
+    expenseCost: number
+    totalCost: number
+    totalOutputKg: number
+    costPerKg: number | null
+    hasData: boolean
+    loading: boolean
+  }>({
+    laborCost: 0,
+    expenseCost: 0,
+    totalCost: 0,
+    totalOutputKg: 0,
+    costPerKg: null,
+    hasData: false,
+    loading: false,
+  })
+  const [seasonProjection, setSeasonProjection] = useState<{
+    seasonTotalKg: number
+    recentAvgDailyKg: number
+    trendDirection: "rising" | "flat" | "declining"
+    projectedSeasonTotal: number | null
+    projectedEndDate: string | null
+    hasData: boolean
+    loading: boolean
+  }>({
+    seasonTotalKg: 0,
+    recentAvgDailyKg: 0,
+    trendDirection: "flat",
+    projectedSeasonTotal: null,
+    projectedEndDate: null,
+    hasData: false,
+    loading: false,
+  })
   const [locations, setLocations] = useState<LocationOption[]>([])
   const [selectedLocationId, setSelectedLocationId] = useState<string>(LOCATION_ALL)
   const [transactionLocationId, setTransactionLocationId] = useState<string>(LOCATION_UNASSIGNED)
@@ -802,6 +836,56 @@ export default function InventorySystem() {
       isActive = false
     }
   }, [activeTab, currentFiscalYear.endDate, currentFiscalYear.startDate, tenantId])
+
+  useEffect(() => {
+    if (!tenantId || activeTab !== "home") return
+    let active = true
+
+    const fetchIntelligence = async () => {
+      setCostPerKgData((p) => ({ ...p, loading: true }))
+      setSeasonProjection((p) => ({ ...p, loading: true }))
+
+      const [cpkRes, projRes] = await Promise.allSettled([
+        fetch("/api/dashboard/cost-per-kg").then((r) => r.json()),
+        fetch("/api/dashboard/season-projection").then((r) => r.json()),
+      ])
+
+      if (!active) return
+
+      if (cpkRes.status === "fulfilled" && cpkRes.value?.success) {
+        const d = cpkRes.value
+        setCostPerKgData({
+          laborCost: d.laborCost ?? 0,
+          expenseCost: d.expenseCost ?? 0,
+          totalCost: d.totalCost ?? 0,
+          totalOutputKg: d.totalOutputKg ?? 0,
+          costPerKg: d.costPerKg ?? null,
+          hasData: d.hasData ?? false,
+          loading: false,
+        })
+      } else {
+        setCostPerKgData((p) => ({ ...p, loading: false }))
+      }
+
+      if (projRes.status === "fulfilled" && projRes.value?.success) {
+        const d = projRes.value
+        setSeasonProjection({
+          seasonTotalKg: d.seasonTotalKg ?? 0,
+          recentAvgDailyKg: d.recentAvgDailyKg ?? 0,
+          trendDirection: d.trendDirection ?? "flat",
+          projectedSeasonTotal: d.projectedSeasonTotal ?? null,
+          projectedEndDate: d.projectedEndDate ?? null,
+          hasData: d.hasData ?? false,
+          loading: false,
+        })
+      } else {
+        setSeasonProjection((p) => ({ ...p, loading: false }))
+      }
+    }
+
+    void fetchIntelligence()
+    return () => { active = false }
+  }, [activeTab, tenantId])
 
   useEffect(() => {
     if (selectedLocationId !== LOCATION_ALL) {
@@ -6731,6 +6815,98 @@ export default function InventorySystem() {
                     >
                       Open revenue detail
                     </Button>
+                  </CardContent>
+                </Card>
+              )}
+
+              {/* Cost-per-kg intelligence card */}
+              {costPerKgData.hasData && (
+                <Card className="border-black/5 bg-white/90">
+                  <CardHeader className="pb-2">
+                    <div className="flex items-start justify-between gap-2">
+                      <CardTitle className="text-sm font-medium text-neutral-600">Cost per kg Output</CardTitle>
+                      <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-violet-50">
+                        <Coins className="h-3.5 w-3.5 text-violet-500" />
+                      </div>
+                    </div>
+                  </CardHeader>
+                  <CardContent>
+                    {costPerKgData.loading ? (
+                      <div className="space-y-2">
+                        <Skeleton className="h-7 w-24" />
+                        <Skeleton className="h-3 w-32" />
+                      </div>
+                    ) : costPerKgData.costPerKg !== null ? (
+                      <>
+                        <p className="text-2xl font-semibold tabular-nums text-neutral-900">
+                          {formatCurrency(costPerKgData.costPerKg, 0)}<span className="text-sm font-normal text-muted-foreground">/kg</span>
+                        </p>
+                        <p className="text-xs text-muted-foreground">
+                          {formatCurrency(costPerKgData.totalCost, 0)} total · {formatNumber(costPerKgData.totalOutputKg, 0)} kg output
+                        </p>
+                        <p className="mt-1 text-xs text-muted-foreground">
+                          Labor {formatCurrency(costPerKgData.laborCost, 0)} · Expenses {formatCurrency(costPerKgData.expenseCost, 0)}
+                        </p>
+                      </>
+                    ) : (
+                      <p className="text-sm text-muted-foreground">Record costs and parchment output to see this metric.</p>
+                    )}
+                  </CardContent>
+                </Card>
+              )}
+
+              {/* Season projection card */}
+              {seasonProjection.hasData && seasonProjection.projectedSeasonTotal !== null && (
+                <Card className="border-black/5 bg-white/90">
+                  <CardHeader className="pb-2">
+                    <div className="flex items-start justify-between gap-2">
+                      <CardTitle className="text-sm font-medium text-neutral-600">Season Projection</CardTitle>
+                      <div className={cn(
+                        "flex h-7 w-7 shrink-0 items-center justify-center rounded-lg",
+                        seasonProjection.trendDirection === "rising" ? "bg-emerald-50" :
+                        seasonProjection.trendDirection === "declining" ? "bg-amber-50" : "bg-stone-50"
+                      )}>
+                        <TrendingUp className={cn(
+                          "h-3.5 w-3.5",
+                          seasonProjection.trendDirection === "rising" ? "text-emerald-600" :
+                          seasonProjection.trendDirection === "declining" ? "text-amber-500" : "text-stone-400"
+                        )} />
+                      </div>
+                    </div>
+                  </CardHeader>
+                  <CardContent>
+                    {seasonProjection.loading ? (
+                      <div className="space-y-2">
+                        <Skeleton className="h-7 w-28" />
+                        <Skeleton className="h-3 w-36" />
+                      </div>
+                    ) : (
+                      <>
+                        <p className="text-2xl font-semibold tabular-nums text-neutral-900">
+                          {formatNumber(seasonProjection.projectedSeasonTotal, 0)} kg
+                        </p>
+                        <p className="text-xs text-muted-foreground">
+                          Projected total · {formatNumber(seasonProjection.recentAvgDailyKg, 0)} kg/day avg (21d)
+                        </p>
+                        {seasonProjection.projectedEndDate && (
+                          <p className="mt-1 text-xs text-muted-foreground">
+                            Est. end:{" "}
+                            {new Date(seasonProjection.projectedEndDate).toLocaleDateString("en-IN", {
+                              day: "numeric",
+                              month: "short",
+                            })}
+                            {seasonProjection.trendDirection !== "flat" && (
+                              <span className={cn(
+                                "ml-1.5 font-medium",
+                                seasonProjection.trendDirection === "rising" ? "text-emerald-600" : "text-amber-600"
+                              )}>
+                                {seasonProjection.trendDirection === "rising" ? "↑ rising" : "↓ declining"}
+                              </span>
+                            )}
+                          </p>
+                        )}
+                      </>
+                    )}
                   </CardContent>
                 </Card>
               )}
