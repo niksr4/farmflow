@@ -48,9 +48,12 @@ export default function WorkspaceHints({ onTabChange }: WorkspaceHintsProps) {
   const [hints, setHints] = useState<WorkspaceHint[]>([])
   const [dismissed, setDismissed] = useState<Set<string>>(new Set())
   const [loaded, setLoaded] = useState(false)
+  const [fetchFailed, setFetchFailed] = useState(false)
+  const [retryCount, setRetryCount] = useState(0)
 
   useEffect(() => {
     setDismissed(getDismissed())
+    setFetchFailed(false)
     fetch("/api/dashboard/hints", { cache: "no-store" })
       .then((r) => r.json())
       .then((data) => {
@@ -58,13 +61,30 @@ export default function WorkspaceHints({ onTabChange }: WorkspaceHintsProps) {
           setHints(data.hints)
         }
       })
-      .catch(() => {})
+      .catch(() => setFetchFailed(true))
       .finally(() => setLoaded(true))
-  }, [])
+  }, [retryCount])
 
   const visible = hints.filter((h) => !dismissed.has(h.id))
 
-  if (!loaded || visible.length === 0) return null
+  if (!loaded) return null
+
+  if (fetchFailed) {
+    return (
+      <div className="mb-4 flex items-center gap-2 text-xs text-muted-foreground">
+        <AlertCircle className="h-3.5 w-3.5 shrink-0 opacity-60" />
+        <span>Couldn&apos;t load workspace tips.</span>
+        <button
+          className="underline underline-offset-2 hover:opacity-80"
+          onClick={() => { setLoaded(false); setRetryCount((n) => n + 1) }}
+        >
+          Retry
+        </button>
+      </div>
+    )
+  }
+
+  if (visible.length === 0) return null
 
   function dismiss(id: string) {
     setDismissed((prev) => {

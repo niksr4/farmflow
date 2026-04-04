@@ -87,14 +87,24 @@ export async function GET() {
       })
     }
 
-    if (totalLogins >= 5 && dataCount === 0 && accountCodes > 0 && locationCount > 0) {
-      hints.push({
-        id: "no-data-entered",
-        type: "tip",
-        title: "Ready to log your first entry?",
-        body: "Your estate is set up. Try adding today's cherry intake under Processing, or log attendance under Labor.",
-        action: { label: "Go to Processing", tab: "processing" },
-      })
+    if (dataCount === 0) {
+      if (totalLogins >= 1 && totalLogins <= 3) {
+        hints.push({
+          id: "welcome-get-started",
+          type: "tip",
+          title: "Welcome — here's where to start recording",
+          body: "Log today's cherry intake under Processing, record attendance under Labor, or add an expense under Finance to see your data come alive.",
+          action: { label: "Go to Processing", tab: "processing" },
+        })
+      } else if (totalLogins > 3 && accountCodes > 0 && locationCount > 0) {
+        hints.push({
+          id: "no-data-entered",
+          type: "tip",
+          title: "Ready to log your first entry?",
+          body: "Your estate is set up. Try adding today's cherry intake under Processing, or log attendance under Labor.",
+          action: { label: "Go to Processing", tab: "processing" },
+        })
+      }
     }
 
     return NextResponse.json({ success: true, hints })

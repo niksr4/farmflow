@@ -327,6 +327,9 @@ export default function WelcomeOnboardingPage() {
                   <p className="mt-1 text-xs text-muted-foreground">
                     Start with the plan that best matches your operation today. You can change it later in Settings.
                   </p>
+                  <p className="mt-1 text-[11px] font-medium text-emerald-700">
+                    All plans include a 30-day free trial — no credit card required.
+                  </p>
                 </div>
                 <div className="grid gap-3">
                   {moduleBundles.map((bundle) => {
@@ -341,11 +344,21 @@ export default function WelcomeOnboardingPage() {
                         }`}
                       >
                         <div className="flex items-start justify-between gap-3">
-                          <div>
-                            <p className="font-semibold text-slate-900">{bundle.label}</p>
+                          <div className="min-w-0">
+                            <div className="flex flex-wrap items-center gap-1.5">
+                              <p className="font-semibold text-slate-900">{bundle.label}</p>
+                              {bundle.id === "core" && (
+                                <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-semibold text-emerald-700">
+                                  Recommended
+                                </span>
+                              )}
+                            </div>
                             <p className="mt-1 text-sm text-muted-foreground">{bundle.description}</p>
                           </div>
-                          {selected ? <CheckCircle2 className="h-5 w-5 text-emerald-600" /> : null}
+                          <div className="flex shrink-0 flex-col items-end gap-1">
+                            {selected ? <CheckCircle2 className="h-5 w-5 text-emerald-600" /> : <div className="h-5 w-5" />}
+                            <span className="text-[10px] text-slate-400">{bundle.modules.length} modules</span>
+                          </div>
                         </div>
                         <div className="mt-3 flex flex-wrap gap-2">
                           {bundle.modules.slice(0, 6).map((moduleName) => (
@@ -415,7 +428,9 @@ export default function WelcomeOnboardingPage() {
                       })
                       router.push("/dashboard")
                     } catch (saveError: any) {
-                      setError(saveError?.message || "Setup was not saved. Review the fields above and try again.")
+                      const raw = String(saveError?.message || "")
+                      const isUserFacing = raw.length > 0 && raw.length < 200 && !/sql|query|connect|prisma|econnrefused/i.test(raw)
+                      setError(isUserFacing ? raw : "Couldn't save your setup — check your connection and try again.")
                     } finally {
                       setSubmitting(false)
                     }
