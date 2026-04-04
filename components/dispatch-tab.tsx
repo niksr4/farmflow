@@ -25,6 +25,7 @@ import { formatNumber } from "@/lib/format"
 import { canAcceptNonNegative, isBlockedNumericKey } from "@/lib/number-input"
 import TaskGuideCard from "@/components/task-guide-card"
 import { SkeletonTable } from "@/components/ui/skeleton"
+import { EmptyStateTable } from "@/components/ui/empty-state"
 import WorkspacePageShell from "@/components/workspace-page-shell"
 import posthog from "posthog-js"
 
@@ -1309,23 +1310,11 @@ export default function DispatchTab({ showDataToolsControls = false }: DispatchT
           {isLoading ? (
             <SkeletonTable rows={5} cols={5} />
           ) : dispatchRecords.length === 0 ? (
-            <div className="rounded-2xl border border-dashed border-emerald-200 bg-emerald-50/40 p-5 text-sm">
-              <p className="font-semibold text-foreground">No dispatch records yet</p>
-              <p className="mt-2 text-muted-foreground">
-                Start when the first bags leave an estate location. Dispatch should describe what physically went out, not what you hope to sell later.
-              </p>
-              <ul className="ml-4 mt-3 list-disc space-y-1 text-muted-foreground">
-                <li>Select the source location.</li>
-                <li>Enter the bag type and number of bags that actually left.</li>
-                <li>Add received KGs when the exact receiving weight is confirmed.</li>
-              </ul>
-              <div className="mt-4 flex flex-wrap gap-2">
-                <Button onClick={scrollToEntryForm}>Use form above</Button>
-                <Button asChild variant="outline" className="bg-white">
-                  <Link href="/manuals">Open manuals</Link>
-                </Button>
-              </div>
-            </div>
+            <EmptyStateTable
+              title="No dispatch records yet"
+              description="Log when bags physically leave an estate location — bag type, count, and received KGs once confirmed."
+              action={{ label: "Use form above", onClick: scrollToEntryForm }}
+            />
           ) : (
             <div className="space-y-4">
               <div className="space-y-3 md:hidden">
