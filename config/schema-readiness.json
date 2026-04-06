@@ -48,5 +48,15 @@
       "tenants": ["ui_variant", "feature_flags"]
     },
     "help": "Run scripts/48-tenant-variants.sql."
+  },
+  {
+    "id": "expense-inventory-link",
+    "label": "Expense inventory linkage",
+    "severity": "warning",
+    "requiredTables": ["expense_transactions"],
+    "requiredColumns": {
+      "expense_transactions": ["inventory_item_type", "inventory_quantity"]
+    },
+    "help": "Run scripts/68-expense-inventory-link.sql."
   }
 ]

@@ -87,8 +87,14 @@ export async function GET(request: Request) {
     const all = searchParams.get("all") === "true"
     const limitParam = searchParams.get("limit")
     const offsetParam = searchParams.get("offset")
+    const startDate = searchParams.get("startDate")
+    const endDate = searchParams.get("endDate")
     const limit = !all && limitParam ? Math.min(Math.max(Number.parseInt(limitParam, 10) || 0, 1), 500) : null
     const offset = !all && offsetParam ? Math.max(Number.parseInt(offsetParam, 10) || 0, 0) : 0
+    const dateFilterClause =
+      startDate && endDate
+        ? accountsSql` AND deployment_date >= ${startDate}::date AND deployment_date <= ${endDate}::date`
+        : accountsSql``
 
     const deploymentRowsQuery = supportsLocation
       ? limit
@@ -108,6 +114,7 @@ export async function GET(request: Request) {
             FROM labor_transactions
             WHERE tenant_id = ${tenantContext.tenantId}
               ${locationFilterClause}
+              ${dateFilterClause}
             ORDER BY deployment_date DESC
             LIMIT ${limit} OFFSET ${offset}
           `
@@ -127,6 +134,7 @@ export async function GET(request: Request) {
             FROM labor_transactions
             WHERE tenant_id = ${tenantContext.tenantId}
               ${locationFilterClause}
+              ${dateFilterClause}
             ORDER BY deployment_date DESC
           `
       : limit
@@ -144,6 +152,7 @@ export async function GET(request: Request) {
               task_description
             FROM labor_transactions
             WHERE tenant_id = ${tenantContext.tenantId}
+              ${dateFilterClause}
             ORDER BY deployment_date DESC
             LIMIT ${limit} OFFSET ${offset}
           `
@@ -161,6 +170,7 @@ export async function GET(request: Request) {
               task_description
             FROM labor_transactions
             WHERE tenant_id = ${tenantContext.tenantId}
+              ${dateFilterClause}
             ORDER BY deployment_date DESC
           `
 
@@ -170,12 +180,14 @@ export async function GET(request: Request) {
         FROM labor_transactions
         WHERE tenant_id = ${tenantContext.tenantId}
           ${locationFilterClause}
+          ${dateFilterClause}
       `,
       accountsSql`
         SELECT COALESCE(SUM(total_cost), 0) as total
         FROM labor_transactions
         WHERE tenant_id = ${tenantContext.tenantId}
           ${locationFilterClause}
+          ${dateFilterClause}
       `,
       deploymentRowsQuery,
     ]

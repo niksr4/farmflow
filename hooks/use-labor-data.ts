@@ -24,6 +24,8 @@ export interface LaborDeployment {
 
 type LaborDataOptions = {
   pageSize?: number
+  startDate?: string
+  endDate?: string
 }
 
 export function useLaborData(locationId?: string, options: LaborDataOptions = {}) {
@@ -37,6 +39,8 @@ export function useLaborData(locationId?: string, options: LaborDataOptions = {}
   const [hasMore, setHasMore] = useState(false)
   const [page, setPage] = useState(0)
   const pageSize = options.pageSize ?? 50
+  const startDate = options.startDate
+  const endDate = options.endDate
 
   const fetchDeployments = useCallback(
     async (pageIndex = 0, append = false) => {
@@ -63,6 +67,10 @@ export function useLaborData(locationId?: string, options: LaborDataOptions = {}
         query.set("offset", String(pageIndex * pageSize))
         if (locationId) {
           query.set("locationId", locationId)
+        }
+        if (startDate && endDate) {
+          query.set("startDate", startDate)
+          query.set("endDate", endDate)
         }
 
         const response = await fetch(`/api/labor-neon?${query.toString()}`, {
@@ -142,7 +150,7 @@ export function useLaborData(locationId?: string, options: LaborDataOptions = {}
         }
       }
     },
-    [locationId, pageSize, status, user?.tenantId],
+    [endDate, locationId, pageSize, startDate, status, user?.tenantId],
   )
 
   useEffect(() => {

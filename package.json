@@ -9,6 +9,7 @@
     "start": "next start",
     "audit:tenant": "node scripts/tenant-audit.js",
     "schema:check": "node scripts/check-schema-readiness.mjs",
+    "backfill:expense-inventory": "node scripts/backfill-expense-inventory-links.mjs",
     "security:passwords": "node scripts/64-password-hardening.mjs",
     "agent:schema": "node scripts/agent-schema-migration-assistant.js",
     "agent:schema:staged": "node scripts/agent-schema-migration-assistant.js --staged",

@@ -30,7 +30,15 @@ interface InventoryItem {
   quantity: number
 }
 
-export default function OtherExpensesTab({ locationId }: { locationId?: string }) {
+export default function OtherExpensesTab({
+  locationId,
+  startDate,
+  endDate,
+}: {
+  locationId?: string
+  startDate?: string
+  endDate?: string
+}) {
   const {
     deployments,
     loading,
@@ -42,7 +50,7 @@ export default function OtherExpensesTab({ locationId }: { locationId?: string }
     addDeployment,
     updateDeployment,
     deleteDeployment,
-  } = useConsumablesData(locationId)
+  } = useConsumablesData(locationId, { startDate, endDate })
 
   const [isAdding, setIsAdding] = useState(false)
   const [editingId, setEditingId] = useState<number | null>(null)

@@ -37,7 +37,15 @@ interface FormData {
   taskDescription: string
 }
 
-export default function LaborDeploymentTab({ locationId }: { locationId?: string }) {
+export default function LaborDeploymentTab({
+  locationId,
+  startDate,
+  endDate,
+}: {
+  locationId?: string
+  startDate?: string
+  endDate?: string
+}) {
   const {
     deployments,
     loading,
@@ -49,7 +57,7 @@ export default function LaborDeploymentTab({ locationId }: { locationId?: string
     addDeployment,
     updateDeployment,
     deleteDeployment,
-  } = useLaborData(locationId)
+  } = useLaborData(locationId, { startDate, endDate })
 
   const [isAdding, setIsAdding] = useState(false)
   const [editingId, setEditingId] = useState<string | null>(null)

@@ -133,12 +133,19 @@ export default function AccountsPage({
 }: AccountsPageProps) {
   const { isAdmin, isOwner, user } = useAuth()
   const canManageActivities = isAdmin || isOwner || user?.role === "user"
-  const { deployments: laborDeployments, loading: laborLoading, totalCount: laborCount } = useLaborData()
-  const { deployments: consumableDeployments, loading: consumablesLoading, totalCount: consumablesCount } =
-    useConsumablesData()
-
   const [selectedFiscalYear, setSelectedFiscalYear] = useState<FiscalYear>(getCurrentFiscalYear())
   const availableFiscalYears = getAvailableFiscalYears()
+  const fiscalYearStartDate = selectedFiscalYear.startDate
+  const fiscalYearEndDate = selectedFiscalYear.endDate
+  const { deployments: laborDeployments, loading: laborLoading, totalCount: laborCount } = useLaborData(undefined, {
+    startDate: fiscalYearStartDate,
+    endDate: fiscalYearEndDate,
+  })
+  const { deployments: consumableDeployments, loading: consumablesLoading, totalCount: consumablesCount } =
+    useConsumablesData(undefined, {
+      startDate: fiscalYearStartDate,
+      endDate: fiscalYearEndDate,
+    })
 
   const [exportStartDate, setExportStartDate] = useState<string>("")
   const [exportEndDate, setExportEndDate] = useState<string>("")
@@ -203,8 +210,8 @@ export default function AccountsPage({
       try {
         setSummaryLoading(true)
         const params = new URLSearchParams({
-          startDate: selectedFiscalYear.startDate,
-          endDate: selectedFiscalYear.endDate,
+          startDate: fiscalYearStartDate,
+          endDate: fiscalYearEndDate,
         })
         const response = await fetch(`/api/accounts-totals?${params.toString()}`)
         const data = await response.json()
@@ -229,7 +236,7 @@ export default function AccountsPage({
     }
 
     fetchTotals()
-  }, [selectedFiscalYear.endDate, selectedFiscalYear.startDate, user?.tenantId])
+  }, [fiscalYearEndDate, fiscalYearStartDate, user?.tenantId])
 
   useEffect(() => {
     if (!user?.tenantId) {
@@ -244,8 +251,8 @@ export default function AccountsPage({
       setAccountsIntelligenceError(null)
       try {
         const params = new URLSearchParams({
-          startDate: selectedFiscalYear.startDate,
-          endDate: selectedFiscalYear.endDate,
+          startDate: fiscalYearStartDate,
+          endDate: fiscalYearEndDate,
         })
         const response = await fetch(`/api/intelligence-brief?${params.toString()}`, { cache: "no-store" })
         const data = await response.json().catch(() => ({}))
@@ -274,7 +281,7 @@ export default function AccountsPage({
     return () => {
       ignore = true
     }
-  }, [selectedFiscalYear.endDate, selectedFiscalYear.startDate, user?.tenantId])
+  }, [fiscalYearEndDate, fiscalYearStartDate, user?.tenantId])
 
   const fetchAllActivities = async () => {
     try {
@@ -1273,11 +1280,11 @@ export default function AccountsPage({
         </TabsList>
 
         <TabsContent value="labor" className="mt-6">
-            <LaborDeploymentTab />
+            <LaborDeploymentTab startDate={fiscalYearStartDate} endDate={fiscalYearEndDate} />
           </TabsContent>
 
         <TabsContent value="expenses" className="mt-6">
-            <OtherExpensesTab />
+            <OtherExpensesTab startDate={fiscalYearStartDate} endDate={fiscalYearEndDate} />
           </TabsContent>
 
         <TabsContent value="attendance" className="mt-6">
