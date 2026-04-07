@@ -98,7 +98,7 @@ export async function GET() {
       .slice(0, 25)
 
     if (merged.length === 0) {
-      logServerError("coffee-news: both upstream queries returned empty", { publishedAfter })
+      logServerError("coffee-news: both upstream queries returned empty", { ninetyDaysAgo, oneEightyDaysAgo })
     }
 
     let trendScore = 0
