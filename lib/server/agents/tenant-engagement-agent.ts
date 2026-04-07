@@ -2,6 +2,7 @@ import "server-only"
 
 import { DEFAULT_ALERT_EMAIL_FROM, DEFAULT_SUPPORT_EMAIL } from "@/lib/email-addresses"
 import { classifyTenantGuidance, type TenantGuidanceSummary } from "@/lib/tenant-guidance"
+import { getCurrentEstatePhase } from "@/lib/coffee-estate-calendar"
 import { sql } from "@/lib/server/db"
 import { fetchWithTimeout } from "@/lib/server/http"
 import { logServerWarning } from "@/lib/server/safe-logging"
@@ -180,7 +181,7 @@ function buildActivitySummary(a: YesterdayActivity | undefined): string {
   return parts.length > 0 ? parts.join(" · ") : "No activity"
 }
 
-function buildAlertHtml(summaries: Array<TenantEngagementRow & TenantGuidanceSummary>, generatedAt: string, yesterdayActivity: Map<string, YesterdayActivity>): string {
+function buildAlertHtml(summaries: Array<TenantEngagementRow & TenantGuidanceSummary>, generatedAt: string, yesterdayActivity: Map<string, YesterdayActivity>, estatePhaseLabel: string): string {
   const statusBadge = (status: TenantGuidanceSummary["status"]) => {
     const styles: Record<TenantGuidanceSummary["status"], string> = {
       active:  "background:#dcfce7;color:#166534;",
@@ -256,6 +257,7 @@ function buildAlertHtml(summaries: Array<TenantEngagementRow & TenantGuidanceSum
 
         <tr><td style="background:#f3f4f6;border-radius:0 0 12px 12px;border:1px solid #e5e7eb;border-top:none;padding:16px 32px;">
           <p style="margin:0;font-size:12px;color:#9ca3af;">FarmFlow platform report — sent daily at 07:00 UTC (12:30 IST). "Yesterday" counts entries created between 00:00–23:59 IST.</p>
+          <p style="margin:6px 0 0;font-size:12px;color:#9ca3af;">Estate season: ${estatePhaseLabel}</p>
         </td></tr>
 
       </table>
@@ -299,11 +301,12 @@ export async function runTenantEngagementAgent(input?: {
   const needsAttention = summaries.filter((s) => s.flags.length > 0 || s.status === "stuck" || s.status === "quiet").length
 
   const generatedAt = new Date().toLocaleString("en-IN", { timeZone: "Asia/Kolkata", dateStyle: "full", timeStyle: "short" })
+  const estatePhase = getCurrentEstatePhase()
   const subject = needsAttention > 0
     ? `⚠️ FarmFlow: ${needsAttention} tenant${needsAttention === 1 ? "" : "s"} need attention`
     : `✅ FarmFlow: All tenants healthy — daily engagement report`
 
-  const html = buildAlertHtml(summaries, generatedAt, yesterdayActivity)
+  const html = buildAlertHtml(summaries, generatedAt, yesterdayActivity, estatePhase.label)
   const text = summaries.map((s) => {
     const activity = buildActivitySummary(yesterdayActivity.get(s.tenantId))
     return `${s.tenantName} [${s.status.toUpperCase()}] — yesterday: ${activity}${s.flags.length > 0 ? " — " + s.flags.join("; ") : ""}`

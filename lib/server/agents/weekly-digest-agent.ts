@@ -7,6 +7,7 @@ import { getClaudeClient, isClaudeConfigured, extractClaudeText, CLAUDE_SONNET }
 import { fetchWithTimeout } from "@/lib/server/http"
 import { logServerWarning } from "@/lib/server/safe-logging"
 import { getCropLabel, getCropVarietiesLabel, mergeTenantEstateProfile } from "@/lib/tenant-estate-profile"
+import { buildEstateCalendarContext } from "@/lib/coffee-estate-calendar"
 
 type TenantDigestRow = {
   tenantId: string
@@ -180,17 +181,21 @@ async function generateWeeklyDigestText(tenant: TenantDigestRow): Promise<string
     const varietiesLabel = getCropVarietiesLabel({ cropFamily: tenant.cropFamily, primaryVarieties: tenant.primaryVarieties, acreageAcres: null, weatherLocationLabel: "", weatherLatitude: null, weatherLongitude: null })
     const cropContext = varietiesLabel ? `${cropLabel} (${varietiesLabel})` : cropLabel
     const lastWeekSection = buildLastWeekSection(lastWeek)
+    const calendarContext = buildEstateCalendarContext()
 
     const client = getClaudeClient()
     const response = await client.messages.create({
       model: CLAUDE_SONNET,
       max_tokens: 1400,
       temperature: 0.3,
-      system: `You are FarmFlow Weekly Digest, an expert agricultural analyst summarising estate operations for ${cropContext} estate managers.
+      system: `You are FarmFlow Weekly Digest, an expert agricultural analyst summarising estate operations for ${cropContext} estate managers in Karnataka/Kerala, India.
+
+${calendarContext}
 
 Rules:
+- Use the season context above to interpret the data correctly. Low activity in the off-season is not a problem. Missing expected activities (e.g. no fertiliser in April) should be flagged.
 - Ground every number strictly in the provided data. Never invent figures.
-- When data is sparse or missing, say so plainly.
+- When data is sparse or missing, say so plainly — but explain whether that is normal for this time of year.
 - Use the correct crop terminology: refer to the primary crop as "${cropLabel}", and use variety names where relevant.
 - Use INR (₹) for currency and KG for weight unless the data suggests otherwise.
 - Keep the tone warm, professional, and practical. Estate managers are busy.
