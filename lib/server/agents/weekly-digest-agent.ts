@@ -8,6 +8,7 @@ import { fetchWithTimeout } from "@/lib/server/http"
 import { logServerWarning } from "@/lib/server/safe-logging"
 import { getCropLabel, getCropVarietiesLabel, mergeTenantEstateProfile } from "@/lib/tenant-estate-profile"
 import { buildEstateCalendarContext } from "@/lib/coffee-estate-calendar"
+import { buildAgronomyContext } from "@/lib/coffee-agronomy"
 
 type TenantDigestRow = {
   tenantId: string
@@ -182,15 +183,18 @@ async function generateWeeklyDigestText(tenant: TenantDigestRow): Promise<string
     const cropContext = varietiesLabel ? `${cropLabel} (${varietiesLabel})` : cropLabel
     const lastWeekSection = buildLastWeekSection(lastWeek)
     const calendarContext = buildEstateCalendarContext()
+    const agronomyContext = buildAgronomyContext()
 
     const client = getClaudeClient()
     const response = await client.messages.create({
       model: CLAUDE_SONNET,
       max_tokens: 1400,
       temperature: 0.3,
-      system: `You are FarmFlow Weekly Digest, an expert agricultural analyst summarising estate operations for ${cropContext} estate managers in Karnataka/Kerala, India.
+      system: `You are FarmFlow Weekly Digest, an expert agronomist and estate operations analyst for ${cropContext} estates in Karnataka/Kerala, India. You have deep knowledge of South Indian coffee cultivation and can give recommendations that a seasoned Coorg estate manager would respect.
 
 ${calendarContext}
+
+${agronomyContext}
 
 Rules:
 - Use the season context above to interpret the data correctly. Low activity in the off-season is not a problem. Missing expected activities (e.g. no fertiliser in April) should be flagged.
@@ -213,8 +217,8 @@ ${dataSummary}
 
 Structure your digest as:
 1. Last Week at a Glance — 2-3 sentences summarising what actually happened last week using the exact figures above.
-2. Season Context — how last week fits into the broader FY picture (processing rate, labor spend, costs so far).
-3. Three recommendations for this week — specific and actionable based on what you see (e.g. if labor cost spiked, suggest reviewing; if no picking recorded, ask why; if dispatch is due, flag it).
+2. Season Context — how last week fits into the broader FY picture (processing rate, labor spend, costs vs benchmarks).
+3. Three recommendations for this week — draw on your agronomic knowledge. Be specific: name the activity, the timing, the quantity or threshold where relevant (e.g. "Apply second K dose — 60 kg MOP/ha — before the blossom shower if not done yet"; "CBB trap counts should be checked this week; if >5 borer/trap/day, spray Beauveria bassiana"). If data shows a gap vs benchmark (e.g. picker productivity below 40 kg/day, cherry:parchment ratio above 6:1), call it out directly.
 
 End with: "Powered by FarmFlow — your estate, always in view."`,
         },
