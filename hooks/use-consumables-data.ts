@@ -11,12 +11,15 @@ export interface ConsumableDeployment {
   amount: number
   notes: string
   user: string
+  inventoryItems?: Array<{ itemType: string; quantity: number }>
   inventoryItemType?: string | null
   inventoryQuantity?: number | null
 }
 
 type ConsumablesDataOptions = {
   pageSize?: number
+  startDate?: string
+  endDate?: string
 }
 
 export function useConsumablesData(locationId?: string, options: ConsumablesDataOptions = {}) {
@@ -29,13 +32,18 @@ export function useConsumablesData(locationId?: string, options: ConsumablesData
   const [hasMore, setHasMore] = useState(false)
   const [page, setPage] = useState(0)
   const pageSize = options.pageSize ?? 50
+  const startDate = options.startDate
+  const endDate = options.endDate
 
   const fetchDeployments = useCallback(
     async (pageIndex = 0, append = false) => {
       try {
         if (!user?.tenantId) {
+          setDeployments([])
           setLoading(false)
+          setLoadingMore(false)
           setHasMore(false)
+          setPage(0)
           setTotalCount(0)
           setTotalAmount(0)
           return
@@ -51,6 +59,10 @@ export function useConsumablesData(locationId?: string, options: ConsumablesData
         query.set("offset", String(pageIndex * pageSize))
         if (locationId) {
           query.set("locationId", locationId)
+        }
+        if (startDate && endDate) {
+          query.set("startDate", startDate)
+          query.set("endDate", endDate)
         }
 
         const response = await fetch(`/api/expenses-neon?${query.toString()}`, {
@@ -106,7 +118,7 @@ export function useConsumablesData(locationId?: string, options: ConsumablesData
         }
       }
     },
-    [locationId, pageSize, user?.tenantId],
+    [endDate, locationId, pageSize, startDate, user?.tenantId],
   )
 
   useEffect(() => {

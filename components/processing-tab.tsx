@@ -891,10 +891,10 @@ export default function ProcessingTab({ showDataToolsControls = false }: Process
       {/* Coffee Pulping Dashboard */}
       <Card className="border-border/70 bg-white/80">
         <CardHeader>
-          <CardTitle>Coffee Pulping Dashboard</CardTitle>
+          <CardTitle>Season totals</CardTitle>
           <CardDescription>
-            Cumulative &quot;To Date&quot; values across all recorded coffee locations. Compare KPIs in Season View
-            against the &quot;Total All (All Types)&quot; row.
+            Running intake and output totals across all recorded locations. Use this to spot whether the season
+            numbers still look believable before you move to dispatch.
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -1003,8 +1003,8 @@ export default function ProcessingTab({ showDataToolsControls = false }: Process
         <CardHeader>
           <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
             <div>
-              <CardTitle>Coffee Pulping Records</CardTitle>
-              <CardDescription>Track daily coffee pulping from cherry intake to final bags</CardDescription>
+              <CardTitle>Daily pulping entry</CardTitle>
+              <CardDescription>Enter one day of intake and output for one location and one coffee type.</CardDescription>
             </div>
             {showDataToolsControls && (
               <Button onClick={handleExportCSV} disabled={isExporting} variant="outline">
@@ -1077,16 +1077,40 @@ export default function ProcessingTab({ showDataToolsControls = false }: Process
             </div>
           </div>
 
+          <div className="rounded-2xl border border-emerald-100 bg-emerald-50/55 p-4">
+            <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+              <div className="rounded-xl border border-white/70 bg-white/85 p-3">
+                <p className="text-[11px] uppercase tracking-[0.18em] text-emerald-700">Location</p>
+                <p className="mt-1 text-sm font-semibold text-foreground">
+                  {selectedLocation?.name || selectedLocation?.code || "Select a location"}
+                </p>
+              </div>
+              <div className="rounded-xl border border-white/70 bg-white/85 p-3">
+                <p className="text-[11px] uppercase tracking-[0.18em] text-emerald-700">Entry date</p>
+                <p className="mt-1 text-sm font-semibold text-foreground">{formatDateOnly(date)}</p>
+              </div>
+              <div className="rounded-xl border border-white/70 bg-white/85 p-3">
+                <p className="text-[11px] uppercase tracking-[0.18em] text-emerald-700">Coffee type</p>
+                <p className="mt-1 text-sm font-semibold text-foreground">{coffeeType}</p>
+              </div>
+              <div className="rounded-xl border border-white/70 bg-white/85 p-3">
+                <p className="text-[11px] uppercase tracking-[0.18em] text-emerald-700">Auto-calculated</p>
+                <p className="mt-1 text-sm font-semibold text-foreground">To-date fields and bag counts</p>
+                <p className="mt-1 text-xs text-muted-foreground">Only enter the physical numbers your team knows today.</p>
+              </div>
+            </div>
+          </div>
+
           {!isLoading && selectedLocationId && (
             <>
               <Card className="border-border/60 bg-white/80">
                 <CardHeader>
-                  <CardTitle className="text-lg">Crop</CardTitle>
+                  <CardTitle className="text-lg">Intake</CardTitle>
                 </CardHeader>
                 <CardContent className="grid grid-cols-2 gap-4">
                   <div>
                     <FieldLabel
-                      label="Crop Today (kg)"
+                      label="Intake today (kg)"
                       tooltip="Total cherry received today before sorting."
                     />
                     <Input
@@ -1100,7 +1124,7 @@ export default function ProcessingTab({ showDataToolsControls = false }: Process
                     />
                   </div>
                   <div>
-                    <Label>Crop To Date (kg)</Label>
+                    <Label>Intake to date (kg)</Label>
                     <Input
                       type="number"
                       step="0.01"
@@ -1115,12 +1139,12 @@ export default function ProcessingTab({ showDataToolsControls = false }: Process
 
               <Card className="border-border/60 bg-white/80">
                 <CardHeader>
-                  <CardTitle className="text-lg">Ripe Cherry</CardTitle>
+                  <CardTitle className="text-lg">Ripe selected</CardTitle>
                 </CardHeader>
                 <CardContent className="grid grid-cols-1 gap-4 md:grid-cols-3">
                   <div>
                     <FieldLabel
-                      label="Ripe Today (kg)"
+                      label="Ripe today (kg)"
                       tooltip="Ripe cherry selected for washed processing."
                     />
                     <Input
@@ -1160,12 +1184,12 @@ export default function ProcessingTab({ showDataToolsControls = false }: Process
 
               <Card className="border-border/60 bg-white/80">
                 <CardHeader>
-                  <CardTitle className="text-lg">Green Cherry</CardTitle>
+                  <CardTitle className="text-lg">Green rejected</CardTitle>
                 </CardHeader>
                 <CardContent className="grid grid-cols-1 gap-4 md:grid-cols-3">
                   <div>
                     <FieldLabel
-                      label="Green Today (kg)"
+                      label="Green today (kg)"
                       tooltip="Under-ripe cherry separated from ripe intake."
                     />
                     <Input
@@ -1205,12 +1229,12 @@ export default function ProcessingTab({ showDataToolsControls = false }: Process
 
               <Card className="border-border/60 bg-white/80">
                 <CardHeader>
-                  <CardTitle className="text-lg">Float</CardTitle>
+                  <CardTitle className="text-lg">Floaters</CardTitle>
                 </CardHeader>
                 <CardContent className="grid grid-cols-1 gap-4 md:grid-cols-3">
                   <div>
                     <FieldLabel
-                      label="Float Today (kg)"
+                      label="Floaters today (kg)"
                       tooltip="Low-density floaters removed during water sorting."
                     />
                     <Input
@@ -1250,7 +1274,7 @@ export default function ProcessingTab({ showDataToolsControls = false }: Process
 
               <Card className="border-border/60 bg-white/80">
                 <CardHeader>
-                  <CardTitle className="text-lg">Wet Parchment</CardTitle>
+                  <CardTitle className="text-lg">Wet parchment</CardTitle>
                 </CardHeader>
                 <CardContent className="grid grid-cols-1 gap-4 md:grid-cols-2">
                   <div>
@@ -1284,7 +1308,7 @@ export default function ProcessingTab({ showDataToolsControls = false }: Process
 
               <Card className="border-border/60 bg-white/80">
                 <CardHeader>
-                  <CardTitle className="text-lg">Dry Parchment</CardTitle>
+                  <CardTitle className="text-lg">Dry parchment</CardTitle>
                 </CardHeader>
                 <CardContent className="grid grid-cols-1 gap-4 md:grid-cols-3">
                   <div>
@@ -1329,7 +1353,7 @@ export default function ProcessingTab({ showDataToolsControls = false }: Process
 
               <Card className="border-border/60 bg-white/80">
                 <CardHeader>
-                  <CardTitle className="text-lg">Dry Cherry</CardTitle>
+                  <CardTitle className="text-lg">Dry cherry</CardTitle>
                 </CardHeader>
                 <CardContent className="grid grid-cols-1 gap-4 md:grid-cols-3">
                   <div>
@@ -1374,7 +1398,7 @@ export default function ProcessingTab({ showDataToolsControls = false }: Process
 
               <Card className="border-border/60 bg-white/80">
                 <CardHeader>
-                  <CardTitle className="text-lg">Bags</CardTitle>
+                  <CardTitle className="text-lg">Bag output</CardTitle>
                 </CardHeader>
                 <CardContent className="grid grid-cols-2 gap-4">
                   <div>
@@ -1425,11 +1449,11 @@ export default function ProcessingTab({ showDataToolsControls = false }: Process
               </Card>
 
               <div>
-                <Label>Notes</Label>
+                <Label>Notes for the day</Label>
                 <Textarea
                   value={record.notes}
                   onChange={(e) => updateField("notes", e.target.value)}
-                  placeholder="Additional notes about today's processing..."
+                  placeholder="Anything the owner or manager should know about this day..."
                   rows={3}
                 />
               </div>
@@ -1444,7 +1468,7 @@ export default function ProcessingTab({ showDataToolsControls = false }: Process
                   ) : (
                     <>
                       <Save className="mr-2 h-4 w-4" />
-                      {hasExistingRecord ? "Update Record" : "Save Record"}
+                      {hasExistingRecord ? "Update entry" : "Save entry"}
                     </>
                   )}
                 </Button>
@@ -1485,7 +1509,7 @@ export default function ProcessingTab({ showDataToolsControls = false }: Process
       {/* Recent Records */}
       <Card className="border-border/70 bg-white/80">
         <CardHeader>
-          <CardTitle>Recent Records</CardTitle>
+          <CardTitle>Recent entries</CardTitle>
           <CardDescription>
             {isLoadingRecords
               ? "Loading..."
@@ -1521,7 +1545,7 @@ export default function ProcessingTab({ showDataToolsControls = false }: Process
                 <div className="rounded-xl border border-emerald-100 bg-emerald-50/50 p-3 text-sm">
                   <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
                     <div>
-                      <p className="text-xs uppercase tracking-[0.2em] text-emerald-700">Record Drill-Down</p>
+                      <p className="text-xs uppercase tracking-[0.2em] text-emerald-700">Selected entry</p>
                       <p className="font-medium text-foreground">{formatDateOnly(selectedRecentRecord.process_date)}</p>
                     </div>
                     <Button
@@ -1530,7 +1554,7 @@ export default function ProcessingTab({ showDataToolsControls = false }: Process
                       onClick={() => setDate(new Date(selectedRecentRecord.process_date))}
                       className="bg-white"
                     >
-                      Open in Form
+                      Use this date
                     </Button>
                   </div>
                   <div className="mt-2 grid gap-2 text-xs text-muted-foreground sm:grid-cols-2 lg:grid-cols-4">

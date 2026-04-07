@@ -96,6 +96,7 @@ interface AccountsIntelligence {
 type AccountsTabValue = "labor" | "expenses" | "attendance" | "activities" | "workers" | "picking" | "ledger" | "payroll"
 
 const LABOR_MANAGEMENT_TAB_VALUES = new Set<AccountsTabValue>(["workers", "ledger", "payroll"])
+const PEOPLE_WORKFLOW_TAB_VALUES = new Set<AccountsTabValue>(["attendance", "workers", "picking", "ledger", "payroll"])
 
 const normalizeAccountsTab = (
   initialTab: AccountsTabValue | undefined,
@@ -133,22 +134,30 @@ export default function AccountsPage({
 }: AccountsPageProps) {
   const { isAdmin, isOwner, user } = useAuth()
   const canManageActivities = isAdmin || isOwner || user?.role === "user"
-  const { deployments: laborDeployments, loading: laborLoading, totalCount: laborCount } = useLaborData()
-  const { deployments: consumableDeployments, loading: consumablesLoading, totalCount: consumablesCount } =
-    useConsumablesData()
-
   const [selectedFiscalYear, setSelectedFiscalYear] = useState<FiscalYear>(getCurrentFiscalYear())
   const availableFiscalYears = getAvailableFiscalYears()
+  const fiscalYearStartDate = selectedFiscalYear.startDate
+  const fiscalYearEndDate = selectedFiscalYear.endDate
+  const { deployments: laborDeployments, loading: laborLoading, totalCount: laborCount } = useLaborData(undefined, {
+    startDate: fiscalYearStartDate,
+    endDate: fiscalYearEndDate,
+  })
+  const { deployments: consumableDeployments, loading: consumablesLoading, totalCount: consumablesCount } =
+    useConsumablesData(undefined, {
+      startDate: fiscalYearStartDate,
+      endDate: fiscalYearEndDate,
+    })
 
-  const [exportStartDate, setExportStartDate] = useState<string>("")
-  const [exportEndDate, setExportEndDate] = useState<string>("")
+  const [useCustomExportRange, setUseCustomExportRange] = useState(false)
+  const [customExportStartDate, setCustomExportStartDate] = useState<string>("")
+  const [customExportEndDate, setCustomExportEndDate] = useState<string>("")
   const [accountActivities, setAccountActivities] = useState<AccountActivity[]>([])
   const [activities, setActivities] = useState<Activity[]>([])
   const [activitySuggestions, setActivitySuggestions] = useState<ActivitySuggestion[]>([])
   const [loadingActivities, setLoadingActivities] = useState(false)
   const [isAddingActivity, setIsAddingActivity] = useState(false)
   const [showAllActivitySuggestions, setShowAllActivitySuggestions] = useState(false)
-  const [showCostPatterns, setShowCostPatterns] = useState(true)
+  const [showCostPatterns, setShowCostPatterns] = useState(false)
   const [newActivityCode, setNewActivityCode] = useState("")
   const [newActivityReference, setNewActivityReference] = useState("")
   const [isSubmitting, setIsSubmitting] = useState(false)
@@ -171,19 +180,55 @@ export default function AccountsPage({
   const exportCombinedCSVRef = useRef<() => Promise<void>>(async () => undefined)
   const exportCombinedXlsxRef = useRef<() => Promise<void>>(async () => undefined)
   const exportInterchangeRef = useRef<(format?: LegacyAccountsExportFormat) => Promise<void>>(async () => undefined)
+  const resolvedExportStartDate = useCustomExportRange ? customExportStartDate : fiscalYearStartDate
+  const resolvedExportEndDate = useCustomExportRange ? customExportEndDate : fiscalYearEndDate
   const exportDateRangeError = useMemo(() => {
-    if ((exportStartDate && !exportEndDate) || (!exportStartDate && exportEndDate)) {
-      return "Select both start and end date, or leave both empty."
+    if (!useCustomExportRange) {
+      return null
     }
-    if (exportStartDate && exportEndDate) {
-      const startDate = new Date(exportStartDate)
-      const endDate = new Date(exportEndDate)
+    if (!customExportStartDate || !customExportEndDate) {
+      return "Select both start and end date for the custom export range."
+    }
+    if (customExportStartDate && customExportEndDate) {
+      const startDate = new Date(customExportStartDate)
+      const endDate = new Date(customExportEndDate)
       if (startDate > endDate) {
         return "Start date cannot be after end date."
       }
     }
     return null
-  }, [exportEndDate, exportStartDate])
+  }, [customExportEndDate, customExportStartDate, useCustomExportRange])
+  const accountsGuide = useMemo(() => {
+    if (PEOPLE_WORKFLOW_TAB_VALUES.has(activeTab)) {
+      return {
+        eyebrow: "People guide",
+        title: "One worker roster, optional people tools",
+        description:
+          "Workers is the shared roster for Attendance, Picking, Ledger, and Payroll. Use only the parts your estate actually needs.",
+        bullets: [
+          "Use Attendance alone if you only want daily muster.",
+          "Add daily rates in Workers only when you want attendance wages in Payroll.",
+          "Use Picking for piece-rate harvest and Ledger only for advances, deductions, or corrections.",
+        ],
+        tip: "Payroll combines whichever people records exist. It does not require every people tab to be used.",
+        tone: "operations" as const,
+      }
+    }
+
+    return {
+      eyebrow: "Accounts guide",
+      title: "Keep cost coding simple",
+      description:
+        "Most estates only need a few stable cost habits here: record labor, record expenses, keep attendance clean when needed, and use codes consistently.",
+      bullets: [
+        "Use labor and expenses for real spend only, not estimates you may change later.",
+        "If you do not have a full chart of accounts yet, start with a short estate code and plain category name.",
+        "Use the Codes tab when you want autocomplete, cleaner exports, and shared labels across the estate.",
+      ],
+      tip: "A small, stable code list is easier to run than a complex chart nobody remembers in the field.",
+      tone: "finance" as const,
+    }
+  }, [activeTab])
 
   useEffect(() => {
     fetchAllActivities()
@@ -203,8 +248,8 @@ export default function AccountsPage({
       try {
         setSummaryLoading(true)
         const params = new URLSearchParams({
-          startDate: selectedFiscalYear.startDate,
-          endDate: selectedFiscalYear.endDate,
+          startDate: fiscalYearStartDate,
+          endDate: fiscalYearEndDate,
         })
         const response = await fetch(`/api/accounts-totals?${params.toString()}`)
         const data = await response.json()
@@ -229,7 +274,7 @@ export default function AccountsPage({
     }
 
     fetchTotals()
-  }, [selectedFiscalYear.endDate, selectedFiscalYear.startDate, user?.tenantId])
+  }, [fiscalYearEndDate, fiscalYearStartDate, user?.tenantId])
 
   useEffect(() => {
     if (!user?.tenantId) {
@@ -244,8 +289,8 @@ export default function AccountsPage({
       setAccountsIntelligenceError(null)
       try {
         const params = new URLSearchParams({
-          startDate: selectedFiscalYear.startDate,
-          endDate: selectedFiscalYear.endDate,
+          startDate: fiscalYearStartDate,
+          endDate: fiscalYearEndDate,
         })
         const response = await fetch(`/api/intelligence-brief?${params.toString()}`, { cache: "no-store" })
         const data = await response.json().catch(() => ({}))
@@ -274,7 +319,7 @@ export default function AccountsPage({
     return () => {
       ignore = true
     }
-  }, [selectedFiscalYear.endDate, selectedFiscalYear.startDate, user?.tenantId])
+  }, [fiscalYearEndDate, fiscalYearStartDate, user?.tenantId])
 
   const fetchAllActivities = async () => {
     try {
@@ -538,10 +583,10 @@ export default function AccountsPage({
     }
 
     let deploymentsToExport = [...allDeployments]
-    if (exportStartDate && exportEndDate) {
-      const startDate = new Date(exportStartDate)
+    if (resolvedExportStartDate && resolvedExportEndDate) {
+      const startDate = new Date(resolvedExportStartDate)
       startDate.setHours(0, 0, 0, 0)
-      const endDate = new Date(exportEndDate)
+      const endDate = new Date(resolvedExportEndDate)
       endDate.setHours(23, 59, 59, 999)
       deploymentsToExport = deploymentsToExport.filter((d) => {
         const deploymentDate = new Date(d.date)
@@ -550,7 +595,7 @@ export default function AccountsPage({
     }
 
     if (deploymentsToExport.length === 0) {
-      toast.error("No entries found for the selected date range.")
+      toast.error(useCustomExportRange ? "No entries found for the selected export range." : "No entries found in this fiscal year.")
       return null
     }
     return deploymentsToExport
@@ -728,6 +773,20 @@ export default function AccountsPage({
     }
   }
 
+  const handleCustomExportRangeToggle = () => {
+    setUseCustomExportRange((prev) => {
+      const next = !prev
+      if (next) {
+        setCustomExportStartDate(fiscalYearStartDate)
+        setCustomExportEndDate(fiscalYearEndDate)
+      } else {
+        setCustomExportStartDate("")
+        setCustomExportEndDate("")
+      }
+      return next
+    })
+  }
+
   const exportCombinedCSV = async () => {
     const deploymentsToExport = await getFilteredDeploymentsForExport()
     if (!deploymentsToExport) return
@@ -736,7 +795,7 @@ export default function AccountsPage({
     const encodedUri = encodeURI("data:text/csv;charset=utf-8," + csvBody)
     const link = document.createElement("a")
     link.setAttribute("href", encodedUri)
-    link.setAttribute("download", buildAccountsCsvFilename(exportStartDate, exportEndDate))
+    link.setAttribute("download", buildAccountsCsvFilename(resolvedExportStartDate, resolvedExportEndDate))
     document.body.appendChild(link)
     link.click()
     document.body.removeChild(link)
@@ -745,16 +804,16 @@ export default function AccountsPage({
     posthog.capture("accounts_export_downloaded", {
       format: "csv",
       rows_exported: deploymentsToExport.length,
-      date_range_start: exportStartDate || null,
-      date_range_end: exportEndDate || null,
+      date_range_start: resolvedExportStartDate || null,
+      date_range_end: resolvedExportEndDate || null,
     })
   }
 
   const exportCombinedXlsx = async () => {
     posthog.capture("accounts_export_requested", {
       format: "xlsx",
-      date_range_start: exportStartDate || null,
-      date_range_end: exportEndDate || null,
+      date_range_start: resolvedExportStartDate || null,
+      date_range_end: resolvedExportEndDate || null,
     })
 
     try {
@@ -763,14 +822,14 @@ export default function AccountsPage({
       const csvBody = buildCombinedAccountsCsv(deploymentsToExport)
       const workbookBytes = buildXlsxArrayBufferFromCsv(csvBody, "Accounts Export")
       const blob = new Blob([workbookBytes], { type: XLSX_MIME_TYPE })
-      downloadBlob(blob, buildAccountsXlsxFilename(exportStartDate, exportEndDate))
+      downloadBlob(blob, buildAccountsXlsxFilename(resolvedExportStartDate, resolvedExportEndDate))
       toast.success(`Accounts XLSX exported (${deploymentsToExport.length} entries)`)
 
       posthog.capture("accounts_export_downloaded", {
         format: "xlsx",
         rows_exported: deploymentsToExport.length,
-        date_range_start: exportStartDate || null,
-        date_range_end: exportEndDate || null,
+        date_range_start: resolvedExportStartDate || null,
+        date_range_end: resolvedExportEndDate || null,
       })
     } catch (error: any) {
       console.error("Error exporting accounts xlsx file:", error)
@@ -786,8 +845,8 @@ export default function AccountsPage({
     const canonicalFormat = normalizeAccountsInterchangeFormat(format)
     posthog.capture("accounts_export_requested", {
       format: canonicalFormat,
-      date_range_start: exportStartDate || null,
-      date_range_end: exportEndDate || null,
+      date_range_start: resolvedExportStartDate || null,
+      date_range_end: resolvedExportEndDate || null,
     })
 
     try {
@@ -838,7 +897,7 @@ export default function AccountsPage({
       const encodedUri = encodeURI("data:text/plain;charset=utf-8," + qifContent)
       const link = document.createElement("a")
       link.setAttribute("href", encodedUri)
-      link.setAttribute("download", buildAccountsQifFilename(exportStartDate, exportEndDate))
+      link.setAttribute("download", buildAccountsQifFilename(resolvedExportStartDate, resolvedExportEndDate))
       document.body.appendChild(link)
       link.click()
       document.body.removeChild(link)
@@ -847,8 +906,8 @@ export default function AccountsPage({
       posthog.capture("accounts_export_downloaded", {
         format: canonicalFormat,
         rows_exported: deploymentsToExport.length,
-        date_range_start: exportStartDate || null,
-        date_range_end: exportEndDate || null,
+        date_range_start: resolvedExportStartDate || null,
+        date_range_end: resolvedExportEndDate || null,
       })
     } catch (error: any) {
       console.error("Error exporting accounts interchange file:", error)
@@ -969,16 +1028,12 @@ export default function AccountsPage({
       }
     >
       <TaskGuideCard
-        eyebrow="Accounts guide"
-        title="Start with the main accounts records"
-        description="Most estates only need four habits here: record labor, record expenses, keep attendance clean, and use codes consistently."
-        bullets={[
-          "Use labor and expenses for real spend only, not estimates you may change later.",
-          "Keep account codes short and stable so exports stay clean for accountants.",
-          "Use attendance when you want daily people tracking, not as a replacement for payroll review.",
-        ]}
-        tip="Fewer, well-named codes make your end-of-season export far easier to read."
-        tone="finance"
+        eyebrow={accountsGuide.eyebrow}
+        title={accountsGuide.title}
+        description={accountsGuide.description}
+        bullets={accountsGuide.bullets}
+        tip={accountsGuide.tip}
+        tone={accountsGuide.tone}
       />
 
       <div className="flex justify-end">
@@ -990,7 +1045,7 @@ export default function AccountsPage({
           className="bg-white text-xs"
         >
           <BarChart2 className="mr-1.5 h-3.5 w-3.5" />
-          Cost Patterns
+          {showCostPatterns ? "Hide Cost Patterns" : "Show Cost Patterns"}
           {showCostPatterns ? <ChevronUp className="ml-1.5 h-3.5 w-3.5" /> : <ChevronDown className="ml-1.5 h-3.5 w-3.5" />}
         </Button>
       </div>
@@ -1152,9 +1207,9 @@ export default function AccountsPage({
           <CardHeader>
             <div className="flex justify-between items-start">
               <div>
-                <CardTitle>Combined Accounts Export</CardTitle>
+                <CardTitle>Accounts Export</CardTitle>
                 <CardDescription className="mt-1">
-                  Export both labor and other expenses to a single CSV or QIF file.
+                  Export labor and other expenses using the same fiscal year already selected above.
                 </CardDescription>
               </div>
               <div className="text-right flex-shrink-0 pl-4">
@@ -1173,29 +1228,55 @@ export default function AccountsPage({
               </div>
             </div>
           </CardHeader>
-          <CardContent className="flex flex-col sm:flex-row items-center gap-2 flex-wrap">
-            <Label htmlFor="exportStartDateCombined" className="text-sm font-medium">
-              From:
-            </Label>
-            <Input
-              type="date"
-              id="exportStartDateCombined"
-              value={exportStartDate}
-              onChange={(e) => setExportStartDate(e.target.value)}
-              className="h-9 text-sm"
-              aria-label="Combined export start date"
-            />
-            <Label htmlFor="exportEndDateCombined" className="text-sm font-medium">
-              To:
-            </Label>
-            <Input
-              type="date"
-              id="exportEndDateCombined"
-              value={exportEndDate}
-              onChange={(e) => setExportEndDate(e.target.value)}
-              className="h-9 text-sm"
-              aria-label="Combined export end date"
-            />
+          <CardContent className="space-y-4">
+            <div className="flex flex-col gap-3 rounded-xl border border-border/60 bg-muted/20 p-3 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <p className="text-sm font-medium text-foreground">
+                  {useCustomExportRange ? "Custom export range" : `Using ${selectedFiscalYear.label}`}
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  {useCustomExportRange
+                    ? "Exports use the custom dates below until you switch back to the fiscal year."
+                    : `Exports currently cover ${fiscalYearStartDate} to ${fiscalYearEndDate}.`}
+                </p>
+              </div>
+              <Button type="button" variant="outline" size="sm" onClick={handleCustomExportRangeToggle} className="bg-white">
+                {useCustomExportRange ? "Use Fiscal Year" : "Use Custom Range"}
+              </Button>
+            </div>
+
+            {useCustomExportRange && (
+              <div className="grid gap-3 sm:grid-cols-2">
+                <div className="space-y-2">
+                  <Label htmlFor="exportStartDateCombined" className="text-sm font-medium">
+                    From
+                  </Label>
+                  <Input
+                    type="date"
+                    id="exportStartDateCombined"
+                    value={customExportStartDate}
+                    onChange={(e) => setCustomExportStartDate(e.target.value)}
+                    className="h-9 text-sm"
+                    aria-label="Combined export start date"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="exportEndDateCombined" className="text-sm font-medium">
+                    To
+                  </Label>
+                  <Input
+                    type="date"
+                    id="exportEndDateCombined"
+                    value={customExportEndDate}
+                    onChange={(e) => setCustomExportEndDate(e.target.value)}
+                    className="h-9 text-sm"
+                    aria-label="Combined export end date"
+                  />
+                </div>
+              </div>
+            )}
+
+            <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
             <Button
               onClick={exportCombinedCSV}
               variant="outline"
@@ -1224,21 +1305,22 @@ export default function AccountsPage({
               <Coins className="mr-2 h-4 w-4" /> Export QIF
             </Button>
             <p className={cn("w-full text-xs", exportDateRangeError ? "text-rose-600" : "text-muted-foreground")}>
-              {exportDisabledReason || "Optional date filter applies to CSV, XLSX, and QIF exports."}
+              {exportDisabledReason || "CSV, XLSX, and QIF exports use the range shown above."}
             </p>
+            </div>
           </CardContent>
         </Card>
       )}
 
       <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as AccountsTabValue)} className="w-full space-y-4">
-        <TabsList className="w-full justify-start sm:justify-center">
+        <TabsList className="h-auto w-full flex-wrap justify-start gap-2 sm:justify-center">
           <TabsTrigger value="labor" className="flex items-center gap-2">
             <Users className="h-4 w-4" />
-            Labor Deployments
+            Labor
           </TabsTrigger>
           <TabsTrigger value="expenses" className="flex items-center gap-2">
             <Receipt className="h-4 w-4" />
-            Other Expenses
+            Expenses
           </TabsTrigger>
           <TabsTrigger value="attendance" className="flex items-center gap-2">
             <Check className="h-4 w-4" />
@@ -1246,12 +1328,12 @@ export default function AccountsPage({
           </TabsTrigger>
           <TabsTrigger value="activities" className="flex items-center gap-2">
             <Settings className="h-4 w-4" />
-            Account Activities
+            Codes
           </TabsTrigger>
           {(showPickingLog || showLaborManagement) && (
             <TabsTrigger value="picking" className="flex items-center gap-2">
               <Wheat className="h-4 w-4" />
-              Picking Log
+              Picking
             </TabsTrigger>
           )}
           {showLaborManagement && (
@@ -1262,22 +1344,22 @@ export default function AccountsPage({
               </TabsTrigger>
               <TabsTrigger value="ledger" className="flex items-center gap-2">
                 <BookOpen className="h-4 w-4" />
-                Advances &amp; Deductions
+                Ledger
               </TabsTrigger>
               <TabsTrigger value="payroll" className="flex items-center gap-2">
                 <DollarSign className="h-4 w-4" />
-                Payroll Summary
+                Payroll
               </TabsTrigger>
             </>
           )}
         </TabsList>
 
         <TabsContent value="labor" className="mt-6">
-            <LaborDeploymentTab />
+            <LaborDeploymentTab startDate={fiscalYearStartDate} endDate={fiscalYearEndDate} />
           </TabsContent>
 
         <TabsContent value="expenses" className="mt-6">
-            <OtherExpensesTab />
+            <OtherExpensesTab startDate={fiscalYearStartDate} endDate={fiscalYearEndDate} />
           </TabsContent>
 
         <TabsContent value="attendance" className="mt-6">

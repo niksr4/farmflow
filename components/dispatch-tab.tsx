@@ -882,35 +882,35 @@ export default function DispatchTab({ showDataToolsControls = false }: DispatchT
 
       <Card className="order-4 border-border/70 bg-white/85">
         <CardHeader className="pb-3">
-          <CardTitle className="text-xs uppercase tracking-[0.2em] text-muted-foreground">Dispatch Reconciliation</CardTitle>
-          <CardDescription>Use received KGs for saleable stock, while keeping nominal bag movement visible.</CardDescription>
+          <CardTitle className="text-xs uppercase tracking-[0.2em] text-muted-foreground">How stock moves</CardTitle>
+          <CardDescription>Bags show physical movement. Confirmed received KGs are what become saleable later.</CardDescription>
         </CardHeader>
         <CardContent className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
           <div className="rounded-lg border border-border/60 bg-white/80 p-3">
-            <p className="text-xs text-muted-foreground">Processed nominal</p>
+            <p className="text-xs text-muted-foreground">Processed bags</p>
             <p className="mt-1 text-sm font-semibold text-foreground">{formatNumber(processedNominalBagsTotal)} bags</p>
             <p className="mt-1 text-xs text-muted-foreground">{formatNumber(processedNominalBagsTotal * bagWeightKg)} KGs</p>
           </div>
           <div className="rounded-lg border border-border/60 bg-white/80 p-3">
-            <p className="text-xs text-muted-foreground">Dispatched nominal</p>
+            <p className="text-xs text-muted-foreground">Dispatched bags</p>
             <p className="mt-1 text-sm font-semibold text-foreground">{formatNumber(dispatchedNominalBagsTotal)} bags</p>
             <p className="mt-1 text-xs text-muted-foreground">{formatNumber(dispatchedNominalBagsTotal * bagWeightKg)} KGs</p>
           </div>
           <div className="rounded-lg border border-border/60 bg-white/80 p-3">
-            <p className="text-xs text-muted-foreground">Confirmed received for sales</p>
+            <p className="text-xs text-muted-foreground">Confirmed received KGs</p>
             <p className="mt-1 text-sm font-semibold text-foreground">{formatNumber(dispatchedReceivedKgsTotal)} KGs</p>
             <p className={cn("mt-1 text-xs", dispatchVarianceKgsTotal >= 0 ? "text-emerald-700" : "text-rose-700")}>
-              Variance vs nominal dispatch: {dispatchVarianceKgsTotal >= 0 ? "+" : ""}
+              Difference vs bag weight: {dispatchVarianceKgsTotal >= 0 ? "+" : ""}
               {formatNumber(dispatchVarianceKgsTotal)} KGs
             </p>
           </div>
           <div className="rounded-lg border border-border/60 bg-white/80 p-3">
-            <p className="text-xs text-muted-foreground">Pending nominal bags</p>
+            <p className="text-xs text-muted-foreground">Still on hand</p>
             <p className={cn("mt-1 text-sm font-semibold", pendingNominalBags < 0 ? "text-rose-700" : "text-foreground")}>
               {formatNumber(Math.abs(pendingNominalBags))} bags
             </p>
             <p className="mt-1 text-xs text-muted-foreground">
-              {pendingNominalBags < 0 ? "Dispatched exceeds processed nominal" : "Still in processed stock"}
+              {pendingNominalBags < 0 ? "More dispatched than processed" : "Still sitting in processed stock"}
             </p>
           </div>
         </CardContent>
@@ -1064,12 +1064,12 @@ export default function DispatchTab({ showDataToolsControls = false }: DispatchT
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <Truck className="h-5 w-5" />
-            {editingRecord ? "Edit Dispatch" : "Record Dispatch"}
+            {editingRecord ? "Edit dispatch entry" : "Dispatch entry"}
           </CardTitle>
           <CardDescription>
             {editingRecord
-              ? "Update the dispatch record"
-              : "Record coffee bags sent from the selected location (availability follows processing output)."}
+              ? "Update what physically left this location."
+              : "Record what physically left this location today. Add confirmed received KGs only when they are known."}
           </CardDescription>
           {editingRecord ? (
             <p className="text-xs text-emerald-700">
@@ -1078,6 +1078,29 @@ export default function DispatchTab({ showDataToolsControls = false }: DispatchT
           ) : null}
         </CardHeader>
         <CardContent>
+          <div className="mb-4 rounded-2xl border border-emerald-100 bg-emerald-50/55 p-4">
+            <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+              <div className="rounded-xl border border-white/70 bg-white/85 p-3">
+                <p className="text-[11px] uppercase tracking-[0.18em] text-emerald-700">Location</p>
+                <p className="mt-1 text-sm font-semibold text-foreground">
+                  {selectedLocation?.name || selectedLocation?.code || "Select a location"}
+                </p>
+              </div>
+              <div className="rounded-xl border border-white/70 bg-white/85 p-3">
+                <p className="text-[11px] uppercase tracking-[0.18em] text-emerald-700">Coffee</p>
+                <p className="mt-1 text-sm font-semibold text-foreground">{coffeeType}</p>
+              </div>
+              <div className="rounded-xl border border-white/70 bg-white/85 p-3">
+                <p className="text-[11px] uppercase tracking-[0.18em] text-emerald-700">Bag type</p>
+                <p className="mt-1 text-sm font-semibold text-foreground">{formatBagTypeLabel(bagType)}</p>
+              </div>
+              <div className="rounded-xl border border-white/70 bg-white/85 p-3">
+                <p className="text-[11px] uppercase tracking-[0.18em] text-emerald-700">Save rule</p>
+                <p className="mt-1 text-sm font-semibold text-foreground">One trip, one location, one stock line</p>
+              </div>
+            </div>
+          </div>
+
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
             {/* Date */}
             <div className="space-y-2">
@@ -1115,8 +1138,8 @@ export default function DispatchTab({ showDataToolsControls = false }: DispatchT
               </Select>
               <p className="text-xs text-muted-foreground">
                 {isLegacyPooledAvailability
-                  ? "Legacy pooled mode is active; availability is estate-wide."
-                  : "Availability is calculated for this location."}
+                  ? "Legacy pooled mode is active, so available stock is shown estate-wide."
+                  : "Available stock is calculated for this location."}
               </p>
             </div>
 
@@ -1156,11 +1179,11 @@ export default function DispatchTab({ showDataToolsControls = false }: DispatchT
                 </SelectContent>
               </Select>
               <p className={cn("text-xs", allowedBalance > 0 ? "text-emerald-600" : "text-rose-600")}>
-                Available: {formatNumber(allowedBalance)} bags ({formatNumber(allowedBalance * bagWeightKg)} KGs)
+                Available now: {formatNumber(allowedBalance)} bags ({formatNumber(allowedBalance * bagWeightKg)} KGs)
               </p>
               {editAllowance.matchesSelection && (
                 <p className="text-xs text-muted-foreground">
-                  This record already accounts for {formatNumber(editAllowance.allowance)} bags.
+                  Editing credit: {formatNumber(editAllowance.allowance)} bags from this record.
                 </p>
               )}
             </div>
@@ -1191,7 +1214,7 @@ export default function DispatchTab({ showDataToolsControls = false }: DispatchT
             {/* KGs Received */}
             <div className="space-y-2">
               <FieldLabel
-                label="KGs Received (Optional)"
+                label="Confirmed received KGs"
                 tooltip="Actual received weight from the buyer or warehouse for reconciliation."
               />
               <Input
@@ -1210,16 +1233,16 @@ export default function DispatchTab({ showDataToolsControls = false }: DispatchT
                 </p>
               ) : (
                 <p className="text-xs text-muted-foreground">
-                  Leave blank until receipt is confirmed. Unconfirmed dispatch stays out of sales availability.
+                  Leave blank until receipt is confirmed. Until then, this stock will not become saleable in Sales.
                 </p>
               )}
             </div>
 
             {/* Notes */}
             <div className="space-y-2 md:col-span-2">
-              <Label>Notes (Optional)</Label>
+              <Label>Trip notes</Label>
               <Textarea
-                placeholder="Add any notes..."
+                placeholder="Vehicle, buyer pickup note, warehouse reference, or anything worth remembering..."
                 value={notes}
                 onChange={(e) => setNotes(e.target.value)}
                 className="min-h-[60px]"
@@ -1242,7 +1265,7 @@ export default function DispatchTab({ showDataToolsControls = false }: DispatchT
               ) : (
                 <>
                   <Save className="mr-2 h-4 w-4" />
-                  {editingRecord ? "Update Dispatch" : "Save Dispatch"}
+                  {editingRecord ? "Update dispatch" : "Save dispatch"}
                 </>
               )}
             </Button>
@@ -1263,9 +1286,9 @@ export default function DispatchTab({ showDataToolsControls = false }: DispatchT
             <div>
               <CardTitle className="flex items-center gap-2">
                 <Package className="h-5 w-5" />
-                Dispatch Records
+                Dispatch history
               </CardTitle>
-              <CardDescription>History of all dispatched bags · {resolvedCountLabel}</CardDescription>
+              <CardDescription>Review and reopen previous dispatch entries · {resolvedCountLabel}</CardDescription>
             </div>
             {showDataToolsControls && (
               <Button variant="outline" size="sm" onClick={exportToCSV} className="bg-transparent">
@@ -1277,12 +1300,12 @@ export default function DispatchTab({ showDataToolsControls = false }: DispatchT
         </CardHeader>
         <CardContent>
           {selectedDispatchRecord && (
-            <div className="mb-4 rounded-xl border border-emerald-100 bg-emerald-50/50 p-3 text-sm">
-              <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
-                <div>
-                  <p className="text-xs uppercase tracking-[0.2em] text-emerald-700">Dispatch Drill-Down</p>
-                  <p className="font-medium text-foreground">{formatDateOnly(selectedDispatchRecord.dispatch_date)} · {getLocationLabel(selectedDispatchRecord)}</p>
-                </div>
+                <div className="mb-4 rounded-xl border border-emerald-100 bg-emerald-50/50 p-3 text-sm">
+                  <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+                    <div>
+                      <p className="text-xs uppercase tracking-[0.2em] text-emerald-700">Selected dispatch</p>
+                      <p className="font-medium text-foreground">{formatDateOnly(selectedDispatchRecord.dispatch_date)} · {getLocationLabel(selectedDispatchRecord)}</p>
+                    </div>
                 <Button
                   size="sm"
                   variant="outline"
@@ -1312,7 +1335,7 @@ export default function DispatchTab({ showDataToolsControls = false }: DispatchT
           ) : dispatchRecords.length === 0 ? (
             <EmptyStateTable
               title="No dispatch records yet"
-              description="Log when bags physically leave an estate location — bag type, count, and received KGs once confirmed."
+              description="Start with the first real movement out of a location: bag type, bag count, and confirmed received KGs when you have them."
               action={{ label: "Use form above", onClick: scrollToEntryForm }}
             />
           ) : (

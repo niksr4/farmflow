@@ -3,6 +3,9 @@ export interface Transaction {
   item_type: string
   quantity: number | ""
   transaction_type: "restock" | "deplete"
+  source_type?: "manual" | "expense"
+  source_label?: string
+  source_id?: string | null
   notes?: string
   transaction_date?: string
   user_id: string

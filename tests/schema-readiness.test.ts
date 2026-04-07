@@ -10,7 +10,7 @@ import {
 describe("schema readiness helpers", () => {
   it("reports healthy when all required schema is present", () => {
     const inventory = buildSchemaInventory({
-      tables: ["signup_requests", "signup_tokens", "users", "tenants"],
+      tables: ["signup_requests", "signup_tokens", "users", "tenants", "expense_transactions", "expense_inventory_links"],
       columns: [
         { table: "signup_requests", column: "id" },
         { table: "signup_requests", column: "tenant_id" },
@@ -28,6 +28,12 @@ describe("schema readiness helpers", () => {
         { table: "users", column: "requires_guided_setup" },
         { table: "tenants", column: "ui_variant" },
         { table: "tenants", column: "feature_flags" },
+        { table: "expense_transactions", column: "inventory_item_type" },
+        { table: "expense_transactions", column: "inventory_quantity" },
+        { table: "expense_inventory_links", column: "expense_transaction_id" },
+        { table: "expense_inventory_links", column: "tenant_id" },
+        { table: "expense_inventory_links", column: "item_type" },
+        { table: "expense_inventory_links", column: "quantity" },
       ],
     })
 
@@ -60,7 +66,7 @@ describe("schema readiness helpers", () => {
 
   it("treats tenant profile drift as warning-only", () => {
     const inventory = buildSchemaInventory({
-      tables: ["signup_requests", "signup_tokens", "users", "tenants"],
+      tables: ["signup_requests", "signup_tokens", "users", "tenants", "expense_transactions", "expense_inventory_links"],
       columns: [
         { table: "signup_requests", column: "id" },
         { table: "signup_requests", column: "tenant_id" },
@@ -76,6 +82,12 @@ describe("schema readiness helpers", () => {
         { table: "users", column: "preferred_locale" },
         { table: "users", column: "setup_completed_at" },
         { table: "users", column: "requires_guided_setup" },
+        { table: "expense_transactions", column: "inventory_item_type" },
+        { table: "expense_transactions", column: "inventory_quantity" },
+        { table: "expense_inventory_links", column: "expense_transaction_id" },
+        { table: "expense_inventory_links", column: "tenant_id" },
+        { table: "expense_inventory_links", column: "item_type" },
+        { table: "expense_inventory_links", column: "quantity" },
       ],
     })
 

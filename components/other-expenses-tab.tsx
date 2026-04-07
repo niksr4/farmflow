@@ -30,7 +30,25 @@ interface InventoryItem {
   quantity: number
 }
 
-export default function OtherExpensesTab({ locationId }: { locationId?: string }) {
+const formatInventoryUsage = (inventoryItems?: Array<{ itemType: string; quantity?: number | null }>) => {
+  if (!Array.isArray(inventoryItems) || inventoryItems.length === 0) {
+    return "-"
+  }
+
+  return inventoryItems
+    .map((item) => `${item.itemType}${item.quantity != null ? ` × ${item.quantity}` : ""}`)
+    .join(", ")
+}
+
+export default function OtherExpensesTab({
+  locationId,
+  startDate,
+  endDate,
+}: {
+  locationId?: string
+  startDate?: string
+  endDate?: string
+}) {
   const {
     deployments,
     loading,
@@ -42,13 +60,14 @@ export default function OtherExpensesTab({ locationId }: { locationId?: string }
     addDeployment,
     updateDeployment,
     deleteDeployment,
-  } = useConsumablesData(locationId)
+  } = useConsumablesData(locationId, { startDate, endDate })
 
   const [isAdding, setIsAdding] = useState(false)
   const [editingId, setEditingId] = useState<number | null>(null)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [activities, setActivities] = useState<ActivityCode[]>([])
   const [inventoryItems, setInventoryItems] = useState<InventoryItem[]>([])
+  const [supportsMultiInventoryItems, setSupportsMultiInventoryItems] = useState(false)
   const [expandedRows, setExpandedRows] = useState<Set<number>>(new Set())
 
   type InventoryLineItem = { itemType: string; quantity: string | number }
@@ -83,6 +102,7 @@ export default function OtherExpensesTab({ locationId }: { locationId?: string }
       const data = await response.json()
       if (data.success && Array.isArray(data.items)) {
         setInventoryItems(data.items)
+        setSupportsMultiInventoryItems(Boolean(data.supportsInventoryLinksTable))
       }
     } catch (error) {
       console.error("Error fetching inventory items:", error)
@@ -127,6 +147,7 @@ export default function OtherExpensesTab({ locationId }: { locationId?: string }
     const validInvItems = invLines
       .map((l) => ({ itemType: l.itemType.trim(), quantity: Number(l.quantity) || 0 }))
       .filter((l) => l.itemType && l.quantity > 0)
+    const inventoryPayload = supportsMultiInventoryItems ? validInvItems : validInvItems.slice(0, 1)
 
     const deployment: any = {
       date: formData.date,
@@ -137,10 +158,10 @@ export default function OtherExpensesTab({ locationId }: { locationId?: string }
       user: "admin",
     }
     if (validInvItems.length > 0) {
-      deployment.inventoryItems = validInvItems
+      deployment.inventoryItems = inventoryPayload
       // Keep legacy single fields for first item so the DB column stays populated
-      deployment.inventoryItemType = validInvItems[0].itemType
-      deployment.inventoryQuantity = validInvItems[0].quantity
+      deployment.inventoryItemType = inventoryPayload[0].itemType
+      deployment.inventoryQuantity = inventoryPayload[0].quantity
     }
 
     try {
@@ -159,12 +180,17 @@ export default function OtherExpensesTab({ locationId }: { locationId?: string }
       amount: deployment.amount,
       notes: deployment.notes || "",
     })
-    // Reconstruct inv lines from stored data (single item until multi-item API is in full use)
-    if (deployment.inventoryItemType) {
-      setInvLines([{ itemType: deployment.inventoryItemType, quantity: deployment.inventoryQuantity ?? "" }])
-    } else {
-      setInvLines([])
-    }
+    const linkedItems = Array.isArray(deployment.inventoryItems) && deployment.inventoryItems.length > 0
+      ? deployment.inventoryItems
+      : deployment.inventoryItemType
+        ? [{ itemType: deployment.inventoryItemType, quantity: deployment.inventoryQuantity ?? "" }]
+        : []
+    setInvLines(
+      (supportsMultiInventoryItems ? linkedItems : linkedItems.slice(0, 1)).map((item: any) => ({
+        itemType: item.itemType,
+        quantity: item.quantity ?? "",
+      })),
+    )
     setEditingId(deployment.id)
     setIsAdding(true)
   }
@@ -197,7 +223,7 @@ export default function OtherExpensesTab({ locationId }: { locationId?: string }
           <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
             <div>
               <CardTitle className="text-xl sm:text-2xl">Other Expenses</CardTitle>
-              <CardDescription className="text-sm">Track miscellaneous expenses by activity code</CardDescription>
+              <CardDescription className="text-sm">Track real spend with a simple estate code and category</CardDescription>
             </div>
             <div className="text-left sm:text-right">
               <p className="text-sm font-medium text-muted-foreground">Total Expenses</p>
@@ -211,13 +237,28 @@ export default function OtherExpensesTab({ locationId }: { locationId?: string }
           </div>
         </CardHeader>
         <CardContent>
+          {activities.length === 0 && (
+            <div className="mb-4 rounded-xl border border-amber-200 bg-amber-50/60 p-4">
+              <p className="text-sm font-semibold text-amber-900">No saved codes yet</p>
+              <p className="mt-1 text-xs text-amber-800">
+                You can still log the expense now. Type a short estate code and a plain category name here, then clean it up in Codes later.
+              </p>
+            </div>
+          )}
           {!isAdding ? (
             <Button onClick={() => setIsAdding(true)} className="w-full h-12 text-base">
               <PlusCircle className="mr-2 h-5 w-5" /> Add Expense
             </Button>
           ) : (
             <form onSubmit={handleSubmit} className="space-y-4 border rounded-lg p-3 sm:p-4 bg-muted/50">
-              <div className="space-y-4">
+              <div className="rounded-lg border border-border/60 bg-background/80 p-3">
+                <p className="text-sm font-medium text-foreground">Expense details</p>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Start with the date, amount, and cost code. If you do not have saved codes yet, type a simple code and category name.
+                </p>
+              </div>
+
+              <div className="grid gap-4 sm:grid-cols-2">
                 <div className="space-y-2">
                   <Label htmlFor="expense-date" className="text-base">
                     Date
@@ -227,42 +268,6 @@ export default function OtherExpensesTab({ locationId }: { locationId?: string }
                     type="date"
                     value={formData.date}
                     onChange={(e) => setFormData((prev) => ({ ...prev, date: e.target.value }))}
-                    required
-                    className="h-11"
-                  />
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="expense-code" className="text-base">
-                    Code
-                  </Label>
-                  <Input
-                    id="expense-code"
-                    value={formData.code}
-                    onChange={(e) => handleCodeChange(e.target.value)}
-                    placeholder="Enter activity code"
-                    required
-                    list="expense-activity-codes"
-                    className="h-11"
-                  />
-                  <datalist id="expense-activity-codes">
-                    {activities.map((activity) => (
-                      <option key={activity.code} value={activity.code}>
-                        {activity.reference}
-                      </option>
-                    ))}
-                  </datalist>
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="expense-reference" className="text-base">
-                    Reference
-                  </Label>
-                  <Input
-                    id="expense-reference"
-                    value={formData.reference}
-                    onChange={(e) => setFormData((prev) => ({ ...prev, reference: e.target.value }))}
-                    placeholder="Auto-filled from code"
                     required
                     className="h-11"
                   />
@@ -285,6 +290,44 @@ export default function OtherExpensesTab({ locationId }: { locationId?: string }
                     className="h-11"
                   />
                 </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="expense-code" className="text-base">
+                    Activity code
+                  </Label>
+                  <Input
+                    id="expense-code"
+                    value={formData.code}
+                    onChange={(e) => handleCodeChange(e.target.value)}
+                    placeholder="e.g. 555"
+                    required
+                    list="expense-activity-codes"
+                    className="h-11"
+                  />
+                  <p className="text-xs text-muted-foreground">Saved codes appear here, but you can type a short estate cost code yourself.</p>
+                  <datalist id="expense-activity-codes">
+                    {activities.map((activity) => (
+                      <option key={activity.code} value={activity.code}>
+                        {activity.reference}
+                      </option>
+                    ))}
+                  </datalist>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="expense-reference" className="text-base">
+                    Category name
+                  </Label>
+                  <Input
+                    id="expense-reference"
+                    value={formData.reference}
+                    onChange={(e) => setFormData((prev) => ({ ...prev, reference: e.target.value }))}
+                    placeholder="Auto-filled from code"
+                    required
+                    className="h-11"
+                  />
+                  <p className="text-xs text-muted-foreground">Use a plain category name the owner and accountant will both recognize.</p>
+                </div>
               </div>
 
               <div className="space-y-2">
@@ -295,7 +338,7 @@ export default function OtherExpensesTab({ locationId }: { locationId?: string }
                   id="expense-notes"
                   value={formData.notes}
                   onChange={(e) => setFormData((prev) => ({ ...prev, notes: e.target.value }))}
-                  placeholder="Additional notes..."
+                  placeholder="What was this expense for?"
                   rows={3}
                   className="text-base"
                 />
@@ -305,18 +348,20 @@ export default function OtherExpensesTab({ locationId }: { locationId?: string }
                 <div className="space-y-3 border rounded-md p-3 bg-background">
                   <div className="flex items-center justify-between">
                     <p className="text-sm font-medium text-muted-foreground">
-                      Inventory used{" "}
-                      <span className="font-normal">(optional — auto-depletes stock)</span>
+                      Inventory link{" "}
+                      <span className="font-normal">(optional — only if this expense also used stock)</span>
                     </p>
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="sm"
-                      onClick={addInvLine}
-                      className="h-8 px-2 text-xs gap-1"
-                    >
-                      <Plus className="h-3.5 w-3.5" /> Add item
-                    </Button>
+                    {supportsMultiInventoryItems && (
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        onClick={addInvLine}
+                        className="h-8 px-2 text-xs gap-1"
+                      >
+                        <Plus className="h-3.5 w-3.5" /> Add item
+                      </Button>
+                    )}
                   </div>
 
                   {invLines.length === 0 && (
@@ -331,7 +376,7 @@ export default function OtherExpensesTab({ locationId }: { locationId?: string }
                     </Button>
                   )}
 
-                  {invLines.map((line, idx) => (
+                  {(supportsMultiInventoryItems ? invLines : invLines.slice(0, 1)).map((line, idx) => (
                     <div key={idx} className="grid grid-cols-[1fr_6rem_2rem] gap-2 items-end">
                       <div className="space-y-1">
                         {idx === 0 && <Label className="text-xs text-muted-foreground">Item</Label>}
@@ -361,22 +406,31 @@ export default function OtherExpensesTab({ locationId }: { locationId?: string }
                           className="h-10"
                         />
                       </div>
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="icon"
-                        onClick={() => removeInvLine(idx)}
-                        className="h-10 w-8 text-muted-foreground hover:text-destructive"
-                        aria-label="Remove item"
-                      >
-                        <X className="h-4 w-4" />
-                      </Button>
+                      {supportsMultiInventoryItems ? (
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => removeInvLine(idx)}
+                          className="h-10 w-8 text-muted-foreground hover:text-destructive"
+                          aria-label="Remove item"
+                        >
+                          <X className="h-4 w-4" />
+                        </Button>
+                      ) : (
+                        <div />
+                      )}
                     </div>
                   ))}
 
                   {invLines.some((l) => l.itemType) && (
                     <p className="text-xs text-muted-foreground">
-                      Quantities will be deducted from inventory when saved.
+                      These quantities will be deducted from inventory when you save the expense.
+                    </p>
+                  )}
+                  {!supportsMultiInventoryItems && (
+                    <p className="text-xs text-muted-foreground">
+                      This estate currently supports one linked inventory item per expense.
                     </p>
                   )}
                 </div>
@@ -443,13 +497,18 @@ export default function OtherExpensesTab({ locationId }: { locationId?: string }
                       </CollapsibleTrigger>
 
                       <CollapsibleContent className="pt-3 space-y-2">
-                        {deployment.inventoryItemType && (
+                        {(Array.isArray(deployment.inventoryItems) && deployment.inventoryItems.length > 0) || deployment.inventoryItemType ? (
                           <div className="text-sm text-muted-foreground">
                             <span className="font-medium">Inventory used:</span>{" "}
-                            {deployment.inventoryItemType}
-                            {deployment.inventoryQuantity != null ? ` × ${deployment.inventoryQuantity}` : ""}
+                            {formatInventoryUsage(
+                              Array.isArray(deployment.inventoryItems) && deployment.inventoryItems.length > 0
+                                ? deployment.inventoryItems
+                                : deployment.inventoryItemType
+                                  ? [{ itemType: deployment.inventoryItemType, quantity: deployment.inventoryQuantity }]
+                                  : [],
+                            )}
                           </div>
-                        )}
+                        ) : null}
                         {deployment.notes && (
                           <div className="text-sm text-muted-foreground">
                             <span className="font-medium">Notes:</span> {deployment.notes}
@@ -501,9 +560,13 @@ export default function OtherExpensesTab({ locationId }: { locationId?: string }
                       <TableCell>{deployment.reference || deployment.code}</TableCell>
                       <TableCell className="text-right font-semibold">{formatCurrency(deployment.amount)}</TableCell>
                       <TableCell className="text-sm">
-                        {deployment.inventoryItemType
-                          ? `${deployment.inventoryItemType}${deployment.inventoryQuantity != null ? ` × ${deployment.inventoryQuantity}` : ""}`
-                          : "-"}
+                        {formatInventoryUsage(
+                          Array.isArray(deployment.inventoryItems) && deployment.inventoryItems.length > 0
+                            ? deployment.inventoryItems
+                            : deployment.inventoryItemType
+                              ? [{ itemType: deployment.inventoryItemType, quantity: deployment.inventoryQuantity }]
+                              : [],
+                        )}
                       </TableCell>
                       <TableCell className="max-w-xs truncate">{deployment.notes || "-"}</TableCell>
                       <TableCell>

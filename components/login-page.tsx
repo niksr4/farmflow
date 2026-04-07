@@ -35,6 +35,26 @@ export default function LoginPage() {
     setSessionMode(isStandalone ? "app" : "web")
   }, [])
 
+  const ensurePrivacyNoticeAccepted = async (role: string, tenantId: string) => {
+    if (!tenantId || role === "owner") {
+      return
+    }
+
+    try {
+      const statusResponse = await fetch("/api/privacy/notice-status", { cache: "no-store" })
+      const statusPayload = await statusResponse.json().catch(() => null)
+      if (!statusResponse.ok || !statusPayload?.success) {
+        return
+      }
+
+      if (!statusPayload?.status?.acceptedAt) {
+        await fetch("/api/privacy/accept", { method: "POST" }).catch(() => null)
+      }
+    } catch {
+      // Privacy acknowledgement should not block login if the workspace is not migrated yet.
+    }
+  }
+
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault()
     if (isSubmitting) return
@@ -71,6 +91,7 @@ export default function LoginPage() {
         role,
         tenant_id: tenantId || "global",
       })
+      await ensurePrivacyNoticeAccepted(role, tenantId)
       const mustCompleteGuidedSetup = shouldForceGuidedSetup({
         role,
         requiresGuidedSetup: sessionPayload?.user?.requiresGuidedSetup,

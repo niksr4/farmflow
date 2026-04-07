@@ -11,6 +11,7 @@ describe("inventory onboarding helpers", () => {
   it("skips inaccessible sales checks and steps for restricted users", () => {
     const access: OnboardingAccess = {
       canShowInventory: true,
+      canShowLabor: false,
       canShowProcessing: true,
       canShowDispatch: true,
       canShowSales: false,
@@ -28,6 +29,7 @@ describe("inventory onboarding helpers", () => {
   it("reduces inventory-only onboarding to inventory actions", () => {
     const access: OnboardingAccess = {
       canShowInventory: true,
+      canShowLabor: false,
       canShowProcessing: false,
       canShowDispatch: false,
       canShowSales: false,

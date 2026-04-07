@@ -71,14 +71,18 @@ export async function recomputeProcessingTotals(
             PARTITION BY tenant_id, location_id, coffee_type
             ORDER BY process_date, id
           ) AS dry_cherry_todate,
-          SUM(COALESCE(ROUND((COALESCE(dry_parch, 0) / NULLIF($4, 0))::numeric, 2), 0)) OVER (
-            PARTITION BY tenant_id, location_id, coffee_type
-            ORDER BY process_date, id
-          ) AS dry_p_bags_todate,
-          SUM(COALESCE(ROUND((COALESCE(dry_cherry, 0) / NULLIF($4, 0))::numeric, 2), 0)) OVER (
-            PARTITION BY tenant_id, location_id, coffee_type
-            ORDER BY process_date, id
-          ) AS dry_cherry_bags_todate,
+          COALESCE(ROUND(
+            (SUM(COALESCE(dry_parch, 0)) OVER (
+              PARTITION BY tenant_id, location_id, coffee_type
+              ORDER BY process_date, id
+            ) / NULLIF($4, 0))::numeric, 2
+          ), 0) AS dry_p_bags_todate,
+          COALESCE(ROUND(
+            (SUM(COALESCE(dry_cherry, 0)) OVER (
+              PARTITION BY tenant_id, location_id, coffee_type
+              ORDER BY process_date, id
+            ) / NULLIF($4, 0))::numeric, 2
+          ), 0) AS dry_cherry_bags_todate,
           CASE WHEN COALESCE(crop_today, 0) > 0
             THEN ROUND((COALESCE(ripe_today, 0) / COALESCE(crop_today, 0)) * 100, 2)
             ELSE 0

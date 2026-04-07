@@ -3,6 +3,7 @@ import "server-only"
 import { randomBytes } from "crypto"
 
 import { DEFAULT_TENANT_PLAN_ID, MODULES, clampRequestedModuleStatesToPlan } from "@/lib/modules"
+import { PRIVACY_NOTICE_VERSION } from "@/lib/privacy-config"
 import { logSecurityEvent } from "@/lib/server/security-events"
 import { sql } from "@/lib/server/db"
 import { persistTenantPlanId } from "@/lib/server/tenant-subscriptions"
@@ -40,6 +41,31 @@ const ownerContext = normalizeTenantContext(undefined, "owner")
 const isMissingPasswordRotationColumnError = (error: unknown) => {
   const message = String((error as Error)?.message || error || "")
   return message.includes('column "password_reset_required"') || message.includes('column "password_updated_at"')
+}
+
+const isMissingPrivacyNoticeColumnError = (error: unknown) => {
+  const message = String((error as Error)?.message || error || "")
+  return message.includes('column "privacy_notice_version"') || message.includes('column "privacy_notice_accepted_at"')
+}
+
+const persistSignupPrivacyAcknowledgement = async (userId: string) => {
+  try {
+    await runTenantQuery(
+      sql,
+      ownerContext,
+      sql`
+        UPDATE users
+        SET
+          privacy_notice_version = ${PRIVACY_NOTICE_VERSION},
+          privacy_notice_accepted_at = COALESCE(privacy_notice_accepted_at, CURRENT_TIMESTAMP)
+        WHERE id = ${userId}
+      `,
+    )
+  } catch (error) {
+    if (!isMissingPrivacyNoticeColumnError(error)) {
+      throw error
+    }
+  }
 }
 
 const loadSignupVerification = async (tokenHash: string) =>
@@ -332,11 +358,13 @@ const updateExistingUserForSignup = async (signupRequest: SignupRequestRecord, u
       `,
     )
   }
+
+  await persistSignupPrivacyAcknowledgement(userId)
 }
 
 const createUserForSignup = async (signupRequest: SignupRequestRecord, username: string, tenantId: string) => {
   try {
-    return (await runTenantQuery(
+    const createdUsers = (await runTenantQuery(
       sql,
       ownerContext,
       sql`
@@ -371,12 +399,16 @@ const createUserForSignup = async (signupRequest: SignupRequestRecord, username:
         RETURNING id, username, tenant_id, email
       `,
     )) as UserRow[]
+    if (createdUsers[0]?.id) {
+      await persistSignupPrivacyAcknowledgement(createdUsers[0].id)
+    }
+    return createdUsers
   } catch (error) {
     if (!isMissingPasswordRotationColumnError(error)) {
       throw error
     }
 
-    return (await runTenantQuery(
+    const createdUsers = (await runTenantQuery(
       sql,
       ownerContext,
       sql`
@@ -407,6 +439,10 @@ const createUserForSignup = async (signupRequest: SignupRequestRecord, username:
         RETURNING id, username, tenant_id, email
       `,
     )) as UserRow[]
+    if (createdUsers[0]?.id) {
+      await persistSignupPrivacyAcknowledgement(createdUsers[0].id)
+    }
+    return createdUsers
   }
 }
 

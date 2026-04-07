@@ -1,6 +1,7 @@
 import "server-only"
 
 import { DEFAULT_ALERT_EMAIL_FROM, DEFAULT_SUPPORT_EMAIL } from "@/lib/email-addresses"
+import { classifyTenantGuidance, type TenantGuidanceSummary } from "@/lib/tenant-guidance"
 import { sql } from "@/lib/server/db"
 import { fetchWithTimeout } from "@/lib/server/http"
 import { logServerWarning } from "@/lib/server/safe-logging"
@@ -28,13 +29,6 @@ type TenantEngagementRow = {
   daysSinceLastLogin: number | null
   operationalDataCount: number
   accountCodesCount: number
-}
-
-type TenantStatus = "new" | "active" | "stuck" | "quiet" | "empty"
-
-type TenantEngagementSummary = TenantEngagementRow & {
-  status: TenantStatus
-  flags: string[]
 }
 
 const toRows = <T = any>(value: unknown): T[] => {
@@ -172,30 +166,6 @@ async function fetchTenantEngagementData(): Promise<TenantEngagementRow[]> {
   })
 }
 
-function classifyTenant(row: TenantEngagementRow): TenantEngagementSummary {
-  const flags: string[] = []
-  let status: TenantStatus = "active"
-
-  if (row.daysSinceCreated < 3) {
-    status = "new"
-  } else if (row.totalLogins === 0) {
-    status = "empty"
-    flags.push("Never logged in")
-  } else if (row.totalLogins >= 3 && row.operationalDataCount === 0) {
-    status = "stuck"
-    flags.push(`${row.totalLogins} logins, zero data entered`)
-  } else if (row.daysSinceLastLogin !== null && row.daysSinceLastLogin > 7 && row.totalLogins > 0) {
-    status = "quiet"
-    flags.push(`No login for ${row.daysSinceLastLogin} days`)
-  }
-
-  if (row.accountCodesCount === 0 && row.daysSinceCreated >= 3 && row.totalLogins >= 1) {
-    flags.push("No account codes — labor & expense entry blocked")
-  }
-
-  return { ...row, status, flags }
-}
-
 function buildActivitySummary(a: YesterdayActivity | undefined): string {
   if (!a) return "—"
   const parts: string[] = []
@@ -210,9 +180,9 @@ function buildActivitySummary(a: YesterdayActivity | undefined): string {
   return parts.length > 0 ? parts.join(" · ") : "No activity"
 }
 
-function buildAlertHtml(summaries: TenantEngagementSummary[], generatedAt: string, yesterdayActivity: Map<string, YesterdayActivity>): string {
-  const statusBadge = (status: TenantStatus) => {
-    const styles: Record<TenantStatus, string> = {
+function buildAlertHtml(summaries: Array<TenantEngagementRow & TenantGuidanceSummary>, generatedAt: string, yesterdayActivity: Map<string, YesterdayActivity>): string {
+  const statusBadge = (status: TenantGuidanceSummary["status"]) => {
+    const styles: Record<TenantGuidanceSummary["status"], string> = {
       active:  "background:#dcfce7;color:#166534;",
       stuck:   "background:#fef9c3;color:#854d0e;",
       quiet:   "background:#fee2e2;color:#991b1b;",
@@ -312,7 +282,16 @@ export async function runTenantEngagementAgent(input?: {
     fetchTenantEngagementData(),
     fetchYesterdayActivity(),
   ])
-  const summaries = rows.map(classifyTenant)
+  const summaries = rows.map((row) => ({
+    ...row,
+    ...classifyTenantGuidance({
+      daysSinceCreated: row.daysSinceCreated,
+      totalLogins: row.totalLogins,
+      daysSinceLastLogin: row.daysSinceLastLogin,
+      operationalDataCount: row.operationalDataCount,
+      accountCodesCount: row.accountCodesCount,
+    }),
+  }))
 
   const stuck = summaries.filter((s) => s.status === "stuck").length
   const quiet = summaries.filter((s) => s.status === "quiet").length

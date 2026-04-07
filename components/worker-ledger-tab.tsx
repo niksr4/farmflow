@@ -178,7 +178,7 @@ export default function WorkerLedgerTab() {
               Advances & Deductions
             </CardTitle>
             <CardDescription>
-              Track advances paid, deductions, and adjustments per worker.
+              Track advances paid, deductions, and adjustments from the shared worker roster. Use this only if you want these balances reflected in payroll.
               {filterWorker && workerBalance && (
                 <span className="ml-2 text-xs">
                   Deductions: <span className="font-medium text-rose-400">{formatCurrency(workerBalance.totalDeductions)}</span>

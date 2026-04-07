@@ -73,6 +73,7 @@ import { normalizeInventoryItemType } from "@/lib/inventory-item-type"
 import { getModuleDefaultEnabled } from "@/lib/modules"
 import { appendOwnerPreviewContext, normalizeOwnerPreviewContext } from "@/lib/owner-preview"
 import type { InventoryItem, Transaction } from "@/lib/inventory-types"
+import type { WorkspaceHintAction } from "@/lib/tenant-guidance"
 import { cn } from "@/lib/utils"
 import { Skeleton, SkeletonCard, SkeletonTable } from "@/components/ui/skeleton"
 import { toast } from "@/components/ui/use-toast"
@@ -116,7 +117,6 @@ import {
 import { downloadDataToolsTemplate, exportOpsCsv, getDataToolsSelection } from "@/components/inventory-system/data-tools-export"
 import {
   INITIAL_ONBOARDING_STATUS,
-  buildLaunchGuidePhases,
   buildOnboardingSteps,
   getOnboardingStatusRequests,
   type OnboardingAccess,
@@ -2421,7 +2421,7 @@ export default function InventorySystem() {
           <h2 className="flex items-center text-lg font-semibold text-emerald-700">
             <History className="mr-2 h-5 w-5" /> Transaction History
           </h2>
-          <p className="text-xs text-muted-foreground">Inventory adjustments and usage across the estate.</p>
+          <p className="text-xs text-muted-foreground">Inventory restocks, stock usage, and corrections across the estate.</p>
         </div>
         {showDataToolsControls && (
           <div className="flex gap-2">
@@ -2519,8 +2519,17 @@ export default function InventorySystem() {
             const typeValue = String(transaction.transaction_type ?? "").toLowerCase()
             const isDepleting = typeValue.includes("deplet")
             const isRestocking = typeValue.includes("restock")
-            const typeLabel = isDepleting ? "Depleting" : isRestocking ? "Restocking" : transaction.transaction_type
-            const typeClass = isDepleting
+            const isExpenseUsage = transaction.source_type === "expense"
+            const typeLabel = isExpenseUsage
+              ? transaction.source_label || "Expense Usage"
+              : isDepleting
+                ? "Stock Out"
+                : isRestocking
+                  ? "Restocking"
+                  : transaction.transaction_type
+            const typeClass = isExpenseUsage
+              ? "bg-amber-100 text-amber-700 border-amber-200"
+              : isDepleting
               ? "bg-red-100 text-red-700 border-red-200"
               : isRestocking
                 ? "bg-green-100 text-green-700 border-green-200"
@@ -2616,8 +2625,17 @@ export default function InventorySystem() {
                 const typeValue = String(transaction.transaction_type ?? "").toLowerCase()
                 const isDepleting = typeValue.includes("deplet")
                 const isRestocking = typeValue.includes("restock")
-                const typeLabel = isDepleting ? "Depleting" : isRestocking ? "Restocking" : transaction.transaction_type
-                const typeClass = isDepleting
+                const isExpenseUsage = transaction.source_type === "expense"
+                const typeLabel = isExpenseUsage
+                  ? transaction.source_label || "Expense Usage"
+                  : isDepleting
+                    ? "Stock Out"
+                    : isRestocking
+                      ? "Restocking"
+                      : transaction.transaction_type
+                const typeClass = isExpenseUsage
+                  ? "bg-amber-100 text-amber-700 border-amber-200"
+                  : isDepleting
                   ? "bg-red-100 text-red-700 border-red-200"
                   : isRestocking
                     ? "bg-green-100 text-green-700 border-green-200"
@@ -3349,13 +3367,13 @@ export default function InventorySystem() {
                     : ["Other Sales"],
             }
           : null,
-        // Inventory is for restocking only — placed last as it's the lowest-frequency task
+        // Inventory handles stock movement and sits with the core operations tabs.
         canShowInventoryWorkspace
           ? {
               value: "inventory",
               label: "Inventory",
               icon: List,
-              subtabs: showTransactionHistory ? ["Restock Inventory", "Transaction History"] : ["Restock Inventory"],
+              subtabs: showTransactionHistory ? ["Inventory", "Transaction History"] : ["Inventory"],
             }
           : null,
       ].filter(Boolean) as Array<{
@@ -4790,6 +4808,22 @@ export default function InventorySystem() {
     [canShowInventory, canShowSales, openDrilldown],
   )
 
+  const handleWorkspaceHintAction = useCallback(
+    (action: WorkspaceHintAction) => {
+      if (action.panel && action.tab === "accounts") {
+        setAccountsInitialTab(action.panel as AccountsWorkspaceTab)
+      }
+      if (action.href) {
+        router.push(buildWorkspaceHref(action.href))
+        return
+      }
+      if (action.tab) {
+        handleTabChange(action.tab)
+      }
+    },
+    [buildWorkspaceHref, handleTabChange, router],
+  )
+
   const handleExecutionOutcomeAction = useCallback(
     (check: ExecutionOutcomeCheck) => {
       posthog.capture("execution_scorecard_action_clicked", {
@@ -4955,7 +4989,7 @@ export default function InventorySystem() {
           ? {
               id: "operations" as const,
               label: "Operations",
-              description: "Pulping, dispatch, sales, and stock restocking.",
+              description: "Pulping, dispatch, sales, and stock movement.",
               icon: Factory,
               tabs: operationsTabItems as SectionTabItem[],
               cardClassName: "border-emerald-200/80 bg-emerald-50/50",
@@ -5264,39 +5298,19 @@ export default function InventorySystem() {
   }))
   const onboardingCompletedCount = onboardingSteps.filter((step) => step.done).length
   const onboardingTotalCount = onboardingSteps.length
-  const onboardingPendingSteps = onboardingSteps.filter((step) => !step.done)
-  const onboardingProgressPct =
-    onboardingTotalCount > 0 ? Math.round((onboardingCompletedCount / onboardingTotalCount) * 100) : 100
-  const setupHealthLabel =
-    onboardingProgressPct >= 90
-      ? "Launch-ready"
-      : onboardingProgressPct >= 60
-        ? "In progress"
-        : "Needs setup"
-  const setupHealthTone =
-    onboardingProgressPct >= 90
-      ? "text-emerald-700 border-emerald-200 bg-emerald-50/70"
-      : onboardingProgressPct >= 60
-        ? "text-amber-700 border-amber-200 bg-amber-50/70"
-        : "text-rose-700 border-rose-200 bg-rose-50/70"
-  const launchGuidePhases = buildLaunchGuidePhases(onboardingStatus, onboardingAccess).map((phase) => ({
-    ...phase,
-    onAction: () => handleTabChange(phase.actionTab),
-  }))
   const showOnboarding =
     !isOwner &&
     !LIVE_TENANT_SKIP_TENANTS.has(tenantId || "") &&
     hasLoadedOnboardingStatus &&
     onboardingTotalCount > 0 &&
     onboardingCompletedCount < onboardingTotalCount
-  const showLaunchGuide = showOnboarding
   const recordMovementPanel = (
     <div className="rounded-2xl border border-black/5 bg-white p-6 shadow-sm">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div>
           <h3 className="text-lg font-semibold text-neutral-900">Record Inventory Movement</h3>
           <p className="text-xs text-neutral-500">
-            Keep estate stock movements clear from intake through storage.
+            Use this form for stock coming in, stock used, and stock corrections.
           </p>
         </div>
         <Button variant="ghost" size="sm" onClick={() => setIsMovementDrawerOpen(false)}>
@@ -5513,7 +5527,7 @@ export default function InventorySystem() {
                     <Info className="h-3 w-3" />
                   </button>
                 </TooltipTrigger>
-                <TooltipContent>Restocking adds stock when goods arrive. Use Depleting only for losses, spillage, or corrections — regular usage should be recorded as an expense in Accounts.</TooltipContent>
+                  <TooltipContent>Restocking adds stock when goods arrive. Depleting records stock used, issued, lost, or corrected.</TooltipContent>
               </Tooltip>
             </TooltipProvider>
           </div>
@@ -5533,14 +5547,20 @@ export default function InventorySystem() {
             <div className="flex items-center space-x-3">
               <RadioGroupItem value="Depleting" id="depleting" className="h-5 w-5" />
               <Label htmlFor="depleting" className="text-sm">
-                Depleting <span className="text-neutral-500 font-normal">(losses &amp; corrections)</span>
+                Depleting <span className="text-neutral-500 font-normal">(used, lost, or corrected)</span>
               </Label>
             </div>
           </RadioGroup>
           {newTransaction?.transaction_type !== "restock" && (
             <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
-              Recording regular consumable usage? Add it as an expense in{" "}
-              <strong>Accounts → Other Expenses</strong> instead — the inventory level updates automatically and the cost flows into your P&amp;L.
+              {canShowAccounts ? (
+                <>
+                  Use this when you only need stock tracking. If the same usage should also appear in Accounts and P&amp;L, record it in{" "}
+                  <strong>Accounts → Other Expenses</strong> instead.
+                </>
+              ) : (
+                "Use this for regular stock usage, losses, or corrections."
+              )}
             </p>
           )}
         </div>
@@ -5645,6 +5665,7 @@ export default function InventorySystem() {
                   {recentDrilldownTransactions.map((transaction) => {
                     const txType = String(transaction.transaction_type || "").toLowerCase()
                     const isDepleting = txType.includes("deplet")
+                    const isExpenseUsage = transaction.source_type === "expense"
                     return (
                       <div
                         key={`drilldown-${transaction.id ?? `${transaction.item_type}-${transaction.transaction_date}`}`}
@@ -5654,9 +5675,15 @@ export default function InventorySystem() {
                           <p className="text-xs text-neutral-500">{formatDate(transaction.transaction_date)}</p>
                           <Badge
                             variant="outline"
-                            className={isDepleting ? "border-red-200 bg-red-50 text-red-700" : "border-emerald-200 bg-emerald-50 text-emerald-700"}
+                            className={
+                              isExpenseUsage
+                                ? "border-amber-200 bg-amber-50 text-amber-700"
+                                : isDepleting
+                                  ? "border-red-200 bg-red-50 text-red-700"
+                                  : "border-emerald-200 bg-emerald-50 text-emerald-700"
+                            }
                           >
-                            {isDepleting ? "Deplete" : "Restock"}
+                            {isExpenseUsage ? transaction.source_label || "Expense Usage" : isDepleting ? "Stock Out" : "Restock"}
                           </Badge>
                         </div>
                         <p className="mt-1 text-sm font-semibold text-neutral-900 tabular-nums">
@@ -5872,8 +5899,8 @@ export default function InventorySystem() {
           </Card>
         )}
 
-        {activeTab === "home" && !isOwner && (
-          <WorkspaceHints onTabChange={handleTabChange} />
+        {activeTab === "home" && !isOwner && !showOnboarding && (
+          <WorkspaceHints onAction={handleWorkspaceHintAction} />
         )}
 
         {activeTab === "home" && (
@@ -6328,7 +6355,7 @@ export default function InventorySystem() {
                 <div className="flex items-center gap-3">
                   <Factory className="h-5 w-5 text-emerald-600" />
                   <div>
-                    <p className="text-sm font-semibold text-emerald-900">Log today's processing</p>
+                    <p className="text-sm font-semibold text-emerald-900">Log today&apos;s processing</p>
                     <p className="text-xs text-emerald-700/75">Cherry intake, pulping, and dry outputs</p>
                   </div>
                 </div>
@@ -6336,9 +6363,8 @@ export default function InventorySystem() {
               </button>
             )}
             {isMobile && (
-              <div className="flex items-center justify-between px-1">
+              <div className="px-1">
                 <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-neutral-500">Workspace Sections</p>
-                <p className="text-[11px] text-neutral-500">Swipe</p>
               </div>
             )}
             <div
@@ -6352,8 +6378,6 @@ export default function InventorySystem() {
               {launcherSections.map((section) => {
                 const SectionIcon = section.icon
                 const isSectionActive = activeTabGroup === section.id
-                const previewTabs = isMobile ? [] : section.tabs.slice(0, 4)
-                const hiddenPreviewCount = Math.max(section.tabs.length - previewTabs.length, 0)
 
                 return (
                   <div
@@ -6383,47 +6407,18 @@ export default function InventorySystem() {
                         >
                           {section.description}
                         </p>
+                        {!isMobile && (
+                          <p
+                            className={cn(
+                              "mt-2 text-[11px] font-medium",
+                              isSectionActive ? "text-white/85" : "text-neutral-500",
+                            )}
+                          >
+                            Open section
+                          </p>
+                        )}
                       </div>
                     </button>
-
-                    {!isMobile && previewTabs.length > 0 && (
-                      <div className={cn("mt-3 border-t pt-3", isSectionActive ? "border-white/15" : "border-black/10")}>
-                        <div className="flex flex-wrap gap-2">
-                          {previewTabs.map((tab) => {
-                            const TabIcon = tab.icon
-                            const isPreviewActive = activeTab === tab.value
-                            return (
-                              <button
-                                key={tab.value}
-                                type="button"
-                                onClick={() => handleTabChange(tab.value)}
-                                className={cn(
-                                  "inline-flex min-h-9 items-center gap-1.5 rounded-lg border px-3 py-2 text-xs font-semibold transition-colors",
-                                  isPreviewActive ? section.previewTabActiveClassName : section.previewTabClassName,
-                                )}
-                              >
-                                <TabIcon className="h-3.5 w-3.5" />
-                                <span>{tab.label}</span>
-                              </button>
-                            )
-                          })}
-                          {hiddenPreviewCount > 0 && (
-                            <button
-                              type="button"
-                              onClick={goToWorkspaceNavigator}
-                              className={cn(
-                                "inline-flex min-h-9 items-center rounded-lg border px-3 py-2 text-xs font-semibold transition-colors",
-                                isSectionActive
-                                  ? "border-white/20 bg-white/10 text-white hover:bg-white/15"
-                                  : "border-dashed border-black/15 bg-white/85 text-neutral-700 hover:border-emerald-200 hover:text-emerald-700",
-                              )}
-                            >
-                              +{hiddenPreviewCount} more
-                            </button>
-                          )}
-                        </div>
-                      </div>
-                    )}
                   </div>
                 )
               })}
@@ -6463,13 +6458,10 @@ export default function InventorySystem() {
                   <Badge variant="outline" className="border-emerald-200 bg-emerald-50 text-emerald-700">
                     Workspace Navigator
                   </Badge>
-                  <Badge variant="outline" className="border-black/10 bg-white text-neutral-700">
-                    {Math.max(visibleTabs.length - 1, 0)} tabs available
-                  </Badge>
                 </div>
-                <CardTitle className={cn("leading-tight", isMobile ? "text-xl" : "text-2xl")}>Choose where to work</CardTitle>
+                <CardTitle className={cn("leading-tight", isMobile ? "text-xl" : "text-2xl")}>Choose your work area</CardTitle>
                 <CardDescription>
-                  Choose the area you want to work in below.
+                  Start with one area, then use the section tabs above once you are inside it.
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
@@ -6485,7 +6477,7 @@ export default function InventorySystem() {
                       </div>
                       <div>
                         <p className="text-sm font-semibold text-amber-900">Record Expense</p>
-                        <p className="text-xs text-amber-700">Accounts → Other Expenses</p>
+                        <p className="text-xs text-amber-700">Open Accounts</p>
                       </div>
                     </button>
                     <button
@@ -6498,7 +6490,7 @@ export default function InventorySystem() {
                       </div>
                       <div>
                         <p className="text-sm font-semibold text-amber-900">Record Labor</p>
-                        <p className="text-xs text-amber-700">Accounts → Labor Deployments</p>
+                        <p className="text-xs text-amber-700">Open Accounts</p>
                       </div>
                     </button>
                   </div>
@@ -7003,96 +6995,6 @@ export default function InventorySystem() {
               </Card>
             )}
 
-            {showLaunchGuide && (
-              <div className="grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(0,1.4fr)]">
-                <Card className="border-black/5 bg-white/90">
-                  <CardHeader>
-                    <CardTitle>Setup Health</CardTitle>
-                    <CardDescription>
-                      Track onboarding completion so operations, dispatch, and sales stay aligned from week one.
-                    </CardDescription>
-                  </CardHeader>
-                  <CardContent className="space-y-4">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <Badge className={cn("border", setupHealthTone)}>{setupHealthLabel}</Badge>
-                      <span className="text-sm text-muted-foreground">
-                        {onboardingCompletedCount}/{onboardingTotalCount} setup steps complete
-                      </span>
-                    </div>
-                    <div className="space-y-2">
-                      <div className="h-2 rounded-full bg-neutral-100">
-                        <div
-                          className={cn(
-                            "h-2 rounded-full transition-[width]",
-                            onboardingProgressPct >= 90
-                              ? "bg-emerald-600"
-                              : onboardingProgressPct >= 60
-                                ? "bg-amber-500"
-                                : "bg-rose-500",
-                          )}
-                          style={{ width: `${onboardingProgressPct}%` }}
-                        />
-                      </div>
-                      <p className="text-xs text-muted-foreground">{onboardingProgressPct}% complete</p>
-                    </div>
-                    {onboardingPendingSteps[0] && (
-                      <div className="rounded-xl border border-black/5 bg-neutral-50/80 p-3">
-                        <p className="text-xs uppercase tracking-[0.16em] text-neutral-500">Next recommended step</p>
-                        <p className="mt-1 text-sm font-medium text-neutral-900">{onboardingPendingSteps[0].title}</p>
-                        <p className="mt-1 text-xs text-muted-foreground">{onboardingPendingSteps[0].description}</p>
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          className="mt-3 bg-white"
-                          onClick={onboardingPendingSteps[0].onAction}
-                        >
-                          {onboardingPendingSteps[0].actionLabel}
-                        </Button>
-                      </div>
-                    )}
-                  </CardContent>
-                </Card>
-
-                <Card className="border-black/5 bg-white/90">
-                  <CardHeader>
-                    <CardTitle>First 30 Days</CardTitle>
-                    <CardDescription>
-                      A first-month plan for new estates with clear weekly checkpoints.
-                    </CardDescription>
-                  </CardHeader>
-                  <CardContent className="space-y-3">
-                    {launchGuidePhases.map((phase) => (
-                      <div key={phase.id} className="rounded-xl border border-black/5 bg-white p-3">
-                        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                          <div>
-                            <p className="text-xs uppercase tracking-[0.16em] text-neutral-500">{phase.label}</p>
-                            <p className="text-sm font-semibold text-neutral-900">{phase.title}</p>
-                          </div>
-                          <Badge
-                            variant="outline"
-                            className={cn(
-                              "w-fit",
-                              phase.done
-                                ? "border-emerald-200 bg-emerald-50 text-emerald-700"
-                                : "border-amber-200 bg-amber-50 text-amber-700",
-                            )}
-                          >
-                            {phase.done ? "Done" : "Pending"}
-                          </Badge>
-                        </div>
-                        <p className="mt-1 text-xs text-muted-foreground">{phase.detail}</p>
-                        {!phase.done && (
-                          <Button size="sm" variant="outline" className="mt-3 bg-white" onClick={phase.onAction}>
-                            {phase.actionLabel}
-                          </Button>
-                        )}
-                      </div>
-                    ))}
-                  </CardContent>
-                </Card>
-              </div>
-            )}
-
             {isMobile && mobileHomeQuickActions.length > 0 && (
               <Card className="border-black/5 bg-white/90">
                 <CardHeader className="pb-3">
@@ -7587,21 +7489,33 @@ export default function InventorySystem() {
                   <div className="flex items-start gap-3">
                     <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" />
                     <div className="space-y-0.5">
-                      <p className="text-sm font-semibold text-amber-900">This tab is for restocking only</p>
+                      <p className="text-sm font-semibold text-amber-900">Inventory can handle stock usage directly</p>
                       <p className="text-xs text-amber-800">
-                        To record fertiliser, chemicals, fuel, or any other consumable usage — go to <strong>Accounts → Other Expenses</strong>. The inventory level adjusts automatically and the cost flows into your P&amp;L.
+                        Use <strong>Deplete</strong> here when you only need stock tracking for fertiliser, chemicals, fuel, or other consumables.{" "}
+                        {canShowAccounts
+                          ? "Use Accounts → Other Expenses only when the same usage should also land in Accounts and P&L."
+                          : "This works even if you do not use Accounts."}
                       </p>
                     </div>
                   </div>
-                  {canShowAccounts && (
+                  <div className="flex shrink-0 flex-wrap gap-2">
                     <button
                       type="button"
-                      onClick={() => { setAccountsInitialTab("expenses"); handleTabChange("accounts") }}
-                      className="shrink-0 rounded-lg border border-amber-300 bg-white px-3 py-2 text-xs font-semibold text-amber-800 transition-colors hover:bg-amber-100 touch-manipulation"
+                      onClick={() => openMovementDrawer("deplete")}
+                      className="rounded-lg border border-amber-300 bg-white px-3 py-2 text-xs font-semibold text-amber-800 transition-colors hover:bg-amber-100 touch-manipulation"
                     >
-                      Go to Expenses →
+                      Record stock usage
                     </button>
-                  )}
+                    {canShowAccounts && (
+                      <button
+                        type="button"
+                        onClick={() => { setAccountsInitialTab("expenses"); handleTabChange("accounts") }}
+                        className="rounded-lg border border-amber-300 bg-white px-3 py-2 text-xs font-semibold text-amber-800 transition-colors hover:bg-amber-100 touch-manipulation"
+                      >
+                        Open Expenses →
+                      </button>
+                    )}
+                  </div>
                 </div>
               )}
               <Card className="border-border/70 bg-white/90">
@@ -7609,8 +7523,10 @@ export default function InventorySystem() {
                   <CardTitle className="text-xs uppercase tracking-[0.2em] text-muted-foreground">Inventory Dashboard</CardTitle>
                   <CardDescription>
                     {resolvedInventoryWorkspaceView === "transactions"
-                      ? "Review and correct movement history without leaving Inventory."
-                      : "Asset tracker — restock here when goods arrive. Record consumable usage as an expense in Accounts; the inventory level updates automatically."}
+                      ? "Review and correct stock history without leaving Inventory."
+                      : canShowAccounts
+                        ? "Track restocks, stock usage, and corrections here. Use Accounts only when the same usage should also hit P&L."
+                        : "Track restocks, stock usage, and corrections here."}
                   </CardDescription>
                 </CardHeader>
                 <CardContent className="grid gap-4 lg:grid-cols-[1.6fr_1fr]">
@@ -7675,9 +7591,9 @@ export default function InventorySystem() {
                       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                         <div className="space-y-1">
                           <h2 className="text-base font-semibold text-neutral-900 flex items-center">
-                            <List className="mr-2 h-5 w-5 text-emerald-600" /> Restock Inventory Levels
+                            <List className="mr-2 h-5 w-5 text-emerald-600" /> Inventory Levels
                           </h2>
-                          <p className="text-xs text-neutral-500">Totals for {selectedLocationLabel}. Stock value shown here is not included in P&amp;L.</p>
+                          <p className="text-xs text-neutral-500">Totals for {selectedLocationLabel}. Restock when goods arrive. Deplete when stock is issued, consumed, lost, or corrected.</p>
                         </div>
                         <div className="flex flex-wrap gap-2">
                           {showDataToolsControls && (
@@ -7960,7 +7876,7 @@ export default function InventorySystem() {
                       >
                         <span className="flex items-center gap-2">
                           <Plus className="h-4 w-4 text-emerald-600" />
-                          Record movement
+                          Record stock movement
                         </span>
                         <span className="text-xs text-neutral-400">Form</span>
                       </button>
@@ -7979,7 +7895,7 @@ export default function InventorySystem() {
                           onClick={() => openMovementDrawer("deplete")}
                           className="flex min-h-11 items-center justify-center rounded-xl border border-amber-200 bg-amber-50/80 px-3 py-2 text-sm font-medium text-amber-800 transition-colors hover:bg-amber-100"
                         >
-                          Depleting
+                          Use stock
                         </button>
                       </div>
                       <button

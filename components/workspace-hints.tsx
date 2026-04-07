@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react"
 import { X, AlertCircle, Lightbulb, Settings } from "lucide-react"
 import { cn } from "@/lib/utils"
-import type { WorkspaceHint } from "@/app/api/dashboard/hints/route"
+import type { WorkspaceHint, WorkspaceHintAction } from "@/lib/tenant-guidance"
 
 const DISMISSED_KEY = "farmflow:dismissed-hints"
 
@@ -41,10 +41,10 @@ const iconStyles = {
 }
 
 type WorkspaceHintsProps = {
-  onTabChange?: (tab: string) => void
+  onAction?: (action: WorkspaceHintAction) => void
 }
 
-export default function WorkspaceHints({ onTabChange }: WorkspaceHintsProps) {
+export default function WorkspaceHints({ onAction }: WorkspaceHintsProps) {
   const [hints, setHints] = useState<WorkspaceHint[]>([])
   const [dismissed, setDismissed] = useState<Set<string>>(new Set())
   const [loaded, setLoaded] = useState(false)
@@ -65,7 +65,7 @@ export default function WorkspaceHints({ onTabChange }: WorkspaceHintsProps) {
       .finally(() => setLoaded(true))
   }, [retryCount])
 
-  const visible = hints.filter((h) => !dismissed.has(h.id))
+  const visible = hints.filter((hint) => hint.dismissible === false || !dismissed.has(hint.id))
 
   if (!loaded) return null
 
@@ -111,22 +111,24 @@ export default function WorkspaceHints({ onTabChange }: WorkspaceHintsProps) {
             <div className="flex-1 min-w-0">
               <p className="font-medium leading-snug">{hint.title}</p>
               <p className="mt-0.5 text-xs opacity-80 leading-relaxed">{hint.body}</p>
-              {hint.action && onTabChange && (
+              {hint.action && onAction && (
                 <button
                   className="mt-1.5 text-xs font-semibold underline underline-offset-2 opacity-90 hover:opacity-100"
-                  onClick={() => onTabChange(hint.action!.tab)}
+                  onClick={() => onAction(hint.action!)}
                 >
                   {hint.action.label} →
                 </button>
               )}
             </div>
-            <button
-              onClick={() => dismiss(hint.id)}
-              className="shrink-0 mt-0.5 opacity-50 hover:opacity-80 transition-opacity"
-              aria-label="Dismiss"
-            >
-              <X className="h-3.5 w-3.5" />
-            </button>
+            {hint.dismissible !== false && (
+              <button
+                onClick={() => dismiss(hint.id)}
+                className="shrink-0 mt-0.5 opacity-50 hover:opacity-80 transition-opacity"
+                aria-label="Dismiss"
+              >
+                <X className="h-3.5 w-3.5" />
+              </button>
+            )}
           </div>
         )
       })}

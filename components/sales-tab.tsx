@@ -1121,9 +1121,9 @@ export default function SalesTab({
 
       <Card className="border-border/70 bg-white/90">
         <CardHeader className="pb-3">
-          <CardTitle className="text-xs uppercase tracking-[0.2em] text-muted-foreground">Revenue Dashboard</CardTitle>
+          <CardTitle className="text-xs uppercase tracking-[0.2em] text-muted-foreground">Revenue summary</CardTitle>
           <CardDescription>
-            {salesFilterLocationId !== LOCATION_ALL ? "Estate filter applied." : "Across all estates."}
+            {salesFilterLocationId !== LOCATION_ALL ? "Filtered to one location." : "Across all locations."}
           </CardDescription>
         </CardHeader>
         <CardContent className="grid gap-4 lg:grid-cols-[1.6fr_1fr]">
@@ -1182,44 +1182,41 @@ export default function SalesTab({
         )}
       >
         <CardHeader className="pb-3">
-          <CardTitle className="text-xs uppercase tracking-[0.2em] text-muted-foreground">Selection Pre-Check</CardTitle>
+          <CardTitle className="text-xs uppercase tracking-[0.2em] text-muted-foreground">Before you save</CardTitle>
           <CardDescription>
-            Guardrail before save: this checks one strict slot only (coffee type + bag type), not estate totals.
+            This checks the exact stock line you selected: coffee type plus bag type.
           </CardDescription>
           <p className="text-xs text-muted-foreground">
             Selection: {selectionScopeLabel} · {coffeeType} · {bagType}
           </p>
           <p className="text-xs text-muted-foreground">
-            Available for this selection is confirmed received stock for this exact slot. Unconfirmed dispatch is not sellable.
-          </p>
-          <p className="text-xs text-muted-foreground">
-            Note: validation uses confirmed received KGs in this scope to match the availability cards below.
+            Only confirmed received stock is sellable here. Unconfirmed dispatch does not count yet.
           </p>
           {isLegacyPooledAvailability && (
             <p className="text-xs font-medium text-amber-700">
-              Legacy pooled stock mode: availability is estate-wide to preserve pre-location history.
+              Legacy pooled stock mode is active, so availability is checked estate-wide to preserve old history.
             </p>
           )}
           {editAllowance.matchesSelection && (
             <p className="text-xs text-muted-foreground">
-              Edit allowance applied: {formatNumber(editAllowance.allowanceKgs)} KGs from this record.
+              Editing credit: {formatNumber(editAllowance.allowanceKgs)} KGs from this record.
             </p>
           )}
           {hasOtherTypeAvailability && (
             <p className="text-xs font-medium text-amber-700">
-              No stock for this exact selection. Other coffee or bag types in this scope still have
+              No stock is available for this exact selection. Other coffee or bag types in this scope still have
               {" "}{formatNumber(selectionScopeAvailabilityTotals.totalAvailable)} KGs available.
             </p>
           )}
         </CardHeader>
         <CardContent className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-6">
           <div className="rounded-lg border border-border/60 bg-white/80 p-3">
-            <p className="text-xs text-muted-foreground">Scope</p>
-            <p className="mt-1 text-sm font-semibold text-foreground">Estate-wide</p>
+            <p className="text-xs text-muted-foreground">Check scope</p>
+            <p className="mt-1 text-sm font-semibold text-foreground">{selectionScopeLabel}</p>
             <p className="mt-1 text-xs text-muted-foreground">{coffeeType} · {bagType}</p>
           </div>
           <div className="rounded-lg border border-border/60 bg-white/80 p-3">
-            <p className="text-xs text-muted-foreground">Available for this selection</p>
+            <p className="text-xs text-muted-foreground">Available now</p>
             <p className="mt-1 text-sm font-semibold text-foreground">
               {formatNumber(selectionAvailability.availableKgs)} KGs
             </p>
@@ -1252,7 +1249,7 @@ export default function SalesTab({
             )}
           </div>
           <div className="rounded-lg border border-border/60 bg-white/80 p-3">
-            <p className="text-xs text-muted-foreground">Projected balance</p>
+            <p className="text-xs text-muted-foreground">Left after this sale</p>
             <p className="mt-1 text-sm font-semibold text-foreground">{formatNumber(projectedRemainingKgs)} KGs</p>
             <p className="mt-1 text-xs text-muted-foreground">{formatNumber(projectedRemainingBags)} bags</p>
           </div>
@@ -1262,7 +1259,7 @@ export default function SalesTab({
             <p className="mt-1 text-xs text-muted-foreground">Price: {formatCurrency(pricePerBagValue)}</p>
           </div>
           <div className="rounded-lg border border-border/60 bg-white/80 p-3">
-            <p className="text-xs text-muted-foreground">All coffee types in this scope</p>
+            <p className="text-xs text-muted-foreground">Other stock in this scope</p>
             <p className="mt-1 text-sm font-semibold text-foreground">
               {formatNumber(selectionScopeAvailabilityTotals.totalAvailable)} KGs
             </p>
@@ -1279,10 +1276,10 @@ export default function SalesTab({
       <Card className="order-3 border-border/70 bg-white/85">
         <CardHeader className="pb-3">
           <CardTitle className="text-xs uppercase tracking-[0.2em] text-muted-foreground">
-            Inventory Available for Sale
+            Available stock
           </CardTitle>
           <CardDescription>
-            Scope: {overviewScopeLabel}. Based on dispatch received KGs only.
+            Scope: {overviewScopeLabel}. Based only on confirmed received KGs.
           </CardDescription>
         </CardHeader>
         <CardContent className="grid grid-cols-1 lg:grid-cols-3 gap-4">
@@ -1421,15 +1418,38 @@ export default function SalesTab({
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <IndianRupee className="h-5 w-5" />
-            {editingRecord ? "Edit Sale" : "Record Sale"}
+            {editingRecord ? "Edit sale entry" : "Sale entry"}
           </CardTitle>
           <CardDescription>
             {editingRecord
-              ? "Update the sales record"
-              : "Record sales for a location (availability follows dispatch received KGs by coffee type and bag type)."}
+              ? "Update the buyer, quantity, or price for this sale."
+              : "Record one confirmed sale with the buyer, quantity, and agreed price."}
           </CardDescription>
         </CardHeader>
         <CardContent>
+          <div className="mb-4 rounded-2xl border border-amber-100 bg-amber-50/60 p-4">
+            <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+              <div className="rounded-xl border border-white/70 bg-white/85 p-3">
+                <p className="text-[11px] uppercase tracking-[0.18em] text-amber-700">Location</p>
+                <p className="mt-1 text-sm font-semibold text-foreground">
+                  {selectedLocation?.name || selectedLocation?.code || "Select a location"}
+                </p>
+              </div>
+              <div className="rounded-xl border border-white/70 bg-white/85 p-3">
+                <p className="text-[11px] uppercase tracking-[0.18em] text-amber-700">Coffee</p>
+                <p className="mt-1 text-sm font-semibold text-foreground">{coffeeType}</p>
+              </div>
+              <div className="rounded-xl border border-white/70 bg-white/85 p-3">
+                <p className="text-[11px] uppercase tracking-[0.18em] text-amber-700">Bag type</p>
+                <p className="mt-1 text-sm font-semibold text-foreground">{formatBagTypeLabel(bagType)}</p>
+              </div>
+              <div className="rounded-xl border border-white/70 bg-white/85 p-3">
+                <p className="text-[11px] uppercase tracking-[0.18em] text-amber-700">Save rule</p>
+                <p className="mt-1 text-sm font-semibold text-foreground">One buyer, one stock line, one agreed price</p>
+              </div>
+            </div>
+          </div>
+
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
             {/* Date */}
             <div className="space-y-2">
@@ -1458,7 +1478,7 @@ export default function SalesTab({
               />
               <Input
                 type="text"
-                placeholder="e.g., MAIN-A1, BLOCK-07"
+                placeholder="Optional batch or ledger reference"
                 value={batchNo}
                 onChange={(e) => setBatchNo(e.target.value)}
               />
@@ -1481,8 +1501,8 @@ export default function SalesTab({
               </Select>
               <p className="text-xs text-muted-foreground">
                 {isLegacyPooledAvailability
-                  ? "Legacy pooled mode is active for this estate; availability is estate-wide."
-                  : "Location is captured for traceability; availability is checked estate-wide."}
+                  ? "Legacy pooled mode is active for this estate, so availability is checked estate-wide."
+                  : "Location is captured for traceability. Stock validation is still checked estate-wide right now."}
               </p>
             </div>
 
@@ -1549,7 +1569,7 @@ export default function SalesTab({
               )}
               {editAllowance.matchesSelection && (
                 <p className="text-xs text-muted-foreground">
-                  Includes {formatNumber(editAllowance.allowanceKgs)} KGs from the record you are editing.
+                  Editing credit: {formatNumber(editAllowance.allowanceKgs)} KGs from this record.
                 </p>
               )}
               {netSelectionOverdrawnKgs > 0 && (
@@ -1572,7 +1592,7 @@ export default function SalesTab({
             {/* Price per Bag */}
             <div className="space-y-2">
               <FieldLabel
-                label="Price per Bag (Rs)"
+                label="Price per bag (Rs)"
                 tooltip="Selling price per bag; revenue auto-calculates."
               />
               <Input
@@ -1604,7 +1624,7 @@ export default function SalesTab({
               />
               <Input
                 type="text"
-                placeholder="e.g., H3xl3"
+                placeholder="Optional bank or settlement reference"
                 value={bankAccount}
                 onChange={(e) => setBankAccount(e.target.value)}
               />
@@ -1619,7 +1639,7 @@ export default function SalesTab({
               <Input
                 type="text"
                 list="buyer-suggestions"
-                placeholder="e.g., LD, Ned"
+                placeholder="Buyer name"
                 value={buyerName}
                 onChange={(e) => setBuyerName(e.target.value)}
               />
@@ -1632,10 +1652,10 @@ export default function SalesTab({
 
             {/* Notes */}
             <div className="space-y-2 md:col-span-2 xl:col-span-2">
-              <Label>Notes (Optional)</Label>
+              <Label>Sale notes</Label>
               <Input
                 type="text"
-                placeholder="Any notes..."
+                placeholder="Transport note, payment note, sample note, or anything worth remembering..."
                 value={notes}
                 onChange={(e) => setNotes(e.target.value)}
               />
@@ -1661,7 +1681,7 @@ export default function SalesTab({
               ) : (
                 <>
                   <Save className="mr-2 h-4 w-4" />
-                  {editingRecord ? "Update Sale" : "Save Sale"}
+                  {editingRecord ? "Update sale" : "Save sale"}
                 </>
               )}
             </Button>
@@ -1692,9 +1712,9 @@ export default function SalesTab({
             <div>
               <CardTitle className="flex items-center gap-2">
                 <TrendingUp className="h-5 w-5" />
-                Sales Records
+                Sales history
               </CardTitle>
-              <CardDescription>History of all coffee sales · {resolvedSalesCountLabel}</CardDescription>
+              <CardDescription>Review and reopen previous coffee sales · {resolvedSalesCountLabel}</CardDescription>
             </div>
             <div className="flex flex-wrap items-center gap-2">
               <Select value={salesFilterLocationId} onValueChange={(value) => {
@@ -1724,13 +1744,13 @@ export default function SalesTab({
         </CardHeader>
         <CardContent>
           {selectedSalesRecord && (
-            <div className="mb-4 rounded-xl border border-emerald-100 bg-emerald-50/50 p-3 text-sm">
-              <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
-                <div>
-                  <p className="text-xs uppercase tracking-[0.2em] text-emerald-700">Sale Drill-Down</p>
-                  <p className="font-medium text-foreground">
-                    {formatDateOnly(selectedSalesRecord.sale_date)} · {selectedSalesRecord.buyer_name || "Buyer TBD"}
-                    {selectedSalesRecord.batch_no ? ` · Batch ${selectedSalesRecord.batch_no}` : ""}
+                <div className="mb-4 rounded-xl border border-emerald-100 bg-emerald-50/50 p-3 text-sm">
+                  <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+                    <div>
+                      <p className="text-xs uppercase tracking-[0.2em] text-emerald-700">Selected sale</p>
+                      <p className="font-medium text-foreground">
+                        {formatDateOnly(selectedSalesRecord.sale_date)} · {selectedSalesRecord.buyer_name || "Buyer TBD"}
+                        {selectedSalesRecord.batch_no ? ` · Batch ${selectedSalesRecord.batch_no}` : ""}
                   </p>
                 </div>
                 <Button
@@ -1763,7 +1783,7 @@ export default function SalesTab({
           ) : salesRecords.length === 0 ? (
             <EmptyStateTable
               title="No sales recorded yet"
-              description="Add a sale when buyer and price are confirmed — enter the location, buyer, quantity, and agreed price."
+              description="Add the first confirmed sale: location, buyer, quantity, and agreed price."
               action={{ label: "Use form above", onClick: scrollToEntryForm }}
             />
           ) : (
