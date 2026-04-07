@@ -181,7 +181,7 @@ export default function WorkspaceHints({ onAction }: WorkspaceHintsProps) {
                     variant="outline"
                     size="sm"
                     className={cn("mt-3 h-9 rounded-full px-3.5", tone.action)}
-                    onClick={() => onAction(hint.action!)}
+                    onClick={() => onAction?.(hint.action!)}
                   >
                     {hint.action.label}
                     <ArrowRight className="h-3.5 w-3.5" />
