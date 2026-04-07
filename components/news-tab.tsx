@@ -91,7 +91,7 @@ export default function NewsTab() {
       <Card>
         <CardHeader>
           <CardTitle>Market News</CardTitle>
-          <CardDescription>Latest coffee market headlines and pricing signals.</CardDescription>
+          <CardDescription>Latest coffee and pepper market headlines and pricing signals.</CardDescription>
         </CardHeader>
         <CardContent>
           <Alert variant="destructive">
@@ -113,7 +113,7 @@ export default function NewsTab() {
         <Card className="lg:col-span-1">
           <CardHeader>
             <CardTitle>Market Pulse</CardTitle>
-            <CardDescription>Headline sentiment for Arabica & Robusta.</CardDescription>
+            <CardDescription>Headline sentiment across coffee and pepper markets.</CardDescription>
           </CardHeader>
           <CardContent className="space-y-3">
             <div className="flex items-center gap-3">
@@ -129,7 +129,7 @@ export default function NewsTab() {
         <Card className="lg:col-span-2">
           <CardHeader>
             <CardTitle>Price Mentions</CardTitle>
-            <CardDescription>Headlines that include price references.</CardDescription>
+            <CardDescription>Headlines with ₹ or USD price references.</CardDescription>
           </CardHeader>
           <CardContent className="space-y-3">
             {data.priceSignals.length ? (
@@ -153,8 +153,8 @@ export default function NewsTab() {
 
       <Card>
         <CardHeader>
-          <CardTitle>Latest Coffee Market News</CardTitle>
-          <CardDescription>Arabica, Robusta, and coffee trade updates.</CardDescription>
+          <CardTitle>Latest Coffee & Pepper Market News</CardTitle>
+          <CardDescription>Arabica, Robusta, pepper, and India trade updates.</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           {data.articles.length ? (
