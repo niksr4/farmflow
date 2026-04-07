@@ -9,6 +9,7 @@ import { logServerWarning } from "@/lib/server/safe-logging"
 import { getCropLabel, getCropVarietiesLabel, mergeTenantEstateProfile } from "@/lib/tenant-estate-profile"
 import { buildEstateCalendarContext } from "@/lib/coffee-estate-calendar"
 import { buildAgronomyContext } from "@/lib/coffee-agronomy"
+import { upsertWeeklyMetrics, fetchHistoricalMetrics, buildHistoricalBaselineContext } from "@/lib/server/tenant-weekly-metrics"
 
 type TenantDigestRow = {
   tenantId: string
@@ -75,7 +76,8 @@ async function fetchTenantOwnersWithVerifiedEmail(): Promise<TenantDigestRow[]> 
 }
 
 type LastWeekActivity = {
-  weekLabel: string  // e.g. "31 Mar – 6 Apr 2026"
+  weekLabel: string   // e.g. "31 Mar – 6 Apr 2026"
+  weekStart: string   // YYYY-MM-DD (ISO Monday)
   processingKg: number
   processingDays: number
   laborEntries: number
@@ -108,7 +110,7 @@ async function fetchLastWeekActivity(tenantId: string): Promise<LastWeekActivity
 
   const weekLabel = `${lastMonday.toLocaleDateString("en-IN", { day: "numeric", month: "short" })} – ${lastSunday.toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })}`
 
-  const empty: LastWeekActivity = { weekLabel, processingKg: 0, processingDays: 0, laborEntries: 0, laborCost: 0, laborWorkers: 0, expenseTotal: 0, expenseEntries: 0, salesRevenue: 0, dispatchBags: 0, rainfallInches: 0, pickingEntries: 0 }
+  const empty: LastWeekActivity = { weekLabel, weekStart: startDate, processingKg: 0, processingDays: 0, laborEntries: 0, laborCost: 0, laborWorkers: 0, expenseTotal: 0, expenseEntries: 0, salesRevenue: 0, dispatchBags: 0, rainfallInches: 0, pickingEntries: 0 }
   if (!sql) return empty
 
   try {
@@ -141,6 +143,7 @@ async function fetchLastWeekActivity(tenantId: string): Promise<LastWeekActivity
     const row = (Array.isArray(result) ? result[0] : (result as any)?.rows?.[0]) ?? {}
     return {
       weekLabel,
+      weekStart: startDate,
       processingKg: Number(row.proc_kg) || 0,
       processingDays: Number(row.proc_days) || 0,
       laborEntries: Number(row.labor_entries) || 0,
@@ -178,10 +181,43 @@ async function generateWeeklyDigestText(tenant: TenantDigestRow): Promise<string
       fetchLastWeekActivity(tenant.tenantId),
     ])
 
+    // Persist this week's metrics, then load historical baselines in parallel
+    await upsertWeeklyMetrics({
+      tenantId: tenant.tenantId,
+      weekStart: lastWeek.weekStart,
+      cherryKg: lastWeek.processingKg,
+      processingDays: lastWeek.processingDays,
+      parchmentBags: lastWeek.dispatchBags,
+      laborEntries: lastWeek.laborEntries,
+      laborWorkerDays: lastWeek.laborWorkers,
+      laborCost: lastWeek.laborCost,
+      expenseTotal: lastWeek.expenseTotal,
+      expenseEntries: lastWeek.expenseEntries,
+      rainfallInches: lastWeek.rainfallInches,
+      dispatchBags: lastWeek.dispatchBags,
+      salesRevenue: lastWeek.salesRevenue,
+      pickingEntries: lastWeek.pickingEntries,
+    })
+    const history = await fetchHistoricalMetrics(tenant.tenantId, 12)
+
     const cropLabel = getCropLabel({ cropFamily: tenant.cropFamily, primaryVarieties: tenant.primaryVarieties, acreageAcres: null, weatherLocationLabel: "", weatherLatitude: null, weatherLongitude: null })
     const varietiesLabel = getCropVarietiesLabel({ cropFamily: tenant.cropFamily, primaryVarieties: tenant.primaryVarieties, acreageAcres: null, weatherLocationLabel: "", weatherLatitude: null, weatherLongitude: null })
     const cropContext = varietiesLabel ? `${cropLabel} (${varietiesLabel})` : cropLabel
     const lastWeekSection = buildLastWeekSection(lastWeek)
+    const historySection = buildHistoricalBaselineContext(history, {
+      cherryKg: lastWeek.processingKg,
+      processingDays: lastWeek.processingDays,
+      parchmentBags: lastWeek.dispatchBags,
+      laborEntries: lastWeek.laborEntries,
+      laborWorkerDays: lastWeek.laborWorkers,
+      laborCost: lastWeek.laborCost,
+      expenseTotal: lastWeek.expenseTotal,
+      expenseEntries: lastWeek.expenseEntries,
+      rainfallInches: lastWeek.rainfallInches,
+      dispatchBags: lastWeek.dispatchBags,
+      salesRevenue: lastWeek.salesRevenue,
+      pickingEntries: lastWeek.pickingEntries,
+    })
     const calendarContext = buildEstateCalendarContext()
     const agronomyContext = buildAgronomyContext()
 
@@ -211,6 +247,8 @@ Rules:
           content: `Generate a weekly operations digest for ${tenant.tenantName}.
 
 ${lastWeekSection}
+
+${historySection}
 
 ## Season-to-Date Context (FY ${fiscalYearLabel})
 ${dataSummary}
