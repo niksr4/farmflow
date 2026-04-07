@@ -23,7 +23,7 @@ export async function GET(_request: NextRequest) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
   }
   const weatherApiKey = process.env.WEATHERAPI_API_KEY
-  const newsApiKey = process.env.NEWS_API_KEY // New API key for news
+  const newsApiKey = process.env.THENEWSAPI_API_KEY
 
   let formattedWeather: any = {
     location: "São Paulo, Brazil",
@@ -74,26 +74,20 @@ export async function GET(_request: NextRequest) {
   // Fetch Real News Data
   if (newsApiKey) {
     try {
-      const newsQuery = encodeURIComponent("coffee AND (market OR price OR harvest OR commodity)")
-      const newsUrl = `https://newsapi.org/v2/everything?q=${newsQuery}&sortBy=publishedAt&language=en&pageSize=5`
+      const keywords = encodeURIComponent("coffee market price harvest commodity")
+      const newsUrl = `https://api.thenewsapi.com/v1/news/all?search=${keywords}&language=en&limit=5&sort=published_at&api_token=${newsApiKey}`
 
-      const newsResponse = await fetchWithTimeout(newsUrl, {
-        headers: {
-          "X-Api-Key": newsApiKey,
-        },
-        timeoutMs: 8_000,
-      })
+      const newsResponse = await fetchWithTimeout(newsUrl, { timeoutMs: 8_000 })
       if (!newsResponse.ok) {
-        const errorBody = await newsResponse.json()
-        throw new Error(`Failed to fetch news data. Status: ${newsResponse.status}. Message: ${errorBody.message}`)
+        const errorBody = await newsResponse.text()
+        throw new Error(`Failed to fetch news data. Status: ${newsResponse.status}. Body: ${errorBody.slice(0, 80)}`)
       }
       const newsData = await newsResponse.json()
+      const articles = Array.isArray(newsData.data) ? newsData.data : []
 
-      if (newsData.articles && newsData.articles.length > 0) {
-        marketNews = newsData.articles.map((article: any) => article.title)
-      } else {
-        marketNews = ["No recent relevant coffee market news found."]
-      }
+      marketNews = articles.length > 0
+        ? articles.map((article: any) => String(article.title || ""))
+        : ["No recent relevant coffee market news found."]
     } catch (error) {
       logServerError("Error fetching market news", error)
       marketNews = ["Error fetching real-time market news."]
