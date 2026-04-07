@@ -10,14 +10,11 @@ export async function POST() {
     const sessionUser = await requireSessionUser()
     const schema = await ensurePrivacySchema(sessionUser)
     if (!schema.ok) {
-      return NextResponse.json(
-        {
-          success: false,
-          error: "DPDP schema missing. Run scripts/40-dpdp-privacy.sql.",
-          missing: schema,
-        },
-        { status: 500 },
-      )
+      return NextResponse.json({
+        success: false,
+        error: "DPDP schema missing. Run scripts/40-dpdp-privacy.sql.",
+        missing: schema,
+      })
     }
 
     await acceptPrivacyNotice(sessionUser)

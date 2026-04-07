@@ -177,7 +177,7 @@ export default function TenantSettingsPage() {
       .then((r) => r.json())
       .then((data) => {
         if (data?.success && data.preferences?.email) {
-          setDigestEmail(data.preferences.email)
+          setDigestEmail(data.preferences.digestEmail || "")
         }
       })
       .catch(() => {})

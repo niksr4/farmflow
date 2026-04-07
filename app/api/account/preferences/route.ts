@@ -23,7 +23,7 @@ export async function GET() {
       sql,
       tenantContext,
       sql`
-        SELECT preferred_locale, email
+        SELECT preferred_locale, digest_email
         FROM users
         WHERE id = ${sessionUser.id}
           AND tenant_id = ${tenantContext.tenantId}
@@ -35,7 +35,7 @@ export async function GET() {
       success: true,
       preferences: {
         preferredLocale: normalizeAppLocale(rows?.[0]?.preferred_locale || sessionUser.preferredLocale || "en"),
-        email: rows?.[0]?.email || null,
+        digestEmail: rows?.[0]?.digest_email || null,
       },
     })
   } catch (error: any) {
@@ -80,7 +80,7 @@ export async function PUT(request: Request) {
         tenantContext,
         sql`
           UPDATE users
-          SET email = ${email}, normalized_email = ${email}
+          SET digest_email = ${email}
           WHERE id = ${sessionUser.id}
             AND tenant_id = ${tenantContext.tenantId}
         `,

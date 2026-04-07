@@ -34,18 +34,26 @@ const toRows = <T = any>(value: unknown): T[] => {
 async function fetchTenantOwnersWithVerifiedEmail(): Promise<TenantDigestRow[]> {
   if (!sql) throw new Error("Database not configured")
 
+  // Prefer the explicit digest_email the user set in Settings.
+  // Fall back to users.email only when it has been verified (self-serve signups).
+  // Username-only tenants (no email, no digest_email) are skipped — they won't
+  // receive a digest until they add an address in Settings.
   const result = await sql.query(`
     SELECT DISTINCT ON (t.id)
       t.id AS tenant_id,
       t.name AS tenant_name,
       t.ui_preferences,
-      u.email AS owner_email,
+      COALESCE(
+        NULLIF(BTRIM(u.digest_email), ''),
+        CASE WHEN u.email_verified_at IS NOT NULL THEN NULLIF(BTRIM(u.email), '') END
+      ) AS owner_email,
       COALESCE(u.username, u.email) AS owner_name
     FROM tenants t
     JOIN users u ON u.tenant_id = t.id
-    WHERE u.email IS NOT NULL
-      AND u.email != ''
-      AND u.email_verified_at IS NOT NULL
+    WHERE COALESCE(
+        NULLIF(BTRIM(u.digest_email), ''),
+        CASE WHEN u.email_verified_at IS NOT NULL THEN NULLIF(BTRIM(u.email), '') END
+      ) IS NOT NULL
       AND u.role IN ('owner', 'admin')
     ORDER BY t.id, CASE u.role WHEN 'owner' THEN 0 ELSE 1 END, u.created_at ASC
   `)

@@ -44,7 +44,7 @@ test.describe("owner console regression", () => {
     })
 
     await page.goto("/admin/tenants")
-    await expect(page.getByText("Owner Console")).toBeVisible()
+    await expect(page.getByText("Owner Console", { exact: true })).toBeVisible()
     await expect(page.locator("#system-health").getByText("System Health")).toBeVisible()
     await expect(page.getByText("Critical 1")).toBeVisible()
     await expect(page.getByText("Warning 1")).toBeVisible()

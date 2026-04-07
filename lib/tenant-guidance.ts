@@ -80,11 +80,11 @@ export function buildTenantWorkspaceHints(metrics: TenantGuidanceMetrics): Works
     hints.push({
       id: "no-account-codes",
       type: "warning",
-      title: "Add account codes before logging labor or expenses",
+      title: "Account codes are missing",
       body: isStuck
-        ? "You've signed in a few times, but labor and expense entry is still blocked because this estate has no account codes. Open Accounts -> Codes and add the few codes your team actually uses."
-        : "Labor and expense entry needs account codes. Open Accounts -> Codes and add the few codes your team actually uses every week.",
-      action: { label: "Open Accounts Codes", tab: "accounts", panel: "activities" },
+        ? "You've signed in a few times, but labor and expense entry is still blocked because this estate has no account codes. Open Accounts → Codes and add the few codes your team actually uses."
+        : "Labor and expense entry needs account codes. Open Accounts → Codes and add the few codes your team actually uses every week.",
+      action: { label: "Go to Codes", tab: "accounts", panel: "activities" },
       dismissible: false,
     })
   }
@@ -93,11 +93,11 @@ export function buildTenantWorkspaceHints(metrics: TenantGuidanceMetrics): Works
     hints.push({
       id: "no-locations",
       type: isStuck ? "warning" : "setup",
-      title: "Add locations so records stay traceable",
+      title: "Add locations to keep records traceable",
       body: isStuck
-        ? "You've signed in a few times, but setup is still incomplete because no locations have been added yet. Add your main estate blocks or mills under Settings -> Locations."
-        : "Locations keep pulping, dispatch, and sales records tied to the right estate block or mill. Add your main sections under Settings -> Locations.",
-      action: { label: "Open Locations", href: "/settings#locations" },
+        ? "You've signed in a few times, but setup is still incomplete because no locations have been added yet. Add your main estate blocks or mills in Settings → Locations."
+        : "Locations keep pulping, dispatch, and sales records tied to the right estate block or mill. Add your main sections in Settings → Locations.",
+      action: { label: "Go to Locations", href: "/settings#locations" },
       dismissible: false,
     })
   }
@@ -110,16 +110,16 @@ export function buildTenantWorkspaceHints(metrics: TenantGuidanceMetrics): Works
     hints.push({
       id: "welcome-get-started",
       type: "tip",
-      title: "Welcome - record your first live entry",
-      body: "Start simple: open Accounts and log today's labor or an expense. If your team is already pulping, you can also begin in Pulping.",
+      title: "Start with one live entry",
+      body: "Open Accounts and log today's labor or an expense. If your team is already pulping, you can start there instead.",
       action: { label: "Open Accounts", tab: "accounts", panel: "labor" },
     })
   } else if (totalLogins > 3) {
     hints.push({
       id: "no-data-entered",
       type: "warning",
-      title: "You've signed in a few times but nothing is recorded yet",
-      body: "Your workspace is ready. Log today's labor, expense, or pulping output so live totals and season reporting can start reflecting real work.",
+      title: "Workspace ready, no records yet",
+      body: "Log your first labor, expense, or pulping entry so live totals and season reporting can start reflecting real work.",
       action: { label: "Open Accounts", tab: "accounts", panel: "labor" },
       dismissible: false,
     })

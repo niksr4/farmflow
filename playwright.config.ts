@@ -1,5 +1,7 @@
 import { defineConfig, devices } from "@playwright/test"
 
+process.env.AUTH_EMAIL_PREVIEW_DIR = process.env.AUTH_EMAIL_PREVIEW_DIR || ".tmp/email-previews"
+
 const port = Number(process.env.E2E_PORT || 3000)
 const baseURL = process.env.E2E_BASE_URL || `http://127.0.0.1:${port}`
 const shouldStartServer = process.env.E2E_SKIP_WEB_SERVER !== "1"
@@ -42,4 +44,3 @@ export default defineConfig({
       }
     : undefined,
 })
-

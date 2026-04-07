@@ -7,8 +7,9 @@ test("landing page shows concise header links and CTAs", async ({ page }) => {
   await expect(page.getByRole("link", { name: "Login" }).first()).toBeVisible()
   await expect(page.getByRole("link", { name: "Create your workspace" }).first()).toBeVisible()
   await expect(page.getByRole("link", { name: "Plans" }).first()).toBeVisible()
+  await expect(page.getByRole("link", { name: "Contact" }).first()).toBeVisible()
   await expect(page.getByRole("link", { name: "Trust" }).first()).toBeVisible()
-  await expect(desktopNavLinks).toHaveCount(4)
+  await expect(desktopNavLinks).toHaveCount(5)
 })
 
 test("self-serve signup submits and routes to login", async ({ page }) => {

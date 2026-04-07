@@ -122,7 +122,7 @@ test.describe("tenant user auth regression", () => {
       await waitForDashboardReady(userPage)
       await expect(userPage.getByRole("tab", { name: "Inventory" })).toBeVisible()
       await userPage.getByRole("tab", { name: "Inventory" }).click()
-      await expect(userPage.getByText("Current Inventory Levels")).toBeVisible()
+      await expect(userPage.getByRole("heading", { name: /Inventory Levels/ })).toBeVisible()
       await expect(userPage.getByText("Estate Launch Checklist")).toBeVisible()
       await expect
         .poll(() => salesRouteHits, {

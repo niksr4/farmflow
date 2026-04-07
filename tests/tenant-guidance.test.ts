@@ -16,7 +16,7 @@ describe("tenant guidance", () => {
         expect.objectContaining({
           id: "no-account-codes",
           type: "warning",
-          action: { label: "Open Accounts Codes", tab: "accounts", panel: "activities" },
+          action: { label: "Go to Codes", tab: "accounts", panel: "activities" },
           dismissible: false,
         }),
       ]),
