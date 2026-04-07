@@ -1,6 +1,11 @@
 import "server-only"
 
-import type { NeonQueryFunction, NeonQueryPromise } from "@neondatabase/serverless"
+import type {
+  NeonQueryFunction,
+  NeonQueryFunctionInTransaction,
+  NeonQueryInTransaction,
+  NeonQueryPromise,
+} from "@neondatabase/serverless"
 
 const FALLBACK_TENANT_ID = "00000000-0000-0000-0000-000000000000"
 const MAX_TRANSIENT_RETRIES = 3
@@ -111,6 +116,37 @@ export async function runTenantQueries(
   client`SELECT set_config('app.tenant_id', ${context.tenantId}::text, true)`,
   client`SELECT set_config('app.role', ${context.role}::text, true)`,
         ...queries,
+      ])
+
+      return results.slice(3) as any[][]
+    } catch (error) {
+      lastError = error
+      const canRetry = isTransientConnectionError(error) && attempt < MAX_TRANSIENT_RETRIES
+      if (!canRetry) break
+      await delay(RETRY_BASE_DELAY_MS * attempt)
+    }
+  }
+
+  if (isTransientConnectionError(lastError)) {
+    throw buildConnectionError(lastError)
+  }
+  throw lastError
+}
+
+export async function runTenantTransaction(
+  client: NeonSql,
+  context: TenantContext,
+  buildQueries: (txn: NeonQueryFunctionInTransaction<any, any>) => NeonQueryInTransaction[],
+): Promise<any[][]> {
+  let lastError: unknown
+
+  for (let attempt = 1; attempt <= MAX_TRANSIENT_RETRIES; attempt += 1) {
+    try {
+      const results = await client.transaction((txn) => [
+        txn`SELECT set_config('TimeZone', 'UTC', true)`,
+        txn`SELECT set_config('app.tenant_id', ${context.tenantId}::text, true)`,
+        txn`SELECT set_config('app.role', ${context.role}::text, true)`,
+        ...buildQueries(txn),
       ])
 
       return results.slice(3) as any[][]

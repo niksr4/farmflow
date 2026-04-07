@@ -3,17 +3,10 @@ import { sql, isDbConfigured } from "@/lib/server/db"
 import { requireSessionUser } from "@/lib/server/auth"
 import { normalizeTenantContext, runTenantQuery } from "@/lib/server/tenant-db"
 import { buildErrorResponse, databaseNotConfiguredResponse } from "@/lib/server/route-utils"
+import { buildTenantWorkspaceHints } from "@/lib/tenant-guidance"
 
 export const dynamic = "force-dynamic"
 export const revalidate = 0
-
-export type WorkspaceHint = {
-  id: string
-  type: "setup" | "tip" | "warning"
-  title: string
-  body: string
-  action?: { label: string; tab: string }
-}
 
 export async function GET() {
   if (!isDbConfigured) return databaseNotConfiguredResponse()
@@ -60,52 +53,12 @@ export async function GET() {
     const data = rows[0]
     if (!data) return NextResponse.json({ success: true, hints: [] })
 
-    const accountCodes = Number(data.account_codes) || 0
-    const locationCount = Number(data.location_count) || 0
-    const dataCount = Number(data.data_count) || 0
-    const totalLogins = Number(data.total_logins) || 0
-
-    const hints: WorkspaceHint[] = []
-
-    if (accountCodes === 0 && totalLogins >= 1) {
-      hints.push({
-        id: "no-account-codes",
-        type: "setup",
-        title: "Set up account codes to start entering costs",
-        body: "Labor and expense entries need account codes. Add a few under Settings → Accounts to unlock the full accounting view.",
-        action: { label: "Go to Settings", tab: "settings" },
-      })
-    }
-
-    if (locationCount === 0 && totalLogins >= 1) {
-      hints.push({
-        id: "no-locations",
-        type: "setup",
-        title: "Add your estate's blocks or sections",
-        body: "Locations let you track labor, processing, and sales by section. Add them under Settings → Locations.",
-        action: { label: "Go to Settings", tab: "settings" },
-      })
-    }
-
-    if (dataCount === 0) {
-      if (totalLogins >= 1 && totalLogins <= 3) {
-        hints.push({
-          id: "welcome-get-started",
-          type: "tip",
-          title: "Welcome — here's where to start recording",
-          body: "Log today's cherry intake under Processing, record attendance under Labor, or add an expense under Finance to see your data come alive.",
-          action: { label: "Go to Processing", tab: "processing" },
-        })
-      } else if (totalLogins > 3 && accountCodes > 0 && locationCount > 0) {
-        hints.push({
-          id: "no-data-entered",
-          type: "tip",
-          title: "Ready to log your first entry?",
-          body: "Your estate is set up. Try adding today's cherry intake under Processing, or log attendance under Labor.",
-          action: { label: "Go to Processing", tab: "processing" },
-        })
-      }
-    }
+    const hints = buildTenantWorkspaceHints({
+      accountCodesCount: Number(data.account_codes) || 0,
+      locationCount: Number(data.location_count) || 0,
+      operationalDataCount: Number(data.data_count) || 0,
+      totalLogins: Number(data.total_logins) || 0,
+    })
 
     return NextResponse.json({ success: true, hints })
   } catch (error) {

@@ -292,10 +292,12 @@ export async function POST(request: Request) {
     const tenantContext = normalizeTenantContext(sessionUser.tenantId, sessionUser.role)
     const body = await request.json()
     const { date, code, laborEntries, notes } = body
+    const normalizedNotes = String(notes || "")
     const supportsTaskDescription = await tableHasTaskDescriptionColumn("labor_transactions")
     const taskDescription = supportsTaskDescription
       ? String(body?.taskDescription || "").trim().slice(0, 500) || null
       : null
+    const requestedTaskDescription = String(body?.taskDescription || "").trim()
 
     const requestedLocationId = normalizeLocationId(body?.locationId)
     if (requestedLocationId === "invalid") {
@@ -322,40 +324,61 @@ export async function POST(request: Request) {
     const computedTotalCost = hfLaborers * hfCostPer + outsideLaborers * outsideCostPer
 
     // De-dupe accidental rapid double-submit from UI (same payload within the last 90 seconds).
-    try {
-      const duplicateRows = await runTenantQuery(
-        accountsSql,
-        tenantContext,
-        accountsSql`
-          SELECT id
-          FROM labor_transactions
-          WHERE tenant_id = ${tenantContext.tenantId}
-            AND deployment_date::date = ${date}::date
-            AND code = ${code}
-            AND COALESCE(hf_laborers, 0) = ${hfLaborers}
-            AND COALESCE(hf_cost_per_laborer, 0) = ${hfCostPer}
-            AND COALESCE(outside_laborers, 0) = ${outsideLaborers}
-            AND COALESCE(outside_cost_per_laborer, 0) = ${outsideCostPer}
-            AND COALESCE(total_cost, 0) = ${computedTotalCost}
-            AND COALESCE(notes, '') = ${notes || ""}
-            ${locationDedupClause}
-            AND created_at >= (CURRENT_TIMESTAMP - INTERVAL '90 seconds')
-          ORDER BY id DESC
-          LIMIT 1
-        `,
-      )
+    if (supportsTaskDescription || !requestedTaskDescription) {
+      try {
+        const duplicateRows = await runTenantQuery(
+          accountsSql,
+          tenantContext,
+          supportsTaskDescription
+            ? accountsSql`
+                SELECT id
+                FROM labor_transactions
+                WHERE tenant_id = ${tenantContext.tenantId}
+                  AND deployment_date::date = ${date}::date
+                  AND code = ${code}
+                  AND COALESCE(hf_laborers, 0) = ${hfLaborers}
+                  AND COALESCE(hf_cost_per_laborer, 0) = ${hfCostPer}
+                  AND COALESCE(outside_laborers, 0) = ${outsideLaborers}
+                  AND COALESCE(outside_cost_per_laborer, 0) = ${outsideCostPer}
+                  AND COALESCE(total_cost, 0) = ${computedTotalCost}
+                  AND COALESCE(notes, '') = ${normalizedNotes}
+                  AND COALESCE(task_description, '') = ${taskDescription || ""}
+                  ${locationDedupClause}
+                  AND created_at >= (CURRENT_TIMESTAMP - INTERVAL '90 seconds')
+                ORDER BY id DESC
+                LIMIT 1
+              `
+            : accountsSql`
+                SELECT id
+                FROM labor_transactions
+                WHERE tenant_id = ${tenantContext.tenantId}
+                  AND deployment_date::date = ${date}::date
+                  AND code = ${code}
+                  AND COALESCE(hf_laborers, 0) = ${hfLaborers}
+                  AND COALESCE(hf_cost_per_laborer, 0) = ${hfCostPer}
+                  AND COALESCE(outside_laborers, 0) = ${outsideLaborers}
+                  AND COALESCE(outside_cost_per_laborer, 0) = ${outsideCostPer}
+                  AND COALESCE(total_cost, 0) = ${computedTotalCost}
+                  AND COALESCE(notes, '') = ${normalizedNotes}
+                  ${locationDedupClause}
+                  AND created_at >= (CURRENT_TIMESTAMP - INTERVAL '90 seconds')
+                ORDER BY id DESC
+                LIMIT 1
+              `,
+        )
 
-      if (duplicateRows?.length) {
-        return NextResponse.json({
-          success: true,
-          id: duplicateRows[0].id,
-          deduped: true,
-          message: "Duplicate submission detected and ignored.",
-        })
-      }
-    } catch (dedupeError) {
-      if (!isMissingColumnError(dedupeError, "created_at")) {
-        throw dedupeError
+        if (duplicateRows?.length) {
+          return NextResponse.json({
+            success: true,
+            id: duplicateRows[0].id,
+            deduped: true,
+            message: "Duplicate submission detected and ignored.",
+          })
+        }
+      } catch (dedupeError) {
+        if (!isMissingColumnError(dedupeError, "created_at")) {
+          throw dedupeError
+        }
       }
     }
 
@@ -384,7 +407,7 @@ export async function POST(request: Request) {
               ${outsideEntry?.laborCount || 0},
               ${outsideEntry?.costPerLabor || 0},
               ${computedTotalCost},
-              ${notes},
+              ${normalizedNotes},
               ${validLocationId}::uuid,
               ${taskDescription},
               ${tenantContext.tenantId}
@@ -415,7 +438,7 @@ export async function POST(request: Request) {
               ${outsideEntry?.laborCount || 0},
               ${outsideEntry?.costPerLabor || 0},
               ${computedTotalCost},
-              ${notes},
+              ${normalizedNotes},
               ${taskDescription},
               ${tenantContext.tenantId}
             )
@@ -435,7 +458,7 @@ export async function POST(request: Request) {
         outside_laborers: outsideLaborers,
         outside_cost_per_laborer: outsideCostPer,
         total_cost: computedTotalCost,
-        notes,
+        notes: normalizedNotes,
         location_id: supportsLocation ? validLocationId : null,
       },
     })

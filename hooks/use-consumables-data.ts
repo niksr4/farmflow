@@ -11,6 +11,7 @@ export interface ConsumableDeployment {
   amount: number
   notes: string
   user: string
+  inventoryItems?: Array<{ itemType: string; quantity: number }>
   inventoryItemType?: string | null
   inventoryQuantity?: number | null
 }
@@ -38,8 +39,11 @@ export function useConsumablesData(locationId?: string, options: ConsumablesData
     async (pageIndex = 0, append = false) => {
       try {
         if (!user?.tenantId) {
+          setDeployments([])
           setLoading(false)
+          setLoadingMore(false)
           setHasMore(false)
+          setPage(0)
           setTotalCount(0)
           setTotalAmount(0)
           return

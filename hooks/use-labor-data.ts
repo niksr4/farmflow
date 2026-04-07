@@ -48,10 +48,14 @@ export function useLaborData(locationId?: string, options: LaborDataOptions = {}
         return
       }
       if (!user?.tenantId) {
+        setDeployments([])
         setLoading(false)
+        setLoadingMore(false)
         setHasMore(false)
+        setPage(0)
         setTotalCount(0)
         setTotalCost(0)
+        setError(null)
         return
       }
       try {

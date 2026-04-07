@@ -123,11 +123,21 @@ export async function GET(request: Request) {
             ? sql` AND invoice_date <= ${endDate}::date`
             : sql``
 
+    const pickingDateClause =
+      startDate && endDate
+        ? sql` AND pick_date >= ${startDate}::date AND pick_date <= ${endDate}::date`
+        : startDate
+          ? sql` AND pick_date >= ${startDate}::date`
+          : endDate
+            ? sql` AND pick_date <= ${endDate}::date`
+            : sql``
+
     const [
       salesResult,
       otherSalesResult,
       laborResult,
       expenseResult,
+      pickingResult,
       inventoryResult,
       receivablesPeriodResult,
       receivablesLiveResult,
@@ -180,6 +190,18 @@ export async function GET(request: Request) {
             ${expenseDateClause}
         `,
         ["expense_transactions"],
+      ),
+      runOptionalQuery<{ total_amount: number; total_count: number }>(
+        tenantContext,
+        sql`
+          SELECT
+            COALESCE(SUM(kg_picked * rate_per_kg), 0) AS total_amount,
+            COUNT(*)::int AS total_count
+          FROM picking_records
+          WHERE tenant_id = ${tenantContext.tenantId}
+            ${pickingDateClause}
+        `,
+        ["picking_records"],
       ),
       runOptionalQuery<{ restock_outflow: number; deplete_value: number; total_count: number }>(
         tenantContext,

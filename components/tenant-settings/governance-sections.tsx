@@ -49,6 +49,11 @@ export function PrivacySection({
   onRequestDeletion,
   onConsentToggle,
 }: PrivacySectionProps) {
+  const privacyToolsUnavailable = Boolean(privacyError && privacyError.includes("DPDP schema missing"))
+  const privacyStatusMessage = privacyToolsUnavailable
+    ? "Privacy tools are not ready for this workspace yet. Ask the owner to run the DPDP privacy migration."
+    : privacyError
+
   return (
     <Card id="privacy-dpdp" className="scroll-mt-24 border-border/70 bg-white/85">
       <CardHeader>
@@ -56,7 +61,9 @@ export function PrivacySection({
         <CardDescription>Manage personal data rights, notices, and consent settings.</CardDescription>
       </CardHeader>
       <CardContent className="space-y-4 text-sm text-muted-foreground">
-        {privacyError && <div className="rounded-md border border-red-200 bg-red-50 p-3 text-red-700">{privacyError}</div>}
+        {privacyStatusMessage && (
+          <div className="rounded-md border border-red-200 bg-red-50 p-3 text-red-700">{privacyStatusMessage}</div>
+        )}
 
         {isPrivacyLoading ? (
           <div>Loading privacy status...</div>
@@ -76,7 +83,7 @@ export function PrivacySection({
                 <Button variant="outline" asChild>
                   <Link href="/privacy">View Notice</Link>
                 </Button>
-                <Button onClick={onAcceptNotice} disabled={isAcceptingNotice || !tenantId}>
+                <Button onClick={onAcceptNotice} disabled={isAcceptingNotice || !tenantId || privacyToolsUnavailable}>
                   {isAcceptingNotice ? "Saving..." : "Acknowledge"}
                 </Button>
               </div>
@@ -92,7 +99,7 @@ export function PrivacySection({
                   type="checkbox"
                   checked={Boolean(privacyStatus?.consentMarketing)}
                   onChange={(event) => onConsentToggle(event.target.checked)}
-                  disabled={isUpdatingConsent || !tenantId}
+                  disabled={isUpdatingConsent || !tenantId || privacyToolsUnavailable}
                 />
                 {privacyStatus?.consentMarketing ? "Opted in" : "Opted out"}
               </label>
@@ -106,7 +113,7 @@ export function PrivacySection({
               <p className="text-sm font-medium text-foreground">Export my data</p>
               <p>Download a JSON export of your personal data across FarmFlow.</p>
             </div>
-            <Button onClick={onExportPersonalData} disabled={isExportingPersonalData || !tenantId}>
+            <Button onClick={onExportPersonalData} disabled={isExportingPersonalData || !tenantId || privacyToolsUnavailable}>
               {isExportingPersonalData ? "Preparing..." : "Download export"}
             </Button>
           </div>
@@ -122,7 +129,7 @@ export function PrivacySection({
                 onChange={(event) => onCorrectionUsernameChange(event.target.value)}
                 placeholder="New username"
               />
-              <Button onClick={onSubmitCorrection} disabled={isSubmittingCorrection || !tenantId}>
+              <Button onClick={onSubmitCorrection} disabled={isSubmittingCorrection || !tenantId || privacyToolsUnavailable}>
                 {isSubmittingCorrection ? "Updating..." : "Update"}
               </Button>
             </div>
@@ -140,7 +147,11 @@ export function PrivacySection({
               Request logged on {formatDateForDisplay(privacyStatus.deletionRequestedAt)}.
             </p>
           )}
-          <Button variant="destructive" onClick={onRequestDeletion} disabled={isRequestingDeletion || !tenantId}>
+          <Button
+            variant="destructive"
+            onClick={onRequestDeletion}
+            disabled={isRequestingDeletion || !tenantId || privacyToolsUnavailable}
+          >
             {isRequestingDeletion ? "Submitting..." : "Request deletion"}
           </Button>
         </div>

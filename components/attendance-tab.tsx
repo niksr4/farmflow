@@ -12,6 +12,7 @@ import { formatDateOnly } from "@/lib/date-utils"
 import { toast } from "sonner"
 import { Skeleton } from "@/components/ui/skeleton"
 import { EmptyState } from "@/components/ui/empty-state"
+import TaskGuideCard from "@/components/task-guide-card"
 
 type AttendanceWorker = {
   id: string
@@ -144,11 +145,24 @@ export default function AttendanceTab() {
 
   return (
     <div className="space-y-4">
+      <TaskGuideCard
+        eyebrow="Attendance guide"
+        title="Mark who came in today"
+        description="Use this as the morning or day-end muster. Keep it simple: choose the date, mark who was present, then save."
+        bullets={[
+          "Add workers once, then reuse the same list every day.",
+          "Mark only the people who actually came in for that date.",
+          "This tab can run on its own for daily muster; rates and payroll can come later.",
+        ]}
+        tip="A clean daily muster makes weekly attendance, wages, and labor review easier for the owner."
+        tone="operations"
+      />
+
       <Card>
         <CardHeader className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
           <div>
-            <CardTitle className="text-xl sm:text-2xl">Attendance</CardTitle>
-            <CardDescription>Morning muster for estate staff, with weekly days-present totals.</CardDescription>
+            <CardTitle className="text-xl sm:text-2xl">Daily attendance</CardTitle>
+            <CardDescription>Mark who came today and keep a simple weekly roll-up.</CardDescription>
           </div>
           <div className="flex flex-wrap gap-2">
             <Badge variant="outline">{workers.length} employees</Badge>
@@ -156,6 +170,23 @@ export default function AttendanceTab() {
           </div>
         </CardHeader>
         <CardContent className="space-y-4">
+          <div className="rounded-2xl border border-emerald-100 bg-emerald-50/50 p-4">
+            <div className="grid gap-3 md:grid-cols-3">
+              <div className="rounded-xl border border-white/70 bg-white/85 p-3">
+                <p className="text-[11px] uppercase tracking-[0.18em] text-emerald-700">Muster date</p>
+                <p className="mt-1 text-sm font-semibold text-foreground">{formatDateOnly(selectedDate)}</p>
+              </div>
+              <div className="rounded-xl border border-white/70 bg-white/85 p-3">
+                <p className="text-[11px] uppercase tracking-[0.18em] text-emerald-700">Present now</p>
+                <p className="mt-1 text-sm font-semibold text-foreground">{presentCount} workers marked</p>
+              </div>
+              <div className="rounded-xl border border-white/70 bg-white/85 p-3">
+                <p className="text-[11px] uppercase tracking-[0.18em] text-emerald-700">This week</p>
+                <p className="mt-1 text-sm font-semibold text-foreground">{buildWeekLabel(weekStartDate, weekEndDate)}</p>
+              </div>
+            </div>
+          </div>
+
           <form onSubmit={handleAddWorker} className="grid gap-3 md:grid-cols-[minmax(0,1fr)_auto]">
             <div className="space-y-2">
               <Label htmlFor="attendance-worker-name">Add employee</Label>
@@ -229,8 +260,8 @@ export default function AttendanceTab() {
 
       <Card>
         <CardHeader>
-          <CardTitle>Daily Muster</CardTitle>
-          <CardDescription>Tap each employee who came in on {formatDateOnly(selectedDate)}.</CardDescription>
+          <CardTitle>Who came today</CardTitle>
+          <CardDescription>Tap each employee who was present on {formatDateOnly(selectedDate)}.</CardDescription>
         </CardHeader>
         <CardContent className="space-y-3">
           {loading ? (
@@ -242,7 +273,7 @@ export default function AttendanceTab() {
           ) : workers.length === 0 ? (
             <EmptyState
               title="No employees added yet"
-              description="Add employees in the Workers tab to begin taking daily attendance."
+              description="Add your first employee above. Use Workers later if you want daily rates, bank details, or the full roster."
               size="sm"
             />
           ) : (
@@ -256,7 +287,7 @@ export default function AttendanceTab() {
                   <div>
                     <p className="font-medium text-foreground">{worker.name}</p>
                     <p className="text-xs text-muted-foreground">
-                      {isPresent ? "Included in today's muster." : "Not marked present yet."}
+                      {isPresent ? "Marked present for this date." : "Not marked present yet."}
                     </p>
                   </div>
                   <Button
@@ -276,8 +307,8 @@ export default function AttendanceTab() {
 
       <Card>
         <CardHeader>
-          <CardTitle>Weekly Attendance Summary</CardTitle>
-          <CardDescription>Days present for the selected week.</CardDescription>
+          <CardTitle>This week</CardTitle>
+          <CardDescription>Days present in the selected week.</CardDescription>
         </CardHeader>
         <CardContent>
           {loading ? (

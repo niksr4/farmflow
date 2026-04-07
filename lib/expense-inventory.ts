@@ -14,6 +14,11 @@ export type InventoryAllocation = {
   unit: string
 }
 
+export type ExpenseInventoryLinkItem = {
+  itemType: string
+  quantity: number
+}
+
 const INVENTORY_EPSILON = 0.0001
 
 const toRoundedQuantity = (value: number) => Number((Math.round((value + Number.EPSILON) * 10000) / 10000).toFixed(4))
@@ -80,4 +85,54 @@ export function allocateInventoryQuantity(
   }
 
   return allocations
+}
+
+export function normalizeExpenseInventoryItems(items: ExpenseInventoryLinkItem[]): ExpenseInventoryLinkItem[] {
+  const merged = new Map<string, ExpenseInventoryLinkItem>()
+
+  for (const item of items) {
+    const itemType = normalizeInventoryItemType(item.itemType)
+    const quantity = toRoundedQuantity(Number(item.quantity) || 0)
+    if (!itemType || quantity <= INVENTORY_EPSILON) {
+      continue
+    }
+
+    const mergeKey = itemType.toLowerCase()
+    const existing = merged.get(mergeKey)
+    if (existing) {
+      existing.quantity = toRoundedQuantity(existing.quantity + quantity)
+      continue
+    }
+
+    merged.set(mergeKey, { itemType, quantity })
+  }
+
+  return Array.from(merged.values())
+}
+
+export function sameExpenseInventoryItems(
+  left: ExpenseInventoryLinkItem[],
+  right: ExpenseInventoryLinkItem[],
+): boolean {
+  const normalizeForCompare = (items: ExpenseInventoryLinkItem[]) =>
+    normalizeExpenseInventoryItems(items)
+      .map((item) => ({
+        itemType: normalizeInventoryItemType(item.itemType).toLowerCase(),
+        quantity: toRoundedQuantity(Number(item.quantity) || 0),
+      }))
+      .filter((item) => item.itemType && item.quantity > INVENTORY_EPSILON)
+      .sort((a, b) => a.itemType.localeCompare(b.itemType))
+
+  const normalizedLeft = normalizeForCompare(left)
+  const normalizedRight = normalizeForCompare(right)
+
+  if (normalizedLeft.length !== normalizedRight.length) {
+    return false
+  }
+
+  return normalizedLeft.every((item, index) => {
+    const other = normalizedRight[index]
+    if (!other) return false
+    return item.itemType === other.itemType && Math.abs(item.quantity - other.quantity) <= INVENTORY_EPSILON
+  })
 }

@@ -152,7 +152,7 @@ export default function TenantSettingsPage() {
   const isOwner = user?.role === "owner"
   const isAdminOrOwner = user?.role === "admin" || user?.role === "owner"
   const canManageTenantExperience = isOwner
-  const privacyFeatureEnabled = false
+  const privacyFeatureEnabled = Boolean(tenantId)
 
   useEffect(() => {
     setEstateNameInput(settings.estateName || "")
@@ -1128,21 +1128,8 @@ export default function TenantSettingsPage() {
           )}
         </SettingsGroup>
 
-        <SettingsGroup title="Advanced" defaultOpen={false}>
-          {isOwner && <OwnerToolsSection />}
-          {canManageTenantExperience && (
-            <TenantExperienceSection
-              uiVariantDraft={uiVariantDraft}
-              featureFlagsDraft={featureFlagsDraft}
-              isSavingTenantExperience={isSavingTenantExperience}
-              settingsLoading={settingsLoading}
-              onUiVariantChange={setUiVariantDraft}
-              onFeatureFlagChange={handleFeatureFlagChange}
-              onSaveTenantExperience={handleSaveTenantExperience}
-            />
-          )}
-
-          {privacyFeatureEnabled && (
+        {privacyFeatureEnabled && (
+          <SettingsGroup title="Privacy">
             <PrivacySection
               tenantId={tenantId}
               privacyStatus={privacyStatus}
@@ -1160,6 +1147,21 @@ export default function TenantSettingsPage() {
               onSubmitCorrection={handleSubmitCorrection}
               onRequestDeletion={handleRequestDeletion}
               onConsentToggle={handleConsentToggle}
+            />
+          </SettingsGroup>
+        )}
+
+        <SettingsGroup title="Advanced" defaultOpen={false}>
+          {isOwner && <OwnerToolsSection />}
+          {canManageTenantExperience && (
+            <TenantExperienceSection
+              uiVariantDraft={uiVariantDraft}
+              featureFlagsDraft={featureFlagsDraft}
+              isSavingTenantExperience={isSavingTenantExperience}
+              settingsLoading={settingsLoading}
+              onUiVariantChange={setUiVariantDraft}
+              onFeatureFlagChange={handleFeatureFlagChange}
+              onSaveTenantExperience={handleSaveTenantExperience}
             />
           )}
 

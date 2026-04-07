@@ -1,12 +1,17 @@
 import { NextResponse } from "next/server"
 import { accountsSql } from "@/lib/server/db"
 import { requireModuleAccess, isModuleAccessError } from "@/lib/server/module-access"
-import { normalizeTenantContext, runTenantQueries, runTenantQuery } from "@/lib/server/tenant-db"
+import { normalizeTenantContext, runTenantQueries, runTenantQuery, runTenantTransaction } from "@/lib/server/tenant-db"
 import { canDeleteModule, canWriteModule } from "@/lib/permissions"
 import { logAuditEvent } from "@/lib/server/audit-log"
-import { recalculateInventoryForItem } from "@/lib/server/inventory-recalc"
 import { normalizeInventoryItemType } from "@/lib/inventory-item-type"
-import { allocateInventoryQuantity, type InventoryAllocationSlot } from "@/lib/expense-inventory"
+import {
+  allocateInventoryQuantity,
+  normalizeExpenseInventoryItems,
+  sameExpenseInventoryItems,
+  type ExpenseInventoryLinkItem,
+  type InventoryAllocationSlot,
+} from "@/lib/expense-inventory"
 
 export const dynamic = "force-dynamic"
 export const revalidate = 0
@@ -15,13 +20,19 @@ const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3
 const EXPENSE_TAG_PREFIX = "[expense_id:"
 
 type TenantContext = ReturnType<typeof normalizeTenantContext>
-type ExpenseInventoryItem = { itemType: string; quantity: number }
+type ExpenseInventoryItem = ExpenseInventoryLinkItem
 type ExpenseInventoryTransactionRow = {
   id: number
   item_type: string
   quantity: number
   location_id: string | null
   unit: string | null
+}
+type ExpenseInventoryLinkRow = {
+  id: number
+  expense_transaction_id: number
+  item_type: string
+  quantity: number
 }
 type ExpenseInventorySourceRow = {
   id: number | string
@@ -33,16 +44,26 @@ type ExpenseInventorySourceRow = {
   location_id: string | null
 }
 
+type PlannedExpenseInventoryTransaction = {
+  itemType: string
+  quantity: number
+  locationId: string | null
+  unit: string
+}
+
 const normalizeInventoryQuantity = (value: unknown) => {
   const numeric = Number(value)
   if (!Number.isFinite(numeric) || numeric <= 0) return 0
   return Number((Math.round((numeric + Number.EPSILON) * 10000) / 10000).toFixed(4))
 }
 
+const buildExpenseInventoryNoteBase = (code: string, notes: string | null | undefined) =>
+  `Used in expense: ${code}${notes ? ` - ${notes}` : ""}`.trim()
+
 const buildExpenseInventoryTag = (expenseId: number | string) => `${EXPENSE_TAG_PREFIX}${expenseId}]`
 
 const buildExpenseInventoryNote = (expenseId: number | string, code: string, notes: string | null | undefined) => {
-  const base = `Used in expense: ${code}${notes ? ` - ${notes}` : ""}`.trim()
+  const base = buildExpenseInventoryNoteBase(code, notes)
   return `${base} ${buildExpenseInventoryTag(expenseId)}`.trim()
 }
 
@@ -62,12 +83,14 @@ const isInventoryUnderflowError = (error: unknown) => {
 
 const parseExpenseInventoryItems = (body: any): ExpenseInventoryItem[] => {
   if (Array.isArray(body.inventoryItems)) {
-    return body.inventoryItems
+    return normalizeExpenseInventoryItems(
+      body.inventoryItems
       .map((item: any) => ({
         itemType: normalizeInventoryItemType(item?.itemType),
         quantity: normalizeInventoryQuantity(item?.quantity),
       }))
-      .filter((item: ExpenseInventoryItem) => item.itemType && item.quantity > 0)
+      .filter((item: ExpenseInventoryItem) => item.itemType && item.quantity > 0),
+    )
   }
 
   const itemType = normalizeInventoryItemType(body.inventoryItemType)
@@ -176,51 +199,6 @@ async function loadAssociatedExpenseInventoryTransactions(
   return loadLegacyExpenseInventoryTransactions(tenantContext, expense)
 }
 
-async function recalculateInventoryPairs(
-  tenantContext: TenantContext,
-  rows: Array<{ item_type: string; location_id: string | null }>,
-) {
-  const pairs = new Map<string, { itemType: string; locationId: string | null }>()
-  for (const row of rows) {
-    const itemType = String(row.item_type || "")
-    if (!itemType) continue
-    const locationId = row.location_id ? String(row.location_id) : null
-    pairs.set(buildInventoryPairKey(itemType, locationId), { itemType, locationId })
-  }
-
-  for (const pair of pairs.values()) {
-    await recalculateInventoryForItem(accountsSql, tenantContext, pair.itemType, pair.locationId)
-  }
-}
-
-async function deleteExpenseInventoryTransactions(
-  tenantContext: TenantContext,
-  expenseId: number | string,
-  expense?: ExpenseInventorySourceRow,
-) {
-  const existingRows = expense
-    ? await loadAssociatedExpenseInventoryTransactions(tenantContext, expense)
-    : await loadExpenseInventoryTransactions(tenantContext, expenseId)
-  const ids = existingRows.map((row) => row.id).filter((id) => Number.isFinite(id))
-
-  if (ids.length === 0) {
-    return existingRows
-  }
-
-  await runTenantQuery(
-    accountsSql,
-    tenantContext,
-    accountsSql`
-      DELETE FROM transaction_history
-      WHERE tenant_id = ${tenantContext.tenantId}
-        AND id = ANY(${ids})
-    `,
-  )
-
-  await recalculateInventoryPairs(tenantContext, existingRows)
-  return existingRows
-}
-
 async function planExpenseInventoryTransactions(
   tenantContext: TenantContext,
   items: ExpenseInventoryItem[],
@@ -282,53 +260,6 @@ async function planExpenseInventoryTransactions(
   return plannedTransactions
 }
 
-async function insertExpenseInventoryTransactions(
-  tenantContext: TenantContext,
-  sessionUser: Awaited<ReturnType<typeof requireModuleAccess>>,
-  expenseId: number | string,
-  expenseDate: string,
-  code: string,
-  notes: string | null | undefined,
-  plannedTransactions: Array<{ itemType: string; quantity: number; locationId: string | null; unit: string }>,
-) {
-  const expenseNote = buildExpenseInventoryNote(expenseId, code, notes)
-
-  for (const transaction of plannedTransactions) {
-    await runTenantQuery(
-      accountsSql,
-      tenantContext,
-      accountsSql`
-        INSERT INTO transaction_history (
-          item_type,
-          quantity,
-          transaction_type,
-          notes,
-          transaction_date,
-          user_id,
-          price,
-          total_cost,
-          tenant_id,
-          location_id,
-          unit
-        )
-        VALUES (
-          ${transaction.itemType},
-          ${transaction.quantity},
-          'deplete',
-          ${expenseNote},
-          ${expenseDate}::timestamp,
-          ${sessionUser.username || "system"},
-          0,
-          0,
-          ${tenantContext.tenantId},
-          ${transaction.locationId},
-          ${transaction.unit}
-        )
-      `,
-    )
-  }
-}
-
 const isMissingColumnError = (error: unknown, columnName: string) => {
   const code = String((error as any)?.code || "")
   const message = String((error as any)?.message || "")
@@ -362,6 +293,17 @@ async function tableHasInventoryLinkColumns() {
       AND column_name IN ('inventory_item_type', 'inventory_quantity')
   `
   return Number((rows as any[])?.[0]?.count) >= 2
+}
+
+async function tableHasExpenseInventoryLinksTable() {
+  const rows = await accountsSql`
+    SELECT 1
+    FROM information_schema.tables
+    WHERE table_schema = 'public'
+      AND table_name = 'expense_inventory_links'
+    LIMIT 1
+  `
+  return Array.isArray(rows) && rows.length > 0
 }
 
 async function fetchInventoryItemsForTenant(tenantId: string): Promise<Array<{ itemType: string; unit: string; quantity: number }>> {
@@ -403,6 +345,564 @@ async function validateLocationForTenant(
   return rows?.length ? locationId : null
 }
 
+async function loadExpenseInventoryLinks(
+  tenantContext: TenantContext,
+  expenseIds: Array<number | string>,
+): Promise<Map<number, ExpenseInventoryItem[]>> {
+  const normalizedExpenseIds = expenseIds
+    .map((value) => Number(value))
+    .filter((value) => Number.isInteger(value) && value > 0)
+
+  if (normalizedExpenseIds.length === 0) {
+    return new Map()
+  }
+
+  const rows = await runTenantQuery<ExpenseInventoryLinkRow>(
+    accountsSql,
+    tenantContext,
+    accountsSql`
+      SELECT id, expense_transaction_id, item_type, quantity
+      FROM expense_inventory_links
+      WHERE tenant_id = ${tenantContext.tenantId}
+        AND expense_transaction_id = ANY(${normalizedExpenseIds})
+      ORDER BY expense_transaction_id ASC, id ASC
+    `,
+  )
+
+  const linksByExpenseId = new Map<number, ExpenseInventoryItem[]>()
+  for (const row of rows || []) {
+    const expenseId = Number(row.expense_transaction_id)
+    const itemType = normalizeInventoryItemType(row.item_type)
+    const quantity = normalizeInventoryQuantity(row.quantity)
+    if (!expenseId || !itemType || quantity <= 0) {
+      continue
+    }
+
+    const existing = linksByExpenseId.get(expenseId) ?? []
+    existing.push({ itemType, quantity })
+    linksByExpenseId.set(expenseId, normalizeExpenseInventoryItems(existing))
+  }
+
+  return linksByExpenseId
+}
+
+const resolveExpenseInventoryItems = (
+  linkedItems: ExpenseInventoryItem[] | undefined,
+  legacyItemType: string | null | undefined,
+  legacyQuantity: number | null | undefined,
+) => {
+  if (linkedItems && linkedItems.length > 0) {
+    return linkedItems
+  }
+
+  const fallbackItemType = normalizeInventoryItemType(legacyItemType)
+  const fallbackQuantity = normalizeInventoryQuantity(legacyQuantity)
+  if (!fallbackItemType || fallbackQuantity <= 0) {
+    return []
+  }
+
+  return [{ itemType: fallbackItemType, quantity: fallbackQuantity }]
+}
+
+const collectInventoryPairs = (
+  ...groups: Array<Array<{ item_type?: string; itemType?: string; location_id?: string | null; locationId?: string | null }>>
+) => {
+  const pairs = new Map<string, { itemType: string; locationId: string | null }>()
+
+  for (const group of groups) {
+    for (const row of group) {
+      const itemType = normalizeInventoryItemType(row.itemType ?? row.item_type)
+      if (!itemType) continue
+      const locationId = row.locationId ?? row.location_id ?? null
+      pairs.set(buildInventoryPairKey(itemType, locationId), { itemType, locationId })
+    }
+  }
+
+  return Array.from(pairs.values())
+}
+
+async function findRecentDuplicateExpenseId(options: {
+  tenantContext: TenantContext
+  date: string
+  code: string
+  amount: number
+  notes: string
+  locationDedupClause: ReturnType<typeof accountsSql>
+  supportsInventoryLink: boolean
+  supportsInventoryLinksTable: boolean
+  inventoryItems: ExpenseInventoryItem[]
+}) {
+  const canCompareInventoryPayload =
+    options.inventoryItems.length === 0 ||
+    options.supportsInventoryLinksTable ||
+    (options.supportsInventoryLink && options.inventoryItems.length <= 1)
+
+  if (!canCompareInventoryPayload) {
+    return null
+  }
+
+  const duplicateRows = await runTenantQuery(
+    accountsSql,
+    options.tenantContext,
+    options.supportsInventoryLink
+      ? accountsSql`
+          SELECT id, inventory_item_type, inventory_quantity
+          FROM expense_transactions
+          WHERE tenant_id = ${options.tenantContext.tenantId}
+            AND entry_date::date = ${options.date}::date
+            AND code = ${options.code}
+            AND COALESCE(total_amount, 0) = ${options.amount}
+            AND COALESCE(notes, '') = ${options.notes}
+            ${options.locationDedupClause}
+            AND created_at >= (CURRENT_TIMESTAMP - INTERVAL '90 seconds')
+          ORDER BY id DESC
+          LIMIT 5
+        `
+      : accountsSql`
+          SELECT id, NULL::text AS inventory_item_type, NULL::numeric AS inventory_quantity
+          FROM expense_transactions
+          WHERE tenant_id = ${options.tenantContext.tenantId}
+            AND entry_date::date = ${options.date}::date
+            AND code = ${options.code}
+            AND COALESCE(total_amount, 0) = ${options.amount}
+            AND COALESCE(notes, '') = ${options.notes}
+            ${options.locationDedupClause}
+            AND created_at >= (CURRENT_TIMESTAMP - INTERVAL '90 seconds')
+          ORDER BY id DESC
+          LIMIT 5
+        `,
+  )
+
+  if (!duplicateRows?.length) {
+    return null
+  }
+
+  const inventoryLinksByExpenseId = options.supportsInventoryLinksTable
+    ? await loadExpenseInventoryLinks(
+        options.tenantContext,
+        duplicateRows.map((row: any) => row.id),
+      )
+    : new Map<number, ExpenseInventoryItem[]>()
+
+  for (const row of duplicateRows) {
+    const existingItems = resolveExpenseInventoryItems(
+      inventoryLinksByExpenseId.get(Number(row.id)),
+      options.supportsInventoryLink ? row.inventory_item_type : null,
+      options.supportsInventoryLink ? row.inventory_quantity : null,
+    )
+
+    if (sameExpenseInventoryItems(existingItems, options.inventoryItems)) {
+      return row.id
+    }
+  }
+
+  return null
+}
+
+type ParameterizedStatement = {
+  text: string
+  params: any[]
+}
+
+const buildValuesClause = (rowCount: number, columnCount: number, startIndex = 1) => {
+  const rows: string[] = []
+  let index = startIndex
+
+  for (let row = 0; row < rowCount; row += 1) {
+    const cols: string[] = []
+    for (let column = 0; column < columnCount; column += 1) {
+      cols.push(`$${index}`)
+      index += 1
+    }
+    rows.push(`(${cols.join(", ")})`)
+  }
+
+  return rows.join(", ")
+}
+
+function buildCreateExpenseMutationStatement(options: {
+  date: string
+  code: string
+  amount: number
+  notes: string
+  tenantId: string
+  locationId: string | null
+  supportsLocation: boolean
+  inventoryItemType: string | null
+  inventoryQuantity: number | null
+  supportsInventoryLink: boolean
+  supportsInventoryLinksTable: boolean
+  inventoryItems: ExpenseInventoryItem[]
+  plannedTransactions: PlannedExpenseInventoryTransaction[]
+  username: string
+}): ParameterizedStatement {
+  const params: any[] = []
+  const expenseColumns = ["entry_date", "code", "total_amount", "notes"]
+  const expenseValueParts = [`$${params.push(options.date)}::timestamp`, `$${params.push(options.code)}`, `$${params.push(options.amount)}`, `$${params.push(options.notes)}`]
+
+  if (options.supportsLocation) {
+    expenseColumns.push("location_id")
+    expenseValueParts.push(`$${params.push(options.locationId)}::uuid`)
+  }
+
+  if (options.supportsInventoryLink) {
+    expenseColumns.push("inventory_item_type", "inventory_quantity")
+    expenseValueParts.push(`$${params.push(options.inventoryItemType)}`, `$${params.push(options.inventoryQuantity)}`)
+  }
+
+  expenseColumns.push("tenant_id")
+  expenseValueParts.push(`$${params.push(options.tenantId)}`)
+
+  const ctes = [
+    `inserted_expense AS (
+      INSERT INTO expense_transactions (${expenseColumns.join(", ")})
+      VALUES (${expenseValueParts.join(", ")})
+      RETURNING id
+    )`,
+  ]
+
+  if (options.supportsInventoryLinksTable && options.inventoryItems.length > 0) {
+    const valuesClause = buildValuesClause(options.inventoryItems.length, 2, params.length + 1)
+    for (const item of options.inventoryItems) {
+      params.push(item.itemType, item.quantity)
+    }
+
+    ctes.push(
+      `link_payload(item_type, quantity) AS (VALUES ${valuesClause})`,
+      `inserted_links AS (
+        INSERT INTO expense_inventory_links (expense_transaction_id, tenant_id, item_type, quantity)
+        SELECT ie.id, $${params.push(options.tenantId)}, lp.item_type, lp.quantity
+        FROM inserted_expense ie
+        CROSS JOIN link_payload lp
+        RETURNING id
+      )`,
+    )
+  }
+
+  if (options.plannedTransactions.length > 0) {
+    const transactionPayloadParts = options.plannedTransactions.map((transaction) => {
+      const itemTypeParam = params.push(transaction.itemType)
+      const quantityParam = params.push(transaction.quantity)
+      const locationParam = params.push(transaction.locationId)
+      const unitParam = params.push(transaction.unit)
+      return `($${itemTypeParam}, $${quantityParam}, $${locationParam}::uuid, $${unitParam})`
+    })
+
+    const noteBaseParam = params.push(buildExpenseInventoryNoteBase(options.code, options.notes))
+    const dateParam = params.push(options.date)
+    const userParam = params.push(options.username)
+    const tenantParam = params.push(options.tenantId)
+
+    ctes.push(
+      `transaction_payload(item_type, quantity, location_id, unit) AS (VALUES ${transactionPayloadParts.join(", ")})`,
+      `inserted_transactions AS (
+        INSERT INTO transaction_history (
+          item_type,
+          quantity,
+          transaction_type,
+          notes,
+          transaction_date,
+          user_id,
+          price,
+          total_cost,
+          tenant_id,
+          location_id,
+          unit
+        )
+        SELECT
+          tp.item_type,
+          tp.quantity,
+          'deplete',
+          $${noteBaseParam} || ' [expense_id:' || ie.id || ']',
+          $${dateParam}::timestamp,
+          $${userParam},
+          0,
+          0,
+          $${tenantParam},
+          tp.location_id,
+          tp.unit
+        FROM inserted_expense ie
+        CROSS JOIN transaction_payload tp
+        RETURNING id
+      )`,
+    )
+  }
+
+  return {
+    text: `WITH ${ctes.join(", ")} SELECT id FROM inserted_expense`,
+    params,
+  }
+}
+
+function buildUpdateExpenseStatement(options: {
+  id: number | string
+  tenantId: string
+  date: string
+  code: string
+  amount: number
+  notes: string
+  locationId: string | null
+  supportsLocation: boolean
+  inventoryItemType: string | null
+  inventoryQuantity: number | null
+  supportsInventoryLink: boolean
+}): ParameterizedStatement {
+  const params: any[] = [options.date, options.code, options.amount, options.notes]
+  const assignments = [
+    `entry_date = $1::timestamp`,
+    `code = $2`,
+    `total_amount = $3`,
+    `notes = $4`,
+  ]
+
+  if (options.supportsLocation) {
+    assignments.push(`location_id = $${params.push(options.locationId)}::uuid`)
+  }
+
+  if (options.supportsInventoryLink) {
+    assignments.push(`inventory_item_type = $${params.push(options.inventoryItemType)}`)
+    assignments.push(`inventory_quantity = $${params.push(options.inventoryQuantity)}`)
+  }
+
+  assignments.push(`tenant_id = $${params.push(options.tenantId)}`)
+  const idParam = params.push(options.id)
+  const tenantParam = params.push(options.tenantId)
+
+  return {
+    text: `UPDATE expense_transactions
+      SET ${assignments.join(", ")}
+      WHERE id = $${idParam}
+        AND tenant_id = $${tenantParam}`,
+    params,
+  }
+}
+
+function buildDeleteExpenseStatement(id: number | string, tenantId: string): ParameterizedStatement {
+  return {
+    text: `DELETE FROM expense_transactions WHERE id = $1 AND tenant_id = $2`,
+    params: [id, tenantId],
+  }
+}
+
+function buildDeleteExpenseInventoryLinksStatement(expenseId: number | string, tenantId: string): ParameterizedStatement {
+  return {
+    text: `DELETE FROM expense_inventory_links WHERE expense_transaction_id = $1 AND tenant_id = $2`,
+    params: [expenseId, tenantId],
+  }
+}
+
+function buildInsertExpenseInventoryLinksStatement(
+  expenseId: number | string,
+  tenantId: string,
+  items: ExpenseInventoryItem[],
+): ParameterizedStatement | null {
+  if (items.length === 0) {
+    return null
+  }
+
+  const params: any[] = []
+  const valuesClause = items
+    .map((item) => {
+      const expenseParam = params.push(expenseId)
+      const tenantParam = params.push(tenantId)
+      const itemTypeParam = params.push(item.itemType)
+      const quantityParam = params.push(item.quantity)
+      return `($${expenseParam}, $${tenantParam}, $${itemTypeParam}, $${quantityParam})`
+    })
+    .join(", ")
+
+  return {
+    text: `INSERT INTO expense_inventory_links (expense_transaction_id, tenant_id, item_type, quantity)
+      VALUES ${valuesClause}`,
+    params,
+  }
+}
+
+function buildDeleteExpenseInventoryTransactionsStatement(
+  tenantId: string,
+  transactionIds: number[],
+): ParameterizedStatement | null {
+  if (transactionIds.length === 0) {
+    return null
+  }
+
+  const params = [...transactionIds, tenantId]
+  const placeholders = transactionIds.map((_, index) => `$${index + 1}`).join(", ")
+  const tenantParam = transactionIds.length + 1
+
+  return {
+    text: `DELETE FROM transaction_history
+      WHERE tenant_id = $${tenantParam}
+        AND id IN (${placeholders})`,
+    params,
+  }
+}
+
+function buildInsertExpenseInventoryTransactionsStatement(options: {
+  expenseId: number | string
+  tenantId: string
+  date: string
+  code: string
+  notes: string
+  username: string
+  transactions: PlannedExpenseInventoryTransaction[]
+}): ParameterizedStatement | null {
+  if (options.transactions.length === 0) {
+    return null
+  }
+
+  const expenseNote = buildExpenseInventoryNote(options.expenseId, options.code, options.notes)
+  const params: any[] = []
+  const valuesClause = options.transactions
+    .map((transaction) => {
+      const itemTypeParam = params.push(transaction.itemType)
+      const quantityParam = params.push(transaction.quantity)
+      const noteParam = params.push(expenseNote)
+      const dateParam = params.push(options.date)
+      const userParam = params.push(options.username)
+      const tenantParam = params.push(options.tenantId)
+      const locationParam = params.push(transaction.locationId)
+      const unitParam = params.push(transaction.unit)
+      return `($${itemTypeParam}, $${quantityParam}, 'deplete', $${noteParam}, $${dateParam}::timestamp, $${userParam}, 0, 0, $${tenantParam}, $${locationParam}::uuid, $${unitParam})`
+    })
+    .join(", ")
+
+  return {
+    text: `INSERT INTO transaction_history (
+        item_type,
+        quantity,
+        transaction_type,
+        notes,
+        transaction_date,
+        user_id,
+        price,
+        total_cost,
+        tenant_id,
+        location_id,
+        unit
+      )
+      VALUES ${valuesClause}`,
+    params,
+  }
+}
+
+function buildRecalculateInventoryStatement(
+  tenantId: string,
+  pair: { itemType: string; locationId: string | null },
+): ParameterizedStatement {
+  const conflictTarget = pair.locationId
+    ? `(item_type, tenant_id, location_id)`
+    : `(item_type, tenant_id) WHERE location_id IS NULL`
+
+  return {
+    text: `
+      WITH RECURSIVE ordered AS (
+        SELECT
+          ROW_NUMBER() OVER (ORDER BY transaction_date ASC, id ASC) AS rn,
+          LOWER(COALESCE(transaction_type, '')) AS transaction_type,
+          COALESCE(quantity, 0)::numeric AS quantity,
+          COALESCE(total_cost, 0)::numeric AS total_cost
+        FROM transaction_history
+        WHERE tenant_id = $1
+          AND item_type = $2
+          AND location_id IS NOT DISTINCT FROM $3::uuid
+      ),
+      running AS (
+        SELECT
+          rn,
+          CASE
+            WHEN transaction_type IN ('restock', 'restocking') THEN quantity
+            ELSE GREATEST(0::numeric, 0::numeric - quantity)
+          END AS running_qty,
+          CASE
+            WHEN transaction_type IN ('restock', 'restocking') THEN total_cost
+            ELSE 0::numeric
+          END AS running_cost
+        FROM ordered
+        WHERE rn = 1
+        UNION ALL
+        SELECT
+          next_row.rn,
+          CASE
+            WHEN next_row.transaction_type IN ('restock', 'restocking') THEN running.running_qty + next_row.quantity
+            ELSE GREATEST(0::numeric, running.running_qty - next_row.quantity)
+          END AS running_qty,
+          CASE
+            WHEN next_row.transaction_type IN ('restock', 'restocking') THEN running.running_cost + next_row.total_cost
+            ELSE GREATEST(
+              0::numeric,
+              running.running_cost - (
+                CASE
+                  WHEN running.running_qty > 0::numeric THEN (running.running_cost / running.running_qty) * next_row.quantity
+                  ELSE 0::numeric
+                END
+              )
+            )
+          END AS running_cost
+        FROM running
+        JOIN ordered AS next_row
+          ON next_row.rn = running.rn + 1
+      ),
+      final_state AS (
+        SELECT
+          COALESCE((SELECT running_qty FROM running ORDER BY rn DESC LIMIT 1), 0::numeric) AS quantity,
+          COALESCE((SELECT running_cost FROM running ORDER BY rn DESC LIMIT 1), 0::numeric) AS total_cost
+      ),
+      unit_source AS (
+        SELECT COALESCE(
+          NULLIF((
+            SELECT unit
+            FROM current_inventory
+            WHERE tenant_id = $1
+              AND item_type = $2
+              AND location_id IS NOT DISTINCT FROM $3::uuid
+            LIMIT 1
+          ), ''),
+          NULLIF((
+            SELECT unit
+            FROM transaction_history
+            WHERE tenant_id = $1
+              AND item_type = $2
+              AND location_id IS NOT DISTINCT FROM $3::uuid
+            ORDER BY transaction_date DESC, id DESC
+            LIMIT 1
+          ), ''),
+          'kg'
+        ) AS unit
+      )
+      INSERT INTO current_inventory (
+        item_type,
+        quantity,
+        unit,
+        avg_price,
+        total_cost,
+        tenant_id,
+        location_id
+      )
+      SELECT
+        $2,
+        final_state.quantity,
+        unit_source.unit,
+        CASE
+          WHEN final_state.quantity > 0::numeric THEN final_state.total_cost / final_state.quantity
+          ELSE 0::numeric
+        END AS avg_price,
+        final_state.total_cost,
+        $1,
+        $3::uuid
+      FROM final_state
+      CROSS JOIN unit_source
+      ON CONFLICT ${conflictTarget}
+      DO UPDATE SET
+        quantity = EXCLUDED.quantity,
+        unit = EXCLUDED.unit,
+        avg_price = EXCLUDED.avg_price,
+        total_cost = EXCLUDED.total_cost
+    `,
+    params: [tenantId, pair.itemType, pair.locationId],
+  }
+}
+
 export async function GET(request: Request) {
   try {
     const sessionUser = await requireModuleAccess("accounts")
@@ -412,16 +912,18 @@ export async function GET(request: Request) {
     // Inventory items list endpoint — used by the expense form dropdown
     if (searchParams.get("inventoryItems") === "1") {
       const items = await fetchInventoryItemsForTenant(tenantContext.tenantId)
-      return NextResponse.json({ success: true, items })
+      const supportsInventoryLinksTable = await tableHasExpenseInventoryLinksTable()
+      return NextResponse.json({ success: true, items, supportsInventoryLinksTable })
     }
 
     const requestedLocationId = normalizeLocationId(searchParams.get("locationId"))
     if (requestedLocationId === "invalid") {
       return NextResponse.json({ success: false, error: "Invalid locationId" }, { status: 400 })
     }
-    const [supportsLocation, supportsInventoryLink] = await Promise.all([
+    const [supportsLocation, supportsInventoryLink, supportsInventoryLinksTable] = await Promise.all([
       tableHasLocationColumn("expense_transactions"),
       tableHasInventoryLinkColumns(),
+      tableHasExpenseInventoryLinksTable(),
     ])
     const validLocationId = supportsLocation
       ? await validateLocationForTenant(tenantContext, requestedLocationId)
@@ -580,21 +1082,35 @@ export async function GET(request: Request) {
 
     const totalCount = Number(totalCountResult[0]?.count) || 0
     const totalAmount = Number(totalAmountResult[0]?.total) || 0
+    const inventoryLinksByExpenseId = supportsInventoryLinksTable
+      ? await loadExpenseInventoryLinks(
+          tenantContext,
+          result.map((row: any) => row.id),
+        )
+      : new Map<number, ExpenseInventoryItem[]>()
 
 
     // Transform the data to match the expected format
-    const deployments = result.map((row: any) => ({
-      id: row.id,
-      date: row.date,
-      code: row.code,
-      reference: row.reference, // Use the reference from the JOIN
-      amount: Number.parseFloat(row.amount),
-      notes: row.notes || "",
-      locationId: supportsLocation && row.location_id ? String(row.location_id) : null,
-      inventoryItemType: supportsInventoryLink && row.inventory_item_type ? String(row.inventory_item_type) : null,
-      inventoryQuantity: supportsInventoryLink && row.inventory_quantity != null ? Number(row.inventory_quantity) : null,
-      user: "system",
-    }))
+    const deployments = result.map((row: any) => {
+      const inventoryItems = resolveExpenseInventoryItems(
+        inventoryLinksByExpenseId.get(Number(row.id)),
+        supportsInventoryLink ? row.inventory_item_type : null,
+        supportsInventoryLink ? row.inventory_quantity : null,
+      )
+      return {
+        id: row.id,
+        date: row.date,
+        code: row.code,
+        reference: row.reference,
+        amount: Number.parseFloat(row.amount),
+        notes: row.notes || "",
+        locationId: supportsLocation && row.location_id ? String(row.location_id) : null,
+        inventoryItems,
+        inventoryItemType: inventoryItems[0]?.itemType ?? null,
+        inventoryQuantity: inventoryItems[0]?.quantity ?? null,
+        user: "system",
+      }
+    })
 
     return NextResponse.json({
       success: true,
@@ -627,18 +1143,19 @@ export async function POST(request: Request) {
     const tenantContext = normalizeTenantContext(sessionUser.tenantId, sessionUser.role)
     const body = await request.json()
     const { date, code, amount, notes } = body
+    const normalizedNotes = String(notes || "")
     const requestedLocationId = normalizeLocationId(body?.locationId)
     if (requestedLocationId === "invalid") {
       return NextResponse.json({ success: false, error: "Invalid locationId" }, { status: 400 })
     }
     const rawInventoryItems = parseExpenseInventoryItems(body)
-    // Keep legacy single fields for the DB column (first item, for backward compat)
     const inventoryItemType = rawInventoryItems[0]?.itemType ?? null
     const inventoryQuantity = rawInventoryItems[0]?.quantity ?? null
 
-    const [supportsLocation, supportsInventoryLink] = await Promise.all([
+    const [supportsLocation, supportsInventoryLink, supportsInventoryLinksTable] = await Promise.all([
       tableHasLocationColumn("expense_transactions"),
       tableHasInventoryLinkColumns(),
+      tableHasExpenseInventoryLinksTable(),
     ])
     const validLocationId = supportsLocation
       ? await validateLocationForTenant(tenantContext, requestedLocationId)
@@ -652,27 +1169,21 @@ export async function POST(request: Request) {
 
     // De-dupe accidental rapid double-submit from UI (same payload within the last 90 seconds).
     try {
-      const duplicateRows = await runTenantQuery(
-        accountsSql,
+      const duplicateId = await findRecentDuplicateExpenseId({
         tenantContext,
-        accountsSql`
-          SELECT id
-          FROM expense_transactions
-          WHERE tenant_id = ${tenantContext.tenantId}
-            AND entry_date::date = ${date}::date
-            AND code = ${code}
-            AND COALESCE(total_amount, 0) = ${amount}
-            AND COALESCE(notes, '') = ${notes || ""}
-            ${locationDedupClause}
-            AND created_at >= (CURRENT_TIMESTAMP - INTERVAL '90 seconds')
-          ORDER BY id DESC
-          LIMIT 1
-        `,
-      )
-      if (duplicateRows?.length) {
+        date,
+        code,
+        amount,
+        notes: normalizedNotes,
+        locationDedupClause,
+        supportsInventoryLink,
+        supportsInventoryLinksTable,
+        inventoryItems: rawInventoryItems,
+      })
+      if (duplicateId) {
         return NextResponse.json({
           success: true,
-          id: duplicateRows[0].id,
+          id: duplicateId,
           deduped: true,
           message: "Duplicate submission detected and ignored.",
         })
@@ -683,141 +1194,58 @@ export async function POST(request: Request) {
       }
     }
 
-    const result = supportsLocation && supportsInventoryLink
-      ? await runTenantQuery(
-          accountsSql,
-          tenantContext,
-          accountsSql`
-            INSERT INTO expense_transactions (
-              entry_date,
-              code,
-              total_amount,
-              notes,
-              location_id,
-              inventory_item_type,
-              inventory_quantity,
-              tenant_id
-            ) VALUES (
-              ${date}::timestamp,
-              ${code},
-              ${amount},
-              ${notes || ""},
-              ${validLocationId}::uuid,
-              ${inventoryItemType},
-              ${inventoryQuantity},
-              ${tenantContext.tenantId}
-            )
-            RETURNING id
-          `,
-        )
-      : supportsLocation
-        ? await runTenantQuery(
-            accountsSql,
+    const plannedTransactions =
+      supportsInventoryLink && rawInventoryItems.length > 0
+        ? await planExpenseInventoryTransactions(
             tenantContext,
-            accountsSql`
-              INSERT INTO expense_transactions (
-                entry_date,
-                code,
-                total_amount,
-                notes,
-                location_id,
-                tenant_id
-              ) VALUES (
-                ${date}::timestamp,
-                ${code},
-                ${amount},
-                ${notes || ""},
-                ${validLocationId}::uuid,
-                ${tenantContext.tenantId}
-              )
-              RETURNING id
-            `,
+            rawInventoryItems,
+            supportsLocation ? validLocationId : null,
           )
-        : await runTenantQuery(
-            accountsSql,
-            tenantContext,
-            accountsSql`
-              INSERT INTO expense_transactions (
-                entry_date,
-                code,
-                total_amount,
-                notes,
-                tenant_id
-              ) VALUES (
-                ${date}::timestamp,
-                ${code},
-                ${amount},
-                ${notes || ""},
-                ${tenantContext.tenantId}
-              )
-              RETURNING id
-            `,
-          )
+        : []
 
-    if (supportsInventoryLink && rawInventoryItems.length > 0 && result?.[0]?.id) {
-      try {
-        const plannedTransactions = await planExpenseInventoryTransactions(
-          tenantContext,
-          rawInventoryItems,
-          supportsLocation ? validLocationId : null,
-        )
-        await insertExpenseInventoryTransactions(
-          tenantContext,
-          sessionUser,
-          result[0].id,
-          date,
-          code,
-          notes,
-          plannedTransactions,
-        )
-      } catch (depleteError) {
-        try {
-          await runTenantQuery(
-            accountsSql,
-            tenantContext,
-            accountsSql`
-              DELETE FROM expense_transactions
-              WHERE id = ${result[0].id}
-                AND tenant_id = ${tenantContext.tenantId}
-            `,
-          )
-        } catch (rollbackError) {
-          console.error("⚠️ Failed to roll back expense after inventory sync error", rollbackError)
-        }
+    const createStatement = buildCreateExpenseMutationStatement({
+      date,
+      code,
+      amount,
+      notes: normalizedNotes,
+      tenantId: tenantContext.tenantId,
+      locationId: supportsLocation ? validLocationId : null,
+      supportsLocation,
+      inventoryItemType,
+      inventoryQuantity,
+      supportsInventoryLink,
+      supportsInventoryLinksTable,
+      inventoryItems: rawInventoryItems,
+      plannedTransactions,
+      username: sessionUser.username || "system",
+    })
 
-        if (isInventoryUnderflowError(depleteError)) {
-          return NextResponse.json(
-            {
-              success: false,
-              error: "Insufficient stock for the linked inventory item. Update the stock location or restock first.",
-            },
-            { status: 409 },
-          )
-        }
+    const [createResult] = await runTenantTransaction(accountsSql, tenantContext, (txn) => [
+      txn.query(createStatement.text, createStatement.params),
+    ])
 
-        throw depleteError
-      }
-    }
+    const createdId = createResult?.[0]?.id
 
     await logAuditEvent(accountsSql, sessionUser, {
       action: "create",
       entityType: "expense_transactions",
-      entityId: result?.[0]?.id,
+      entityId: createdId,
       after: {
         entry_date: date,
         code,
         total_amount: amount,
-        notes,
+        notes: normalizedNotes,
         location_id: supportsLocation ? validLocationId : null,
         inventory_item_type: inventoryItemType,
         inventory_quantity: inventoryQuantity,
+        inventory_items: rawInventoryItems,
       },
     })
 
 
     return NextResponse.json({
       success: true,
-      id: result[0].id,
+      id: createdId,
     })
   } catch (error: any) {
     console.error("❌ Error adding expense:", error.message)
@@ -852,6 +1280,7 @@ export async function PUT(request: Request) {
     const tenantContext = normalizeTenantContext(sessionUser.tenantId, sessionUser.role)
     const body = await request.json()
     const { id, date, code, amount, notes } = body
+    const normalizedNotes = String(notes || "")
     const rawInventoryItems = parseExpenseInventoryItems(body)
     const inventoryItemType = rawInventoryItems[0]?.itemType ?? null
     const inventoryQuantity = rawInventoryItems[0]?.quantity ?? null
@@ -859,9 +1288,10 @@ export async function PUT(request: Request) {
     if (requestedLocationId === "invalid") {
       return NextResponse.json({ success: false, error: "Invalid locationId" }, { status: 400 })
     }
-    const [supportsLocation, supportsInventoryLink] = await Promise.all([
+    const [supportsLocation, supportsInventoryLink, supportsInventoryLinksTable] = await Promise.all([
       tableHasLocationColumn("expense_transactions"),
       tableHasInventoryLinkColumns(),
+      tableHasExpenseInventoryLinksTable(),
     ])
     const validLocationId = supportsLocation
       ? await validateLocationForTenant(tenantContext, requestedLocationId)
@@ -896,110 +1326,76 @@ export async function PUT(request: Request) {
       location_id: existing[0].location_id ? String(existing[0].location_id) : null,
     }
 
-    const existingInventoryTransactions = supportsInventoryLink
-      ? await loadAssociatedExpenseInventoryTransactions(tenantContext, existingExpenseRow)
-      : []
-    let plannedTransactions: Array<{ itemType: string; quantity: number; locationId: string | null; unit: string }> = []
-    if (supportsInventoryLink && rawInventoryItems.length > 0) {
-      try {
-        plannedTransactions = await planExpenseInventoryTransactions(
-          tenantContext,
-          rawInventoryItems,
-          supportsLocation ? validLocationId : null,
-          existingInventoryTransactions,
-        )
-      } catch (planError) {
-        if (isInventoryUnderflowError(planError)) {
-          return NextResponse.json(
-            {
-              success: false,
-              error: "Insufficient stock for the linked inventory item. Update the stock location or restock first.",
-            },
-            { status: 409 },
+    const existingInventoryTransactions = await loadAssociatedExpenseInventoryTransactions(tenantContext, existingExpenseRow)
+    const plannedTransactions =
+      supportsInventoryLink && rawInventoryItems.length > 0
+        ? await planExpenseInventoryTransactions(
+            tenantContext,
+            rawInventoryItems,
+            supportsLocation ? validLocationId : null,
+            existingInventoryTransactions,
           )
-        }
-        throw planError
-      }
-    }
+        : []
+    const affectedPairs = collectInventoryPairs(existingInventoryTransactions, plannedTransactions)
+    const existingTransactionIds = existingInventoryTransactions
+      .map((row) => Number(row.id))
+      .filter((value) => Number.isInteger(value) && value > 0)
 
-    if (supportsLocation && supportsInventoryLink) {
-      await runTenantQuery(
-        accountsSql,
-        tenantContext,
-        accountsSql`
-          UPDATE expense_transactions
-          SET
-            entry_date = ${date}::timestamp,
-            code = ${code},
-            total_amount = ${amount},
-            notes = ${notes || ""},
-            location_id = ${validLocationId}::uuid,
-            inventory_item_type = ${inventoryItemType},
-            inventory_quantity = ${inventoryQuantity},
-            tenant_id = ${tenantContext.tenantId}
-          WHERE id = ${id}
-            AND tenant_id = ${tenantContext.tenantId}
-        `,
-      )
-    } else if (supportsLocation) {
-      await runTenantQuery(
-        accountsSql,
-        tenantContext,
-        accountsSql`
-          UPDATE expense_transactions
-          SET
-            entry_date = ${date}::timestamp,
-            code = ${code},
-            total_amount = ${amount},
-            notes = ${notes || ""},
-            location_id = ${validLocationId}::uuid,
-            tenant_id = ${tenantContext.tenantId}
-          WHERE id = ${id}
-            AND tenant_id = ${tenantContext.tenantId}
-        `,
-      )
-    } else if (supportsInventoryLink) {
-      await runTenantQuery(
-        accountsSql,
-        tenantContext,
-        accountsSql`
-          UPDATE expense_transactions
-          SET
-            entry_date = ${date}::timestamp,
-            code = ${code},
-            total_amount = ${amount},
-            notes = ${notes || ""},
-            inventory_item_type = ${inventoryItemType},
-            inventory_quantity = ${inventoryQuantity},
-            tenant_id = ${tenantContext.tenantId}
-          WHERE id = ${id}
-            AND tenant_id = ${tenantContext.tenantId}
-        `,
-      )
-    } else {
-      await runTenantQuery(
-        accountsSql,
-        tenantContext,
-        accountsSql`
-          UPDATE expense_transactions
-          SET
-            entry_date = ${date}::timestamp,
-            code = ${code},
-            total_amount = ${amount},
-            notes = ${notes || ""},
-            tenant_id = ${tenantContext.tenantId}
-          WHERE id = ${id}
-            AND tenant_id = ${tenantContext.tenantId}
-        `,
-      )
-    }
+    const updateStatement = buildUpdateExpenseStatement({
+      id,
+      tenantId: tenantContext.tenantId,
+      date,
+      code,
+      amount,
+      notes: normalizedNotes,
+      locationId: supportsLocation ? validLocationId : null,
+      supportsLocation,
+      inventoryItemType,
+      inventoryQuantity,
+      supportsInventoryLink,
+    })
+    const deleteLinksStatement = supportsInventoryLinksTable
+      ? buildDeleteExpenseInventoryLinksStatement(id, tenantContext.tenantId)
+      : null
+    const insertLinksStatement = supportsInventoryLinksTable
+      ? buildInsertExpenseInventoryLinksStatement(id, tenantContext.tenantId, rawInventoryItems)
+      : null
+    const deleteTransactionsStatement = buildDeleteExpenseInventoryTransactionsStatement(
+      tenantContext.tenantId,
+      existingTransactionIds,
+    )
+    const insertTransactionsStatement = buildInsertExpenseInventoryTransactionsStatement({
+      expenseId: id,
+      tenantId: tenantContext.tenantId,
+      date,
+      code,
+      notes: normalizedNotes,
+      username: sessionUser.username || "system",
+      transactions: plannedTransactions,
+    })
 
-    if (supportsInventoryLink) {
-      await deleteExpenseInventoryTransactions(tenantContext, id, existingExpenseRow)
-      if (plannedTransactions.length > 0) {
-        await insertExpenseInventoryTransactions(tenantContext, sessionUser, id, date, code, notes, plannedTransactions)
+    await runTenantTransaction(accountsSql, tenantContext, (txn) => {
+      const queries = [txn.query(updateStatement.text, updateStatement.params)]
+
+      if (deleteLinksStatement) {
+        queries.push(txn.query(deleteLinksStatement.text, deleteLinksStatement.params))
       }
-    }
+      if (insertLinksStatement) {
+        queries.push(txn.query(insertLinksStatement.text, insertLinksStatement.params))
+      }
+      if (deleteTransactionsStatement) {
+        queries.push(txn.query(deleteTransactionsStatement.text, deleteTransactionsStatement.params))
+      }
+      if (insertTransactionsStatement) {
+        queries.push(txn.query(insertTransactionsStatement.text, insertTransactionsStatement.params))
+      }
+      for (const pair of affectedPairs) {
+        const recalcStatement = buildRecalculateInventoryStatement(tenantContext.tenantId, pair)
+        queries.push(txn.query(recalcStatement.text, recalcStatement.params))
+      }
+
+      return queries
+    })
 
     await logAuditEvent(accountsSql, sessionUser, {
       action: "update",
@@ -1010,10 +1406,11 @@ export async function PUT(request: Request) {
         entry_date: date,
         code,
         total_amount: amount,
-        notes,
+        notes: normalizedNotes,
         location_id: supportsLocation ? validLocationId : null,
         inventory_item_type: supportsInventoryLink ? inventoryItemType : null,
         inventory_quantity: supportsInventoryLink ? inventoryQuantity : null,
+        inventory_items: rawInventoryItems,
       },
     })
 
@@ -1074,15 +1471,7 @@ export async function DELETE(request: Request) {
       return NextResponse.json({ success: false, error: "Expense not found" }, { status: 404 })
     }
 
-    await runTenantQuery(
-      accountsSql,
-      tenantContext,
-      accountsSql`
-        DELETE FROM expense_transactions
-        WHERE id = ${id}
-          AND tenant_id = ${tenantContext.tenantId}
-      `,
-    )
+    const supportsInventoryLinksTable = await tableHasExpenseInventoryLinksTable()
     const existingExpenseRow: ExpenseInventorySourceRow = {
       id: existing[0].id,
       code: String(existing[0].code || ""),
@@ -1092,7 +1481,35 @@ export async function DELETE(request: Request) {
       inventory_quantity: existing[0].inventory_quantity != null ? Number(existing[0].inventory_quantity) : null,
       location_id: existing[0].location_id ? String(existing[0].location_id) : null,
     }
-    await deleteExpenseInventoryTransactions(tenantContext, id, existingExpenseRow)
+    const existingInventoryTransactions = await loadAssociatedExpenseInventoryTransactions(tenantContext, existingExpenseRow)
+    const existingTransactionIds = existingInventoryTransactions
+      .map((row) => Number(row.id))
+      .filter((value) => Number.isInteger(value) && value > 0)
+    const affectedPairs = collectInventoryPairs(existingInventoryTransactions)
+    const deleteLinksStatement = supportsInventoryLinksTable
+      ? buildDeleteExpenseInventoryLinksStatement(id, tenantContext.tenantId)
+      : null
+    const deleteTransactionsStatement = buildDeleteExpenseInventoryTransactionsStatement(
+      tenantContext.tenantId,
+      existingTransactionIds,
+    )
+    const deleteExpenseStatement = buildDeleteExpenseStatement(id, tenantContext.tenantId)
+
+    await runTenantTransaction(accountsSql, tenantContext, (txn) => {
+      const queries = []
+      if (deleteLinksStatement) {
+        queries.push(txn.query(deleteLinksStatement.text, deleteLinksStatement.params))
+      }
+      if (deleteTransactionsStatement) {
+        queries.push(txn.query(deleteTransactionsStatement.text, deleteTransactionsStatement.params))
+      }
+      queries.push(txn.query(deleteExpenseStatement.text, deleteExpenseStatement.params))
+      for (const pair of affectedPairs) {
+        const recalcStatement = buildRecalculateInventoryStatement(tenantContext.tenantId, pair)
+        queries.push(txn.query(recalcStatement.text, recalcStatement.params))
+      }
+      return queries
+    })
 
     await logAuditEvent(accountsSql, sessionUser, {
       action: "delete",

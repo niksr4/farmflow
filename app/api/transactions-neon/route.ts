@@ -1,6 +1,6 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { inventorySql } from "@/lib/server/db"
-import { requireModuleAccess, isModuleAccessError } from "@/lib/server/module-access"
+import { requireAnyModuleAccess, requireModuleAccess, isModuleAccessError } from "@/lib/server/module-access"
 import { normalizeTenantContext, runTenantQuery } from "@/lib/server/tenant-db"
 import { resolveLocationCompatibility } from "@/lib/server/location-compatibility"
 import { canWriteModule } from "@/lib/permissions"
@@ -11,6 +11,8 @@ export const dynamic = "force-dynamic"
 
 const USAGE_LOCATION_TAG_REGEX = /\[usage_location:([^\]]+)\]/i
 const ALL_USAGE_LOCATION_TAGS_REGEX = /\s*\[usage_location:[^\]]+\]\s*/gi
+const EXPENSE_TAG_REGEX = /\[expense_id:([^\]]+)\]/i
+const ALL_EXPENSE_TAGS_REGEX = /\s*\[expense_id:[^\]]+\]\s*/gi
 
 const extractUsageLocationId = (notes: string | null | undefined) => {
   const raw = String(notes || "")
@@ -21,6 +23,17 @@ const extractUsageLocationId = (notes: string | null | undefined) => {
 
 const stripUsageLocationTag = (notes: string | null | undefined) => {
   return String(notes || "").replace(ALL_USAGE_LOCATION_TAGS_REGEX, " ").trim()
+}
+
+const extractExpenseId = (notes: string | null | undefined) => {
+  const raw = String(notes || "")
+  const match = raw.match(EXPENSE_TAG_REGEX)
+  const value = match?.[1]?.trim()
+  return value || null
+}
+
+const stripExpenseTag = (notes: string | null | undefined) => {
+  return String(notes || "").replace(ALL_EXPENSE_TAGS_REGEX, " ").trim()
 }
 
 const appendUsageLocationTag = (notes: string | null | undefined, usageLocationId: string) => {
@@ -339,12 +352,14 @@ export async function GET(request: NextRequest) {
     const rawTransactions = query.map((row) => {
       const rawNotes = row.notes ? String(row.notes) : ""
       const usageLocationId = !row.location_id ? extractUsageLocationId(rawNotes) : null
+      const expenseId = extractExpenseId(rawNotes)
+      const strippedNotes = stripExpenseTag(stripUsageLocationTag(rawNotes))
       return {
         id: Number(row.id),
         item_type: String(row.item_type),
         quantity: Number(row.quantity) || 0,
         transaction_type: String(row.transaction_type),
-        notes: stripUsageLocationTag(rawNotes),
+        notes: strippedNotes,
         transaction_date: String(row.transaction_date),
         user_id: String(row.user_id),
         price: Number(row.price) || 0,
@@ -355,6 +370,9 @@ export async function GET(request: NextRequest) {
         location_code: row.location_code ? String(row.location_code) : undefined,
         usage_location_id: usageLocationId,
         stock_location_id: row.location_id ? String(row.location_id) : null,
+        source_type: expenseId ? "expense" as const : "manual" as const,
+        source_label: expenseId ? "Expense Usage" : undefined,
+        source_id: expenseId,
       }
     })
 
@@ -432,7 +450,7 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
-    const sessionUser = await requireModuleAccess("transactions")
+    const sessionUser = await requireAnyModuleAccess(["transactions", "inventory"])
     if (!canWriteModule(sessionUser.role, "transactions")) {
       return NextResponse.json({ success: false, message: "Insufficient role" }, { status: 403 })
     }

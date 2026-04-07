@@ -180,7 +180,7 @@ export default function WorkerProfilesTab() {
           <div>
             <CardTitle className="text-base">Worker Roster</CardTitle>
             <CardDescription>
-              Manage worker profiles, daily rates, and payment details. {workers.length} active worker{workers.length !== 1 ? "s" : ""}.
+              This shared roster feeds Attendance, Picking, Ledger, and Payroll. Add only the workers you want tracked across those tabs. {workers.length} active worker{workers.length !== 1 ? "s" : ""}.
             </CardDescription>
           </div>
           {canWrite && !isAdding && (
@@ -252,7 +252,7 @@ export default function WorkerProfilesTab() {
               <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Loading workers…
             </div>
           ) : workers.length === 0 ? (
-            <EmptyStateTable title="No workers yet — add your first worker to start tracking attendance and payroll." />
+            <EmptyStateTable title="No workers yet — add your first worker to start tracking attendance, picking, ledger, or payroll." />
           ) : (
             <div className="overflow-x-auto">
               <Table>

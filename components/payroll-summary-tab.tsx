@@ -110,7 +110,7 @@ export default function PayrollSummaryTab() {
             Payroll Summary
           </CardTitle>
           <CardDescription>
-            Per-worker net payable for a date range — combining attendance earnings, picking earnings, advances, and deductions.
+            Per-worker net payable for a date range — combining whichever people records you keep: attendance wages, picking earnings, advances, deductions, and adjustments.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">

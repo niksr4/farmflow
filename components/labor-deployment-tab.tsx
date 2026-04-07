@@ -222,24 +222,24 @@ export default function LaborDeploymentTab({
     <div className="space-y-4">
       {!loading && activities.length === 0 && (
         <TaskGuideCard
-          tone="onboarding"
-          eyebrow="Setup required"
-          title="Add account codes before logging labor"
-          description="Labor deployments need an activity code (e.g. 184 — Pepper Harvest, 140 — Arabica Harvesting). Account codes are set up in the Accounts Setup tab and tell FarmFlow what type of work each labor entry is for."
+          tone="finance"
+          eyebrow="Simple start"
+          title="Start with a few simple work codes"
+          description="You do not need a full chart of accounts before logging labor. If you already know the estate codes, use them. If not, type a short code and work name now, then tidy the Codes tab later."
           bullets={[
-            "Go to Accounts → Accounts Setup tab",
-            'Click "Add Activity" and enter your code and description',
-            "Come back here and log your first labor deployment",
+            "Use short, stable work codes your team will actually remember.",
+            "Type the code and category name directly here if no saved list exists yet.",
+            "Use Codes later when you want autocomplete and cleaner exports.",
           ]}
-          tip="Your estate's chart of accounts is usually provided by your accountant or manager. Codes like 101–220 are common for coffee estates."
+          tip="A simple code like HARVEST, WEEDING, or PRUNING is better than waiting for a perfect accounting structure."
         />
       )}
       <Card>
         <CardHeader>
           <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
             <div>
-              <CardTitle className="text-xl sm:text-2xl">Labor Deployments</CardTitle>
-              <CardDescription className="text-sm">Track estate and outside labor</CardDescription>
+              <CardTitle className="text-xl sm:text-2xl">Labor</CardTitle>
+              <CardDescription className="text-sm">Log what work was done and how many people were paid.</CardDescription>
             </div>
             <div className="text-left sm:text-right">
               <p className="text-sm font-medium text-muted-foreground">Total Labor Cost</p>
@@ -253,13 +253,37 @@ export default function LaborDeploymentTab({
           </div>
         </CardHeader>
         <CardContent>
+          <div className="mb-4 rounded-2xl border border-emerald-100 bg-emerald-50/50 p-4">
+            <div className="grid gap-3 md:grid-cols-3">
+              <div className="rounded-xl border border-white/70 bg-white/85 p-3">
+                <p className="text-[11px] uppercase tracking-[0.18em] text-emerald-700">One entry</p>
+                <p className="mt-1 text-sm font-semibold text-foreground">One day, one activity code</p>
+              </div>
+              <div className="rounded-xl border border-white/70 bg-white/85 p-3">
+                <p className="text-[11px] uppercase tracking-[0.18em] text-emerald-700">Estate team</p>
+                <p className="mt-1 text-sm font-semibold text-foreground">Workers paid by the estate</p>
+              </div>
+              <div className="rounded-xl border border-white/70 bg-white/85 p-3">
+                <p className="text-[11px] uppercase tracking-[0.18em] text-emerald-700">Outside team</p>
+                <p className="mt-1 text-sm font-semibold text-foreground">Contract or outside workers for the same task</p>
+              </div>
+            </div>
+          </div>
+
           {!isAdding ? (
             <Button onClick={() => setIsAdding(true)} className="w-full h-12 text-base">
-              <PlusCircle className="mr-2 h-5 w-5" /> Add Labor Deployment
+              <PlusCircle className="mr-2 h-5 w-5" /> Add labor entry
             </Button>
           ) : (
             <form onSubmit={handleSubmit} className="space-y-4 border rounded-lg p-3 sm:p-4 bg-muted/50" ref={formRef}>
-              <div className="space-y-4">
+              <div className="rounded-xl border border-border/60 bg-white/80 p-4">
+                <p className="text-sm font-semibold text-foreground">Entry basics</p>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Start with the day and work code. If you do not have saved codes yet, type a short code and work name manually.
+                </p>
+              </div>
+
+              <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
                 <div className="space-y-2">
                   <Label htmlFor="date" className="text-base">
                     Date
@@ -276,7 +300,7 @@ export default function LaborDeploymentTab({
 
                 <div className="space-y-2">
                   <Label htmlFor="code" className="text-base">
-                    Code
+                    Activity code
                   </Label>
                   <Input
                     id="code"
@@ -294,29 +318,36 @@ export default function LaborDeploymentTab({
                       </option>
                     ))}
                   </datalist>
+                  <p className="text-xs text-muted-foreground">Saved codes appear here, but you can type a short estate work code now.</p>
                 </div>
 
                 <div className="space-y-2">
                   <Label htmlFor="reference" className="text-base">
-                    Reference
+                    Category name
                   </Label>
                   <Input
                     id="reference"
                     value={formData.reference}
                     onChange={(e) => setFormData((prev) => ({ ...prev, reference: e.target.value }))}
-                    placeholder="Auto-filled from code"
+                    placeholder="Auto-filled from activity code"
                     required
                     className="h-11"
                   />
+                  <p className="text-xs text-muted-foreground">Use a plain work name the field team and owner will both recognize.</p>
                 </div>
               </div>
 
-              <div className="border-t pt-4">
-                <h4 className="font-medium mb-3 text-base">Estate Labor</h4>
-                <div className="space-y-4">
+              <div className="rounded-xl border border-border/60 bg-white/80 p-4">
+                <div className="mb-3 flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+                  <h4 className="font-medium text-base">Estate team</h4>
+                  <p className="text-sm text-muted-foreground">
+                    Subtotal: {formatCurrency(formData.hfLaborers * formData.hfCostPerLaborer)}
+                  </p>
+                </div>
+                <div className="grid gap-4 md:grid-cols-2">
                   <div className="space-y-2">
                     <Label htmlFor="hfLaborers" className="text-base">
-                      Number of Laborers (0.5 for half day)
+                      Number of workers (0.5 for half day)
                     </Label>
                     <Input
                       id="hfLaborers"
@@ -332,7 +363,7 @@ export default function LaborDeploymentTab({
                   </div>
                   <div className="space-y-2">
                     <Label htmlFor="hfCostPerLaborer" className="text-base">
-                      Cost per Laborer (₹)
+                      Cost per worker (₹)
                     </Label>
                     <Input
                       id="hfCostPerLaborer"
@@ -347,17 +378,19 @@ export default function LaborDeploymentTab({
                     />
                   </div>
                 </div>
-                <p className="text-sm text-muted-foreground mt-2">
-                  Subtotal: {formatCurrency(formData.hfLaborers * formData.hfCostPerLaborer)}
-                </p>
               </div>
 
-              <div className="border-t pt-4">
-                <h4 className="font-medium mb-3 text-base">Outside Labor</h4>
-                <div className="space-y-4">
+              <div className="rounded-xl border border-border/60 bg-white/80 p-4">
+                <div className="mb-3 flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+                  <h4 className="font-medium text-base">Outside team</h4>
+                  <p className="text-sm text-muted-foreground">
+                    Subtotal: {formatCurrency(formData.outsideLaborers * formData.outsideCostPerLaborer)}
+                  </p>
+                </div>
+                <div className="grid gap-4 md:grid-cols-2">
                   <div className="space-y-2">
                     <Label htmlFor="outsideLaborers" className="text-base">
-                      Number of Laborers (0.5 for half day)
+                      Number of workers (0.5 for half day)
                     </Label>
                     <Input
                       id="outsideLaborers"
@@ -373,7 +406,7 @@ export default function LaborDeploymentTab({
                   </div>
                   <div className="space-y-2">
                     <Label htmlFor="outsideCostPerLaborer" className="text-base">
-                      Cost per Laborer (₹)
+                      Cost per worker (₹)
                     </Label>
                     <Input
                       id="outsideCostPerLaborer"
@@ -391,20 +424,17 @@ export default function LaborDeploymentTab({
                     />
                   </div>
                 </div>
-                <p className="text-sm text-muted-foreground mt-2">
-                  Subtotal: {formatCurrency(formData.outsideLaborers * formData.outsideCostPerLaborer)}
-                </p>
               </div>
 
               <div className="space-y-2">
                 <Label htmlFor="taskDescription" className="text-base">
-                  Task Description
+                  What work was done
                 </Label>
                 <Textarea
                   id="taskDescription"
                   value={formData.taskDescription}
                   onChange={(e) => setFormData((prev) => ({ ...prev, taskDescription: e.target.value }))}
-                  placeholder="Describe the field task (e.g. Weeding block 3, Pruning section A)..."
+                  placeholder="Describe the work simply, for example Weeding block 3 or Pruning section A..."
                   rows={2}
                   className="text-base"
                 />
@@ -418,7 +448,7 @@ export default function LaborDeploymentTab({
                   id="notes"
                   value={formData.notes}
                   onChange={(e) => setFormData((prev) => ({ ...prev, notes: e.target.value }))}
-                  placeholder="Additional notes..."
+                  placeholder="Payment note, field note, or anything the owner should know..."
                   rows={3}
                   className="text-base"
                 />
@@ -431,7 +461,7 @@ export default function LaborDeploymentTab({
               <div className="flex flex-col sm:flex-row gap-2">
                 <Button type="submit" className="flex-1 h-12 text-base" disabled={isSubmitting}>
                   <Save className="mr-2 h-5 w-5" />
-                  {isSubmitting ? "Saving..." : `${editingId ? "Update" : "Save"} Deployment`}
+                  {isSubmitting ? "Saving..." : `${editingId ? "Update" : "Save"} labor entry`}
                 </Button>
                 <Button
                   type="button"
@@ -453,7 +483,7 @@ export default function LaborDeploymentTab({
       ) : deployments.length > 0 ? (
         <Card>
           <CardHeader>
-            <CardTitle className="text-xl sm:text-2xl">Deployment History</CardTitle>
+            <CardTitle className="text-xl sm:text-2xl">Labor history</CardTitle>
           </CardHeader>
           <CardContent className="p-0">
             {/* Mobile View */}
@@ -489,13 +519,13 @@ export default function LaborDeploymentTab({
                       <CollapsibleContent className="pt-3 space-y-2">
                         {hfEntry && Number(hfEntry.laborCount) > 0 && (
                           <div className="text-sm">
-                            <span className="font-medium">Estate Labor:</span> {formatLaborCount(Number(hfEntry.laborCount) || 0)} @{" "}
+                            <span className="font-medium">Estate team:</span> {formatLaborCount(Number(hfEntry.laborCount) || 0)} @{" "}
                             {formatCurrency(hfEntry.costPerLabor)}
                           </div>
                         )}
                         {outsideEntry && Number(outsideEntry.laborCount) > 0 && (
                           <div className="text-sm">
-                            <span className="font-medium">Outside Labor:</span> {formatLaborCount(Number(outsideEntry.laborCount) || 0)} @{" "}
+                            <span className="font-medium">Outside team:</span> {formatLaborCount(Number(outsideEntry.laborCount) || 0)} @{" "}
                             {formatCurrency(outsideEntry.costPerLabor)}
                           </div>
                         )}
@@ -540,9 +570,9 @@ export default function LaborDeploymentTab({
                   <TableRow className="bg-muted/50">
                     <TableHead className="sticky top-0 bg-muted/60">Date</TableHead>
                     <TableHead className="sticky top-0 bg-muted/60">Code</TableHead>
-                    <TableHead className="sticky top-0 bg-muted/60">Reference</TableHead>
-                    <TableHead className="sticky top-0 bg-muted/60">Estate Laborers</TableHead>
-                    <TableHead className="sticky top-0 bg-muted/60">Outside Laborers</TableHead>
+                    <TableHead className="sticky top-0 bg-muted/60">Category</TableHead>
+                    <TableHead className="sticky top-0 bg-muted/60">Estate Team</TableHead>
+                    <TableHead className="sticky top-0 bg-muted/60">Outside Team</TableHead>
                     <TableHead className="text-right sticky top-0 bg-muted/60">Total Cost</TableHead>
                     <TableHead className="w-[100px] sticky top-0 bg-muted/60">Actions</TableHead>
                   </TableRow>

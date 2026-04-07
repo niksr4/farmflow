@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest"
 
-import { allocateInventoryQuantity } from "../lib/expense-inventory"
+import { allocateInventoryQuantity, normalizeExpenseInventoryItems, sameExpenseInventoryItems } from "../lib/expense-inventory"
 
 describe("allocateInventoryQuantity", () => {
   it("uses the preferred location first when it has sufficient stock", () => {
@@ -44,5 +44,56 @@ describe("allocateInventoryQuantity", () => {
         18,
       ),
     ).toThrow("Insufficient stock for Pesticide (L)")
+  })
+})
+
+describe("normalizeExpenseInventoryItems", () => {
+  it("merges duplicate item rows by normalized item type", () => {
+    expect(
+      normalizeExpenseInventoryItems([
+        { itemType: " Diesel  (L) ", quantity: 10 },
+        { itemType: "diesel (l)", quantity: 5.125 },
+        { itemType: "Urea", quantity: 2 },
+      ]),
+    ).toEqual([
+      { itemType: "Diesel (L)", quantity: 15.125 },
+      { itemType: "Urea", quantity: 2 },
+    ])
+  })
+
+  it("drops blank or non-positive rows", () => {
+    expect(
+      normalizeExpenseInventoryItems([
+        { itemType: "", quantity: 10 },
+        { itemType: "Pesticide", quantity: 0 },
+        { itemType: "Pesticide", quantity: -3 },
+      ]),
+    ).toEqual([])
+  })
+})
+
+describe("sameExpenseInventoryItems", () => {
+  it("treats reordered and differently-cased rows as the same inventory payload", () => {
+    expect(
+      sameExpenseInventoryItems(
+        [
+          { itemType: "Diesel (L)", quantity: 10 },
+          { itemType: "Urea", quantity: 5 },
+        ],
+        [
+          { itemType: " urea ", quantity: 5 },
+          { itemType: "diesel (l)", quantity: 10 },
+        ],
+      ),
+    ).toBe(true)
+  })
+
+  it("detects when linked inventory payloads are actually different", () => {
+    expect(
+      sameExpenseInventoryItems(
+        [{ itemType: "Diesel (L)", quantity: 10 }],
+        [{ itemType: "Diesel (L)", quantity: 12 }],
+      ),
+    ).toBe(false)
   })
 })

@@ -174,7 +174,7 @@ export default function PickingLogTab() {
               Picking Log
             </CardTitle>
             <CardDescription>
-              Per-worker piece-rate cherry picking records.
+              Piece-rate cherry picking using the shared worker roster. Use this only when you pay pickers per kg.
               {!loading && (
                 <span className="ml-2 font-medium text-foreground">
                   {totalKg.toLocaleString("en-IN", { maximumFractionDigits: 1 })} kg · {formatCurrency(totalAmount)}
