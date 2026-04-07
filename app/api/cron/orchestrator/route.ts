@@ -8,6 +8,7 @@ import { runImportJobRetentionCleanup } from "@/lib/server/import-jobs"
 import { runTenantSmokeAgent } from "@/lib/server/agents/tenant-smoke-agent"
 import { runTenantEngagementAgent } from "@/lib/server/agents/tenant-engagement-agent"
 import { runWeeklyDigestAgent } from "@/lib/server/agents/weekly-digest-agent"
+import { runOnboardingNudgeAgent } from "@/lib/server/agents/onboarding-nudge-agent"
 import { extractBearerToken, sharedSecretMatches } from "@/lib/server/request-security"
 import { logServerError } from "@/lib/server/safe-logging"
 
@@ -27,7 +28,7 @@ async function handleCronInvocation(request: Request) {
 
     const isMonday = new Date().getDay() === 1
 
-    const [dataIntegrity, logAnomaly, retention, tenantSmoke, tenantEngagement, weeklyDigest] =
+    const [dataIntegrity, logAnomaly, retention, tenantSmoke, tenantEngagement, weeklyDigest, onboardingNudge] =
       await Promise.allSettled([
         runDataIntegrityAgent({ triggerSource: "cron" }),
         runLogAnomalyAgent({ triggerSource: "cron" }),
@@ -37,6 +38,7 @@ async function handleCronInvocation(request: Request) {
         isMonday
           ? runWeeklyDigestAgent({ triggerSource: "cron" })
           : Promise.resolve({ skipped: true }),
+        runOnboardingNudgeAgent({ triggerSource: "cron" }),
       ])
 
     const toResult = (r: PromiseSettledResult<unknown>) =>
@@ -49,6 +51,7 @@ async function handleCronInvocation(request: Request) {
       tenantSmoke: toResult(tenantSmoke),
       tenantEngagement: toResult(tenantEngagement),
       weeklyDigest: toResult(weeklyDigest),
+      onboardingNudge: toResult(onboardingNudge),
     }
 
     const anyFailed = Object.values(results).some((r) => !r.ok)
