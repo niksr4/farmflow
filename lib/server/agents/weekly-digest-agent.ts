@@ -72,21 +72,119 @@ async function fetchTenantOwnersWithVerifiedEmail(): Promise<TenantDigestRow[]> 
   })
 }
 
+type LastWeekActivity = {
+  weekLabel: string  // e.g. "31 Mar – 6 Apr 2026"
+  processingKg: number
+  processingDays: number
+  laborEntries: number
+  laborCost: number
+  laborWorkers: number
+  expenseTotal: number
+  expenseEntries: number
+  salesRevenue: number
+  dispatchBags: number
+  rainfallInches: number
+  pickingEntries: number
+}
+
+async function fetchLastWeekActivity(tenantId: string): Promise<LastWeekActivity> {
+  // Last week = Mon 00:00 IST to Sun 23:59 IST
+  // Cron runs Monday 02:00 UTC (07:30 IST), so "last week" is the 7 days just ended
+  const now = new Date()
+  const dayOfWeek = now.getDay() // 0=Sun, 1=Mon
+  const daysToLastMonday = dayOfWeek === 0 ? 6 : dayOfWeek - 1
+  const lastMonday = new Date(now)
+  lastMonday.setDate(now.getDate() - daysToLastMonday - 7)
+  lastMonday.setHours(0, 0, 0, 0)
+  const lastSunday = new Date(lastMonday)
+  lastSunday.setDate(lastMonday.getDate() + 6)
+  lastSunday.setHours(23, 59, 59, 999)
+
+  const fmt = (d: Date) => d.toISOString().split("T")[0]
+  const startDate = fmt(lastMonday)
+  const endDate = fmt(lastSunday)
+
+  const weekLabel = `${lastMonday.toLocaleDateString("en-IN", { day: "numeric", month: "short" })} – ${lastSunday.toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })}`
+
+  const empty: LastWeekActivity = { weekLabel, processingKg: 0, processingDays: 0, laborEntries: 0, laborCost: 0, laborWorkers: 0, expenseTotal: 0, expenseEntries: 0, salesRevenue: 0, dispatchBags: 0, rainfallInches: 0, pickingEntries: 0 }
+  if (!sql) return empty
+
+  try {
+    const result = await sql.query(`
+      SELECT
+        (SELECT COALESCE(SUM(crop_today), 0) FROM processing_records
+          WHERE tenant_id = $1 AND process_date BETWEEN $2 AND $3)  AS proc_kg,
+        (SELECT COUNT(*) FROM processing_records
+          WHERE tenant_id = $1 AND process_date BETWEEN $2 AND $3)  AS proc_days,
+        (SELECT COUNT(*) FROM labor_transactions
+          WHERE tenant_id = $1 AND deployment_date BETWEEN $2 AND $3) AS labor_entries,
+        (SELECT COALESCE(SUM(total_cost), 0) FROM labor_transactions
+          WHERE tenant_id = $1 AND deployment_date BETWEEN $2 AND $3) AS labor_cost,
+        (SELECT COALESCE(SUM(hf_laborers + outside_laborers), 0) FROM labor_transactions
+          WHERE tenant_id = $1 AND deployment_date BETWEEN $2 AND $3) AS labor_workers,
+        (SELECT COALESCE(SUM(total_amount), 0) FROM expense_transactions
+          WHERE tenant_id = $1 AND entry_date BETWEEN $2 AND $3)    AS expense_total,
+        (SELECT COUNT(*) FROM expense_transactions
+          WHERE tenant_id = $1 AND entry_date BETWEEN $2 AND $3)    AS expense_entries,
+        (SELECT COALESCE(SUM(revenue), 0) FROM sales_records
+          WHERE tenant_id = $1 AND sale_date BETWEEN $2 AND $3)     AS sales_revenue,
+        (SELECT COALESCE(SUM(bags_dispatched), 0) FROM dispatch_records
+          WHERE tenant_id = $1 AND dispatch_date BETWEEN $2 AND $3) AS dispatch_bags,
+        (SELECT COALESCE(SUM(inches + cents::numeric / 100), 0) FROM rainfall_records
+          WHERE tenant_id = $1 AND record_date BETWEEN $2 AND $3)   AS rainfall_inches,
+        (SELECT COUNT(*) FROM picking_records
+          WHERE tenant_id = $1 AND picking_date BETWEEN $2 AND $3)  AS picking_entries
+    `, [tenantId, startDate, endDate])
+
+    const row = (Array.isArray(result) ? result[0] : (result as any)?.rows?.[0]) ?? {}
+    return {
+      weekLabel,
+      processingKg: Number(row.proc_kg) || 0,
+      processingDays: Number(row.proc_days) || 0,
+      laborEntries: Number(row.labor_entries) || 0,
+      laborCost: Number(row.labor_cost) || 0,
+      laborWorkers: Number(row.labor_workers) || 0,
+      expenseTotal: Number(row.expense_total) || 0,
+      expenseEntries: Number(row.expense_entries) || 0,
+      salesRevenue: Number(row.sales_revenue) || 0,
+      dispatchBags: Number(row.dispatch_bags) || 0,
+      rainfallInches: Number(row.rainfall_inches) || 0,
+      pickingEntries: Number(row.picking_entries) || 0,
+    }
+  } catch {
+    return empty
+  }
+}
+
+function buildLastWeekSection(w: LastWeekActivity): string {
+  const lines: string[] = [`## Last Week (${w.weekLabel})`]
+  if (w.processingKg > 0) lines.push(`- Cherry processed: ${w.processingKg.toFixed(1)} kg over ${w.processingDays} day(s)`)
+  if (w.pickingEntries > 0) lines.push(`- Picking entries recorded: ${w.pickingEntries}`)
+  if (w.laborEntries > 0) lines.push(`- Labor deployments: ${w.laborEntries} entries, ${w.laborWorkers} worker-days, ₹${w.laborCost.toLocaleString("en-IN")} cost`)
+  if (w.expenseEntries > 0) lines.push(`- Other expenses: ₹${w.expenseTotal.toLocaleString("en-IN")} across ${w.expenseEntries} entries`)
+  if (w.salesRevenue > 0) lines.push(`- Sales revenue: ₹${w.salesRevenue.toLocaleString("en-IN")}`)
+  if (w.dispatchBags > 0) lines.push(`- Bags dispatched: ${w.dispatchBags.toFixed(1)}`)
+  if (w.rainfallInches > 0) lines.push(`- Rainfall recorded: ${w.rainfallInches.toFixed(2)} inches`)
+  if (lines.length === 1) lines.push("- No activity recorded last week.")
+  return lines.join("\n")
+}
+
 async function generateWeeklyDigestText(tenant: TenantDigestRow): Promise<string | null> {
   try {
-    const { dataSummary, fiscalYearLabel } = await buildTenantAiDataSummary({
-      tenantId: tenant.tenantId,
-      role: "owner",
-    })
+    const [{ dataSummary, fiscalYearLabel }, lastWeek] = await Promise.all([
+      buildTenantAiDataSummary({ tenantId: tenant.tenantId, role: "owner" }),
+      fetchLastWeekActivity(tenant.tenantId),
+    ])
 
     const cropLabel = getCropLabel({ cropFamily: tenant.cropFamily, primaryVarieties: tenant.primaryVarieties, acreageAcres: null, weatherLocationLabel: "", weatherLatitude: null, weatherLongitude: null })
     const varietiesLabel = getCropVarietiesLabel({ cropFamily: tenant.cropFamily, primaryVarieties: tenant.primaryVarieties, acreageAcres: null, weatherLocationLabel: "", weatherLatitude: null, weatherLongitude: null })
     const cropContext = varietiesLabel ? `${cropLabel} (${varietiesLabel})` : cropLabel
+    const lastWeekSection = buildLastWeekSection(lastWeek)
 
     const client = getClaudeClient()
     const response = await client.messages.create({
       model: CLAUDE_SONNET,
-      max_tokens: 1200,
+      max_tokens: 1400,
       temperature: 0.3,
       system: `You are FarmFlow Weekly Digest, an expert agricultural analyst summarising estate operations for ${cropContext} estate managers.
 
@@ -96,21 +194,22 @@ Rules:
 - Use the correct crop terminology: refer to the primary crop as "${cropLabel}", and use variety names where relevant.
 - Use INR (₹) for currency and KG for weight unless the data suggests otherwise.
 - Keep the tone warm, professional, and practical. Estate managers are busy.
-- This is a weekly email digest — keep it concise (under 400 words).
+- This is a weekly email digest — keep it concise (under 450 words).
 - Format with clear sections using plain text (no markdown headers, no asterisks). Use numbered lists for recommendations.`,
       messages: [
         {
           role: "user",
-          content: `Generate a weekly operations digest for ${tenant.tenantName} for the fiscal year ${fiscalYearLabel}.
+          content: `Generate a weekly operations digest for ${tenant.tenantName}.
 
+${lastWeekSection}
+
+## Season-to-Date Context (FY ${fiscalYearLabel})
 ${dataSummary}
 
 Structure your digest as:
-1. This Week at a Glance — 2-3 sentences on the most important metric or trend.
-2. Processing & Harvest — key conversion rates, top/bottom performing locations.
-3. Labor & Costs — notable labor cost trends or efficiency signals.
-4. Inventory & Dispatch — stock levels, any items to restock, pending dispatches.
-5. Three actions for this week — specific, named, and actionable.
+1. Last Week at a Glance — 2-3 sentences summarising what actually happened last week using the exact figures above.
+2. Season Context — how last week fits into the broader FY picture (processing rate, labor spend, costs so far).
+3. Three recommendations for this week — specific and actionable based on what you see (e.g. if labor cost spiked, suggest reviewing; if no picking recorded, ask why; if dispatch is due, flag it).
 
 End with: "Powered by FarmFlow — your estate, always in view."`,
         },
