@@ -4,6 +4,7 @@ import { requireModuleAccess, isModuleAccessError } from "@/lib/server/module-ac
 import { normalizeTenantContext, runTenantQuery } from "@/lib/server/tenant-db"
 import { canDeleteModule, canWriteModule } from "@/lib/permissions"
 import { logAuditEvent } from "@/lib/server/audit-log"
+import { logRouteMutationFailure } from "@/lib/server/route-error-events"
 
 export const dynamic = "force-dynamic"
 export const revalidate = 0
@@ -154,11 +155,13 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
+  let tenantId: string | null = null
   try {
     const sessionUser = await requireModuleAccess("pepper")
     if (!canWriteModule(sessionUser.role, "pepper")) {
       return NextResponse.json({ success: false, error: "Insufficient role" }, { status: 403 })
     }
+    tenantId = sessionUser.tenantId
     const tenantContext = normalizeTenantContext(sessionUser.tenantId, sessionUser.role)
     const data = await request.json()
     const recordId = Number(data.id)
@@ -283,16 +286,25 @@ export async function POST(request: Request) {
     if (isModuleAccessError(error)) {
       return NextResponse.json({ success: false, error: "Module access disabled" }, { status: 403 })
     }
+    await logRouteMutationFailure({
+      tenantId,
+      source: "pepper-api",
+      endpoint: "/api/pepper-records",
+      action: "save_pepper_record",
+      error,
+    })
     return NextResponse.json({ success: false, error: error.message }, { status: 500 })
   }
 }
 
 export async function DELETE(request: Request) {
+  let tenantId: string | null = null
   try {
     const sessionUser = await requireModuleAccess("pepper")
     if (!canDeleteModule(sessionUser.role, "pepper")) {
       return NextResponse.json({ success: false, error: "Insufficient role" }, { status: 403 })
     }
+    tenantId = sessionUser.tenantId
     const tenantContext = normalizeTenantContext(sessionUser.tenantId, sessionUser.role)
     const { searchParams } = new URL(request.url)
     const id = Number(searchParams.get("id"))
@@ -406,6 +418,13 @@ export async function DELETE(request: Request) {
     if (isModuleAccessError(error)) {
       return NextResponse.json({ success: false, error: "Module access disabled" }, { status: 403 })
     }
+    await logRouteMutationFailure({
+      tenantId,
+      source: "pepper-api",
+      endpoint: "/api/pepper-records",
+      action: "delete_pepper_record",
+      error,
+    })
     return NextResponse.json({ success: false, error: error.message }, { status: 500 })
   }
 }

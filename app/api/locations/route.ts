@@ -5,6 +5,7 @@ import { requireAnyModuleAccess, isModuleAccessError } from "@/lib/server/module
 import { normalizeTenantContext, runTenantQuery } from "@/lib/server/tenant-db"
 import { requireAdminRole } from "@/lib/permissions"
 import { logAuditEvent } from "@/lib/server/audit-log"
+import { logRouteMutationFailure } from "@/lib/server/route-error-events"
 
 export const dynamic = "force-dynamic"
 export const revalidate = 0
@@ -68,6 +69,7 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
+  let tenantId: string | null = null
   try {
     const sessionUser = await requireAnyModuleAccess(LOCATION_MODULES, await requireSessionUser())
     try {
@@ -80,7 +82,7 @@ export async function POST(request: Request) {
     const name = (body.name || "").trim()
     const code = body.code ? normalizeCode(body.code) : normalizeCode(name)
     const requestedTenantId = body.tenantId
-    const tenantId = sessionUser.role === "owner" && requestedTenantId ? requestedTenantId : sessionUser.tenantId
+    tenantId = sessionUser.role === "owner" && requestedTenantId ? requestedTenantId : sessionUser.tenantId
     const tenantContext = normalizeTenantContext(tenantId, sessionUser.role)
 
     if (!name) {
@@ -115,11 +117,19 @@ export async function POST(request: Request) {
     if (isModuleAccessError(error)) {
       return NextResponse.json({ success: false, error: "Module access disabled" }, { status: 403 })
     }
+    await logRouteMutationFailure({
+      tenantId,
+      source: "locations-api",
+      endpoint: "/api/locations",
+      action: "create_location",
+      error,
+    })
     return NextResponse.json({ success: false, error: error.message || "Failed to create location" }, { status: 500 })
   }
 }
 
 export async function PATCH(request: Request) {
+  let tenantId: string | null = null
   try {
     const sessionUser = await requireAnyModuleAccess(LOCATION_MODULES, await requireSessionUser())
     try {
@@ -133,7 +143,7 @@ export async function PATCH(request: Request) {
     const name = String(body.name || "").trim()
     const codeInput = String(body.code || "").trim()
     const requestedTenantId = body.tenantId
-    const tenantId = sessionUser.role === "owner" && requestedTenantId ? requestedTenantId : sessionUser.tenantId
+    tenantId = sessionUser.role === "owner" && requestedTenantId ? requestedTenantId : sessionUser.tenantId
     const tenantContext = normalizeTenantContext(tenantId, sessionUser.role)
 
     if (!id || !name) {
@@ -202,6 +212,13 @@ export async function PATCH(request: Request) {
     if (isModuleAccessError(error)) {
       return NextResponse.json({ success: false, error: "Module access disabled" }, { status: 403 })
     }
+    await logRouteMutationFailure({
+      tenantId,
+      source: "locations-api",
+      endpoint: "/api/locations",
+      action: "update_location",
+      error,
+    })
     return NextResponse.json({ success: false, error: error.message || "Failed to update location" }, { status: 500 })
   }
 }

@@ -5,16 +5,19 @@ import { normalizeTenantContext, runTenantQuery } from "@/lib/server/tenant-db"
 import { canDeleteModule } from "@/lib/permissions"
 import { logAuditEvent } from "@/lib/server/audit-log"
 import { repairCurrentInventoryUpsertConstraints } from "@/lib/server/current-inventory-constraints"
+import { logRouteMutationFailure } from "@/lib/server/route-error-events"
 import { resolveTenantUserUuid } from "@/lib/server/tenant-user"
 
 export const dynamic = "force-dynamic"
 
 export async function POST(request: NextRequest) {
+  let tenantId: string | null = null
   try {
     const sessionUser = await requireModuleAccess("transactions")
     if (!canDeleteModule(sessionUser.role, "transactions")) {
       return NextResponse.json({ success: false, message: "Insufficient role" }, { status: 403 })
     }
+    tenantId = sessionUser.tenantId
     const tenantContext = normalizeTenantContext(sessionUser.tenantId, sessionUser.role)
     const tenantUserUuid = await resolveTenantUserUuid(sessionUser)
     const body = await request.json()
@@ -130,6 +133,13 @@ export async function POST(request: NextRequest) {
     if (isModuleAccessError(error)) {
       return NextResponse.json({ success: false, message: "Module access disabled" }, { status: 403 })
     }
+    await logRouteMutationFailure({
+      tenantId,
+      source: "api/transactions-neon-batch",
+      endpoint: "/api/transactions-neon/batch",
+      action: "batch_replace_transactions",
+      error,
+    })
     return NextResponse.json(
       {
         success: false,

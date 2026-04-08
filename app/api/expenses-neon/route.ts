@@ -6,6 +6,7 @@ import { resolveTenantUserUuid } from "@/lib/server/tenant-user"
 import { canDeleteModule, canWriteModule } from "@/lib/permissions"
 import { logAuditEvent } from "@/lib/server/audit-log"
 import { normalizeInventoryItemType } from "@/lib/inventory-item-type"
+import { logRouteMutationFailure } from "@/lib/server/route-error-events"
 import {
   isMissingCurrentInventoryUpsertConstraintError,
   repairCurrentInventoryUpsertConstraints,
@@ -1163,11 +1164,13 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
+  let tenantId: string | null = null
   try {
     const sessionUser = await requireModuleAccess("accounts")
     if (!canWriteModule(sessionUser.role, "accounts")) {
       return NextResponse.json({ success: false, error: "Insufficient role" }, { status: 403 })
     }
+    tenantId = sessionUser.tenantId
     const tenantContext = normalizeTenantContext(sessionUser.tenantId, sessionUser.role)
     const tenantUserUuid = await resolveTenantUserUuid(sessionUser)
     const body = await request.json()
@@ -1282,6 +1285,13 @@ export async function POST(request: Request) {
     if (isModuleAccessError(error)) {
       return NextResponse.json({ success: false, error: "Module access disabled" }, { status: 403 })
     }
+    await logRouteMutationFailure({
+      tenantId,
+      source: "api/expenses-neon",
+      endpoint: "/api/expenses-neon",
+      action: "create_expense",
+      error,
+    })
     if (isInventoryUnderflowError(error)) {
       return NextResponse.json(
         {
@@ -1302,11 +1312,13 @@ export async function POST(request: Request) {
 }
 
 export async function PUT(request: Request) {
+  let tenantId: string | null = null
   try {
     const sessionUser = await requireModuleAccess("accounts")
     if (!canWriteModule(sessionUser.role, "accounts")) {
       return NextResponse.json({ success: false, error: "Insufficient role" }, { status: 403 })
     }
+    tenantId = sessionUser.tenantId
     const tenantContext = normalizeTenantContext(sessionUser.tenantId, sessionUser.role)
     const tenantUserUuid = await resolveTenantUserUuid(sessionUser)
     const body = await request.json()
@@ -1457,6 +1469,13 @@ export async function PUT(request: Request) {
     if (isModuleAccessError(error)) {
       return NextResponse.json({ success: false, error: "Module access disabled" }, { status: 403 })
     }
+    await logRouteMutationFailure({
+      tenantId,
+      source: "api/expenses-neon",
+      endpoint: "/api/expenses-neon",
+      action: "update_expense",
+      error,
+    })
     if (isInventoryUnderflowError(error)) {
       return NextResponse.json(
         {
@@ -1477,6 +1496,7 @@ export async function PUT(request: Request) {
 }
 
 export async function DELETE(request: Request) {
+  let tenantId: string | null = null
   try {
     const { searchParams } = new URL(request.url)
     const id = searchParams.get("id")
@@ -1484,6 +1504,7 @@ export async function DELETE(request: Request) {
     if (!canDeleteModule(sessionUser.role, "accounts")) {
       return NextResponse.json({ success: false, error: "Insufficient role" }, { status: 403 })
     }
+    tenantId = sessionUser.tenantId
     const tenantContext = normalizeTenantContext(sessionUser.tenantId, sessionUser.role)
     if (!id) {
       return NextResponse.json({ success: false, error: "ID is required" }, { status: 400 })
@@ -1563,6 +1584,13 @@ export async function DELETE(request: Request) {
     if (isModuleAccessError(error)) {
       return NextResponse.json({ success: false, error: "Module access disabled" }, { status: 403 })
     }
+    await logRouteMutationFailure({
+      tenantId,
+      source: "api/expenses-neon",
+      endpoint: "/api/expenses-neon",
+      action: "delete_expense",
+      error,
+    })
     return NextResponse.json(
       {
         success: false,

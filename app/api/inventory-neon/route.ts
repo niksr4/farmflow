@@ -5,6 +5,7 @@ import { canDeleteModule, canWriteModule } from "@/lib/permissions"
 import { logAuditEvent } from "@/lib/server/audit-log"
 import { normalizeTenantContext, runTenantQueries, runTenantQuery } from "@/lib/server/tenant-db"
 import { resolveTenantUserUuid } from "@/lib/server/tenant-user"
+import { logRouteMutationFailure } from "@/lib/server/route-error-events"
 import { normalizeInventoryItemType } from "@/lib/inventory-item-type"
 import {
   isMissingCurrentInventoryUpsertConstraintError,
@@ -275,11 +276,13 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
+  let tenantId: string | null = null
   try {
     const sessionUser = await requireModuleAccess("inventory")
     if (!canWriteModule(sessionUser.role, "inventory")) {
       return NextResponse.json({ success: false, message: "Insufficient role" }, { status: 403 })
     }
+    tenantId = sessionUser.tenantId
     const tenantContext = normalizeTenantContext(sessionUser.tenantId, sessionUser.role)
     const tenantUserUuid = await resolveTenantUserUuid(sessionUser)
     const body = await request.json()
@@ -387,6 +390,13 @@ export async function POST(request: NextRequest) {
     if (isModuleAccessError(error)) {
       return NextResponse.json({ success: false, message: "Module access disabled" }, { status: 403 })
     }
+    await logRouteMutationFailure({
+      tenantId,
+      source: "api/inventory-neon",
+      endpoint: "/api/inventory-neon",
+      action: "create_inventory_item",
+      error,
+    })
     return NextResponse.json(
       {
         success: false,
@@ -399,12 +409,14 @@ export async function POST(request: NextRequest) {
 }
 
 export async function DELETE(request: NextRequest) {
+  let tenantId: string | null = null
   try {
     const sessionUser = await requireModuleAccess("inventory")
     if (!canDeleteModule(sessionUser.role, "inventory")) {
       return NextResponse.json({ success: false, message: "Insufficient role" }, { status: 403 })
     }
 
+    tenantId = sessionUser.tenantId
     const tenantContext = normalizeTenantContext(sessionUser.tenantId, sessionUser.role)
     const tenantUserUuid = await resolveTenantUserUuid(sessionUser)
     const body = await request.json().catch(() => ({}))
@@ -566,6 +578,13 @@ export async function DELETE(request: NextRequest) {
     if (isModuleAccessError(error)) {
       return NextResponse.json({ success: false, message: "Module access disabled" }, { status: 403 })
     }
+    await logRouteMutationFailure({
+      tenantId,
+      source: "api/inventory-neon",
+      endpoint: "/api/inventory-neon",
+      action: "delete_inventory_item",
+      error,
+    })
     return NextResponse.json(
       {
         success: false,
@@ -578,11 +597,13 @@ export async function DELETE(request: NextRequest) {
 }
 
 export async function PUT(request: NextRequest) {
+  let tenantId: string | null = null
   try {
     const sessionUser = await requireModuleAccess("inventory")
     if (!canWriteModule(sessionUser.role, "inventory")) {
       return NextResponse.json({ success: false, message: "Insufficient role" }, { status: 403 })
     }
+    tenantId = sessionUser.tenantId
     const tenantContext = normalizeTenantContext(sessionUser.tenantId, sessionUser.role)
     const body = await request.json()
 
@@ -707,6 +728,13 @@ export async function PUT(request: NextRequest) {
     if (isModuleAccessError(error)) {
       return NextResponse.json({ success: false, message: "Module access disabled" }, { status: 403 })
     }
+    await logRouteMutationFailure({
+      tenantId,
+      source: "api/inventory-neon",
+      endpoint: "/api/inventory-neon",
+      action: "update_inventory_item",
+      error,
+    })
     return NextResponse.json(
       {
         success: false,

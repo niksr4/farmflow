@@ -7,6 +7,7 @@ import { resolveLocationInfo } from "@/lib/server/location-utils"
 import { logAuditEvent } from "@/lib/server/audit-log"
 import { requirePositiveNumber, toNonNegativeNumber } from "@/lib/number-input"
 import { resolveLocationCompatibility } from "@/lib/server/location-compatibility"
+import { logRouteMutationFailure } from "@/lib/server/route-error-events"
 
 export const dynamic = "force-dynamic"
 export const revalidate = 0
@@ -164,12 +165,14 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
+  let tenantId: string | null = null
   try {
     const sessionUser = await requireModuleAccess("dispatch")
     if (!canWriteModule(sessionUser.role, "dispatch")) {
       return NextResponse.json({ success: false, error: "Insufficient role" }, { status: 403 })
     }
     // Allow data entry for user/admin/owner; reserve destructive actions for admin/owner.
+    tenantId = sessionUser.tenantId
     const tenantContext = normalizeTenantContext(sessionUser.tenantId, sessionUser.role)
     const body = await request.json()
     const { 
@@ -258,6 +261,13 @@ export async function POST(request: Request) {
     if (isModuleAccessError(error)) {
       return NextResponse.json({ success: false, error: "Module access disabled" }, { status: 403 })
     }
+    await logRouteMutationFailure({
+      tenantId,
+      source: "dispatch-api",
+      endpoint: "/api/dispatch",
+      action: "create_dispatch_record",
+      error,
+    })
     return NextResponse.json(
       { success: false, error: error instanceof Error ? error.message : "Unknown error" },
       { status: 500 }
@@ -266,11 +276,13 @@ export async function POST(request: Request) {
 }
 
 export async function PUT(request: Request) {
+  let tenantId: string | null = null
   try {
     const sessionUser = await requireModuleAccess("dispatch")
     if (!canWriteModule(sessionUser.role, "dispatch")) {
       return NextResponse.json({ success: false, error: "Insufficient role" }, { status: 403 })
     }
+    tenantId = sessionUser.tenantId
     const tenantContext = normalizeTenantContext(sessionUser.tenantId, sessionUser.role)
     const body = await request.json()
     const { 
@@ -374,6 +386,13 @@ export async function PUT(request: Request) {
     if (isModuleAccessError(error)) {
       return NextResponse.json({ success: false, error: "Module access disabled" }, { status: 403 })
     }
+    await logRouteMutationFailure({
+      tenantId,
+      source: "dispatch-api",
+      endpoint: "/api/dispatch",
+      action: "update_dispatch_record",
+      error,
+    })
     return NextResponse.json(
       { success: false, error: error instanceof Error ? error.message : "Unknown error" },
       { status: 500 }
@@ -382,6 +401,7 @@ export async function PUT(request: Request) {
 }
 
 export async function DELETE(request: Request) {
+  let tenantId: string | null = null
   try {
     const { searchParams } = new URL(request.url)
     const id = searchParams.get("id")
@@ -389,6 +409,7 @@ export async function DELETE(request: Request) {
     if (!canDeleteModule(sessionUser.role, "dispatch")) {
       return NextResponse.json({ success: false, error: "Insufficient role" }, { status: 403 })
     }
+    tenantId = sessionUser.tenantId
     const tenantContext = normalizeTenantContext(sessionUser.tenantId, sessionUser.role)
 
     if (!id) {
@@ -433,6 +454,13 @@ export async function DELETE(request: Request) {
     if (isModuleAccessError(error)) {
       return NextResponse.json({ success: false, error: "Module access disabled" }, { status: 403 })
     }
+    await logRouteMutationFailure({
+      tenantId,
+      source: "dispatch-api",
+      endpoint: "/api/dispatch",
+      action: "delete_dispatch_record",
+      error,
+    })
     return NextResponse.json(
       { success: false, error: error instanceof Error ? error.message : "Unknown error" },
       { status: 500 }

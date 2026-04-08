@@ -6,6 +6,7 @@ import { requireModuleAccess, isModuleAccessError } from "@/lib/server/module-ac
 import { normalizeTenantContext, runTenantQueries, runTenantQuery } from "@/lib/server/tenant-db"
 import { resolveTenantUserUuid } from "@/lib/server/tenant-user"
 import { repairCurrentInventoryUpsertConstraints } from "@/lib/server/current-inventory-constraints"
+import { logRouteMutationFailure } from "@/lib/server/route-error-events"
 import { csvToObjects } from "@/lib/csv"
 import { resolveLocationInfo } from "@/lib/server/location-utils"
 import { recalculateInventoryForItem } from "@/lib/server/inventory-recalc"
@@ -322,6 +323,7 @@ export async function POST(request: Request) {
   let commitJobId: string | null = null
   let mode: "validate" | "commit" = "commit"
   let activeTenantContext: { tenantId: string; role: string } | null = null
+  let activeDataset = ""
   try {
     if (!sql) {
       return NextResponse.json({ success: false, error: "Database not configured" }, { status: 500 })
@@ -354,6 +356,7 @@ export async function POST(request: Request) {
     }
 
     const dataset = String(body.dataset || "").trim().toLowerCase()
+    activeDataset = dataset
     mode = normalizeImportMode(body.mode)
     const validationToken = String(body.validationToken || "").trim()
     let csvText = String(body.csv || "")
@@ -1333,6 +1336,18 @@ export async function POST(request: Request) {
     if (isModuleAccessError(error)) {
       return NextResponse.json({ success: false, error: "Module access disabled" }, { status: 403 })
     }
+    await logRouteMutationFailure({
+      tenantId: activeTenantContext?.tenantId || null,
+      source: "api/import-bulk",
+      endpoint: "/api/import-bulk",
+      action: mode === "commit" ? "commit_bulk_import" : "validate_bulk_import",
+      error,
+      metadata: {
+        dataset: activeDataset || null,
+        commitJobId,
+        mode,
+      },
+    })
     if ((mode === "validate" || commitJobId) && isImportJobTableMissing(error)) {
       return NextResponse.json({ success: false, error: IMPORT_JOB_HELP }, { status: 503 })
     }

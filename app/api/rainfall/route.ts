@@ -4,6 +4,7 @@ import { requireModuleAccess, isModuleAccessError } from "@/lib/server/module-ac
 import { normalizeTenantContext, runTenantQuery } from "@/lib/server/tenant-db"
 import { canDeleteModule, canWriteModule } from "@/lib/permissions"
 import { logAuditEvent } from "@/lib/server/audit-log"
+import { logRouteMutationFailure } from "@/lib/server/route-error-events"
 
 export const dynamic = "force-dynamic"
 export const revalidate = 0
@@ -39,11 +40,13 @@ export async function GET(_request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
+  let tenantId: string | null = null
   try {
     const sessionUser = await requireModuleAccess("rainfall")
     if (!canWriteModule(sessionUser.role, "rainfall")) {
       return NextResponse.json({ success: false, error: "Insufficient role" }, { status: 403 })
     }
+    tenantId = sessionUser.tenantId
     const tenantContext = normalizeTenantContext(sessionUser.tenantId, sessionUser.role)
     const { record_date, inches, cents, notes } = await request.json()
 
@@ -99,11 +102,19 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: false, error: "Module access disabled" }, { status: 403 })
     }
     console.error("[v0] Error saving rainfall record:", error)
+    await logRouteMutationFailure({
+      tenantId,
+      source: "rainfall-api",
+      endpoint: "/api/rainfall",
+      action: "create_rainfall_record",
+      error,
+    })
     return NextResponse.json({ success: false, error: error.message }, { status: 500 })
   }
 }
 
 export async function DELETE(request: NextRequest) {
+  let tenantId: string | null = null
   try {
     const { searchParams } = new URL(request.url)
     const id = searchParams.get("id")
@@ -111,6 +122,7 @@ export async function DELETE(request: NextRequest) {
     if (!canDeleteModule(sessionUser.role, "rainfall")) {
       return NextResponse.json({ success: false, error: "Insufficient role" }, { status: 403 })
     }
+    tenantId = sessionUser.tenantId
     const tenantContext = normalizeTenantContext(sessionUser.tenantId, sessionUser.role)
 
     if (!id) {
@@ -148,6 +160,13 @@ export async function DELETE(request: NextRequest) {
       return NextResponse.json({ success: false, error: "Module access disabled" }, { status: 403 })
     }
     console.error("[v0] Error deleting rainfall record:", error)
+    await logRouteMutationFailure({
+      tenantId,
+      source: "rainfall-api",
+      endpoint: "/api/rainfall",
+      action: "delete_rainfall_record",
+      error,
+    })
     return NextResponse.json({ success: false, error: error.message }, { status: 500 })
   }
 }

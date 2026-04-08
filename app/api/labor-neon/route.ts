@@ -4,6 +4,7 @@ import { requireModuleAccess, isModuleAccessError } from "@/lib/server/module-ac
 import { normalizeTenantContext, runTenantQueries, runTenantQuery } from "@/lib/server/tenant-db"
 import { canDeleteModule, canWriteModule } from "@/lib/permissions"
 import { logAuditEvent } from "@/lib/server/audit-log"
+import { logRouteMutationFailure } from "@/lib/server/route-error-events"
 
 export const dynamic = "force-dynamic"
 export const revalidate = 0
@@ -281,11 +282,13 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
+  let tenantId: string | null = null
   try {
     const sessionUser = await requireModuleAccess("accounts")
     if (!canWriteModule(sessionUser.role, "accounts")) {
       return NextResponse.json({ success: false, error: "Insufficient role" }, { status: 403 })
     }
+    tenantId = sessionUser.tenantId
     const tenantContext = normalizeTenantContext(sessionUser.tenantId, sessionUser.role)
     const body = await request.json()
     const { date, code, laborEntries, notes } = body
@@ -468,6 +471,13 @@ export async function POST(request: Request) {
     if (isModuleAccessError(error)) {
       return NextResponse.json({ success: false, error: "Module access disabled" }, { status: 403 })
     }
+    await logRouteMutationFailure({
+      tenantId,
+      source: "labor-api",
+      endpoint: "/api/labor-neon",
+      action: "create_labor_deployment",
+      error,
+    })
     return NextResponse.json(
       {
         success: false,
@@ -479,11 +489,13 @@ export async function POST(request: Request) {
 }
 
 export async function PUT(request: Request) {
+  let tenantId: string | null = null
   try {
     const sessionUser = await requireModuleAccess("accounts")
     if (!canWriteModule(sessionUser.role, "accounts")) {
       return NextResponse.json({ success: false, error: "Insufficient role" }, { status: 403 })
     }
+    tenantId = sessionUser.tenantId
     const tenantContext = normalizeTenantContext(sessionUser.tenantId, sessionUser.role)
     const body = await request.json()
     const { id, date, code, laborEntries, notes } = body
@@ -596,6 +608,13 @@ export async function PUT(request: Request) {
     if (isModuleAccessError(error)) {
       return NextResponse.json({ success: false, error: "Module access disabled" }, { status: 403 })
     }
+    await logRouteMutationFailure({
+      tenantId,
+      source: "labor-api",
+      endpoint: "/api/labor-neon",
+      action: "update_labor_deployment",
+      error,
+    })
     return NextResponse.json(
       {
         success: false,
@@ -607,6 +626,7 @@ export async function PUT(request: Request) {
 }
 
 export async function DELETE(request: Request) {
+  let tenantId: string | null = null
   try {
     const { searchParams } = new URL(request.url)
     const id = searchParams.get("id")
@@ -614,6 +634,7 @@ export async function DELETE(request: Request) {
     if (!canDeleteModule(sessionUser.role, "accounts")) {
       return NextResponse.json({ success: false, error: "Insufficient role" }, { status: 403 })
     }
+    tenantId = sessionUser.tenantId
     const tenantContext = normalizeTenantContext(sessionUser.tenantId, sessionUser.role)
     if (!id) {
       return NextResponse.json({ success: false, error: "ID is required" }, { status: 400 })
@@ -658,6 +679,13 @@ export async function DELETE(request: Request) {
     if (isModuleAccessError(error)) {
       return NextResponse.json({ success: false, error: "Module access disabled" }, { status: 403 })
     }
+    await logRouteMutationFailure({
+      tenantId,
+      source: "labor-api",
+      endpoint: "/api/labor-neon",
+      action: "delete_labor_deployment",
+      error,
+    })
     return NextResponse.json(
       {
         success: false,

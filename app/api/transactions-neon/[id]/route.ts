@@ -5,17 +5,20 @@ import { normalizeTenantContext, runTenantQuery } from "@/lib/server/tenant-db"
 import { recalculateInventoryForItem } from "@/lib/server/inventory-recalc"
 import { canDeleteModule } from "@/lib/permissions"
 import { logAuditEvent } from "@/lib/server/audit-log"
+import { logRouteMutationFailure } from "@/lib/server/route-error-events"
 
 export const dynamic = "force-dynamic"
 
 type RouteContext = { params: Promise<{ id: string }> }
 
 export async function DELETE(_request: NextRequest, context: RouteContext) {
+  let tenantId: string | null = null
   try {
     const sessionUser = await requireModuleAccess("transactions")
     if (!canDeleteModule(sessionUser.role, "transactions")) {
       return NextResponse.json({ success: false, message: "Insufficient role" }, { status: 403 })
     }
+    tenantId = sessionUser.tenantId
     const tenantContext = normalizeTenantContext(sessionUser.tenantId, sessionUser.role)
     const { id: idParam } = await context.params
     const id = Number(idParam)
@@ -69,6 +72,13 @@ export async function DELETE(_request: NextRequest, context: RouteContext) {
     if (isModuleAccessError(error)) {
       return NextResponse.json({ success: false, message: "Module access disabled" }, { status: 403 })
     }
+    await logRouteMutationFailure({
+      tenantId,
+      source: "api/transactions-neon-id",
+      endpoint: "/api/transactions-neon/[id]",
+      action: "delete_transaction",
+      error,
+    })
     return NextResponse.json(
       { success: false, message: error.message || "Failed to delete transaction" },
       { status: 500 },

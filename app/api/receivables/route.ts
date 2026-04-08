@@ -4,6 +4,7 @@ import { requireModuleAccess, isModuleAccessError } from "@/lib/server/module-ac
 import { normalizeTenantContext, runTenantQuery } from "@/lib/server/tenant-db"
 import { canDeleteModule, canWriteModule } from "@/lib/permissions"
 import { logAuditEvent } from "@/lib/server/audit-log"
+import { logRouteMutationFailure } from "@/lib/server/route-error-events"
 
 export const dynamic = "force-dynamic"
 export const revalidate = 0
@@ -189,6 +190,7 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
+  let tenantId: string | null = null
   try {
     if (!sql) {
       return NextResponse.json({ success: false, error: "Database not configured" }, { status: 500 })
@@ -198,6 +200,7 @@ export async function POST(request: Request) {
     if (!canWriteModule(sessionUser.role, "receivables")) {
       return NextResponse.json({ success: false, error: "Insufficient role" }, { status: 403 })
     }
+    tenantId = sessionUser.tenantId
 
     const body = await request.json()
     const buyerName = String(body?.buyer_name || "").trim()
@@ -275,11 +278,19 @@ export async function POST(request: Request) {
     if (isModuleAccessError(error)) {
       return NextResponse.json({ success: false, error: "Module access disabled" }, { status: 403 })
     }
+    await logRouteMutationFailure({
+      tenantId,
+      source: "receivables-api",
+      endpoint: "/api/receivables",
+      action: "create_receivable",
+      error,
+    })
     return NextResponse.json({ success: false, error: error.message || "Failed to create receivable" }, { status: 500 })
   }
 }
 
 export async function PUT(request: Request) {
+  let tenantId: string | null = null
   try {
     if (!sql) {
       return NextResponse.json({ success: false, error: "Database not configured" }, { status: 500 })
@@ -289,6 +300,7 @@ export async function PUT(request: Request) {
     if (!canWriteModule(sessionUser.role, "receivables")) {
       return NextResponse.json({ success: false, error: "Insufficient role" }, { status: 403 })
     }
+    tenantId = sessionUser.tenantId
 
     const body = await request.json()
     const id = body?.id
@@ -374,11 +386,19 @@ export async function PUT(request: Request) {
     if (isModuleAccessError(error)) {
       return NextResponse.json({ success: false, error: "Module access disabled" }, { status: 403 })
     }
+    await logRouteMutationFailure({
+      tenantId,
+      source: "receivables-api",
+      endpoint: "/api/receivables",
+      action: "update_receivable",
+      error,
+    })
     return NextResponse.json({ success: false, error: error.message || "Failed to update receivable" }, { status: 500 })
   }
 }
 
 export async function DELETE(request: Request) {
+  let tenantId: string | null = null
   try {
     if (!sql) {
       return NextResponse.json({ success: false, error: "Database not configured" }, { status: 500 })
@@ -388,6 +408,7 @@ export async function DELETE(request: Request) {
     if (!canDeleteModule(sessionUser.role, "receivables")) {
       return NextResponse.json({ success: false, error: "Insufficient role" }, { status: 403 })
     }
+    tenantId = sessionUser.tenantId
 
     const { searchParams } = new URL(request.url)
     const id = searchParams.get("id")
@@ -435,6 +456,13 @@ export async function DELETE(request: Request) {
     if (isModuleAccessError(error)) {
       return NextResponse.json({ success: false, error: "Module access disabled" }, { status: 403 })
     }
+    await logRouteMutationFailure({
+      tenantId,
+      source: "receivables-api",
+      endpoint: "/api/receivables",
+      action: "delete_receivable",
+      error,
+    })
     return NextResponse.json({ success: false, error: error.message || "Failed to delete receivable" }, { status: 500 })
   }
 }

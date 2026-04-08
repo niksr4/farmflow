@@ -5,6 +5,7 @@ import { canDeleteModule, canWriteModule } from "@/lib/permissions"
 import { normalizeTenantContext, runTenantQueries, runTenantQuery } from "@/lib/server/tenant-db"
 import { resolveLocationInfo } from "@/lib/server/location-utils"
 import { logAuditEvent } from "@/lib/server/audit-log"
+import { logRouteMutationFailure } from "@/lib/server/route-error-events"
 
 export const dynamic = "force-dynamic"
 export const revalidate = 0
@@ -274,11 +275,13 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
+  let tenantId: string | null = null
   try {
     const sessionUser = await requireModuleAccess("other-sales")
     if (!canWriteModule(sessionUser.role, "other-sales")) {
       return NextResponse.json({ success: false, error: "Insufficient role" }, { status: 403 })
     }
+    tenantId = sessionUser.tenantId
 
     const body = await request.json()
     const parsed = parsePayload(body)
@@ -346,16 +349,25 @@ export async function POST(request: Request) {
       return NextResponse.json({ success: false, error: "Module access disabled" }, { status: 403 })
     }
     console.error("Error creating other sale record:", error)
+    await logRouteMutationFailure({
+      tenantId,
+      source: "other-sales-api",
+      endpoint: "/api/other-sales",
+      action: "create_other_sale_record",
+      error,
+    })
     return NextResponse.json({ success: false, error: error.message || "Failed to create record" }, { status: 500 })
   }
 }
 
 export async function PUT(request: Request) {
+  let tenantId: string | null = null
   try {
     const sessionUser = await requireModuleAccess("other-sales")
     if (!canWriteModule(sessionUser.role, "other-sales")) {
       return NextResponse.json({ success: false, error: "Insufficient role" }, { status: 403 })
     }
+    tenantId = sessionUser.tenantId
 
     const body = await request.json()
     const id = Number(body?.id)
@@ -430,16 +442,25 @@ export async function PUT(request: Request) {
       return NextResponse.json({ success: false, error: "Module access disabled" }, { status: 403 })
     }
     console.error("Error updating other sale record:", error)
+    await logRouteMutationFailure({
+      tenantId,
+      source: "other-sales-api",
+      endpoint: "/api/other-sales",
+      action: "update_other_sale_record",
+      error,
+    })
     return NextResponse.json({ success: false, error: error.message || "Failed to update record" }, { status: 500 })
   }
 }
 
 export async function DELETE(request: Request) {
+  let tenantId: string | null = null
   try {
     const sessionUser = await requireModuleAccess("other-sales")
     if (!canDeleteModule(sessionUser.role, "other-sales")) {
       return NextResponse.json({ success: false, error: "Insufficient role" }, { status: 403 })
     }
+    tenantId = sessionUser.tenantId
 
     const { searchParams } = new URL(request.url)
     const id = Number(searchParams.get("id"))
@@ -486,6 +507,13 @@ export async function DELETE(request: Request) {
       return NextResponse.json({ success: false, error: "Module access disabled" }, { status: 403 })
     }
     console.error("Error deleting other sale record:", error)
+    await logRouteMutationFailure({
+      tenantId,
+      source: "other-sales-api",
+      endpoint: "/api/other-sales",
+      action: "delete_other_sale_record",
+      error,
+    })
     return NextResponse.json({ success: false, error: error.message || "Failed to delete record" }, { status: 500 })
   }
 }

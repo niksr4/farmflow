@@ -4,6 +4,7 @@ import { requireModuleAccess, isModuleAccessError } from "@/lib/server/module-ac
 import { normalizeTenantContext, runTenantQuery } from "@/lib/server/tenant-db"
 import { canDeleteModule, canWriteModule } from "@/lib/permissions"
 import { logAuditEvent } from "@/lib/server/audit-log"
+import { logRouteMutationFailure } from "@/lib/server/route-error-events"
 
 export const dynamic = "force-dynamic"
 export const revalidate = 0
@@ -107,6 +108,7 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
+  let tenantId: string | null = null
   try {
     const sessionUser = await requireModuleAccess("journal")
     if (!canWriteModule(sessionUser.role, "journal")) {
@@ -116,6 +118,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ success: false, error: "Database not configured" }, { status: 500 })
     }
 
+    tenantId = sessionUser.tenantId
     const tenantContext = normalizeTenantContext(sessionUser.tenantId, sessionUser.role)
     const body = await request.json()
     const entry_date = String(body.entry_date || "").trim()
@@ -196,11 +199,19 @@ export async function POST(request: Request) {
       return NextResponse.json({ success: false, error: "Module access disabled" }, { status: 403 })
     }
     console.error("Error creating journal entry:", error)
+    await logRouteMutationFailure({
+      tenantId,
+      source: "journal-api",
+      endpoint: "/api/journal",
+      action: "create_journal_entry",
+      error,
+    })
     return NextResponse.json({ success: false, error: error.message }, { status: 500 })
   }
 }
 
 export async function PATCH(request: Request) {
+  let tenantId: string | null = null
   try {
     const sessionUser = await requireModuleAccess("journal")
     if (!canWriteModule(sessionUser.role, "journal")) {
@@ -210,6 +221,7 @@ export async function PATCH(request: Request) {
       return NextResponse.json({ success: false, error: "Database not configured" }, { status: 500 })
     }
 
+    tenantId = sessionUser.tenantId
     const tenantContext = normalizeTenantContext(sessionUser.tenantId, sessionUser.role)
     const body = await request.json()
     const id = String(body.id || "").trim()
@@ -298,11 +310,19 @@ export async function PATCH(request: Request) {
       return NextResponse.json({ success: false, error: "Module access disabled" }, { status: 403 })
     }
     console.error("Error updating journal entry:", error)
+    await logRouteMutationFailure({
+      tenantId,
+      source: "journal-api",
+      endpoint: "/api/journal",
+      action: "update_journal_entry",
+      error,
+    })
     return NextResponse.json({ success: false, error: error.message }, { status: 500 })
   }
 }
 
 export async function DELETE(request: Request) {
+  let tenantId: string | null = null
   try {
     const sessionUser = await requireModuleAccess("journal")
     if (!canDeleteModule(sessionUser.role, "journal")) {
@@ -311,6 +331,7 @@ export async function DELETE(request: Request) {
     if (!sql) {
       return NextResponse.json({ success: false, error: "Database not configured" }, { status: 500 })
     }
+    tenantId = sessionUser.tenantId
 
     const { searchParams } = new URL(request.url)
     const id = searchParams.get("id")
@@ -354,6 +375,13 @@ export async function DELETE(request: Request) {
       return NextResponse.json({ success: false, error: "Module access disabled" }, { status: 403 })
     }
     console.error("Error deleting journal entry:", error)
+    await logRouteMutationFailure({
+      tenantId,
+      source: "journal-api",
+      endpoint: "/api/journal",
+      action: "delete_journal_entry",
+      error,
+    })
     return NextResponse.json({ success: false, error: error.message }, { status: 500 })
   }
 }

@@ -9,6 +9,7 @@ import { logAuditEvent } from "@/lib/server/audit-log"
 import { resolveLocationCompatibility } from "@/lib/server/location-compatibility"
 import { computeRemainingKgs, hasSufficientStock } from "@/lib/sales-math"
 import { getPostHogClient } from "@/lib/posthog-server"
+import { logRouteMutationFailure } from "@/lib/server/route-error-events"
 import {
   bagPatternFor,
   canonicalizeBagType,
@@ -313,6 +314,7 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
+  let tenantId: string | null = null
   try {
     const sessionUser = await requireModuleAccess("sales")
     if (!isSalesAdminRole(sessionUser.role)) {
@@ -321,6 +323,7 @@ export async function POST(request: Request) {
     if (!canWriteModule(sessionUser.role, "sales")) {
       return NextResponse.json({ success: false, error: "Insufficient role" }, { status: 403 })
     }
+    tenantId = sessionUser.tenantId
     const tenantContext = normalizeTenantContext(sessionUser.tenantId, sessionUser.role)
     const body = await request.json()
 
@@ -486,6 +489,13 @@ export async function POST(request: Request) {
     if (isModuleAccessError(error)) {
       return NextResponse.json({ success: false, error: "Module access disabled" }, { status: 403 })
     }
+    await logRouteMutationFailure({
+      tenantId,
+      source: "sales-api",
+      endpoint: "/api/sales",
+      action: "create_sales_record",
+      error,
+    })
     return NextResponse.json(
       { success: false, error: error instanceof Error ? error.message : "Unknown error" },
       { status: 500 }
@@ -494,6 +504,7 @@ export async function POST(request: Request) {
 }
 
 export async function PUT(request: Request) {
+  let tenantId: string | null = null
   try {
     const sessionUser = await requireModuleAccess("sales")
     if (!isSalesAdminRole(sessionUser.role)) {
@@ -502,6 +513,7 @@ export async function PUT(request: Request) {
     if (!canWriteModule(sessionUser.role, "sales")) {
       return NextResponse.json({ success: false, error: "Insufficient role" }, { status: 403 })
     }
+    tenantId = sessionUser.tenantId
     const tenantContext = normalizeTenantContext(sessionUser.tenantId, sessionUser.role)
     const body = await request.json()
 
@@ -635,6 +647,13 @@ export async function PUT(request: Request) {
     if (isModuleAccessError(error)) {
       return NextResponse.json({ success: false, error: "Module access disabled" }, { status: 403 })
     }
+    await logRouteMutationFailure({
+      tenantId,
+      source: "sales-api",
+      endpoint: "/api/sales",
+      action: "update_sales_record",
+      error,
+    })
     return NextResponse.json(
       { success: false, error: error instanceof Error ? error.message : "Unknown error" },
       { status: 500 }
@@ -643,6 +662,7 @@ export async function PUT(request: Request) {
 }
 
 export async function DELETE(request: Request) {
+  let tenantId: string | null = null
   try {
     const { searchParams } = new URL(request.url)
     const id = searchParams.get("id")
@@ -653,7 +673,7 @@ export async function DELETE(request: Request) {
     if (!canDeleteModule(sessionUser.role, "sales")) {
       return NextResponse.json({ success: false, error: "Insufficient role" }, { status: 403 })
     }
-    const tenantId = sessionUser.tenantId
+    tenantId = sessionUser.tenantId
 
     if (!id) {
       return NextResponse.json(
@@ -697,6 +717,13 @@ export async function DELETE(request: Request) {
     if (isModuleAccessError(error)) {
       return NextResponse.json({ success: false, error: "Module access disabled" }, { status: 403 })
     }
+    await logRouteMutationFailure({
+      tenantId,
+      source: "sales-api",
+      endpoint: "/api/sales",
+      action: "delete_sales_record",
+      error,
+    })
     return NextResponse.json(
       { success: false, error: error instanceof Error ? error.message : "Unknown error" },
       { status: 500 }

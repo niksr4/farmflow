@@ -6,6 +6,7 @@ import { normalizeTenantContext, runTenantQuery, runTenantQueries } from "@/lib/
 import { logAuditEvent } from "@/lib/server/audit-log"
 import { recomputeProcessingTotals } from "@/lib/server/processing-utils"
 import { resolveLocationCompatibility } from "@/lib/server/location-compatibility"
+import { logRouteMutationFailure } from "@/lib/server/route-error-events"
 
 export const dynamic = "force-dynamic"
 export const revalidate = 0
@@ -344,6 +345,7 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
+  let tenantId: string | null = null
   try {
     if (!sql) {
       return NextResponse.json({ success: false, error: "Database not configured" }, { status: 500 })
@@ -353,6 +355,7 @@ export async function POST(request: NextRequest) {
     if (!canWriteModule(sessionUser.role, "processing")) {
       return NextResponse.json({ success: false, error: "Insufficient role" }, { status: 403 })
     }
+    tenantId = sessionUser.tenantId
     const tenantContext = normalizeTenantContext(sessionUser.tenantId, sessionUser.role)
     const data = await request.json()
     const locationId = data.locationId
@@ -486,6 +489,13 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: false, error: "Module access disabled" }, { status: 403 })
     }
     console.error("Error saving processing record:", error)
+    await logRouteMutationFailure({
+      tenantId,
+      source: "processing-api",
+      endpoint: "/api/processing-records",
+      action: "save_processing_record",
+      error,
+    })
     if (isProcessingTriggerRecursionError(error)) {
       return NextResponse.json(
         {
@@ -501,6 +511,7 @@ export async function POST(request: NextRequest) {
 }
 
 export async function DELETE(request: NextRequest) {
+  let tenantId: string | null = null
   try {
     if (!sql) {
       return NextResponse.json({ success: false, error: "Database not configured" }, { status: 500 })
@@ -510,6 +521,7 @@ export async function DELETE(request: NextRequest) {
     if (!canDeleteModule(sessionUser.role, "processing")) {
       return NextResponse.json({ success: false, error: "Insufficient role" }, { status: 403 })
     }
+    tenantId = sessionUser.tenantId
     const tenantContext = normalizeTenantContext(sessionUser.tenantId, sessionUser.role)
     const { searchParams } = new URL(request.url)
     const date = searchParams.get("date")
@@ -564,6 +576,13 @@ export async function DELETE(request: NextRequest) {
       return NextResponse.json({ success: false, error: "Module access disabled" }, { status: 403 })
     }
     console.error("Error deleting processing record:", error)
+    await logRouteMutationFailure({
+      tenantId,
+      source: "processing-api",
+      endpoint: "/api/processing-records",
+      action: "delete_processing_record",
+      error,
+    })
     if (isProcessingTriggerRecursionError(error)) {
       return NextResponse.json(
         {

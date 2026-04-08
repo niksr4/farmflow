@@ -7,6 +7,7 @@ import { recalculateInventoryForItem } from "@/lib/server/inventory-recalc"
 import { canWriteModule } from "@/lib/permissions"
 import { logAuditEvent } from "@/lib/server/audit-log"
 import { normalizeInventoryItemType } from "@/lib/inventory-item-type"
+import { logRouteMutationFailure } from "@/lib/server/route-error-events"
 
 export const dynamic = "force-dynamic"
 
@@ -109,11 +110,13 @@ const loadAnyInventorySlotByNormalizedItem = async (
 }
 
 export async function PUT(request: NextRequest) {
+  let tenantId: string | null = null
   try {
     const sessionUser = await requireModuleAccess("transactions")
     if (!canWriteModule(sessionUser.role, "transactions")) {
       return NextResponse.json({ success: false, message: "Insufficient role" }, { status: 403 })
     }
+    tenantId = sessionUser.tenantId
     const tenantContext = normalizeTenantContext(sessionUser.tenantId, sessionUser.role)
     const body = await request.json()
 
@@ -337,6 +340,13 @@ export async function PUT(request: NextRequest) {
     if (isModuleAccessError(error)) {
       return NextResponse.json({ success: false, message: "Module access disabled" }, { status: 403 })
     }
+    await logRouteMutationFailure({
+      tenantId,
+      source: "api/transactions-neon-update",
+      endpoint: "/api/transactions-neon/update",
+      action: "update_transaction",
+      error,
+    })
     return NextResponse.json(
       {
         success: false,

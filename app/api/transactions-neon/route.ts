@@ -6,6 +6,7 @@ import { resolveLocationCompatibility } from "@/lib/server/location-compatibilit
 import { canWriteModule } from "@/lib/permissions"
 import { logAuditEvent } from "@/lib/server/audit-log"
 import { normalizeInventoryItemType } from "@/lib/inventory-item-type"
+import { logRouteMutationFailure } from "@/lib/server/route-error-events"
 import { resolveTenantUserUuid } from "@/lib/server/tenant-user"
 import {
   isMissingCurrentInventoryUpsertConstraintError,
@@ -454,11 +455,13 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
+  let tenantId: string | null = null
   try {
     const sessionUser = await requireAnyModuleAccess(["transactions", "inventory"])
     if (!canWriteModule(sessionUser.role, "transactions")) {
       return NextResponse.json({ success: false, message: "Insufficient role" }, { status: 403 })
     }
+    tenantId = sessionUser.tenantId
     const tenantContext = normalizeTenantContext(sessionUser.tenantId, sessionUser.role)
     const tenantUserUuid = await resolveTenantUserUuid(sessionUser)
     const body = await request.json()
@@ -673,6 +676,13 @@ export async function POST(request: NextRequest) {
     if (isModuleAccessError(error)) {
       return NextResponse.json({ success: false, message: "Module access disabled" }, { status: 403 })
     }
+    await logRouteMutationFailure({
+      tenantId,
+      source: "api/transactions-neon",
+      endpoint: "/api/transactions-neon",
+      action: "create_transaction",
+      error,
+    })
     if (isInventoryUnderflowError(error)) {
       return NextResponse.json(
         {
