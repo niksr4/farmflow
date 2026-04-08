@@ -143,6 +143,13 @@ const planBadges: Record<string, string> = {
 
 const moduleLabelById = new Map(MODULES.map((m) => [m.id, m.label]))
 
+const heroBeanSpecs = [
+  { left: "6%", top: "10%", size: 16, duration: "9.2s", delay: "-1.4s", opacity: 0.24 },
+  { left: "14%", top: "3%", size: 12, duration: "8.4s", delay: "-5.1s", opacity: 0.18 },
+  { left: "78%", top: "8%", size: 18, duration: "10.6s", delay: "-3.6s", opacity: 0.22 },
+  { left: "88%", top: "18%", size: 13, duration: "7.8s", delay: "-6.2s", opacity: 0.2 },
+]
+
 export default function LandingPage() {
   const { t } = useLocale()
   const prefersReducedMotion = useReducedMotion()
@@ -168,35 +175,100 @@ export default function LandingPage() {
       <div className="mx-auto w-full max-w-6xl space-y-24 sm:space-y-32">
 
         {/* ── Hero ── */}
-        <MotionDiv {...reveal(0)} className="pt-12 text-center sm:pt-20">
-          <Badge className="mb-6 border-emerald-300/20 bg-emerald-300/[0.08] text-emerald-200">
-            {t("public.landing.badge")}
-          </Badge>
-          <h1 className="mx-auto max-w-4xl font-display text-5xl font-semibold leading-[1.05] tracking-tight text-stone-50 sm:text-6xl lg:text-[5rem]">
-            {t("public.landing.title")}
-          </h1>
-          <p className="mx-auto mt-6 max-w-xl text-lg leading-8 text-stone-400">
-            {t("public.landing.description")}
-          </p>
-          <div className="mt-8 flex flex-wrap items-center justify-center gap-3">
-            <Button
-              size="lg"
-              className="bg-emerald-300 text-[#06110f] shadow-[0_0_40px_-8px_rgba(110,231,183,0.5)] hover:bg-emerald-200"
-              asChild
-            >
-              <Link href="/signup">
-                {t("public.landing.ctaPrimary")}
-                <ArrowRight className="ml-1 h-4 w-4" />
-              </Link>
-            </Button>
-            <Button
-              size="lg"
-              variant="ghost"
-              className="text-stone-300 hover:bg-white/[0.06] hover:text-white"
-              asChild
-            >
-              <Link href="/plans">See plans</Link>
-            </Button>
+        <MotionDiv {...reveal(0)} className="relative overflow-hidden pt-12 text-center sm:pt-20">
+          {!prefersReducedMotion && (
+            <div aria-hidden className="pointer-events-none absolute inset-0 hidden lg:block">
+              {heroBeanSpecs.map((bean, index) => (
+                <span
+                  key={`${bean.left}-${bean.top}-${index}`}
+                  className="coffee-bean"
+                  style={{
+                    left: bean.left,
+                    top: bean.top,
+                    width: `${bean.size}px`,
+                    height: `${Math.round(bean.size * 1.45)}px`,
+                    opacity: bean.opacity,
+                    animationDuration: bean.duration,
+                    animationDelay: bean.delay,
+                    animationIterationCount: "infinite",
+                  }}
+                />
+              ))}
+            </div>
+          )}
+          <div className="relative z-10">
+            <Badge className="mb-6 border-emerald-300/20 bg-emerald-300/[0.08] text-emerald-200">
+              {t("public.landing.badge")}
+            </Badge>
+            <h1 className="mx-auto max-w-4xl font-display text-5xl font-semibold leading-[1.05] tracking-tight text-stone-50 sm:text-6xl lg:text-[5rem]">
+              {t("public.landing.title")}
+            </h1>
+            <p className="mx-auto mt-6 max-w-xl text-lg leading-8 text-stone-400">
+              {t("public.landing.description")}
+            </p>
+            <div className="mt-8 flex flex-wrap items-center justify-center gap-3">
+              <Button
+                size="lg"
+                className="bg-emerald-300 text-[#06110f] shadow-[0_0_40px_-8px_rgba(110,231,183,0.5)] hover:bg-emerald-200"
+                asChild
+              >
+                <Link href="/signup">
+                  {t("public.landing.ctaPrimary")}
+                  <ArrowRight className="ml-1 h-4 w-4" />
+                </Link>
+              </Button>
+              <Button
+                size="lg"
+                variant="ghost"
+                className="text-stone-300 hover:bg-white/[0.06] hover:text-white"
+                asChild
+              >
+                <Link href="/plans">See plans</Link>
+              </Button>
+            </div>
+          </div>
+        </MotionDiv>
+
+        <MotionDiv {...reveal(0.04)} aria-hidden className="flex justify-center">
+          <div className="flex items-center gap-3 text-stone-500/25">
+            <span className="h-px w-12 bg-gradient-to-r from-transparent via-stone-400/25 to-transparent" />
+            <span
+              className="coffee-bean"
+              style={{
+                position: "relative",
+                top: 0,
+                display: "inline-block",
+                width: "10px",
+                height: "14px",
+                opacity: 0.32,
+                animation: "none",
+              }}
+            />
+            <span
+              className="coffee-bean"
+              style={{
+                position: "relative",
+                top: 0,
+                display: "inline-block",
+                width: "14px",
+                height: "20px",
+                opacity: 0.48,
+                animation: "none",
+              }}
+            />
+            <span
+              className="coffee-bean"
+              style={{
+                position: "relative",
+                top: 0,
+                display: "inline-block",
+                width: "10px",
+                height: "14px",
+                opacity: 0.32,
+                animation: "none",
+              }}
+            />
+            <span className="h-px w-12 bg-gradient-to-r from-transparent via-stone-400/25 to-transparent" />
           </div>
         </MotionDiv>
 
@@ -254,7 +326,7 @@ export default function LandingPage() {
           <div className="mb-14 text-center">
             <p className="text-sm font-medium text-emerald-400">Why planters choose FarmFlow</p>
             <h2 className="mt-3 font-display text-4xl font-semibold text-stone-50 sm:text-5xl">
-              Your season's numbers shouldn't live in three notebooks
+              {"Your season's numbers shouldn't live in three notebooks"}
             </h2>
             <p className="mx-auto mt-4 max-w-2xl text-base leading-7 text-stone-400">
               Most estates run on a mix of registers, WhatsApp forwards, and spreadsheets assembled at the end of the season. FarmFlow keeps it all in one place, updated daily.

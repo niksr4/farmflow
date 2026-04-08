@@ -3,7 +3,7 @@
 import Link from "next/link"
 import { useMemo } from "react"
 import { useSearchParams } from "next/navigation"
-import { BookOpen, Check, ChevronDown, ChevronUp, Clock, Info } from "lucide-react"
+import { ArrowRight, BookOpen, Check, ChevronDown, ChevronUp, Clock, Info, Sparkles } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
@@ -90,13 +90,18 @@ export default function OnboardingChecklist({
 
   const nextPendingStep = steps.find((step) => !step.done) || null
   const progressPct = totalCount > 0 ? Math.round((completedCount / totalCount) * 100) : 100
+  const setupStateLabel = progressPct >= 100 ? "Ready" : nextPendingStep ? "In progress" : "Setup"
 
   return (
-    <Card className="border-2 border-emerald-100 bg-emerald-50/40">
+    <Card className="overflow-hidden border border-emerald-100/80 bg-[linear-gradient(180deg,#f7fdf9_0%,#ffffff_58%)] shadow-[0_18px_60px_-42px_rgba(14,93,82,0.35)]">
       <Collapsible open={isExpanded} onOpenChange={onExpandedChange}>
-        <CardHeader className="space-y-3">
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <div>
+        <CardHeader className="space-y-4 p-5 sm:p-6">
+          <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+            <div className="space-y-2">
+              <Badge variant="outline" className="w-fit border-emerald-200 bg-white text-emerald-700">
+                <Sparkles className="mr-1.5 h-3.5 w-3.5" />
+                Launch checklist
+              </Badge>
               <CardTitle>Estate Launch Checklist</CardTitle>
               <CardDescription>Complete these steps to unlock traceability and season reporting.</CardDescription>
             </div>
@@ -127,34 +132,67 @@ export default function OnboardingChecklist({
               </CollapsibleTrigger>
             </div>
           </div>
+          <div className="grid gap-3 lg:grid-cols-[1.25fr_0.85fr]">
+            <div className="rounded-2xl border border-emerald-100 bg-white/90 p-4 shadow-sm">
+              <div className="flex items-center justify-between text-xs uppercase tracking-[0.18em] text-emerald-700">
+                <span>Launch progress</span>
+                <span>{progressPct}% ready</span>
+              </div>
+              <div className="mt-3 h-2 overflow-hidden rounded-full bg-emerald-50/80">
+                <div className="h-full rounded-full bg-emerald-600 transition-all" style={{ width: `${progressPct}%` }} />
+              </div>
+              <p className="mt-3 text-xs leading-relaxed text-muted-foreground">
+                {nextPendingStep
+                  ? `Do this next: ${nextPendingStep.title}.`
+                  : "Core setup is complete. Your estate is ready for live records."}
+              </p>
+            </div>
+            <div className="rounded-2xl border border-stone-200 bg-white/80 p-4 shadow-sm">
+              <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.18em] text-stone-700">
+                <Sparkles className="h-4 w-4 text-emerald-600" />
+                Setup flow
+              </div>
+              <p className="mt-2 text-sm leading-relaxed text-stone-600">
+                Keep the first pass short: estate defaults, one location, then the first live record.
+              </p>
+              <div className="mt-3 inline-flex items-center gap-2 rounded-full border border-stone-200 bg-white px-3 py-1.5 text-xs font-medium text-stone-700">
+                <span className={cn("h-2 w-2 rounded-full", progressPct >= 100 ? "bg-emerald-500" : "bg-amber-500")} />
+                {setupStateLabel}
+              </div>
+            </div>
+          </div>
           {!isExpanded && nextPendingStep && (
-            <p className="text-xs text-muted-foreground">
-              Next step: <span className="font-medium text-foreground">{nextPendingStep.title}</span>
-            </p>
+            <div className="rounded-2xl border border-amber-200 bg-amber-50/85 px-4 py-4 shadow-sm">
+              <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+                <div className="space-y-1">
+                  <div className="inline-flex items-center gap-2 rounded-full border border-amber-200 bg-white px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-amber-700">
+                    <Clock className="h-3.5 w-3.5" />
+                    Do this next
+                  </div>
+                  <p className="text-sm font-semibold text-amber-950">{nextPendingStep.title}</p>
+                  <p className="text-xs leading-relaxed text-amber-900">{nextPendingStep.description}</p>
+                  <p className="text-xs leading-relaxed text-amber-800">
+                    Keep the first pass simple. One honest live record is enough to move forward. If you get stuck, ask FarmFlow from the bottom-right corner.
+                  </p>
+                </div>
+                <Button size="sm" onClick={nextPendingStep.onAction} className="bg-amber-700 text-white hover:bg-amber-800">
+                  <span className="inline-flex items-center gap-2">
+                    {nextPendingStep.actionLabel}
+                    <ArrowRight className="h-3.5 w-3.5" />
+                  </span>
+                </Button>
+              </div>
+            </div>
           )}
           {error && <p className="text-xs text-red-600">{error}</p>}
-          <div className="space-y-2">
-            <div className="flex items-center justify-between text-xs text-muted-foreground">
-              <span>Launch progress</span>
-              <span>{progressPct}% ready</span>
-            </div>
-            <div className="h-2 overflow-hidden rounded-full bg-white/80">
-              <div className="h-full rounded-full bg-emerald-600 transition-all" style={{ width: `${progressPct}%` }} />
-            </div>
-            <p className="text-xs text-muted-foreground">
-              {nextPendingStep
-                ? `Do this next: ${nextPendingStep.title}.`
-                : "Core setup is complete. Your estate is ready for live records."}
-            </p>
-          </div>
         </CardHeader>
 
         <CollapsibleContent>
-          <CardContent className="space-y-4">
+          <CardContent className="space-y-4 px-5 pb-5 pt-0 sm:px-6">
             {canManageEstateDefaults && (
-              <div className="space-y-3 rounded-lg border bg-white/80 p-4">
-                <div>
-                  <p className="text-sm font-medium">Confirm estate defaults</p>
+              <div className="space-y-4 rounded-2xl border border-emerald-100 bg-white/90 p-4 shadow-sm">
+                <div className="space-y-1">
+                  <p className="text-sm font-semibold text-foreground">Confirm estate defaults</p>
                   <p className="text-xs text-muted-foreground">
                     Set the estate name and standard bag weight your team uses before daily records begin.
                   </p>
@@ -183,7 +221,7 @@ export default function OnboardingChecklist({
                     />
                   </div>
                   <div className="flex items-end">
-                    <Button onClick={onSaveEstateDefaults} disabled={isSavingEstateDefaults} className="w-full bg-green-700 hover:bg-green-800">
+                    <Button onClick={onSaveEstateDefaults} disabled={isSavingEstateDefaults} className="w-full bg-emerald-700 hover:bg-emerald-800">
                       {isSavingEstateDefaults ? "Saving..." : "Save Defaults"}
                     </Button>
                   </div>
@@ -195,40 +233,71 @@ export default function OnboardingChecklist({
             )}
 
             <div className="grid gap-3">
-              {steps.map((step) => (
+              {steps.map((step) => {
+                const isNextStep = !step.done && nextPendingStep?.key === step.key
+                return (
                 <div
                   key={step.key}
-                  className="flex flex-col gap-3 rounded-lg border bg-white/80 p-3 sm:flex-row sm:items-center sm:justify-between"
-                >
-                  <div className="flex items-start gap-3">
-                    <div
-                      className={cn(
-                        "mt-0.5 flex h-8 w-8 items-center justify-center rounded-full border",
-                        step.done
-                          ? "border-emerald-200 bg-emerald-100 text-emerald-700"
-                          : "border-gray-200 bg-white text-gray-500",
-                      )}
-                    >
-                      {step.done ? <Check className="h-4 w-4" /> : <Clock className="h-4 w-4" />}
-                    </div>
-                    <div>
-                      <p className="text-sm font-medium">{step.title}</p>
-                      <p className="text-xs text-muted-foreground">{step.description}</p>
-                    </div>
-                  </div>
-                  {!step.done && (
-                    <Button variant="outline" size="sm" onClick={step.onAction} className="bg-transparent">
-                      {step.actionLabel}
-                    </Button>
+                  className={cn(
+                    "rounded-2xl border p-4 shadow-sm transition-colors",
+                    step.done
+                      ? "border-emerald-200 bg-emerald-50/70"
+                      : isNextStep
+                        ? "border-amber-200 bg-amber-50/80"
+                        : "border-stone-200 bg-white/90",
                   )}
+                >
+                  <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                    <div className="flex items-start gap-3">
+                      <div
+                        className={cn(
+                          "mt-0.5 flex h-10 w-10 items-center justify-center rounded-2xl border",
+                          step.done
+                            ? "border-emerald-200 bg-emerald-100 text-emerald-700"
+                            : isNextStep
+                              ? "border-amber-200 bg-amber-100 text-amber-700"
+                              : "border-stone-200 bg-white text-stone-500",
+                        )}
+                      >
+                        {step.done ? <Check className="h-4 w-4" /> : <Clock className="h-4 w-4" />}
+                      </div>
+                      <div className="space-y-1">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <p className="text-sm font-semibold text-foreground">{step.title}</p>
+                          <Badge
+                            variant="outline"
+                            className={cn(
+                              "text-[11px] uppercase tracking-[0.18em]",
+                              step.done
+                                ? "border-emerald-200 bg-white text-emerald-700"
+                                : isNextStep
+                                  ? "border-amber-200 bg-white text-amber-700"
+                                  : "border-stone-200 bg-white text-stone-600",
+                            )}
+                          >
+                            {step.done ? "Done" : isNextStep ? "Next" : "Pending"}
+                          </Badge>
+                        </div>
+                        <p className="text-xs leading-relaxed text-muted-foreground">{step.description}</p>
+                      </div>
+                    </div>
+                    {!step.done && (
+                      <Button variant="outline" size="sm" onClick={step.onAction} className="w-full bg-white sm:w-auto">
+                        <span className="inline-flex items-center gap-2">
+                          {step.actionLabel}
+                          <ArrowRight className="h-3.5 w-3.5" />
+                        </span>
+                      </Button>
+                    )}
+                  </div>
                 </div>
-              ))}
+              )})}
             </div>
 
             {!steps.find((step) => step.key === "locations")?.done && canCreateLocation && (
-              <div className="space-y-3 rounded-lg border bg-white/80 p-4">
-                <div>
-                  <p className="text-sm font-medium">Add your first location</p>
+              <div className="space-y-4 rounded-2xl border border-stone-200 bg-white/90 p-4 shadow-sm">
+                <div className="space-y-1">
+                  <p className="text-sm font-semibold text-foreground">Add your first location</p>
                   <p className="text-xs text-muted-foreground">
                     Locations unlock processing, dispatch, and season reporting.
                   </p>
@@ -240,13 +309,13 @@ export default function OnboardingChecklist({
                       <TooltipProvider>
                         <Tooltip>
                           <TooltipTrigger asChild>
-                            <button
-                              type="button"
-                              aria-label="Location name help"
-                              className="inline-flex h-5 w-5 items-center justify-center rounded-full border border-slate-200 text-slate-500 hover:text-slate-700"
-                            >
-                              <Info className="h-3 w-3" />
-                            </button>
+                          <button
+                            type="button"
+                            aria-label="Location name help"
+                            className="inline-flex h-5 w-5 items-center justify-center rounded-full border border-stone-200 text-stone-500 hover:text-stone-700"
+                          >
+                            <Info className="h-3 w-3" />
+                          </button>
                           </TooltipTrigger>
                           <TooltipContent>Use the same names your team uses at each location.</TooltipContent>
                         </Tooltip>
@@ -265,13 +334,13 @@ export default function OnboardingChecklist({
                       <TooltipProvider>
                         <Tooltip>
                           <TooltipTrigger asChild>
-                            <button
-                              type="button"
-                              aria-label="Location code help"
-                              className="inline-flex h-5 w-5 items-center justify-center rounded-full border border-slate-200 text-slate-500 hover:text-slate-700"
-                            >
-                              <Info className="h-3 w-3" />
-                            </button>
+                          <button
+                            type="button"
+                            aria-label="Location code help"
+                            className="inline-flex h-5 w-5 items-center justify-center rounded-full border border-stone-200 text-stone-500 hover:text-stone-700"
+                          >
+                            <Info className="h-3 w-3" />
+                          </button>
                           </TooltipTrigger>
                           <TooltipContent>Short codes show up in export files and buyer reports.</TooltipContent>
                         </Tooltip>
@@ -288,7 +357,7 @@ export default function OnboardingChecklist({
                     <Button
                       onClick={onCreateLocation}
                       disabled={isCreatingLocation}
-                      className="w-full bg-green-700 hover:bg-green-800"
+                      className="w-full bg-emerald-700 hover:bg-emerald-800"
                     >
                       {isCreatingLocation ? "Adding..." : "Add Location"}
                     </Button>

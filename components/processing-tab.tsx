@@ -24,6 +24,7 @@ import { formatNumber } from "@/lib/format"
 import { canAcceptNonNegative, isBlockedNumericKey } from "@/lib/number-input"
 import TaskGuideCard from "@/components/task-guide-card"
 import { SkeletonTable } from "@/components/ui/skeleton"
+import WorkflowEmptyState from "@/components/workflow-empty-state"
 
 interface ProcessingRecord {
   id?: number
@@ -1522,23 +1523,19 @@ export default function ProcessingTab({ showDataToolsControls = false }: Process
           {isLoadingRecords ? (
             <SkeletonTable rows={4} cols={5} />
           ) : recentRecords.length === 0 ? (
-            <div className="rounded-2xl border border-dashed border-emerald-200 bg-emerald-50/40 p-5 text-sm">
-              <p className="font-semibold text-foreground">No processing records yet</p>
-              <p className="mt-2 text-muted-foreground">
-                Start with one honest record for today. You only need the real location, coffee type, and today&apos;s intake/output.
-              </p>
-              <ul className="ml-4 mt-3 list-disc space-y-1 text-muted-foreground">
-                <li>Pick the location your team actually used today.</li>
-                <li>Enter today&apos;s crop and the processed result you already know.</li>
-                <li>Save first, then come back later for extra detail like moisture or notes.</li>
-              </ul>
-              <div className="mt-4 flex flex-wrap gap-2">
-                <Button onClick={scrollToEntryForm}>Use form above</Button>
-                <Button asChild variant="outline" className="bg-white">
-                  <Link href="/manuals">Open manuals</Link>
-                </Button>
-              </div>
-            </div>
+            <WorkflowEmptyState
+              title="No processing records yet"
+              description="Start with one honest record for today. You only need the real location, coffee type, and the intake or output you already know."
+              steps={[
+                "Pick the real location and coffee type your team used today.",
+                "Enter the crop and processed result you already know now.",
+                "Save first, then come back later for moisture, notes, or quality detail.",
+              ]}
+              tip="Do not wait for perfect totals before starting. A simple daily baseline is far more useful than missing the day completely."
+              askPrompt="How do I enter my first pulping record?"
+              primaryAction={{ label: "Use form above", onClick: scrollToEntryForm }}
+              secondaryAction={{ label: "Open manuals", href: "/manuals" }}
+            />
           ) : (
             <div className="space-y-2">
               {selectedRecentRecord && (

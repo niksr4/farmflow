@@ -1,6 +1,6 @@
 "use client"
 
-import { useCallback, useEffect, useMemo, useState, type ChangeEvent } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent } from "react"
 import { useSearchParams } from "next/navigation"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
@@ -14,6 +14,7 @@ import { useAuth } from "@/hooks/use-auth"
 import { formatDateOnly } from "@/lib/date-utils"
 import { formatCurrency } from "@/lib/format"
 import { cn } from "@/lib/utils"
+import WorkflowEmptyState from "@/components/workflow-empty-state"
 
 const STATUS_OPTIONS = [
   { value: "unpaid", label: "Unpaid" },
@@ -151,6 +152,7 @@ export default function ReceivablesTab() {
   const [searchQuery, setSearchQuery] = useState("")
   const [selectedReceivable, setSelectedReceivable] = useState<ReceivableRecord | null>(null)
   const [form, setForm] = useState({ ...emptyForm })
+  const formCardRef = useRef<HTMLDivElement | null>(null)
 
   const tenantPreviewQuery = useMemo(() => {
     if (!isPreviewMode || !previewTenantId) return ""
@@ -381,6 +383,10 @@ export default function ReceivablesTab() {
     setForm({ ...emptyForm })
   }
 
+  const scrollToEntryForm = useCallback(() => {
+    formCardRef.current?.scrollIntoView({ block: "start", behavior: "smooth" })
+  }, [])
+
   return (
     <div className="space-y-6">
       <Card className="border-emerald-100 bg-emerald-50/40">
@@ -422,7 +428,7 @@ export default function ReceivablesTab() {
         </Card>
       )}
 
-      <Card>
+      <Card ref={formCardRef}>
         <CardHeader>
           <CardTitle>{editingRecord ? "Edit receivable" : "Add receivable"}</CardTitle>
           <CardDescription>Record buyer invoices and expected collections.</CardDescription>
@@ -562,9 +568,24 @@ export default function ReceivablesTab() {
           {isLoading ? (
             <div className="text-sm text-muted-foreground">Loading receivables...</div>
           ) : filteredRecords.length === 0 ? (
-            <div className="text-sm text-muted-foreground">
-              No receivables match your filters. Clear filters or add a new invoice.
-            </div>
+            records.length === 0 ? (
+              <WorkflowEmptyState
+                title="No receivables yet"
+                description="Start with the invoices you expect to collect, even if follow-up details will come later."
+                steps={[
+                  "Enter the buyer, invoice date, and amount first.",
+                  "Add a due date if you know it, otherwise start with the invoice and update later.",
+                  "Use status changes as collections happen instead of rewriting the invoice from scratch.",
+                ]}
+                tip="Receivables work best when every open buyer amount has a clear invoice record. That keeps collection follow-up much calmer."
+                askPrompt="How do I record my first receivable invoice?"
+                primaryAction={{ label: "Use form above", onClick: scrollToEntryForm }}
+              />
+            ) : (
+              <div className="text-sm text-muted-foreground">
+                No receivables match your filters. Clear filters or add a new invoice.
+              </div>
+            )
           ) : (
             <div className="space-y-4">
               {selectedReceivable && (

@@ -1,10 +1,12 @@
 import { buildRateLimitHeaders, checkRateLimit } from "@/lib/rate-limit"
 import { getCurrentFiscalYear } from "@/lib/fiscal-year-utils"
+import { buildClaudeRouteErrorResponse, classifyClaudeRouteError } from "@/lib/server/claude-errors"
 import { requireModuleAccess, isModuleAccessError } from "@/lib/server/module-access"
-import { logServerError } from "@/lib/server/safe-logging"
+import { logServerError, logServerWarning } from "@/lib/server/safe-logging"
 import { sql } from "@/lib/server/db"
 import { normalizeTenantContext, runTenantQuery } from "@/lib/server/tenant-db"
-import { getClaudeClient, isClaudeConfigured, extractClaudeText, CLAUDE_HAIKU } from "@/lib/server/claude"
+import { CLAUDE_HAIKU } from "@/lib/server/claude"
+import { callAI, isAIConfigured } from "@/lib/server/ai-provider"
 
 export const dynamic = "force-dynamic"
 export const revalidate = 0
@@ -78,10 +80,11 @@ function pctChange(curr: number, prev: number): string {
 }
 
 export async function GET() {
+  let rateHeaders: Record<string, string> = {}
   try {
     const sessionUser = await requireModuleAccess("ai-analysis")
     const rateLimit = await checkRateLimit("aiSeasonCompare", sessionUser.tenantId)
-    const rateHeaders = buildRateLimitHeaders(rateLimit)
+    rateHeaders = buildRateLimitHeaders(rateLimit)
 
     if (!rateLimit.success) {
       return Response.json(
@@ -90,7 +93,7 @@ export async function GET() {
       )
     }
 
-    if (!isClaudeConfigured()) {
+    if (!isAIConfigured()) {
       return Response.json({ success: false, error: "AI is not configured" }, { status: 503, headers: rateHeaders })
     }
 
@@ -140,22 +143,22 @@ ${currentFY.label} (in progress):
 - Labor cost: ₹${curr.laborCost.toLocaleString()} | Other expenses: ₹${curr.expenseCost.toLocaleString()}
     `.trim()
 
-    const client = getClaudeClient()
-    const message = await client.messages.create({
-      model: CLAUDE_HAIKU,
-      max_tokens: 400,
-      temperature: 0.2,
-      system:
-        "You are FarmFlow Season Analyst. Write a concise 2–3 sentence year-on-year comparison for an estate manager. Ground every observation in the numbers provided. Use INR (₹) and KG. Be specific — name the metric and the percentage. No markdown, no bullet points, plain prose only.",
-      messages: [
-        {
-          role: "user",
-          content: `${dataSummary}\n\nWrite a 2–3 sentence YoY season summary highlighting the most important changes.`,
-        },
-      ],
-    })
-
-    const narrative = extractClaudeText(message).trim() || null
+    const narrative =
+      (
+        await callAI({
+          model: CLAUDE_HAIKU,
+          max_tokens: 400,
+          temperature: 0.2,
+          system:
+            "You are FarmFlow Season Analyst. Write a concise 2–3 sentence year-on-year comparison for an estate manager. Ground every observation in the numbers provided. Use INR (₹) and KG. Be specific — name the metric and the percentage. No markdown, no bullet points, plain prose only.",
+          messages: [
+            {
+              role: "user",
+              content: `${dataSummary}\n\nWrite a 2–3 sentence YoY season summary highlighting the most important changes.`,
+            },
+          ],
+        })
+      ).trim() || null
 
     return Response.json(
       {
@@ -168,13 +171,21 @@ ${currentFY.label} (in progress):
       { headers: rateHeaders },
     )
   } catch (error) {
-    logServerError("Season compare error", error)
     if (isModuleAccessError(error)) {
-      return Response.json({ success: false, error: "Module access disabled" }, { status: 403 })
+      return Response.json({ success: false, error: "Module access disabled" }, { status: 403, headers: rateHeaders })
     }
+    const claudeClassification = classifyClaudeRouteError(error)
+    if (claudeClassification) {
+      logServerWarning("Season compare Claude request failed", {
+        classification: claudeClassification,
+        error,
+      })
+      return buildClaudeRouteErrorResponse(claudeClassification, rateHeaders)
+    }
+    logServerError("Season compare error", error)
     return Response.json(
       { success: false, error: error instanceof Error ? error.message : "Failed to generate season comparison" },
-      { status: 500 },
+      { status: 500, headers: rateHeaders },
     )
   }
 }

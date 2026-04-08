@@ -10,6 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Calendar } from "@/components/ui/calendar"
 import { formatDateOnly } from "@/lib/date-utils"
 import { useToast } from "@/hooks/use-toast"
+import WorkflowEmptyState from "@/components/workflow-empty-state"
 
 interface JournalEntry {
   id: string
@@ -414,9 +415,18 @@ export default function JournalTab() {
             {loading ? (
               <div className="text-sm text-muted-foreground">Loading entries...</div>
             ) : entries.length === 0 ? (
-              <div className="text-sm text-muted-foreground">
-                No journal entries yet. Start with fertilizer mixes, sprays, or irrigation notes.
-              </div>
+              <WorkflowEmptyState
+                title="No journal entries yet"
+                description="Use Journal for the short field notes that are easy to forget later: fertilizer mixes, sprays, irrigation, and daily observations."
+                steps={[
+                  "Pick the real date and location first.",
+                  "Use a short title or fertilizer name instead of writing a long report.",
+                  "Capture the note while it is fresh, then expand it later only if needed.",
+                ]}
+                tip="Journal works best for the small operational facts your team will want back during audits, planning, or troubleshooting."
+                askPrompt="What should I write in my first journal entry?"
+                className="mt-2"
+              />
             ) : (
               <div className="rounded-lg border divide-y">
                 {entries.map((entry) => (

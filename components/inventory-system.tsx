@@ -70,6 +70,7 @@ import { formatCurrency, formatNumber } from "@/lib/format"
 import { type AccountsExportFormat } from "@/lib/accounts-export"
 import { getCurrentFiscalYear } from "@/lib/fiscal-year-utils"
 import { normalizeInventoryItemType } from "@/lib/inventory-item-type"
+import { ASSISTANT_PROMPT_EVENT, type AssistantPromptEventDetail } from "@/lib/assistant-events"
 import { getModuleDefaultEnabled } from "@/lib/modules"
 import { appendOwnerPreviewContext, normalizeOwnerPreviewContext } from "@/lib/owner-preview"
 import type { InventoryItem, Transaction } from "@/lib/inventory-types"
@@ -78,6 +79,7 @@ import { cn } from "@/lib/utils"
 import { Skeleton, SkeletonCard, SkeletonTable } from "@/components/ui/skeleton"
 import { toast } from "@/components/ui/use-toast"
 import { roleLabel } from "@/lib/roles"
+import WorkflowEmptyState from "@/components/workflow-empty-state"
 import {
   EXPORT_DATASETS,
   isExportDatasetId,
@@ -236,11 +238,37 @@ type TransactionWriteFailureSnapshot = {
   transaction: Transaction
 }
 
+type AccountsWorkspaceTab = "labor" | "expenses" | "attendance" | "activities" | "workers" | "picking" | "ledger" | "payroll"
+type SmartNextStepTone = "progress" | "attention" | "help"
+type SmartNextStep = {
+  id: string
+  tone: SmartNextStepTone
+  title: string
+  description: string
+  reason: string
+  actionLabel: string
+  actionTab: string
+  askPrompt?: string
+}
+
+const ACCOUNTS_WORKSPACE_TABS: AccountsWorkspaceTab[] = [
+  "labor",
+  "expenses",
+  "attendance",
+  "activities",
+  "workers",
+  "picking",
+  "ledger",
+  "payroll",
+]
+
+const isAccountsWorkspaceTab = (value: string | null | undefined): value is AccountsWorkspaceTab =>
+  ACCOUNTS_WORKSPACE_TABS.includes(String(value || "").trim() as AccountsWorkspaceTab)
+
 export default function InventorySystem() {
   type InventoryWorkspaceView = "inventory" | "transactions"
   type SalesWorkspaceView = "coffee" | "other-sales"
   type ProcessingWorkspaceView = "coffee" | "pepper"
-  type AccountsWorkspaceTab = "labor" | "expenses" | "attendance" | "activities" | "workers" | "picking" | "ledger" | "payroll"
   // UI / paging
   const [currentPage, setCurrentPage] = useState(1)
   const itemsPerPage = 10
@@ -344,6 +372,13 @@ export default function InventorySystem() {
     totalCost: number
     totalOutputKg: number
     costPerKg: number | null
+    totalRevenue: number
+    totalSoldKg: number
+    revenuePerKg: number | null
+    grossMarginPerKg: number | null
+    grossMarginPct: number | null
+    laborPct: number | null
+    expensePct: number | null
     hasData: boolean
     loading: boolean
   }>({
@@ -352,6 +387,13 @@ export default function InventorySystem() {
     totalCost: 0,
     totalOutputKg: 0,
     costPerKg: null,
+    totalRevenue: 0,
+    totalSoldKg: 0,
+    revenuePerKg: null,
+    grossMarginPerKg: null,
+    grossMarginPct: null,
+    laborPct: null,
+    expensePct: null,
     hasData: false,
     loading: false,
   })
@@ -457,6 +499,7 @@ export default function InventorySystem() {
   const [proactiveInsightsError, setProactiveInsightsError] = useState<string | null>(null)
   const [seasonCompareNarrative, setSeasonCompareNarrative] = useState<string | null>(null)
   const [seasonCompareLoading, setSeasonCompareLoading] = useState(false)
+  const [seasonCompareError, setSeasonCompareError] = useState<string | null>(null)
   const [seasonCompareFYLabels, setSeasonCompareFYLabels] = useState<{ curr: string; prev: string } | null>(null)
   const [recentActivity, setRecentActivity] = useState<Array<{ module: string; label: string; detail: string; date: string }> | null>(null)
   const [recentActivityLoading, setRecentActivityLoading] = useState(false)
@@ -576,6 +619,7 @@ export default function InventorySystem() {
   const canShowRainfall = isModuleEnabled("rainfall")
   const canShowPepper = isModuleEnabled("pepper")
   const canShowAiAnalysis = isModuleEnabled("ai-analysis")
+  const canLaunchAssistant = canShowAiAnalysis && (!isOwner || isPreviewMode)
   const canShowNews = isModuleEnabled("news")
   const canShowWeather = isModuleEnabled("weather")
   const canShowSeason = isModuleEnabled("season")
@@ -860,6 +904,13 @@ export default function InventorySystem() {
           totalCost: d.totalCost ?? 0,
           totalOutputKg: d.totalOutputKg ?? 0,
           costPerKg: d.costPerKg ?? null,
+          totalRevenue: d.totalRevenue ?? 0,
+          totalSoldKg: d.totalSoldKg ?? 0,
+          revenuePerKg: d.revenuePerKg ?? null,
+          grossMarginPerKg: d.grossMarginPerKg ?? null,
+          grossMarginPct: d.grossMarginPct ?? null,
+          laborPct: d.laborPct ?? null,
+          expensePct: d.expensePct ?? null,
           hasData: d.hasData ?? false,
           loading: false,
         })
@@ -2414,8 +2465,12 @@ export default function InventorySystem() {
     }
   }, [currentPage, validatedCurrentPage])
 
-  const renderTransactionHistoryPanel = () => (
-    <div className="rounded-2xl border border-black/5 bg-white/85 p-6 shadow-sm">
+  const renderTransactionHistoryPanel = () => {
+    const noTransactionsRecorded = transactions.length === 0
+    const noFilteredTransactions = transactions.length > 0 && filteredTransactions.length === 0
+
+    return (
+      <div className="rounded-2xl border border-black/5 bg-white/85 p-6 shadow-sm">
       <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h2 className="flex items-center text-lg font-semibold text-emerald-700">
@@ -2505,12 +2560,28 @@ export default function InventorySystem() {
 
       {isMobile ? (
         <div className="space-y-3">
-          {transactions.length === 0 && (
-            <div className="rounded-lg border border-border/60 bg-white/80 py-10 text-center text-muted-foreground">
-              No transactions recorded yet.
-            </div>
+          {noTransactionsRecorded && (
+            <WorkflowEmptyState
+              title="No inventory movements yet"
+              description="Start with the first real stock arrival or usage entry. Inventory history becomes useful as soon as the first movement is recorded."
+              steps={[
+                hasMovementItemTypes
+                  ? "Pick the real item and location that changed today."
+                  : "Create the first inventory item your team actually buys or uses.",
+                "Use Restock when stock arrives or you are setting the opening baseline.",
+                "Use Deplete only when stock was actually used, lost, or corrected.",
+              ]}
+              tip="If you are just starting, one clean opening restock is enough to begin. You do not need to backfill everything on day one."
+              askPrompt="How do I record my first inventory movement?"
+              primaryAction={
+                hasMovementItemTypes
+                  ? { label: "Record movement", onClick: () => openMovementDrawer("restock") }
+                  : { label: "Add first item", onClick: openNewItemDialog }
+              }
+              secondaryAction={hasMovementItemTypes ? { label: "Add item", onClick: openNewItemDialog } : undefined}
+            />
           )}
-          {transactions.length > 0 && filteredTransactions.length === 0 && (
+          {noFilteredTransactions && (
             <div className="rounded-lg border border-border/60 bg-white/80 py-10 text-center text-muted-foreground">
               No transactions found matching your current filters.
             </div>
@@ -2693,10 +2764,30 @@ export default function InventorySystem() {
               })}
             </tbody>
           </table>
-          {transactions.length === 0 && (
-            <div className="text-center py-10 text-muted-foreground">No transactions recorded yet.</div>
+          {noTransactionsRecorded && (
+            <div className="p-4">
+              <WorkflowEmptyState
+                title="No inventory movements yet"
+                description="Start with the first real stock arrival or usage entry. Inventory history becomes trustworthy from the first honest movement."
+                steps={[
+                  hasMovementItemTypes
+                    ? "Choose the real item and location that changed."
+                    : "Create the first item you want to track in stock.",
+                  "Restock for arrivals or opening balance, then deplete only when usage actually happens.",
+                  "Keep notes short and factual so later corrections are easy to explain.",
+                ]}
+                tip="This page is your stock audit trail. Keep it factual and it will save time later when balances need explaining."
+                askPrompt="How should I start transaction history in FarmFlow?"
+                primaryAction={
+                  hasMovementItemTypes
+                    ? { label: "Record movement", onClick: () => openMovementDrawer("restock") }
+                    : { label: "Add first item", onClick: openNewItemDialog }
+                }
+                secondaryAction={hasMovementItemTypes ? { label: "Add item", onClick: openNewItemDialog } : undefined}
+              />
+            </div>
           )}
-          {transactions.length > 0 && filteredTransactions.length === 0 && (
+          {noFilteredTransactions && (
             <div className="text-center py-10 text-muted-foreground">
               No transactions found matching your current filters.
             </div>
@@ -2725,7 +2816,8 @@ export default function InventorySystem() {
         </div>
       )}
     </div>
-  )
+    )
+  }
 
   // helpers for transaction object safety
   const ensureTransactionSafety = (transaction: Transaction | null): Transaction => {
@@ -3296,6 +3388,7 @@ export default function InventorySystem() {
   const generateAIAnalysis = async () => {
     setIsAnalyzing(true)
     setAnalysisError("")
+    setAiAnalysis(null)
     try {
       const payload = { inventory, transactions: transactions.slice(0, 50), laborDeployments: laborDeployments.slice(0, 50) }
       const res = await fetch("/api/ai-analysis", {
@@ -3303,9 +3396,11 @@ export default function InventorySystem() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
       })
-      if (!res.ok) throw new Error("AI analysis failed")
-      const json = await res.json()
-      setAiAnalysis(json.analysis || "No analysis returned")
+      const { json, text } = await parseJsonResponse(res)
+      if (!res.ok || !json?.success) {
+        throw new Error(json?.error || json?.message || text || "AI analysis could not answer right now.")
+      }
+      setAiAnalysis(String(json.analysis || "No analysis returned"))
     } catch (err: any) {
       console.error("AI Analysis error:", err)
       setAnalysisError(err.message || "Failed to generate AI analysis")
@@ -3555,15 +3650,23 @@ export default function InventorySystem() {
     let ignore = false
     const loadSeasonCompare = async () => {
       setSeasonCompareLoading(true)
+      setSeasonCompareError(null)
       try {
         const response = await fetch("/api/ai-season-compare", { cache: "no-store" })
-        const data = await response.json().catch(() => ({}))
-        if (!ignore && data?.success && data.narrative) {
-          setSeasonCompareNarrative(data.narrative)
-          setSeasonCompareFYLabels({ curr: data.currentFY, prev: data.prevFY })
+        const { json, text } = await parseJsonResponse(response)
+        if (!response.ok || !json?.success) {
+          throw new Error(json?.error || json?.message || text || "Season comparison is temporarily unavailable.")
         }
-      } catch {
-        // silent — YoY card simply doesn't render
+        if (!ignore) {
+          setSeasonCompareNarrative(json.narrative || null)
+          setSeasonCompareFYLabels(json.currentFY && json.prevFY ? { curr: json.currentFY, prev: json.prevFY } : null)
+        }
+      } catch (error: any) {
+        if (!ignore) {
+          setSeasonCompareNarrative(null)
+          setSeasonCompareFYLabels(null)
+          setSeasonCompareError(error?.message || "Season comparison is temporarily unavailable.")
+        }
       } finally {
         if (!ignore) setSeasonCompareLoading(false)
       }
@@ -3665,8 +3768,8 @@ export default function InventorySystem() {
   const reconciliationStatusLabel = overdrawnCoffeeKgs > 0 ? "Overdrawn" : "Healthy"
   const reconciliationStatusTone =
     overdrawnCoffeeKgs > 0 ? "text-rose-700 border-rose-200 bg-rose-50/70" : "text-emerald-700 border-emerald-200 bg-emerald-50/70"
-  const intelligenceHighlights = intelligenceBrief?.highlights || []
-  const intelligenceActions = intelligenceBrief?.actions || []
+  const intelligenceHighlights = useMemo(() => intelligenceBrief?.highlights || [], [intelligenceBrief])
+  const intelligenceActions = useMemo(() => intelligenceBrief?.actions || [], [intelligenceBrief])
   const intelligenceTopCostCode = intelligenceBrief?.accountsPatterns?.topCostCodes?.[0] || null
   const intelligenceTopFrequencyCode = intelligenceBrief?.accountsPatterns?.mostFrequentCodes?.[0] || null
   const visibleTabs = useMemo(() => {
@@ -4048,6 +4151,242 @@ export default function InventorySystem() {
       metric_by_id: metricById,
     })
   }, [activeTab, executionOutcomeChecks, user?.role, user?.tenantId])
+
+  const smartNextSteps = useMemo<SmartNextStep[]>(() => {
+    const steps: SmartNextStep[] = []
+    const smartOnboardingAccess: OnboardingAccess = {
+      canShowInventory,
+      canShowLabor: canShowAccounts,
+      canShowProcessing,
+      canShowDispatch,
+      canShowSales,
+    }
+    const onboardingStepConfigs = buildOnboardingSteps(onboardingStatus, smartOnboardingAccess)
+    const onboardingCompletedCountLocal = onboardingStepConfigs.filter((step) => step.done).length
+    const onboardingTotalCountLocal = onboardingStepConfigs.length
+    const showOnboardingLocal =
+      !isOwner &&
+      !LIVE_TENANT_SKIP_TENANTS.has(tenantId || "") &&
+      hasLoadedOnboardingStatus &&
+      onboardingTotalCountLocal > 0 &&
+      onboardingCompletedCountLocal < onboardingTotalCountLocal
+    const nextPendingOnboardingStep = onboardingStepConfigs.find((step) => !step.done) || null
+    const latestActivity = recentActivity?.[0] || null
+    const primaryAlert = exceptionsSummary.alerts[0] || null
+    const fallbackOutcome =
+      executionOutcomeChecks.find((check) => check.status === "blocked") ||
+      executionOutcomeChecks.find((check) => check.status === "attention") ||
+      null
+
+    const pickTab = (preferredTabs: string[]) => {
+      for (const tab of preferredTabs) {
+        const normalized = String(tab || "").trim()
+        if (!normalized) continue
+        if (normalized === "transactions" && showTransactionHistory) return "transactions"
+        if (normalized === "inventory" && canShowInventoryWorkspace) return "inventory"
+        if (normalized === "processing" && canShowProcessingWorkspace) return "processing"
+        if (normalized === "sales" && canShowSalesWorkspace) return "sales"
+        if (visibleTabs.includes(normalized)) return normalized
+      }
+      return "home"
+    }
+
+    const resolveActionLabel = (tab: string) => {
+      if (tab === "transactions") return "Open Transactions"
+      if (tab === "home") return "Open Dashboard"
+      return `Open ${tabMeta[tab]?.label || "Workspace"}`
+    }
+
+    const addStep = (step: SmartNextStep | null) => {
+      if (!step) return
+      if (steps.some((existing) => existing.id === step.id || existing.actionTab === step.actionTab)) {
+        return
+      }
+      steps.push(step)
+    }
+
+    if (nextPendingOnboardingStep) {
+      addStep({
+        id: `onboarding-${nextPendingOnboardingStep.key}`,
+        tone: "progress",
+        title: nextPendingOnboardingStep.title,
+        description: nextPendingOnboardingStep.description,
+        reason: `${onboardingCompletedCountLocal}/${onboardingTotalCountLocal} setup steps complete. Finish this step before daily work gets spread across too many tabs.`,
+        actionLabel: nextPendingOnboardingStep.actionLabel,
+        actionTab: nextPendingOnboardingStep.actionTab,
+        askPrompt: `How do I complete "${nextPendingOnboardingStep.title}" in FarmFlow?`,
+      })
+    }
+
+    if (primaryAlert || exceptionsSummary.count > 0) {
+      const alertLocation = primaryAlert?.location ? ` for ${primaryAlert.location}` : ""
+      addStep({
+        id: "active-alert",
+        tone: "attention",
+        title: primaryAlert ? primaryAlert.title : "Review active estate alerts",
+        description: primaryAlert
+          ? `This is the highest-priority issue FarmFlow sees right now${alertLocation}.`
+          : `${exceptionsSummary.count} estate alerts need review before they turn into reporting drift.`,
+        reason:
+          exceptionsSummary.highlights[0] ||
+          (primaryAlert?.metric
+            ? `Check ${primaryAlert.metric.toLowerCase()} and clear the blocker before it cascades into other records.`
+            : "Resolve the current blocker before it starts affecting downstream records."),
+        actionLabel: canShowSeason ? "Review alerts" : "Open Dashboard",
+        actionTab: pickTab(["season", intelligenceActions[0]?.tab || "", "home"]),
+        askPrompt: `Explain this estate alert and tell me what to do next: ${primaryAlert?.title || "current estate alerts"}.`,
+      })
+    }
+
+    if (!latestActivity) {
+      const starterTab = nextPendingOnboardingStep
+        ? nextPendingOnboardingStep.actionTab
+        : pickTab(["processing", "inventory", "accounts", "dispatch", "sales"])
+      addStep({
+        id: "first-live-record",
+        tone: showOnboardingLocal ? "progress" : "help",
+        title: showOnboardingLocal ? "Keep setup moving with one real record" : "Log the next live record",
+        description: showOnboardingLocal
+          ? "Do not wait for a perfect setup. One honest live record is enough to move the estate forward."
+          : "There is no recent activity yet. Start with one real entry so FarmFlow can give better guidance.",
+        reason: showOnboardingLocal
+          ? "The first useful rhythm is locations, one stock baseline, then one live operational record."
+          : "Recent activity is empty, so the dashboard has very little real usage context yet.",
+        actionLabel: nextPendingOnboardingStep ? nextPendingOnboardingStep.actionLabel : resolveActionLabel(starterTab),
+        actionTab: starterTab,
+        askPrompt: "I am getting started in FarmFlow. What is the minimum useful record I should enter first today?",
+      })
+    } else {
+      const latestReason = `Latest activity: ${latestActivity.label}${latestActivity.date ? ` on ${latestActivity.date}` : ""}.`
+      if (latestActivity.module === "processing" && canShowDispatch) {
+        addStep({
+          id: "after-processing",
+          tone: "progress",
+          title: "Close the loop after pulping",
+          description: "You recently logged pulping output. Record dispatch next so bags out and received KGs stay aligned.",
+          reason: latestReason,
+          actionLabel: "Open Dispatch",
+          actionTab: "dispatch",
+          askPrompt: "I already logged pulping output. What should I do next in FarmFlow?",
+        })
+      } else if (latestActivity.module === "dispatch") {
+        const nextTab = pickTab(["sales", "receivables", "season"])
+        addStep({
+          id: "after-dispatch",
+          tone: "progress",
+          title: "Follow through after dispatch",
+          description: "Use the next step to keep stock, buyers, and revenue aligned after bags leave the estate.",
+          reason: latestReason,
+          actionLabel: resolveActionLabel(nextTab),
+          actionTab: nextTab,
+          askPrompt: "I recorded dispatch already. Should I log sales, receivables, or review stock next?",
+        })
+      } else if (latestActivity.module === "sales") {
+        const nextTab = pickTab(["receivables", "season", "accounts"])
+        addStep({
+          id: "after-sales",
+          tone: "progress",
+          title: "Follow up on buyers after sales",
+          description: "Review the next buyer-facing step so cash collection and season reporting do not fall behind.",
+          reason: latestReason,
+          actionLabel: resolveActionLabel(nextTab),
+          actionTab: nextTab,
+          askPrompt: "I have recorded a sale. What should I review next in FarmFlow?",
+        })
+      } else if (latestActivity.module === "expenses") {
+        const nextTab = pickTab(["inventory", "accounts"])
+        addStep({
+          id: "after-expenses",
+          tone: "help",
+          title: "Check the operational follow-through on expenses",
+          description: "After entering expenses, confirm the related stock or coding context so Accounts and operations stay aligned.",
+          reason: latestReason,
+          actionLabel: resolveActionLabel(nextTab),
+          actionTab: nextTab,
+          askPrompt: "I entered an expense. Should I also review inventory, account codes, or something else?",
+        })
+      } else if (latestActivity.module === "labor" && canShowAccounts) {
+        addStep({
+          id: "after-labor",
+          tone: "progress",
+          title: "Review labor visibility",
+          description: "Keep labor entries tied back to activities and totals so cost visibility stays usable day to day.",
+          reason: latestReason,
+          actionLabel: "Open Accounts",
+          actionTab: "accounts",
+          askPrompt: "I logged labor already. What should I review next so labor costs stay accurate?",
+        })
+      }
+    }
+
+    const suggestedIntelligenceAction =
+      intelligenceActions.find((action) => !steps.some((step) => step.actionTab === action.tab)) || null
+    if (suggestedIntelligenceAction) {
+      addStep({
+        id: `intelligence-${suggestedIntelligenceAction.tab}`,
+        tone: "help",
+        title: suggestedIntelligenceAction.label,
+        description: "FarmFlow flagged this as a useful follow-up based on the latest tenant data across modules.",
+        reason: intelligenceHighlights[0] || "This recommendation comes from the latest cross-module intelligence brief.",
+        actionLabel: suggestedIntelligenceAction.label,
+        actionTab: pickTab([suggestedIntelligenceAction.tab, "home"]),
+        askPrompt: `Why is "${suggestedIntelligenceAction.label}" a useful next step for my estate today?`,
+      })
+    }
+
+    if (steps.length < 3 && fallbackOutcome) {
+      addStep({
+        id: `scorecard-${fallbackOutcome.id}`,
+        tone: fallbackOutcome.status === "blocked" ? "attention" : "help",
+        title: fallbackOutcome.title,
+        description: fallbackOutcome.goal,
+        reason: fallbackOutcome.metric,
+        actionLabel: fallbackOutcome.actionLabel,
+        actionTab: fallbackOutcome.actionTab,
+        askPrompt: `How do I improve "${fallbackOutcome.title}" in FarmFlow?`,
+      })
+    }
+
+    if (steps.length < 3) {
+      addStep({
+        id: "stuck-help",
+        tone: "help",
+        title: "Need help finding the right tab?",
+        description: "Ask FarmFlow in plain English and it will point you to the right screen or matching records.",
+        reason: "Useful when you know the task, but not where it lives or what the next field should be.",
+        actionLabel: "Open Dashboard",
+        actionTab: "home",
+        askPrompt: "I am stuck in FarmFlow. What should I do next, and where exactly should I go?",
+      })
+    }
+
+    return steps.slice(0, 3)
+  }, [
+    canShowAccounts,
+    canShowInventory,
+    canShowDispatch,
+    canShowInventoryWorkspace,
+    canShowProcessingWorkspace,
+    canShowProcessing,
+    canShowSales,
+    canShowSalesWorkspace,
+    canShowSeason,
+    exceptionsSummary.alerts,
+    exceptionsSummary.count,
+    exceptionsSummary.highlights,
+    executionOutcomeChecks,
+    hasLoadedOnboardingStatus,
+    intelligenceActions,
+    intelligenceHighlights,
+    onboardingStatus,
+    recentActivity,
+    showTransactionHistory,
+    tabMeta,
+    tenantId,
+    visibleTabs,
+    isOwner,
+    LIVE_TENANT_SKIP_TENANTS,
+  ])
 
   const getPreferredDefaultTab = useCallback(
     (tabs: string[]) => DEFAULT_DASHBOARD_TAB_PRIORITY.find((tab) => tabs.includes(tab)) || tabs[0],
@@ -4699,6 +5038,7 @@ export default function InventorySystem() {
     tab: string
     locationId?: string | null
     itemType?: string | null
+    panel?: string | null
     transactionSearch?: string | null
     seasonAlertId?: string | null
     seasonMetric?: string | null
@@ -4754,6 +5094,11 @@ export default function InventorySystem() {
       if (options.transactionSearch !== undefined && options.transactionSearch !== null) {
         setTransactionSearchTerm(String(options.transactionSearch))
       }
+      if (requestedTab === "accounts") {
+        setAccountsInitialTab(isAccountsWorkspaceTab(options.panel) ? options.panel : undefined)
+      } else {
+        setAccountsInitialTab(undefined)
+      }
 
       const params = new URLSearchParams(searchParams.toString())
       params.set("tab", queryTab)
@@ -4768,6 +5113,11 @@ export default function InventorySystem() {
       }
       if (options.itemType !== undefined) {
         setOptional(DRILLDOWN_ITEM_PARAM, options.itemType)
+      }
+      if (requestedTab === "accounts") {
+        setOptional("panel", options.panel)
+      } else {
+        params.delete("panel")
       }
       if (options.transactionSearch !== undefined) {
         setOptional(DRILLDOWN_TXN_SEARCH_PARAM, options.transactionSearch)
@@ -4810,18 +5160,15 @@ export default function InventorySystem() {
 
   const handleWorkspaceHintAction = useCallback(
     (action: WorkspaceHintAction) => {
-      if (action.panel && action.tab === "accounts") {
-        setAccountsInitialTab(action.panel as AccountsWorkspaceTab)
-      }
       if (action.href) {
         router.push(buildWorkspaceHref(action.href))
         return
       }
       if (action.tab) {
-        handleTabChange(action.tab)
+        openDrilldown({ tab: action.tab, panel: action.panel })
       }
     },
-    [buildWorkspaceHref, handleTabChange, router],
+    [buildWorkspaceHref, openDrilldown, router],
   )
 
   const handleExecutionOutcomeAction = useCallback(
@@ -4835,6 +5182,16 @@ export default function InventorySystem() {
     },
     [openDrilldown],
   )
+
+  const launchAssistantPrompt = useCallback((prompt?: string | null) => {
+    if (typeof window === "undefined") return
+    const nextPrompt = String(prompt || "").trim()
+    window.dispatchEvent(
+      new CustomEvent<AssistantPromptEventDetail>(ASSISTANT_PROMPT_EVENT, {
+        detail: nextPrompt ? { prompt: nextPrompt } : {},
+      }),
+    )
+  }, [])
 
   const resolveWriteQueueTab = useCallback(
     (pathname: string) => {
@@ -4978,9 +5335,9 @@ export default function InventorySystem() {
               subtabChipClassName: "border-amber-100 bg-amber-100/70 text-amber-800/80",
               iconClassName: "text-amber-700",
               activeCardClassName: "border-amber-500 bg-amber-500 text-white shadow-[0_14px_30px_-20px_rgba(217,119,6,0.95)]",
-              inactiveCardClassName: "border-amber-200 bg-amber-50/70 text-amber-900 hover:border-amber-300 hover:bg-amber-50",
+              inactiveCardClassName: "border-amber-200 bg-amber-50/70 text-slate-900 hover:border-amber-300 hover:bg-amber-50",
               activeDescriptionClassName: "text-amber-100",
-              inactiveDescriptionClassName: "text-amber-700/80",
+              inactiveDescriptionClassName: "text-slate-500",
               previewTabClassName: "border-amber-200 bg-white/90 text-amber-900 hover:bg-white",
               previewTabActiveClassName: "border-white/30 bg-white/15 text-white",
             }
@@ -4998,9 +5355,9 @@ export default function InventorySystem() {
               subtabChipClassName: "border-emerald-100 bg-emerald-100/70 text-emerald-800/80",
               iconClassName: "text-emerald-700",
               activeCardClassName: "border-emerald-600 bg-emerald-600 text-white shadow-[0_14px_30px_-20px_rgba(5,150,105,0.9)]",
-              inactiveCardClassName: "border-emerald-200 bg-emerald-50/70 text-emerald-900 hover:border-emerald-300 hover:bg-emerald-50",
+              inactiveCardClassName: "border-emerald-200 bg-emerald-50/70 text-slate-900 hover:border-emerald-300 hover:bg-emerald-50",
               activeDescriptionClassName: "text-emerald-100",
-              inactiveDescriptionClassName: "text-emerald-700/80",
+              inactiveDescriptionClassName: "text-slate-500",
               previewTabClassName: "border-emerald-200 bg-white/90 text-emerald-900 hover:bg-white",
               previewTabActiveClassName: "border-white/30 bg-white/15 text-white",
             }
@@ -5018,9 +5375,9 @@ export default function InventorySystem() {
               subtabChipClassName: "border-cyan-100 bg-cyan-100/70 text-cyan-800/80",
               iconClassName: "text-cyan-700",
               activeCardClassName: "border-cyan-600 bg-cyan-600 text-white shadow-[0_14px_30px_-20px_rgba(8,145,178,0.9)]",
-              inactiveCardClassName: "border-cyan-200 bg-cyan-50/70 text-cyan-900 hover:border-cyan-300 hover:bg-cyan-50",
+              inactiveCardClassName: "border-cyan-200 bg-cyan-50/70 text-slate-900 hover:border-cyan-300 hover:bg-cyan-50",
               activeDescriptionClassName: "text-cyan-100",
-              inactiveDescriptionClassName: "text-cyan-700/80",
+              inactiveDescriptionClassName: "text-slate-500",
               previewTabClassName: "border-cyan-200 bg-white/90 text-cyan-900 hover:bg-white",
               previewTabActiveClassName: "border-white/30 bg-white/15 text-white",
             }
@@ -5070,6 +5427,7 @@ export default function InventorySystem() {
 
   const tabParam = searchParams.get("tab")
   const locationFilterParam = (searchParams.get("locationId") || "").trim()
+  const accountsPanelParam = (searchParams.get("panel") || "").trim()
   const transactionSearchParam = searchParams.get(DRILLDOWN_TXN_SEARCH_PARAM)
   const itemTypeParam = searchParams.get(DRILLDOWN_ITEM_PARAM)
   useEffect(() => {
@@ -5102,6 +5460,13 @@ export default function InventorySystem() {
       setActiveTab(fallbackTab)
     }
   }, [activeTab, getPreferredDefaultTab, isModulesLoading, visibleTabs])
+
+  useEffect(() => {
+    if (tabParam !== "accounts") {
+      return
+    }
+    setAccountsInitialTab(isAccountsWorkspaceTab(accountsPanelParam) ? accountsPanelParam : undefined)
+  }, [accountsPanelParam, tabParam])
 
   useEffect(() => {
     if (!tabParam) {
@@ -5288,7 +5653,8 @@ export default function InventorySystem() {
     canShowDispatch,
     canShowSales,
   }
-  const onboardingSteps: OnboardingStep[] = buildOnboardingSteps(onboardingStatus, onboardingAccess).map((step) => ({
+  const onboardingStepConfigs = buildOnboardingSteps(onboardingStatus, onboardingAccess)
+  const onboardingSteps: OnboardingStep[] = onboardingStepConfigs.map((step) => ({
     key: step.key,
     title: step.title,
     description: step.description,
@@ -5296,8 +5662,8 @@ export default function InventorySystem() {
     actionLabel: step.actionLabel,
     onAction: () => handleTabChange(step.actionTab),
   }))
-  const onboardingCompletedCount = onboardingSteps.filter((step) => step.done).length
-  const onboardingTotalCount = onboardingSteps.length
+  const onboardingCompletedCount = onboardingStepConfigs.filter((step) => step.done).length
+  const onboardingTotalCount = onboardingStepConfigs.length
   const showOnboarding =
     !isOwner &&
     !LIVE_TENANT_SKIP_TENANTS.has(tenantId || "") &&
@@ -5305,12 +5671,12 @@ export default function InventorySystem() {
     onboardingTotalCount > 0 &&
     onboardingCompletedCount < onboardingTotalCount
   const recordMovementPanel = (
-    <div className="rounded-2xl border border-black/5 bg-white p-6 shadow-sm">
+    <div className="rounded-[28px] border border-emerald-100 bg-[linear-gradient(180deg,#ffffff_0%,#fbfffd_46%,#fafaf8_100%)] p-6 shadow-[0_24px_80px_-45px_rgba(14,93,82,0.35)]">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div>
-          <h3 className="text-lg font-semibold text-neutral-900">Record Inventory Movement</h3>
+          <h3 className="text-lg font-semibold text-neutral-900">Record inventory movement</h3>
           <p className="text-xs text-neutral-500">
-            Use this form for stock coming in, stock used, and stock corrections.
+            Restock, deplete, or correct stock without leaving the inventory workspace.
           </p>
         </div>
         <Button type="button" variant="ghost" size="sm" onClick={() => setIsMovementDrawerOpen(false)}>
@@ -5318,12 +5684,18 @@ export default function InventorySystem() {
         </Button>
       </div>
       <div className="mt-4 flex flex-wrap gap-2 text-xs">
-        <Badge variant="outline" className="border-black/5 bg-neutral-50 text-neutral-600">
-          Harvest & pulping
+        <Badge variant="outline" className="border-emerald-200 bg-white text-emerald-700">
+          Audit trail
         </Badge>
-        <Badge variant="outline" className="border-black/5 bg-neutral-50 text-neutral-600">
-          Restock or deplete
+        <Badge variant="outline" className="border-emerald-200 bg-white text-emerald-700">
+          Backdated entries
         </Badge>
+        <Badge variant="outline" className="border-emerald-200 bg-white text-emerald-700">
+          Estate linked
+        </Badge>
+      </div>
+      <div className="mt-4 rounded-2xl border border-emerald-100 bg-emerald-50/70 px-4 py-3 text-sm text-emerald-900">
+        Record restocks when stock arrives. Record depletions when stock is used, lost, or corrected.
       </div>
       <div className="mt-6 space-y-5">
         {lastTransactionWriteFailure && (
@@ -5350,7 +5722,7 @@ export default function InventorySystem() {
         )}
         <div className="space-y-2">
           <div className="flex items-center gap-2">
-            <label className="text-sm font-medium text-neutral-700">Item Type</label>
+            <label className="text-sm font-medium text-neutral-700">Item / crop</label>
             <TooltipProvider>
               <Tooltip>
                 <TooltipTrigger asChild>
@@ -5362,7 +5734,7 @@ export default function InventorySystem() {
                     <Info className="h-3 w-3" />
                   </button>
                 </TooltipTrigger>
-                <TooltipContent>Select the coffee or inventory item being adjusted.</TooltipContent>
+                <TooltipContent>Select the crop or inventory item being adjusted.</TooltipContent>
               </Tooltip>
             </TooltipProvider>
           </div>
@@ -5408,7 +5780,7 @@ export default function InventorySystem() {
 
         <div className="space-y-2">
           <div className="flex items-center gap-2">
-            <label className="text-sm font-medium text-neutral-700">Location</label>
+            <label className="text-sm font-medium text-neutral-700">Estate block</label>
             <TooltipProvider>
               <Tooltip>
                 <TooltipTrigger asChild>
@@ -5527,7 +5899,7 @@ export default function InventorySystem() {
                     <Info className="h-3 w-3" />
                   </button>
                 </TooltipTrigger>
-                  <TooltipContent>Restocking adds stock when goods arrive. Depleting records stock used, issued, lost, or corrected.</TooltipContent>
+                <TooltipContent>Restocking adds stock when goods arrive. Depleting records stock used, issued, lost, or corrected.</TooltipContent>
               </Tooltip>
             </TooltipProvider>
           </div>
@@ -5536,20 +5908,38 @@ export default function InventorySystem() {
             onValueChange={(value: "Depleting" | "Restocking") =>
               handleFieldChange("transaction_type", value === "Restocking" ? "restock" : "deplete")
             }
-            className="flex flex-col gap-3 rounded-xl border border-black/5 bg-neutral-50/70 p-3 sm:flex-row sm:items-center"
+            className="grid gap-3 sm:grid-cols-2"
           >
-            <div className="flex items-center space-x-3">
-              <RadioGroupItem value="Restocking" id="restocking" className="h-5 w-5" />
-              <Label htmlFor="restocking" className="text-sm">
-                Restocking <span className="text-neutral-500 font-normal">(goods received)</span>
-              </Label>
-            </div>
-            <div className="flex items-center space-x-3">
-              <RadioGroupItem value="Depleting" id="depleting" className="h-5 w-5" />
-              <Label htmlFor="depleting" className="text-sm">
-                Depleting <span className="text-neutral-500 font-normal">(used, lost, or corrected)</span>
-              </Label>
-            </div>
+            <label
+              htmlFor="restocking"
+              className={cn(
+                "flex cursor-pointer items-start gap-3 rounded-2xl border p-4 transition-colors",
+                newTransaction?.transaction_type === "restock"
+                  ? "border-emerald-200 bg-emerald-50/80"
+                  : "border-black/5 bg-white hover:border-emerald-200 hover:bg-neutral-50",
+              )}
+            >
+              <RadioGroupItem value="Restocking" id="restocking" className="mt-1 h-4 w-4" />
+              <div className="space-y-1">
+                <p className="text-sm font-semibold text-neutral-900">Restocking</p>
+                <p className="text-xs leading-relaxed text-neutral-500">Goods received, replenishment, or transfers in.</p>
+              </div>
+            </label>
+            <label
+              htmlFor="depleting"
+              className={cn(
+                "flex cursor-pointer items-start gap-3 rounded-2xl border p-4 transition-colors",
+                newTransaction?.transaction_type !== "restock"
+                  ? "border-amber-200 bg-amber-50/80"
+                  : "border-black/5 bg-white hover:border-amber-200 hover:bg-neutral-50",
+              )}
+            >
+              <RadioGroupItem value="Depleting" id="depleting" className="mt-1 h-4 w-4" />
+              <div className="space-y-1">
+                <p className="text-sm font-semibold text-neutral-900">Depleting</p>
+                <p className="text-xs leading-relaxed text-neutral-500">Used, issued, lost, or corrected stock.</p>
+              </div>
+            </label>
           </RadioGroup>
           {newTransaction?.transaction_type !== "restock" && (
             <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
@@ -5597,18 +5987,18 @@ export default function InventorySystem() {
           onClick={handleRecordTransaction}
           className="w-full h-11 text-base bg-emerald-700 hover:bg-emerald-800 text-white shadow-sm"
         >
-          <Check className="mr-2 h-5 w-5" /> Record Transaction
+          <Check className="mr-2 h-5 w-5" /> Record movement
         </Button>
       </div>
     </div>
   )
 
   const inventoryDrilldownPanel = (
-    <div className="rounded-2xl border border-black/5 bg-white p-6 shadow-sm">
+    <div className="rounded-[28px] border border-emerald-100 bg-[linear-gradient(180deg,#ffffff_0%,#fbfffd_48%,#fafaf8_100%)] p-6 shadow-[0_24px_80px_-45px_rgba(14,93,82,0.3)]">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div>
-          <h3 className="text-lg font-semibold text-neutral-900">Item Drill-Down</h3>
-          <p className="text-xs text-neutral-500">Recent stock movements and value snapshot for the selected item.</p>
+          <h3 className="text-lg font-semibold text-neutral-900">Item timeline</h3>
+          <p className="text-xs text-neutral-500">On-hand stock, value snapshot, and recent movements for the selected item.</p>
         </div>
         <Button variant="ghost" size="sm" onClick={() => setIsInventoryDrilldownOpen(false)}>
           Close
@@ -5621,7 +6011,7 @@ export default function InventorySystem() {
           </div>
         ) : (
           <>
-            <div className="rounded-xl border border-black/10 bg-neutral-50/60 p-4">
+            <div className="rounded-2xl border border-emerald-100 bg-emerald-50/60 p-4">
               <div className="flex items-start justify-between gap-3">
                 <div>
                   <p className="text-sm font-semibold text-neutral-900">{selectedInventoryDrilldownItem.name}</p>
@@ -5634,19 +6024,13 @@ export default function InventorySystem() {
                   {selectedLocationLabel}
                 </Badge>
               </div>
-              <div className="mt-3 grid grid-cols-1 gap-3 text-xs sm:grid-cols-2">
-                <div className="rounded-lg bg-white px-3 py-2">
-                  <p className="text-neutral-500">Avg cost</p>
-                  <p className="font-semibold text-neutral-900 tabular-nums">
-                    {formatCurrency(selectedInventoryDrilldownValue?.avgPrice || 0)}
-                  </p>
-                </div>
-                <div className="rounded-lg bg-white px-3 py-2">
-                  <p className="text-neutral-500">Total value</p>
-                  <p className="font-semibold text-amber-700 tabular-nums">
-                    {formatCurrency(selectedInventoryDrilldownValue?.totalValue || 0)}
-                  </p>
-                </div>
+              <div className="mt-3 flex flex-wrap gap-2 text-xs">
+                <span className="rounded-full border border-white/80 bg-white px-3 py-1.5 text-neutral-700">
+                  Avg cost {formatCurrency(selectedInventoryDrilldownValue?.avgPrice || 0)}
+                </span>
+                <span className="rounded-full border border-white/80 bg-white px-3 py-1.5 text-amber-700">
+                  Value {formatCurrency(selectedInventoryDrilldownValue?.totalValue || 0)}
+                </span>
               </div>
             </div>
 
@@ -5667,13 +6051,27 @@ export default function InventorySystem() {
                     const txType = String(transaction.transaction_type || "").toLowerCase()
                     const isDepleting = txType.includes("deplet")
                     const isExpenseUsage = transaction.source_type === "expense"
+                    const movementTone = isExpenseUsage
+                      ? "border-amber-200 bg-amber-50/70"
+                      : isDepleting
+                        ? "border-rose-200 bg-rose-50/70"
+                        : "border-emerald-200 bg-emerald-50/70"
                     return (
                       <div
                         key={`drilldown-${transaction.id ?? `${transaction.item_type}-${transaction.transaction_date}`}`}
-                        className="rounded-xl border border-black/5 bg-white px-3 py-2"
+                        className={cn("rounded-2xl border px-3 py-3 shadow-sm", movementTone)}
                       >
-                        <div className="flex items-center justify-between gap-2">
-                          <p className="text-xs text-neutral-500">{formatDate(transaction.transaction_date)}</p>
+                        <div className="flex items-start justify-between gap-2">
+                          <div>
+                            <p className="text-xs text-neutral-500">{formatDate(transaction.transaction_date)}</p>
+                            <p className="mt-1 text-sm font-semibold text-neutral-900">
+                              {isExpenseUsage
+                                ? transaction.source_label || "Expense usage"
+                                : isDepleting
+                                  ? "Stock out"
+                                  : "Restock"}
+                            </p>
+                          </div>
                           <Badge
                             variant="outline"
                             className={
@@ -5681,20 +6079,31 @@ export default function InventorySystem() {
                                 ? "border-amber-200 bg-amber-50 text-amber-700"
                                 : isDepleting
                                   ? "border-red-200 bg-red-50 text-red-700"
-                                  : "border-emerald-200 bg-emerald-50 text-emerald-700"
+                              : "border-emerald-200 bg-emerald-50 text-emerald-700"
                             }
                           >
                             {isExpenseUsage ? transaction.source_label || "Expense Usage" : isDepleting ? "Stock Out" : "Restock"}
                           </Badge>
                         </div>
-                        <p className="mt-1 text-sm font-semibold text-neutral-900 tabular-nums">
-                          {isDepleting ? "-" : "+"}
-                          {formatNumber(Number(transaction.quantity) || 0)}{" "}
-                          {transaction.unit || selectedInventoryDrilldownItem.unit || "unit"}
-                        </p>
-                        <p className="text-xs text-neutral-500">
-                          {resolveLocationLabel(transaction.location_id, transaction.location_name || transaction.location_code)}
-                        </p>
+                        <div className="mt-3 flex flex-wrap items-end justify-between gap-3">
+                          <div>
+                            <p className="text-lg font-semibold text-neutral-900 tabular-nums">
+                              {isDepleting ? "-" : "+"}
+                              {formatNumber(Number(transaction.quantity) || 0)}{" "}
+                              {transaction.unit || selectedInventoryDrilldownItem.unit || "unit"}
+                            </p>
+                            <p className="text-xs text-neutral-500">
+                              {resolveLocationLabel(transaction.location_id, transaction.location_name || transaction.location_code)}
+                            </p>
+                          </div>
+                          <p className="text-xs text-neutral-500">
+                            {isExpenseUsage
+                              ? "Recorded from Accounts expense"
+                              : isDepleting
+                                ? "Leaves the stock balance"
+                                : "Adds to the stock balance"}
+                          </p>
+                        </div>
                       </div>
                     )
                   })}
@@ -5946,6 +6355,107 @@ export default function InventorySystem() {
               </div>
             </div>
           </div>
+        )}
+
+        {activeTab === "home" && smartNextSteps.length > 0 && (
+          <Card data-testid="home-smart-next-steps" className="mb-5 border-black/5 bg-white/90">
+            <CardHeader className="gap-4 pb-3">
+              <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                <div className="space-y-2">
+                  <Badge variant="outline" className="w-fit border-emerald-200 bg-white text-emerald-700">
+                    Smart Next Steps
+                  </Badge>
+                  <div>
+                    <CardTitle>What to do next</CardTitle>
+                    <CardDescription>
+                      Based on setup progress, recent usage, and the current estate signals FarmFlow can see.
+                    </CardDescription>
+                  </div>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  {canLaunchAssistant && (
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      className="bg-white"
+                      onClick={() => launchAssistantPrompt("What should I do next in my estate today?")}
+                    >
+                      <Brain className="mr-2 h-4 w-4 text-emerald-700" />
+                      Ask FarmFlow
+                    </Button>
+                  )}
+                  <Button asChild size="sm" variant="ghost">
+                    <Link href={buildWorkspaceHref("/manuals")}>
+                      <BookOpen className="mr-2 h-4 w-4" />
+                      Open manuals
+                    </Link>
+                  </Button>
+                </div>
+              </div>
+            </CardHeader>
+            <CardContent className="grid gap-3 xl:grid-cols-3">
+              {smartNextSteps.map((step, index) => {
+                const toneClasses: Record<SmartNextStepTone, { badge: string; panel: string; icon: string; label: string }> = {
+                  progress: {
+                    badge: "border-emerald-200 bg-emerald-50 text-emerald-700",
+                    panel: "border-emerald-100 bg-emerald-50/55",
+                    icon: "bg-emerald-100 text-emerald-700",
+                    label: "Momentum",
+                  },
+                  attention: {
+                    badge: "border-amber-200 bg-amber-50 text-amber-700",
+                    panel: "border-amber-100 bg-amber-50/60",
+                    icon: "bg-amber-100 text-amber-700",
+                    label: "Attention",
+                  },
+                  help: {
+                    badge: "border-sky-200 bg-sky-50 text-sky-700",
+                    panel: "border-sky-100 bg-sky-50/55",
+                    icon: "bg-sky-100 text-sky-700",
+                    label: "Helpful",
+                  },
+                }
+                const tone = toneClasses[step.tone]
+                const ActionIcon = step.tone === "attention" ? AlertTriangle : step.tone === "help" ? Brain : CheckCircle2
+                return (
+                  <div
+                    key={step.id}
+                    data-testid={`smart-next-step-${index + 1}`}
+                    className={cn("rounded-2xl border p-4 shadow-sm", tone.panel)}
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div className={cn("flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl", tone.icon)}>
+                        <ActionIcon className="h-4 w-4" />
+                      </div>
+                      <Badge variant="outline" className={cn("w-fit", tone.badge)}>
+                        {tone.label}
+                      </Badge>
+                    </div>
+                    <p className="mt-4 text-sm font-semibold text-neutral-900">{step.title}</p>
+                    <p className="mt-2 text-sm leading-6 text-neutral-700">{step.description}</p>
+                    <p className="mt-3 text-xs leading-5 text-neutral-500">{step.reason}</p>
+                    <div className="mt-4 flex flex-wrap gap-2">
+                      <Button size="sm" className="bg-emerald-700 hover:bg-emerald-800" onClick={() => openDrilldown({ tab: step.actionTab })}>
+                        {step.actionLabel}
+                      </Button>
+                      {canLaunchAssistant && step.askPrompt ? (
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="ghost"
+                          className="text-emerald-800 hover:bg-white/80 hover:text-emerald-900"
+                          onClick={() => launchAssistantPrompt(step.askPrompt)}
+                        >
+                          Ask FarmFlow
+                        </Button>
+                      ) : null}
+                    </div>
+                  </div>
+                )
+              })}
+            </CardContent>
+          </Card>
         )}
 
         {activeTab === "home" && visibleCommandStripItems.length > 0 && (
@@ -6351,7 +6861,7 @@ export default function InventorySystem() {
               <button
                 type="button"
                 onClick={() => handleTabChange("processing")}
-                className="flex w-full items-center justify-between rounded-2xl border border-emerald-200 bg-emerald-50/70 px-4 py-3.5 text-left shadow-sm transition-colors hover:bg-emerald-100/80 touch-manipulation"
+                className="flex w-full items-center justify-between rounded-2xl border border-emerald-200 bg-emerald-50/70 px-4 py-3.5 text-left shadow-sm transition-colors hover:bg-emerald-100/80 touch-manipulation border-l-4 border-l-emerald-500"
               >
                 <div className="flex items-center gap-3">
                   <Factory className="h-5 w-5 text-emerald-600" />
@@ -6455,11 +6965,6 @@ export default function InventorySystem() {
           >
             <Card className="overflow-hidden border-black/10 bg-gradient-to-br from-white via-neutral-50 to-neutral-100/80 shadow-sm">
               <CardHeader className="space-y-3 pb-4">
-                <div className="flex flex-wrap items-center gap-2">
-                  <Badge variant="outline" className="border-emerald-200 bg-emerald-50 text-emerald-700">
-                    Workspace Navigator
-                  </Badge>
-                </div>
                 <CardTitle className={cn("leading-tight", isMobile ? "text-xl" : "text-2xl")}>Choose your work area</CardTitle>
                 <CardDescription>
                   Start with one area, then use the section tabs above once you are inside it.
@@ -6471,42 +6976,42 @@ export default function InventorySystem() {
                     <button
                       type="button"
                       onClick={() => { setAccountsInitialTab("expenses"); handleTabChange("accounts") }}
-                      className="flex items-center gap-3 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3.5 text-left transition-colors hover:bg-amber-100/80 touch-manipulation"
+                      className="flex items-center gap-3 rounded-2xl border border-emerald-200 bg-emerald-50/70 px-4 py-3.5 text-left transition-colors hover:bg-emerald-100/60 touch-manipulation"
                     >
-                      <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-amber-600 text-white shadow-sm">
+                      <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-emerald-700 text-white shadow-sm">
                         <Receipt className="h-4 w-4" />
                       </div>
                       <div>
-                        <p className="text-sm font-semibold text-amber-900">Record Expense</p>
-                        <p className="text-xs text-amber-700">Open Accounts</p>
+                        <p className="text-sm font-semibold text-slate-900">Record Expense</p>
+                        <p className="text-xs text-emerald-700">Open Accounts</p>
                       </div>
                     </button>
                     <button
                       type="button"
                       onClick={() => { setAccountsInitialTab("labor"); handleTabChange("accounts") }}
-                      className="flex items-center gap-3 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3.5 text-left transition-colors hover:bg-amber-100/80 touch-manipulation"
+                      className="flex items-center gap-3 rounded-2xl border border-emerald-200 bg-emerald-50/70 px-4 py-3.5 text-left transition-colors hover:bg-emerald-100/60 touch-manipulation"
                     >
-                      <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-amber-600 text-white shadow-sm">
+                      <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-emerald-700 text-white shadow-sm">
                         <Users className="h-4 w-4" />
                       </div>
                       <div>
-                        <p className="text-sm font-semibold text-amber-900">Record Labor</p>
-                        <p className="text-xs text-amber-700">Open Accounts</p>
+                        <p className="text-sm font-semibold text-slate-900">Record Labor</p>
+                        <p className="text-xs text-emerald-700">Open Accounts</p>
                       </div>
                     </button>
                   </div>
                 )}
-                <div className="flex flex-col gap-3 rounded-2xl border border-sky-200 bg-sky-50/80 p-4 md:flex-row md:items-center md:justify-between">
+                <div className="flex flex-col gap-3 rounded-2xl border border-slate-200 bg-slate-50/60 p-4 md:flex-row md:items-center md:justify-between">
                   <div className="space-y-1">
-                    <p className="flex items-center gap-2 text-sm font-semibold text-sky-950">
-                      <BookOpen className="h-4 w-4 text-sky-700" />
+                    <p className="flex items-center gap-2 text-sm font-semibold text-slate-800">
+                      <BookOpen className="h-4 w-4 text-slate-500" />
                       Need the plain-language guide?
                     </p>
-                    <p className="text-sm text-sky-900/80">
+                    <p className="text-sm text-slate-600">
                       Open the FarmFlow manuals for step-by-step help on every tab, with beginner-friendly wording.
                     </p>
                   </div>
-                  <Button asChild variant="outline" className={cn("border-sky-200 bg-white text-sky-900 hover:bg-sky-100", isMobile ? "w-full min-h-11" : "")}>
+                  <Button asChild variant="outline" className={cn("border-slate-200 bg-white text-slate-700 hover:bg-slate-50", isMobile ? "w-full min-h-11" : "")}>
                     <Link href={buildWorkspaceHref("/manuals")}>Open training manuals</Link>
                   </Button>
                 </div>
@@ -6817,7 +7322,7 @@ export default function InventorySystem() {
                 <Card className="border-black/5 bg-white/90">
                   <CardHeader className="pb-2">
                     <div className="flex items-start justify-between gap-2">
-                      <CardTitle className="text-sm font-medium text-neutral-600">Cost per kg Output</CardTitle>
+                      <CardTitle className="text-sm font-medium text-neutral-600">Cost vs Revenue</CardTitle>
                       <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-violet-50">
                         <Coins className="h-3.5 w-3.5 text-violet-500" />
                       </div>
@@ -6827,20 +7332,88 @@ export default function InventorySystem() {
                     {costPerKgData.loading ? (
                       <div className="space-y-2">
                         <Skeleton className="h-7 w-24" />
-                        <Skeleton className="h-3 w-32" />
+                        <Skeleton className="h-3 w-40" />
+                        <Skeleton className="h-2 w-full rounded-full" />
                       </div>
                     ) : costPerKgData.costPerKg !== null ? (
-                      <>
-                        <p className="text-2xl font-semibold tabular-nums text-neutral-900">
-                          {formatCurrency(costPerKgData.costPerKg, 0)}<span className="text-sm font-normal text-muted-foreground">/kg</span>
-                        </p>
-                        <p className="text-xs text-muted-foreground">
-                          {formatCurrency(costPerKgData.totalCost, 0)} total · {formatNumber(costPerKgData.totalOutputKg, 0)} kg output
-                        </p>
-                        <p className="mt-1 text-xs text-muted-foreground">
-                          Labor {formatCurrency(costPerKgData.laborCost, 0)} · Expenses {formatCurrency(costPerKgData.expenseCost, 0)}
-                        </p>
-                      </>
+                      <div className="space-y-3">
+                        {/* Cost vs Revenue per kg */}
+                        <div className="grid grid-cols-2 gap-2">
+                          <div className="rounded-lg bg-slate-50 px-3 py-2">
+                            <p className="text-[10px] uppercase tracking-[0.14em] text-slate-500">Cost / kg</p>
+                            <p className="mt-0.5 text-lg font-semibold tabular-nums text-slate-900">
+                              {formatCurrency(costPerKgData.costPerKg, 0)}
+                            </p>
+                          </div>
+                          <div className={cn(
+                            "rounded-lg px-3 py-2",
+                            costPerKgData.revenuePerKg !== null ? "bg-emerald-50" : "bg-slate-50"
+                          )}>
+                            <p className="text-[10px] uppercase tracking-[0.14em] text-slate-500">Avg sale / kg</p>
+                            <p className={cn(
+                              "mt-0.5 text-lg font-semibold tabular-nums",
+                              costPerKgData.revenuePerKg !== null ? "text-emerald-800" : "text-slate-400"
+                            )}>
+                              {costPerKgData.revenuePerKg !== null
+                                ? formatCurrency(costPerKgData.revenuePerKg, 0)
+                                : "No sales"}
+                            </p>
+                          </div>
+                        </div>
+
+                        {/* Gross margin */}
+                        {costPerKgData.grossMarginPerKg !== null && costPerKgData.grossMarginPct !== null && (
+                          <div className={cn(
+                            "flex items-center justify-between rounded-lg px-3 py-2",
+                            costPerKgData.grossMarginPct >= 25 ? "bg-emerald-50" :
+                            costPerKgData.grossMarginPct >= 10 ? "bg-amber-50" : "bg-rose-50"
+                          )}>
+                            <div>
+                              <p className="text-[10px] uppercase tracking-[0.14em] text-slate-500">Gross margin</p>
+                              <p className={cn(
+                                "mt-0.5 text-base font-semibold tabular-nums",
+                                costPerKgData.grossMarginPct >= 25 ? "text-emerald-800" :
+                                costPerKgData.grossMarginPct >= 10 ? "text-amber-800" : "text-rose-700"
+                              )}>
+                                {formatCurrency(costPerKgData.grossMarginPerKg, 0)}/kg
+                              </p>
+                            </div>
+                            <span className={cn(
+                              "text-xl font-bold tabular-nums",
+                              costPerKgData.grossMarginPct >= 25 ? "text-emerald-700" :
+                              costPerKgData.grossMarginPct >= 10 ? "text-amber-700" : "text-rose-600"
+                            )}>
+                              {costPerKgData.grossMarginPct.toFixed(1)}%
+                            </span>
+                          </div>
+                        )}
+
+                        {/* Cost split bar */}
+                        {costPerKgData.laborPct !== null && costPerKgData.expensePct !== null && (
+                          <div className="space-y-1.5">
+                            <div className="flex overflow-hidden rounded-full">
+                              <div
+                                className="h-1.5 bg-violet-400 transition-all"
+                                style={{ width: `${costPerKgData.laborPct}%` }}
+                              />
+                              <div
+                                className="h-1.5 bg-slate-300 transition-all"
+                                style={{ width: `${costPerKgData.expensePct}%` }}
+                              />
+                            </div>
+                            <div className="flex items-center gap-3 text-[10px] text-slate-500">
+                              <span className="flex items-center gap-1">
+                                <span className="inline-block h-1.5 w-2.5 rounded-full bg-violet-400" />
+                                Labor {costPerKgData.laborPct.toFixed(0)}%
+                              </span>
+                              <span className="flex items-center gap-1">
+                                <span className="inline-block h-1.5 w-2.5 rounded-full bg-slate-300" />
+                                Expenses {costPerKgData.expensePct.toFixed(0)}%
+                              </span>
+                            </div>
+                          </div>
+                        )}
+                      </div>
                     ) : (
                       <p className="text-sm text-muted-foreground">Record costs and parchment output to see this metric.</p>
                     )}
@@ -7338,7 +7911,7 @@ export default function InventorySystem() {
               </Card>
             )}
 
-            {canShowAiAnalysis && !isScopedUser && (seasonCompareLoading || seasonCompareNarrative) && (
+            {canShowAiAnalysis && !isScopedUser && (seasonCompareLoading || seasonCompareNarrative || seasonCompareError) && (
               <Card className="border-black/5 bg-white/90">
                 <CardHeader className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                   <div>
@@ -7358,6 +7931,11 @@ export default function InventorySystem() {
                     <div className="flex items-center gap-2 text-sm text-neutral-500">
                       <Loader2 className="h-4 w-4 animate-spin" />
                       Comparing seasons...
+                    </div>
+                  ) : seasonCompareError ? (
+                    <div className="rounded-xl border border-amber-200 bg-amber-50/70 p-3 text-sm text-amber-900">
+                      <p className="font-medium">Season comparison temporarily unavailable.</p>
+                      <p className="mt-1 text-muted-foreground">{seasonCompareError}</p>
                     </div>
                   ) : seasonCompareNarrative ? (
                     <p className="text-sm leading-relaxed text-neutral-700">{seasonCompareNarrative}</p>
@@ -7384,7 +7962,10 @@ export default function InventorySystem() {
                       Reading your data...
                     </div>
                   ) : proactiveInsightsError ? (
-                    <p className="text-sm text-muted-foreground">Insights unavailable right now. They refresh automatically.</p>
+                    <div className="rounded-xl border border-amber-200 bg-amber-50/70 p-3 text-sm text-amber-900">
+                      <p className="font-medium">Insights temporarily unavailable.</p>
+                      <p className="mt-1 text-muted-foreground">{proactiveInsightsError}</p>
+                    </div>
                   ) : proactiveInsights && proactiveInsights.length > 0 ? (
                     <div className="space-y-2">
                       {proactiveInsights.map((insight, i) => (
@@ -7490,7 +8071,7 @@ export default function InventorySystem() {
                   <div className="flex items-start gap-3">
                     <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" />
                     <div className="space-y-0.5">
-                      <p className="text-sm font-semibold text-amber-900">Inventory can handle stock usage directly</p>
+                      <p className="text-sm font-semibold text-amber-900">Inventory handles stock usage directly</p>
                       <p className="text-xs text-amber-800">
                         Use <strong>Deplete</strong> here when you only need stock tracking for fertiliser, chemicals, fuel, or other consumables.{" "}
                         {canShowAccounts
@@ -7513,7 +8094,7 @@ export default function InventorySystem() {
                         onClick={() => { setAccountsInitialTab("expenses"); handleTabChange("accounts") }}
                         className="rounded-lg border border-amber-300 bg-white px-3 py-2 text-xs font-semibold text-amber-800 transition-colors hover:bg-amber-100 touch-manipulation"
                       >
-                        Open Expenses →
+                        Open Accounts expense
                       </button>
                     )}
                   </div>
@@ -7521,7 +8102,7 @@ export default function InventorySystem() {
               )}
               <Card className="border-border/70 bg-white/90">
                 <CardHeader className="pb-3">
-                  <CardTitle className="text-xs uppercase tracking-[0.2em] text-muted-foreground">Inventory Dashboard</CardTitle>
+                  <CardTitle className="text-xs uppercase tracking-[0.2em] text-muted-foreground">Inventory overview</CardTitle>
                   <CardDescription>
                     {resolvedInventoryWorkspaceView === "transactions"
                       ? "Review and correct stock history without leaving Inventory."
@@ -7533,13 +8114,13 @@ export default function InventorySystem() {
                 <CardContent className="grid gap-4 lg:grid-cols-[1.6fr_1fr]">
                   <div className="space-y-2">
                     <div>
-                      <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">Current View</p>
+                      <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">Current mode</p>
                       <p className="text-2xl font-semibold text-foreground">
                         {resolvedInventoryWorkspaceView === "transactions" ? "Transaction History" : "Inventory"}
                       </p>
                     </div>
                     <div>
-                      <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">Selected Estate</p>
+                      <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">Selected location</p>
                       <p className="text-sm font-semibold text-foreground">{selectedLocationLabel}</p>
                     </div>
                     <div className="border-t border-border/60 pt-2">
@@ -7553,7 +8134,7 @@ export default function InventorySystem() {
                   </div>
                   {showTransactionHistory ? (
                     <div className="rounded-xl border border-border/60 bg-muted/20 p-3">
-                      <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">Inventory Actions</p>
+                      <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">Next step</p>
                       <div className="mt-3 space-y-2">
                         {resolvedInventoryWorkspaceView === "transactions" ? (
                           canShowInventory ? (
@@ -7563,7 +8144,7 @@ export default function InventorySystem() {
                               className="w-full bg-white"
                               onClick={() => setInventoryWorkspaceView("inventory")}
                             >
-                              Back to Inventory
+                              Back to inventory
                             </Button>
                           ) : (
                             <p className="text-sm text-muted-foreground">History view only for this module set.</p>
@@ -7574,7 +8155,7 @@ export default function InventorySystem() {
                             className="w-full bg-emerald-700 hover:bg-emerald-800"
                             onClick={() => setInventoryWorkspaceView("transactions")}
                           >
-                            Open Transaction History
+                            Open transaction history
                           </Button>
                         )}
                       </div>
@@ -7607,7 +8188,7 @@ export default function InventorySystem() {
                             onClick={openNewItemDialog}
                             className="bg-emerald-700 hover:bg-emerald-800 h-10 text-white shadow-sm"
                           >
-                            <Plus className="mr-2 h-4 w-4" /> Add New Item
+                            <Plus className="mr-2 h-4 w-4" /> Add item
                           </Button>
                         </div>
                       </div>
@@ -7773,11 +8354,29 @@ export default function InventorySystem() {
                       })}
                     </div>
 
-                    {filteredAndSortedInventory.length === 0 && (
-                      <div className="text-center py-8 text-muted-foreground">
-                        {inventorySearchTerm ? "No items match your search." : "Inventory is empty or not yet loaded."}
-                      </div>
-                    )}
+                    {filteredAndSortedInventory.length === 0 &&
+                      (inventorySearchTerm ? (
+                        <div className="text-center py-8 text-muted-foreground">No items match your search.</div>
+                      ) : inventory.length === 0 ? (
+                        <WorkflowEmptyState
+                          title="No inventory items yet"
+                          description="Start with the few items your team actually buys or consumes often. You do not need a perfect master list before starting."
+                          steps={[
+                            "Add the real item name and unit your team uses on the estate.",
+                            "Set the opening quantity only if you know it well enough today.",
+                            "Use later restocks and depletions to keep the running balance honest.",
+                          ]}
+                          tip="A short, clean list is better than importing every possible item too early. Start with fertilizers, chemicals, fuel, bags, or anything used weekly."
+                          askPrompt="How do I set up my first inventory item?"
+                          primaryAction={{ label: "Add first item", onClick: openNewItemDialog }}
+                        />
+                      ) : (
+                        <div className="text-center py-8 text-muted-foreground">
+                          {selectedLocationId !== LOCATION_ALL
+                            ? "No inventory items in this location yet. Change the location filter or add stock here."
+                            : "Inventory is empty or not yet loaded."}
+                        </div>
+                      ))}
                   </div>
                 </div>
 
@@ -7861,11 +8460,11 @@ export default function InventorySystem() {
                     </Card>
                   )}
 
-                  <Card className="order-1 rounded-2xl border border-black/5 bg-white shadow-sm lg:order-2">
+                    <Card data-testid="inventory-quick-actions" className="order-1 rounded-2xl border border-black/5 bg-white shadow-sm lg:order-2">
                     <CardHeader className="space-y-1">
-                      <CardTitle className="text-base font-semibold text-neutral-900">Actions</CardTitle>
+                      <CardTitle className="text-base font-semibold text-neutral-900">Quick actions</CardTitle>
                       <CardDescription className="text-xs text-neutral-500">
-                        Quick shortcuts for inventory work.
+                        Choose the most common inventory task from here.
                       </CardDescription>
                     </CardHeader>
                     <CardContent className="space-y-2">
@@ -7879,7 +8478,7 @@ export default function InventorySystem() {
                           <Plus className="h-4 w-4 text-emerald-600" />
                           Record stock movement
                         </span>
-                        <span className="text-xs text-neutral-400">Form</span>
+                        <span className="text-xs text-neutral-400">Primary</span>
                       </button>
                       <div className="grid grid-cols-2 gap-2">
                         <button
@@ -7888,7 +8487,7 @@ export default function InventorySystem() {
                           onClick={() => openMovementDrawer("restock")}
                           className="flex min-h-11 items-center justify-center rounded-xl border border-emerald-200 bg-emerald-50/80 px-3 py-2 text-sm font-medium text-emerald-800 transition-colors hover:bg-emerald-100"
                         >
-                          Restocking
+                          Record restock
                         </button>
                         <button
                           data-testid="inventory-action-depleting"
@@ -7896,17 +8495,18 @@ export default function InventorySystem() {
                           onClick={() => openMovementDrawer("deplete")}
                           className="flex min-h-11 items-center justify-center rounded-xl border border-amber-200 bg-amber-50/80 px-3 py-2 text-sm font-medium text-amber-800 transition-colors hover:bg-amber-100"
                         >
-                          Use stock
+                          Record usage
                         </button>
                       </div>
                       <button
+                        data-testid="inventory-action-add-item"
                         type="button"
                         onClick={openNewItemDialog}
                         className="flex w-full items-center justify-between rounded-xl border border-black/5 bg-white px-4 py-3 text-sm text-neutral-800 transition-colors hover:bg-neutral-50"
                       >
                         <span className="flex items-center gap-2">
                           <Plus className="h-4 w-4 text-emerald-600" />
-                          Add new item
+                          Add inventory item
                         </span>
                         <span className="text-xs text-neutral-400">Inventory</span>
                       </button>
@@ -7914,11 +8514,11 @@ export default function InventorySystem() {
                         <button
                           type="button"
                           onClick={exportInventoryToCSV}
-                          className="flex w-full items-center justify-between rounded-xl border border-black/5 bg-white px-4 py-3 text-sm text-neutral-800 transition-colors hover:bg-neutral-50"
-                        >
-                          <span className="flex items-center gap-2">
-                            <Download className="h-4 w-4 text-emerald-600" />
-                            Export inventory
+                        className="flex w-full items-center justify-between rounded-xl border border-black/5 bg-white px-4 py-3 text-sm text-neutral-800 transition-colors hover:bg-neutral-50"
+                      >
+                        <span className="flex items-center gap-2">
+                          <Download className="h-4 w-4 text-emerald-600" />
+                          Export inventory
                           </span>
                           <span className="text-xs text-neutral-400">CSV</span>
                         </button>
@@ -7944,18 +8544,18 @@ export default function InventorySystem() {
                         >
                           <span className="flex items-center gap-2">
                             <List className="h-4 w-4 text-emerald-700" />
-                            Open item details
+                            Open item timeline
                           </span>
                           <span className="max-w-[9rem] truncate text-xs text-emerald-700">{inventoryDrilldownItemName}</span>
                         </button>
                       )}
                       <div className="rounded-xl border border-black/5 bg-neutral-50/70 px-4 py-3 text-xs text-neutral-600 space-y-2">
                         <div className="flex items-center justify-between">
-                          <span>Default location</span>
+                          <span>Selected location</span>
                           <span className="text-neutral-900">{selectedLocationLabel}</span>
                         </div>
                         <div className="flex items-center justify-between">
-                          <span>Transaction type</span>
+                          <span>Movement type</span>
                           <span className="text-neutral-900">Restock / Deplete</span>
                         </div>
                         <div className="flex items-center justify-between">
@@ -7963,7 +8563,7 @@ export default function InventorySystem() {
                           <span className="text-neutral-900">{selectedMovementUnit}</span>
                         </div>
                         <div className="border-t border-black/5 pt-2 text-[11px] leading-relaxed text-neutral-500">
-                          Click any inventory item card to open full drill-down and recent transaction timeline.
+                          Open an item card to inspect recent movements and value without leaving Inventory.
                         </div>
                       </div>
                     </CardContent>

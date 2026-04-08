@@ -1,8 +1,10 @@
 import { buildRateLimitHeaders, checkRateLimit } from "@/lib/rate-limit"
 import { buildTenantAiDataSummary } from "@/lib/server/ai-analysis"
+import { buildClaudeRouteErrorResponse, classifyClaudeRouteError } from "@/lib/server/claude-errors"
 import { requireModuleAccess, isModuleAccessError } from "@/lib/server/module-access"
-import { logServerError } from "@/lib/server/safe-logging"
-import { getClaudeClient, isClaudeConfigured, extractClaudeText, CLAUDE_SONNET } from "@/lib/server/claude"
+import { logServerError, logServerWarning } from "@/lib/server/safe-logging"
+import { CLAUDE_SONNET } from "@/lib/server/claude"
+import { callAI, isAIConfigured } from "@/lib/server/ai-provider"
 import type { InventoryItem, Transaction } from "@/lib/inventory-types"
 
 export const dynamic = "force-dynamic"
@@ -44,15 +46,16 @@ If rainfall data is present, correlate heavy rain periods with processing dips o
 Provide 3–5 specific, actionable recommendations the estate manager can act on this week. Be concrete — name the location, coffee type, or cost code where relevant.`
 
 export async function POST(req: Request) {
+  let rateHeaders: Record<string, string> = {}
   try {
     const sessionUser = await requireModuleAccess("ai-analysis")
     const rateLimit = await checkRateLimit("aiAnalysis", sessionUser.tenantId)
-    const rateHeaders = buildRateLimitHeaders(rateLimit)
+    rateHeaders = buildRateLimitHeaders(rateLimit)
     if (!rateLimit.success) {
       return Response.json({ success: false, error: "Rate limit exceeded" }, { status: 429, headers: rateHeaders })
     }
 
-    if (!isClaudeConfigured()) {
+    if (!isAIConfigured()) {
       return Response.json({ success: false, error: "AI analysis is not configured" }, { status: 503, headers: rateHeaders })
     }
 
@@ -67,8 +70,7 @@ export async function POST(req: Request) {
       transactions,
     })
 
-    const client = getClaudeClient()
-    const message = await client.messages.create({
+    const analysisText = await callAI({
       model: CLAUDE_SONNET,
       max_tokens: 2048,
       temperature: 0.3,
@@ -76,20 +78,26 @@ export async function POST(req: Request) {
       messages: [{ role: "user", content: buildAnalysisPrompt(dataSummary) }],
     })
 
-    const analysisText = extractClaudeText(message)
-
     return Response.json(
       { success: true, analysis: analysisText || "No analysis could be generated from the current data." },
       { headers: rateHeaders },
     )
   } catch (error) {
-    logServerError("AI Analysis error", error)
     if (isModuleAccessError(error)) {
-      return Response.json({ success: false, error: "Module access disabled" }, { status: 403 })
+      return Response.json({ success: false, error: "Module access disabled" }, { status: 403, headers: rateHeaders })
     }
+    const claudeClassification = classifyClaudeRouteError(error)
+    if (claudeClassification) {
+      logServerWarning("AI Analysis Claude request failed", {
+        classification: claudeClassification,
+        error,
+      })
+      return buildClaudeRouteErrorResponse(claudeClassification, rateHeaders)
+    }
+    logServerError("AI Analysis error", error)
     return Response.json(
       { success: false, error: error instanceof Error ? error.message : "Failed to generate analysis" },
-      { status: 500 },
+      { status: 500, headers: rateHeaders },
     )
   }
 }

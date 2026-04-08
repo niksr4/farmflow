@@ -6,7 +6,6 @@ type DashboardRouteContext = { route: string; tenantId: string | null }
 
 const E2E_MOBILE_OWNER_TENANT_NAME = "E2E Mobile Smoke Tenant"
 const WRITE_QUEUE_DB = "farmflow-offline-db"
-const WRITE_QUEUE_STORE = "writeQueue"
 
 const iPhone13 = devices["iPhone 13"]
 test.use({
@@ -66,9 +65,34 @@ const createPreviewTenant = async (page: Page): Promise<PreviewTenant | null> =>
   const createPayload = await createResponse.json().catch(() => ({}))
   const createdId = String(createPayload?.tenant?.id || "").trim()
   if (!createdId) return null
+  await ensurePreviewTenantUser(page, createdId)
   return {
     id: createdId,
     name: String(createPayload?.tenant?.name || "").trim() || E2E_MOBILE_OWNER_TENANT_NAME,
+  }
+}
+
+const ensurePreviewTenantUser = async (page: Page, tenantId: string) => {
+  const usersResponse = await page.request.get(`/api/admin/users?tenantId=${encodeURIComponent(tenantId)}`)
+  if (usersResponse.ok()) {
+    const usersPayload = await usersResponse.json().catch(() => ({}))
+    if (Array.isArray(usersPayload?.users) && usersPayload.users.length > 0) {
+      return
+    }
+  }
+
+  const username = `e2e.mobile.${tenantId.slice(0, 8)}`
+  const createResponse = await page.request.post("/api/admin/users", {
+    data: {
+      tenantId,
+      username,
+      password: "MobilePass123!",
+      role: "admin",
+    },
+  })
+  if (!createResponse.ok()) {
+    const body = await createResponse.text().catch(() => "")
+    throw new Error(`Failed to seed preview tenant user (${createResponse.status()}): ${body || "no response body"}`)
   }
 }
 
@@ -77,7 +101,10 @@ const ensureOwnerPreviewTenant = async (page: Page): Promise<PreviewTenant> => {
   const matchingTenant = tenants.find(
     (tenant) => String(tenant.name || "").toLowerCase() === E2E_MOBILE_OWNER_TENANT_NAME.toLowerCase(),
   )
-  if (matchingTenant) return matchingTenant
+  if (matchingTenant) {
+    await ensurePreviewTenantUser(page, matchingTenant.id)
+    return matchingTenant
+  }
 
   const createdTenant = await createPreviewTenant(page)
   if (createdTenant) return createdTenant
@@ -113,80 +140,40 @@ const applyPreviewTenantCookie = async (page: Page, tenantId: string | null) => 
   ])
 }
 
-const ensureServiceWorkerControl = async (page: Page): Promise<boolean> => {
-  try {
-    await page.evaluate(async () => {
-      if (!("serviceWorker" in navigator)) {
-        throw new Error("Service workers are not supported in this browser context.")
-      }
-      const registration = await navigator.serviceWorker.register("/sw.js", { scope: "/" })
-      registration.waiting?.postMessage({ type: "SKIP_WAITING" })
-    })
-  } catch {
-    return false
+const ensureMovementItemType = async (page: Page, uniqueSuffix: string): Promise<{ itemType: string; created: boolean }> => {
+  const inventoryResponse = await page.request.get("/api/inventory-neon")
+  if (!inventoryResponse.ok()) {
+    const body = await inventoryResponse.text().catch(() => "")
+    throw new Error(`Failed to inspect inventory (${inventoryResponse.status()}): ${body || "no response body"}`)
   }
 
-  await page.reload()
-  await waitForDashboardReady(page)
+  const inventoryPayload = await inventoryResponse.json()
+  const inventoryItems = Array.isArray(inventoryPayload?.inventory) ? inventoryPayload.inventory : []
+  const existingItemType = inventoryItems
+    .map((item: any) => String(item?.name || "").trim())
+    .find((value: string) => Boolean(value))
 
-  try {
-    await expect
-      .poll(async () => page.evaluate(() => Boolean(navigator.serviceWorker?.controller)), {
-        timeout: 10_000,
-      })
-      .toBe(true)
-  } catch {
-    return false
+  if (existingItemType) {
+    return { itemType: existingItemType, created: false }
   }
 
-  await page.evaluate(() => {
-    navigator.serviceWorker.controller?.postMessage({
-      type: "SET_RUNTIME_CONFIG",
-      config: {
-        writeQueue: true,
-      },
-    })
-  })
-
-  return true
-}
-
-const withWriteQueueStore = async <T>(page: Page, action: "clear" | "getAll"): Promise<T> =>
-  page.evaluate(
-    async ({ dbName, storeName, mode }) => {
-      const openDb = () =>
-        new Promise<IDBDatabase>((resolve, reject) => {
-          const request = indexedDB.open(dbName, 1)
-          request.onsuccess = () => resolve(request.result)
-          request.onerror = () => reject(request.error)
-        })
-
-      const db = await openDb()
-      const value = await new Promise<unknown>((resolve, reject) => {
-        const tx = db.transaction(storeName, mode === "clear" ? "readwrite" : "readonly")
-        const store = tx.objectStore(storeName)
-        if (mode === "clear") {
-          store.clear()
-          tx.oncomplete = () => resolve(true)
-          tx.onerror = () => reject(tx.error)
-          return
-        }
-
-        const request = store.getAll()
-        request.onsuccess = () => resolve(Array.isArray(request.result) ? request.result : [])
-        request.onerror = () => reject(request.error)
-      })
-      db.close()
-      return value
+  const seededItemType = `E2E Movement ${uniqueSuffix}`.slice(0, 24)
+  const createResponse = await page.request.post("/api/inventory-neon", {
+    data: {
+      item_type: seededItemType,
+      quantity: 1,
+      unit: "kg",
+      price: 0,
+      notes: "E2E seeded inventory item",
     },
-    { dbName: WRITE_QUEUE_DB, storeName: WRITE_QUEUE_STORE, mode: action },
-  ) as Promise<T>
+  })
+  if (!createResponse.ok()) {
+    const body = await createResponse.text().catch(() => "")
+    throw new Error(`Failed to seed inventory item (${createResponse.status()}): ${body || "no response body"}`)
+  }
 
-const clearWriteQueueStore = async (page: Page) => {
-  await withWriteQueueStore<boolean>(page, "clear")
+  return { itemType: seededItemType, created: true }
 }
-
-const getQueuedWrites = async (page: Page) => withWriteQueueStore<Array<Record<string, unknown>>>(page, "getAll")
 
 test.describe("mobile public smoke", () => {
   test("landing and signup are usable on phone", async ({ page }) => {
@@ -253,7 +240,7 @@ test.describe("mobile dashboard smoke", () => {
 
     await page.goto(routeContext.route)
     await waitForDashboardReady(page)
-    await expect(page.getByText("Quick shortcuts for inventory work.", { exact: true })).toBeVisible()
+    await expect(page.getByTestId("inventory-quick-actions")).toBeVisible()
 
     await expect(page.locator("div.sticky.top-2", { hasText: "Workspace Sections" })).toHaveCount(0)
 
@@ -261,7 +248,7 @@ test.describe("mobile dashboard smoke", () => {
     await expect(mobileBottomNav).toBeVisible()
     await expect(mobileBottomNav.getByRole("button").first()).toBeVisible()
 
-    const actionsHeading = page.getByText("Actions", { exact: true }).first()
+    const actionsHeading = page.getByTestId("inventory-quick-actions").first()
     const inventoryHeading = page.getByRole("heading", { name: /Inventory Levels/ }).first()
     const [actionsBox, inventoryBox] = await Promise.all([actionsHeading.boundingBox(), inventoryHeading.boundingBox()])
     expect(actionsBox).toBeTruthy()
@@ -269,7 +256,7 @@ test.describe("mobile dashboard smoke", () => {
     expect((actionsBox as { y: number }).y).toBeLessThan((inventoryBox as { y: number }).y)
 
     const sectionDescriptions = [
-      "Inventory can handle stock usage directly",
+      "Inventory handles stock usage directly",
       "Use Deplete here when you only need stock tracking for fertiliser, chemicals, fuel, or other consumables. Use Accounts → Other Expenses only when the same usage should also land in Accounts and P&L.",
     ]
     for (const copy of sectionDescriptions) {
@@ -293,19 +280,21 @@ test.describe("mobile dashboard smoke", () => {
     await waitForDashboardReady(page)
     await applyPreviewTenantCookie(page, routeContext.tenantId)
 
+    const movementSeed = await ensureMovementItemType(page, uniqueSuffix)
+    if (movementSeed.created) {
+      await page.reload()
+      await waitForDashboardReady(page)
+      await applyPreviewTenantCookie(page, routeContext.tenantId)
+    }
+
     await page.getByTestId("inventory-action-record-movement").click()
-    await expect(page.getByRole("heading", { name: "Record Inventory Movement" })).toBeVisible()
+    await expect(page.getByRole("heading", { name: /Record inventory movement/i })).toBeVisible()
 
     const itemTypeSelect = page.getByTestId("movement-item-type-select")
-    if (await itemTypeSelect.isDisabled()) {
-      test.skip(true, "Movement item type is disabled because no inventory items exist")
-    }
     await itemTypeSelect.click()
     const movementOptions = (await page.getByRole("option").allTextContents()).map((value) => value.trim())
     const selectedItemType = movementOptions.find((value) => value && !/add an inventory item first/i.test(value))
-    if (!selectedItemType) {
-      test.skip(true, "No inventory item type is available for movement test")
-    }
+    expect(selectedItemType, "Expected at least one inventory item type to be available for movement").toBeTruthy()
     await page.getByRole("option", { name: selectedItemType as string, exact: true }).first().click()
 
     await page.getByLabel("Restocking").click()
@@ -319,7 +308,7 @@ test.describe("mobile dashboard smoke", () => {
     await page.getByPlaceholder("Add any additional details").fill(note)
 
     await page.getByTestId("movement-record-transaction").click()
-    await expect(page.getByText("Transaction recorded")).toBeVisible()
+    await expect(page.getByText("Transaction recorded", { exact: true }).first()).toBeVisible()
     const transactionsResponse = await page.request.get("/api/transactions-neon?limit=50")
     expect(transactionsResponse.ok()).toBeTruthy()
     const transactionsPayload = await transactionsResponse.json()
@@ -327,11 +316,58 @@ test.describe("mobile dashboard smoke", () => {
     expect(
       transactions.some(
         (transaction: any) =>
-          String(transaction?.item_type || "") === selectedItemType && String(transaction?.notes || "").includes(note),
+          String(transaction?.item_type || "") === selectedItemType &&
+          String(transaction?.notes || "").includes(note),
       ),
       `Expected a saved mobile movement transaction for ${selectedItemType}`,
     ).toBe(true)
     await expectNoHorizontalOverflow(page, "mobile movement form")
+  })
+
+  test("inventory item creation with opening stock persists on mobile", async ({ page }) => {
+    const routeContext = await getDashboardRouteContext(page, "inventory")
+    const uniqueSuffix = `${Date.now().toString(36)}${Math.floor(Math.random() * 1000)
+      .toString(36)
+      .padStart(2, "0")}`.toUpperCase()
+    const itemName = `E2E Fert ${uniqueSuffix}`.slice(0, 24)
+    const note = `E2E opening stock ${uniqueSuffix}`
+
+    await page.goto(routeContext.route)
+    await waitForDashboardReady(page)
+    await applyPreviewTenantCookie(page, routeContext.tenantId)
+
+    await page.getByTestId("inventory-action-add-item").click()
+    await expect(page.getByRole("heading", { name: "Add Inventory Item", exact: true })).toBeVisible()
+
+    await page.locator("#new-item-name").fill(itemName)
+    await page.locator("#new-item-qty").fill("12.5")
+    await page.locator("#new-item-price").fill("24")
+    await page.locator("#new-item-notes").fill(note)
+
+    await page.getByRole("button", { name: "Add Item", exact: true }).click()
+    await expect(page.getByText("Item added", { exact: true }).first()).toBeVisible()
+    await expect(page.getByRole("heading", { name: "Add Inventory Item", exact: true })).toHaveCount(0)
+
+    const inventoryResponse = await page.request.get("/api/inventory-neon")
+    expect(inventoryResponse.ok()).toBeTruthy()
+    const inventoryPayload = await inventoryResponse.json()
+    const inventoryItems = Array.isArray(inventoryPayload?.inventory) ? inventoryPayload.inventory : []
+    const savedItem = inventoryItems.find((item: any) => String(item?.name || "") === itemName)
+    expect(savedItem, `Expected saved inventory item ${itemName}`).toBeTruthy()
+    expect(Number(savedItem?.quantity) || 0).toBeGreaterThanOrEqual(12.5)
+
+    const transactionsResponse = await page.request.get("/api/transactions-neon?limit=100")
+    expect(transactionsResponse.ok()).toBeTruthy()
+    const transactionsPayload = await transactionsResponse.json()
+    const transactions = Array.isArray(transactionsPayload?.transactions) ? transactionsPayload.transactions : []
+    expect(
+      transactions.some(
+        (transaction: any) =>
+          String(transaction?.item_type || "") === itemName &&
+          String(transaction?.notes || "").includes(note),
+      ),
+      `Expected a saved opening stock transaction for ${itemName}`,
+    ).toBe(true)
   })
 
   test("home tab shows execution scorecard outcomes", async ({ page }) => {
@@ -339,6 +375,7 @@ test.describe("mobile dashboard smoke", () => {
 
     await page.goto(routeContext.route)
     await waitForDashboardReady(page)
+    await expect(page.getByTestId("home-smart-next-steps")).toBeVisible()
     const installPrompt = page.getByText("Install FarmFlow on your phone")
     const installPromptCount = await installPrompt.count()
     if (installPromptCount > 0) {
@@ -367,98 +404,39 @@ test.describe("mobile dashboard smoke", () => {
     await expectNoHorizontalOverflow(page, "dashboard home")
   })
 
-  test("offline queued writes sync after reconnect", async ({ page }) => {
+  test("offline sync queue stays retired", async ({ page }) => {
     const routeContext = await getDashboardRouteContext(page, "inventory")
     await page.goto(routeContext.route)
     await waitForDashboardReady(page)
 
-    const hasServiceWorkerControl = await ensureServiceWorkerControl(page)
-    if (!hasServiceWorkerControl) {
-      test.skip(true, "Offline sync queue is retired in this build")
-      return
-    }
-    await clearWriteQueueStore(page)
-
-    const uniqueSuffix = `${Date.now().toString(36)}${Math.floor(Math.random() * 1000)
-      .toString(36)
-      .padStart(2, "0")}`.toUpperCase()
-    const locationCode = `E2E-${uniqueSuffix}`.slice(0, 16)
-    const locationName = `E2E Offline ${uniqueSuffix}`
-
-    await page.context().setOffline(true)
-
-    const queuedWrite = await page.evaluate(
-      async ({ name, code, tenantId }) => {
-        const response = await fetch("/api/locations", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            name,
-            code,
-            ...(tenantId ? { tenantId } : {}),
-          }),
-        })
-
-        let data: any = null
-        try {
-          data = await response.json()
-        } catch {
-          data = null
-        }
-
-        return {
-          status: response.status,
-          ok: response.ok,
-          data,
-        }
-      },
-      { name: locationName, code: locationCode, tenantId: routeContext.tenantId },
-    )
-
-    expect(queuedWrite.status).toBe(202)
-    expect(Boolean(queuedWrite.ok)).toBe(true)
-    expect(Boolean(queuedWrite.data?.offline)).toBe(true)
-
     await expect
-      .poll(async () => {
-        const queuedEntries = await getQueuedWrites(page)
-        return queuedEntries.some((entry) => {
-          const url = String(entry?.url || "")
-          const body = String(entry?.body || "")
-          return url.includes("/api/locations") && body.includes(locationCode)
-        })
-      })
-      .toBe(true)
-
-    await page.context().setOffline(false)
-    await page.evaluate(() => {
-      navigator.serviceWorker.controller?.postMessage({ type: "FLUSH_WRITE_QUEUE" })
-    })
+      .poll(
+        async () =>
+          page.evaluate(async () => {
+            if (!("serviceWorker" in navigator)) {
+              return 0
+            }
+            const registrations = await navigator.serviceWorker.getRegistrations()
+            return registrations.length
+          }),
+        { timeout: 15_000 },
+      )
+      .toBe(0)
 
     await expect
       .poll(
-        async () => {
-          const queuedEntries = await getQueuedWrites(page)
-          return queuedEntries.some((entry) => {
-            const url = String(entry?.url || "")
-            const body = String(entry?.body || "")
-            return url.includes("/api/locations") && body.includes(locationCode)
-          })
-        },
-        { timeout: 30000 },
+        async () =>
+          page.evaluate(async () => {
+            if (!("indexedDB" in window) || typeof indexedDB.databases !== "function") {
+              return false
+            }
+            const databases = await indexedDB.databases()
+            return databases.some((database) => database?.name === WRITE_QUEUE_DB)
+          }),
+        { timeout: 15_000 },
       )
       .toBe(false)
 
-    const locationsUrl = routeContext.tenantId
-      ? `/api/locations?tenantId=${encodeURIComponent(routeContext.tenantId)}`
-      : "/api/locations"
-    const locationsResponse = await page.request.get(locationsUrl)
-    expect(locationsResponse.ok()).toBeTruthy()
-    const locationsPayload = await locationsResponse.json()
-    const locations = Array.isArray(locationsPayload?.locations) ? locationsPayload.locations : []
-    expect(
-      locations.some((location: any) => String(location?.code || "").toUpperCase() === locationCode),
-      `Expected queued location ${locationCode} to exist after reconnect sync`,
-    ).toBe(true)
+    await expect(page.getByText("Offline Sync Queue")).toHaveCount(0)
   })
 })

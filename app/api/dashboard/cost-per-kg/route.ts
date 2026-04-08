@@ -8,6 +8,8 @@ import { buildErrorResponse, databaseNotConfiguredResponse } from "@/lib/server/
 export const dynamic = "force-dynamic"
 export const revalidate = 0
 
+const DEFAULT_BAG_WEIGHT_KG = 50
+
 const isMissingRelation = (error: unknown, relation: string) =>
   String((error as Error)?.message || error).includes(`relation "${relation}" does not exist`)
 
@@ -33,7 +35,15 @@ export async function GET() {
     const context = normalizeTenantContext(sessionUser.tenantId, sessionUser.role)
     const fy = getCurrentFiscalYear()
 
-    const [laborResult, expenseResult, parchmentResult] = await Promise.all([
+    // Fetch bag weight for kg resolution on sales
+    const bagWeightRows = await runTenantQuery<{ bag_weight_kg: number }>(
+      sql!,
+      context,
+      sql!`SELECT bag_weight_kg FROM tenants WHERE id = ${context.tenantId} LIMIT 1`,
+    ).catch(() => [])
+    const bagWeightKg = Number((bagWeightRows as any[])[0]?.bag_weight_kg) || DEFAULT_BAG_WEIGHT_KG
+
+    const [laborResult, expenseResult, parchmentResult, salesResult] = await Promise.all([
       tryQuery<{ total_cost: number }>(
         context,
         sql!`
@@ -69,6 +79,21 @@ export async function GET() {
         `,
         ["processing_records"],
       ),
+      tryQuery<{ total_revenue: number; total_sold_kg: number }>(
+        context,
+        sql!`
+          SELECT
+            COALESCE(SUM(revenue), 0) AS total_revenue,
+            COALESCE(SUM(
+              COALESCE(NULLIF(kgs_received, 0), NULLIF(kgs, 0), NULLIF(weight_kgs, 0), NULLIF(kgs_sent, 0), bags_sold * ${bagWeightKg})
+            ), 0) AS total_sold_kg
+          FROM sales_records
+          WHERE tenant_id = ${context.tenantId}
+            AND sale_date >= ${fy.startDate}::date
+            AND sale_date <= ${fy.endDate}::date
+        `,
+        ["sales_records"],
+      ),
     ])
 
     const laborCost = Number(laborResult.rows[0]?.total_cost) || 0
@@ -78,6 +103,21 @@ export async function GET() {
     const totalOutputKg = dryParchKg + dryCherryKg
     const totalCost = laborCost + expenseCost
     const costPerKg = totalOutputKg > 0 ? totalCost / totalOutputKg : null
+
+    const totalRevenue = Number(salesResult.rows[0]?.total_revenue) || 0
+    const totalSoldKg = Number(salesResult.rows[0]?.total_sold_kg) || 0
+    const revenuePerKg = totalSoldKg > 0 ? totalRevenue / totalSoldKg : null
+
+    const grossMarginPerKg =
+      costPerKg !== null && revenuePerKg !== null ? revenuePerKg - costPerKg : null
+    const grossMarginPct =
+      grossMarginPerKg !== null && revenuePerKg !== null && revenuePerKg > 0
+        ? (grossMarginPerKg / revenuePerKg) * 100
+        : null
+
+    const laborPct = totalCost > 0 ? (laborCost / totalCost) * 100 : null
+    const expensePct = totalCost > 0 ? (expenseCost / totalCost) * 100 : null
+
     const hasData = laborResult.ok || expenseResult.ok
 
     return NextResponse.json({
@@ -88,6 +128,13 @@ export async function GET() {
       totalCost,
       totalOutputKg,
       costPerKg,
+      totalRevenue,
+      totalSoldKg,
+      revenuePerKg,
+      grossMarginPerKg,
+      grossMarginPct,
+      laborPct,
+      expensePct,
       hasData,
     })
   } catch (error) {

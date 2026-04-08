@@ -26,7 +26,7 @@ import { buildSalesCsv } from "@/lib/sales-export"
 import { resolveDispatchReceivedKgs as resolveDispatchReceivedKgsValue, resolveSalesKgs } from "@/lib/sales-math"
 import OtherSalesTab from "@/components/other-sales-tab"
 import TaskGuideCard from "@/components/task-guide-card"
-import { EmptyStateTable } from "@/components/ui/empty-state"
+import WorkflowEmptyState from "@/components/workflow-empty-state"
 import WorkspacePageShell from "@/components/workspace-page-shell"
 import posthog from "posthog-js"
 
@@ -1781,10 +1781,18 @@ export default function SalesTab({
               <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
             </div>
           ) : salesRecords.length === 0 ? (
-            <EmptyStateTable
+            <WorkflowEmptyState
               title="No sales recorded yet"
-              description="Add the first confirmed sale: location, buyer, quantity, and agreed price."
-              action={{ label: "Use form above", onClick: scrollToEntryForm }}
+              description="Start with the first confirmed sale: real buyer, actual sold quantity, and the agreed price."
+              steps={[
+                "Pick the real location, coffee type, and bag type that match the sale.",
+                "Enter the confirmed sold KGs and agreed price, not an estimate you may change later.",
+                "Save the sale once it is commercially agreed, then edit only if the deal actually changes.",
+              ]}
+              tip="Sales should follow confirmed dispatch-received stock. If the numbers do not line up yet, fix dispatch first instead of guessing here."
+              askPrompt="How do I record my first coffee sale?"
+              primaryAction={{ label: "Use form above", onClick: scrollToEntryForm }}
+              secondaryAction={{ label: "Manuals", href: "/manuals" }}
             />
           ) : (
             <div className="space-y-4">

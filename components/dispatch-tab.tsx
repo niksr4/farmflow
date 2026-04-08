@@ -26,6 +26,7 @@ import { canAcceptNonNegative, isBlockedNumericKey } from "@/lib/number-input"
 import TaskGuideCard from "@/components/task-guide-card"
 import { SkeletonTable } from "@/components/ui/skeleton"
 import { EmptyStateTable } from "@/components/ui/empty-state"
+import WorkflowEmptyState from "@/components/workflow-empty-state"
 import WorkspacePageShell from "@/components/workspace-page-shell"
 import posthog from "posthog-js"
 
@@ -1333,10 +1334,18 @@ export default function DispatchTab({ showDataToolsControls = false }: DispatchT
           {isLoading ? (
             <SkeletonTable rows={5} cols={5} />
           ) : dispatchRecords.length === 0 ? (
-            <EmptyStateTable
+            <WorkflowEmptyState
               title="No dispatch records yet"
-              description="Start with the first real movement out of a location: bag type, bag count, and confirmed received KGs when you have them."
-              action={{ label: "Use form above", onClick: scrollToEntryForm }}
+              description="Start with the first real movement out of a location. Bag type, bag count, and received KGs are enough to begin."
+              steps={[
+                "Choose the location and coffee type that actually moved today.",
+                "Enter the bag type and bag count first, even if received KGs are not confirmed yet.",
+                "Update received KGs later when the buyer or mill confirms the final number.",
+              ]}
+              tip="Dispatch discipline matters because sales stock becomes unreliable if bags leave the estate without a matching dispatch entry."
+              askPrompt="How do I record my first dispatch in FarmFlow?"
+              primaryAction={{ label: "Use form above", onClick: scrollToEntryForm }}
+              secondaryAction={{ label: "Open manuals", href: "/manuals" }}
             />
           ) : (
             <div className="space-y-4">

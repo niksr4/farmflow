@@ -17,7 +17,7 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/component
 import { formatDateOnly } from "@/lib/date-utils"
 import { formatCurrency } from "@/lib/format"
 import { SkeletonTable } from "@/components/ui/skeleton"
-import { EmptyStateTable } from "@/components/ui/empty-state"
+import WorkflowEmptyState from "@/components/workflow-empty-state"
 
 interface ActivityCode {
   code: string
@@ -614,10 +614,18 @@ export default function OtherExpensesTab({
           </CardContent>
         </Card>
       ) : (
-        <EmptyStateTable
+        <WorkflowEmptyState
           title="No expenses recorded yet"
-          description="Add your first expense above to start tracking costs by activity code."
-          size="md"
+          description="Start with the date, amount, and cost code for the first real spend. You can keep the first entry very simple."
+          steps={[
+            "Enter the real date and amount you already know.",
+            "Use a short estate code and plain category name if saved codes are not ready yet.",
+            "Add linked inventory usage only when the expense actually consumed stock.",
+          ]}
+          tip="Do not postpone expense logging until the chart of accounts feels perfect. Clean up code labels later if needed."
+          askPrompt="How do I log my first expense and inventory usage?"
+          primaryAction={{ label: isAdding ? "Continue entry" : "Add expense", onClick: () => setIsAdding(true) }}
+          className="mt-2"
         />
       )}
     </div>

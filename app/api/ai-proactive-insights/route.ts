@@ -1,8 +1,10 @@
 import { buildRateLimitHeaders, checkRateLimit } from "@/lib/rate-limit"
 import { buildTenantAiDataSummary } from "@/lib/server/ai-analysis"
+import { buildClaudeRouteErrorResponse, classifyClaudeRouteError } from "@/lib/server/claude-errors"
 import { requireModuleAccess, isModuleAccessError } from "@/lib/server/module-access"
-import { logServerError } from "@/lib/server/safe-logging"
-import { getClaudeClient, isClaudeConfigured, extractClaudeText, CLAUDE_HAIKU } from "@/lib/server/claude"
+import { logServerError, logServerWarning } from "@/lib/server/safe-logging"
+import { CLAUDE_HAIKU } from "@/lib/server/claude"
+import { callAI, isAIConfigured } from "@/lib/server/ai-provider"
 
 export const dynamic = "force-dynamic"
 export const revalidate = 0
@@ -45,10 +47,11 @@ Severity guide:
 If data is sparse, return fewer insights. If there is no meaningful data, return an empty insights array.`
 
 export async function GET() {
+  let rateHeaders: Record<string, string> = {}
   try {
     const sessionUser = await requireModuleAccess("ai-analysis")
     const rateLimit = await checkRateLimit("aiProactiveInsights", sessionUser.tenantId)
-    const rateHeaders = buildRateLimitHeaders(rateLimit)
+    rateHeaders = buildRateLimitHeaders(rateLimit)
 
     if (!rateLimit.success) {
       return Response.json(
@@ -57,7 +60,7 @@ export async function GET() {
       )
     }
 
-    if (!isClaudeConfigured()) {
+    if (!isAIConfigured()) {
       return Response.json({ success: false, error: "AI is not configured" }, { status: 503, headers: rateHeaders })
     }
 
@@ -66,16 +69,15 @@ export async function GET() {
       role: sessionUser.role,
     })
 
-    const client = getClaudeClient()
-    const message = await client.messages.create({
-      model: CLAUDE_HAIKU,
-      max_tokens: 600,
-      temperature: 0.2,
-      system: SYSTEM_PROMPT,
-      messages: [{ role: "user", content: buildInsightPrompt(dataSummary) }],
-    })
-
-    const raw = extractClaudeText(message).trim()
+    const raw = (
+      await callAI({
+        model: CLAUDE_HAIKU,
+        max_tokens: 600,
+        temperature: 0.2,
+        system: SYSTEM_PROMPT,
+        messages: [{ role: "user", content: buildInsightPrompt(dataSummary) }],
+      })
+    ).trim()
 
     let insights: ProactiveInsight[] = []
     try {
@@ -96,13 +98,21 @@ export async function GET() {
 
     return Response.json({ success: true, insights }, { headers: rateHeaders })
   } catch (error) {
-    logServerError("Proactive insights error", error)
     if (isModuleAccessError(error)) {
-      return Response.json({ success: false, error: "Module access disabled" }, { status: 403 })
+      return Response.json({ success: false, error: "Module access disabled" }, { status: 403, headers: rateHeaders })
     }
+    const claudeClassification = classifyClaudeRouteError(error)
+    if (claudeClassification) {
+      logServerWarning("Proactive insights Claude request failed", {
+        classification: claudeClassification,
+        error,
+      })
+      return buildClaudeRouteErrorResponse(claudeClassification, rateHeaders)
+    }
+    logServerError("Proactive insights error", error)
     return Response.json(
       { success: false, error: error instanceof Error ? error.message : "Failed to generate insights" },
-      { status: 500 },
+      { status: 500, headers: rateHeaders },
     )
   }
 }

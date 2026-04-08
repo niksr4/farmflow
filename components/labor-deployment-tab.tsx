@@ -17,8 +17,8 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/component
 import { formatDateOnly } from "@/lib/date-utils"
 import { formatCurrency, formatNumber } from "@/lib/format"
 import { SkeletonTable } from "@/components/ui/skeleton"
-import { EmptyStateTable } from "@/components/ui/empty-state"
 import TaskGuideCard from "@/components/task-guide-card"
+import WorkflowEmptyState from "@/components/workflow-empty-state"
 
 interface ActivityCode {
   code: string
@@ -643,10 +643,18 @@ export default function LaborDeploymentTab({
           </CardContent>
         </Card>
       ) : (
-        <EmptyStateTable
+        <WorkflowEmptyState
           title="No labor deployments yet"
-          description="Record your first deployment above to start tracking labor costs by activity code."
-          size="md"
+          description="Start with one real workday and one activity code. That is enough to begin tracking labor cost cleanly."
+          steps={[
+            "Use the real date and work code for the task your team completed.",
+            "Enter estate workers and outside workers separately only if both were actually used.",
+            "Leave extra notes for later if they are slowing you down.",
+          ]}
+          tip="One entry should represent one day and one activity. Keeping that rule makes labor totals much easier to trust."
+          askPrompt="How do I record my first labor entry?"
+          primaryAction={{ label: isAdding ? "Continue entry" : "Add labor entry", onClick: () => setIsAdding(true) }}
+          className="mt-2"
         />
       )}
     </div>

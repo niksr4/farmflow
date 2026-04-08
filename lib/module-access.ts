@@ -88,8 +88,12 @@ export async function resolveScopedSessionUser(user: SessionUser): Promise<Sessi
 export async function getEnabledModules(sessionUser?: SessionUser): Promise<string[]> {
   const resolvedUser = sessionUser ?? (await requireSessionUser())
   const user = await resolveScopedSessionUser(resolvedUser)
+  const ownerPreviewActive =
+    resolvedUser.role === "owner" &&
+    Boolean(user.tenantId) &&
+    String(user.tenantId || "").trim() !== String(resolvedUser.tenantId || "").trim()
 
-  if (user.role === "owner") {
+  if (user.role === "owner" && !ownerPreviewActive) {
     return MODULE_IDS
   }
 

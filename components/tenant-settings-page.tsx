@@ -1,11 +1,13 @@
 "use client"
 
-import { useCallback, useEffect, useRef, useState } from "react"
+import { useCallback, useEffect, useState } from "react"
 import { useSession } from "next-auth/react"
 import { ChevronDown } from "lucide-react"
 import { cn } from "@/lib/utils"
+import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { useToast } from "@/hooks/use-toast"
@@ -59,27 +61,87 @@ import type {
   UserModuleSource,
 } from "@/components/tenant-settings/types"
 
+type SettingsGroupId = "profile" | "estate" | "operations" | "user-access" | "privacy" | "advanced"
+
+const SETTINGS_SECTION_TO_GROUP: Record<string, SettingsGroupId> = {
+  "account-email": "profile",
+  "account-language": "profile",
+  "estate-identity": "estate",
+  "estate-profile": "estate",
+  "display-preferences": "estate",
+  thresholds: "estate",
+  locations: "operations",
+  "data-import": "operations",
+  "tenant-users": "user-access",
+  "user-module-overrides": "user-access",
+  "tenant-modules": "user-access",
+  "privacy-dpdp": "privacy",
+  "owner-tools": "advanced",
+  "tenant-experience": "advanced",
+  "audit-log": "advanced",
+}
+
 function SettingsGroup({
+  groupId,
   title,
+  summary,
+  sectionCountLabel,
+  open,
+  onOpenChange,
   children,
-  defaultOpen = true,
 }: {
+  groupId: SettingsGroupId
   title: string
+  summary: string
+  sectionCountLabel: string
+  open: boolean
+  onOpenChange: (groupId: SettingsGroupId | null) => void
   children: React.ReactNode
-  defaultOpen?: boolean
 }) {
-  const [open, setOpen] = useState(defaultOpen)
   return (
-    <div>
-      <button
-        onClick={() => setOpen((v) => !v)}
-        className="flex w-full items-center justify-between border-b border-stone-100 py-3 text-left text-[11px] font-semibold uppercase tracking-widest text-slate-400 transition-colors hover:text-slate-600"
+    <Collapsible open={open} onOpenChange={(nextOpen) => onOpenChange(nextOpen ? groupId : null)}>
+      <div
+        className={cn(
+          "overflow-hidden rounded-[28px] border bg-white/82 shadow-sm backdrop-blur-sm transition-colors",
+          open
+            ? "border-slate-300/90 shadow-[0_18px_36px_-30px_rgba(15,23,42,0.42)]"
+            : "border-slate-200/80 hover:border-slate-300/80",
+        )}
       >
-        {title}
-        <ChevronDown className={cn("h-3.5 w-3.5 transition-transform duration-200", open ? "" : "-rotate-90")} />
-      </button>
-      {open && <div className="space-y-4 pt-4">{children}</div>}
-    </div>
+        <CollapsibleTrigger asChild>
+          <button
+            type="button"
+            className="flex w-full items-start justify-between gap-4 px-5 py-4 text-left transition-colors hover:bg-slate-50/70 sm:px-6"
+          >
+            <div className="space-y-2">
+              <div className="flex flex-wrap items-center gap-2">
+                <p className="text-sm font-semibold text-slate-900 sm:text-[15px]">{title}</p>
+                <Badge variant="outline" className="border-slate-200 bg-white/90 text-slate-600">
+                  {sectionCountLabel}
+                </Badge>
+              </div>
+              <p className="max-w-3xl text-sm leading-6 text-slate-600">{summary}</p>
+            </div>
+            <div className="mt-0.5 flex shrink-0 items-center gap-2">
+              <span className="hidden text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-400 sm:inline">
+                {open ? "Open" : "Closed"}
+              </span>
+              <span
+                className={cn(
+                  "inline-flex h-9 w-9 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-500 transition-transform duration-200",
+                  open ? "rotate-180" : "",
+                )}
+              >
+                <ChevronDown className="h-4 w-4" />
+              </span>
+            </div>
+          </button>
+        </CollapsibleTrigger>
+        <CollapsibleContent>
+          <div className="space-y-4 border-t border-slate-100 px-4 py-4 sm:px-6 sm:py-5">{children}</div>
+        </CollapsibleContent>
+      </div>
+    </Collapsible>
   )
 }
 
@@ -153,6 +215,21 @@ export default function TenantSettingsPage() {
   const isAdminOrOwner = user?.role === "admin" || user?.role === "owner"
   const canManageTenantExperience = isOwner
   const privacyFeatureEnabled = Boolean(tenantId)
+  const [openGroup, setOpenGroup] = useState<SettingsGroupId | null>("estate")
+
+  const syncOpenGroupFromHash = useCallback(() => {
+    if (typeof window === "undefined") return
+    const sectionId = decodeURIComponent(window.location.hash.replace(/^#/, "").trim())
+    if (!sectionId) return
+    const nextGroup = SETTINGS_SECTION_TO_GROUP[sectionId]
+    if (!nextGroup) return
+    setOpenGroup(nextGroup)
+    window.requestAnimationFrame(() => {
+      window.requestAnimationFrame(() => {
+        document.getElementById(sectionId)?.scrollIntoView({ block: "start", behavior: "smooth" })
+      })
+    })
+  }, [])
 
   useEffect(() => {
     setEstateNameInput(settings.estateName || "")
@@ -213,6 +290,12 @@ export default function TenantSettingsPage() {
     if (!privacyFeatureEnabled) return
     loadPrivacyStatus()
   }, [loadPrivacyStatus, privacyFeatureEnabled])
+
+  useEffect(() => {
+    syncOpenGroupFromHash()
+    window.addEventListener("hashchange", syncOpenGroupFromHash)
+    return () => window.removeEventListener("hashchange", syncOpenGroupFromHash)
+  }, [syncOpenGroupFromHash])
 
   const handleAcceptNotice = async () => {
     setIsAcceptingNotice(true)
@@ -962,6 +1045,10 @@ export default function TenantSettingsPage() {
       detail: isOwner ? "Plan and module controls available" : "Owner-managed access bundle",
     },
   ]
+  const profileSectionCount = 2
+  const estateSectionCount = isAdminOrOwner ? 4 : 3
+  const userAccessSectionCount = 1 + (isAdminOrOwner ? 1 : 0) + (isOwner ? 1 : 0)
+  const hasAdvancedSection = isOwner
 
   return (
     <WorkspacePageShell
@@ -988,9 +1075,15 @@ export default function TenantSettingsPage() {
         onLogout={logout}
       />
 
-      <div className="space-y-2 pt-2">
-
-        <SettingsGroup title="Profile">
+      <div className="space-y-3 pt-2">
+        <SettingsGroup
+          groupId="profile"
+          title="Profile"
+          summary="Keep your digest email and account language in one place without touching estate-wide operational settings."
+          sectionCountLabel={`${profileSectionCount} sections`}
+          open={openGroup === "profile"}
+          onOpenChange={setOpenGroup}
+        >
           <Card id="account-email" className="scroll-mt-24 border-border/70 bg-white/85">
             <CardHeader>
               <CardTitle>Digest Email</CardTitle>
@@ -1023,7 +1116,14 @@ export default function TenantSettingsPage() {
           />
         </SettingsGroup>
 
-        <SettingsGroup title="Estate">
+        <SettingsGroup
+          groupId="estate"
+          title="Estate"
+          summary="Set the estate identity, footprint, dashboard defaults, and exception thresholds that shape how the workspace behaves."
+          sectionCountLabel={`${estateSectionCount} sections`}
+          open={openGroup === "estate"}
+          onOpenChange={setOpenGroup}
+        >
           <EstateIdentitySection
             estateNameInput={estateNameInput}
             savedEstateName={settings.estateName || ""}
@@ -1058,7 +1158,14 @@ export default function TenantSettingsPage() {
           />
         </SettingsGroup>
 
-        <SettingsGroup title="Operations">
+        <SettingsGroup
+          groupId="operations"
+          title="Operations"
+          summary="Manage the live structures daily work depends on: locations for traceability and import tools for bulk setup."
+          sectionCountLabel="2 sections"
+          open={openGroup === "operations"}
+          onOpenChange={setOpenGroup}
+        >
           <LocationsSection
             locations={locations}
             newLocationName={newLocationName}
@@ -1080,7 +1187,14 @@ export default function TenantSettingsPage() {
           <DataImportSection />
         </SettingsGroup>
 
-        <SettingsGroup title="User Access">
+        <SettingsGroup
+          groupId="user-access"
+          title="User Access"
+          summary="Control who can enter data, who gets exceptions from tenant defaults, and which modules the estate is allowed to use."
+          sectionCountLabel={`${userAccessSectionCount} sections`}
+          open={openGroup === "user-access"}
+          onOpenChange={setOpenGroup}
+        >
           <TenantUsersSection
             tenantId={tenantId}
             users={users}
@@ -1129,7 +1243,14 @@ export default function TenantSettingsPage() {
         </SettingsGroup>
 
         {privacyFeatureEnabled && (
-          <SettingsGroup title="Privacy">
+          <SettingsGroup
+            groupId="privacy"
+            title="Privacy"
+            summary="Handle consent, export, correction, and deletion requests without mixing them into daily estate setup work."
+            sectionCountLabel="1 section"
+            open={openGroup === "privacy"}
+            onOpenChange={setOpenGroup}
+          >
             <PrivacySection
               tenantId={tenantId}
               privacyStatus={privacyStatus}
@@ -1151,33 +1272,41 @@ export default function TenantSettingsPage() {
           </SettingsGroup>
         )}
 
-        <SettingsGroup title="Advanced" defaultOpen={false}>
-          {isOwner && <OwnerToolsSection />}
-          {canManageTenantExperience && (
-            <TenantExperienceSection
-              uiVariantDraft={uiVariantDraft}
-              featureFlagsDraft={featureFlagsDraft}
-              isSavingTenantExperience={isSavingTenantExperience}
-              settingsLoading={settingsLoading}
-              onUiVariantChange={setUiVariantDraft}
-              onFeatureFlagChange={handleFeatureFlagChange}
-              onSaveTenantExperience={handleSaveTenantExperience}
-            />
-          )}
+        {hasAdvancedSection ? (
+          <SettingsGroup
+            groupId="advanced"
+            title="Advanced"
+            summary="Keep owner-only tools, experience tuning, and audit history tucked away unless you are deliberately changing platform behavior."
+            sectionCountLabel="3 sections"
+            open={openGroup === "advanced"}
+            onOpenChange={setOpenGroup}
+          >
+            {isOwner && <OwnerToolsSection />}
+            {canManageTenantExperience && (
+              <TenantExperienceSection
+                uiVariantDraft={uiVariantDraft}
+                featureFlagsDraft={featureFlagsDraft}
+                isSavingTenantExperience={isSavingTenantExperience}
+                settingsLoading={settingsLoading}
+                onUiVariantChange={setUiVariantDraft}
+                onFeatureFlagChange={handleFeatureFlagChange}
+                onSaveTenantExperience={handleSaveTenantExperience}
+              />
+            )}
 
-          {isOwner && (
-            <AuditLogSection
-              tenantId={tenantId}
-              auditEntityType={auditEntityType}
-              auditLogs={auditLogs}
-              auditTotalCount={auditTotalCount}
-              isAuditLoading={isAuditLoading}
-              onAuditEntityTypeChange={setAuditEntityType}
-              onRefreshAuditLogs={loadAuditLogs}
-            />
-          )}
-        </SettingsGroup>
-
+            {isOwner && (
+              <AuditLogSection
+                tenantId={tenantId}
+                auditEntityType={auditEntityType}
+                auditLogs={auditLogs}
+                auditTotalCount={auditTotalCount}
+                isAuditLoading={isAuditLoading}
+                onAuditEntityTypeChange={setAuditEntityType}
+                onRefreshAuditLogs={loadAuditLogs}
+              />
+            )}
+          </SettingsGroup>
+        ) : null}
       </div>
     </WorkspacePageShell>
   )
