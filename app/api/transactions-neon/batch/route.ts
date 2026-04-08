@@ -4,6 +4,8 @@ import { requireModuleAccess, isModuleAccessError } from "@/lib/server/module-ac
 import { normalizeTenantContext, runTenantQuery } from "@/lib/server/tenant-db"
 import { canDeleteModule } from "@/lib/permissions"
 import { logAuditEvent } from "@/lib/server/audit-log"
+import { repairCurrentInventoryUpsertConstraints } from "@/lib/server/current-inventory-constraints"
+import { resolveTenantUserUuid } from "@/lib/server/tenant-user"
 
 export const dynamic = "force-dynamic"
 
@@ -14,6 +16,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: false, message: "Insufficient role" }, { status: 403 })
     }
     const tenantContext = normalizeTenantContext(sessionUser.tenantId, sessionUser.role)
+    const tenantUserUuid = await resolveTenantUserUuid(sessionUser)
     const body = await request.json()
     const { transactions } = body
 
@@ -46,6 +49,8 @@ export async function POST(request: NextRequest) {
         WHERE tenant_id = ${tenantContext.tenantId}
       `,
     )
+
+    await repairCurrentInventoryUpsertConstraints(accountsSql, tenantContext)
     
     const sortedTransactions = [...transactions].sort((a, b) => {
       const dateA = a?.transaction_date ? new Date(a.transaction_date).getTime() : 0
@@ -64,7 +69,7 @@ export async function POST(request: NextRequest) {
         accountsSql`
           INSERT INTO transaction_history (
             item_type, quantity, transaction_type, notes,
-            transaction_date, user_id, price, total_cost,
+            transaction_date, user_id, user_uuid, price, total_cost,
             tenant_id, location_id, unit
           )
           VALUES (
@@ -74,6 +79,7 @@ export async function POST(request: NextRequest) {
             ${txn.notes || ""},
             ${txn.transaction_date || new Date().toISOString()},
             ${txn.user_id || "system"},
+            ${tenantUserUuid},
             ${txn.price || 0},
             ${txn.total_cost || 0},
             ${tenantContext.tenantId},

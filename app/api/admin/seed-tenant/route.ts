@@ -6,6 +6,8 @@ import { normalizeTenantContext, runTenantQuery } from "@/lib/server/tenant-db"
 import { logAuditEvent } from "@/lib/server/audit-log"
 import { recalculateInventoryForItem } from "@/lib/server/inventory-recalc"
 import { buildAdminErrorResponse, databaseNotConfiguredResponse } from "@/lib/server/route-utils"
+import { repairCurrentInventoryUpsertConstraints } from "@/lib/server/current-inventory-constraints"
+import { resolveTenantUserUuid } from "@/lib/server/tenant-user"
 
 const isMissingRelation = (error: unknown) => {
   const message = String((error as Error)?.message || error)
@@ -69,6 +71,7 @@ export async function POST(request: Request) {
     }
 
     const tenantContext = normalizeTenantContext(tenantId, sessionUser.role)
+    const tenantUserUuid = await resolveTenantUserUuid({ ...sessionUser, tenantId } as typeof sessionUser)
     const tenantRows = await runTenantQuery(
       sql,
       tenantContext,
@@ -320,6 +323,8 @@ export async function POST(request: Request) {
       },
     ]
 
+    await repairCurrentInventoryUpsertConstraints(sql, tenantContext)
+
     for (const tx of transactions) {
       await runTenantQuery(
         sql,
@@ -360,6 +365,7 @@ export async function POST(request: Request) {
             notes,
             transaction_date,
             user_id,
+            user_uuid,
             price,
             total_cost,
             tenant_id,
@@ -373,6 +379,7 @@ export async function POST(request: Request) {
             ${tx.notes},
             ${daysAgo(tx.days)}::date,
             ${tx.user_id},
+            ${tenantUserUuid},
             ${tx.price},
             ${tx.total_cost},
             ${tenantId},

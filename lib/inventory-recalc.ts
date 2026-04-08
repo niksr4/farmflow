@@ -2,6 +2,10 @@ import "server-only"
 
 import type { NeonQueryFunction } from "@neondatabase/serverless"
 import { runTenantQuery } from "@/lib/server/tenant-db"
+import {
+  isMissingCurrentInventoryUpsertConstraintError,
+  repairCurrentInventoryUpsertConstraints,
+} from "@/lib/server/current-inventory-constraints"
 
 type TenantContext = {
   tenantId: string
@@ -69,22 +73,25 @@ async function recalculateInventoryForLocation(
   )
   const unit = unitRow?.[0]?.unit ? String(unitRow[0].unit) : "kg"
 
-  if (locationId) {
-    await runTenantQuery(
-      sql,
-      tenantContext,
-      sql`
-        INSERT INTO current_inventory (item_type, quantity, unit, avg_price, total_cost, tenant_id, location_id)
-        VALUES (${itemType}, ${runningQty}, ${unit}, ${avgPrice}, ${runningCost}, ${tenantContext.tenantId}, ${locationId})
-        ON CONFLICT (item_type, tenant_id, location_id)
-        DO UPDATE SET
-          quantity = ${runningQty},
-          unit = ${unit},
-          avg_price = ${avgPrice},
-          total_cost = ${runningCost}
-      `,
-    )
-  } else {
+  const upsertInventorySnapshot = async () => {
+    if (locationId) {
+      await runTenantQuery(
+        sql,
+        tenantContext,
+        sql`
+          INSERT INTO current_inventory (item_type, quantity, unit, avg_price, total_cost, tenant_id, location_id)
+          VALUES (${itemType}, ${runningQty}, ${unit}, ${avgPrice}, ${runningCost}, ${tenantContext.tenantId}, ${locationId})
+          ON CONFLICT (item_type, tenant_id, location_id)
+          DO UPDATE SET
+            quantity = ${runningQty},
+            unit = ${unit},
+            avg_price = ${avgPrice},
+            total_cost = ${runningCost}
+        `,
+      )
+      return
+    }
+
     await runTenantQuery(
       sql,
       tenantContext,
@@ -99,6 +106,16 @@ async function recalculateInventoryForLocation(
           total_cost = ${runningCost}
       `,
     )
+  }
+
+  try {
+    await upsertInventorySnapshot()
+  } catch (error) {
+    if (!isMissingCurrentInventoryUpsertConstraintError(error)) {
+      throw error
+    }
+    await repairCurrentInventoryUpsertConstraints(sql, tenantContext)
+    await upsertInventorySnapshot()
   }
 
   return {

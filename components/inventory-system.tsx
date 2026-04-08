@@ -5313,7 +5313,7 @@ export default function InventorySystem() {
             Use this form for stock coming in, stock used, and stock corrections.
           </p>
         </div>
-        <Button variant="ghost" size="sm" onClick={() => setIsMovementDrawerOpen(false)}>
+        <Button type="button" variant="ghost" size="sm" onClick={() => setIsMovementDrawerOpen(false)}>
           Close
         </Button>
       </div>
@@ -5592,6 +5592,7 @@ export default function InventorySystem() {
         </div>
 
         <Button
+          type="button"
           data-testid="movement-record-transaction"
           onClick={handleRecordTransaction}
           className="w-full h-11 text-base bg-emerald-700 hover:bg-emerald-800 text-white shadow-sm"
@@ -8336,6 +8337,7 @@ export default function InventorySystem() {
               <div className="flex items-center justify-between">
                 <h3 className="text-lg font-semibold">Add Inventory Item</h3>
                 <Button
+                  type="button"
                   variant="ghost"
                   size="sm"
                   onClick={() => {
@@ -8437,6 +8439,7 @@ export default function InventorySystem() {
               </div>
               <div className={cn("mt-6 flex gap-2", isMobile ? "flex-col-reverse" : "justify-end")}>
                 <Button
+                  type="button"
                   variant="outline"
                   onClick={() => {
                     setIsNewItemDialogOpen(false)
@@ -8445,7 +8448,7 @@ export default function InventorySystem() {
                 >
                   Cancel
                 </Button>
-                <Button onClick={handleCreateNewItem} disabled={isSavingNewItem}>
+                <Button type="button" onClick={handleCreateNewItem} disabled={isSavingNewItem}>
                   {isSavingNewItem ? "Saving..." : "Add Item"}
                 </Button>
               </div>

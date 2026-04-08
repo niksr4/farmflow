@@ -4,21 +4,14 @@ import { requireModuleAccess, isModuleAccessError } from "@/lib/server/module-ac
 import { canDeleteModule, canWriteModule } from "@/lib/permissions"
 import { logAuditEvent } from "@/lib/server/audit-log"
 import { normalizeTenantContext, runTenantQueries, runTenantQuery } from "@/lib/server/tenant-db"
+import { resolveTenantUserUuid } from "@/lib/server/tenant-user"
 import { normalizeInventoryItemType } from "@/lib/inventory-item-type"
+import {
+  isMissingCurrentInventoryUpsertConstraintError,
+  repairCurrentInventoryUpsertConstraints,
+} from "@/lib/server/current-inventory-constraints"
 
 export const dynamic = "force-dynamic"
-
-const getErrorCode = (error: unknown) => String((error as { code?: unknown })?.code || "")
-const getErrorMessage = (error: unknown) => String((error as { message?: unknown })?.message || "")
-
-const isMissingInventoryUpsertConstraintError = (error: unknown) => {
-  const code = getErrorCode(error)
-  const message = getErrorMessage(error).toLowerCase()
-  return (
-    code === "42P10" ||
-    message.includes("no unique or exclusion constraint matching the on conflict specification")
-  )
-}
 
 const ensureInventorySlotExists = async (
   tenantContext: ReturnType<typeof normalizeTenantContext>,
@@ -26,6 +19,33 @@ const ensureInventorySlotExists = async (
   unit: string,
   locationValue: string | null,
 ) => {
+  const upsertSlot = async () => {
+    if (locationValue) {
+      await runTenantQuery(
+        inventorySql,
+        tenantContext,
+        inventorySql`
+          INSERT INTO current_inventory (item_type, quantity, unit, avg_price, total_cost, tenant_id, location_id)
+          VALUES (${itemType}, 0, ${unit}, 0, 0, ${tenantContext.tenantId}, ${locationValue})
+          ON CONFLICT (item_type, tenant_id, location_id)
+          DO UPDATE SET unit = EXCLUDED.unit
+        `,
+      )
+      return
+    }
+
+    await runTenantQuery(
+      inventorySql,
+      tenantContext,
+      inventorySql`
+        INSERT INTO current_inventory (item_type, quantity, unit, avg_price, total_cost, tenant_id, location_id)
+        VALUES (${itemType}, 0, ${unit}, 0, 0, ${tenantContext.tenantId}, NULL)
+        ON CONFLICT (item_type, tenant_id) WHERE location_id IS NULL
+        DO UPDATE SET unit = EXCLUDED.unit
+      `,
+    )
+  }
+
   const applyFallback = async () => {
     if (locationValue) {
       const existingRows = await runTenantQuery(
@@ -100,33 +120,22 @@ const ensureInventorySlotExists = async (
   }
 
   try {
-    if (locationValue) {
-      await runTenantQuery(
-        inventorySql,
-        tenantContext,
-        inventorySql`
-          INSERT INTO current_inventory (item_type, quantity, unit, avg_price, total_cost, tenant_id, location_id)
-          VALUES (${itemType}, 0, ${unit}, 0, 0, ${tenantContext.tenantId}, ${locationValue})
-          ON CONFLICT (item_type, tenant_id, location_id)
-          DO UPDATE SET unit = EXCLUDED.unit
-        `,
-      )
-      return
-    }
-    await runTenantQuery(
-      inventorySql,
-      tenantContext,
-      inventorySql`
-        INSERT INTO current_inventory (item_type, quantity, unit, avg_price, total_cost, tenant_id, location_id)
-        VALUES (${itemType}, 0, ${unit}, 0, 0, ${tenantContext.tenantId}, NULL)
-        ON CONFLICT (item_type, tenant_id) WHERE location_id IS NULL
-        DO UPDATE SET unit = EXCLUDED.unit
-      `,
-    )
+    await upsertSlot()
   } catch (error) {
-    if (!isMissingInventoryUpsertConstraintError(error)) {
+    if (!isMissingCurrentInventoryUpsertConstraintError(error)) {
       throw error
     }
+
+    try {
+      await repairCurrentInventoryUpsertConstraints(inventorySql, tenantContext)
+      await upsertSlot()
+      return
+    } catch (repairError) {
+      if (!isMissingCurrentInventoryUpsertConstraintError(repairError)) {
+        throw repairError
+      }
+    }
+
     await applyFallback()
   }
 }
@@ -272,6 +281,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: false, message: "Insufficient role" }, { status: 403 })
     }
     const tenantContext = normalizeTenantContext(sessionUser.tenantId, sessionUser.role)
+    const tenantUserUuid = await resolveTenantUserUuid(sessionUser)
     const body = await request.json()
 
     const { item_type, quantity, unit, price, notes, location_id } = body
@@ -301,9 +311,8 @@ export async function POST(request: NextRequest) {
     await ensureInventorySlotExists(tenantContext, itemType, unitValue, locationValue)
 
 
-    // Add initial transaction if quantity > 0 (trigger updates current_inventory)
-    if (quantityValue > 0) {
-      await runTenantQuery(
+    const insertInitialTransaction = async () =>
+      runTenantQuery(
         inventorySql,
         tenantContext,
         inventorySql`
@@ -313,6 +322,7 @@ export async function POST(request: NextRequest) {
             transaction_type,
             notes,
             user_id,
+            user_uuid,
             price,
             total_cost,
             tenant_id,
@@ -325,6 +335,7 @@ export async function POST(request: NextRequest) {
             'restock',
             ${notes || `New item added: ${itemType}`},
             ${sessionUser.username || "system"},
+            ${tenantUserUuid},
             ${priceValue},
             ${total_cost},
             ${tenantContext.tenantId},
@@ -333,6 +344,18 @@ export async function POST(request: NextRequest) {
           )
         `,
       )
+
+    // Add initial transaction if quantity > 0 (trigger updates current_inventory)
+    if (quantityValue > 0) {
+      try {
+        await insertInitialTransaction()
+      } catch (error) {
+        if (!isMissingCurrentInventoryUpsertConstraintError(error)) {
+          throw error
+        }
+        await repairCurrentInventoryUpsertConstraints(inventorySql, tenantContext)
+        await insertInitialTransaction()
+      }
     }
 
     await logAuditEvent(inventorySql, sessionUser, {
@@ -383,6 +406,7 @@ export async function DELETE(request: NextRequest) {
     }
 
     const tenantContext = normalizeTenantContext(sessionUser.tenantId, sessionUser.role)
+    const tenantUserUuid = await resolveTenantUserUuid(sessionUser)
     const body = await request.json().catch(() => ({}))
     const itemType = typeof body.item_type === "string" ? body.item_type.trim() : ""
     const rawLocation = typeof body.location_id === "string" ? body.location_id.trim() : ""
@@ -447,36 +471,49 @@ export async function DELETE(request: NextRequest) {
       if (quantityValue <= 0) {
         continue
       }
-      await runTenantQuery(
-        inventorySql,
-        tenantContext,
-        inventorySql`
-          INSERT INTO transaction_history (
-            item_type,
-            quantity,
-            transaction_type,
-            notes,
-            user_id,
-            price,
-            total_cost,
-            tenant_id,
-            location_id,
-            unit
-          )
-          VALUES (
-            ${itemType},
-            ${quantityValue},
-            'deplete',
-            ${`Inventory item deleted by ${sessionUser.username || "system"}`},
-            ${sessionUser.username || "system"},
-            0,
-            0,
-            ${tenantContext.tenantId},
-            ${row.location_id ?? null},
-            ${row.unit || "kg"}
-          )
-        `,
-      )
+      const insertDeletionTransaction = async () =>
+        runTenantQuery(
+          inventorySql,
+          tenantContext,
+          inventorySql`
+            INSERT INTO transaction_history (
+              item_type,
+              quantity,
+              transaction_type,
+              notes,
+              user_id,
+              user_uuid,
+              price,
+              total_cost,
+              tenant_id,
+              location_id,
+              unit
+            )
+            VALUES (
+              ${itemType},
+              ${quantityValue},
+              'deplete',
+              ${`Inventory item deleted by ${sessionUser.username || "system"}`},
+              ${sessionUser.username || "system"},
+              ${tenantUserUuid},
+              0,
+              0,
+              ${tenantContext.tenantId},
+              ${row.location_id ?? null},
+              ${row.unit || "kg"}
+            )
+          `,
+        )
+
+      try {
+        await insertDeletionTransaction()
+      } catch (error) {
+        if (!isMissingCurrentInventoryUpsertConstraintError(error)) {
+          throw error
+        }
+        await repairCurrentInventoryUpsertConstraints(inventorySql, tenantContext)
+        await insertDeletionTransaction()
+      }
     }
 
     if (deleteAll) {

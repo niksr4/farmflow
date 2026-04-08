@@ -6,6 +6,11 @@ import { resolveLocationCompatibility } from "@/lib/server/location-compatibilit
 import { canWriteModule } from "@/lib/permissions"
 import { logAuditEvent } from "@/lib/server/audit-log"
 import { normalizeInventoryItemType } from "@/lib/inventory-item-type"
+import { resolveTenantUserUuid } from "@/lib/server/tenant-user"
+import {
+  isMissingCurrentInventoryUpsertConstraintError,
+  repairCurrentInventoryUpsertConstraints,
+} from "@/lib/server/current-inventory-constraints"
 
 export const dynamic = "force-dynamic"
 
@@ -455,6 +460,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: false, message: "Insufficient role" }, { status: 403 })
     }
     const tenantContext = normalizeTenantContext(sessionUser.tenantId, sessionUser.role)
+    const tenantUserUuid = await resolveTenantUserUuid(sessionUser)
     const body = await request.json()
 
     const { item_type, quantity, transaction_type, notes, price, location_id, unit, transaction_date } = body
@@ -586,51 +592,65 @@ export async function POST(request: NextRequest) {
     const priceValue = Number(price) || 0
     const total_cost = quantityValue * priceValue
 
-    // Just insert into transaction_history - don't touch current_inventory
-    const result = await runTenantQuery(
-      inventorySql,
-      tenantContext,
-      inventorySql`
-      INSERT INTO transaction_history (
-        item_type, 
-        quantity, 
-        transaction_type, 
-        notes, 
-        transaction_date,
-        user_id, 
-        price, 
-        total_cost,
-        tenant_id,
-        location_id,
-        unit
+    const insertTransaction = async () =>
+      runTenantQuery(
+        inventorySql,
+        tenantContext,
+        inventorySql`
+          INSERT INTO transaction_history (
+            item_type,
+            quantity,
+            transaction_type,
+            notes,
+            transaction_date,
+            user_id,
+            user_uuid,
+            price,
+            total_cost,
+            tenant_id,
+            location_id,
+            unit
+          )
+          VALUES (
+            ${canonicalItemType},
+            ${quantityValue},
+            ${normalizedType},
+            ${notesValue || ""},
+            ${normalizedTransactionDate},
+            ${sessionUser.username || "system"},
+            ${tenantUserUuid},
+            ${priceValue},
+            ${total_cost},
+            ${tenantContext.tenantId},
+            ${stockLocationValue},
+            ${unitValue}
+          )
+          RETURNING
+            id,
+            item_type,
+            quantity,
+            transaction_type,
+            notes,
+            transaction_date,
+            user_id,
+            price,
+            total_cost,
+            location_id,
+            unit
+        `,
       )
-      VALUES (
-        ${canonicalItemType},
-        ${quantityValue},
-        ${normalizedType},
-        ${notesValue || ""},
-        ${normalizedTransactionDate},
-        ${sessionUser.username || "system"},
-        ${priceValue},
-        ${total_cost},
-        ${tenantContext.tenantId},
-        ${stockLocationValue},
-        ${unitValue}
-      )
-      RETURNING 
-        id,
-        item_type,
-        quantity,
-        transaction_type,
-        notes,
-        transaction_date,
-        user_id,
-        price,
-        total_cost,
-        location_id,
-        unit
-    `,
-    )
+
+    // Just insert into transaction_history - inventory is updated by the DB trigger.
+    let result
+    try {
+      result = await insertTransaction()
+    } catch (error) {
+      if (!isMissingCurrentInventoryUpsertConstraintError(error)) {
+        throw error
+      }
+      await repairCurrentInventoryUpsertConstraints(inventorySql, tenantContext)
+      result = await insertTransaction()
+    }
 
 
     await logAuditEvent(inventorySql, sessionUser, {

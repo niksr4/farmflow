@@ -4,6 +4,8 @@ import { sql } from "@/lib/server/db"
 import { requireSessionUser } from "@/lib/server/auth"
 import { requireModuleAccess, isModuleAccessError } from "@/lib/server/module-access"
 import { normalizeTenantContext, runTenantQueries, runTenantQuery } from "@/lib/server/tenant-db"
+import { resolveTenantUserUuid } from "@/lib/server/tenant-user"
+import { repairCurrentInventoryUpsertConstraints } from "@/lib/server/current-inventory-constraints"
 import { csvToObjects } from "@/lib/csv"
 import { resolveLocationInfo } from "@/lib/server/location-utils"
 import { recalculateInventoryForItem } from "@/lib/server/inventory-recalc"
@@ -337,6 +339,7 @@ export async function POST(request: Request) {
       role: tenantContext.role,
       username: requestedBy,
     })
+    const tenantUserUuid = await resolveTenantUserUuid(sessionUser)
 
     const parsedBody = importBulkBodySchema.safeParse(await request.json().catch(() => ({})))
     if (!parsedBody.success) {
@@ -999,6 +1002,8 @@ export async function POST(request: Request) {
     }
 
     if (dataset === "transactions") {
+      await repairCurrentInventoryUpsertConstraints(sql, tenantContext)
+
       const queries: SqlQuery[] = []
       const affectedItems = new Set<string>()
 
@@ -1055,11 +1060,11 @@ export async function POST(request: Request) {
           sql.query(
             `
             INSERT INTO transaction_history (
-              item_type, quantity, transaction_type, notes, user_id, price, total_cost, transaction_date, tenant_id, unit${
+              item_type, quantity, transaction_type, notes, user_id, user_uuid, price, total_cost, transaction_date, tenant_id, unit${
                 locationId ? ", location_id" : ""
               }
             ) VALUES (
-              $1,$2,$3,$4,$5,$6,$7,$8,$9,$10${locationId ? ", $11" : ""}
+              $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11${locationId ? ", $12" : ""}
             )
             `,
             locationId
@@ -1069,6 +1074,7 @@ export async function POST(request: Request) {
                   transactionType,
                   notes,
                   userId,
+                  tenantUserUuid,
                   price,
                   totalCost,
                   transactionDate,
@@ -1076,7 +1082,19 @@ export async function POST(request: Request) {
                   unitValue,
                   locationId,
                 ]
-              : [itemType, quantity, transactionType, notes, userId, price, totalCost, transactionDate, tenantContext.tenantId, unitValue],
+              : [
+                  itemType,
+                  quantity,
+                  transactionType,
+                  notes,
+                  userId,
+                  tenantUserUuid,
+                  price,
+                  totalCost,
+                  transactionDate,
+                  tenantContext.tenantId,
+                  unitValue,
+                ],
           ),
         )
 
@@ -1103,6 +1121,8 @@ export async function POST(request: Request) {
     }
 
     if (dataset === "inventory") {
+      await repairCurrentInventoryUpsertConstraints(sql, tenantContext)
+
       const affectedItems = new Set<string>()
 
       for (let index = 0; index < records.length; index += 1) {
@@ -1154,9 +1174,9 @@ export async function POST(request: Request) {
             tenantContext,
             sql`
               INSERT INTO transaction_history (
-                item_type, quantity, transaction_type, notes, user_id, price, total_cost, tenant_id, location_id, unit
+                item_type, quantity, transaction_type, notes, user_id, user_uuid, price, total_cost, tenant_id, location_id, unit
               ) VALUES (
-                ${itemType}, ${quantity}, 'restock', ${notes || "Imported opening balance"}, ${sessionUser.username || "system"}, ${price}, ${totalCost}, ${tenantContext.tenantId}, ${locationId}, ${unit || "kg"}
+                ${itemType}, ${quantity}, 'restock', ${notes || "Imported opening balance"}, ${sessionUser.username || "system"}, ${tenantUserUuid}, ${price}, ${totalCost}, ${tenantContext.tenantId}, ${locationId}, ${unit || "kg"}
               )
             `,
           )

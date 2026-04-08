@@ -2,9 +2,14 @@ import { NextResponse } from "next/server"
 import { accountsSql } from "@/lib/server/db"
 import { requireModuleAccess, isModuleAccessError } from "@/lib/server/module-access"
 import { normalizeTenantContext, runTenantQueries, runTenantQuery, runTenantTransaction } from "@/lib/server/tenant-db"
+import { resolveTenantUserUuid } from "@/lib/server/tenant-user"
 import { canDeleteModule, canWriteModule } from "@/lib/permissions"
 import { logAuditEvent } from "@/lib/server/audit-log"
 import { normalizeInventoryItemType } from "@/lib/inventory-item-type"
+import {
+  isMissingCurrentInventoryUpsertConstraintError,
+  repairCurrentInventoryUpsertConstraints,
+} from "@/lib/server/current-inventory-constraints"
 import {
   allocateInventoryQuantity,
   normalizeExpenseInventoryItems,
@@ -42,6 +47,22 @@ type ExpenseInventorySourceRow = {
   inventory_item_type: string | null
   inventory_quantity: number | null
   location_id: string | null
+}
+
+async function runExpenseMutationWithInventoryConstraintRepair<T>(
+  tenantContext: TenantContext,
+  runMutation: () => Promise<T>,
+): Promise<T> {
+  try {
+    return await runMutation()
+  } catch (error) {
+    if (!isMissingCurrentInventoryUpsertConstraintError(error)) {
+      throw error
+    }
+
+    await repairCurrentInventoryUpsertConstraints(accountsSql, tenantContext)
+    return runMutation()
+  }
 }
 
 type PlannedExpenseInventoryTransaction = {
@@ -535,6 +556,7 @@ function buildCreateExpenseMutationStatement(options: {
   inventoryItems: ExpenseInventoryItem[]
   plannedTransactions: PlannedExpenseInventoryTransaction[]
   username: string
+  userUuid: string
 }): ParameterizedStatement {
   const params: any[] = []
   const expenseColumns = ["entry_date", "code", "total_amount", "notes"]
@@ -591,6 +613,7 @@ function buildCreateExpenseMutationStatement(options: {
     const noteBaseParam = params.push(buildExpenseInventoryNoteBase(options.code, options.notes))
     const dateParam = params.push(options.date)
     const userParam = params.push(options.username)
+    const userUuidParam = params.push(options.userUuid)
     const tenantParam = params.push(options.tenantId)
 
     ctes.push(
@@ -603,6 +626,7 @@ function buildCreateExpenseMutationStatement(options: {
           notes,
           transaction_date,
           user_id,
+          user_uuid,
           price,
           total_cost,
           tenant_id,
@@ -616,6 +640,7 @@ function buildCreateExpenseMutationStatement(options: {
           $${noteBaseParam} || ' [expense_id:' || ie.id || ']',
           $${dateParam}::timestamp,
           $${userParam},
+          $${userUuidParam},
           0,
           0,
           $${tenantParam},
@@ -745,6 +770,7 @@ function buildInsertExpenseInventoryTransactionsStatement(options: {
   code: string
   notes: string
   username: string
+  userUuid: string
   transactions: PlannedExpenseInventoryTransaction[]
 }): ParameterizedStatement | null {
   if (options.transactions.length === 0) {
@@ -753,17 +779,18 @@ function buildInsertExpenseInventoryTransactionsStatement(options: {
 
   const expenseNote = buildExpenseInventoryNote(options.expenseId, options.code, options.notes)
   const params: any[] = []
-  const valuesClause = options.transactions
+    const valuesClause = options.transactions
     .map((transaction) => {
       const itemTypeParam = params.push(transaction.itemType)
       const quantityParam = params.push(transaction.quantity)
       const noteParam = params.push(expenseNote)
       const dateParam = params.push(options.date)
       const userParam = params.push(options.username)
+      const userUuidParam = params.push(options.userUuid)
       const tenantParam = params.push(options.tenantId)
       const locationParam = params.push(transaction.locationId)
       const unitParam = params.push(transaction.unit)
-      return `($${itemTypeParam}, $${quantityParam}, 'deplete', $${noteParam}, $${dateParam}::timestamp, $${userParam}, 0, 0, $${tenantParam}, $${locationParam}::uuid, $${unitParam})`
+      return `($${itemTypeParam}, $${quantityParam}, 'deplete', $${noteParam}, $${dateParam}::timestamp, $${userParam}, $${userUuidParam}, 0, 0, $${tenantParam}, $${locationParam}::uuid, $${unitParam})`
     })
     .join(", ")
 
@@ -775,6 +802,7 @@ function buildInsertExpenseInventoryTransactionsStatement(options: {
         notes,
         transaction_date,
         user_id,
+        user_uuid,
         price,
         total_cost,
         tenant_id,
@@ -1141,6 +1169,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ success: false, error: "Insufficient role" }, { status: 403 })
     }
     const tenantContext = normalizeTenantContext(sessionUser.tenantId, sessionUser.role)
+    const tenantUserUuid = await resolveTenantUserUuid(sessionUser)
     const body = await request.json()
     const { date, code, amount, notes } = body
     const normalizedNotes = String(notes || "")
@@ -1218,11 +1247,12 @@ export async function POST(request: Request) {
       inventoryItems: rawInventoryItems,
       plannedTransactions,
       username: sessionUser.username || "system",
+      userUuid: tenantUserUuid,
     })
 
-    const [createResult] = await runTenantTransaction(accountsSql, tenantContext, (txn) => [
-      txn.query(createStatement.text, createStatement.params),
-    ])
+    const [createResult] = await runExpenseMutationWithInventoryConstraintRepair(tenantContext, () =>
+      runTenantTransaction(accountsSql, tenantContext, (txn) => [txn.query(createStatement.text, createStatement.params)]),
+    )
 
     const createdId = createResult?.[0]?.id
 
@@ -1278,6 +1308,7 @@ export async function PUT(request: Request) {
       return NextResponse.json({ success: false, error: "Insufficient role" }, { status: 403 })
     }
     const tenantContext = normalizeTenantContext(sessionUser.tenantId, sessionUser.role)
+    const tenantUserUuid = await resolveTenantUserUuid(sessionUser)
     const body = await request.json()
     const { id, date, code, amount, notes } = body
     const normalizedNotes = String(notes || "")
@@ -1371,31 +1402,34 @@ export async function PUT(request: Request) {
       code,
       notes: normalizedNotes,
       username: sessionUser.username || "system",
+      userUuid: tenantUserUuid,
       transactions: plannedTransactions,
     })
 
-    await runTenantTransaction(accountsSql, tenantContext, (txn) => {
-      const queries = [txn.query(updateStatement.text, updateStatement.params)]
+    await runExpenseMutationWithInventoryConstraintRepair(tenantContext, () =>
+      runTenantTransaction(accountsSql, tenantContext, (txn) => {
+        const queries = [txn.query(updateStatement.text, updateStatement.params)]
 
-      if (deleteLinksStatement) {
-        queries.push(txn.query(deleteLinksStatement.text, deleteLinksStatement.params))
-      }
-      if (insertLinksStatement) {
-        queries.push(txn.query(insertLinksStatement.text, insertLinksStatement.params))
-      }
-      if (deleteTransactionsStatement) {
-        queries.push(txn.query(deleteTransactionsStatement.text, deleteTransactionsStatement.params))
-      }
-      if (insertTransactionsStatement) {
-        queries.push(txn.query(insertTransactionsStatement.text, insertTransactionsStatement.params))
-      }
-      for (const pair of affectedPairs) {
-        const recalcStatement = buildRecalculateInventoryStatement(tenantContext.tenantId, pair)
-        queries.push(txn.query(recalcStatement.text, recalcStatement.params))
-      }
+        if (deleteLinksStatement) {
+          queries.push(txn.query(deleteLinksStatement.text, deleteLinksStatement.params))
+        }
+        if (insertLinksStatement) {
+          queries.push(txn.query(insertLinksStatement.text, insertLinksStatement.params))
+        }
+        if (deleteTransactionsStatement) {
+          queries.push(txn.query(deleteTransactionsStatement.text, deleteTransactionsStatement.params))
+        }
+        if (insertTransactionsStatement) {
+          queries.push(txn.query(insertTransactionsStatement.text, insertTransactionsStatement.params))
+        }
+        for (const pair of affectedPairs) {
+          const recalcStatement = buildRecalculateInventoryStatement(tenantContext.tenantId, pair)
+          queries.push(txn.query(recalcStatement.text, recalcStatement.params))
+        }
 
-      return queries
-    })
+        return queries
+      }),
+    )
 
     await logAuditEvent(accountsSql, sessionUser, {
       action: "update",
@@ -1495,21 +1529,23 @@ export async function DELETE(request: Request) {
     )
     const deleteExpenseStatement = buildDeleteExpenseStatement(id, tenantContext.tenantId)
 
-    await runTenantTransaction(accountsSql, tenantContext, (txn) => {
-      const queries = []
-      if (deleteLinksStatement) {
-        queries.push(txn.query(deleteLinksStatement.text, deleteLinksStatement.params))
-      }
-      if (deleteTransactionsStatement) {
-        queries.push(txn.query(deleteTransactionsStatement.text, deleteTransactionsStatement.params))
-      }
-      queries.push(txn.query(deleteExpenseStatement.text, deleteExpenseStatement.params))
-      for (const pair of affectedPairs) {
-        const recalcStatement = buildRecalculateInventoryStatement(tenantContext.tenantId, pair)
-        queries.push(txn.query(recalcStatement.text, recalcStatement.params))
-      }
-      return queries
-    })
+    await runExpenseMutationWithInventoryConstraintRepair(tenantContext, () =>
+      runTenantTransaction(accountsSql, tenantContext, (txn) => {
+        const queries = []
+        if (deleteLinksStatement) {
+          queries.push(txn.query(deleteLinksStatement.text, deleteLinksStatement.params))
+        }
+        if (deleteTransactionsStatement) {
+          queries.push(txn.query(deleteTransactionsStatement.text, deleteTransactionsStatement.params))
+        }
+        queries.push(txn.query(deleteExpenseStatement.text, deleteExpenseStatement.params))
+        for (const pair of affectedPairs) {
+          const recalcStatement = buildRecalculateInventoryStatement(tenantContext.tenantId, pair)
+          queries.push(txn.query(recalcStatement.text, recalcStatement.params))
+        }
+        return queries
+      }),
+    )
 
     await logAuditEvent(accountsSql, sessionUser, {
       action: "delete",
