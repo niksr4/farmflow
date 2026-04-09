@@ -16,6 +16,20 @@ export const dynamic = "force-dynamic"
 
 const getCronSecret = () => process.env.CRON_SECRET || null
 
+// Pings a Healthchecks.io check URL so missed/failed cron runs trigger an alert.
+// Set HEALTHCHECKS_PING_URL to the check's ping URL in Vercel env vars.
+// Append /fail for failure pings (Healthchecks.io convention).
+async function pingHealthcheck(outcome: "success" | "fail"): Promise<void> {
+  const baseUrl = String(process.env.HEALTHCHECKS_PING_URL || "").trim()
+  if (!baseUrl) return
+  const url = outcome === "fail" ? `${baseUrl}/fail` : baseUrl
+  try {
+    await fetch(url, { method: "HEAD" })
+  } catch {
+    // Non-fatal — don't let a monitoring failure break the cron response
+  }
+}
+
 async function handleCronInvocation(request: Request) {
   try {
     const secret = getCronSecret()
@@ -55,9 +69,11 @@ async function handleCronInvocation(request: Request) {
     }
 
     const anyFailed = Object.values(results).some((r) => !r.ok)
+    await pingHealthcheck(anyFailed ? "fail" : "success")
     return NextResponse.json({ success: true, anyFailed, results })
   } catch (error: any) {
     logServerError("Orchestrator cron invocation failed", error)
+    await pingHealthcheck("fail")
     return NextResponse.json({ success: false, error: error?.message || "Orchestrator failed" }, { status: 500 })
   }
 }

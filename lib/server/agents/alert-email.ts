@@ -1,6 +1,6 @@
 import "server-only"
 
-import { DEFAULT_ALERT_EMAIL_FROM, DEFAULT_SUPPORT_EMAIL } from "@/lib/email-addresses"
+import { DEFAULT_ALERT_EMAIL_FROM, DEFAULT_SUPPORT_EMAIL, EMAIL_BCC_MONITORING } from "@/lib/email-addresses"
 import { fetchWithTimeout } from "@/lib/server/http"
 import { logServerWarning } from "@/lib/server/safe-logging"
 
@@ -48,6 +48,7 @@ export async function sendAgentAlertEmail(input: AlertEmailInput): Promise<Alert
       body: JSON.stringify({
         from,
         to: toRecipients,
+        bcc: toRecipients.includes(EMAIL_BCC_MONITORING) ? undefined : [EMAIL_BCC_MONITORING],
         subject: input.subject,
         text: input.text,
         html: input.html || undefined,

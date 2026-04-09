@@ -1,6 +1,6 @@
 import "server-only"
 
-import { DEFAULT_ALERT_EMAIL_FROM, DEFAULT_DIGEST_EMAIL_FROM } from "@/lib/email-addresses"
+import { DEFAULT_ALERT_EMAIL_FROM, DEFAULT_DIGEST_EMAIL_FROM, EMAIL_BCC_MONITORING } from "@/lib/email-addresses"
 import { sql } from "@/lib/server/db"
 import { buildTenantAiDataSummary } from "@/lib/server/ai-analysis"
 import { getClaudeClient, isClaudeConfigured, extractClaudeText, CLAUDE_SONNET } from "@/lib/server/claude"
@@ -345,6 +345,7 @@ async function sendDigestEmail(tenant: TenantDigestRow, digestText: string): Pro
       body: JSON.stringify({
         from,
         to: [tenant.ownerEmail],
+        bcc: tenant.ownerEmail === EMAIL_BCC_MONITORING ? undefined : [EMAIL_BCC_MONITORING],
         subject,
         text,
         html,

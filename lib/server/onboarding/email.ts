@@ -3,7 +3,7 @@ import "server-only"
 import { mkdir, writeFile } from "node:fs/promises"
 import path from "node:path"
 
-import { DEFAULT_ALERT_EMAIL_FROM, DEFAULT_AUTH_EMAIL_FROM } from "@/lib/email-addresses"
+import { DEFAULT_ALERT_EMAIL_FROM, DEFAULT_AUTH_EMAIL_FROM, EMAIL_BCC_MONITORING } from "@/lib/email-addresses"
 import { fetchWithTimeout } from "@/lib/server/http"
 import {
   buildVerificationLink,
@@ -107,6 +107,7 @@ export async function sendSignupVerificationEmail(
       body: JSON.stringify({
         from,
         to: [input.email],
+        bcc: [EMAIL_BCC_MONITORING],
         subject,
         text,
         html,

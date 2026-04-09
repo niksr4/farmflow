@@ -1,6 +1,6 @@
 import "server-only"
 
-import { DEFAULT_AUTH_EMAIL_FROM } from "@/lib/email-addresses"
+import { DEFAULT_AUTH_EMAIL_FROM, EMAIL_BCC_MONITORING } from "@/lib/email-addresses"
 import { sql } from "@/lib/server/db"
 import { fetchWithTimeout } from "@/lib/server/http"
 import { logServerError, logServerWarning } from "@/lib/server/safe-logging"
@@ -195,7 +195,7 @@ export async function runOnboardingNudgeAgent(input?: {
             Authorization: `Bearer ${resendKey}`,
             "Content-Type": "application/json",
           },
-          body: JSON.stringify({ from, to: [candidate.email], subject, text, html }),
+          body: JSON.stringify({ from, to: [candidate.email], bcc: [EMAIL_BCC_MONITORING], subject, text, html }),
           timeoutMs: 10_000,
         })
         if (!response.ok) {
