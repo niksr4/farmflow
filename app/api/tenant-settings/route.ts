@@ -20,6 +20,7 @@ import {
   sanitizeTenantUiVariant,
 } from "@/lib/tenant-experience"
 import { sanitizeRouteError } from "@/lib/server/sanitize-route-error"
+import { logRouteMutationFailure } from "@/lib/server/route-error-events"
 
 export const dynamic = "force-dynamic"
 export const revalidate = 0
@@ -343,7 +344,7 @@ export async function PUT(request: Request) {
       settings: { bagWeightKg: updated, estateName, estateProfile, alertThresholds, uiPreferences, uiVariant, featureFlags },
     })
   } catch (error: any) {
-    console.error("Error updating tenant settings:", error)
+    await logRouteMutationFailure({ source: "tenant-settings", endpoint: "/api/tenant-settings", action: "update", error })
     return NextResponse.json({ success: false, error: sanitizeRouteError(error, "Failed to update tenant settings") }, { status: 500 })
   }
 }

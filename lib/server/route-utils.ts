@@ -1,10 +1,20 @@
 import "server-only"
 
 import { NextResponse } from "next/server"
+import { sanitizeRouteError } from "@/lib/server/sanitize-route-error"
 
 const DEFAULT_ADMIN_FORBIDDEN_MESSAGES = ["Admin role required", "Unauthorized"]
 const DEFAULT_OWNER_ADMIN_FORBIDDEN_MESSAGES = ["Admin role required", "Owner role required", "Unauthorized"]
 const DATABASE_NOT_CONFIGURED_MESSAGE = "Database not configured"
+
+// Messages that are safe to pass through to the client as-is (role/auth errors,
+// not DB internals). sanitizeRouteError would block these since they're short
+// known strings, but we list them explicitly to be defensive.
+const PASSTHROUGH_MESSAGES = new Set([
+  ...DEFAULT_ADMIN_FORBIDDEN_MESSAGES,
+  ...DEFAULT_OWNER_ADMIN_FORBIDDEN_MESSAGES,
+  DATABASE_NOT_CONFIGURED_MESSAGE,
+])
 
 type ErrorResponseOptions = {
   forbiddenMessages?: string[]
@@ -13,10 +23,15 @@ type ErrorResponseOptions = {
 }
 
 export const getErrorMessage = (error: unknown, fallback: string) => {
-  if (error instanceof Error && error.message) return error.message
-  const maybeMessage =
-    typeof error === "object" && error && "message" in error ? String((error as { message?: unknown }).message || "") : ""
-  return maybeMessage || fallback
+  const raw =
+    error instanceof Error && error.message
+      ? error.message
+      : typeof error === "object" && error && "message" in error
+        ? String((error as { message?: unknown }).message || "")
+        : ""
+  const message = raw || fallback
+  if (PASSTHROUGH_MESSAGES.has(message)) return message
+  return sanitizeRouteError(error, fallback)
 }
 
 export const buildErrorResponse = (

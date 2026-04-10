@@ -6,6 +6,7 @@ import { canWriteModule } from "@/lib/permissions"
 import { logAuditEvent } from "@/lib/server/audit-log"
 import { normalizeTenantContext, runTenantQuery } from "@/lib/server/tenant-db"
 import { logServerError } from "@/lib/server/safe-logging"
+import { logRouteMutationFailure } from "@/lib/server/route-error-events"
 
 export const dynamic = "force-dynamic"
 export const revalidate = 0
@@ -173,7 +174,7 @@ export async function POST(request: Request) {
     if (isModuleAccessError(error)) {
       return NextResponse.json({ success: false, error: "Module access disabled" }, { status: 403 })
     }
-    logServerError("Failed to create picking record", error)
+    await logRouteMutationFailure({ source: "picking-records", endpoint: "/api/picking-records", action: "create", error })
     return NextResponse.json({ success: false, error: "Failed to save picking record" }, { status: 500 })
   }
 }
