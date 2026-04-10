@@ -1,7 +1,7 @@
 "use client"
 
 import Link from "next/link"
-import { useMemo } from "react"
+import { useEffect, useMemo, useState } from "react"
 import { useSearchParams } from "next/navigation"
 import { ArrowRight, BookOpen, Check, ChevronDown, ChevronUp, Clock, Info, Sparkles } from "lucide-react"
 import { Button } from "@/components/ui/button"
@@ -44,7 +44,6 @@ type OnboardingChecklistProps = {
   onLocationCodeChange: (value: string) => void
   onCreateLocation: () => void
   isCreatingLocation: boolean
-  onRefresh: () => void
   isExpanded: boolean
   onExpandedChange: (expanded: boolean) => void
 }
@@ -70,7 +69,6 @@ export default function OnboardingChecklist({
   onLocationCodeChange,
   onCreateLocation,
   isCreatingLocation,
-  onRefresh,
   isExpanded,
   onExpandedChange,
 }: OnboardingChecklistProps) {
@@ -85,6 +83,16 @@ export default function OnboardingChecklist({
     [searchParams],
   )
   const manualsHref = useMemo(() => appendOwnerPreviewContext("/manuals", previewContext), [previewContext])
+
+  const [hasUserEditedLocationCode, setHasUserEditedLocationCode] = useState(false)
+
+  const deriveLocationCode = (name: string) =>
+    name.trim().toUpperCase().replace(/\s+/g, "-").replace(/[^A-Z0-9-]/g, "").slice(0, 20)
+
+  // Reset the "manually edited" flag when the form is cleared after a successful creation
+  useEffect(() => {
+    if (!locationName) setHasUserEditedLocationCode(false)
+  }, [locationName])
 
   if (!isVisible) return null
 
@@ -114,15 +122,6 @@ export default function OnboardingChecklist({
                   <BookOpen className="mr-2 h-4 w-4" />
                   Open manuals
                 </Link>
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={onRefresh}
-                disabled={isLoading}
-                className="bg-transparent"
-              >
-                {isLoading ? "Refreshing..." : "Refresh"}
               </Button>
               <CollapsibleTrigger asChild>
                 <Button variant="ghost" size="sm" className="gap-2">
@@ -294,7 +293,7 @@ export default function OnboardingChecklist({
               )})}
             </div>
 
-            {!steps.find((step) => step.key === "locations")?.done && canCreateLocation && (
+            {!steps.find((step) => step.key === "locations")?.done && !isLoading && canCreateLocation && (
               <div className="space-y-4 rounded-2xl border border-stone-200 bg-white/90 p-4 shadow-sm">
                 <div className="space-y-1">
                   <p className="text-sm font-semibold text-foreground">Add your first location</p>
@@ -325,7 +324,13 @@ export default function OnboardingChecklist({
                       id="onboarding-location-name"
                       placeholder="Main Estate, Block A, Wet Mill"
                       value={locationName}
-                      onChange={(event) => onLocationNameChange(event.target.value)}
+                      onChange={(event) => {
+                        const name = event.target.value
+                        onLocationNameChange(name)
+                        if (!hasUserEditedLocationCode) {
+                          onLocationCodeChange(deriveLocationCode(name))
+                        }
+                      }}
                     />
                   </div>
                   <div className="space-y-2">
@@ -350,7 +355,10 @@ export default function OnboardingChecklist({
                       id="onboarding-location-code"
                       placeholder="MAIN-A"
                       value={locationCode}
-                      onChange={(event) => onLocationCodeChange(event.target.value)}
+                      onChange={(event) => {
+                        setHasUserEditedLocationCode(true)
+                        onLocationCodeChange(event.target.value)
+                      }}
                     />
                   </div>
                   <div className="flex items-end">

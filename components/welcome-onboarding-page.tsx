@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useMemo, useState } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { useSession } from "next-auth/react"
@@ -72,6 +72,10 @@ export default function WelcomeOnboardingPage() {
   const [moduleBundles, setModuleBundles] = useState<ModuleBundle[]>([])
   const [error, setError] = useState("")
   const [draft, setDraft] = useState<GuidedSetupState | null>(null)
+  const hasUserEditedLocationCode = useRef(false)
+
+  const deriveLocationCode = (name: string) =>
+    name.trim().toUpperCase().replace(/\s+/g, "-").replace(/[^A-Z0-9-]/g, "").slice(0, 20)
 
   useEffect(() => {
     let cancelled = false
@@ -188,7 +192,7 @@ export default function WelcomeOnboardingPage() {
         <div className="grid gap-6 lg:grid-cols-[1.15fr_0.85fr]">
           <Card className="border-white/70 bg-white/92">
             <CardHeader>
-              <CardTitle className="font-display">{t("public.welcome.title")}</CardTitle>
+              <CardTitle className="font-display">Set up your estate</CardTitle>
               <CardDescription>{t("public.welcome.helper")}</CardDescription>
             </CardHeader>
             <CardContent className="space-y-5">
@@ -225,9 +229,17 @@ export default function WelcomeOnboardingPage() {
                   <Input
                     id="welcome-location-name"
                     value={draft.primaryLocationName}
-                    onChange={(event) =>
-                      setDraft((current) => (current ? { ...current, primaryLocationName: event.target.value } : current))
-                    }
+                    onChange={(event) => {
+                      const name = event.target.value
+                      setDraft((current) => {
+                        if (!current) return current
+                        const next = { ...current, primaryLocationName: name }
+                        if (!hasUserEditedLocationCode.current) {
+                          next.primaryLocationCode = deriveLocationCode(name)
+                        }
+                        return next
+                      })
+                    }}
                   />
                 </div>
                 <div className="space-y-2">
@@ -235,9 +247,12 @@ export default function WelcomeOnboardingPage() {
                   <Input
                     id="welcome-location-code"
                     value={draft.primaryLocationCode}
-                    onChange={(event) =>
-                      setDraft((current) => (current ? { ...current, primaryLocationCode: event.target.value } : current))
-                    }
+                    onChange={(event) => {
+                      hasUserEditedLocationCode.current = true
+                      setDraft((current) =>
+                        current ? { ...current, primaryLocationCode: event.target.value } : current,
+                      )
+                    }}
                   />
                 </div>
               </div>

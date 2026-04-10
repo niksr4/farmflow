@@ -511,6 +511,7 @@ export default function InventorySystem() {
   const [onboardingError, setOnboardingError] = useState<string | null>(null)
   const [newLocationName, setNewLocationName] = useState("")
   const [newLocationCode, setNewLocationCode] = useState("")
+  const hasLoadedOnboardingOnce = useRef(false)
   const [isCreatingLocation, setIsCreatingLocation] = useState(false)
   const [onboardingEstateName, setOnboardingEstateName] = useState("")
   const [onboardingBagWeightKg, setOnboardingBagWeightKg] = useState("")
@@ -1081,13 +1082,14 @@ export default function InventorySystem() {
         (result) => result.status === "rejected" || (result.status === "fulfilled" && !result.value.ok),
       )
       if (hasError) {
-        setOnboardingError("Some checklist data could not be loaded. Refresh to try again.")
+        setOnboardingError("Some checklist data could not be loaded.")
       }
     } catch (error: any) {
       setOnboardingError(error?.message || "Failed to load setup checklist.")
     } finally {
       setIsOnboardingLoading(false)
       setHasLoadedOnboardingStatus(true)
+      hasLoadedOnboardingOnce.current = true
     }
   }, [hasResolvedModules, isAdmin, isModuleEnabled, isOwner, isPreviewMode, previewTenantId, tenantId])
 
@@ -1095,6 +1097,13 @@ export default function InventorySystem() {
     if (!tenantId || isOwner || !hasResolvedModules) return
     loadOnboardingStatus()
   }, [hasResolvedModules, tenantId, isOwner, loadOnboardingStatus])
+
+  // Auto-refresh checklist whenever inventory data syncs (catches step completions in other tabs)
+  useEffect(() => {
+    if (!lastSync || !hasLoadedOnboardingOnce.current) return
+    loadOnboardingStatus()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [lastSync])
 
 
   const handleCreateLocation = async () => {
@@ -6827,7 +6836,6 @@ export default function InventorySystem() {
               onLocationCodeChange={setNewLocationCode}
               onCreateLocation={handleCreateLocation}
               isCreatingLocation={isCreatingLocation}
-              onRefresh={loadOnboardingStatus}
               isExpanded={isOnboardingExpanded}
               onExpandedChange={handleOnboardingExpandedChange}
             />
