@@ -8,6 +8,7 @@ import { logAuditEvent } from "@/lib/server/audit-log"
 import { requirePositiveNumber, toNonNegativeNumber } from "@/lib/number-input"
 import { resolveLocationCompatibility } from "@/lib/server/location-compatibility"
 import { logRouteMutationFailure } from "@/lib/server/route-error-events"
+import { sanitizeRouteError } from "@/lib/server/sanitize-route-error"
 
 export const dynamic = "force-dynamic"
 export const revalidate = 0
@@ -148,17 +149,17 @@ export async function GET(request: Request) {
 
     return NextResponse.json({ success: true, records, totalCount, totalsByType, locationScope })
   } catch (error) {
-    const errorMessage = error instanceof Error ? error.message : "Unknown error"
+    const rawMessage = error instanceof Error ? error.message : String(error || "")
     if (isModuleAccessError(error)) {
       return NextResponse.json({ success: false, error: "Module access disabled" }, { status: 403 })
     }
     // Check if database doesn't exist yet
-    if (errorMessage.includes("does not exist")) {
+    if (rawMessage.includes("does not exist")) {
       return NextResponse.json({ success: true, records: [] })
     }
     console.error("Error fetching dispatch records:", error)
     return NextResponse.json(
-      { success: false, error: errorMessage },
+      { success: false, error: sanitizeRouteError(error, "Unknown error") },
       { status: 500 }
     )
   }
@@ -269,7 +270,7 @@ export async function POST(request: Request) {
       error,
     })
     return NextResponse.json(
-      { success: false, error: error instanceof Error ? error.message : "Unknown error" },
+      { success: false, error: sanitizeRouteError(error, "Unknown error") },
       { status: 500 }
     )
   }
@@ -394,7 +395,7 @@ export async function PUT(request: Request) {
       error,
     })
     return NextResponse.json(
-      { success: false, error: error instanceof Error ? error.message : "Unknown error" },
+      { success: false, error: sanitizeRouteError(error, "Unknown error") },
       { status: 500 }
     )
   }
@@ -462,7 +463,7 @@ export async function DELETE(request: Request) {
       error,
     })
     return NextResponse.json(
-      { success: false, error: error instanceof Error ? error.message : "Unknown error" },
+      { success: false, error: sanitizeRouteError(error, "Unknown error") },
       { status: 500 }
     )
   }

@@ -5,6 +5,7 @@ import { normalizeTenantContext, runTenantQuery } from "@/lib/server/tenant-db"
 import { canDeleteModule, canWriteModule } from "@/lib/permissions"
 import { logAuditEvent } from "@/lib/server/audit-log"
 import { logRouteMutationFailure } from "@/lib/server/route-error-events"
+import { sanitizeRouteError } from "@/lib/server/sanitize-route-error"
 
 export const dynamic = "force-dynamic"
 export const revalidate = 0
@@ -134,7 +135,7 @@ export async function GET(request: Request) {
     if (isModuleAccessError(error)) {
       return NextResponse.json({ success: false, error: "Module access disabled", records: [] }, { status: 403 })
     }
-    return NextResponse.json({ success: false, error: error.message, records: [] }, { status: 500 })
+    return NextResponse.json({ success: false, error: sanitizeRouteError(error, "Failed to process record"), records: [] }, { status: 500 })
   }
 }
 
@@ -290,7 +291,7 @@ export async function POST(request: Request) {
       action: "save_quality_grading_record",
       error,
     })
-    return NextResponse.json({ success: false, error: error.message }, { status: 500 })
+    return NextResponse.json({ success: false, error: sanitizeRouteError(error, "Failed to process record") }, { status: 500 })
   }
 }
 
@@ -357,6 +358,6 @@ export async function DELETE(request: Request) {
       action: "delete_quality_grading_record",
       error,
     })
-    return NextResponse.json({ success: false, error: error.message }, { status: 500 })
+    return NextResponse.json({ success: false, error: sanitizeRouteError(error, "Failed to process record") }, { status: 500 })
   }
 }

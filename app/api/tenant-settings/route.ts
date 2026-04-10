@@ -19,6 +19,7 @@ import {
   sanitizeTenantFeatureFlags,
   sanitizeTenantUiVariant,
 } from "@/lib/tenant-experience"
+import { sanitizeRouteError } from "@/lib/server/sanitize-route-error"
 
 export const dynamic = "force-dynamic"
 export const revalidate = 0
@@ -167,7 +168,7 @@ export async function GET(request: Request) {
     })
   } catch (error: any) {
     console.error("Error loading tenant settings:", error)
-    return NextResponse.json({ success: false, error: error.message || "Failed to load tenant settings" }, { status: 500 })
+    return NextResponse.json({ success: false, error: sanitizeRouteError(error, "Failed to load tenant settings") }, { status: 500 })
   }
 }
 
@@ -343,6 +344,6 @@ export async function PUT(request: Request) {
     })
   } catch (error: any) {
     console.error("Error updating tenant settings:", error)
-    return NextResponse.json({ success: false, error: error.message || "Failed to update tenant settings" }, { status: 500 })
+    return NextResponse.json({ success: false, error: sanitizeRouteError(error, "Failed to update tenant settings") }, { status: 500 })
   }
 }

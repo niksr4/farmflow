@@ -11,6 +11,7 @@ import {
   isMissingCurrentInventoryUpsertConstraintError,
   repairCurrentInventoryUpsertConstraints,
 } from "@/lib/server/current-inventory-constraints"
+import { sanitizeRouteError } from "@/lib/server/sanitize-route-error"
 
 export const dynamic = "force-dynamic"
 
@@ -261,8 +262,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json(
       {
         success: false,
-        message: error.message || "Failed to fetch inventory",
-        error: error.toString(),
+        message: sanitizeRouteError(error, "Failed to fetch inventory"),
         inventory: [],
         summary: {
           total_inventory_value: 0,
@@ -400,8 +400,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json(
       {
         success: false,
-        message: error.message || "Failed to add item",
-        error: error.toString(),
+        message: sanitizeRouteError(error, "Failed to add item"),
       },
       { status: 500 },
     )
@@ -588,8 +587,7 @@ export async function DELETE(request: NextRequest) {
     return NextResponse.json(
       {
         success: false,
-        message: error.message || "Failed to delete item",
-        error: error.toString(),
+        message: sanitizeRouteError(error, "Failed to delete item"),
       },
       { status: 500 },
     )
@@ -738,8 +736,7 @@ export async function PUT(request: NextRequest) {
     return NextResponse.json(
       {
         success: false,
-        message: error.message || "Failed to update item",
-        error: error.toString(),
+        message: sanitizeRouteError(error, "Failed to update item"),
       },
       { status: 500 },
     )

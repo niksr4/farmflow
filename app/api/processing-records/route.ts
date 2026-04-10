@@ -7,6 +7,7 @@ import { logAuditEvent } from "@/lib/server/audit-log"
 import { recomputeProcessingTotals } from "@/lib/server/processing-utils"
 import { resolveLocationCompatibility } from "@/lib/server/location-compatibility"
 import { logRouteMutationFailure } from "@/lib/server/route-error-events"
+import { sanitizeRouteError } from "@/lib/server/sanitize-route-error"
 
 export const dynamic = "force-dynamic"
 export const revalidate = 0
@@ -340,7 +341,7 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ success: false, error: "Module access disabled", records: [] }, { status: 403 })
     }
     console.error("Error fetching processing records:", error)
-    return NextResponse.json({ success: false, error: error.message, records: [] }, { status: 500 })
+    return NextResponse.json({ success: false, error: sanitizeRouteError(error, "Failed to process record"), records: [] }, { status: 500 })
   }
 }
 
@@ -506,7 +507,7 @@ export async function POST(request: NextRequest) {
         { status: 503 },
       )
     }
-    return NextResponse.json({ success: false, error: error.message }, { status: 500 })
+    return NextResponse.json({ success: false, error: sanitizeRouteError(error, "Failed to process record") }, { status: 500 })
   }
 }
 
@@ -593,6 +594,6 @@ export async function DELETE(request: NextRequest) {
         { status: 503 },
       )
     }
-    return NextResponse.json({ success: false, error: error.message }, { status: 500 })
+    return NextResponse.json({ success: false, error: sanitizeRouteError(error, "Failed to process record") }, { status: 500 })
   }
 }

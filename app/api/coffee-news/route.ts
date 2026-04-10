@@ -3,6 +3,7 @@ import { requireModuleAccess, isModuleAccessError } from "@/lib/server/module-ac
 import { buildRateLimitHeaders, checkRateLimit } from "@/lib/rate-limit"
 import { fetchWithTimeout } from "@/lib/server/http"
 import { logServerError } from "@/lib/server/safe-logging"
+import { sanitizeRouteError } from "@/lib/server/sanitize-route-error"
 
 export const dynamic = "force-dynamic"
 export const revalidate = 0
@@ -127,7 +128,7 @@ export async function GET() {
       return NextResponse.json({ success: false, error: "Module access disabled" }, { status: 403 })
     }
     return NextResponse.json(
-      { success: false, error: error.message || "Failed to fetch market news." },
+      { success: false, error: sanitizeRouteError(error, "Failed to fetch market news.") },
       { status: 500 },
     )
   }

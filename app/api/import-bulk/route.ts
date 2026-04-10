@@ -10,6 +10,7 @@ import { logRouteMutationFailure } from "@/lib/server/route-error-events"
 import { csvToObjects } from "@/lib/csv"
 import { resolveLocationInfo } from "@/lib/server/location-utils"
 import { recalculateInventoryForItem } from "@/lib/server/inventory-recalc"
+import { sanitizeRouteError } from "@/lib/server/sanitize-route-error"
 import { recomputeProcessingTotals, resolveBagWeightKg } from "@/lib/server/processing-utils"
 import {
   buildValidationErrors,
@@ -61,14 +62,7 @@ type RequestBody = {
 
 type SqlQuery = Parameters<typeof runTenantQueries>[2][number]
 
-const getErrorMessage = (error: unknown, fallback: string) => {
-  if (error instanceof Error && error.message) return error.message
-  if (typeof error === "object" && error && "message" in error) {
-    const message = (error as { message?: unknown }).message
-    if (typeof message === "string" && message.trim()) return message
-  }
-  return fallback
-}
+const getErrorMessage = (error: unknown, fallback: string) => sanitizeRouteError(error, fallback)
 
 const importBulkBodySchema = z.object({
   dataset: z.string().trim().optional().default(""),

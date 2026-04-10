@@ -19,6 +19,7 @@ import { formatCurrency, formatNumber } from "@/lib/format"
 import { SkeletonTable } from "@/components/ui/skeleton"
 import TaskGuideCard from "@/components/task-guide-card"
 import WorkflowEmptyState from "@/components/workflow-empty-state"
+import { useToast } from "@/hooks/use-toast"
 
 interface ActivityCode {
   code: string
@@ -50,6 +51,7 @@ export default function LaborDeploymentTab({
     deployments,
     loading,
     loadingMore,
+    error: deployError,
     totalCost,
     totalCount,
     hasMore,
@@ -58,6 +60,7 @@ export default function LaborDeploymentTab({
     updateDeployment,
     deleteDeployment,
   } = useLaborData(locationId, { startDate, endDate })
+  const { toast } = useToast()
 
   const [isAdding, setIsAdding] = useState(false)
   const [editingId, setEditingId] = useState<string | null>(null)
@@ -171,6 +174,12 @@ export default function LaborDeploymentTab({
       const success = editingId ? await updateDeployment(editingId, deployment) : await addDeployment(deployment)
       if (success) {
         resetForm()
+      } else {
+        toast({
+          title: "Couldn't save record",
+          description: deployError || "Please check your entries and try again.",
+          variant: "destructive",
+        })
       }
     } finally {
       setIsSubmitting(false)

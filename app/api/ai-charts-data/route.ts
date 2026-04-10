@@ -3,6 +3,7 @@ import { sql } from "@/lib/server/db"
 import { getFiscalYearDateRange, getCurrentFiscalYear } from "@/lib/fiscal-year-utils"
 import { requireModuleAccess, isModuleAccessError } from "@/lib/server/module-access"
 import { normalizeTenantContext, runTenantQuery } from "@/lib/server/tenant-db"
+import { sanitizeRouteError } from "@/lib/server/sanitize-route-error"
 
 export const dynamic = "force-dynamic"
 export const revalidate = 0
@@ -89,7 +90,7 @@ export async function GET(request: Request) {
       return NextResponse.json({ success: false, error: "Module access disabled" }, { status: 403 })
     }
     return NextResponse.json(
-      { success: false, error: error instanceof Error ? error.message : "Unknown error" },
+      { success: false, error: sanitizeRouteError(error, "Unknown error") },
       { status: 500 },
     )
   }

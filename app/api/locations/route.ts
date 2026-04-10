@@ -6,6 +6,7 @@ import { normalizeTenantContext, runTenantQuery } from "@/lib/server/tenant-db"
 import { requireAdminRole } from "@/lib/permissions"
 import { logAuditEvent } from "@/lib/server/audit-log"
 import { logRouteMutationFailure } from "@/lib/server/route-error-events"
+import { sanitizeRouteError } from "@/lib/server/sanitize-route-error"
 
 export const dynamic = "force-dynamic"
 export const revalidate = 0
@@ -64,7 +65,7 @@ export async function GET(request: Request) {
     if (isModuleAccessError(error)) {
       return NextResponse.json({ success: false, error: "Module access disabled" }, { status: 403 })
     }
-    return NextResponse.json({ success: false, error: error.message || "Failed to load locations" }, { status: 500 })
+    return NextResponse.json({ success: false, error: sanitizeRouteError(error, "Failed to load locations") }, { status: 500 })
   }
 }
 
@@ -124,7 +125,7 @@ export async function POST(request: Request) {
       action: "create_location",
       error,
     })
-    return NextResponse.json({ success: false, error: error.message || "Failed to create location" }, { status: 500 })
+    return NextResponse.json({ success: false, error: sanitizeRouteError(error, "Failed to create location") }, { status: 500 })
   }
 }
 
@@ -219,6 +220,6 @@ export async function PATCH(request: Request) {
       action: "update_location",
       error,
     })
-    return NextResponse.json({ success: false, error: error.message || "Failed to update location" }, { status: 500 })
+    return NextResponse.json({ success: false, error: sanitizeRouteError(error, "Failed to update location") }, { status: 500 })
   }
 }

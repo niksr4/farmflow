@@ -5,6 +5,7 @@ import { normalizeTenantContext, runTenantQuery } from "@/lib/server/tenant-db"
 import { canDeleteModule, canWriteModule } from "@/lib/permissions"
 import { logAuditEvent } from "@/lib/server/audit-log"
 import { logRouteMutationFailure } from "@/lib/server/route-error-events"
+import { sanitizeRouteError } from "@/lib/server/sanitize-route-error"
 
 export const dynamic = "force-dynamic"
 export const revalidate = 0
@@ -185,7 +186,7 @@ export async function GET(request: Request) {
     if (isModuleAccessError(error)) {
       return NextResponse.json({ success: false, error: "Module access disabled" }, { status: 403 })
     }
-    return NextResponse.json({ success: false, error: error.message || "Failed to load receivables" }, { status: 500 })
+    return NextResponse.json({ success: false, error: sanitizeRouteError(error, "Failed to load receivables") }, { status: 500 })
   }
 }
 
@@ -285,7 +286,7 @@ export async function POST(request: Request) {
       action: "create_receivable",
       error,
     })
-    return NextResponse.json({ success: false, error: error.message || "Failed to create receivable" }, { status: 500 })
+    return NextResponse.json({ success: false, error: sanitizeRouteError(error, "Failed to create receivable") }, { status: 500 })
   }
 }
 
@@ -393,7 +394,7 @@ export async function PUT(request: Request) {
       action: "update_receivable",
       error,
     })
-    return NextResponse.json({ success: false, error: error.message || "Failed to update receivable" }, { status: 500 })
+    return NextResponse.json({ success: false, error: sanitizeRouteError(error, "Failed to update receivable") }, { status: 500 })
   }
 }
 
@@ -463,6 +464,6 @@ export async function DELETE(request: Request) {
       action: "delete_receivable",
       error,
     })
-    return NextResponse.json({ success: false, error: error.message || "Failed to delete receivable" }, { status: 500 })
+    return NextResponse.json({ success: false, error: sanitizeRouteError(error, "Failed to delete receivable") }, { status: 500 })
   }
 }

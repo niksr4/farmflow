@@ -7,6 +7,7 @@ import { sql } from "@/lib/server/db"
 import { normalizeTenantContext, runTenantQuery } from "@/lib/server/tenant-db"
 import { CLAUDE_HAIKU } from "@/lib/server/claude"
 import { callAI, isAIConfigured } from "@/lib/server/ai-provider"
+import { sanitizeRouteError } from "@/lib/server/sanitize-route-error"
 
 export const dynamic = "force-dynamic"
 export const revalidate = 0
@@ -184,7 +185,7 @@ ${currentFY.label} (in progress):
     }
     logServerError("Season compare error", error)
     return Response.json(
-      { success: false, error: error instanceof Error ? error.message : "Failed to generate season comparison" },
+      { success: false, error: sanitizeRouteError(error, "Failed to generate season comparison") },
       { status: 500, headers: rateHeaders },
     )
   }

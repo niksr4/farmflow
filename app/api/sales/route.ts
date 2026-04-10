@@ -10,6 +10,7 @@ import { resolveLocationCompatibility } from "@/lib/server/location-compatibilit
 import { computeRemainingKgs, hasSufficientStock } from "@/lib/sales-math"
 import { getPostHogClient } from "@/lib/posthog-server"
 import { logRouteMutationFailure } from "@/lib/server/route-error-events"
+import { sanitizeRouteError } from "@/lib/server/sanitize-route-error"
 import {
   bagPatternFor,
   canonicalizeBagType,
@@ -298,16 +299,16 @@ export async function GET(request: Request) {
 
     return NextResponse.json({ success: true, records, totalCount, totalBagsSold, totalKgsSold, totalRevenue, totalsByType, locationScope })
   } catch (error) {
-    const errorMessage = error instanceof Error ? error.message : "Unknown error"
+    const rawMessage = error instanceof Error ? error.message : String(error || "")
     if (isModuleAccessError(error)) {
       return NextResponse.json({ success: false, error: "Module access disabled" }, { status: 403 })
     }
-    if (errorMessage.includes("does not exist")) {
+    if (rawMessage.includes("does not exist")) {
       return NextResponse.json({ success: true, records: [] })
     }
     console.error("Error fetching sales records:", error)
     return NextResponse.json(
-      { success: false, error: errorMessage },
+      { success: false, error: sanitizeRouteError(error, "Failed to fetch sales records") },
       { status: 500 }
     )
   }
@@ -497,7 +498,7 @@ export async function POST(request: Request) {
       error,
     })
     return NextResponse.json(
-      { success: false, error: error instanceof Error ? error.message : "Unknown error" },
+      { success: false, error: sanitizeRouteError(error, "Unknown error") },
       { status: 500 }
     )
   }
@@ -655,7 +656,7 @@ export async function PUT(request: Request) {
       error,
     })
     return NextResponse.json(
-      { success: false, error: error instanceof Error ? error.message : "Unknown error" },
+      { success: false, error: sanitizeRouteError(error, "Unknown error") },
       { status: 500 }
     )
   }
@@ -725,7 +726,7 @@ export async function DELETE(request: Request) {
       error,
     })
     return NextResponse.json(
-      { success: false, error: error instanceof Error ? error.message : "Unknown error" },
+      { success: false, error: sanitizeRouteError(error, "Unknown error") },
       { status: 500 }
     )
   }

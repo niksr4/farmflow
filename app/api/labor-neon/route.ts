@@ -5,6 +5,7 @@ import { normalizeTenantContext, runTenantQueries, runTenantQuery } from "@/lib/
 import { canDeleteModule, canWriteModule } from "@/lib/permissions"
 import { logAuditEvent } from "@/lib/server/audit-log"
 import { logRouteMutationFailure } from "@/lib/server/route-error-events"
+import { sanitizeRouteError } from "@/lib/server/sanitize-route-error"
 
 export const dynamic = "force-dynamic"
 export const revalidate = 0
@@ -273,7 +274,7 @@ export async function GET(request: Request) {
     return NextResponse.json(
       {
         success: false,
-        error: error.message,
+        error: sanitizeRouteError(error, "Failed to process labour record"),
         deployments: [],
       },
       { status: 500 },
@@ -481,7 +482,7 @@ export async function POST(request: Request) {
     return NextResponse.json(
       {
         success: false,
-        error: error.message,
+        error: sanitizeRouteError(error, "Failed to process labour record"),
       },
       { status: 500 },
     )
@@ -618,7 +619,7 @@ export async function PUT(request: Request) {
     return NextResponse.json(
       {
         success: false,
-        error: error.message,
+        error: sanitizeRouteError(error, "Failed to process labour record"),
       },
       { status: 500 },
     )
@@ -689,7 +690,7 @@ export async function DELETE(request: Request) {
     return NextResponse.json(
       {
         success: false,
-        error: error.message,
+        error: sanitizeRouteError(error, "Failed to process labour record"),
       },
       { status: 500 },
     )

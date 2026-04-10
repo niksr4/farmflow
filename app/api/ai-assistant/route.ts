@@ -12,6 +12,7 @@ import { callAI, isAIConfigured } from "@/lib/server/ai-provider"
 import { searchAssistantData } from "@/lib/server/assistant-search"
 import { getEnabledModules, requireModuleAccess, isModuleAccessError } from "@/lib/server/module-access"
 import { logServerError, logServerWarning } from "@/lib/server/safe-logging"
+import { sanitizeRouteError } from "@/lib/server/sanitize-route-error"
 
 export const dynamic = "force-dynamic"
 export const revalidate = 0
@@ -193,7 +194,7 @@ Treat the tenant data above as the working dataset for ${fiscalYearLabel}. Use t
     }
     logServerError("AI Assistant error", error)
     return Response.json(
-      { success: false, error: error instanceof Error ? error.message : "Failed to answer assistant question" },
+      { success: false, error: sanitizeRouteError(error, "Failed to answer assistant question") },
       { status: 500, headers: rateHeaders },
     )
   }

@@ -5,6 +5,7 @@ import { normalizeTenantContext, runTenantQuery } from "@/lib/server/tenant-db"
 import { canDeleteModule, canWriteModule } from "@/lib/permissions"
 import { logAuditEvent } from "@/lib/server/audit-log"
 import { logRouteMutationFailure } from "@/lib/server/route-error-events"
+import { sanitizeRouteError } from "@/lib/server/sanitize-route-error"
 
 export const dynamic = "force-dynamic"
 export const revalidate = 0
@@ -35,7 +36,7 @@ export async function GET(_request: NextRequest) {
       return NextResponse.json({ success: false, error: "Module access disabled" }, { status: 403 })
     }
     console.error("[v0] Error fetching rainfall records:", error)
-    return NextResponse.json({ success: false, error: error.message }, { status: 500 })
+    return NextResponse.json({ success: false, error: sanitizeRouteError(error, "Failed to save rainfall data") }, { status: 500 })
   }
 }
 
@@ -109,7 +110,7 @@ export async function POST(request: NextRequest) {
       action: "create_rainfall_record",
       error,
     })
-    return NextResponse.json({ success: false, error: error.message }, { status: 500 })
+    return NextResponse.json({ success: false, error: sanitizeRouteError(error, "Failed to save rainfall data") }, { status: 500 })
   }
 }
 
@@ -167,6 +168,6 @@ export async function DELETE(request: NextRequest) {
       action: "delete_rainfall_record",
       error,
     })
-    return NextResponse.json({ success: false, error: error.message }, { status: 500 })
+    return NextResponse.json({ success: false, error: sanitizeRouteError(error, "Failed to save rainfall data") }, { status: 500 })
   }
 }

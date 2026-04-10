@@ -6,6 +6,7 @@ import { normalizeTenantContext, runTenantQueries, runTenantQuery } from "@/lib/
 import { resolveLocationInfo } from "@/lib/server/location-utils"
 import { logAuditEvent } from "@/lib/server/audit-log"
 import { logRouteMutationFailure } from "@/lib/server/route-error-events"
+import { sanitizeRouteError } from "@/lib/server/sanitize-route-error"
 
 export const dynamic = "force-dynamic"
 export const revalidate = 0
@@ -270,7 +271,7 @@ export async function GET(request: Request) {
       })
     }
     console.error("Error loading other sales records:", error)
-    return NextResponse.json({ success: false, error: error.message || "Failed to load records" }, { status: 500 })
+    return NextResponse.json({ success: false, error: sanitizeRouteError(error, "Failed to load records") }, { status: 500 })
   }
 }
 
@@ -356,7 +357,7 @@ export async function POST(request: Request) {
       action: "create_other_sale_record",
       error,
     })
-    return NextResponse.json({ success: false, error: error.message || "Failed to create record" }, { status: 500 })
+    return NextResponse.json({ success: false, error: sanitizeRouteError(error, "Failed to create record") }, { status: 500 })
   }
 }
 
@@ -449,7 +450,7 @@ export async function PUT(request: Request) {
       action: "update_other_sale_record",
       error,
     })
-    return NextResponse.json({ success: false, error: error.message || "Failed to update record" }, { status: 500 })
+    return NextResponse.json({ success: false, error: sanitizeRouteError(error, "Failed to update record") }, { status: 500 })
   }
 }
 
@@ -514,6 +515,6 @@ export async function DELETE(request: Request) {
       action: "delete_other_sale_record",
       error,
     })
-    return NextResponse.json({ success: false, error: error.message || "Failed to delete record" }, { status: 500 })
+    return NextResponse.json({ success: false, error: sanitizeRouteError(error, "Failed to delete record") }, { status: 500 })
   }
 }

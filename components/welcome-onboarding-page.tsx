@@ -72,6 +72,7 @@ export default function WelcomeOnboardingPage() {
   const [moduleBundles, setModuleBundles] = useState<ModuleBundle[]>([])
   const [error, setError] = useState("")
   const [draft, setDraft] = useState<GuidedSetupState | null>(null)
+  const [touched, setTouched] = useState(false)
   const hasUserEditedLocationCode = useRef(false)
 
   const deriveLocationCode = (name: string) =>
@@ -128,6 +129,16 @@ export default function WelcomeOnboardingPage() {
     ]
     return Math.round((checks.filter(Boolean).length / checks.length) * 100)
   }, [draft])
+
+  const fieldErrors = useMemo(() => {
+    if (!draft || !touched) return { estateName: false, bagWeight: false, locationName: false, locationCode: false }
+    return {
+      estateName: !String(draft.estateName || "").trim(),
+      bagWeight: !Number.isFinite(Number(draft.bagWeightKg)) || Number(draft.bagWeightKg) < 40 || Number(draft.bagWeightKg) > 70,
+      locationName: !String(draft.primaryLocationName || "").trim(),
+      locationCode: !String(draft.primaryLocationCode || "").trim(),
+    }
+  }, [draft, touched])
 
   if (loading || !draft) {
     return (
@@ -202,7 +213,11 @@ export default function WelcomeOnboardingPage() {
                   <Input
                     id="welcome-estate-name"
                     value={draft.estateName}
-                    onChange={(event) => setDraft((current) => (current ? { ...current, estateName: event.target.value } : current))}
+                    className={fieldErrors.estateName ? "border-red-400 ring-1 ring-red-300" : undefined}
+                    onChange={(event) => {
+                      setTouched(true)
+                      setDraft((current) => (current ? { ...current, estateName: event.target.value } : current))
+                    }}
                   />
                 </div>
                 <div className="space-y-2">
@@ -214,11 +229,13 @@ export default function WelcomeOnboardingPage() {
                     max={70}
                     step={1}
                     value={draft.bagWeightKg}
-                    onChange={(event) =>
+                    className={fieldErrors.bagWeight ? "border-red-400 ring-1 ring-red-300" : undefined}
+                    onChange={(event) => {
+                      setTouched(true)
                       setDraft((current) =>
                         current ? { ...current, bagWeightKg: Number(event.target.value || current.bagWeightKg) } : current,
                       )
-                    }
+                    }}
                   />
                 </div>
               </div>
@@ -229,8 +246,10 @@ export default function WelcomeOnboardingPage() {
                   <Input
                     id="welcome-location-name"
                     value={draft.primaryLocationName}
+                    className={fieldErrors.locationName ? "border-red-400 ring-1 ring-red-300" : undefined}
                     onChange={(event) => {
                       const name = event.target.value
+                      setTouched(true)
                       setDraft((current) => {
                         if (!current) return current
                         const next = { ...current, primaryLocationName: name }
@@ -247,8 +266,10 @@ export default function WelcomeOnboardingPage() {
                   <Input
                     id="welcome-location-code"
                     value={draft.primaryLocationCode}
+                    className={fieldErrors.locationCode ? "border-red-400 ring-1 ring-red-300" : undefined}
                     onChange={(event) => {
                       hasUserEditedLocationCode.current = true
+                      setTouched(true)
                       setDraft((current) =>
                         current ? { ...current, primaryLocationCode: event.target.value } : current,
                       )
@@ -422,6 +443,7 @@ export default function WelcomeOnboardingPage() {
                 <Button
                   disabled={submitting || setupBlockers.length > 0}
                   onClick={async () => {
+                    setTouched(true)
                     if (submitting) return
                     setSubmitting(true)
                     setError("")

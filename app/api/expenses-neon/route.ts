@@ -18,6 +18,7 @@ import {
   type ExpenseInventoryLinkItem,
   type InventoryAllocationSlot,
 } from "@/lib/expense-inventory"
+import { sanitizeRouteError } from "@/lib/server/sanitize-route-error"
 
 export const dynamic = "force-dynamic"
 export const revalidate = 0
@@ -1155,7 +1156,7 @@ export async function GET(request: Request) {
     return NextResponse.json(
       {
         success: false,
-        error: error.message,
+        error: sanitizeRouteError(error, "Failed to process expense"),
         deployments: [],
       },
       { status: 500 },
@@ -1304,7 +1305,7 @@ export async function POST(request: Request) {
     return NextResponse.json(
       {
         success: false,
-        error: error.message,
+        error: sanitizeRouteError(error, "Failed to process expense"),
       },
       { status: 500 },
     )
@@ -1488,7 +1489,7 @@ export async function PUT(request: Request) {
     return NextResponse.json(
       {
         success: false,
-        error: error.message,
+        error: sanitizeRouteError(error, "Failed to process expense"),
       },
       { status: 500 },
     )
@@ -1594,7 +1595,7 @@ export async function DELETE(request: Request) {
     return NextResponse.json(
       {
         success: false,
-        error: error.message,
+        error: sanitizeRouteError(error, "Failed to process expense"),
       },
       { status: 500 },
     )

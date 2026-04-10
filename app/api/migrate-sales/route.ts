@@ -2,6 +2,7 @@ import { NextResponse } from "next/server"
 import { sql } from "@/lib/server/db"
 import { requireSessionUser } from "@/lib/server/auth"
 import { requireOwnerRole } from "@/lib/tenant"
+import { sanitizeRouteError } from "@/lib/server/sanitize-route-error"
 
 export const dynamic = "force-dynamic"
 export const revalidate = 0
@@ -44,7 +45,7 @@ export async function POST() {
   } catch (error) {
     console.error("Migration error:", error)
     return NextResponse.json(
-      { success: false, error: error instanceof Error ? error.message : "Unknown error" },
+      { success: false, error: sanitizeRouteError(error, "Migration failed") },
       { status: 500 }
     )
   }
