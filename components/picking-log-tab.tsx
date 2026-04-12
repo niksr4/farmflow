@@ -13,6 +13,7 @@ import { EmptyStateTable } from "@/components/ui/empty-state"
 import { FieldLabel } from "@/components/ui/field-label"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import { toast } from "sonner"
+import { FARMFLOW_RECORD_SAVED_EVENT } from "@/components/inventory-system/constants"
 import { canWriteModule, canDeleteModule, type UserRole } from "@/lib/permissions"
 import { useAuth } from "@/hooks/use-auth"
 import { formatCurrency } from "@/lib/format"
@@ -112,6 +113,7 @@ export default function PickingLogTab() {
       setForm(EMPTY_FORM)
       setIsAdding(false)
       fetchRecords()
+      window.dispatchEvent(new CustomEvent(FARMFLOW_RECORD_SAVED_EVENT))
     } catch (err: any) {
       toast.error(err?.message || "Failed to save record")
     } finally {

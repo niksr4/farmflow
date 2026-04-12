@@ -20,6 +20,7 @@ import { SkeletonTable } from "@/components/ui/skeleton"
 import TaskGuideCard from "@/components/task-guide-card"
 import WorkflowEmptyState from "@/components/workflow-empty-state"
 import { useToast } from "@/hooks/use-toast"
+import { FARMFLOW_RECORD_SAVED_EVENT } from "@/components/inventory-system/constants"
 
 interface ActivityCode {
   code: string
@@ -174,6 +175,7 @@ export default function LaborDeploymentTab({
       const success = editingId ? await updateDeployment(editingId, deployment) : await addDeployment(deployment)
       if (success) {
         resetForm()
+        window.dispatchEvent(new CustomEvent(FARMFLOW_RECORD_SAVED_EVENT))
       } else {
         toast({
           title: "Couldn't save record",

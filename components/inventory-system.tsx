@@ -69,6 +69,7 @@ import { isWithinLast24Hours } from "@/lib/date-utils"
 import { formatCurrency, formatNumber } from "@/lib/format"
 import { type AccountsExportFormat } from "@/lib/accounts-export"
 import { getCurrentFiscalYear } from "@/lib/fiscal-year-utils"
+import { getCurrentEstatePhase } from "@/lib/coffee-estate-calendar"
 import { normalizeInventoryItemType } from "@/lib/inventory-item-type"
 import { ASSISTANT_PROMPT_EVENT, type AssistantPromptEventDetail } from "@/lib/assistant-events"
 import { getModuleDefaultEnabled } from "@/lib/modules"
@@ -95,6 +96,7 @@ import {
   DRILLDOWN_ALERT_METRIC_PARAM,
   DRILLDOWN_ITEM_PARAM,
   DRILLDOWN_TXN_SEARCH_PARAM,
+  FARMFLOW_RECORD_SAVED_EVENT,
   LOCATION_ALL,
   LOCATION_UNASSIGNED,
   PREVIEW_TENANT_COOKIE,
@@ -516,6 +518,8 @@ export default function InventorySystem() {
   const [onboardingEstateName, setOnboardingEstateName] = useState("")
   const [onboardingBagWeightKg, setOnboardingBagWeightKg] = useState("")
   const [isSavingOnboardingDefaults, setIsSavingOnboardingDefaults] = useState(false)
+  const [trialDaysRemaining, setTrialDaysRemaining] = useState<number | null>(null)
+  const [trialBannerDismissed, setTrialBannerDismissed] = useState(false)
 
   // auth + router
   const { user, logout, status } = useAuth()
@@ -721,6 +725,7 @@ export default function InventorySystem() {
       setEnabledModules(Array.isArray(data.modules) ? data.modules.map((moduleId) => String(moduleId)) : null)
       setLocations(Array.isArray(data.locations) ? data.locations : [])
       setCurrentPlanId(data.planId ? String(data.planId) : null)
+      if (typeof data.trialDaysRemaining === "number") setTrialDaysRemaining(data.trialDaysRemaining)
       resolved = true
       return true
     } catch (error) {
@@ -1104,6 +1109,17 @@ export default function InventorySystem() {
     loadOnboardingStatus()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [lastSync])
+
+  // Refresh checklist when labor, expense, or picking tabs save a record
+  useEffect(() => {
+    const handler = () => {
+      if (!hasLoadedOnboardingOnce.current) return
+      loadOnboardingStatus()
+    }
+    window.addEventListener(FARMFLOW_RECORD_SAVED_EVENT, handler)
+    return () => window.removeEventListener(FARMFLOW_RECORD_SAVED_EVENT, handler)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
 
   const handleCreateLocation = async () => {
@@ -5679,6 +5695,12 @@ export default function InventorySystem() {
     hasLoadedOnboardingStatus &&
     onboardingTotalCount > 0 &&
     onboardingCompletedCount < onboardingTotalCount
+  const showSetupComplete =
+    !isOwner &&
+    !LIVE_TENANT_SKIP_TENANTS.has(tenantId || "") &&
+    hasLoadedOnboardingStatus &&
+    onboardingTotalCount > 0 &&
+    onboardingCompletedCount === onboardingTotalCount
   const recordMovementPanel = (
     <div className="rounded-[28px] border border-emerald-100 bg-[linear-gradient(180deg,#ffffff_0%,#fbfffd_46%,#fafaf8_100%)] p-6 shadow-[0_24px_80px_-45px_rgba(14,93,82,0.35)]">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
@@ -6813,6 +6835,31 @@ export default function InventorySystem() {
             </CardContent>
           </Card>
         )}
+        {!isOwner && !trialBannerDismissed && trialDaysRemaining !== null && (
+          <div className={`mb-4 flex items-center justify-between gap-3 rounded-xl border px-4 py-3 text-sm ${
+            trialDaysRemaining <= 5
+              ? "border-amber-300 bg-amber-50 text-amber-900"
+              : "border-sky-200 bg-sky-50 text-sky-900"
+          }`}>
+            <p>
+              <span className="font-semibold">
+                {trialDaysRemaining === 0
+                  ? "Your free trial ends today."
+                  : trialDaysRemaining === 1
+                    ? "1 day left on your free trial."
+                    : `${trialDaysRemaining} days left on your free trial.`}
+              </span>
+              {" "}Keep recording to build your season picture — your data is saved either way.
+            </p>
+            <button
+              type="button"
+              className="shrink-0 text-xs underline opacity-60 hover:opacity-100"
+              onClick={() => setTrialBannerDismissed(true)}
+            >
+              Dismiss
+            </button>
+          </div>
+        )}
         {showOnboarding && (
           <div className="mb-6">
             <OnboardingChecklist
@@ -6841,6 +6888,41 @@ export default function InventorySystem() {
             />
           </div>
         )}
+        {showSetupComplete && (() => {
+          const phase = getCurrentEstatePhase()
+          const phaseActions: Record<string, { label: string; description: string; tab: string }> = {
+            "harvest-peak": { label: "Log today's picking", description: "Record cherry weight by plot for each picking team.", tab: "accounts" },
+            "pre-harvest": { label: "Record a harvest expense", description: "Log picker wages, nets, or equipment costs before harvest begins.", tab: "accounts" },
+            "post-harvest-pruning": { label: "Track pruning labour", description: "Log wages and activity codes for post-harvest pruning work.", tab: "accounts" },
+            "blossom": { label: "Record the blossom date", description: "Note the blossom shower date — it sets your harvest window.", tab: "inventory" },
+            "berry-formation": { label: "Log an estate expense", description: "Record weed management, fertiliser, or maintenance costs for this period.", tab: "accounts" },
+            "monsoon": { label: "Record rainfall", description: "Log daily rainfall — monsoon tracking feeds your season report.", tab: "rainfall" },
+          }
+          const action = phaseActions[phase.season] ?? phaseActions["berry-formation"]
+          return (
+            <div className="mb-6 rounded-2xl border border-emerald-200 bg-gradient-to-br from-emerald-50 to-white px-5 py-4">
+              <div className="flex items-start justify-between gap-4">
+                <div>
+                  <div className="flex items-center gap-2">
+                    <CheckCircle2 className="h-4 w-4 text-emerald-600" />
+                    <p className="text-sm font-semibold text-emerald-900">Estate setup complete</p>
+                  </div>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    {phase.label} — {action.description}
+                  </p>
+                </div>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="shrink-0 border-emerald-300 bg-white text-emerald-800 hover:bg-emerald-50"
+                  onClick={() => handleTabChange(action.tab)}
+                >
+                  {action.label}
+                </Button>
+              </div>
+            </div>
+          )
+        })()}
         <Tabs value={activeTab} onValueChange={handleTabChange} className="w-full space-y-4">
           {!isStandaloneMobileApp && (
             <div

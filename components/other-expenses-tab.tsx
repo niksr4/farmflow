@@ -3,6 +3,7 @@
 import type React from "react"
 
 import { useState, useEffect, useCallback } from "react"
+import { FARMFLOW_RECORD_SAVED_EVENT } from "@/components/inventory-system/constants"
 import { useConsumablesData } from "@/hooks/use-consumables-data"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -166,7 +167,10 @@ export default function OtherExpensesTab({
 
     try {
       const success = editingId ? await updateDeployment(editingId, deployment) : await addDeployment(deployment)
-      if (success) resetForm()
+      if (success) {
+        resetForm()
+        window.dispatchEvent(new CustomEvent(FARMFLOW_RECORD_SAVED_EVENT))
+      }
     } finally {
       setIsSubmitting(false)
     }

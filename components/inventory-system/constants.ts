@@ -1,6 +1,10 @@
 export const API_TRANSACTIONS = "/api/transactions-neon"
 export const API_INVENTORY = "/api/inventory-neon"
 
+// Dispatched by any tab (labor, expenses, picking) after a successful write.
+// inventory-system listens for this to refresh the onboarding checklist.
+export const FARMFLOW_RECORD_SAVED_EVENT = "farmflow:record-saved"
+
 export const LOCATION_ALL = "all"
 export const LOCATION_UNASSIGNED = "unassigned"
 export const UNASSIGNED_LABEL = "Unassigned (legacy)"

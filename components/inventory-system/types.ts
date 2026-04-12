@@ -9,6 +9,7 @@ export interface WorkspaceBootstrapPayload {
   locations: LocationOption[]
   planId?: string | null
   plans?: import("@/lib/modules").ModuleBundle[]
+  trialDaysRemaining?: number | null
 }
 
 export interface IntelligenceCodePattern {

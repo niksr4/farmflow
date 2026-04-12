@@ -9,11 +9,41 @@ import { buildErrorResponse, databaseNotConfiguredResponse } from "@/lib/server/
 export const dynamic = "force-dynamic"
 export const revalidate = 0
 
+const TRIAL_DAYS = 30
+
 const serializeLocation = (row: Record<string, unknown>) => ({
   id: String(row.id || ""),
   name: String(row.name || ""),
   code: row.code ? String(row.code) : null,
 })
+
+const resolveTrialInfo = async (tenantId: string): Promise<{ trialDaysRemaining: number | null }> => {
+  if (!sql) return { trialDaysRemaining: null }
+  try {
+    // Use provisioned_at from signup_requests as the trial start date.
+    // Only self-serve tenants have a signup_requests row; manual tenants get null (no banner).
+    const rows = await sql`
+      SELECT provisioned_at
+      FROM signup_requests
+      WHERE tenant_id = ${tenantId}
+        AND status = 'provisioned'
+      ORDER BY provisioned_at ASC
+      LIMIT 1
+    `
+    const provisionedAt = (Array.isArray(rows) ? rows[0] : (rows as any)?.rows?.[0])?.provisioned_at
+    if (!provisionedAt) return { trialDaysRemaining: null }
+    const provisionedMs = new Date(provisionedAt).getTime()
+    const trialEndsMs = provisionedMs + TRIAL_DAYS * 24 * 60 * 60 * 1000
+    const remainingMs = trialEndsMs - Date.now()
+    const trialDaysRemaining = Math.max(0, Math.ceil(remainingMs / (24 * 60 * 60 * 1000)))
+    // Only surface within the trial window (0–30 days); return null after expiry
+    if (trialDaysRemaining > TRIAL_DAYS) return { trialDaysRemaining: null }
+    return { trialDaysRemaining }
+  } catch {
+    // Non-fatal — missing signup_requests row is expected for manual tenants
+    return { trialDaysRemaining: null }
+  }
+}
 
 export async function GET() {
   if (!isDbConfigured) {
@@ -68,12 +98,15 @@ export async function GET() {
         ? cappedTenantEnabled.filter((moduleId) => (userMap.has(moduleId) ? Boolean(userMap.get(moduleId)) : true))
         : cappedTenantEnabled
 
+    const { trialDaysRemaining } = await resolveTrialInfo(tenantId)
+
     return NextResponse.json({
       success: true,
       modules: effectiveModules,
       locations: (locationRows || []).map((row) => serializeLocation(row as Record<string, unknown>)),
       planId,
       plans: MODULE_BUNDLES,
+      trialDaysRemaining,
     })
   } catch (error) {
     console.error("Error loading workspace bootstrap:", error)
