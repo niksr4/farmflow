@@ -47,3 +47,6 @@ tests/e2e/.auth/
 *.tsbuildinfo
 next-env.d.ts
 .env.local
+
+# Sentry Config File
+.env.sentry-build-plugin

@@ -1,5 +1,7 @@
 import "server-only"
 
+import * as Sentry from "@sentry/nextjs"
+
 const EMAIL_PATTERN = /\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/gi
 const BEARER_PATTERN = /\bBearer\s+[A-Za-z0-9._~+/-]+\b/gi
 const BASIC_PATTERN = /\bBasic\s+[A-Za-z0-9+/=]+\b/gi
@@ -60,8 +62,16 @@ export const logServerWarning = (message: string, details?: unknown) => {
 export const logServerError = (message: string, details?: unknown) => {
   if (details === undefined) {
     console.error(message)
-    return
+  } else {
+    console.error(message, redactForLogs(details))
   }
-  console.error(message, redactForLogs(details))
+  // Forward to Sentry so server-side errors appear in the issues dashboard.
+  // Wrap in try/catch so a Sentry failure never breaks the caller.
+  try {
+    const error = details instanceof Error ? details : new Error(message)
+    Sentry.captureException(error, { extra: { message } })
+  } catch {
+    // non-fatal
+  }
 }
 
