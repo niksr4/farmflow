@@ -7,6 +7,7 @@ import { normalizeTenantContext, runTenantQueries, runTenantQuery } from "@/lib/
 import { resolveTenantUserUuid } from "@/lib/server/tenant-user"
 import { repairCurrentInventoryUpsertConstraints } from "@/lib/server/current-inventory-constraints"
 import { logRouteMutationFailure } from "@/lib/server/route-error-events"
+import { logAuditEvent } from "@/lib/server/audit-log"
 import { csvToObjects } from "@/lib/csv"
 import { resolveLocationInfo } from "@/lib/server/location-utils"
 import { recalculateInventoryForItem } from "@/lib/server/inventory-recalc"
@@ -507,6 +508,12 @@ export async function POST(request: Request) {
           errors,
         })
       }
+      await logAuditEvent(sql, sessionUser, {
+        action: "create",
+        entityType: `import_bulk_${dataset}`,
+        entityId: commitJobId,
+        after: { dataset, imported, skipped, errors: errors.length },
+      })
       return NextResponse.json({
         success: true,
         mode: "commit",
