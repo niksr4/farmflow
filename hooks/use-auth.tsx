@@ -1,5 +1,6 @@
 "use client"
 
+import { useMemo } from "react"
 import { SessionProvider, signIn, signOut, useSession } from "next-auth/react"
 import type { ReactNode } from "react"
 
@@ -33,18 +34,35 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
 export function useAuth(): AuthContextType {
   const { data: session, status } = useSession()
-  const user = session?.user
-      ? {
-          username: String(session.user.name || ""),
-          role: session.user.role,
-          tenantId: String(session.user.tenantId || ""),
-          sessionMode: session.user.sessionMode,
-          passwordResetRequired: Boolean(session.user.passwordResetRequired),
-          preferredLocale: session.user.preferredLocale,
-          setupCompleted: Boolean(session.user.setupCompleted),
-          requiresGuidedSetup: Boolean(session.user.requiresGuidedSetup),
-        }
-    : null
+
+  // Memoize so the object reference is stable across renders — prevents
+  // useEffects that depend on `user` from firing on every render cycle.
+  const user = useMemo(
+    () =>
+      session?.user
+        ? {
+            username: String(session.user.name || ""),
+            role: session.user.role,
+            tenantId: String(session.user.tenantId || ""),
+            sessionMode: session.user.sessionMode,
+            passwordResetRequired: Boolean(session.user.passwordResetRequired),
+            preferredLocale: session.user.preferredLocale,
+            setupCompleted: Boolean(session.user.setupCompleted),
+            requiresGuidedSetup: Boolean(session.user.requiresGuidedSetup),
+          }
+        : null,
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [
+      session?.user?.name,
+      session?.user?.role,
+      session?.user?.tenantId,
+      session?.user?.sessionMode,
+      session?.user?.passwordResetRequired,
+      session?.user?.preferredLocale,
+      session?.user?.setupCompleted,
+      session?.user?.requiresGuidedSetup,
+    ],
+  )
 
   const login = async (identifier: string, password: string, sessionMode: "app" | "web" = "web") => {
     const result = await signIn("credentials", {

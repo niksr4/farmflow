@@ -2,6 +2,7 @@
 
 import React, { useEffect, useState, useCallback, useMemo, useRef } from "react"
 import dynamic from "next/dynamic"
+import { useTheme } from "next-themes"
 import {
   Check,
   Download,
@@ -37,6 +38,8 @@ import {
   Scale,
   FileText,
   Coins,
+  Sun,
+  Moon,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -77,6 +80,7 @@ import { appendOwnerPreviewContext, normalizeOwnerPreviewContext } from "@/lib/o
 import type { InventoryItem, Transaction } from "@/lib/inventory-types"
 import type { WorkspaceHintAction } from "@/lib/tenant-guidance"
 import { cn } from "@/lib/utils"
+import AppSidebar from "@/components/app-sidebar"
 import { Skeleton, SkeletonCard, SkeletonTable } from "@/components/ui/skeleton"
 import { toast } from "@/components/ui/use-toast"
 import { roleLabel } from "@/lib/roles"
@@ -600,6 +604,7 @@ export default function InventorySystem() {
   const isMobile = useMediaQuery("(max-width: 768px)")
   const isStandaloneMode = useStandaloneMode()
   const isStandaloneMobileApp = isMobile && isStandaloneMode
+  const { theme, setTheme } = useTheme()
   const currentFiscalYear = useMemo(() => getCurrentFiscalYear(), [])
   const seasonProgress = useMemo(() => {
     const start = new Date(currentFiscalYear.startDate).getTime()
@@ -6155,71 +6160,147 @@ export default function InventorySystem() {
     : "pb-8"
 
   return (
-    <div
-      className={cn(
-        "relative mx-auto w-full px-3 pt-4 sm:px-4 sm:py-8",
-        mobileBottomSpacingClass,
+    <div className="flex min-h-screen bg-background">
+      {!isMobile && (
+        <AppSidebar
+          activeTab={activeTab}
+          visibleTabs={visibleTabs}
+          tabMeta={tabMeta}
+          onTabChange={handleTabChange}
+          username={user.username}
+          estateName={tenantSettings.estateName}
+          roleBadgeLabel={roleBadgeLabel}
+          onLogout={handleLogout}
+          isAdmin={isAdmin}
+          isOwner={isOwner}
+          buildWorkspaceHref={buildWorkspaceHref}
+        />
       )}
-    >
-      <div className="relative max-w-7xl mx-auto">
+      <div
+        className={cn(
+          "flex-1 min-w-0",
+          !isMobile && "pl-[68px]",
+          isMobile ? mobileBottomSpacingClass : "pb-8",
+        )}
+      >
+      <div className="relative max-w-7xl mx-auto px-3 pt-4 sm:px-6 sm:pt-5">
         <div className="pointer-events-none absolute -top-20 left-[-6%] h-[220px] w-[220px] rounded-full bg-[radial-gradient(circle_at_center,rgba(120,82,46,0.25),transparent_70%)] blur-[110px]" />
         <div className="pointer-events-none absolute -top-16 right-[5%] h-[200px] w-[200px] rounded-full bg-[radial-gradient(circle_at_center,rgba(69,111,96,0.25),transparent_70%)] blur-[110px]" />
 
-        <header className="relative mb-6 overflow-hidden rounded-2xl border border-black/5 bg-white/70 p-4 shadow-sm backdrop-blur sm:p-6">
-          <div className="absolute inset-x-0 top-0 h-0.5 bg-gradient-to-r from-emerald-500 via-amber-300 to-emerald-600" />
-          <div className="flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between">
-            <div className="space-y-3">
+        <header className={cn(
+          "relative mb-4 overflow-hidden backdrop-blur",
+          isMobile
+            ? "rounded-2xl border border-black/5 bg-white/80 p-4 shadow-sm dark:border-white/[0.07] dark:bg-card/80"
+            : "flex items-center justify-between rounded-xl border border-black/5 bg-white/75 px-4 py-2.5 shadow-sm dark:border-white/[0.07] dark:bg-card/70",
+        )}>
+          <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-emerald-500/40 via-amber-300/30 to-emerald-600/40" />
+          {isMobile ? (
+            /* Mobile header: logo + estate name + user controls */
+            <div className="flex flex-col gap-3">
               <div className="flex flex-wrap items-center gap-3">
                 <Image
                   src="/brand-logo.svg"
                   alt="FarmFlow"
                   width={220}
                   height={86}
-                  className="h-11 w-auto rounded-xl border border-emerald-100/80 bg-white/90 px-2 py-1 shadow-sm"
+                  className="h-9 w-auto rounded-xl border border-emerald-100/80 bg-white/90 px-2 py-1 shadow-sm"
                 />
-                <div>
-                  <h1 className="text-2xl font-display font-semibold text-[color:var(--foreground)]">
-                    FarmFlow Workspace Navigator
-                  </h1>
-                  {!isPreviewMode && tenantSettings.estateName && (
-                    <p className="mt-1 flex items-center gap-1.5 text-lg font-semibold text-emerald-700">
-                      <Leaf className="h-4.5 w-4.5" />
-                      {tenantSettings.estateName}
-                    </p>
-                  )}
-                </div>
-                <Badge className="bg-white/90 text-emerald-700 border-emerald-200">Estate Workspace</Badge>
-              </div>
-              <div className="flex flex-wrap items-center gap-3 text-sm text-muted-foreground">
+                {!isPreviewMode && tenantSettings.estateName && (
+                  <p className="flex items-center gap-1.5 text-base font-semibold text-emerald-700">
+                    <Leaf className="h-4 w-4" />
+                    {tenantSettings.estateName}
+                  </p>
+                )}
                 {(isPreviewMode || !tenantSettings.estateName) && (
-                  <span className="inline-flex items-center gap-2 rounded-full border border-emerald-100 bg-white/80 px-3 py-1 text-xs text-emerald-700">
-                    <Leaf className="h-3.5 w-3.5" />
+                  <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-100 bg-white/80 px-3 py-1 text-xs text-emerald-700">
+                    <Leaf className="h-3 w-3" />
                     {tenantLabel}
                   </span>
                 )}
-                <span className="text-xs text-emerald-700/70">Live operations with traceability</span>
+              </div>
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div className="flex items-center gap-2 rounded-full border border-emerald-100 bg-white/80 px-3 py-1.5">
+                  <Badge variant="outline" className="bg-emerald-100 text-emerald-700 border-emerald-200 text-xs">
+                    {roleBadgeLabel}
+                  </Badge>
+                  <span className="text-sm text-slate-700">{user.username}</span>
+                </div>
+                <div className="flex flex-wrap gap-1.5">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
+                    className="h-9 w-9 px-0"
+                    aria-label="Toggle theme"
+                  >
+                    {theme === "dark" ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
+                  </Button>
+                  <Button variant="ghost" size="sm" asChild>
+                    <Link href={buildWorkspaceHref("/manuals")}>
+                      <BookOpen className="h-4 w-4 mr-1.5" />
+                      Manuals
+                    </Link>
+                  </Button>
+                  {isAdmin && (
+                    <Button variant="ghost" size="sm" asChild>
+                      <Link href={buildWorkspaceHref("/settings")}>
+                        <Settings className="h-4 w-4 mr-1.5" />
+                        Settings
+                      </Link>
+                    </Button>
+                  )}
+                  <Button variant="ghost" size="sm" onClick={handleLogout}>
+                    <LogOut className="h-4 w-4 mr-1.5" /> Logout
+                  </Button>
+                </div>
               </div>
             </div>
-            <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-              <div className="flex items-center gap-2 rounded-full border border-emerald-100 bg-white/80 px-3 py-2">
-                <Badge variant="outline" className="bg-emerald-100 text-emerald-700 border-emerald-200">
-                  {roleBadgeLabel}
-                </Badge>
-                <span className="text-sm text-slate-700">{user.username}</span>
+          ) : (
+            /* Desktop slim topbar: estate name + breadcrumb + actions */
+            <>
+              <div className="flex items-center gap-2.5 min-w-0">
+                {!isPreviewMode && tenantSettings.estateName ? (
+                  <div className="flex items-center gap-2">
+                    <Leaf className="h-3.5 w-3.5 shrink-0 text-emerald-600 dark:text-emerald-400" />
+                    <span className="font-semibold text-sm text-foreground truncate">{tenantSettings.estateName}</span>
+                  </div>
+                ) : (
+                  <span className="font-semibold text-sm text-foreground">FarmFlow</span>
+                )}
+                {activeTab !== DASHBOARD_LAUNCHER_TAB && activeTab !== "home" && tabMeta[activeTab] && (
+                  <>
+                    <span className="text-muted-foreground/30 text-sm select-none">/</span>
+                    <span className="text-sm text-muted-foreground truncate">{tabMeta[activeTab]?.label}</span>
+                  </>
+                )}
+                {isPreviewMode && (
+                  <Badge variant="outline" className="border-amber-300 bg-amber-50 text-amber-700 text-xs ml-1">
+                    Preview
+                  </Badge>
+                )}
               </div>
-              <div className="flex flex-wrap gap-2">
-                <Button variant="ghost" size="sm" asChild>
+              <div className="flex items-center gap-1 shrink-0">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
+                  className="text-muted-foreground hover:text-foreground h-8 w-8 px-0"
+                  aria-label="Toggle theme"
+                >
+                  {theme === "dark" ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
+                </Button>
+                <Button variant="ghost" size="sm" asChild className="text-muted-foreground hover:text-foreground h-8 px-3">
                   <Link href={buildWorkspaceHref("/manuals")}>
-                    <BookOpen className="h-4 w-4 mr-2" />
+                    <BookOpen className="h-3.5 w-3.5 mr-1.5" />
                     Manuals
                   </Link>
                 </Button>
                 {isOwner && (
                   <DropdownMenu>
                     <DropdownMenuTrigger asChild>
-                      <Button variant="ghost" size="sm">
-                        <Settings className="h-4 w-4 mr-2" />
-                        Platform Owner
+                      <Button variant="ghost" size="sm" className="text-muted-foreground hover:text-foreground h-8 px-3">
+                        <Settings className="h-3.5 w-3.5 mr-1.5" />
+                        Console
                       </Button>
                     </DropdownMenuTrigger>
                     <DropdownMenuContent align="end" className="w-56">
@@ -6258,20 +6339,18 @@ export default function InventorySystem() {
                     </DropdownMenuContent>
                   </DropdownMenu>
                 )}
-                {isAdmin && !isOwner && (
-                  <Button variant="ghost" size="sm" asChild>
-                    <Link href={buildWorkspaceHref("/settings")}>
-                      <Settings className="h-4 w-4 mr-2" />
-                      Settings
-                    </Link>
-                  </Button>
-                )}
-                <Button variant="ghost" size="sm" onClick={handleLogout}>
-                  <LogOut className="h-4 w-4 mr-2" /> Logout
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={handleLogout}
+                  className="text-muted-foreground hover:text-rose-600 dark:hover:text-rose-400 h-8 w-8 px-0"
+                  aria-label="Sign out"
+                >
+                  <LogOut className="h-4 w-4" />
                 </Button>
               </div>
-            </div>
-          </div>
+            </>
+          )}
         </header>
 
         {isPreviewMode && (
@@ -6924,21 +7003,38 @@ export default function InventorySystem() {
           )
         })()}
         <Tabs value={activeTab} onValueChange={handleTabChange} className="w-full space-y-4">
-          {!isStandaloneMobileApp && (
-            <div
-              className={cn(
-                "z-20 rounded-3xl border border-black/10 bg-gradient-to-br from-white/95 via-white to-neutral-100/80 shadow-[0_12px_30px_-24px_rgba(15,23,42,0.75)] backdrop-blur",
-                isMobile ? "relative space-y-2.5 p-3" : "sticky top-2 space-y-3 p-4",
-              )}
-            >
+          {/* Desktop: slim section sub-tabs only (sidebar handles main navigation) */}
+          {!isMobile && activeTab !== DASHBOARD_LAUNCHER_TAB && activeTabGroup !== "dashboard" && activeSectionTabs.length > 0 && (
+            <div className="sticky top-2 z-20 mb-1">
+              <TabsList className="h-auto flex-wrap items-center gap-2 rounded-2xl border border-black/10 bg-gradient-to-br from-white/95 via-white to-neutral-100/80 p-2 shadow-[0_8px_24px_-16px_rgba(15,23,42,0.6)] backdrop-blur dark:border-white/[0.08] dark:from-card dark:via-card dark:to-card/90">
+                {activeSectionTabs.map((tab) => {
+                  const TabIcon = tab.icon
+                  return (
+                    <TabsTrigger
+                      key={tab.value}
+                      value={tab.value}
+                      className="min-h-9 rounded-lg border border-black/10 bg-white/90 px-4 text-sm font-semibold data-[state=active]:border-emerald-600 data-[state=active]:bg-emerald-600 data-[state=active]:text-white data-[state=active]:shadow-[0_10px_20px_-14px_rgba(5,150,105,0.9)] dark:border-white/[0.08] dark:bg-white/[0.04] dark:text-foreground dark:data-[state=active]:border-emerald-500 dark:data-[state=active]:bg-emerald-600"
+                    >
+                      <TabIcon className="mr-2 h-4 w-4" />
+                      {tab.label}
+                    </TabsTrigger>
+                  )
+                })}
+              </TabsList>
+            </div>
+          )}
+
+          {/* Mobile: section navigation with workspace navigator + section cards */}
+          {!isStandaloneMobileApp && isMobile && (
+            <div className="relative space-y-2.5 rounded-3xl border border-black/10 bg-gradient-to-br from-white/95 via-white to-neutral-100/80 p-3 shadow-[0_12px_30px_-24px_rgba(15,23,42,0.75)] backdrop-blur">
             {activeTab !== DASHBOARD_LAUNCHER_TAB && (
-              <div className={cn("flex", isMobile ? "justify-stretch" : "justify-start")}>
+              <div className="flex justify-stretch">
                 <Button
                   type="button"
                   variant="outline"
                   size="sm"
                   onClick={goToWorkspaceNavigator}
-                  className={cn("bg-white", isMobile ? "min-h-10 flex-1 justify-center" : "")}
+                  className="bg-white min-h-10 flex-1 justify-center"
                 >
                   <Home className="mr-2 h-3.5 w-3.5" />
                   Workspace Navigator
@@ -6963,61 +7059,35 @@ export default function InventorySystem() {
                 <span className="text-xs font-medium text-emerald-600">Open →</span>
               </button>
             )}
-            {isMobile && (
-              <div className="px-1">
-                <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-neutral-500">Workspace Sections</p>
-              </div>
-            )}
-            <div
-              className={cn(
-                "gap-2",
-                isMobile
-                  ? "flex snap-x snap-mandatory overflow-x-auto no-scrollbar"
-                  : "grid grid-cols-1 gap-3 md:grid-cols-3",
-              )}
-            >
+            <div className="px-1">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-neutral-500">Workspace Sections</p>
+            </div>
+            <div className="flex snap-x snap-mandatory overflow-x-auto no-scrollbar gap-2">
               {launcherSections.map((section) => {
                 const SectionIcon = section.icon
                 const isSectionActive = activeTabGroup === section.id
-
                 return (
                   <div
                     key={section.id}
                     className={cn(
-                      "rounded-2xl border transition-all shadow-sm",
-                      isMobile ? "min-w-[220px] max-w-[85vw] snap-start px-3.5 py-2.5" : "px-4 py-3.5",
+                      "min-w-[220px] max-w-[85vw] snap-start px-3.5 py-2.5 rounded-2xl border transition-all shadow-sm",
                       isSectionActive ? section.activeCardClassName : section.inactiveCardClassName,
                     )}
                   >
                     <button
                       type="button"
                       onClick={() => handleSectionSelect(section.id)}
-                      className={cn(
-                        "flex w-full items-center gap-3 text-left transition-all touch-manipulation",
-                        isMobile ? "min-h-[72px]" : "min-h-[78px]",
-                      )}
+                      className="flex w-full items-center gap-3 text-left transition-all touch-manipulation min-h-[72px]"
                     >
                       <SectionIcon className={cn("h-5 w-5", isSectionActive ? "text-white" : section.iconClassName)} />
                       <div className="min-w-0">
                         <p className="text-base font-semibold">{section.label}</p>
-                        <p
-                          className={cn(
-                            "text-xs whitespace-normal break-words leading-snug",
-                            isSectionActive ? section.activeDescriptionClassName : section.inactiveDescriptionClassName,
-                          )}
-                        >
+                        <p className={cn(
+                          "text-xs whitespace-normal break-words leading-snug",
+                          isSectionActive ? section.activeDescriptionClassName : section.inactiveDescriptionClassName,
+                        )}>
                           {section.description}
                         </p>
-                        {!isMobile && (
-                          <p
-                            className={cn(
-                              "mt-2 text-[11px] font-medium",
-                              isSectionActive ? "text-white/85" : "text-neutral-500",
-                            )}
-                          >
-                            Open section
-                          </p>
-                        )}
                       </div>
                     </button>
                   </div>
@@ -7025,25 +7095,6 @@ export default function InventorySystem() {
               })}
             </div>
             </>
-            )}
-            {!isMobile && activeTab !== DASHBOARD_LAUNCHER_TAB && activeTabGroup !== "dashboard" && activeSectionTabs.length > 0 && (
-              <TabsList
-                className="h-auto flex-wrap items-center gap-2 rounded-2xl border border-black/10 bg-neutral-50/90 p-2 shadow-inner"
-              >
-                {activeSectionTabs.map((tab) => {
-                  const TabIcon = tab.icon
-                  return (
-                    <TabsTrigger
-                      key={tab.value}
-                      value={tab.value}
-                      className="min-h-11 rounded-lg border border-black/10 bg-white/90 px-4 text-sm font-semibold data-[state=active]:border-emerald-600 data-[state=active]:bg-emerald-600 data-[state=active]:text-white data-[state=active]:shadow-[0_10px_20px_-14px_rgba(5,150,105,0.9)]"
-                    >
-                      <TabIcon className="mr-2 h-4 w-4" />
-                      {tab.label}
-                    </TabsTrigger>
-                  )
-                })}
-              </TabsList>
             )}
             </div>
           )}
@@ -9602,6 +9653,7 @@ export default function InventorySystem() {
             </div>
           </div>
         )}
+      </div>
       </div>
     </div>
   )

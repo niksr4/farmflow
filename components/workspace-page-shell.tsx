@@ -36,6 +36,7 @@ const accentStyles: Record<
   WorkspaceShellAccent,
   {
     shell: string
+    darkShell: string
     glow: string
     badge: string
     text: string
@@ -44,6 +45,7 @@ const accentStyles: Record<
 > = {
   emerald: {
     shell: "border-emerald-200/80 bg-gradient-to-br from-white via-emerald-50/80 to-slate-50/90",
+    darkShell: "dark:border-emerald-500/20 dark:bg-card dark:[background-image:none]",
     glow: "bg-[radial-gradient(circle_at_top_right,_rgba(16,185,129,0.18),_transparent_42%),radial-gradient(circle_at_bottom_left,_rgba(52,211,153,0.14),_transparent_38%)]",
     badge: "border-emerald-200 bg-white text-emerald-700",
     text: "text-emerald-900",
@@ -51,6 +53,7 @@ const accentStyles: Record<
   },
   amber: {
     shell: "border-amber-200/80 bg-gradient-to-br from-white via-amber-50/80 to-stone-50/90",
+    darkShell: "dark:border-amber-500/20 dark:bg-card dark:[background-image:none]",
     glow: "bg-[radial-gradient(circle_at_top_right,_rgba(245,158,11,0.2),_transparent_42%),radial-gradient(circle_at_bottom_left,_rgba(251,191,36,0.16),_transparent_38%)]",
     badge: "border-amber-200 bg-white text-amber-700",
     text: "text-amber-950",
@@ -58,6 +61,7 @@ const accentStyles: Record<
   },
   sky: {
     shell: "border-sky-200/80 bg-gradient-to-br from-white via-sky-50/80 to-cyan-50/90",
+    darkShell: "dark:border-sky-500/20 dark:bg-card dark:[background-image:none]",
     glow: "bg-[radial-gradient(circle_at_top_right,_rgba(14,165,233,0.16),_transparent_42%),radial-gradient(circle_at_bottom_left,_rgba(34,211,238,0.14),_transparent_38%)]",
     badge: "border-sky-200 bg-white text-sky-700",
     text: "text-sky-950",
@@ -65,6 +69,7 @@ const accentStyles: Record<
   },
   slate: {
     shell: "border-slate-200/90 bg-gradient-to-br from-white via-slate-50/85 to-zinc-50/90",
+    darkShell: "dark:border-white/[0.08] dark:bg-card dark:[background-image:none]",
     glow: "bg-[radial-gradient(circle_at_top_right,_rgba(148,163,184,0.16),_transparent_42%),radial-gradient(circle_at_bottom_left,_rgba(203,213,225,0.14),_transparent_38%)]",
     badge: "border-slate-200 bg-white text-slate-700",
     text: "text-slate-900",
@@ -72,6 +77,7 @@ const accentStyles: Record<
   },
   violet: {
     shell: "border-violet-200/80 bg-gradient-to-br from-white via-violet-50/80 to-fuchsia-50/85",
+    darkShell: "dark:border-violet-500/20 dark:bg-card dark:[background-image:none]",
     glow: "bg-[radial-gradient(circle_at_top_right,_rgba(139,92,246,0.16),_transparent_42%),radial-gradient(circle_at_bottom_left,_rgba(217,70,239,0.12),_transparent_38%)]",
     badge: "border-violet-200 bg-white text-violet-700",
     text: "text-violet-950",
@@ -96,27 +102,27 @@ const statToneStyles: Record<
   }
 > = {
   default: {
-    card: "border-slate-200/80 bg-white/88",
+    card: "border-slate-200/80 bg-white/88 dark:bg-card/70 dark:border-white/[0.07]",
     label: "text-slate-500",
-    accent: "bg-slate-300/80",
+    accent: "bg-slate-300/80 dark:bg-white/20",
     detail: "text-slate-500",
   },
   positive: {
-    card: "border-emerald-200/80 bg-emerald-50/80",
+    card: "border-emerald-200/80 bg-emerald-50/80 dark:bg-emerald-500/10 dark:border-emerald-500/25",
     label: "text-emerald-700",
-    accent: "bg-emerald-400/80",
+    accent: "bg-emerald-400/80 dark:bg-emerald-400/50",
     detail: "text-emerald-700/85",
   },
   warning: {
-    card: "border-amber-200/80 bg-amber-50/80",
+    card: "border-amber-200/80 bg-amber-50/80 dark:bg-amber-500/10 dark:border-amber-500/25",
     label: "text-amber-700",
-    accent: "bg-amber-400/80",
+    accent: "bg-amber-400/80 dark:bg-amber-400/50",
     detail: "text-amber-700/85",
   },
   critical: {
-    card: "border-rose-200/80 bg-rose-50/80",
+    card: "border-rose-200/80 bg-rose-50/80 dark:bg-rose-500/10 dark:border-rose-500/25",
     label: "text-rose-700",
-    accent: "bg-rose-400/80",
+    accent: "bg-rose-400/80 dark:bg-rose-400/50",
     detail: "text-rose-700/85",
   },
 }
@@ -163,6 +169,7 @@ export default function WorkspacePageShell({
         className={cn(
           "relative overflow-hidden rounded-[32px] border shadow-[0_20px_48px_-32px_rgba(15,23,42,0.34)]",
           accentStyle.shell,
+          accentStyle.darkShell,
         )}
       >
         <div className={cn("absolute inset-0", accentStyle.glow)} />

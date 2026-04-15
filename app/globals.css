@@ -104,6 +104,40 @@ body::before {
   background: hsl(var(--background));
 }
 
+/* ── Subtle interactive grow-on-hover ──────────────────────────────────────
+   Applies a gentle scale on hover + a slight press-in on active for all
+   interactive elements. Elements with Tailwind transition-all already cover
+   transform; this rule is a fallback for anything that doesn't.           */
+button:not(:disabled),
+a[href],
+[role="button"]:not([aria-disabled="true"]) {
+  transition-property: color, background-color, border-color,
+    text-decoration-color, fill, stroke, opacity, box-shadow, transform;
+  transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+  transition-duration: 120ms;
+}
+
+button:not(:disabled):hover,
+a[href]:hover,
+[role="button"]:not([aria-disabled="true"]):hover {
+  transform: scale(1.02);
+}
+
+button:not(:disabled):active,
+a[href]:active,
+[role="button"]:not([aria-disabled="true"]):active {
+  transform: scale(0.97);
+  transition-duration: 80ms;
+}
+
+/* Sidebar nav: fixed-width container clips the scale — keep it flat */
+aside button:hover,
+aside button:active,
+aside a[href]:hover,
+aside a[href]:active {
+  transform: none;
+}
+
 .font-display {
   font-family: var(--font-display), "Fraunces", "Georgia", serif;
   letter-spacing: -0.01em;
@@ -368,3 +402,159 @@ body::before {
   transform: translateX(-50%);
   border-radius: 999px;
 }
+
+/* ── Dark-mode adapters for hardcoded light colours ────────────────────
+   The dashboard UI was originally built with literal bg-white / text-slate-*
+   classes. These overrides remap them to CSS-variable equivalents so the
+   whole app changes consistently when the dark theme is active.           */
+
+/* White backgrounds → card surface */
+.dark .bg-white            { background-color: hsl(var(--card)); }
+.dark .bg-white\/70        { background-color: hsl(var(--card) / 0.88); }
+.dark .bg-white\/75        { background-color: hsl(var(--card) / 0.90); }
+.dark .bg-white\/80        { background-color: hsl(var(--card) / 0.92); }
+.dark .bg-white\/90        { background-color: hsl(var(--card) / 0.95); }
+.dark .bg-white\/95        { background-color: hsl(var(--card) / 0.97); }
+
+/* Neutral/slate tinted backgrounds */
+.dark .bg-neutral-50,
+.dark .bg-slate-50         { background-color: hsl(var(--muted) / 0.45); }
+.dark .bg-neutral-50\/90   { background-color: hsl(var(--muted) / 0.42); }
+.dark .bg-neutral-50\/70,
+.dark .bg-slate-50\/60     { background-color: hsl(var(--muted) / 0.3); }
+.dark .bg-neutral-100\/80  { background-color: hsl(var(--muted) / 0.35); }
+.dark .bg-neutral-100      { background-color: hsl(var(--muted) / 0.5); }
+
+/* Emerald tinted backgrounds → very dark green tints */
+.dark .bg-emerald-50       { background-color: hsl(152 40% 7%); }
+.dark .bg-emerald-50\/50,
+.dark .bg-emerald-50\/55,
+.dark .bg-emerald-50\/60   { background-color: hsl(152 40% 7% / 0.7); }
+.dark .bg-emerald-50\/70,
+.dark .bg-emerald-50\/80   { background-color: hsl(152 40% 8% / 0.85); }
+
+/* Amber tinted backgrounds → very dark amber tints */
+.dark .bg-amber-50         { background-color: hsl(43 60% 6%); }
+.dark .bg-amber-50\/50,
+.dark .bg-amber-50\/60,
+.dark .bg-amber-50\/70,
+.dark .bg-amber-50\/80,
+.dark .bg-amber-50\/90     { background-color: hsl(43 60% 7% / 0.85); }
+
+/* Rose tinted backgrounds → very dark rose tints */
+.dark .bg-rose-50,
+.dark .bg-rose-50\/70      { background-color: hsl(0 50% 7%); }
+
+/* Text colour mappings */
+.dark .text-slate-900,
+.dark .text-neutral-900    { color: hsl(var(--foreground)); }
+.dark .text-slate-800,
+.dark .text-neutral-800    { color: hsl(var(--foreground) / 0.9); }
+.dark .text-slate-700,
+.dark .text-neutral-700    { color: hsl(var(--foreground) / 0.78); }
+.dark .text-slate-600,
+.dark .text-neutral-600    { color: hsl(var(--muted-foreground)); }
+.dark .text-slate-500,
+.dark .text-neutral-500    { color: hsl(var(--muted-foreground) / 0.85); }
+
+/* Emerald/amber text — lighten in dark mode so they stay readable */
+.dark .text-emerald-900    { color: hsl(152 55% 72%); }
+.dark .text-amber-900      { color: hsl(43  60% 72%); }
+
+/* Border mappings */
+.dark .border-black\/5     { border-color: hsl(var(--border) / 0.4); }
+.dark .border-black\/10    { border-color: hsl(var(--border)); }
+.dark .border-black\/15    { border-color: hsl(var(--border)); }
+.dark .border-emerald-100,
+.dark .border-emerald-200  { border-color: hsl(152 30% 22%); }
+.dark .border-amber-100,
+.dark .border-amber-200    { border-color: hsl(43  40% 20%); }
+
+.dark .shadow-sm           { box-shadow: 0 1px 3px 0 rgba(0,0,0,0.4), 0 1px 2px -1px rgba(0,0,0,0.4); }
+
+/* Gradient stop overrides — from/via/to utilities each set a CSS custom
+   property, so they must be overridden individually by selector.         */
+.dark .from-white          { --tw-gradient-from: hsl(var(--card)); }
+.dark .from-white\/95      { --tw-gradient-from: hsl(var(--card) / 0.97); }
+.dark .via-white           { --tw-gradient-via: hsl(var(--card)); }
+.dark .via-neutral-50      { --tw-gradient-via: hsl(var(--muted) / 0.5); }
+.dark .to-neutral-50       { --tw-gradient-to:  hsl(var(--muted) / 0.4); }
+.dark .to-neutral-100\/80  { --tw-gradient-to:  hsl(var(--muted) / 0.35); }
+
+/* Additional bg-white opacity variants */
+.dark .bg-white\/72        { background-color: hsl(var(--card) / 0.88); }
+.dark .bg-white\/82        { background-color: hsl(var(--card) / 0.92); }
+.dark .bg-white\/85        { background-color: hsl(var(--card) / 0.93); }
+.dark .bg-white\/88        { background-color: hsl(var(--card) / 0.94); }
+
+/* Sky tinted backgrounds → very dark sky tints */
+.dark .bg-sky-50           { background-color: hsl(200 60% 6%); }
+.dark .bg-sky-50\/80       { background-color: hsl(200 60% 6% / 0.85); }
+
+/* Violet tinted backgrounds → very dark violet tints */
+.dark .bg-violet-50        { background-color: hsl(260 40% 7%); }
+.dark .bg-violet-50\/80    { background-color: hsl(260 40% 7% / 0.85); }
+
+/* Slate/stone/zinc tinted backgrounds */
+.dark .bg-slate-50\/90     { background-color: hsl(var(--muted) / 0.42); }
+.dark .bg-stone-50\/90     { background-color: hsl(var(--muted) / 0.42); }
+
+/* Colored via-* gradient stops */
+.dark .via-emerald-50\/80  { --tw-gradient-via: hsl(152 40% 7% / 0.5); }
+.dark .via-amber-50\/80    { --tw-gradient-via: hsl(43  60% 6% / 0.5); }
+.dark .via-sky-50\/80      { --tw-gradient-via: hsl(200 60% 6% / 0.5); }
+.dark .via-slate-50\/85    { --tw-gradient-via: hsl(var(--muted) / 0.35); }
+.dark .via-violet-50\/80   { --tw-gradient-via: hsl(260 40% 7% / 0.5); }
+
+/* Colored to-* gradient stops */
+.dark .to-slate-50\/90     { --tw-gradient-to: hsl(var(--muted) / 0.35); }
+.dark .to-stone-50\/90     { --tw-gradient-to: hsl(var(--muted) / 0.35); }
+.dark .to-zinc-50\/90      { --tw-gradient-to: hsl(var(--muted) / 0.35); }
+.dark .to-cyan-50\/90      { --tw-gradient-to: hsl(200 60% 6% / 0.5); }
+.dark .to-fuchsia-50\/85   { --tw-gradient-to: hsl(290 40% 7% / 0.5); }
+
+/* Additional border variants */
+.dark .border-slate-200\/70  { border-color: hsl(var(--border) / 0.5); }
+.dark .border-slate-200\/80  { border-color: hsl(var(--border) / 0.6); }
+.dark .border-slate-200\/90  { border-color: hsl(var(--border) / 0.7); }
+.dark .border-sky-100\/90    { border-color: hsl(200 40% 20% / 0.7); }
+.dark .border-sky-200\/80    { border-color: hsl(200 40% 22%); }
+.dark .border-violet-200\/80 { border-color: hsl(260 30% 22%); }
+
+/* Gradient to-white stop (e.g. Operational Confidence card) */
+.dark .to-white              { --tw-gradient-to: hsl(var(--card)); }
+
+/* Gradient from-* stops at opacity variants not covered above */
+.dark .from-emerald-50\/60   { --tw-gradient-from: hsl(152 40% 7%); }
+
+/* -100 shade backgrounds (icon circles in What to do next) */
+.dark .bg-emerald-100        { background-color: hsl(152 40% 10%); }
+.dark .bg-amber-100          { background-color: hsl(43  60% 10%); }
+.dark .bg-sky-100            { background-color: hsl(200 60% 10%); }
+.dark .bg-rose-100           { background-color: hsl(0   50% 10%); }
+
+/* Additional sky-50 opacity variants */
+.dark .bg-sky-50\/55         { background-color: hsl(200 60% 6% / 0.7); }
+.dark .bg-sky-50\/60         { background-color: hsl(200 60% 6% / 0.75); }
+
+/* Additional rose tint for stat cards */
+.dark .bg-rose-50\/80        { background-color: hsl(0 50% 7% / 0.85); }
+.dark .bg-rose-50\/70        { background-color: hsl(0 50% 7% / 0.75); }
+.dark .bg-rose-50\/90        { background-color: hsl(0 50% 7% / 0.9); }
+.dark .border-rose-200\/80   { border-color: hsl(0 40% 22%); }
+
+/* Cyan tinted backgrounds (pepper / other-sales sections) */
+.dark .bg-cyan-50            { background-color: hsl(188 60% 6%); }
+.dark .bg-cyan-50\/50        { background-color: hsl(188 60% 6% / 0.7); }
+.dark .bg-cyan-50\/70        { background-color: hsl(188 60% 6% / 0.8); }
+.dark .bg-cyan-100,
+.dark .bg-cyan-100\/70       { background-color: hsl(188 60% 9%); }
+
+/* Stone backgrounds */
+.dark .bg-stone-50           { background-color: hsl(var(--muted) / 0.45); }
+.dark .bg-stone-100          { background-color: hsl(var(--muted) / 0.55); }
+
+/* Translucent -100 shades (badge chips etc.) */
+.dark .bg-emerald-100\/70    { background-color: hsl(152 40% 10% / 0.8); }
+.dark .bg-amber-100\/70      { background-color: hsl(43  60% 10% / 0.8); }
+.dark .bg-cyan-100\/70       { background-color: hsl(188 60% 9%  / 0.8); }
