@@ -1,18 +1,20 @@
 import * as Sentry from "@sentry/nextjs"
 import posthog from "posthog-js"
 
-const sentryDsn = process.env.NEXT_PUBLIC_SENTRY_DSN
-if (sentryDsn) {
-  Sentry.init({
-    dsn: sentryDsn,
-    environment: process.env.NEXT_PUBLIC_VERCEL_ENV ?? "development",
-    tracesSampleRate: 0.1,
-    replaysOnErrorSampleRate: 1.0,
-    replaysSessionSampleRate: 0,
-    ignoreErrors: ["Unauthorized", "Module access disabled"],
-    integrations: [Sentry.replayIntegration({ maskAllText: true, blockAllMedia: true })],
-  })
-}
+Sentry.init({
+  dsn: process.env.NEXT_PUBLIC_SENTRY_DSN ?? "https://9ff9672ddc6ade0965e0a02e09f6cf3c@o4511210874339328.ingest.de.sentry.io/4511212832817232",
+  environment: process.env.NEXT_PUBLIC_VERCEL_ENV ?? process.env.NODE_ENV ?? "development",
+  tracesSampleRate: 0.05,
+  replaysOnErrorSampleRate: 1.0,
+  replaysSessionSampleRate: 0.01,
+  ignoreErrors: [
+    "Unauthorized",
+    "Module access disabled",
+    "ResizeObserver loop limit exceeded",
+    "ResizeObserver loop completed with undelivered notifications",
+  ],
+  integrations: [Sentry.replayIntegration({ maskAllText: true, blockAllMedia: true })],
+})
 
 const posthogKey = process.env.NEXT_PUBLIC_POSTHOG_KEY
 const posthogHost = process.env.NEXT_PUBLIC_POSTHOG_HOST
