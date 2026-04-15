@@ -91,7 +91,7 @@ export default async function RootLayout({
         <meta name="apple-mobile-web-app-capable" content="yes" />
       </head>
       <body className={`${bodyFont.variable} ${displayFont.variable} font-body`} suppressHydrationWarning>
-        <ThemeProvider attribute="class" defaultTheme="dark" disableTransitionOnChange>
+        <ThemeProvider attribute="class" defaultTheme="light" disableTransitionOnChange>
           <AuthProvider>
             <LocaleProvider>
               <Suspense fallback={null}>
