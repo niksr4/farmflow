@@ -131,31 +131,10 @@ export const buildOnboardingSteps = (
     })
   }
 
-  // Processing (pulping) is deliberately excluded: it's only possible during
-  // harvest season and would permanently block checklist completion for
-  // estates in the off-season. Workspace hints surface it when in season.
-
-  if (access.canShowDispatch) {
-    steps.push({
-      key: "dispatch",
-      title: "Create a dispatch record",
-      description: "Send bags out and optionally note KGs received.",
-      done: status.dispatch,
-      actionLabel: "Open Dispatch",
-      actionTab: "dispatch",
-    })
-  }
-
-  if (access.canShowSales) {
-    steps.push({
-      key: "sales",
-      title: "Record your first sale",
-      description: "Capture bags sold and pricing for revenue tracking.",
-      done: status.sales,
-      actionLabel: "Open Sales",
-      actionTab: "sales",
-    })
-  }
+  // Processing, dispatch, and sales are deliberately excluded: they only
+  // happen during or after harvest season and would permanently block
+  // checklist completion for off-season estates. Workspace hints surface
+  // these contextually when the season is right.
 
   return steps
 }
