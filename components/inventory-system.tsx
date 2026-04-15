@@ -4196,6 +4196,7 @@ export default function InventorySystem() {
     const onboardingTotalCountLocal = onboardingStepConfigs.length
     const showOnboardingLocal =
       !isOwner &&
+      Boolean(user?.requiresGuidedSetup) &&
       !LIVE_TENANT_SKIP_TENANTS.has(tenantId || "") &&
       hasLoadedOnboardingStatus &&
       onboardingTotalCountLocal > 0 &&
@@ -5700,12 +5701,14 @@ export default function InventorySystem() {
   const onboardingTotalCount = onboardingStepConfigs.length
   const showOnboarding =
     !isOwner &&
+    Boolean(user.requiresGuidedSetup) &&
     !LIVE_TENANT_SKIP_TENANTS.has(tenantId || "") &&
     hasLoadedOnboardingStatus &&
     onboardingTotalCount > 0 &&
     onboardingCompletedCount < onboardingTotalCount
   const showSetupComplete =
     !isOwner &&
+    Boolean(user.requiresGuidedSetup) &&
     !LIVE_TENANT_SKIP_TENANTS.has(tenantId || "") &&
     hasLoadedOnboardingStatus &&
     onboardingTotalCount > 0 &&

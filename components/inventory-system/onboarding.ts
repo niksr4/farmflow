@@ -131,16 +131,9 @@ export const buildOnboardingSteps = (
     })
   }
 
-  if (access.canShowProcessing) {
-    steps.push({
-      key: "processing",
-      title: "Record pulping output",
-      description: "Log today's coffee pulping output (parchment/cherry).",
-      done: status.processing,
-      actionLabel: "Open Pulping",
-      actionTab: "processing",
-    })
-  }
+  // Processing (pulping) is deliberately excluded: it's only possible during
+  // harvest season and would permanently block checklist completion for
+  // estates in the off-season. Workspace hints surface it when in season.
 
   if (access.canShowDispatch) {
     steps.push({
