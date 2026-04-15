@@ -1,6 +1,6 @@
 "use client"
 
-import { useMemo } from "react"
+import { useEffect, useMemo } from "react"
 import { SessionProvider, signIn, signOut, useSession } from "next-auth/react"
 import type { ReactNode } from "react"
 
@@ -34,6 +34,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
 export function useAuth(): AuthContextType {
   const { data: session, status } = useSession()
+
+  // Auto-clear stale JWT cookies. When NEXTAUTH_SECRET rotates or a token is
+  // otherwise corrupt, NextAuth returns "unauthenticated" but leaves the dead
+  // cookie in the browser — the user is stuck in a silent loop. If we detect
+  // a session token cookie while status is unauthenticated, force a clean
+  // signOut so the cookie is cleared and the user lands on the login page.
+  useEffect(() => {
+    if (status !== "unauthenticated") return
+    const hasStaleToken =
+      typeof document !== "undefined" &&
+      (document.cookie.includes("next-auth.session-token") ||
+        document.cookie.includes("__Secure-next-auth.session-token"))
+    if (hasStaleToken) {
+      signOut({ callbackUrl: "/login" })
+    }
+  }, [status])
 
   // Memoize so the object reference is stable across renders — prevents
   // useEffects that depend on `user` from firing on every render cycle.
