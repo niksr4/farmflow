@@ -12,6 +12,7 @@ import { DEFAULT_APP_LOCALE, normalizeAppLocale } from "@/lib/i18n"
 import { isEmailIdentifier, normalizeSignupEmail } from "@/lib/server/onboarding/utils"
 import { assertCoreRuntimeConfig } from "@/lib/runtime-config"
 import { logServerWarning } from "@/lib/server/safe-logging"
+import { sendAgentAlertEmail } from "@/lib/server/agents/alert-email"
 import { normalizeUsername, normalizeUsernameLookup } from "@/lib/usernames"
 
 type SessionMode = "app" | "web"
@@ -275,6 +276,21 @@ export const authOptions: NextAuthOptions = {
               userAgent,
               metadata: { identifier, reason: "rate_limited" },
             })
+            // Fire-and-forget — don't let alerting add latency to the auth response.
+            // Rate-limit hit means 10+ failed attempts: could be a legitimate user
+            // locked out or a brute-force attempt. Either warrants owner visibility.
+            sendAgentAlertEmail({
+              subject: `[FarmFlow] Login alert: ${identifier} is being rate-limited`,
+              text: [
+                `User "${identifier}" has been blocked after too many failed login attempts.`,
+                ``,
+                `IP: ${ipAddress || "unknown"}`,
+                `Time: ${new Date().toISOString()}`,
+                ``,
+                `If this is a legitimate user who has forgotten their password, reset it via the admin console:`,
+                `https://thefarmflow.in/admin/tenants`,
+              ].join("\n"),
+            }).catch(() => {})
             return null
           }
         } catch (rateLimitError) {
@@ -332,6 +348,22 @@ export const authOptions: NextAuthOptions = {
             userAgent,
             metadata: { identifier, reason: "invalid_password", candidates: users.length },
           })
+          // Alert the owner immediately — at current scale (small user base) any
+          // wrong-password attempt for a known account warrants visibility. Add a
+          // threshold here once the user base grows to avoid noise.
+          const knownUser = users[0]
+          sendAgentAlertEmail({
+            subject: `[FarmFlow] Login failure: ${knownUser.username} entered wrong password`,
+            text: [
+              `User "${knownUser.username}" failed to log in with an incorrect password.`,
+              ``,
+              `IP:   ${ipAddress || "unknown"}`,
+              `Time: ${new Date().toISOString()}`,
+              ``,
+              `If they are locked out, reset their password from the admin console:`,
+              `https://thefarmflow.in/admin/tenants`,
+            ].join("\n"),
+          }).catch(() => {})
           return null
         }
 
