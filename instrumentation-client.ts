@@ -1,6 +1,8 @@
 import * as Sentry from "@sentry/nextjs"
 import posthog from "posthog-js"
 
+export const onRouterTransitionStart = Sentry.captureRouterTransitionStart
+
 Sentry.init({
   dsn: process.env.NEXT_PUBLIC_SENTRY_DSN ?? "https://9ff9672ddc6ade0965e0a02e09f6cf3c@o4511210874339328.ingest.de.sentry.io/4511212832817232",
   environment: process.env.NEXT_PUBLIC_VERCEL_ENV ?? process.env.NODE_ENV ?? "development",
