@@ -5583,6 +5583,10 @@ export default function InventorySystem() {
       setShowWelcome(false)
       return
     }
+    if (user.setupCompleted) {
+      setShowWelcome(false)
+      return
+    }
     const key = `farmflow_welcome_seen:${tenantId}:${user.username}`
     try {
       const hasSeen = window.localStorage.getItem(key) === "true"

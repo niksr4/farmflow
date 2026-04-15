@@ -550,9 +550,20 @@ aside a[href]:active {
 .dark .bg-cyan-100,
 .dark .bg-cyan-100\/70       { background-color: hsl(188 60% 9%); }
 
-/* Stone backgrounds */
+/* Stone backgrounds and text */
 .dark .bg-stone-50           { background-color: hsl(var(--muted) / 0.45); }
 .dark .bg-stone-100          { background-color: hsl(var(--muted) / 0.55); }
+.dark .border-stone-200      { border-color: hsl(var(--border)); }
+.dark .text-stone-700        { color: hsl(var(--muted-foreground)); }
+.dark .text-stone-600        { color: hsl(var(--muted-foreground) / 0.85); }
+
+/* Amber text (used in onboarding "do this next" card) */
+.dark .text-amber-950        { color: hsl(43 80% 82%); }
+.dark .text-amber-900        { color: hsl(43 70% 75%); }
+.dark .text-amber-800        { color: hsl(43 65% 68%); }
+
+/* bg-amber-50 with additional opacity variants */
+.dark .bg-amber-50\/85       { background-color: hsl(43 60% 7% / 0.9); }
 
 /* Translucent -100 shades (badge chips etc.) */
 .dark .bg-emerald-100\/70    { background-color: hsl(152 40% 10% / 0.8); }
