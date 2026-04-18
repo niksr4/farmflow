@@ -168,9 +168,8 @@ export function useLaborData(locationId?: string, options: LaborDataOptions = {}
     await fetchDeployments(page + 1, true)
   }, [fetchDeployments, hasMore, loading, loadingMore, page])
 
-  const addDeployment = async (deployment: Omit<LaborDeployment, "id" | "totalCost" | "updatedAt">) => {
+  const addDeployment = async (deployment: Omit<LaborDeployment, "id" | "totalCost" | "updatedAt">): Promise<{ ok: true } | { ok: false; error: string }> => {
     try {
-
       const response = await fetch("/api/labor-neon", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -182,25 +181,24 @@ export function useLaborData(locationId?: string, options: LaborDataOptions = {}
       if (data.success) {
         await fetchDeployments(0, false)
         setError(null)
-        return true
+        return { ok: true }
       } else {
         console.error("❌ Failed to add deployment:", data.message)
         setError(data.message || "Failed to add deployment")
-        return false
+        return { ok: false, error: data.message || "Failed to save labor record" }
       }
     } catch (err: any) {
       console.error("❌ Error adding deployment:", err)
       setError(err.message || "Failed to add deployment")
-      return false
+      return { ok: false, error: "Network error — labor record may not have saved" }
     }
   }
 
   const updateDeployment = async (
     id: string,
     deployment: Omit<LaborDeployment, "id" | "totalCost" | "user" | "updatedAt">,
-  ) => {
+  ): Promise<{ ok: true } | { ok: false; error: string }> => {
     try {
-
       const response = await fetch("/api/labor-neon", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
@@ -212,27 +210,24 @@ export function useLaborData(locationId?: string, options: LaborDataOptions = {}
       if (data.success) {
         await fetchDeployments(0, false)
         setError(null)
-        return true
+        return { ok: true }
       } else {
         console.error("❌ Failed to update deployment:", data.message)
         setError(data.message || "Failed to update deployment")
-        return false
+        return { ok: false, error: data.message || "Failed to update labor record" }
       }
     } catch (err: any) {
       console.error("❌ Error updating deployment:", err)
       setError(err.message || "Failed to update deployment")
-      return false
+      return { ok: false, error: "Network error — labor record may not have saved" }
     }
   }
 
-  const deleteDeployment = async (id: string) => {
+  const deleteDeployment = async (id: string): Promise<{ ok: true } | { ok: false; error: string }> => {
     try {
-
       const response = await fetch(
         `/api/labor-neon?id=${id}${locationId ? `&locationId=${locationId}` : ""}`,
-        {
-          method: "DELETE",
-                  },
+        { method: "DELETE" },
       )
 
       const data = await response.json()
@@ -240,16 +235,16 @@ export function useLaborData(locationId?: string, options: LaborDataOptions = {}
       if (data.success) {
         await fetchDeployments(0, false)
         setError(null)
-        return true
+        return { ok: true }
       } else {
         console.error("❌ Failed to delete deployment:", data.message)
         setError(data.message || "Failed to delete deployment")
-        return false
+        return { ok: false, error: data.message || "Failed to delete labor record" }
       }
     } catch (err: any) {
       console.error("❌ Error deleting deployment:", err)
       setError(err.message || "Failed to delete deployment")
-      return false
+      return { ok: false, error: "Network error — labor record may not have deleted" }
     }
   }
 

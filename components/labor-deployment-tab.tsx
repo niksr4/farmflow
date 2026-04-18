@@ -172,14 +172,14 @@ export default function LaborDeploymentTab({
     }
 
     try {
-      const success = editingId ? await updateDeployment(editingId, deployment) : await addDeployment(deployment)
-      if (success) {
+      const result = editingId ? await updateDeployment(editingId, deployment) : await addDeployment(deployment)
+      if (result.ok) {
         resetForm()
         window.dispatchEvent(new CustomEvent(FARMFLOW_RECORD_SAVED_EVENT))
       } else {
         toast({
           title: "Couldn't save record",
-          description: deployError || "Please check your entries and try again.",
+          description: result.error || "Please check your entries and try again.",
           variant: "destructive",
         })
       }
@@ -558,9 +558,12 @@ export default function LaborDeploymentTab({
                             variant="outline"
                             size="sm"
                             className="flex-1 bg-transparent"
-                            onClick={() => {
+                            onClick={async () => {
                               if (confirm("Are you sure you want to delete this deployment?")) {
-                                deleteDeployment(deployment.id)
+                                const result = await deleteDeployment(deployment.id)
+                                if (!result.ok) {
+                                  toast({ title: "Couldn't delete record", description: result.error, variant: "destructive" })
+                                }
                               }
                             }}
                           >
@@ -624,9 +627,12 @@ export default function LaborDeploymentTab({
                                   <Button
                                     variant="ghost"
                                     size="icon"
-                                    onClick={() => {
+                                    onClick={async () => {
                                       if (confirm("Are you sure you want to delete this deployment?")) {
-                                        deleteDeployment(deployment.id)
+                                        const result = await deleteDeployment(deployment.id)
+                                        if (!result.ok) {
+                                          toast({ title: "Couldn't delete record", description: result.error, variant: "destructive" })
+                                        }
                                       }
                                     }}
                                   >
