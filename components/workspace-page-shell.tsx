@@ -2,8 +2,10 @@
 
 import type { CSSProperties, ReactNode } from "react"
 import { motion, useReducedMotion } from "framer-motion"
+import { Info } from "lucide-react"
 
 import { Badge } from "@/components/ui/badge"
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import { cn } from "@/lib/utils"
 
 type WorkspaceShellAccent = "emerald" | "amber" | "sky" | "slate" | "violet"
@@ -14,6 +16,7 @@ export type WorkspaceShellStat = {
   value: string
   detail?: string
   tone?: WorkspaceShellStatTone
+  tooltip?: string
 }
 
 type WorkspacePageShellProps = {
@@ -207,7 +210,19 @@ export default function WorkspacePageShell({
                   className={cn("rounded-2xl border p-4 shadow-[0_10px_20px_-18px_rgba(15,23,42,0.4)]", statToneStyles[stat.tone || "default"].card, accentStyle.statCard)}
                 >
                   <div className={cn("h-1.5 w-12 rounded-full", statToneStyles[stat.tone || "default"].accent)} />
-                  <p className={cn("mt-3 text-[11px] uppercase tracking-[0.18em]", statToneStyles[stat.tone || "default"].label)}>{stat.label}</p>
+                  <div className="mt-3 flex items-center gap-1.5">
+                    <p className={cn("text-[11px] uppercase tracking-[0.18em]", statToneStyles[stat.tone || "default"].label)}>{stat.label}</p>
+                    {stat.tooltip && (
+                      <TooltipProvider>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Info className={cn("h-3 w-3 shrink-0 cursor-help opacity-60", statToneStyles[stat.tone || "default"].label)} />
+                          </TooltipTrigger>
+                          <TooltipContent className="max-w-[220px]">{stat.tooltip}</TooltipContent>
+                        </Tooltip>
+                      </TooltipProvider>
+                    )}
+                  </div>
                   <p className={cn("mt-2 text-xl font-semibold tracking-tight", statToneClasses[stat.tone || "default"])}>
                     {stat.value}
                   </p>

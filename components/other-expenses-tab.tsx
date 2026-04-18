@@ -19,6 +19,7 @@ import { formatDateOnly } from "@/lib/date-utils"
 import { formatCurrency } from "@/lib/format"
 import { SkeletonTable } from "@/components/ui/skeleton"
 import WorkflowEmptyState from "@/components/workflow-empty-state"
+import { toast } from "sonner"
 
 interface ActivityCode {
   code: string
@@ -166,10 +167,12 @@ export default function OtherExpensesTab({
     }
 
     try {
-      const success = editingId ? await updateDeployment(editingId, deployment) : await addDeployment(deployment)
-      if (success) {
+      const result = editingId ? await updateDeployment(editingId, deployment) : await addDeployment(deployment)
+      if (result.ok) {
         resetForm()
         window.dispatchEvent(new CustomEvent(FARMFLOW_RECORD_SAVED_EVENT))
+      } else {
+        toast.error(result.error)
       }
     } finally {
       setIsSubmitting(false)
@@ -526,9 +529,10 @@ export default function OtherExpensesTab({
                             variant="outline"
                             size="sm"
                             className="flex-1 bg-transparent"
-                            onClick={() => {
+                            onClick={async () => {
                               if (confirm("Are you sure you want to delete this expense?")) {
-                                deleteDeployment(deployment.id)
+                                const result = await deleteDeployment(deployment.id)
+                                if (!result.ok) toast.error(result.error)
                               }
                             }}
                           >
@@ -589,9 +593,10 @@ export default function OtherExpensesTab({
                                 <Button
                                   variant="ghost"
                                   size="icon"
-                                  onClick={() => {
+                                  onClick={async () => {
                                     if (confirm("Are you sure you want to delete this expense?")) {
-                                      deleteDeployment(deployment.id)
+                                      const result = await deleteDeployment(deployment.id)
+                                      if (!result.ok) toast.error(result.error)
                                     }
                                   }}
                                 >

@@ -950,21 +950,25 @@ export default function AccountsPage({
       label: "Fiscal Year",
       value: selectedFiscalYear.label,
       detail: "April 1 to March 31 reporting window",
+      tooltip: "All figures below are filtered to this fiscal year. Switch the year using the selector in the header.",
     },
     {
       label: "Labor Tracked",
       value: summaryLoading ? "Loading..." : formatCurrency(filteredLaborTotal),
       detail: `${formatNumber(laborCount || laborDeployments.length, 0)} labor records in range`,
+      tooltip: "Total wages, advances, and labor costs recorded for the selected fiscal year and active filters.",
     },
     {
       label: "Other Expenses",
       value: summaryLoading ? "Loading..." : formatCurrency(filteredOtherExpensesTotal),
       detail: `${formatNumber(consumablesCount || consumableDeployments.length, 0)} expense records in range`,
+      tooltip: "Non-labor operational expenses: consumables, equipment, repairs, and other coded activities.",
     },
     {
       label: "Account Codes",
       value: formatNumber(accountActivities.length || activities.length, 0),
       detail: topCostCode ? `Top cost code: ${topCostCode.code}` : "Add estate codes for exports and summaries",
+      tooltip: "Estate-defined activity codes used to categorize labor and expenses. Used for cost reporting and export formats.",
     },
   ]
 

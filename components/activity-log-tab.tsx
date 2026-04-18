@@ -4,25 +4,24 @@ import { useCallback, useEffect, useMemo, useState } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
-import { Badge } from "@/components/ui/badge"
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import { History, Loader2, RefreshCw, Search } from "lucide-react"
 import { formatDateForDisplay } from "@/lib/date-utils"
 import { cn } from "@/lib/utils"
 
-type ActivityAction = "create" | "update" | "delete" | "upsert"
+type ActivitySource = "labor" | "expense" | "inventory"
 
-type AuditLog = {
-  id: number
-  tenant_id: string
-  user_id: string | null
+type ActivityRecord = {
+  id: string
+  source: ActivitySource | string
+  event_date: string
+  title: string
+  subtitle: string | null
+  amount: number | null
   username: string | null
-  role: string | null
-  action: ActivityAction | string
-  entity_type: string
-  entity_id: string | null
-  created_at: string
 }
 
 type ActivityLogTabProps = {
@@ -31,69 +30,48 @@ type ActivityLogTabProps = {
 
 const PAGE_SIZE = 50
 
-const ENTITY_LABELS: Record<string, string> = {
-  transaction_history: "Inventory",
-  current_inventory: "Inventory",
-  processing_records: "Processing",
-  dispatch_records: "Dispatch",
-  sales_records: "Sales",
-  other_sales_records: "Other Sales",
-  pepper_records: "Pepper",
-  curing_records: "Curing",
-  quality_grading_records: "Quality",
-  rainfall_records: "Rainfall",
-  journal_entries: "Journal",
-  labor_transactions: "Accounts",
-  expense_transactions: "Accounts",
-  receivables: "Receivables",
-  billing_invoices: "Billing",
-  locations: "Locations",
-  users: "Users",
-  tenant_modules: "Modules",
-  user_modules: "User Access",
-  tenants: "Tenant",
+const SOURCE_LABELS: Record<string, string> = {
+  labor: "Labour",
+  expense: "Expenses",
+  inventory: "Inventory",
 }
 
-const ACTION_OPTIONS: Array<{ value: string; label: string }> = [
-  { value: "all", label: "All actions" },
-  { value: "create", label: "Create" },
-  { value: "update", label: "Update" },
-  { value: "delete", label: "Delete" },
-  { value: "upsert", label: "Upsert" },
+const SOURCE_OPTIONS: Array<{ value: string; label: string }> = [
+  { value: "all", label: "All modules" },
+  { value: "labor", label: "Labour" },
+  { value: "expense", label: "Expenses" },
+  { value: "inventory", label: "Inventory" },
 ]
 
-const formatEntityLabel = (entityType: string) => {
-  if (ENTITY_LABELS[entityType]) return ENTITY_LABELS[entityType]
-  return entityType
-    .split("_")
-    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
-    .join(" ")
+const formatSourceLabel = (source: string) => SOURCE_LABELS[source] ?? source
+
+const sourceTagClass = (source: string) => {
+  if (source === "labor") return "bg-sky-100 text-sky-700 border-sky-200"
+  if (source === "expense") return "bg-amber-100 text-amber-700 border-amber-200"
+  if (source === "inventory") return "bg-emerald-100 text-emerald-700 border-emerald-200"
+  return "bg-muted text-muted-foreground border-border"
 }
 
-const actionBadgeClass = (action: string) => {
-  const normalized = action.toLowerCase()
-  if (normalized === "create") return "bg-emerald-100 text-emerald-700 border-emerald-200"
-  if (normalized === "update") return "bg-blue-100 text-blue-700 border-blue-200"
-  if (normalized === "delete") return "bg-rose-100 text-rose-700 border-rose-200"
-  return "bg-amber-100 text-amber-700 border-amber-200"
+const formatAmount = (amount: number | null) => {
+  if (amount == null || amount === 0) return null
+  return `₹${Number(amount).toLocaleString("en-IN")}`
 }
 
 export default function ActivityLogTab({ tenantId }: ActivityLogTabProps) {
-  const [logs, setLogs] = useState<AuditLog[]>([])
+  const [records, setRecords] = useState<ActivityRecord[]>([])
   const [totalCount, setTotalCount] = useState(0)
   const [page, setPage] = useState(0)
   const [hasMore, setHasMore] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
   const [isLoadingMore, setIsLoadingMore] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [entityFilter, setEntityFilter] = useState("all")
-  const [actionFilter, setActionFilter] = useState("all")
+  const [sourceFilter, setSourceFilter] = useState("all")
   const [searchTerm, setSearchTerm] = useState("")
 
-  const fetchLogs = useCallback(
+  const fetchRecords = useCallback(
     async (pageIndex = 0, append = false) => {
       if (!tenantId) {
-        setLogs([])
+        setRecords([])
         setTotalCount(0)
         setHasMore(false)
         setError("Tenant context missing.")
@@ -112,28 +90,28 @@ export default function ActivityLogTab({ tenantId }: ActivityLogTabProps) {
           limit: String(PAGE_SIZE),
           offset: String(pageIndex * PAGE_SIZE),
         })
-        if (entityFilter !== "all") {
-          params.set("entityType", entityFilter)
+        if (sourceFilter !== "all") {
+          params.set("source", sourceFilter)
         }
 
-        const response = await fetch(`/api/admin/audit-logs?${params.toString()}`)
+        const response = await fetch(`/api/admin/tenant-activity?${params.toString()}`)
         const data = await response.json()
         if (!response.ok || !data.success) {
-          throw new Error(data.error || "Failed to load activity logs")
+          throw new Error(data.error || "Failed to load activity")
         }
 
-        const nextLogs = Array.isArray(data.logs) ? data.logs : []
+        const nextRecords = Array.isArray(data.records) ? data.records : []
         const nextTotalCount = Number(data.totalCount) || 0
-        setLogs((prev) => (append ? [...prev, ...nextLogs] : nextLogs))
+        setRecords((prev) => (append ? [...prev, ...nextRecords] : nextRecords))
         setTotalCount(nextTotalCount)
-        const resolvedCount = append ? pageIndex * PAGE_SIZE + nextLogs.length : nextLogs.length
-        setHasMore(nextTotalCount ? resolvedCount < nextTotalCount : nextLogs.length === PAGE_SIZE)
+        const resolvedCount = append ? pageIndex * PAGE_SIZE + nextRecords.length : nextRecords.length
+        setHasMore(nextTotalCount ? resolvedCount < nextTotalCount : nextRecords.length === PAGE_SIZE)
         setPage(pageIndex)
         setError(null)
       } catch (loadError: any) {
-        setError(loadError?.message || "Failed to load activity logs")
+        setError(loadError?.message || "Failed to load activity")
         if (!append) {
-          setLogs([])
+          setRecords([])
           setTotalCount(0)
           setHasMore(false)
         }
@@ -145,44 +123,31 @@ export default function ActivityLogTab({ tenantId }: ActivityLogTabProps) {
         }
       }
     },
-    [entityFilter, tenantId],
+    [sourceFilter, tenantId],
   )
 
   useEffect(() => {
-    fetchLogs(0, false)
-  }, [fetchLogs])
+    fetchRecords(0, false)
+  }, [fetchRecords])
 
-  const entityOptions = useMemo(() => {
-    const uniqueEntityTypes = Array.from(new Set(logs.map((log) => String(log.entity_type || "")))).filter(Boolean)
-    return uniqueEntityTypes
-      .map((value) => ({ value, label: formatEntityLabel(value) }))
-      .sort((a, b) => a.label.localeCompare(b.label))
-  }, [logs])
-
-  const filteredLogs = useMemo(() => {
+  const filteredRecords = useMemo(() => {
     const normalizedSearch = searchTerm.trim().toLowerCase()
-    return logs.filter((log) => {
-      if (actionFilter !== "all" && String(log.action || "").toLowerCase() !== actionFilter) {
-        return false
-      }
-      if (!normalizedSearch) return true
-      const entityLabel = formatEntityLabel(log.entity_type || "").toLowerCase()
+    if (!normalizedSearch) return records
+    return records.filter((rec) => {
       const haystack = [
-        String(log.username || ""),
-        String(log.role || ""),
-        String(log.action || ""),
-        String(log.entity_type || ""),
-        entityLabel,
-        String(log.entity_id || ""),
+        String(rec.title || ""),
+        String(rec.subtitle || ""),
+        formatSourceLabel(rec.source),
+        String(rec.username || ""),
       ]
         .join(" ")
         .toLowerCase()
       return haystack.includes(normalizedSearch)
     })
-  }, [actionFilter, logs, searchTerm])
+  }, [records, searchTerm])
 
   const resolvedCountLabel =
-    totalCount > logs.length ? `Showing ${logs.length} of ${totalCount}` : `${logs.length} record(s)`
+    totalCount > records.length ? `Showing ${records.length} of ${totalCount}` : `${records.length} record(s)`
 
   return (
     <div className="space-y-6">
@@ -193,7 +158,7 @@ export default function ActivityLogTab({ tenantId }: ActivityLogTabProps) {
             Activity Log
           </CardTitle>
           <CardDescription>
-            Cross-module timeline for create, update, and delete operations across the estate.
+            Full timeline of transactions and entries recorded across the estate.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -203,36 +168,23 @@ export default function ActivityLogTab({ tenantId }: ActivityLogTabProps) {
               <Input
                 value={searchTerm}
                 onChange={(event) => setSearchTerm(event.target.value)}
-                placeholder="Search by user, module, action, or record ID"
+                placeholder="Search by activity, item, or notes"
                 className="pl-10"
               />
             </div>
-            <Select value={entityFilter} onValueChange={setEntityFilter}>
-              <SelectTrigger className="w-full bg-white lg:w-[220px]">
-                <SelectValue placeholder="All modules" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All modules</SelectItem>
-                {entityOptions.map((option) => (
-                  <SelectItem key={option.value} value={option.value}>
-                    {option.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            <Select value={actionFilter} onValueChange={setActionFilter}>
-              <SelectTrigger className="w-full bg-white lg:w-[170px]">
+            <Select value={sourceFilter} onValueChange={setSourceFilter}>
+              <SelectTrigger className="w-full bg-white lg:w-[200px]">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                {ACTION_OPTIONS.map((option) => (
+                {SOURCE_OPTIONS.map((option) => (
                   <SelectItem key={option.value} value={option.value}>
                     {option.label}
                   </SelectItem>
                 ))}
               </SelectContent>
             </Select>
-            <Button variant="outline" className="bg-white" onClick={() => fetchLogs(0, false)} disabled={isLoading}>
+            <Button variant="outline" className="bg-white" onClick={() => fetchRecords(0, false)} disabled={isLoading}>
               <RefreshCw className={cn("mr-2 h-4 w-4", isLoading ? "animate-spin" : "")} />
               Refresh
             </Button>
@@ -246,7 +198,7 @@ export default function ActivityLogTab({ tenantId }: ActivityLogTabProps) {
             <div className="flex items-center justify-center py-10">
               <Loader2 className="h-7 w-7 animate-spin text-muted-foreground" />
             </div>
-          ) : filteredLogs.length === 0 ? (
+          ) : filteredRecords.length === 0 ? (
             <div className="rounded-xl border border-border/60 bg-muted/20 p-8 text-center text-sm text-muted-foreground">
               No activity records match your current filters.
             </div>
@@ -256,33 +208,98 @@ export default function ActivityLogTab({ tenantId }: ActivityLogTabProps) {
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead>Date</TableHead>
+                      <TableHead className="whitespace-nowrap">Date</TableHead>
                       <TableHead>Module</TableHead>
-                      <TableHead>Action</TableHead>
-                      <TableHead>Record</TableHead>
+                      <TableHead>Details</TableHead>
+                      <TableHead className="text-right">Amount</TableHead>
                       <TableHead>User</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {filteredLogs.map((log) => {
-                      const action = String(log.action || "").toLowerCase()
+                    {filteredRecords.map((rec) => {
+                      const amountStr = formatAmount(rec.amount)
+                      const sourceMeta: Record<string, string> = {
+                        labor: "Labour deployments, wages, and worker costs",
+                        expense: "Equipment, consumables, and activity expenses",
+                        inventory: "Stock movements, purchases, and allocations",
+                      }
                       return (
-                        <TableRow key={log.id}>
-                          <TableCell>{formatDateForDisplay(log.created_at)}</TableCell>
-                          <TableCell>{formatEntityLabel(log.entity_type || "")}</TableCell>
+                        <TableRow key={`${rec.source}-${rec.id}`}>
+                          <TableCell className="whitespace-nowrap">{formatDateForDisplay(rec.event_date)}</TableCell>
                           <TableCell>
-                            <Badge variant="outline" className={cn("capitalize", actionBadgeClass(action))}>
-                              {action || "event"}
-                            </Badge>
+                            <TooltipProvider>
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <span
+                                    className={cn(
+                                      "inline-flex cursor-default items-center rounded-full border px-2 py-0.5 text-xs font-medium",
+                                      sourceTagClass(rec.source),
+                                    )}
+                                  >
+                                    {formatSourceLabel(rec.source)}
+                                  </span>
+                                </TooltipTrigger>
+                                {sourceMeta[rec.source] && (
+                                  <TooltipContent>{sourceMeta[rec.source]}</TooltipContent>
+                                )}
+                              </Tooltip>
+                            </TooltipProvider>
                           </TableCell>
-                          <TableCell className="font-mono text-xs">
-                            {log.entity_id ? String(log.entity_id) : "n/a"}
+                          <TableCell className="max-w-[260px]">
+                            <Popover>
+                              <PopoverTrigger asChild>
+                                <button className="group flex w-full flex-col gap-0.5 text-left">
+                                  <span className="font-medium text-sm leading-snug group-hover:text-emerald-700 transition-colors">
+                                    {rec.title || "—"}
+                                  </span>
+                                  {rec.subtitle && (
+                                    <span className="text-xs text-muted-foreground truncate">{rec.subtitle}</span>
+                                  )}
+                                </button>
+                              </PopoverTrigger>
+                              <PopoverContent side="right" align="start" className="w-72 space-y-2.5 p-4 text-sm">
+                                <p className="font-semibold text-foreground">{rec.title || "—"}</p>
+                                {rec.subtitle && (
+                                  <p className="text-muted-foreground leading-relaxed">{rec.subtitle}</p>
+                                )}
+                                <div className="border-t pt-2.5 space-y-1.5 text-xs text-muted-foreground">
+                                  <div className="flex justify-between">
+                                    <span>Date</span>
+                                    <span className="font-medium text-foreground">{formatDateForDisplay(rec.event_date)}</span>
+                                  </div>
+                                  <div className="flex justify-between">
+                                    <span>Module</span>
+                                    <span className="font-medium text-foreground">{formatSourceLabel(rec.source)}</span>
+                                  </div>
+                                  {amountStr && (
+                                    <div className="flex justify-between">
+                                      <span>Amount</span>
+                                      <span className="font-medium text-foreground">{amountStr}</span>
+                                    </div>
+                                  )}
+                                  {rec.username && (
+                                    <div className="flex justify-between">
+                                      <span>Recorded by</span>
+                                      <span className="font-medium text-foreground">{rec.username}</span>
+                                    </div>
+                                  )}
+                                </div>
+                              </PopoverContent>
+                            </Popover>
                           </TableCell>
-                          <TableCell>
-                            <div className="flex flex-col">
-                              <span>{log.username || "system"}</span>
-                              <span className="text-xs text-muted-foreground capitalize">{log.role || "unknown"}</span>
-                            </div>
+                          <TableCell className="text-right whitespace-nowrap">
+                            {amountStr ? (
+                              <span className="text-sm font-medium tabular-nums">{amountStr}</span>
+                            ) : (
+                              <span className="text-muted-foreground">—</span>
+                            )}
+                          </TableCell>
+                          <TableCell className="whitespace-nowrap">
+                            {rec.username ? (
+                              <span className="font-medium text-sm">{rec.username}</span>
+                            ) : (
+                              <span className="text-muted-foreground text-xs">—</span>
+                            )}
                           </TableCell>
                         </TableRow>
                       )
@@ -294,7 +311,7 @@ export default function ActivityLogTab({ tenantId }: ActivityLogTabProps) {
                 <div className="flex justify-center">
                   <Button
                     variant="outline"
-                    onClick={() => fetchLogs(page + 1, true)}
+                    onClick={() => fetchRecords(page + 1, true)}
                     disabled={isLoadingMore}
                     className="bg-white"
                   >

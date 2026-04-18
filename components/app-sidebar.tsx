@@ -3,6 +3,8 @@
 import React from "react"
 import { cn } from "@/lib/utils"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
+import { Badge } from "@/components/ui/badge"
 import { LogOut, Settings } from "lucide-react"
 import Image from "next/image"
 import Link from "next/link"
@@ -71,6 +73,8 @@ export default function AppSidebar({
   isOwner,
   buildWorkspaceHref,
 }: AppSidebarProps) {
+  const initial = username.charAt(0).toUpperCase()
+
   return (
     <TooltipProvider delayDuration={80}>
       <aside className={cn(
@@ -159,38 +163,80 @@ export default function AppSidebar({
           })}
         </nav>
 
-        {/* Bottom actions */}
-        <div className="shrink-0 border-t border-slate-100 px-2 py-2.5 flex flex-col gap-px dark:border-white/[0.05]">
-          {(isAdmin || isOwner) && (
-            <Tooltip>
-              <TooltipTrigger asChild>
+        {/* Profile section */}
+        <div className="shrink-0 border-t border-slate-100 px-2 py-2.5 dark:border-white/[0.05]">
+          <Popover>
+            <PopoverTrigger asChild>
+              <button
+                type="button"
+                aria-label="Profile"
+                className={cn(
+                  "flex h-9 w-full items-center justify-center rounded-lg transition-all duration-150",
+                  "text-slate-500 hover:bg-slate-100 dark:text-white/55 dark:hover:bg-white/[0.08]",
+                )}
+              >
+                <span className={cn(
+                  "flex h-[26px] w-[26px] items-center justify-center rounded-full text-[11px] font-bold",
+                  "bg-emerald-100 text-emerald-700 ring-1 ring-emerald-200/80",
+                  "dark:bg-emerald-500/15 dark:text-emerald-400 dark:ring-emerald-500/25",
+                )}>
+                  {initial}
+                </span>
+              </button>
+            </PopoverTrigger>
+            <PopoverContent side="right" sideOffset={12} align="end" className="w-56 p-2">
+              {/* Identity */}
+              <div className="flex items-center gap-2.5 px-2 py-2">
+                <span className={cn(
+                  "flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-sm font-bold",
+                  "bg-emerald-100 text-emerald-700 ring-1 ring-emerald-200",
+                  "dark:bg-emerald-500/15 dark:text-emerald-400 dark:ring-emerald-500/25",
+                )}>
+                  {initial}
+                </span>
+                <div className="min-w-0">
+                  <p className="truncate text-sm font-semibold text-foreground">{username}</p>
+                  {estateName && (
+                    <p className="truncate text-xs text-muted-foreground">{estateName}</p>
+                  )}
+                </div>
+              </div>
+              <div className="px-2 pb-2">
+                <Badge variant="outline" className="text-[11px] font-medium">
+                  {roleBadgeLabel}
+                </Badge>
+              </div>
+
+              <div className="my-1 border-t border-border" />
+
+              {(isAdmin || isOwner) && (
                 <Link
                   href={buildWorkspaceHref("/settings")}
-                  className="flex h-9 w-full items-center justify-center rounded-lg text-slate-500 transition-all duration-150 hover:bg-slate-100 hover:text-slate-800 dark:text-white/55 dark:hover:bg-white/[0.08] dark:hover:text-white/90"
+                  className={cn(
+                    "flex w-full items-center gap-2.5 rounded-md px-2 py-1.5 text-sm",
+                    "text-foreground hover:bg-accent transition-colors duration-100",
+                  )}
                 >
-                  <Settings className="h-[17px] w-[17px]" />
+                  <Settings className="h-3.5 w-3.5 text-muted-foreground" />
+                  Settings
                 </Link>
-              </TooltipTrigger>
-              <TooltipContent side="right" sideOffset={10} className={TOOLTIP_CLS}>
-                Settings
-              </TooltipContent>
-            </Tooltip>
-          )}
-          <Tooltip>
-            <TooltipTrigger asChild>
+              )}
+
+              <div className="my-1 border-t border-border" />
+
               <button
                 type="button"
                 onClick={onLogout}
-                className="flex h-9 w-full items-center justify-center rounded-lg text-slate-500 transition-all duration-150 hover:bg-rose-50 hover:text-rose-600 dark:text-white/55 dark:hover:bg-rose-500/12 dark:hover:text-rose-400"
+                className={cn(
+                  "flex w-full items-center gap-2.5 rounded-md px-2 py-1.5 text-sm",
+                  "text-rose-600 hover:bg-rose-50 dark:text-rose-400 dark:hover:bg-rose-500/10 transition-colors duration-100",
+                )}
               >
-                <LogOut className="h-[17px] w-[17px]" />
+                <LogOut className="h-3.5 w-3.5" />
+                Sign out
               </button>
-            </TooltipTrigger>
-            <TooltipContent side="right" sideOffset={10} className={TOOLTIP_CLS}>
-              <p className="font-semibold">{username}</p>
-              <p className="text-[11px] text-white/55">{roleBadgeLabel} · Sign out</p>
-            </TooltipContent>
-          </Tooltip>
+            </PopoverContent>
+          </Popover>
         </div>
       </aside>
     </TooltipProvider>

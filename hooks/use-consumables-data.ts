@@ -132,9 +132,8 @@ export function useConsumablesData(locationId?: string, options: ConsumablesData
     await fetchDeployments(page + 1, true)
   }, [fetchDeployments, hasMore, loading, loadingMore, page])
 
-  const addDeployment = async (deployment: Omit<ConsumableDeployment, "id">) => {
+  const addDeployment = async (deployment: Omit<ConsumableDeployment, "id">): Promise<{ ok: true } | { ok: false; error: string }> => {
     try {
-
       const response = await fetch("/api/expenses-neon", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -145,20 +144,19 @@ export function useConsumablesData(locationId?: string, options: ConsumablesData
 
       if (data.success) {
         await fetchDeployments(0, false) // Refresh the list
-        return true
+        return { ok: true }
       } else {
         console.error("❌ Failed to add deployment:", data)
-        return false
+        return { ok: false, error: data.error || "Failed to save expense" }
       }
     } catch (error) {
       console.error("❌ Error adding deployment:", error)
-      return false
+      return { ok: false, error: "Network error — expense may not have saved" }
     }
   }
 
-  const updateDeployment = async (id: number, deployment: Omit<ConsumableDeployment, "id" | "user">) => {
+  const updateDeployment = async (id: number, deployment: Omit<ConsumableDeployment, "id" | "user">): Promise<{ ok: true } | { ok: false; error: string }> => {
     try {
-
       const response = await fetch("/api/expenses-neon", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
@@ -169,20 +167,19 @@ export function useConsumablesData(locationId?: string, options: ConsumablesData
 
       if (data.success) {
         await fetchDeployments(0, false) // Refresh the list
-        return true
+        return { ok: true }
       } else {
         console.error("❌ Failed to update deployment:", data)
-        return false
+        return { ok: false, error: data.error || "Failed to update expense" }
       }
     } catch (error) {
       console.error("❌ Error updating deployment:", error)
-      return false
+      return { ok: false, error: "Network error — expense may not have saved" }
     }
   }
 
-  const deleteDeployment = async (id: number) => {
+  const deleteDeployment = async (id: number): Promise<{ ok: true } | { ok: false; error: string }> => {
     try {
-
       const response = await fetch(`/api/expenses-neon?id=${id}${locationId ? `&locationId=${locationId}` : ""}`, {
         method: "DELETE",
       })
@@ -191,14 +188,14 @@ export function useConsumablesData(locationId?: string, options: ConsumablesData
 
       if (data.success) {
         await fetchDeployments(0, false) // Refresh the list
-        return true
+        return { ok: true }
       } else {
         console.error("❌ Failed to delete deployment:", data)
-        return false
+        return { ok: false, error: data.error || "Failed to delete expense" }
       }
     } catch (error) {
       console.error("❌ Error deleting deployment:", error)
-      return false
+      return { ok: false, error: "Network error — expense may not have deleted" }
     }
   }
 

@@ -26,6 +26,11 @@ export async function GET(request: Request) {
     const limit = Math.min(Math.max(Number.parseInt(limitParam || "50", 10) || 50, 1), 200)
     const offset = Math.max(Number.parseInt(offsetParam || "0", 10) || 0, 0)
 
+    // scope=estate returns only business operations; scope=admin returns only platform-level ones.
+    // Default is "estate" — admin console actions (user mgmt, module toggles) are excluded.
+    const scope = searchParams.get("scope") || "estate"
+    const ADMIN_ENTITY_TYPES = ["users", "tenant_modules", "user_modules", "tenants"]
+
     if (!tenantId) {
       return NextResponse.json({ success: false, error: "tenantId is required" }, { status: 400 })
     }
@@ -38,9 +43,14 @@ export async function GET(request: Request) {
     const params: any[] = [tenantId]
     let whereClause = "tenant_id = $1"
 
-    if (entityType) {
+    if (entityType && entityType !== "all") {
       params.push(entityType)
       whereClause += ` AND entity_type = $${params.length}`
+    } else if (scope === "estate") {
+      // Exclude platform admin operations from the estate-facing log
+      const placeholders = ADMIN_ENTITY_TYPES.map((_, i) => `$${params.length + i + 1}`).join(", ")
+      params.push(...ADMIN_ENTITY_TYPES)
+      whereClause += ` AND entity_type NOT IN (${placeholders})`
     }
 
     params.push(limit, offset)

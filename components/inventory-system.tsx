@@ -40,6 +40,7 @@ import {
   Coins,
   Sun,
   Moon,
+  LifeBuoy,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -66,6 +67,7 @@ import { useTenantExperience } from "@/hooks/use-tenant-experience"
 import { useRouter, useSearchParams } from "next/navigation"
 import OnboardingChecklist, { type OnboardingStep } from "@/components/onboarding-checklist"
 import WorkspaceHints from "@/components/workspace-hints"
+import UniversalSearch from "@/components/universal-search"
 import Link from "next/link"
 import Image from "next/image"
 import { isWithinLast24Hours } from "@/lib/date-utils"
@@ -284,6 +286,7 @@ export default function InventorySystem() {
   const [processingWorkspaceView, setProcessingWorkspaceView] = useState<ProcessingWorkspaceView>("coffee")
   const [loadedTabs, setLoadedTabs] = useState<string[]>([DASHBOARD_LAUNCHER_TAB])
   const [dataToolsDataset, setDataToolsDataset] = useState<ExportDatasetId>("processing")
+  const [searchOpen, setSearchOpen] = useState(false)
   const [isExportingDataTools, setIsExportingDataTools] = useState(false)
   const [showDataToolsPanel, setShowDataToolsPanel] = useState(false)
   const [accountsInitialTab, setAccountsInitialTab] = useState<AccountsWorkspaceTab | undefined>(undefined)
@@ -671,6 +674,18 @@ export default function InventorySystem() {
       inventoryValue: summary.total_inventory_value,
     }
   }, [inventory.length, locations.length, summary.total_inventory_value, transactions])
+
+  // Cmd+K / Ctrl+K global shortcut to open search
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === "k") {
+        e.preventDefault()
+        setSearchOpen((o) => !o)
+      }
+    }
+    window.addEventListener("keydown", handleKeyDown)
+    return () => window.removeEventListener("keydown", handleKeyDown)
+  }, [])
 
   useEffect(() => {
     setProcessingWorkspaceView((currentView) => {
@@ -2763,31 +2778,52 @@ export default function InventorySystem() {
                     <td className="py-4 px-4">
                       {transaction.price ? formatCurrency(Number(transaction.price) || 0) : "-"}
                     </td>
-                    <td className="py-4 px-4 max-w-xs truncate" title={transaction.notes}>
-                      {transaction.notes}
+                    <td className="py-4 px-4 max-w-xs">
+                      {transaction.notes ? (
+                        <TooltipProvider>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <span className="block truncate cursor-default">{transaction.notes}</span>
+                            </TooltipTrigger>
+                            <TooltipContent className="max-w-xs">{transaction.notes}</TooltipContent>
+                          </Tooltip>
+                        </TooltipProvider>
+                      ) : null}
                     </td>
                     <td className="py-4 px-4">{transaction.user_id}</td>
                     <td className="py-4 px-4">
-                      <div className="flex gap-2">
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          onClick={() => handleEditTransaction(transaction)}
-                          className="text-amber-600 p-2 h-auto"
-                        >
-                          <Edit className="h-4 w-4" />
-                        </Button>
-                        {canManageRecords && (
-                          <Button
-                            size="sm"
-                            variant="ghost"
-                            onClick={() => handleDeleteConfirm(transaction.id)}
-                            className="text-red-600 p-2 h-auto"
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
-                        )}
-                      </div>
+                      <TooltipProvider>
+                        <div className="flex gap-2">
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                onClick={() => handleEditTransaction(transaction)}
+                                className="text-amber-600 p-2 h-auto"
+                              >
+                                <Edit className="h-4 w-4" />
+                              </Button>
+                            </TooltipTrigger>
+                            <TooltipContent>Edit transaction</TooltipContent>
+                          </Tooltip>
+                          {canManageRecords && (
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <Button
+                                  size="sm"
+                                  variant="ghost"
+                                  onClick={() => handleDeleteConfirm(transaction.id)}
+                                  className="text-red-600 p-2 h-auto"
+                                >
+                                  <Trash2 className="h-4 w-4" />
+                                </Button>
+                              </TooltipTrigger>
+                              <TooltipContent>Delete transaction</TooltipContent>
+                            </Tooltip>
+                          )}
+                        </div>
+                      </TooltipProvider>
                     </td>
                   </tr>
                 )
@@ -6168,6 +6204,11 @@ export default function InventorySystem() {
 
   return (
     <div className="flex min-h-screen bg-background">
+      <UniversalSearch
+        open={searchOpen}
+        onOpenChange={setSearchOpen}
+        onNavigate={handleTabChange}
+      />
       {!isMobile && (
         <AppSidebar
           activeTab={activeTab}
@@ -6290,6 +6331,18 @@ export default function InventorySystem() {
                 <Button
                   variant="ghost"
                   size="sm"
+                  onClick={() => setSearchOpen(true)}
+                  className="text-muted-foreground hover:text-foreground h-8 px-3 hidden sm:flex"
+                >
+                  <Search className="h-3.5 w-3.5 mr-1.5" />
+                  Search
+                  <kbd className="ml-2 hidden lg:inline-flex h-4 select-none items-center gap-0.5 rounded border bg-muted px-1 text-[10px] font-medium text-muted-foreground">
+                    ⌘K
+                  </kbd>
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="sm"
                   onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
                   className="text-muted-foreground hover:text-foreground h-8 w-8 px-0"
                   aria-label="Toggle theme"
@@ -6299,8 +6352,19 @@ export default function InventorySystem() {
                 <Button variant="ghost" size="sm" asChild className="text-muted-foreground hover:text-foreground h-8 px-3">
                   <Link href={buildWorkspaceHref("/manuals")}>
                     <BookOpen className="h-3.5 w-3.5 mr-1.5" />
-                    Manuals
+                    Help
                   </Link>
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="text-muted-foreground hover:text-foreground h-8 px-3"
+                  onClick={() => {
+                    window.location.href = `mailto:support@thefarmflow.in?subject=Support%20Request%20%E2%80%94%20${encodeURIComponent(user.username)}&body=Hi%20FarmFlow%20team%2C%0A%0A`
+                  }}
+                >
+                  <LifeBuoy className="h-3.5 w-3.5 mr-1.5" />
+                  Support
                 </Button>
                 {isOwner && (
                   <DropdownMenu>
@@ -6346,15 +6410,6 @@ export default function InventorySystem() {
                     </DropdownMenuContent>
                   </DropdownMenu>
                 )}
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={handleLogout}
-                  className="text-muted-foreground hover:text-rose-600 dark:hover:text-rose-400 h-8 w-8 px-0"
-                  aria-label="Sign out"
-                >
-                  <LogOut className="h-4 w-4" />
-                </Button>
               </div>
             </>
           )}

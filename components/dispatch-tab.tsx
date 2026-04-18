@@ -794,18 +794,23 @@ export default function DispatchTab({ showDataToolsControls = false }: DispatchT
       label: "Processed Nominal",
       value: `${formatNumber(processedNominalBagsTotal, 0)} bags`,
       detail: `${formatNumber(processedNominalBagsTotal * bagWeightKg, 0)} KGs from processing`,
+      tooltip: "Total nominal bag count derived from processing records this season. Each bag is assumed to be the configured bag weight.",
     },
     {
       label: "Confirmed Received",
       value: `${formatNumber(dispatchedReceivedKgsTotal, 0)} KGs`,
       detail: "This is the sellable stock basis downstream",
       tone: "positive" as const,
+      tooltip: "KGs confirmed received by the buyer or warehouse. This is the authoritative figure for downstream sales and revenue calculations.",
     },
     {
       label: "Pending Dispatch",
       value: `${formatNumber(Math.abs(pendingNominalBags), 0)} bags`,
       detail: pendingNominalBags < 0 ? "Dispatch exceeds processed nominal" : "Still waiting in processed stock",
       tone: pendingNominalBags < 0 ? ("critical" as const) : ("default" as const),
+      tooltip: pendingNominalBags < 0
+        ? "More bags have been dispatched than were processed — check for missing processing records or data entry errors."
+        : "Processed bags that have not yet been dispatched. Reduce this by recording dispatches.",
     },
     {
       label: "Dispatch Records",

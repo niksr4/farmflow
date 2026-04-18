@@ -1057,11 +1057,13 @@ export default function SalesTab({
       value: formatCurrency(coffeeRevenue, 0),
       detail: `${formatNumber(totalKgsSold, 0)} KGs sold to date`,
       tone: "positive" as const,
+      tooltip: "Total revenue from confirmed coffee sales records. Includes all coffee types sold this season.",
     },
     {
       label: "Other Revenue",
       value: formatCurrency(otherRevenue, 0),
       detail: otherSalesEnabled ? `${formatNumber(otherSalesTotals.totalCount, 0)} other-sales records` : "Module not enabled",
+      tooltip: "Revenue from non-coffee estate products — pepper, timber, services, etc. Requires the Other Sales module.",
     },
     {
       label: "Available To Sell",
@@ -1069,11 +1071,15 @@ export default function SalesTab({
       detail: "Confirmed dispatch-received stock",
       tone:
         selectionScopeAvailabilityTotals.totalAvailable > 0 ? ("default" as const) : ("warning" as const),
+      tooltip: selectionScopeAvailabilityTotals.totalAvailable <= 0
+        ? "No unsold stock available for the selected type and scope. All confirmed receipts have been recorded as sold."
+        : "Confirmed dispatch-received KGs that haven't been recorded as sold yet. Sell against this to keep records accurate.",
     },
     {
       label: "Sales Records",
       value: formatNumber(salesTotalCount || salesRecords.length, 0),
       detail: buyerSuggestions.length > 0 ? `${buyerSuggestions.length} buyer suggestions saved` : "Build buyer history as you go",
+      tooltip: "Total number of individual sale transactions recorded. Buyer names are saved as suggestions for faster future entry.",
     },
   ]
   const scrollToEntryForm = useCallback(() => {

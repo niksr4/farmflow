@@ -988,17 +988,20 @@ export default function SeasonDashboard() {
       label: "Processed",
       value: summary ? `${formatNumber(summary.totals.processedKgs, 0)} KGs` : loading ? "Loading..." : "No data",
       detail: "Dry output to date this fiscal year",
+      tooltip: "Total dry-processed output recorded across all processing batches for the current fiscal year.",
     },
     {
       label: "Revenue",
       value: summary ? formatCurrency(summary.totals.revenue) : loading ? "Loading..." : "No data",
       detail: "Realized commercial value to date",
       tone: summary && summary.totals.revenue > 0 ? ("positive" as const) : ("default" as const),
+      tooltip: "Actual sales revenue recognized from confirmed dispatches and sales records this fiscal year.",
     },
     {
       label: "Available To Sell",
       value: summary ? `${formatNumber(summary.totals.availableToSellKgs, 0)} KGs` : loading ? "Loading..." : "No data",
       detail: "Confirmed dispatch-received stock minus sold",
+      tooltip: "Stock confirmed received by buyers minus what has already been recorded as sold. This is your unsold inventory position.",
     },
     {
       label: "Exceptions",
@@ -1006,6 +1009,7 @@ export default function SeasonDashboard() {
       detail: weeklyError ? "Weekly checks unavailable" : "Rolling 7-day alert count",
       tone:
         !weeklyLoading && (weeklyExceptions?.alerts.length || 0) > 0 ? ("warning" as const) : ("default" as const),
+      tooltip: "Data quality and integrity alerts flagged in the last 7 days — gaps in records, unusual values, or missing entries that need attention.",
     },
   ]
 
