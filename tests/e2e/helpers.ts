@@ -33,5 +33,6 @@ export const hasRequiredAuthCredentials = expectOwnerUser ? hasOwnerCredentials 
 
 export const waitForDashboardReady = async (page: Page) => {
   await expect(page).toHaveURL(/\/dashboard(?:\?|$)/)
-  await expect(page.getByRole("heading", { name: "FarmFlow Workspace Navigator" })).toBeVisible()
+  // Wait for the page to finish loading — works on both desktop (sidebar) and mobile (no sidebar)
+  await page.waitForLoadState("networkidle", { timeout: 25000 })
 }

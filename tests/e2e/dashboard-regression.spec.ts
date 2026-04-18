@@ -138,6 +138,7 @@ test.describe("dashboard regression", () => {
     await expect(page).toHaveURL(/tab=dispatch/)
 
     await page.goto(homeRoute)
+    await waitForDashboardReady(page) // wait for exception-alerts to load before checking for alert buttons
     const homePriorityAlert = page.getByTestId("home-priority-alert-1")
     if ((await homePriorityAlert.count()) > 0) {
       await homePriorityAlert.click()
