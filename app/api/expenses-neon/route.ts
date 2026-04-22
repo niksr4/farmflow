@@ -571,7 +571,7 @@ function buildCreateExpenseMutationStatement(options: {
 
   if (options.supportsInventoryLink) {
     expenseColumns.push("inventory_item_type", "inventory_quantity")
-    expenseValueParts.push(`$${params.push(options.inventoryItemType)}`, `$${params.push(options.inventoryQuantity)}`)
+    expenseValueParts.push(`$${params.push(options.inventoryItemType)}`, `$${params.push(options.inventoryQuantity)}::numeric`)
   }
 
   expenseColumns.push("tenant_id")
@@ -595,7 +595,7 @@ function buildCreateExpenseMutationStatement(options: {
       `link_payload(item_type, quantity) AS (VALUES ${valuesClause})`,
       `inserted_links AS (
         INSERT INTO expense_inventory_links (expense_transaction_id, tenant_id, item_type, quantity)
-        SELECT ie.id, $${params.push(options.tenantId)}, lp.item_type, lp.quantity
+        SELECT ie.id, $${params.push(options.tenantId)}, lp.item_type, lp.quantity::numeric
         FROM inserted_expense ie
         CROSS JOIN link_payload lp
         RETURNING id

@@ -127,8 +127,11 @@ test.describe("day-in-life workflow regression", () => {
     await waitForDashboardReady(page)
     await applyPreviewTenantCookie(page, context.tenantId)
 
-    const requiredTabs = ["Pulping", "Dispatch", "Sales", "Accounts"] as const
-    for (const tabName of requiredTabs) {
+    // OPS section tabs (Pulping, Dispatch, Sales) are visible on the inventory route.
+    // Accounts lives in the Finance section and only renders its role="tab" when navigated there —
+    // the test already navigates to accounts further down, so we skip the pre-flight check for it.
+    const opsRequiredTabs = ["Pulping", "Dispatch", "Sales"] as const
+    for (const tabName of opsRequiredTabs) {
       const tab = page.getByRole("tab", { name: tabName })
       if ((await tab.count()) === 0) {
         test.skip(true, `${tabName} tab is not visible for the authenticated role or tenant modules`)

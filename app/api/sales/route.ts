@@ -25,7 +25,10 @@ import {
 export const dynamic = "force-dynamic"
 export const revalidate = 0
 
-const isSalesAdminRole = (role: string | null | undefined) => String(role || "").toLowerCase() === "admin"
+const isSalesAdminRole = (role: string | null | undefined) => {
+  const r = String(role || "").toLowerCase()
+  return r === "admin" || r === "owner"
+}
 
 async function resolveBagWeightKg(db: typeof sql, tenantContext: { tenantId: string; role: string }) {
   const rows = await runTenantQuery(
