@@ -41,6 +41,7 @@ import {
   Sun,
   Moon,
   LifeBuoy,
+  ShieldCheck,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -174,6 +175,12 @@ const SalesTab = dynamic(() => import("@/components/sales-tab"), {
 })
 const NewsTab = dynamic(() => import("@/components/news-tab"), {
   loading: () => <TabPanelLoading label="News" />,
+})
+const MarketPricingTab = dynamic(() => import("@/components/market-pricing-tab"), {
+  loading: () => <TabPanelLoading label="Market pricing" />,
+})
+const ComplianceTab = dynamic(() => import("@/components/compliance-tab"), {
+  loading: () => <TabPanelLoading label="Compliance" />,
 })
 const SeasonDashboard = dynamic(() => import("@/components/season-dashboard"), {
   loading: () => <TabPanelLoading label="Season view" />,
@@ -522,6 +529,7 @@ export default function InventorySystem() {
   const [newLocationCode, setNewLocationCode] = useState("")
   const hasLoadedOnboardingOnce = useRef(false)
   const [isCreatingLocation, setIsCreatingLocation] = useState(false)
+  const [isAddingStarterCodes, setIsAddingStarterCodes] = useState(false)
   const [onboardingEstateName, setOnboardingEstateName] = useState("")
   const [onboardingBagWeightKg, setOnboardingBagWeightKg] = useState("")
   const [isSavingOnboardingDefaults, setIsSavingOnboardingDefaults] = useState(false)
@@ -634,6 +642,8 @@ export default function InventorySystem() {
   const canShowAiAnalysis = isModuleEnabled("ai-analysis")
   const canLaunchAssistant = canShowAiAnalysis && (!isOwner || isPreviewMode)
   const canShowNews = isModuleEnabled("news")
+  const canShowMarketPricing = isModuleEnabled("market-pricing")
+  const canShowCompliance = isModuleEnabled("compliance")
   const canShowWeather = isModuleEnabled("weather")
   const canShowSeason = isModuleEnabled("season")
   const canShowYieldForecast = canShowSeason
@@ -1043,6 +1053,7 @@ export default function InventorySystem() {
     try {
       const onboardingAccess: OnboardingAccess = {
         canShowInventory: isModuleEnabled("inventory"),
+        canShowAccountCodes: isModuleEnabled("accounts"),
         canShowLabor: isModuleEnabled("accounts"),
         canShowProcessing: isModuleEnabled("processing"),
         canShowDispatch: isModuleEnabled("dispatch"),
@@ -1090,6 +1101,10 @@ export default function InventorySystem() {
           nextStatus.locations = Array.isArray(payload?.locations) && payload.locations.length > 0
           return
         }
+        if (request.key === "account_codes") {
+          nextStatus.account_codes = Array.isArray(payload?.activities) && payload.activities.length > 0
+          return
+        }
         if (request.key === "inventory") {
           nextStatus.inventory =
             Number(payload?.summary?.total_items) > 0 ||
@@ -1098,7 +1113,7 @@ export default function InventorySystem() {
           return
         }
 
-        nextStatus[request.key as Exclude<OnboardingStatusKey, "locations" | "inventory">] = hasRecords(payload)
+        nextStatus[request.key as Exclude<OnboardingStatusKey, "locations" | "account_codes" | "inventory">] = hasRecords(payload)
       })
 
       setOnboardingStatus(nextStatus)
@@ -1183,6 +1198,40 @@ export default function InventorySystem() {
       })
     } finally {
       setIsCreatingLocation(false)
+    }
+  }
+
+  const handleAddStarterCodes = async () => {
+    const starterCodes = [
+      { code: "LABOR", reference: "Wages and picker payments" },
+      { code: "SUPPLIES", reference: "Materials and farm inputs" },
+      { code: "MAINTENANCE", reference: "Equipment and estate upkeep" },
+      { code: "ADMIN", reference: "Office and administrative costs" },
+    ]
+    setIsAddingStarterCodes(true)
+    try {
+      await Promise.allSettled(
+        starterCodes.map((entry) =>
+          fetch("/api/add-activity", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(entry),
+          }),
+        ),
+      )
+      toast({
+        title: "Starter codes added",
+        description: "LABOR, SUPPLIES, MAINTENANCE, and ADMIN codes are ready to use.",
+      })
+      loadOnboardingStatus()
+    } catch {
+      toast({
+        title: "Failed to add codes",
+        description: "Please try again or add codes manually in Accounts.",
+        variant: "destructive",
+      })
+    } finally {
+      setIsAddingStarterCodes(false)
     }
   }
 
@@ -3858,6 +3907,8 @@ export default function InventorySystem() {
     if (canShowPlantHealth) tabs.push("plant-health")
     if (canShowAiAnalysis) tabs.push("ai-analysis")
     if (canShowNews) tabs.push("news")
+    if (canShowMarketPricing) tabs.push("market-pricing")
+    if (canShowCompliance) tabs.push("compliance")
     if (canShowReceivables) tabs.push("receivables")
     if (canShowBilling) tabs.push("billing")
     return tabs
@@ -3882,6 +3933,8 @@ export default function InventorySystem() {
     canShowSalesWorkspace,
     canShowSeason,
     canShowYieldForecast,
+    canShowMarketPricing,
+    canShowCompliance,
   ])
   const markTabAsLoaded = useCallback((tab: string) => {
     setLoadedTabs((previousTabs) => (previousTabs.includes(tab) ? previousTabs : [...previousTabs, tab]))
@@ -3928,6 +3981,8 @@ export default function InventorySystem() {
         news: { label: "News", icon: Newspaper },
         curing: { label: "Curing", icon: Factory },
         quality: { label: "Quality", icon: CheckCircle2 },
+        "market-pricing": { label: "Market Pricing", icon: TrendingUp },
+        compliance: { label: "Compliance", icon: ShieldCheck },
       }) as Record<string, { label: string; icon: React.ComponentType<{ className?: string }> }>,
     [processingWorkspaceIcon, processingWorkspaceLabel],
   )
@@ -4222,6 +4277,7 @@ export default function InventorySystem() {
     const steps: SmartNextStep[] = []
     const smartOnboardingAccess: OnboardingAccess = {
       canShowInventory,
+      canShowAccountCodes: canShowAccounts,
       canShowLabor: canShowAccounts,
       canShowProcessing,
       canShowDispatch,
@@ -5719,6 +5775,7 @@ export default function InventorySystem() {
 
   const onboardingAccess: OnboardingAccess = {
     canShowInventory,
+    canShowAccountCodes: canShowAccounts,
     canShowLabor: canShowAccounts,
     canShowProcessing,
     canShowDispatch,
@@ -7017,6 +7074,9 @@ export default function InventorySystem() {
               onBagWeightKgChange={setOnboardingBagWeightKg}
               onSaveEstateDefaults={handleSaveOnboardingDefaults}
               isSavingEstateDefaults={isSavingOnboardingDefaults}
+              canManageAccountCodes={isAdmin && !isPreviewMode}
+              onAddStarterCodes={handleAddStarterCodes}
+              isAddingStarterCodes={isAddingStarterCodes}
               canCreateLocation={isAdmin && !isPreviewMode}
               locationName={newLocationName}
               locationCode={newLocationCode}
@@ -8973,6 +9033,16 @@ export default function InventorySystem() {
           {canShowNews && (
             <TabsContent value="news" className="space-y-6" forceMount={isTabLoaded("news") ? true : undefined}>
               <NewsTab />
+            </TabsContent>
+          )}
+          {canShowMarketPricing && (
+            <TabsContent value="market-pricing" className="space-y-6" forceMount={isTabLoaded("market-pricing") ? true : undefined}>
+              <MarketPricingTab />
+            </TabsContent>
+          )}
+          {canShowCompliance && (
+            <TabsContent value="compliance" className="space-y-6" forceMount={isTabLoaded("compliance") ? true : undefined}>
+              <ComplianceTab />
             </TabsContent>
           )}
           {canShowBilling && (

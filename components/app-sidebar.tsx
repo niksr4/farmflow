@@ -33,7 +33,7 @@ const NAV_GROUPS: Array<{ id: string; label?: string; items: string[] }> = [
   {
     id: "finance",
     label: "Finance",
-    items: ["accounts", "balance-sheet", "receivables", "billing"],
+    items: ["accounts", "balance-sheet", "receivables", "billing", "market-pricing"],
   },
   {
     id: "insights",
@@ -49,6 +49,7 @@ const NAV_GROUPS: Array<{ id: string; label?: string; items: string[] }> = [
       "plant-health",
       "ai-analysis",
       "news",
+      "compliance",
     ],
   },
 ]

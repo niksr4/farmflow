@@ -118,10 +118,10 @@ const outcomeCards = [
 ]
 
 const trustItems = [
+  { label: "30-day free trial — no credit card", icon: CheckCircle2 },
   { label: "Live in under 10 minutes", icon: Zap },
   { label: "Your data stays private", icon: Lock },
   { label: "Works on mobile, even offline", icon: Smartphone },
-  { label: "Flat pricing — no per-seat fees", icon: CheckCircle2 },
 ]
 
 const coreSurfacePills = [
@@ -226,6 +226,9 @@ export default function LandingPage() {
                 <Link href="/plans">See plans</Link>
               </Button>
             </div>
+            <p className="mt-4 text-sm text-stone-500">
+              30-day free trial · No credit card required · Cancel any time
+            </p>
           </div>
         </MotionDiv>
 
@@ -511,7 +514,7 @@ export default function LandingPage() {
                         </div>
                       )
                     })()}
-                    <div className="mt-auto pt-8">
+                    <div className="mt-auto space-y-2 pt-8">
                       <Button
                         asChild
                         size="sm"
@@ -522,8 +525,9 @@ export default function LandingPage() {
                         }
                         variant={isCore ? "default" : "ghost"}
                       >
-                        <Link href="/signup">Get started</Link>
+                        <Link href="/signup">Try free for 30 days</Link>
                       </Button>
+                      <p className="text-center text-[11px] text-stone-600">No credit card required</p>
                     </div>
                   </div>
                 </MotionDiv>
@@ -574,12 +578,12 @@ export default function LandingPage() {
               <div className="absolute bottom-0 right-1/4 h-48 w-48 translate-x-1/2 rounded-full bg-[radial-gradient(circle,rgba(253,224,71,0.08),transparent_65%)] blur-3xl" />
             </div>
             <div className="relative z-10 space-y-6">
-              <p className="text-sm font-medium text-emerald-400">No sales call. No setup fee. No waiting.</p>
+              <p className="text-sm font-medium text-emerald-400">No credit card. No sales call. No waiting.</p>
               <h2 className="mx-auto max-w-3xl font-display text-4xl font-semibold text-stone-50 sm:text-5xl">
                 Your estate can be live today.
               </h2>
               <p className="mx-auto max-w-xl text-base leading-7 text-stone-400">
-                Sign up, add your blocks and team, and start logging cherry intake. Most estates are recording live entries within the hour.
+                Sign up, complete a 5-minute setup, and start logging cherry intake. Most estates are recording live entries within the hour.
               </p>
               <div className="flex flex-wrap items-center justify-center gap-3 pt-2">
                 <Button
@@ -598,9 +602,10 @@ export default function LandingPage() {
                   className="text-stone-400 hover:bg-white/[0.06] hover:text-stone-200"
                   asChild
                 >
-                  <Link href="/login">{t("common.login")}</Link>
+                  <Link href="/plans">See plans</Link>
                 </Button>
               </div>
+              <p className="text-sm text-stone-600">30-day free trial · No credit card required</p>
             </div>
           </div>
         </MotionSection>

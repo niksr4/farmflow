@@ -43,6 +43,8 @@ export const MODULES: ModuleDefinition[] = [
   { id: "season", label: "Season View", defaultEnabled: false },
   { id: "labor", label: "Labor Management", defaultEnabled: false },
   { id: "picking", label: "Picking Log", defaultEnabled: false },
+  { id: "market-pricing", label: "Market Pricing & Buyers", defaultEnabled: false },
+  { id: "compliance", label: "Compliance & Certifications", defaultEnabled: false },
 ]
 
 export const MODULE_BUNDLES: ModuleBundle[] = [
@@ -62,23 +64,25 @@ export const MODULE_BUNDLES: ModuleBundle[] = [
   {
     id: "core",
     label: "Core",
-    description: "The full harvest-to-sale workflow for estates running their own pulping. Processing, dispatch, sales, accounts, and settlement tracking.",
+    description: "The full harvest-to-sale workflow for estates running their own pulping. Processing, dispatch, sales, accounts, labor, and settlement tracking.",
     modules: [
       "inventory",
       "transactions",
       "accounts",
       "balance-sheet",
       "processing",
+      "curing",
       "dispatch",
       "sales",
       "other-sales",
       "receivables",
+      "labor",
+      "picking",
       "rainfall",
       "weather",
       "pepper",
       "season",
       "journal",
-      "picking",
     ],
   },
   {

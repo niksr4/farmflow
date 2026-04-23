@@ -152,7 +152,7 @@ test.describe("day-in-life workflow regression", () => {
       coffee_type: "Arabica",
       bag_type: "Dry Cherry",
       bags_dispatched: 4,
-      kgs_received: 220,
+      kgs_received: 200,
       notes: `Workflow dispatch ${token}`,
     })
     expect(dispatchSeed.ok, `Failed to seed dispatch record (status ${dispatchSeed.status}): ${dispatchSeed.text}`).toBeTruthy()
