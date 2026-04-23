@@ -42,7 +42,73 @@ const quickJumpSections = [
   { id: "where-to-go", label: "Where do I click?" },
   { id: "daily-routines", label: "Daily routines" },
   { id: "tab-manuals", label: "Every tab" },
+  { id: "learning-module", label: "First week lessons" },
   { id: "glossary", label: "Plain words" },
+]
+
+const firstWeekLessons = [
+  {
+    number: 1,
+    title: "Set up activity codes",
+    duration: "5 min",
+    goal: "Create the codes your team uses to label what each labor or expense is for.",
+    how: [
+      "Open the Accounts tab from the sidebar.",
+      "Go to the Codes section.",
+      "Add LABOR, SUPPLIES, MAINTENANCE, and ADMIN — or use the starter codes button in the setup checklist.",
+    ],
+    doneLooksLike: "At least three codes appear in the Codes list. You can now select them when recording labor or expenses.",
+  },
+  {
+    number: 2,
+    title: "Record your first expense",
+    duration: "5–10 min",
+    goal: "Log a real cost — wages paid, materials bought, or anything the estate spent money on.",
+    how: [
+      "Open Accounts → Expenses.",
+      "Enter the amount, date, and select an activity code (e.g. LABOR or SUPPLIES).",
+      "Add a short note so you remember what this was for.",
+      "Save the record.",
+    ],
+    doneLooksLike: "The expense appears in the list with the correct code, amount, and date.",
+  },
+  {
+    number: 3,
+    title: "Log your first labor deployment",
+    duration: "5–10 min",
+    goal: "Track the workers who showed up for one activity — picking, pruning, irrigation, or any task.",
+    how: [
+      "Open Accounts → Labor.",
+      "Choose the date, number of workers, hours worked, and the activity code.",
+      "Enter the total wages paid.",
+      "Save the record.",
+    ],
+    doneLooksLike: "A labor record appears in the list. You can see the cost per worker and hours tracked.",
+  },
+  {
+    number: 4,
+    title: "Add your first inventory item",
+    duration: "5 min",
+    goal: "Create an item to track — coffee cherry, fertiliser, bags, or any stock your estate holds.",
+    how: [
+      "Open the Inventory tab.",
+      "Click Add item, give it a name and unit (e.g. kg, bags, litres).",
+      "Record the opening quantity so your current stock is correct from day one.",
+    ],
+    doneLooksLike: "The item shows in the inventory list with the right quantity. Stock movements will update it automatically.",
+  },
+  {
+    number: 5,
+    title: "Review your accounts summary",
+    duration: "5 min",
+    goal: "Check that costs are being captured correctly before the week ends.",
+    how: [
+      "Open Accounts → Summary.",
+      "Look at the cost breakdown by activity code.",
+      "Check that labor and expense totals make sense for the work done this week.",
+    ],
+    doneLooksLike: "You can see totals by activity code. Any missing or miscoded records are visible and easy to fix.",
+  },
 ]
 
 const glossary = [
@@ -758,6 +824,59 @@ export default function AppTrainingManual({
             )
           })}
         </div>
+
+        <Card id="learning-module" className="scroll-mt-24 border-emerald-100 bg-white/95">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-lg">
+              <BookOpen className="h-4 w-4 text-emerald-700" />
+              First week lessons
+            </CardTitle>
+            <CardDescription>
+              Five short lessons that walk you through the most important things to do in your first week on FarmFlow.
+              Each lesson takes 5–10 minutes and builds on the previous one.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {firstWeekLessons.map((lesson) => (
+              <div key={lesson.number} className="rounded-2xl border border-slate-200 bg-white p-5">
+                <div className="flex items-start gap-4">
+                  <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-2xl border border-emerald-200 bg-emerald-50 text-sm font-bold text-emerald-700">
+                    {lesson.number}
+                  </div>
+                  <div className="flex-1 space-y-3">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <p className="font-semibold text-slate-900">{lesson.title}</p>
+                      <span className="rounded-full border border-slate-200 bg-slate-50 px-2.5 py-0.5 text-[11px] text-slate-600">
+                        {lesson.duration}
+                      </span>
+                    </div>
+                    <p className="text-sm text-muted-foreground">
+                      <span className="font-medium text-slate-700">Goal: </span>
+                      {lesson.goal}
+                    </p>
+                    <div className="space-y-1.5">
+                      <p className="text-xs font-semibold uppercase tracking-[0.15em] text-slate-500">How</p>
+                      <ol className="space-y-1">
+                        {lesson.how.map((step, index) => (
+                          <li key={index} className="flex items-start gap-2 text-sm text-slate-700">
+                            <span className="mt-0.5 text-xs font-semibold text-slate-400">{index + 1}.</span>
+                            <span>{step}</span>
+                          </li>
+                        ))}
+                      </ol>
+                    </div>
+                    <div className="rounded-xl border border-emerald-100 bg-emerald-50/70 px-3 py-2.5">
+                      <p className="text-xs text-emerald-800">
+                        <span className="font-semibold">Done looks like: </span>
+                        {lesson.doneLooksLike}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </CardContent>
+        </Card>
 
         <Card id="glossary" className="scroll-mt-24 border-slate-200 bg-white/95">
           <CardHeader>

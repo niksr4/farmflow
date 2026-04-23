@@ -34,7 +34,7 @@ describe("tenant guidance", () => {
     expect(hints[0]).toMatchObject({
       id: "welcome-get-started",
       type: "tip",
-      action: { label: "Open Accounts", tab: "accounts", panel: "labor" },
+      action: { tab: "accounts", panel: "expenses" },
     })
   })
 

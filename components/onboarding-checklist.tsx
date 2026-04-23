@@ -37,6 +37,9 @@ type OnboardingChecklistProps = {
   onBagWeightKgChange: (value: string) => void
   onSaveEstateDefaults: () => void
   isSavingEstateDefaults: boolean
+  canManageAccountCodes: boolean
+  onAddStarterCodes: () => void
+  isAddingStarterCodes: boolean
   canCreateLocation: boolean
   locationName: string
   locationCode: string
@@ -62,6 +65,9 @@ export default function OnboardingChecklist({
   onBagWeightKgChange,
   onSaveEstateDefaults,
   isSavingEstateDefaults,
+  canManageAccountCodes,
+  onAddStarterCodes,
+  isAddingStarterCodes,
   canCreateLocation,
   locationName,
   locationCode,
@@ -292,6 +298,40 @@ export default function OnboardingChecklist({
                 </div>
               )})}
             </div>
+
+            {!steps.find((step) => step.key === "account_codes")?.done && !isLoading && canManageAccountCodes && (
+              <div className="space-y-4 rounded-2xl border border-stone-200 bg-white/90 p-4 shadow-sm">
+                <div className="space-y-1">
+                  <p className="text-sm font-semibold text-foreground">Add starter activity codes</p>
+                  <p className="text-xs text-muted-foreground">
+                    Activity codes organise labor and expenses by what the cost was for. Add these four to get started — you can rename or add more any time.
+                  </p>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  {[
+                    { code: "LABOR", label: "Wages & picker payments" },
+                    { code: "SUPPLIES", label: "Materials & farm inputs" },
+                    { code: "MAINTENANCE", label: "Equipment & estate upkeep" },
+                    { code: "ADMIN", label: "Office & admin costs" },
+                  ].map((item) => (
+                    <div key={item.code} className="flex items-center gap-2 rounded-full border border-stone-200 bg-stone-50 px-3 py-1.5 text-xs">
+                      <span className="font-mono font-semibold text-stone-800">{item.code}</span>
+                      <span className="text-stone-500">{item.label}</span>
+                    </div>
+                  ))}
+                </div>
+                <Button
+                  onClick={onAddStarterCodes}
+                  disabled={isAddingStarterCodes}
+                  className="bg-emerald-700 hover:bg-emerald-800"
+                >
+                  {isAddingStarterCodes ? "Adding codes..." : "Add starter codes"}
+                </Button>
+                <p className="text-xs text-muted-foreground">
+                  You can also add codes one at a time in Accounts → Codes, or use the suggestions from other estates.
+                </p>
+              </div>
+            )}
 
             {!steps.find((step) => step.key === "locations")?.done && !isLoading && canCreateLocation && (
               <div className="space-y-4 rounded-2xl border border-stone-200 bg-white/90 p-4 shadow-sm">

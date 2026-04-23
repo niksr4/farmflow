@@ -44,6 +44,10 @@ export default function PlansPage() {
           <p className="mt-4 max-w-3xl text-sm text-stone-200 sm:text-base">
             FarmFlow offers three clear bundles. Start with stock and finance discipline, move into full coffee operations, or unlock the complete estate stack.
           </p>
+          <p className="mt-4 inline-flex items-center gap-2 rounded-full border border-emerald-400/30 bg-emerald-400/10 px-4 py-1.5 text-sm font-medium text-emerald-300">
+            <CheckCircle2 className="h-4 w-4" />
+            All plans include a 30-day free trial · No credit card required
+          </p>
         </section>
 
         <section className="grid gap-5 lg:grid-cols-3">
@@ -84,6 +88,16 @@ export default function PlansPage() {
                         </span>
                       ))}
                     </div>
+                  </div>
+                  <div className="space-y-2 pt-2">
+                    <Button
+                      className={isRecommended ? "w-full bg-emerald-300 text-[#06110f] hover:bg-emerald-200" : "w-full border-white/10 bg-white/[0.04] text-stone-200 hover:bg-white/[0.08]"}
+                      variant={isRecommended ? "default" : "ghost"}
+                      asChild
+                    >
+                      <Link href="/signup">Try free for 30 days</Link>
+                    </Button>
+                    <p className="text-center text-[11px] text-stone-600">No credit card required</p>
                   </div>
                 </CardContent>
               </Card>
@@ -139,15 +153,16 @@ export default function PlansPage() {
         <section className="rounded-[2rem] border border-white/10 bg-[#0a1714]/92 p-6 shadow-[0_28px_70px_-48px_rgba(0,0,0,0.55)] sm:p-8">
           <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
             <div>
-              <p className="text-sm font-medium text-emerald-200">Ready to create a workspace?</p>
+              <p className="text-sm font-medium text-emerald-200">Start your free trial today</p>
               <h2 className="mt-1 text-2xl font-semibold text-stone-50">Start with the plan that matches the estate, then refine it after launch.</h2>
+              <p className="mt-1 text-sm text-stone-400">30 days free · No credit card · Cancel any time</p>
             </div>
             <div className="flex flex-wrap gap-2">
               <Button variant="ghost" className="border-white/10 bg-white/[0.04] text-stone-100 hover:bg-white/[0.08] hover:text-white" asChild>
                 <Link href="/capabilities">See capabilities</Link>
               </Button>
               <Button className="border-emerald-300/40 bg-emerald-300 text-[#06110f] shadow-[0_18px_36px_-18px_rgba(110,231,183,0.6)] hover:bg-emerald-200" asChild>
-                <Link href="/signup">Create your workspace</Link>
+                <Link href="/signup">Try free for 30 days</Link>
               </Button>
             </div>
           </div>

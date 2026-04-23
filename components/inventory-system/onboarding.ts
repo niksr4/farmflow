@@ -1,9 +1,10 @@
-export type OnboardingStatusKey = "locations" | "inventory" | "labor" | "processing" | "dispatch" | "sales"
+export type OnboardingStatusKey = "locations" | "account_codes" | "inventory" | "labor" | "processing" | "dispatch" | "sales"
 
 export type OnboardingStatusSnapshot = Record<OnboardingStatusKey, boolean>
 
 export const INITIAL_ONBOARDING_STATUS: OnboardingStatusSnapshot = {
   locations: false,
+  account_codes: false,
   inventory: false,
   labor: false,
   processing: false,
@@ -13,6 +14,7 @@ export const INITIAL_ONBOARDING_STATUS: OnboardingStatusSnapshot = {
 
 export type OnboardingAccess = {
   canShowInventory: boolean
+  canShowAccountCodes: boolean
   canShowLabor: boolean
   canShowProcessing: boolean
   canShowDispatch: boolean
@@ -72,6 +74,9 @@ export const getOnboardingStatusRequests = (
   if (needsLocationSetup(access)) {
     requests.push({ key: "locations", endpoint: locationsEndpoint })
   }
+  if (access.canShowAccountCodes) {
+    requests.push({ key: "account_codes", endpoint: "/api/get-activity" })
+  }
   if (access.canShowInventory) {
     requests.push({ key: "inventory", endpoint: "/api/inventory-neon" })
   }
@@ -106,6 +111,17 @@ export const buildOnboardingSteps = (
       done: status.locations,
       actionLabel: getActionLabel(actionTab),
       actionTab,
+    })
+  }
+
+  if (access.canShowAccountCodes) {
+    steps.push({
+      key: "account_codes",
+      title: "Set up activity codes",
+      description: "Add the codes your team uses to categorize labor and expenses before daily records begin.",
+      done: status.account_codes,
+      actionLabel: "Go to Accounts",
+      actionTab: "accounts",
     })
   }
 

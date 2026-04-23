@@ -19,7 +19,7 @@ describe("i18n helpers", () => {
 
   it("translates with token substitution and english fallback", () => {
     expect(translate("es", "public.verify.sentMessage", { email: "te****@estate.com" })).toContain("te****@estate.com")
-    expect(translate("fr", "public.landing.ctaPrimary")).toBe("Créer votre espace")
+    expect(translate("fr", "public.landing.ctaPrimary")).toBe("Essai gratuit 30 jours")
     expect(translate("es", "missing.key")).toBe("missing.key")
   })
 
