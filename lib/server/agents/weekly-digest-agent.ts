@@ -272,7 +272,17 @@ End with: "Powered by FarmFlow — your estate, always in view."`,
       ],
     })
 
-    return extractClaudeText(response).trim() || null
+    const digestText = extractClaudeText(response).trim()
+    if (!digestText) {
+      logServerError(`Weekly digest generation empty for tenant ${tenant.tenantId}`, {
+        stopReason: response.stop_reason,
+        contentBlocks: response.content.length,
+        firstBlockType: response.content[0]?.type,
+        inputTokens: response.usage?.input_tokens,
+        outputTokens: response.usage?.output_tokens,
+      })
+    }
+    return digestText || null
   } catch (error) {
     logServerError(`Weekly digest generation failed for tenant ${tenant.tenantId}`, error)
     return null
