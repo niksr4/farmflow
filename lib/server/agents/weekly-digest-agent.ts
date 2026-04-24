@@ -174,7 +174,7 @@ function buildLastWeekSection(w: LastWeekActivity): string {
   return lines.join("\n")
 }
 
-async function generateWeeklyDigestText(tenant: TenantDigestRow): Promise<string | null> {
+async function generateWeeklyDigestText(tenant: TenantDigestRow): Promise<{ text: string; error?: undefined } | { text: null; error: string }> {
   try {
     const [{ dataSummary, fiscalYearLabel }, lastWeek] = await Promise.all([
       buildTenantAiDataSummary({ tenantId: tenant.tenantId, role: "owner" }),
@@ -274,18 +274,15 @@ End with: "Powered by FarmFlow — your estate, always in view."`,
 
     const digestText = extractClaudeText(response).trim()
     if (!digestText) {
-      logServerError(`Weekly digest generation empty for tenant ${tenant.tenantId}`, {
-        stopReason: response.stop_reason,
-        contentBlocks: response.content.length,
-        firstBlockType: response.content[0]?.type,
-        inputTokens: response.usage?.input_tokens,
-        outputTokens: response.usage?.output_tokens,
-      })
+      const detail = `stop_reason=${response.stop_reason} blocks=${response.content.length} in=${response.usage?.input_tokens} out=${response.usage?.output_tokens}`
+      logServerError(`Weekly digest generation empty for tenant ${tenant.tenantId}`, { detail })
+      return { text: null, error: `Claude returned empty (${detail})` }
     }
-    return digestText || null
+    return { text: digestText }
   } catch (error) {
+    const msg = String((error as any)?.message || error || "unknown error")
     logServerError(`Weekly digest generation failed for tenant ${tenant.tenantId}`, error)
-    return null
+    return { text: null, error: msg }
   }
 }
 
@@ -425,15 +422,15 @@ export async function runWeeklyDigestAgent(input?: {
   const results: DigestResult[] = []
 
   for (const tenant of tenants) {
-    const digestText = await generateWeeklyDigestText(tenant)
+    const generated = await generateWeeklyDigestText(tenant)
 
-    if (!digestText) {
+    if (!generated.text) {
       results.push({
         tenantId: tenant.tenantId,
         tenantName: tenant.tenantName,
         ownerEmail: tenant.ownerEmail,
         status: "failed",
-        reason: "AI digest generation returned empty",
+        reason: generated.error ?? "AI digest generation returned empty",
       })
       continue
     }
@@ -449,7 +446,7 @@ export async function runWeeklyDigestAgent(input?: {
       continue
     }
 
-    const sent = await sendDigestEmail(tenant, digestText)
+    const sent = await sendDigestEmail(tenant, generated.text)
     results.push({
       tenantId: tenant.tenantId,
       tenantName: tenant.tenantName,
