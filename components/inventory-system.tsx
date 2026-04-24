@@ -485,6 +485,9 @@ export default function InventorySystem() {
   const [transactionSearchTerm, setTransactionSearchTerm] = useState("")
   const [filterType, setFilterType] = useState("All Types")
   const [inventoryDrilldownItemName, setInventoryDrilldownItemName] = useState("")
+  const [itemDrilldownTransactions, setItemDrilldownTransactions] = useState<Transaction[]>([])
+  const [isLoadingItemDrilldown, setIsLoadingItemDrilldown] = useState(false)
+  const [drilldownShowAll, setDrilldownShowAll] = useState(false)
   const [inventorySortOrder, setInventorySortOrder] = useState<"asc" | "desc" | null>(null)
   const [transactionSortOrder, setTransactionSortOrder] = useState<"asc" | "desc">("desc")
   const [isAnalyzing, setIsAnalyzing] = useState(false)
@@ -1546,19 +1549,31 @@ export default function InventorySystem() {
   const openInventoryDrilldown = useCallback((itemName: string) => {
     setInventoryDrilldownItemName(itemName)
     setIsInventoryDrilldownOpen(true)
+    setDrilldownShowAll(false)
   }, [])
+
+  useEffect(() => {
+    if (!inventoryDrilldownItemName) {
+      setItemDrilldownTransactions([])
+      return
+    }
+    setIsLoadingItemDrilldown(true)
+    fetch(`${API_TRANSACTIONS}?item_type=${encodeURIComponent(inventoryDrilldownItemName)}`)
+      .then((res) => res.json())
+      .then((data) => setItemDrilldownTransactions(data.transactions || []))
+      .catch(() => {})
+      .finally(() => setIsLoadingItemDrilldown(false))
+  }, [inventoryDrilldownItemName])
 
   const recentDrilldownTransactions = useMemo(() => {
     if (!inventoryDrilldownItemName) return []
-    return transactions
-      .filter((tx) => String(tx.item_type || "").trim() === inventoryDrilldownItemName)
-      .sort((a, b) => {
-        const dateA = a.transaction_date ? parseCustomDateString(a.transaction_date) : null
-        const dateB = b.transaction_date ? parseCustomDateString(b.transaction_date) : null
-        return (dateB?.getTime() || 0) - (dateA?.getTime() || 0)
-      })
-      .slice(0, 6)
-  }, [transactions, inventoryDrilldownItemName])
+    const sorted = [...itemDrilldownTransactions].sort((a, b) => {
+      const dateA = a.transaction_date ? parseCustomDateString(a.transaction_date) : null
+      const dateB = b.transaction_date ? parseCustomDateString(b.transaction_date) : null
+      return (dateB?.getTime() || 0) - (dateA?.getTime() || 0)
+    })
+    return drilldownShowAll ? sorted : sorted.slice(0, 6)
+  }, [itemDrilldownTransactions, inventoryDrilldownItemName, drilldownShowAll])
 
   useEffect(() => {
     if (!inventoryDrilldownItemName) return
@@ -3490,13 +3505,7 @@ export default function InventorySystem() {
 
   const handleOpenItemDrilldownHistory = () => {
     if (!inventoryDrilldownItemName) return
-    setIsInventoryDrilldownOpen(false)
-    openDrilldown({
-      tab: "transactions",
-      itemType: inventoryDrilldownItemName,
-      transactionSearch: "",
-    })
-    setCurrentPage(1)
+    setDrilldownShowAll(true)
   }
 
   // AI Analysis trigger (calls your AI API route)
@@ -6172,14 +6181,28 @@ export default function InventorySystem() {
 
             <div className="space-y-2">
               <div className="flex items-center justify-between">
-                <p className="text-xs uppercase tracking-[0.18em] text-neutral-500">Recent Transactions</p>
-                <Button variant="link" size="sm" className="h-auto p-0 text-emerald-700" onClick={handleOpenItemDrilldownHistory}>
-                  View full history
-                </Button>
+                <p className="text-xs uppercase tracking-[0.18em] text-neutral-500">
+                  {drilldownShowAll ? `All Transactions (${itemDrilldownTransactions.length})` : "Recent Transactions"}
+                </p>
+                {isLoadingItemDrilldown ? (
+                  <span className="text-xs text-neutral-400">Loading…</span>
+                ) : drilldownShowAll ? (
+                  <Button variant="link" size="sm" className="h-auto p-0 text-emerald-700" onClick={() => setDrilldownShowAll(false)}>
+                    Show less
+                  </Button>
+                ) : itemDrilldownTransactions.length > 6 ? (
+                  <Button variant="link" size="sm" className="h-auto p-0 text-emerald-700" onClick={handleOpenItemDrilldownHistory}>
+                    View all {itemDrilldownTransactions.length}
+                  </Button>
+                ) : null}
               </div>
-              {recentDrilldownTransactions.length === 0 ? (
+              {isLoadingItemDrilldown ? (
+                <div className="rounded-xl border border-dashed border-black/10 bg-white px-3 py-4 text-xs text-neutral-400">
+                  Loading transaction history…
+                </div>
+              ) : recentDrilldownTransactions.length === 0 ? (
                 <div className="rounded-xl border border-dashed border-black/10 bg-white px-3 py-4 text-xs text-neutral-500">
-                  No transactions found for this item in the current location filter.
+                  No transactions recorded for this item yet.
                 </div>
               ) : (
                 <div className="space-y-2">
