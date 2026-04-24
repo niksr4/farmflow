@@ -152,6 +152,9 @@ async function fetchAnomalyEvents(startDateIso: string) {
           COALESCE(fingerprint, '') AS fingerprint
         FROM app_error_events
         WHERE created_at >= $1::timestamptz
+          AND (tenant_id IS NULL OR tenant_id NOT IN (
+            SELECT id FROM tenants WHERE LOWER(name) LIKE 'e2e %'
+          ))
       `,
       [startDateIso],
     )
@@ -199,6 +202,9 @@ async function fetchAnomalyEvents(startDateIso: string) {
           FROM security_events
           WHERE created_at >= $1::timestamptz
             AND severity IN ('warning', 'critical')
+            AND (tenant_id IS NULL OR tenant_id NOT IN (
+              SELECT id FROM tenants WHERE LOWER(name) LIKE 'e2e %'
+            ))
         `,
         [startDateIso],
       ),

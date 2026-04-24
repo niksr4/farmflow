@@ -9,6 +9,34 @@ type JsonResult = {
   text: string
 }
 
+type SeedCleanup = {
+  page: Page
+  dispatchId?: string | number
+  salesId?: string | number
+  laborId?: string | number
+  expenseId?: string | number
+  locationId?: string
+  activityCode?: string
+}
+
+const requestDelete = async (page: Page, url: string): Promise<void> => {
+  try {
+    await page.request.delete(url)
+  } catch {
+    // best-effort cleanup — never fail the test on teardown errors
+  }
+}
+
+const cleanupSeedRecords = async (cleanup: SeedCleanup) => {
+  const { page } = cleanup
+  if (cleanup.expenseId) await requestDelete(page, `/api/expenses-neon?id=${cleanup.expenseId}`)
+  if (cleanup.laborId) await requestDelete(page, `/api/labor-neon?id=${cleanup.laborId}`)
+  if (cleanup.salesId) await requestDelete(page, `/api/sales?id=${cleanup.salesId}`)
+  if (cleanup.dispatchId) await requestDelete(page, `/api/dispatch?id=${cleanup.dispatchId}`)
+  if (cleanup.activityCode) await requestDelete(page, `/api/get-activity?code=${encodeURIComponent(cleanup.activityCode)}`)
+  if (cleanup.locationId) await requestDelete(page, `/api/locations?id=${cleanup.locationId}`)
+}
+
 const applyPreviewTenantCookie = async (page: Page, tenantId: string | null) => {
   if (!tenantId) return
   const origin = new URL(page.url()).origin
@@ -116,6 +144,7 @@ test.describe("day-in-life workflow regression", () => {
     const salesLot = `SAL-${token}`.slice(0, 20)
     const locationCode = `E2E-${token}`.slice(0, 16)
     const activityCode = `A${token}`.slice(0, 10)
+    const cleanup: SeedCleanup = { page, activityCode }
 
     const { route, context } = await resolveDashboardRouteContext(page, "inventory", {
       requiredModules: ["inventory", "transactions", "processing", "dispatch", "sales", "accounts"],
@@ -143,6 +172,9 @@ test.describe("day-in-life workflow regression", () => {
       `E2E Workflow ${token}`,
       locationCode,
     )
+    cleanup.locationId = location.id
+
+    try {
 
     const dispatchSeed = await requestJson(page, "POST", "/api/dispatch", {
       dispatch_date: today,
@@ -157,6 +189,7 @@ test.describe("day-in-life workflow regression", () => {
     })
     expect(dispatchSeed.ok, `Failed to seed dispatch record (status ${dispatchSeed.status}): ${dispatchSeed.text}`).toBeTruthy()
     expect(Boolean(dispatchSeed.data?.success), `Dispatch API did not return success: ${dispatchSeed.text}`).toBeTruthy()
+    cleanup.dispatchId = dispatchSeed.data?.id
 
     const salesSeed = await requestJson(page, "POST", "/api/sales", {
       sale_date: today,
@@ -174,6 +207,7 @@ test.describe("day-in-life workflow regression", () => {
     })
     expect(salesSeed.ok, `Failed to seed sales record (status ${salesSeed.status}): ${salesSeed.text}`).toBeTruthy()
     expect(Boolean(salesSeed.data?.success), `Sales API did not return success: ${salesSeed.text}`).toBeTruthy()
+    cleanup.salesId = salesSeed.data?.id
 
     await ensureActivityCode(page, activityCode, `Workflow account ${token}`)
 
@@ -192,6 +226,7 @@ test.describe("day-in-life workflow regression", () => {
     })
     expect(laborSeed.ok, `Failed to seed labor record (status ${laborSeed.status}): ${laborSeed.text}`).toBeTruthy()
     expect(Boolean(laborSeed.data?.success), `Labor API did not return success: ${laborSeed.text}`).toBeTruthy()
+    cleanup.laborId = laborSeed.data?.id
 
     const expenseSeed = await requestJson(page, "POST", "/api/expenses-neon", {
       date: today,
@@ -202,6 +237,7 @@ test.describe("day-in-life workflow regression", () => {
     })
     expect(expenseSeed.ok, `Failed to seed expense record (status ${expenseSeed.status}): ${expenseSeed.text}`).toBeTruthy()
     expect(Boolean(expenseSeed.data?.success), `Expense API did not return success: ${expenseSeed.text}`).toBeTruthy()
+    cleanup.expenseId = expenseSeed.data?.id
 
     await page.goto(route)
     await waitForDashboardReady(page)
@@ -232,5 +268,9 @@ test.describe("day-in-life workflow regression", () => {
       test.skip(true, "Accounts Labor sub-tab not visible for this tenant/role configuration")
     }
     await expect(laborSubTab.first()).toBeVisible()
+
+    } finally {
+      await cleanupSeedRecords(cleanup)
+    }
   })
 })
