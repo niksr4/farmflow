@@ -224,23 +224,23 @@ async function generateWeeklyDigestText(tenant: TenantDigestRow): Promise<string
     const client = getClaudeClient()
     const response = await client.messages.create({
       model: CLAUDE_SONNET,
-      max_tokens: 1400,
+      max_tokens: 1600,
       temperature: 0.3,
-      system: `You are FarmFlow Weekly Digest, an expert agronomist and estate operations analyst for ${cropContext} estates in Karnataka/Kerala, India. You have deep knowledge of South Indian coffee cultivation and can give recommendations that a seasoned Coorg estate manager would respect.
+      system: `You are FarmFlow Weekly Digest, an expert agronomist and estate operations analyst for ${cropContext} estates in Karnataka/Kerala, India. You combine deep South Indian coffee cultivation knowledge with sharp financial judgement — your analysis is what a seasoned Coorg estate manager and their accountant would both respect.
 
 ${calendarContext}
 
 ${agronomyContext}
 
 Rules:
-- Use the season context above to interpret the data correctly. Low activity in the off-season is not a problem. Missing expected activities (e.g. no fertiliser in April) should be flagged.
+- Use the season context above to interpret the data correctly. Low activity in the off-season is not a problem. Missing expected activities (e.g. no fertiliser in April) must be flagged.
 - Ground every number strictly in the provided data. Never invent figures.
 - When data is sparse or missing, say so plainly — but explain whether that is normal for this time of year.
-- Use the correct crop terminology: refer to the primary crop as "${cropLabel}", and use variety names where relevant.
+- Use the correct crop terminology: refer to the primary crop as "${cropLabel}", use variety names where relevant.
 - Use INR (₹) for currency and KG for weight unless the data suggests otherwise.
 - Keep the tone warm, professional, and practical. Estate managers are busy.
-- This is a weekly email digest — keep it concise (under 450 words).
-- Format with clear sections using plain text (no markdown headers, no asterisks). Use numbered lists for recommendations.`,
+- This is a weekly email digest — keep it under 550 words.
+- Format with clear sections using plain text (no markdown headers, no asterisks). Use numbered lists for actions.`,
       messages: [
         {
           role: "user",
@@ -253,10 +253,19 @@ ${historySection}
 ## Season-to-Date Context (FY ${fiscalYearLabel})
 ${dataSummary}
 
-Structure your digest as:
-1. Last Week at a Glance — 2-3 sentences summarising what actually happened last week using the exact figures above.
-2. Season Context — how last week fits into the broader FY picture (processing rate, labor spend, costs vs benchmarks).
-3. Three recommendations for this week — draw on your agronomic knowledge. Be specific: name the activity, the timing, the quantity or threshold where relevant (e.g. "Apply second K dose — 60 kg MOP/ha — before the blossom shower if not done yet"; "CBB trap counts should be checked this week; if >5 borer/trap/day, spray Beauveria bassiana"). If data shows a gap vs benchmark (e.g. picker productivity below 40 kg/day, cherry:parchment ratio above 6:1), call it out directly.
+Structure your digest in exactly four sections:
+
+1. Last Week at a Glance — 2-3 sentences summarising what actually happened last week using exact figures from the data above.
+
+2. Business Snapshot — three specific financial signals the owner needs to see:
+   (a) Labor cost as a percentage of total spend this week. Flag if it is above 70% (typical healthy range is 50-65% for harvest season, lower off-season).
+   (b) Cost per kg of cherry processed, if processing happened. Benchmark: ₹8-14/kg for Arabica in Coorg; flag if outside this range.
+   (c) Revenue-to-cost trend: is the estate earning more than it is spending YTD, or is there a deficit building? Be direct — if margins look thin or costs are running ahead of revenue, say so clearly.
+   If data is insufficient for any signal, say "Insufficient data this week" rather than guessing.
+
+3. Field Signal — one specific agronomic observation drawn directly from the numbers: cherry-to-parchment conversion ratio (flag if above 5.5:1), picker productivity (flag if below 40 kg/picker/day during harvest), rainfall deviation from seasonal norms, or a gap vs expected activity for this point in the calendar. Cite the actual number. If no operational data this week, comment on what the current season phase demands and whether the estate appears on track.
+
+4. Three actions for this week — one financial, two agronomic. Be specific: name the activity, the timing, the quantity or threshold where relevant (e.g. "Apply second K dose — 60 kg MOP/ha — before the blossom shower"; "CBB trap counts should be checked; if >5 borer/trap/day, spray Beauveria bassiana at 5 g/L"; "Review last month's expense codes — ensure all fertiliser and chemical costs are coded correctly before the FY close"). If data shows a gap vs benchmark, call it out directly in the action.
 
 End with: "Powered by FarmFlow — your estate, always in view."`,
         },
@@ -384,6 +393,20 @@ export async function runWeeklyDigestAgent(input?: {
     throw new Error("ANTHROPIC_API_KEY is not configured — weekly digest requires Claude")
   }
 
+  let runId: string | null = null
+  if (sql) {
+    try {
+      const runRow = await sql.query(
+        `INSERT INTO agent_runs (agent_name, trigger_source, status, tenant_scope)
+         VALUES ('weekly-digest', $1, 'running', $2) RETURNING id`,
+        [input?.triggerSource || "manual", input?.tenantId ? "single" : "all"],
+      )
+      runId = toRows<any>(runRow)[0]?.id ?? null
+    } catch {
+      // non-critical — proceed without run tracking
+    }
+  }
+
   const allTenants = await fetchTenantOwnersWithVerifiedEmail()
   const tenants = input?.tenantId
     ? allTenants.filter((t) => t.tenantId === input.tenantId)
@@ -426,12 +449,24 @@ export async function runWeeklyDigestAgent(input?: {
     })
   }
 
-  return {
+  const summary = {
     tenantsProcessed: tenants.length,
     sent: results.filter((r) => r.status === "sent").length,
     skipped: results.filter((r) => r.status === "skipped").length,
     failed: results.filter((r) => r.status === "failed").length,
-    results,
     dryRun,
   }
+
+  if (runId && sql) {
+    try {
+      await sql.query(
+        `UPDATE agent_runs SET status = $1, completed_at = NOW(), summary = $2 WHERE id = $3`,
+        [summary.failed > 0 && summary.sent === 0 ? "failed" : "success", JSON.stringify(summary), runId],
+      )
+    } catch {
+      // non-critical
+    }
+  }
+
+  return { ...summary, results }
 }
