@@ -12,7 +12,7 @@ export function getClaudeClient(): Anthropic {
   if (!_client) {
     const apiKey = String(process.env.ANTHROPIC_API_KEY || "").trim()
     if (!apiKey) throw new Error("ANTHROPIC_API_KEY is not configured")
-    _client = new Anthropic({ apiKey, timeout: 30_000 })
+    _client = new Anthropic({ apiKey, timeout: 90_000 })
   }
   return _client
 }
