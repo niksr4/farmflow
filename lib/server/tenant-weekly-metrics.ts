@@ -81,7 +81,7 @@ export async function fetchHistoricalMetrics(tenantId: string, weeks = 12): Prom
         dispatch_bags,
         sales_revenue,
         picking_entries,
-        FLOOR(EXTRACT(EPOCH FROM (CURRENT_DATE - week_start)) / 604800)::int AS weeks_since_now
+        ((CURRENT_DATE - week_start) / 7)::int AS weeks_since_now
       FROM tenant_weekly_metrics
       WHERE tenant_id = $1
         AND week_start < date_trunc('week', CURRENT_DATE)
