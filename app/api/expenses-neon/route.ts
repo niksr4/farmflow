@@ -609,7 +609,7 @@ function buildCreateExpenseMutationStatement(options: {
       const quantityParam = params.push(transaction.quantity)
       const locationParam = params.push(transaction.locationId)
       const unitParam = params.push(transaction.unit)
-      return `($${itemTypeParam}, $${quantityParam}, $${locationParam}::uuid, $${unitParam})`
+      return `($${itemTypeParam}, $${quantityParam}::numeric, $${locationParam}::uuid, $${unitParam})`
     })
 
     const noteBaseParam = params.push(buildExpenseInventoryNoteBase(options.code, options.notes))
@@ -734,7 +734,7 @@ function buildInsertExpenseInventoryLinksStatement(
       const tenantParam = params.push(tenantId)
       const itemTypeParam = params.push(item.itemType)
       const quantityParam = params.push(item.quantity)
-      return `($${expenseParam}, $${tenantParam}, $${itemTypeParam}, $${quantityParam})`
+      return `($${expenseParam}, $${tenantParam}, $${itemTypeParam}, $${quantityParam}::numeric)`
     })
     .join(", ")
 
