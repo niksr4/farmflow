@@ -479,6 +479,7 @@ export async function runDataIntegrityAgent(input?: {
       : await sql`
           SELECT id, name, bag_weight_kg
           FROM tenants
+          WHERE LOWER(name) NOT LIKE 'e2e %'
           ORDER BY created_at ASC
         `
 
