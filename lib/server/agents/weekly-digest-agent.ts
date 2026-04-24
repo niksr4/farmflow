@@ -5,7 +5,7 @@ import { sql } from "@/lib/server/db"
 import { buildTenantAiDataSummary } from "@/lib/server/ai-analysis"
 import { getClaudeClient, isClaudeConfigured, extractClaudeText, CLAUDE_SONNET } from "@/lib/server/claude"
 import { fetchWithTimeout } from "@/lib/server/http"
-import { logServerWarning } from "@/lib/server/safe-logging"
+import { logServerError, logServerWarning } from "@/lib/server/safe-logging"
 import { getCropLabel, getCropVarietiesLabel, mergeTenantEstateProfile } from "@/lib/tenant-estate-profile"
 import { buildEstateCalendarContext } from "@/lib/coffee-estate-calendar"
 import { buildAgronomyContext } from "@/lib/coffee-agronomy"
@@ -274,7 +274,7 @@ End with: "Powered by FarmFlow — your estate, always in view."`,
 
     return extractClaudeText(response).trim() || null
   } catch (error) {
-    logServerWarning(`Weekly digest generation failed for tenant ${tenant.tenantId}`, error)
+    logServerError(`Weekly digest generation failed for tenant ${tenant.tenantId}`, error)
     return null
   }
 }
