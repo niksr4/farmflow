@@ -6,10 +6,12 @@ import { buildTenantAiDataSummary } from "@/lib/server/ai-analysis"
 import { getClaudeClient, isClaudeConfigured, extractClaudeText, CLAUDE_SONNET } from "@/lib/server/claude"
 import { fetchWithTimeout } from "@/lib/server/http"
 import { logServerError, logServerWarning } from "@/lib/server/safe-logging"
-import { getCropLabel, getCropVarietiesLabel, mergeTenantEstateProfile } from "@/lib/tenant-estate-profile"
+import { getCropLabel, getCropVarietiesLabel, mergeTenantEstateProfile, buildTenantWeatherQuery } from "@/lib/tenant-estate-profile"
 import { buildEstateCalendarContext } from "@/lib/coffee-estate-calendar"
 import { buildAgronomyContext } from "@/lib/coffee-agronomy"
 import { upsertWeeklyMetrics, fetchHistoricalMetrics, buildHistoricalBaselineContext } from "@/lib/server/tenant-weekly-metrics"
+import { summarizeForecastWindow, deriveIrrigationAdvice, deriveWeatherAnomalySignal, WEATHER_FORECAST_DAYS } from "@/lib/weather-guidance"
+import { DEFAULT_WEATHER_QUERY } from "@/lib/weather-config"
 
 type TenantDigestRow = {
   tenantId: string
@@ -18,6 +20,7 @@ type TenantDigestRow = {
   ownerName: string
   cropFamily: string | null
   primaryVarieties: string[]
+  weatherLocationQuery: string | null
 }
 
 type DigestResult = {
@@ -71,6 +74,7 @@ async function fetchTenantOwnersWithVerifiedEmail(): Promise<TenantDigestRow[]> 
       ownerName: String(row.owner_name || "Estate Manager"),
       cropFamily: profile.cropFamily,
       primaryVarieties: profile.primaryVarieties,
+      weatherLocationQuery: buildTenantWeatherQuery(profile) ?? null,
     }
   })
 }
@@ -174,11 +178,121 @@ function buildLastWeekSection(w: LastWeekActivity): string {
   return lines.join("\n")
 }
 
+async function fetchRecentRainfallSummary(tenantId: string): Promise<{
+  last7DaysInches: number
+  last30DaysInches: number
+  loggedDaysInLast30: number
+  recentDailyAverageInches: number
+}> {
+  const empty = { last7DaysInches: 0, last30DaysInches: 0, loggedDaysInLast30: 0, recentDailyAverageInches: 0 }
+  if (!sql) return empty
+  try {
+    const result = await sql.query(`
+      SELECT
+        COALESCE(SUM(CASE WHEN record_date >= NOW() - INTERVAL '7 days'  THEN inches + cents::numeric/100 END), 0) AS last7,
+        COALESCE(SUM(CASE WHEN record_date >= NOW() - INTERVAL '30 days' THEN inches + cents::numeric/100 END), 0) AS last30,
+        COUNT(CASE  WHEN record_date >= NOW() - INTERVAL '30 days' THEN 1 END) AS logged30
+      FROM rainfall_records
+      WHERE tenant_id = $1
+    `, [tenantId])
+    const row = (Array.isArray(result) ? result[0] : (result as any)?.rows?.[0]) ?? {}
+    const last7 = Number(row.last7) || 0
+    const last30 = Number(row.last30) || 0
+    const logged30 = Number(row.logged30) || 0
+    return {
+      last7DaysInches: last7,
+      last30DaysInches: last30,
+      loggedDaysInLast30: logged30,
+      recentDailyAverageInches: logged30 > 0 ? last30 / logged30 : 0,
+    }
+  } catch {
+    return empty
+  }
+}
+
+async function fetchWeatherForecast(locationQuery: string): Promise<string | null> {
+  const apiKey = String(process.env.WEATHERAPI_API_KEY || "").trim()
+  if (!apiKey) return null
+  try {
+    const url = `https://api.weatherapi.com/v1/forecast.json?key=${apiKey}&q=${encodeURIComponent(locationQuery)}&days=${WEATHER_FORECAST_DAYS}&aqi=no&alerts=no`
+    const res = await fetchWithTimeout(url, { timeoutMs: 8_000 })
+    if (!res.ok) return null
+    return await res.text()
+  } catch {
+    return null
+  }
+}
+
+function buildWeatherContext(params: {
+  locationQuery: string | null
+  forecastJson: string | null
+  rainfall: { last7DaysInches: number; last30DaysInches: number; loggedDaysInLast30: number; recentDailyAverageInches: number }
+}): string {
+  const lines: string[] = ["## Weather & Irrigation Context"]
+
+  lines.push(`- Recorded rainfall last 7 days: ${params.rainfall.last7DaysInches.toFixed(2)} inches`)
+  lines.push(`- Recorded rainfall last 30 days: ${params.rainfall.last30DaysInches.toFixed(2)} inches (${params.rainfall.loggedDaysInLast30} logged days)`)
+
+  if (!params.forecastJson) {
+    lines.push("- Live weather forecast: not available (no API key or location configured)")
+    return lines.join("\n")
+  }
+
+  try {
+    const data = JSON.parse(params.forecastJson)
+    const location = data?.location
+    const forecastDays: Array<{ day: { totalprecip_mm: number; daily_chance_of_rain: number }; date: string }> =
+      data?.forecast?.forecastday ?? []
+
+    if (location?.name) {
+      lines.push(`- Forecast location: ${location.name}${location.region ? `, ${location.region}` : ""}`)
+    }
+
+    const forecastInputs = forecastDays.map((d) => ({
+      precipitationMm: d.day?.totalprecip_mm ?? 0,
+      chanceOfRainPct: d.day?.daily_chance_of_rain ?? 0,
+    }))
+
+    const { next3DaysRainInches, rainyDaysNext3, maxChanceNext3 } = summarizeForecastWindow(forecastInputs)
+
+    forecastDays.slice(0, WEATHER_FORECAST_DAYS).forEach((d) => {
+      const mm = d.day?.totalprecip_mm ?? 0
+      const chance = d.day?.daily_chance_of_rain ?? 0
+      lines.push(`- ${d.date}: ${(mm / 25.4).toFixed(2)} in forecast, ${chance}% rain chance`)
+    })
+
+    lines.push(`- 3-day total forecast: ${next3DaysRainInches.toFixed(2)} inches across ${rainyDaysNext3} rainy day(s), peak chance ${maxChanceNext3}%`)
+
+    const anomaly = deriveWeatherAnomalySignal({
+      next3DaysRainInches,
+      recentDailyAverageInches: params.rainfall.recentDailyAverageInches,
+    })
+    lines.push(`- Forecast vs recent trend: ${anomaly}`)
+
+    const irrigation = deriveIrrigationAdvice({
+      next3DaysRainInches,
+      rainyDaysNext3,
+      maxChanceNext3,
+      last7DaysRainInches: params.rainfall.last7DaysInches,
+      recentDailyAverageInches: params.rainfall.recentDailyAverageInches,
+      loggedDaysInLast30: params.rainfall.loggedDaysInLast30,
+    })
+    lines.push(`- Irrigation signal: ${irrigation.title} — ${irrigation.reason} ${irrigation.recommendation} (confidence: ${irrigation.confidence})`)
+  } catch {
+    lines.push("- Live weather forecast: could not parse response")
+  }
+
+  return lines.join("\n")
+}
+
 async function generateWeeklyDigestText(tenant: TenantDigestRow): Promise<{ text: string; error?: undefined } | { text: null; error: string }> {
   try {
-    const [{ dataSummary, fiscalYearLabel }, lastWeek] = await Promise.all([
+    const locationQuery = tenant.weatherLocationQuery ?? DEFAULT_WEATHER_QUERY
+    const [{ dataSummary, fiscalYearLabel }, lastWeek, rainfall, forecastJson] = await Promise.all([
       buildTenantAiDataSummary({ tenantId: tenant.tenantId, role: "owner" }),
       fetchLastWeekActivity(tenant.tenantId),
+      fetchRecentRainfallSummary(tenant.tenantId),
+      fetchWeatherForecast(locationQuery),
     ])
 
     // Persist this week's metrics, then load historical baselines in parallel
@@ -220,6 +334,7 @@ async function generateWeeklyDigestText(tenant: TenantDigestRow): Promise<{ text
     })
     const calendarContext = buildEstateCalendarContext()
     const agronomyContext = buildAgronomyContext()
+    const weatherContext = buildWeatherContext({ locationQuery, forecastJson, rainfall })
 
     const client = getClaudeClient()
     const response = await client.messages.create({
@@ -253,6 +368,8 @@ ${historySection}
 ## Season-to-Date Context (FY ${fiscalYearLabel})
 ${dataSummary}
 
+${weatherContext}
+
 Structure your digest in exactly four sections:
 
 1. Last Week at a Glance — 2-3 sentences summarising what actually happened last week using exact figures from the data above.
@@ -263,9 +380,9 @@ Structure your digest in exactly four sections:
    (c) Revenue-to-cost trend: is the estate earning more than it is spending YTD, or is there a deficit building? Be direct — if margins look thin or costs are running ahead of revenue, say so clearly.
    If data is insufficient for any signal, say "Insufficient data this week" rather than guessing.
 
-3. Field Signal — one specific agronomic observation drawn directly from the numbers: cherry-to-parchment conversion ratio (flag if above 5.5:1), picker productivity (flag if below 40 kg/picker/day during harvest), rainfall deviation from seasonal norms, or a gap vs expected activity for this point in the calendar. Cite the actual number. If no operational data this week, comment on what the current season phase demands and whether the estate appears on track.
+3. Field Signal — combine the recorded rainfall, the 3-day forecast, and the irrigation signal from the Weather & Irrigation Context above into a single, specific observation. State whether to irrigate or hold, cite the forecast figures, and flag any anomaly vs the recent trend. If no forecast data is available, use the logged rainfall and seasonal norms only.
 
-4. Three actions for this week — one financial, two agronomic. Be specific: name the activity, the timing, the quantity or threshold where relevant (e.g. "Apply second K dose — 60 kg MOP/ha — before the blossom shower"; "CBB trap counts should be checked; if >5 borer/trap/day, spray Beauveria bassiana at 5 g/L"; "Review last month's expense codes — ensure all fertiliser and chemical costs are coded correctly before the FY close"). If data shows a gap vs benchmark, call it out directly in the action.
+4. Three actions for this week — one financial, two agronomic. The agronomic actions must factor in the forecast: if rain is coming, defer irrigation and focus on fertiliser timing; if it is dry, prioritise irrigation. Be specific: name the activity, timing, quantity or threshold where relevant. If data shows a gap vs benchmark, call it out directly in the action.
 
 End with: "Powered by FarmFlow — your estate, always in view."`,
         },
