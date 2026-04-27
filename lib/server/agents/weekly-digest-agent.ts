@@ -137,7 +137,7 @@ async function fetchLastWeekActivity(tenantId: string): Promise<LastWeekActivity
         (SELECT COALESCE(SUM(inches + cents::numeric / 100), 0) FROM rainfall_records
           WHERE tenant_id = $1 AND record_date BETWEEN $2 AND $3)   AS rainfall_inches,
         (SELECT COUNT(*) FROM picking_records
-          WHERE tenant_id = $1 AND picking_date BETWEEN $2 AND $3)  AS picking_entries
+          WHERE tenant_id = $1 AND pick_date BETWEEN $2 AND $3)  AS picking_entries
     `, [tenantId, startDate, endDate])
 
     const row = (Array.isArray(result) ? result[0] : (result as any)?.rows?.[0]) ?? {}
