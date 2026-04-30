@@ -306,7 +306,7 @@ export default function FloatingAiAssistant() {
                   </div>
                   <p className="mt-2 leading-6">Ask about discrepancies, stock, sales, or where something lives in the app.</p>
                 </div>
-                <div className="grid gap-2 sm:grid-cols-2">
+                <div className="flex flex-col gap-2">
                   {STARTER_PROMPTS.map((prompt) => (
                     <Button
                       key={prompt}
@@ -315,9 +315,9 @@ export default function FloatingAiAssistant() {
                       onClick={() => void submitPrompt(prompt)}
                       className="h-auto w-full justify-start rounded-2xl border-emerald-100 bg-white px-3 py-3 text-left text-sm text-slate-700 transition-colors hover:border-emerald-300 hover:bg-emerald-50"
                     >
-                      <span className="flex items-start gap-2">
-                        <ArrowRight className="mt-0.5 h-3.5 w-3.5 text-emerald-600" />
-                        <span className="leading-5">{prompt}</span>
+                      <span className="flex min-w-0 items-start gap-2">
+                        <ArrowRight className="mt-0.5 h-3.5 w-3.5 shrink-0 text-emerald-600" />
+                        <span className="min-w-0 break-words leading-5">{prompt}</span>
                       </span>
                     </Button>
                   ))}

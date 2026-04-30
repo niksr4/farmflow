@@ -1,10 +1,12 @@
 "use client"
 
 import type { ReactNode } from "react"
+import { useState, useEffect } from "react"
 import Link from "next/link"
 import Image from "next/image"
 import { usePathname } from "next/navigation"
 import { Fraunces, Manrope } from "next/font/google"
+import { Sun, Moon } from "lucide-react"
 import { useLocale } from "@/components/locale-provider"
 import { Button } from "@/components/ui/button"
 
@@ -23,10 +25,29 @@ const isActiveLink = (pathname: string, href: string) => {
   return pathname === href || pathname.startsWith(`${href}/`)
 }
 
+const STORAGE_KEY = "farmflow-public-theme"
+
 export function PublicSiteShell({ children, theme = "light" }: PublicSiteShellProps) {
   const pathname = usePathname()
   const { t } = useLocale()
+  const [activeTheme, setActiveTheme] = useState<"light" | "dark">(theme)
+  const [mounted, setMounted] = useState(false)
+
+  useEffect(() => {
+    setMounted(true)
+    const stored = localStorage.getItem(STORAGE_KEY) as "light" | "dark" | null
+    if (stored === "light" || stored === "dark") setActiveTheme(stored)
+  }, [])
+
+  const toggleTheme = () => {
+    const next = activeTheme === "dark" ? "light" : "dark"
+    setActiveTheme(next)
+    localStorage.setItem(STORAGE_KEY, next)
+  }
+
+  // Page background/content always follows the prop — only the nav chrome follows user preference
   const isDark = theme === "dark"
+  const navIsDark = activeTheme === "dark"
   const navItems = [
     { href: "/plans", label: t("public.landing.navPlans") },
     { href: "/capabilities", label: t("public.landing.navCapabilities") },
@@ -53,8 +74,8 @@ export function PublicSiteShell({ children, theme = "light" }: PublicSiteShellPr
       ) : null}
       <header className="px-4 pt-4 sm:px-6 sm:pt-6">
         <nav
-          className={`mx-auto flex w-full max-w-6xl flex-col gap-3 rounded-2xl px-3 py-3 backdrop-blur sm:flex-row sm:items-center sm:justify-between sm:px-4 ${
-            isDark
+          className={`mx-auto flex w-full max-w-6xl flex-col gap-3 rounded-2xl px-3 py-3 backdrop-blur sm:flex-row sm:items-center sm:justify-between sm:px-4 transition-colors duration-300 ${
+            navIsDark
               ? "border border-white/10 bg-[#081613]/70 shadow-[0_24px_70px_-34px_rgba(0,0,0,0.75)]"
               : "border border-white/70 bg-white/85 shadow-[0_24px_50px_-32px_rgba(15,23,42,0.45)]"
           }`}
@@ -63,11 +84,11 @@ export function PublicSiteShell({ children, theme = "light" }: PublicSiteShellPr
             <Link href="/" className="flex items-center gap-3">
               <Image src="/brand-logo.svg" alt="FarmFlow" width={220} height={86} className="h-12 w-auto" priority />
             </Link>
-            <p className={`${display.className} hidden text-sm sm:block ${isDark ? "text-stone-300" : "text-slate-600"}`}>
+            <p className={`${display.className} hidden text-sm sm:block ${navIsDark ? "text-stone-300" : "text-slate-600"}`}>
               Coffee operations, without spreadsheet drift
             </p>
           </div>
-          <div className={`hidden items-center gap-4 text-sm lg:flex ${isDark ? "text-stone-300/80" : "text-slate-600"}`}>
+          <div className={`hidden items-center gap-4 text-sm lg:flex ${navIsDark ? "text-stone-300/80" : "text-slate-600"}`}>
             {navItems.map((item) => {
               const active = isActiveLink(pathname, item.href)
               return (
@@ -76,10 +97,10 @@ export function PublicSiteShell({ children, theme = "light" }: PublicSiteShellPr
                   href={item.href}
                   className={
                     active
-                      ? isDark
+                      ? navIsDark
                         ? "font-semibold text-emerald-200"
                         : "font-semibold text-emerald-800"
-                      : isDark
+                      : navIsDark
                         ? "hover:text-white"
                         : "hover:text-slate-900"
                   }
@@ -90,16 +111,32 @@ export function PublicSiteShell({ children, theme = "light" }: PublicSiteShellPr
             })}
           </div>
           <div className="flex items-center gap-2">
+            {mounted && (
+              <button
+                onClick={toggleTheme}
+                aria-label={navIsDark ? "Switch to light nav" : "Switch to dark nav"}
+                className={`relative flex h-8 w-8 items-center justify-center rounded-full border transition-all duration-200 ${
+                  navIsDark
+                    ? "border-white/10 bg-white/[0.05] text-stone-400 hover:border-white/20 hover:bg-white/[0.10] hover:text-amber-300"
+                    : "border-slate-200 bg-white/70 text-slate-500 hover:border-slate-300 hover:bg-white hover:text-amber-500"
+                }`}
+              >
+                {navIsDark
+                  ? <Sun className="h-3.5 w-3.5" />
+                  : <Moon className="h-3.5 w-3.5" />
+                }
+              </button>
+            )}
             <Button
               variant="ghost"
-              className={isDark ? "border-white/10 text-stone-200 hover:bg-white/10 hover:text-white" : undefined}
+              className={navIsDark ? "border-white/10 text-stone-200 hover:bg-white/10 hover:text-white" : undefined}
               asChild
             >
               <Link href="/login">{t("common.login")}</Link>
             </Button>
             <Button
               className={
-                isDark
+                navIsDark
                   ? "border-emerald-300/40 bg-emerald-300/90 text-[#06110f] shadow-[0_18px_36px_-18px_rgba(110,231,183,0.65)] hover:bg-emerald-200"
                   : undefined
               }
@@ -118,10 +155,10 @@ export function PublicSiteShell({ children, theme = "light" }: PublicSiteShellPr
                 href={item.href}
                 className={`shrink-0 rounded-full border px-3 py-1.5 text-xs ${
                   active
-                    ? isDark
+                    ? navIsDark
                       ? "border-emerald-300/50 bg-emerald-300/12 text-emerald-100"
                       : "border-emerald-300 bg-emerald-50 text-emerald-800"
-                    : isDark
+                    : navIsDark
                       ? "border-white/10 bg-white/5 text-stone-300"
                       : "border-white/70 bg-white/80 text-slate-700"
                 }`}

@@ -539,13 +539,15 @@ export default function LandingPage() {
         {/* ── Crop roadmap ── */}
         <MotionSection {...reveal(0.04)}>
           <div className="rounded-2xl border border-white/[0.06] bg-white/[0.02] px-6 py-8 text-center sm:px-10">
-            <p className="text-xs uppercase tracking-[0.25em] text-stone-600">Starting with coffee, built to go further</p>
+            <p className="text-xs uppercase tracking-[0.25em] text-stone-600">Built for coffee, rubber, and pepper — expanding further</p>
             <p className="mx-auto mt-3 max-w-xl text-sm leading-7 text-stone-400">
-              Coffee is the hardest crop to run operationally — pulping, fermentation, drying, curing, grading, and traceability all in one season. We started here. Tea, cocoa, spices, and more are coming as those communities join.
+              Coffee, rubber, and pepper are live today — full processing, grading, and dispatch workflows included. Tea, cocoa, spices, and more are coming as those communities join.
             </p>
             <div className="mt-6 flex flex-wrap items-center justify-center gap-3">
               {[
                 { emoji: "☕", label: "Coffee", active: true },
+                { emoji: "🌱", label: "Rubber", active: true },
+                { emoji: "🫚", label: "Pepper", active: true },
                 { emoji: "🍵", label: "Tea" },
                 { emoji: "🍫", label: "Cocoa" },
                 { emoji: "🌿", label: "Spices" },

@@ -18,14 +18,14 @@ const body = Manrope({ subsets: ["latin"], weight: ["400", "500", "600", "700"] 
 const INQUIRY_TYPES = [
   { value: "estate-trial", label: "Estate trial / demo" },
   { value: "partnership", label: "Partnership / integration" },
-  { value: "incubation", label: "Incubation / investor" },
+  { value: "incubation", label: "Funding / mentorship" },
   { value: "general", label: "General enquiry" },
 ]
 
 const CONTACT_REASONS = [
   { icon: "🌱", title: "Estate trials", description: "Want to run FarmFlow on your estate or see a live demo before signing up." },
-  { icon: "🤝", title: "Partnerships", description: "Integrations, distribution, or co-building within the coffee ecosystem." },
-  { icon: "📈", title: "Incubation & investment", description: "Early-stage support, mentorship, or funding conversations." },
+  { icon: "🤝", title: "Partnerships", description: "Integrations, distribution, or co-building within the estate farming ecosystem." },
+  { icon: "📈", title: "Funding & mentorship", description: "Looking for early-stage investors, advisors, or incubation support for FarmFlow." },
   { icon: "💬", title: "General", description: "Anything else — questions, feedback, or just saying hello." },
 ]
 

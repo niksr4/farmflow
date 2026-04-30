@@ -14,6 +14,7 @@ type AppSidebarProps = {
   visibleTabs: string[]
   tabMeta: Record<string, { label: string; icon: React.ComponentType<{ className?: string }> }>
   onTabChange: (tab: string) => void
+  launcherTab: string
   username: string
   estateName?: string
   roleBadgeLabel: string
@@ -27,29 +28,28 @@ const NAV_GROUPS: Array<{ id: string; label?: string; items: string[] }> = [
   { id: "home", items: ["home"] },
   {
     id: "operations",
-    label: "Ops",
-    items: ["processing", "curing", "quality", "dispatch", "sales", "inventory", "pepper"],
+    label: "Operations",
+    items: ["processing", "curing", "quality", "dispatch", "sales", "inventory", "picking", "pepper", "rubber", "rainfall"],
   },
   {
     id: "finance",
     label: "Finance",
-    items: ["accounts", "balance-sheet", "receivables", "billing", "market-pricing"],
+    items: ["accounts", "balance-sheet", "season-pl", "receivables", "billing", "market-pricing"],
   },
   {
     id: "insights",
-    label: "Insights",
+    label: "Reports",
     items: [
       "season",
       "yield-forecast",
-      "activity-log",
-      "rainfall",
-      "documents",
-      "journal",
-      "resources",
       "plant-health",
       "ai-analysis",
       "news",
+      "documents",
+      "journal",
+      "resources",
       "compliance",
+      "activity-log",
     ],
   },
 ]
@@ -66,6 +66,7 @@ export default function AppSidebar({
   visibleTabs,
   tabMeta,
   onTabChange,
+  launcherTab,
   username,
   estateName,
   roleBadgeLabel,
@@ -79,7 +80,7 @@ export default function AppSidebar({
   return (
     <TooltipProvider delayDuration={80}>
       <aside className={cn(
-        "fixed inset-y-0 left-0 z-40 flex w-[68px] flex-col border-r",
+        "fixed inset-y-0 left-0 z-40 flex w-[76px] flex-col border-r",
         /* Light mode */
         "bg-white border-slate-200 shadow-[2px_0_16px_-4px_rgba(0,0,0,0.08)]",
         /* Dark mode */
@@ -91,7 +92,7 @@ export default function AppSidebar({
             <TooltipTrigger asChild>
               <button
                 type="button"
-                onClick={() => onTabChange("home")}
+                onClick={() => onTabChange(launcherTab)}
                 className={cn(
                   "flex h-9 w-9 items-center justify-center rounded-xl transition-all duration-150",
                   "bg-emerald-50 ring-1 ring-emerald-200 hover:bg-emerald-100 hover:ring-emerald-300",
@@ -102,7 +103,7 @@ export default function AppSidebar({
               </button>
             </TooltipTrigger>
             <TooltipContent side="right" sideOffset={10} className={TOOLTIP_CLS}>
-              {estateName ?? "FarmFlow"}
+              {estateName ? `${estateName} — home` : "Go to home"}
             </TooltipContent>
           </Tooltip>
         </div>
@@ -124,7 +125,7 @@ export default function AppSidebar({
                 )}
               >
                 {group.label && (
-                  <p className="mb-1 select-none px-2 text-[7.5px] font-bold uppercase tracking-[0.18em] text-slate-400 dark:text-white/35">
+                  <p className="mb-0.5 select-none px-1 text-center text-[7px] font-bold uppercase tracking-[0.12em] text-slate-400 dark:text-white/30">
                     {group.label}
                   </p>
                 )}
@@ -134,6 +135,23 @@ export default function AppSidebar({
                   const Icon = meta.icon
                   const isActive = activeTab === itemId
 
+                  // Shorten labels to fit in narrow sidebar
+                  const shortLabel = meta.label
+                    .replace("Stock & ", "")
+                    .replace("Curing & Drying", "Curing")
+                    .replace("Quality Grading", "Quality")
+                    .replace("Season Summary", "Season")
+                    .replace("Harvest Forecast", "Forecast")
+                    .replace("Rain & Weather", "Weather")
+                    .replace("Crop Health", "Health")
+                    .replace("AI Insights", "AI")
+                    .replace("Market News", "News")
+                    .replace("Market Rates", "Rates")
+                    .replace("Live Balance", "Balance")
+                    .replace("P&L Report", "P&L")
+                    .replace("Audit Log", "Audit")
+                    .replace("Picking Log", "Picking")
+
                   return (
                     <Tooltip key={itemId}>
                       <TooltipTrigger asChild>
@@ -141,7 +159,7 @@ export default function AppSidebar({
                           type="button"
                           onClick={() => onTabChange(itemId)}
                           className={cn(
-                            "group relative flex h-9 w-full items-center justify-center rounded-lg transition-all duration-150",
+                            "group relative flex h-auto w-full flex-col items-center justify-center gap-0.5 rounded-lg py-2 transition-all duration-150",
                             isActive
                               ? "bg-emerald-50 text-emerald-700 dark:bg-emerald-500/14 dark:text-emerald-400"
                               : "text-slate-500 hover:bg-slate-100 hover:text-slate-800 dark:text-white/55 dark:hover:bg-white/[0.08] dark:hover:text-white/90",
@@ -151,6 +169,12 @@ export default function AppSidebar({
                             <span className="absolute left-0 top-1/2 h-4 w-0.5 -translate-y-1/2 rounded-r-full bg-emerald-500 dark:bg-emerald-400/80" />
                           )}
                           <Icon className="h-[17px] w-[17px]" />
+                          <span className={cn(
+                            "text-center leading-none",
+                            isActive ? "text-[8.5px] font-semibold" : "text-[8px] font-medium",
+                          )}>
+                            {shortLabel}
+                          </span>
                         </button>
                       </TooltipTrigger>
                       <TooltipContent side="right" sideOffset={10} className={TOOLTIP_CLS}>
