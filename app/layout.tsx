@@ -9,6 +9,7 @@ import { ThemeProvider } from "@/components/theme-provider"
 import { AuthProvider } from "@/hooks/use-auth"
 import BrandWatermark from "@/components/brand-watermark"
 import FloatingAiAssistant from "@/components/floating-ai-assistant"
+import FeedbackWidget from "@/components/feedback-widget"
 import { Toaster } from "@/components/ui/toaster"
 import PwaRegister from "@/components/pwa-register"
 import PostHogAuthSync from "@/components/posthog-auth-sync"
@@ -107,6 +108,9 @@ gtag('config', 'G-X0RB06WXE9');`}
               {children}
               <Suspense fallback={null}>
                 <FloatingAiAssistant />
+              </Suspense>
+              <Suspense fallback={null}>
+                <FeedbackWidget />
               </Suspense>
               <BrandWatermark />
               <Toaster />

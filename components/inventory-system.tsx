@@ -30,6 +30,7 @@ import {
   Users,
   Factory,
   Leaf,
+  Droplets,
   NotebookPen,
   Receipt,
   Settings,
@@ -200,6 +201,9 @@ const ReceivablesTab = dynamic(() => import("@/components/receivables-tab"), {
 const BalanceSheetTab = dynamic(() => import("@/components/balance-sheet-tab"), {
   loading: () => <TabPanelLoading label="Balance sheet" />,
 })
+const SeasonPlTab = dynamic(() => import("@/components/season-pl-tab"), {
+  loading: () => <TabPanelLoading label="P&L" />,
+})
 const JournalTab = dynamic(() => import("@/components/journal-tab"), {
   loading: () => <TabPanelLoading label="Journal" />,
 })
@@ -217,6 +221,9 @@ const YieldForecastTab = dynamic(() => import("@/components/yield-forecast-tab")
 })
 const PepperTab = dynamic(() => import("./pepper-tab").then((module) => module.PepperTab), {
   loading: () => <TabPanelLoading label="Pepper processing" />,
+})
+const RubberTab = dynamic(() => import("./rubber-tab").then((module) => module.RubberTab), {
+  loading: () => <TabPanelLoading label="Rubber tapping" />,
 })
 
 type WriteQueueBlockedEntry = {
@@ -283,7 +290,7 @@ const isAccountsWorkspaceTab = (value: string | null | undefined): value is Acco
 export default function InventorySystem() {
   type InventoryWorkspaceView = "inventory" | "transactions"
   type SalesWorkspaceView = "coffee" | "other-sales"
-  type ProcessingWorkspaceView = "coffee" | "pepper"
+  type ProcessingWorkspaceView = "coffee" | "pepper" | "rubber"
   // UI / paging
   const [currentPage, setCurrentPage] = useState(1)
   const itemsPerPage = 10
@@ -363,6 +370,14 @@ export default function InventorySystem() {
     totalPickedKg: 0,
     totalDryKg: 0,
     avgDryPercent: 0,
+    loading: false,
+    error: null as string | null,
+  })
+  const [rubberHeroTotals, setRubberHeroTotals] = useState({
+    totalRecords: 0,
+    totalLatexKg: 0,
+    totalSheetsKg: 0,
+    avgDrcPct: 0,
     loading: false,
     error: null as string | null,
   })
@@ -632,6 +647,7 @@ export default function InventorySystem() {
   const canShowInventory = isModuleEnabled("inventory")
   const canShowAccounts = isModuleEnabled("accounts")
   const canShowBalanceSheet = isModuleEnabled("balance-sheet") && (isAdmin || isOwner)
+  const canShowSeasonPl = isModuleEnabled("accounts") && (isAdmin || isOwner)
   const canShowProcessing = isModuleEnabled("processing")
   const canShowDispatch = isModuleEnabled("dispatch")
   const canShowSales = isModuleEnabled("sales") && isAdmin
@@ -642,6 +658,7 @@ export default function InventorySystem() {
   const canShowQuality = isModuleEnabled("quality")
   const canShowRainfall = isModuleEnabled("rainfall")
   const canShowPepper = isModuleEnabled("pepper")
+  const canShowRubber = isModuleEnabled("rubber")
   const canShowAiAnalysis = isModuleEnabled("ai-analysis")
   const canLaunchAssistant = canShowAiAnalysis && (!isOwner || isPreviewMode)
   const canShowNews = isModuleEnabled("news")
@@ -662,19 +679,23 @@ export default function InventorySystem() {
   const canShowWelcomeCard = isFeatureEnabled("showWelcomeCard")
   const canShowRainfallSection = canShowRainfall || canShowWeather
   const canShowIntelligence = !isScopedUser && (canShowDispatch || canShowSalesWorkspace || canShowAccounts || canShowSeason)
-  const canShowProcessingWorkspace = canShowProcessing || canShowPepper
-  const processingWorkspaceLabel = canShowProcessing ? "Pulping" : "Pepper Processing"
+  const canShowProcessingWorkspace = canShowProcessing || canShowPepper || canShowRubber
+  const processingWorkspaceLabel = canShowProcessing ? "Pulping" : canShowPepper ? "Pepper Processing" : "Rubber"
   const processingWorkspaceIcon = canShowProcessing ? Factory : Leaf
   const shouldLoadHomeMetrics = activeTab === "home"
   const shouldLoadExceptionSummary = activeTab === "home" || activeTab === "season"
-  const resolvedProcessingWorkspaceView =
+  const resolvedProcessingWorkspaceView: ProcessingWorkspaceView =
     processingWorkspaceView === "pepper" && canShowPepper
       ? "pepper"
-      : canShowProcessing
-        ? "coffee"
-        : canShowPepper
-          ? "pepper"
-          : "coffee"
+      : processingWorkspaceView === "rubber" && canShowRubber
+        ? "rubber"
+        : canShowProcessing
+          ? "coffee"
+          : canShowPepper
+            ? "pepper"
+            : canShowRubber
+              ? "rubber"
+              : "coffee"
   const estateMetrics = useMemo(() => {
     const inventoryCount = inventory.length
     const locationCount = locations.length
@@ -702,18 +723,14 @@ export default function InventorySystem() {
 
   useEffect(() => {
     setProcessingWorkspaceView((currentView) => {
-      if (currentView === "pepper" && canShowPepper) {
-        return currentView
-      }
-      if (canShowProcessing) {
-        return "coffee"
-      }
-      if (canShowPepper) {
-        return "pepper"
-      }
+      if (currentView === "pepper" && canShowPepper) return currentView
+      if (currentView === "rubber" && canShowRubber) return currentView
+      if (canShowProcessing) return "coffee"
+      if (canShowPepper) return "pepper"
+      if (canShowRubber) return "rubber"
       return "coffee"
     })
-  }, [canShowPepper, canShowProcessing])
+  }, [canShowPepper, canShowRubber, canShowProcessing])
 
   useEffect(() => {
     setOnboardingEstateName(String(tenantSettings.estateName || ""))
@@ -1776,6 +1793,39 @@ export default function InventorySystem() {
       },
     ]
 
+    const rubberSheetYieldPct = rubberHeroTotals.totalLatexKg > 0
+      ? (rubberHeroTotals.totalSheetsKg / rubberHeroTotals.totalLatexKg) * 100
+      : 0
+    const rubberStats: HeroStat[] = [
+      {
+        label: "Latex collected",
+        value: rubberHeroTotals.loading
+          ? "Loading..."
+          : rubberHeroTotals.error
+            ? "Unavailable"
+            : `${formatNumber(rubberHeroTotals.totalLatexKg, 0)} kg`,
+        metricValue: rubberHeroTotals.loading || rubberHeroTotals.error ? null : rubberHeroTotals.totalLatexKg,
+      },
+      {
+        label: "Sheets produced",
+        value: rubberHeroTotals.loading
+          ? "Loading..."
+          : rubberHeroTotals.error
+            ? "Unavailable"
+            : `${formatNumber(rubberHeroTotals.totalSheetsKg, 0)} kg`,
+        metricValue: rubberHeroTotals.loading || rubberHeroTotals.error ? null : rubberHeroTotals.totalSheetsKg,
+      },
+      {
+        label: "Sheet yield",
+        value: rubberHeroTotals.loading
+          ? "Loading..."
+          : rubberHeroTotals.error
+            ? "Unavailable"
+            : `${formatNumber(rubberSheetYieldPct, 1)}%`,
+        metricValue: rubberHeroTotals.loading || rubberHeroTotals.error ? null : rubberSheetYieldPct,
+      },
+    ]
+
     const showRainfallMetrics = isModuleEnabled("rainfall")
     const latestRainLabel = rainfallHeroTotals.latestDate ? formatDate(rainfallHeroTotals.latestDate) : "No logs"
     const rainfallStats: HeroStat[] = showRainfallMetrics
@@ -2237,11 +2287,23 @@ export default function InventorySystem() {
             stats: pepperStats,
           }
         }
+        if (resolvedProcessingWorkspaceView === "rubber") {
+          return {
+            badge: "Rubber Tapping",
+            title: "Daily latex, cup lump, and sheet production",
+            description: "Track tapping output and RSS sheet grades in one place.",
+            chips: [
+              { icon: Droplets, label: "Latex → Cup Lump → RSS sheet workflow", metricValue: null },
+              { icon: Leaf, label: "Grades RSS1–RSS5 and cup lump supported", metricValue: null },
+            ],
+            stats: rubberStats,
+          }
+        }
         return {
           badge: "Coffee Pulping",
           title: "Daily coffee pulping, yield, and conversion",
-          description: canShowPepper
-            ? "Keep coffee pulping and pepper processing together in one place."
+          description: canShowPepper || canShowRubber
+            ? "Keep all post-harvest crop records in one workspace."
             : "Keep dispatch and sales aligned with real coffee output.",
           chips: chipsProcessing,
           stats: processingTotalsStats,
@@ -2353,6 +2415,17 @@ export default function InventorySystem() {
           chips: chipsPepper,
           stats: pepperStats,
         }
+      case "rubber":
+        return {
+          badge: "Rubber Tapping",
+          title: "Latex, cup lump, and sheet production",
+          description: "Track daily tapping output and RSS sheet grades by location.",
+          chips: [
+            { icon: Droplets, label: "Latex → Cup Lump → RSS sheet workflow", metricValue: null },
+            { icon: Leaf, label: "Grades RSS1–RSS5 and cup lump supported", metricValue: null },
+          ],
+          stats: rubberStats,
+        }
       case "journal":
         return {
           badge: "Estate Journal",
@@ -2454,6 +2527,7 @@ export default function InventorySystem() {
     bagWeightLabel,
     bagWeightValue,
     canShowPepper,
+    canShowRubber,
     currentFiscalYear.label,
     curingHeroTotals.avgDryingDays,
     curingHeroTotals.avgMoistureDrop,
@@ -2487,6 +2561,12 @@ export default function InventorySystem() {
     pepperHeroTotals.totalDryKg,
     pepperHeroTotals.totalPickedKg,
     pepperHeroTotals.totalRecords,
+    rubberHeroTotals.avgDrcPct,
+    rubberHeroTotals.error,
+    rubberHeroTotals.loading,
+    rubberHeroTotals.totalLatexKg,
+    rubberHeroTotals.totalSheetsKg,
+    rubberHeroTotals.totalRecords,
     qualityHeroTotals.avgCupScore,
     qualityHeroTotals.avgDefects,
     qualityHeroTotals.avgOutturnPct,
@@ -3539,14 +3619,14 @@ export default function InventorySystem() {
     canShowCuring ||
     canShowQuality ||
     canShowDispatch ||
-    canShowSalesWorkspace
+    canShowSalesWorkspace ||
+    canShowRainfallSection
   const showFinanceTabs =
     canShowAccounts || canShowBalanceSheet || canShowReceivables || canShowBilling
   const showInsightsTabs =
     canShowSeason ||
     canShowYieldForecast ||
     canShowActivityLog ||
-    canShowRainfallSection ||
     canShowDocuments ||
     canShowJournal ||
     canShowResources ||
@@ -3562,16 +3642,15 @@ export default function InventorySystem() {
               value: "processing",
               label: processingWorkspaceLabel,
               icon: processingWorkspaceIcon,
-              subtabs:
-                canShowProcessing && canShowPepper
-                  ? ["Coffee Pulping", "Pepper Processing"]
-                  : canShowProcessing
-                    ? ["Coffee Pulping"]
-                    : ["Pepper Processing"],
+              subtabs: [
+                canShowProcessing && "Coffee Pulping",
+                canShowPepper && "Pepper Processing",
+                canShowRubber && "Rubber Tapping",
+              ].filter(Boolean) as string[],
             }
           : null,
-        canShowCuring ? { value: "curing", label: "Curing", icon: Factory } : null,
-        canShowQuality ? { value: "quality", label: "Quality", icon: CheckCircle2 } : null,
+        canShowCuring ? { value: "curing", label: "Curing & Drying", icon: Factory } : null,
+        canShowQuality ? { value: "quality", label: "Quality Grading", icon: CheckCircle2 } : null,
         canShowDispatch ? { value: "dispatch", label: "Dispatch", icon: Truck } : null,
         canShowSalesWorkspace
           ? {
@@ -3590,9 +3669,22 @@ export default function InventorySystem() {
         canShowInventoryWorkspace
           ? {
               value: "inventory",
-              label: "Inventory",
+              label: "Stock & Inventory",
               icon: List,
-              subtabs: showTransactionHistory ? ["Inventory", "Transaction History"] : ["Inventory"],
+              subtabs: showTransactionHistory ? ["Stock Levels", "Transaction History"] : ["Stock Levels"],
+            }
+          : null,
+        canShowRainfallSection
+          ? {
+              value: "rainfall",
+              label: "Rain & Weather",
+              icon: CloudRain,
+              subtabs:
+                canShowRainfall && canShowWeather
+                  ? ["Rainfall Logs", "Forecast"]
+                  : canShowWeather
+                    ? ["Forecast", "Estate Coordinates"]
+                    : ["Rainfall Logs"],
             }
           : null,
       ].filter(Boolean) as Array<{
@@ -3610,8 +3702,12 @@ export default function InventorySystem() {
       canShowProcessingWorkspace,
       canShowQuality,
       canShowProcessing,
+      canShowRainfall,
+      canShowRainfallSection,
+      canShowRubber,
       canShowSales,
       canShowSalesWorkspace,
+      canShowWeather,
       processingWorkspaceIcon,
       processingWorkspaceLabel,
       showTransactionHistory,
@@ -3629,7 +3725,8 @@ export default function InventorySystem() {
               subtabs: ["Labor Deployments", "Other Expenses", "Attendance", "Account Activities"],
             }
           : null,
-        canShowBalanceSheet ? { value: "balance-sheet", label: "Balance Sheet", icon: Scale } : null,
+        canShowBalanceSheet ? { value: "balance-sheet", label: "Live Balance", icon: Scale } : null,
+        canShowSeasonPl ? { value: "season-pl", label: "P&L Report", icon: TrendingUp } : null,
         canShowReceivables ? { value: "receivables", label: "Receivables", icon: Receipt } : null,
         canShowBilling ? { value: "billing", label: "Billing", icon: Receipt } : null,
       ].filter(Boolean) as Array<{
@@ -3638,34 +3735,21 @@ export default function InventorySystem() {
         icon: React.ComponentType<{ className?: string }>
         subtabs?: string[]
       }>,
-    [canShowAccounts, canShowBalanceSheet, canShowBilling, canShowReceivables],
+    [canShowAccounts, canShowBalanceSheet, canShowBilling, canShowReceivables, canShowSeasonPl],
   )
 
   const insightsTabItems = useMemo(
     () =>
       [
-        canShowSeason ? { value: "season", label: "Season View", icon: BarChart3 } : null,
-        canShowYieldForecast ? { value: "yield-forecast", label: "Yield Forecast", icon: TrendingUp } : null,
-        canShowActivityLog ? { value: "activity-log", label: "Activity Log", icon: History } : null,
-        canShowRainfallSection
-          ? {
-              value: "rainfall",
-              label: canShowRainfall ? "Rainfall" : "Weather",
-              icon: CloudRain,
-              subtabs:
-                canShowRainfall && canShowWeather
-                  ? ["Rainfall Logs", "Weather"]
-                  : canShowWeather
-                    ? ["Forecast", "Estate Coordinates"]
-                    : ["Rainfall Logs"],
-            }
-          : null,
+        canShowSeason ? { value: "season", label: "Season Summary", icon: BarChart3 } : null,
+        canShowYieldForecast ? { value: "yield-forecast", label: "Harvest Forecast", icon: TrendingUp } : null,
+        canShowPlantHealth ? { value: "plant-health", label: "Crop Health", icon: Leaf } : null,
+        canShowAiAnalysis ? { value: "ai-analysis", label: "AI Insights", icon: Brain } : null,
+        canShowNews ? { value: "news", label: "Market News", icon: Newspaper } : null,
         canShowDocuments ? { value: "documents", label: "Documents", icon: FileText } : null,
         canShowJournal ? { value: "journal", label: "Journal", icon: NotebookPen } : null,
         canShowResources ? { value: "resources", label: "Resources", icon: BookOpen } : null,
-        canShowPlantHealth ? { value: "plant-health", label: "Plant Health", icon: Leaf } : null,
-        canShowAiAnalysis ? { value: "ai-analysis", label: "AI Analysis", icon: Brain } : null,
-        canShowNews ? { value: "news", label: "News", icon: Newspaper } : null,
+        canShowActivityLog ? { value: "activity-log", label: "Audit Log", icon: History } : null,
       ].filter(Boolean) as Array<{
         value: string
         label: string
@@ -3679,11 +3763,8 @@ export default function InventorySystem() {
       canShowJournal,
       canShowNews,
       canShowPlantHealth,
-      canShowRainfall,
-      canShowRainfallSection,
       canShowResources,
       canShowSeason,
-      canShowWeather,
       canShowYieldForecast,
     ],
   )
@@ -3901,6 +3982,7 @@ export default function InventorySystem() {
     if (canShowInventoryWorkspace) tabs.push("inventory")
     if (canShowAccounts) tabs.push("accounts")
     if (canShowBalanceSheet) tabs.push("balance-sheet")
+    if (canShowSeasonPl) tabs.push("season-pl")
     if (canShowProcessingWorkspace) tabs.push("processing")
     if (canShowDispatch) tabs.push("dispatch")
     if (canShowSalesWorkspace) tabs.push("sales")
@@ -3969,29 +4051,32 @@ export default function InventorySystem() {
     () =>
       ({
         home: { label: "Dashboard", icon: Home },
-        inventory: { label: "Inventory", icon: List },
+        inventory: { label: "Stock & Inventory", icon: List },
         processing: { label: processingWorkspaceLabel, icon: processingWorkspaceIcon },
         dispatch: { label: "Dispatch", icon: Truck },
         sales: { label: "Sales", icon: TrendingUp },
         pepper: { label: "Pepper", icon: Leaf },
+        rubber: { label: "Rubber", icon: Leaf },
         accounts: { label: "Accounts", icon: Users },
-        "balance-sheet": { label: "Balance Sheet", icon: Scale },
+        "balance-sheet": { label: "Live Balance", icon: Scale },
+        "season-pl": { label: "P&L Report", icon: TrendingUp },
         receivables: { label: "Receivables", icon: Receipt },
         billing: { label: "Billing", icon: Receipt },
-        season: { label: "Season", icon: BarChart3 },
-        "yield-forecast": { label: "Yield Forecast", icon: TrendingUp },
-        "activity-log": { label: "Activity Log", icon: History },
-        rainfall: { label: "Rainfall", icon: CloudRain },
+        season: { label: "Season Summary", icon: BarChart3 },
+        "yield-forecast": { label: "Harvest Forecast", icon: TrendingUp },
+        "activity-log": { label: "Audit Log", icon: History },
+        rainfall: { label: "Rain & Weather", icon: CloudRain },
         documents: { label: "Documents", icon: FileText },
         journal: { label: "Journal", icon: NotebookPen },
         resources: { label: "Resources", icon: BookOpen },
-        "plant-health": { label: "Plant Health", icon: Leaf },
-        "ai-analysis": { label: "AI Analysis", icon: Brain },
-        news: { label: "News", icon: Newspaper },
-        curing: { label: "Curing", icon: Factory },
-        quality: { label: "Quality", icon: CheckCircle2 },
-        "market-pricing": { label: "Market Pricing", icon: TrendingUp },
+        "plant-health": { label: "Crop Health", icon: Leaf },
+        "ai-analysis": { label: "AI Insights", icon: Brain },
+        news: { label: "Market News", icon: Newspaper },
+        curing: { label: "Curing & Drying", icon: Factory },
+        quality: { label: "Quality Grading", icon: CheckCircle2 },
+        "market-pricing": { label: "Market Rates", icon: TrendingUp },
         compliance: { label: "Compliance", icon: ShieldCheck },
+        picking: { label: "Picking Log", icon: List },
       }) as Record<string, { label: string; icon: React.ComponentType<{ className?: string }> }>,
     [processingWorkspaceIcon, processingWorkspaceLabel],
   )
@@ -5023,6 +5108,66 @@ export default function InventorySystem() {
   }, [tenantId, canShowPepper, currentFiscalYear.endDate, currentFiscalYear.startDate, shouldLoadHomeMetrics])
 
   useEffect(() => {
+    if (!tenantId || !canShowRubber) return
+    if (!shouldLoadHomeMetrics) return
+    let ignore = false
+
+    const loadRubberHeroTotals = async () => {
+      setRubberHeroTotals((prev) => ({ ...prev, loading: true, error: null }))
+      try {
+        const params = new URLSearchParams({
+          fiscalYearStart: currentFiscalYear.startDate,
+          fiscalYearEnd: currentFiscalYear.endDate,
+        })
+        const res = await fetch(`/api/rubber-records?${params.toString()}`)
+        const json = await res.json().catch(() => ({}))
+        if (!res.ok || !json?.success) {
+          throw new Error(json?.error || "Failed to load rubber totals")
+        }
+        const records = Array.isArray(json.records) ? json.records : []
+        const totals = records.reduce(
+          (acc: { latex: number; sheets: number; drcTotal: number; drcCount: number }, record: any) => {
+            const latexKg = Number(record?.latex_kg)
+            if (Number.isFinite(latexKg)) acc.latex += latexKg
+            const sheetsKg = Number(record?.sheets_kg)
+            if (Number.isFinite(sheetsKg)) acc.sheets += sheetsKg
+            const drcPct = Number(record?.drc_pct)
+            if (Number.isFinite(drcPct) && drcPct > 0) {
+              acc.drcTotal += drcPct
+              acc.drcCount += 1
+            }
+            return acc
+          },
+          { latex: 0, sheets: 0, drcTotal: 0, drcCount: 0 },
+        )
+        if (!ignore) {
+          setRubberHeroTotals({
+            totalRecords: records.length,
+            totalLatexKg: totals.latex,
+            totalSheetsKg: totals.sheets,
+            avgDrcPct: totals.drcCount ? totals.drcTotal / totals.drcCount : 0,
+            loading: false,
+            error: null,
+          })
+        }
+      } catch (error: any) {
+        if (!ignore) {
+          setRubberHeroTotals((prev) => ({
+            ...prev,
+            loading: false,
+            error: error?.message || "Failed to load rubber totals",
+          }))
+        }
+      }
+    }
+
+    loadRubberHeroTotals()
+    return () => {
+      ignore = true
+    }
+  }, [tenantId, canShowRubber, currentFiscalYear.endDate, currentFiscalYear.startDate, shouldLoadHomeMetrics])
+
+  useEffect(() => {
     if (!tenantId || !canShowRainfall) return
     if (!shouldLoadHomeMetrics) return
     let ignore = false
@@ -5444,9 +5589,9 @@ export default function InventorySystem() {
     () =>
       [
         { id: "dashboard" as TabGroupKey, label: "Home", icon: Home, visible: true },
-        { id: "operations" as TabGroupKey, label: "Ops", icon: Factory, visible: showOperationsTabs },
+        { id: "operations" as TabGroupKey, label: "Operations", icon: Factory, visible: showOperationsTabs },
         { id: "finance" as TabGroupKey, label: "Finance", icon: Scale, visible: showFinanceTabs },
-        { id: "insights" as TabGroupKey, label: "Insights", icon: BarChart3, visible: showInsightsTabs },
+        { id: "insights" as TabGroupKey, label: "Reports", icon: BarChart3, visible: showInsightsTabs },
       ].filter((group) => group.visible),
     [showFinanceTabs, showInsightsTabs, showOperationsTabs],
   )
@@ -5458,7 +5603,7 @@ export default function InventorySystem() {
           ? {
               id: "finance" as const,
               label: "Finance",
-              description: "Record daily labor and expenses, track accounts, and review finances.",
+              description: "Accounts, balance, P&L, receivables, and market rates.",
               icon: Scale,
               tabs: financeTabItems as SectionTabItem[],
               cardClassName: "border-amber-200/80 bg-amber-50/50",
@@ -5478,7 +5623,7 @@ export default function InventorySystem() {
           ? {
               id: "operations" as const,
               label: "Operations",
-              description: "Pulping, dispatch, sales, and stock movement.",
+              description: "Processing, dispatch, sales, stock, and rain & weather.",
               icon: Factory,
               tabs: operationsTabItems as SectionTabItem[],
               cardClassName: "border-emerald-200/80 bg-emerald-50/50",
@@ -5497,8 +5642,8 @@ export default function InventorySystem() {
         showInsightsTabs
           ? {
               id: "insights" as const,
-              label: "Insights",
-              description: "Season monitoring, rainfall, weather, AI, and trend intelligence.",
+              label: "Reports",
+              description: "Season summary, rain & weather, AI insights, and records.",
               icon: BarChart3,
               tabs: insightsTabItems as SectionTabItem[],
               cardClassName: "border-cyan-200/80 bg-cyan-50/50",
@@ -5576,6 +5721,11 @@ export default function InventorySystem() {
     }
     if (activeTab === "pepper") {
       setProcessingWorkspaceView("pepper")
+      setActiveTab("processing")
+      return
+    }
+    if (activeTab === "rubber") {
+      setProcessingWorkspaceView("rubber")
       setActiveTab("processing")
       return
     }
@@ -6295,6 +6445,7 @@ export default function InventorySystem() {
           visibleTabs={visibleTabs}
           tabMeta={tabMeta}
           onTabChange={handleTabChange}
+          launcherTab={DASHBOARD_LAUNCHER_TAB}
           username={user.username}
           estateName={tenantSettings.estateName}
           roleBadgeLabel={roleBadgeLabel}
@@ -6307,7 +6458,7 @@ export default function InventorySystem() {
       <div
         className={cn(
           "flex-1 min-w-0",
-          !isMobile && "pl-[68px]",
+          !isMobile && "pl-[76px]",
           isMobile ? mobileBottomSpacingClass : "pb-8",
         )}
       >
@@ -6439,9 +6590,7 @@ export default function InventorySystem() {
                   variant="ghost"
                   size="sm"
                   className="text-muted-foreground hover:text-foreground h-8 px-3"
-                  onClick={() => {
-                    window.location.href = `mailto:support@thefarmflow.in?subject=Support%20Request%20%E2%80%94%20${encodeURIComponent(user.username)}&body=Hi%20FarmFlow%20team%2C%0A%0A`
-                  }}
+                  onClick={() => window.dispatchEvent(new CustomEvent("farmflow:open-feedback"))}
                 >
                   <LifeBuoy className="h-3.5 w-3.5 mr-1.5" />
                   Support
@@ -7158,7 +7307,7 @@ export default function InventorySystem() {
                     <TabsTrigger
                       key={tab.value}
                       value={tab.value}
-                      className="min-h-9 rounded-lg border border-black/10 bg-white/90 px-4 text-sm font-semibold data-[state=active]:border-emerald-600 data-[state=active]:bg-emerald-600 data-[state=active]:text-white data-[state=active]:shadow-[0_10px_20px_-14px_rgba(5,150,105,0.9)] dark:border-white/[0.08] dark:bg-white/[0.04] dark:text-foreground dark:data-[state=active]:border-emerald-500 dark:data-[state=active]:bg-emerald-600"
+                      className="min-h-10 rounded-lg border border-black/10 bg-white/90 px-4 text-[13px] font-semibold data-[state=active]:border-emerald-600 data-[state=active]:bg-emerald-600 data-[state=active]:text-white data-[state=active]:shadow-[0_10px_20px_-14px_rgba(5,150,105,0.9)] dark:border-white/[0.08] dark:bg-white/[0.04] dark:text-foreground dark:data-[state=active]:border-emerald-500 dark:data-[state=active]:bg-emerald-600"
                     >
                       <TabIcon className="mr-2 h-4 w-4" />
                       {tab.label}
@@ -7173,72 +7322,85 @@ export default function InventorySystem() {
           {!isStandaloneMobileApp && isMobile && (
             <div className="relative space-y-2.5 rounded-3xl border border-black/10 bg-gradient-to-br from-white/95 via-white to-neutral-100/80 p-3 shadow-[0_12px_30px_-24px_rgba(15,23,42,0.75)] backdrop-blur">
             {activeTab !== DASHBOARD_LAUNCHER_TAB && (
-              <div className="flex justify-stretch">
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  onClick={goToWorkspaceNavigator}
-                  className="bg-white min-h-10 flex-1 justify-center"
-                >
-                  <Home className="mr-2 h-3.5 w-3.5" />
-                  Workspace Navigator
-                </Button>
+              <div className="space-y-2">
+                {/* Back button + quick-jump row */}
+                <div className="flex items-center gap-2 min-w-0">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={goToWorkspaceNavigator}
+                    className="bg-white min-h-11 shrink-0 gap-1.5 px-3"
+                  >
+                    <Home className="h-4 w-4" />
+                    <span className="text-sm">All sections</span>
+                  </Button>
+                  {/* Horizontal scroll of most-used tabs — skip the current one */}
+                  <div className="flex min-w-0 flex-1 overflow-x-auto no-scrollbar gap-2">
+                    {mobileHomeQuickActions
+                      .filter((a) => a.tab !== activeTab)
+                      .map((action) => {
+                        const ActionIcon = action.icon
+                        return (
+                          <button
+                            key={action.tab}
+                            type="button"
+                            onClick={() => handleTabChange(action.tab)}
+                            className="flex shrink-0 items-center gap-1.5 rounded-xl border border-black/10 bg-white px-3 py-2 text-sm font-medium text-slate-700 shadow-sm transition-colors hover:bg-slate-50 touch-manipulation min-h-11"
+                          >
+                            <ActionIcon className="h-4 w-4 text-emerald-600" />
+                            <span className="whitespace-nowrap">{action.label}</span>
+                          </button>
+                        )
+                      })}
+                  </div>
+                </div>
               </div>
             )}
             {activeTab === DASHBOARD_LAUNCHER_TAB && (
             <>
-            {canShowProcessingWorkspace && (
-              <button
-                type="button"
-                onClick={() => handleTabChange("processing")}
-                className="flex w-full items-center justify-between rounded-2xl border border-emerald-200 bg-emerald-50/70 px-4 py-3.5 text-left shadow-sm transition-colors hover:bg-emerald-100/80 touch-manipulation border-l-4 border-l-emerald-500"
-              >
-                <div className="flex items-center gap-3">
-                  <Factory className="h-5 w-5 text-emerald-600" />
-                  <div>
-                    <p className="text-sm font-semibold text-emerald-900">Log today&apos;s processing</p>
-                    <p className="text-xs text-emerald-700/75">Cherry intake, pulping, and dry outputs</p>
-                  </div>
+            {/* Quick-access grid on mobile home — all sections inline */}
+            {launcherSections.map((section) => (
+              <div key={section.id} className="space-y-2">
+                <div className="flex items-center gap-2 px-1">
+                  <section.icon className={cn("h-3.5 w-3.5", section.iconClassName)} />
+                  <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-neutral-500">
+                    {section.label}
+                  </p>
                 </div>
-                <span className="text-xs font-medium text-emerald-600">Open →</span>
-              </button>
-            )}
-            <div className="px-1">
-              <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-neutral-500">Workspace Sections</p>
-            </div>
-            <div className="flex snap-x snap-mandatory overflow-x-auto no-scrollbar gap-2">
-              {launcherSections.map((section) => {
-                const SectionIcon = section.icon
-                const isSectionActive = activeTabGroup === section.id
-                return (
-                  <div
-                    key={section.id}
-                    className={cn(
-                      "min-w-[220px] max-w-[85vw] snap-start px-3.5 py-2.5 rounded-2xl border transition-all shadow-sm",
-                      isSectionActive ? section.activeCardClassName : section.inactiveCardClassName,
-                    )}
-                  >
-                    <button
-                      type="button"
-                      onClick={() => handleSectionSelect(section.id)}
-                      className="flex w-full items-center gap-3 text-left transition-all touch-manipulation min-h-[72px]"
-                    >
-                      <SectionIcon className={cn("h-5 w-5", isSectionActive ? "text-white" : section.iconClassName)} />
-                      <div className="min-w-0">
-                        <p className="text-base font-semibold">{section.label}</p>
-                        <p className={cn(
-                          "text-xs whitespace-normal break-words leading-snug",
-                          isSectionActive ? section.activeDescriptionClassName : section.inactiveDescriptionClassName,
+                <div className="flex snap-x snap-mandatory overflow-x-auto no-scrollbar gap-2 pb-0.5">
+                  {section.tabs.map((tab) => {
+                    const TabIcon = tab.icon
+                    return (
+                      <button
+                        key={tab.value}
+                        type="button"
+                        onClick={() => handleTabChange(tab.value)}
+                        className={cn(
+                          "flex min-w-[148px] shrink-0 snap-start items-center gap-3 rounded-2xl border px-3.5 py-3.5 text-left shadow-sm transition-colors touch-manipulation",
+                          section.tabClassName,
+                        )}
+                      >
+                        <span className={cn(
+                          "flex h-9 w-9 shrink-0 items-center justify-center rounded-xl",
+                          section.badgeClassName,
                         )}>
-                          {section.description}
-                        </p>
-                      </div>
-                    </button>
-                  </div>
-                )
-              })}
-            </div>
+                          <TabIcon className={cn("h-4 w-4", section.iconClassName)} />
+                        </span>
+                        <div className="min-w-0">
+                          <p className="text-sm font-semibold leading-tight">{tab.label}</p>
+                          {tab.subtabs?.length ? (
+                            <p className="mt-0.5 truncate text-[10px] text-muted-foreground">
+                              {tab.subtabs.slice(0, 2).join(" · ")}
+                            </p>
+                          ) : null}
+                        </div>
+                      </button>
+                    )
+                  })}
+                </div>
+              </div>
+            ))}
             </>
             )}
             </div>
@@ -7250,127 +7412,133 @@ export default function InventorySystem() {
             forceMount={isTabLoaded(DASHBOARD_LAUNCHER_TAB) ? true : undefined}
           >
             <Card className="overflow-hidden border-black/10 bg-gradient-to-br from-white via-neutral-50 to-neutral-100/80 shadow-sm">
-              <CardHeader className="space-y-3 pb-4">
-                <CardTitle className={cn("leading-tight", isMobile ? "text-xl" : "text-2xl")}>Choose your work area</CardTitle>
+              <CardHeader className="space-y-1 pb-3">
+                <CardTitle className={cn("leading-tight", isMobile ? "text-xl" : "text-2xl")}>
+                  Where do you want to go?
+                </CardTitle>
                 <CardDescription>
-                  Start with one area, then use the section tabs above once you are inside it.
+                  Tap any section to jump straight there — no extra steps.
                 </CardDescription>
               </CardHeader>
-              <CardContent className="space-y-4">
+              <CardContent className="space-y-6">
+
+                {/* ── Task shortcuts ── */}
                 {canShowAccounts && (
-                  <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                  <div className="grid grid-cols-2 gap-2.5">
                     <button
                       type="button"
                       onClick={() => { setAccountsInitialTab("expenses"); handleTabChange("accounts") }}
-                      className="flex items-center gap-3 rounded-2xl border border-emerald-200 bg-emerald-50/70 px-4 py-3.5 text-left transition-colors hover:bg-emerald-100/60 touch-manipulation"
+                      className={cn(
+                        "flex items-center gap-3 rounded-2xl border border-emerald-200 bg-emerald-50/70 px-4 text-left transition-colors hover:bg-emerald-100/60 touch-manipulation",
+                        isMobile ? "py-4" : "py-3.5",
+                      )}
                     >
                       <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-emerald-700 text-white shadow-sm">
                         <Receipt className="h-4 w-4" />
                       </div>
                       <div>
-                        <p className="text-sm font-semibold text-slate-900">Record Expense</p>
-                        <p className="text-xs text-emerald-700">Open Accounts</p>
+                        <p className={cn("font-semibold text-slate-900", isMobile ? "text-base" : "text-sm")}>Record Expense</p>
+                        <p className="text-xs text-emerald-700">Log a cost or input used</p>
                       </div>
                     </button>
                     <button
                       type="button"
                       onClick={() => { setAccountsInitialTab("labor"); handleTabChange("accounts") }}
-                      className="flex items-center gap-3 rounded-2xl border border-emerald-200 bg-emerald-50/70 px-4 py-3.5 text-left transition-colors hover:bg-emerald-100/60 touch-manipulation"
+                      className={cn(
+                        "flex items-center gap-3 rounded-2xl border border-emerald-200 bg-emerald-50/70 px-4 text-left transition-colors hover:bg-emerald-100/60 touch-manipulation",
+                        isMobile ? "py-4" : "py-3.5",
+                      )}
                     >
                       <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-emerald-700 text-white shadow-sm">
                         <Users className="h-4 w-4" />
                       </div>
                       <div>
-                        <p className="text-sm font-semibold text-slate-900">Record Labor</p>
-                        <p className="text-xs text-emerald-700">Open Accounts</p>
+                        <p className={cn("font-semibold text-slate-900", isMobile ? "text-base" : "text-sm")}>Record Labor</p>
+                        <p className="text-xs text-emerald-700">Workers and daily wages</p>
                       </div>
                     </button>
                   </div>
                 )}
-                <div className="flex flex-col gap-3 rounded-2xl border border-slate-200 bg-slate-50/60 p-4 md:flex-row md:items-center md:justify-between">
-                  <div className="space-y-1">
-                    <p className="flex items-center gap-2 text-sm font-semibold text-slate-800">
-                      <BookOpen className="h-4 w-4 text-slate-500" />
-                      Need the plain-language guide?
-                    </p>
-                    <p className="text-sm text-slate-600">
-                      Open the FarmFlow manuals for step-by-step help on every tab, with beginner-friendly wording.
-                    </p>
-                  </div>
-                  <Button asChild variant="outline" className={cn("border-slate-200 bg-white text-slate-700 hover:bg-slate-50", isMobile ? "w-full min-h-11" : "")}>
-                    <Link href={buildWorkspaceHref("/manuals")}>Open training manuals</Link>
-                  </Button>
-                </div>
-                <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
-                  {launcherSections.map((section) => {
-                    const SectionIcon = section.icon
-                    return (
-                      <div key={section.id} className={cn("rounded-2xl border", section.cardClassName, isMobile ? "p-3.5" : "p-3")}>
-                        <div className="mb-3 flex items-start justify-between gap-2">
+
+                {/* ── All tabs — direct access, grouped ── */}
+                {launcherSections.map((section) => (
+                  <div key={section.id} className="space-y-2.5">
+                    {/* Section divider label */}
+                    <div className="flex items-center gap-2">
+                      <section.icon className={cn("h-3.5 w-3.5", section.iconClassName)} />
+                      <p className="text-[11px] font-bold uppercase tracking-[0.2em] text-neutral-500">
+                        {section.label}
+                      </p>
+                      <div className="flex-1 border-t border-neutral-100" />
+                    </div>
+
+                    {/* Tab buttons — 2 per row, direct navigation */}
+                    <div className="grid grid-cols-2 gap-2">
+                      {section.tabs.map((tab) => {
+                        const TabIcon = tab.icon
+                        return (
                           <button
+                            key={tab.value}
                             type="button"
-                            onClick={() => handleSectionSelect(section.id)}
-                            className={cn("flex items-center gap-2 text-left", isMobile ? "min-h-10" : "")}
+                            onClick={() => handleTabChange(tab.value)}
+                            className={cn(
+                              "flex items-center gap-3 rounded-xl border text-left touch-manipulation transition-colors",
+                              isMobile ? "min-h-[64px] px-3.5 py-3.5" : "min-h-[52px] px-3 py-2.5",
+                              section.tabClassName,
+                            )}
                           >
-                            <SectionIcon className={cn("h-4 w-4", section.iconClassName)} />
-                            <div>
-                              <p className="text-sm font-semibold text-neutral-900">{section.label}</p>
-                              <p className="text-xs text-muted-foreground">{section.description}</p>
+                            {/* Icon bubble */}
+                            <span className={cn(
+                              "flex shrink-0 items-center justify-center rounded-lg",
+                              isMobile ? "h-9 w-9" : "h-7 w-7",
+                              section.badgeClassName,
+                            )}>
+                              <TabIcon className={cn(isMobile ? "h-4 w-4" : "h-3.5 w-3.5", section.iconClassName)} />
+                            </span>
+
+                            {/* Label + subtabs */}
+                            <div className="min-w-0">
+                              <p className={cn(
+                                "font-semibold leading-tight",
+                                isMobile ? "text-[15px]" : "text-[13px]",
+                              )}>
+                                {tab.label}
+                              </p>
+                              {tab.subtabs?.length ? (
+                                <p className="mt-0.5 truncate text-[11px] text-muted-foreground">
+                                  {tab.subtabs.slice(0, 2).join(" · ")}
+                                </p>
+                              ) : null}
                             </div>
                           </button>
-                          <Badge variant="outline" className={section.badgeClassName}>
-                            {section.tabs.length}
-                          </Badge>
-                        </div>
-                        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-                          {section.tabs.map((tab) => {
-                            const TabIcon = tab.icon
-                            return (
-                              <button
-                                key={tab.value}
-                                type="button"
-                                onClick={() => handleTabChange(tab.value)}
-                                className={cn(
-                                  "flex min-h-14 w-full flex-col items-start justify-start gap-2 rounded-lg border px-3 py-2.5 text-left text-xs font-semibold transition-colors touch-manipulation",
-                                  isMobile ? "rounded-xl px-3.5 py-3 text-sm" : "",
-                                  section.tabClassName,
-                                )}
-                              >
-                                <span className="inline-flex items-center gap-1.5">
-                                  <TabIcon className={cn("h-3.5 w-3.5", section.iconClassName)} />
-                                  <span>{tab.label}</span>
-                                </span>
-                                {tab.subtabs?.length ? (
-                                  <span className="ml-5 flex flex-wrap gap-1.5">
-                                    {tab.subtabs.map((subtab) => (
-                                      <span
-                                        key={`${tab.value}-${subtab}`}
-                                        className={cn(
-                                          "rounded-full border px-2 py-0.5 text-[10px] font-medium leading-4",
-                                          section.subtabChipClassName,
-                                        )}
-                                      >
-                                        {subtab}
-                                      </span>
-                                    ))}
-                                  </span>
-                                ) : null}
-                              </button>
-                            )
-                          })}
-                        </div>
-                      </div>
-                    )
-                  })}
-                </div>
-                <div className="flex flex-wrap gap-2">
-                  <Button variant="outline" className={cn("bg-white", isMobile ? "w-full min-h-11" : "")} onClick={() => handleTabChange("home")}>
+                        )
+                      })}
+                    </div>
+                  </div>
+                ))}
+
+                {/* ── Bottom links ── */}
+                <div className="flex flex-wrap gap-2 border-t border-neutral-100 pt-3">
+                  <Button
+                    variant="outline"
+                    className={cn("bg-white text-slate-700", isMobile ? "w-full min-h-[48px] text-base" : "")}
+                    onClick={() => handleTabChange("home")}
+                  >
+                    <Home className="mr-2 h-4 w-4" />
                     Open Dashboard
                   </Button>
-                  <Button asChild variant="outline" className={cn("bg-white", isMobile ? "w-full min-h-11" : "")}>
-                    <Link href={buildWorkspaceHref("/manuals")}>Open manuals</Link>
+                  <Button
+                    asChild
+                    variant="outline"
+                    className={cn("bg-white text-slate-700", isMobile ? "w-full min-h-[48px] text-base" : "")}
+                  >
+                    <Link href={buildWorkspaceHref("/manuals")}>
+                      <BookOpen className="mr-2 h-4 w-4" />
+                      Training Manuals
+                    </Link>
                   </Button>
                 </div>
+
               </CardContent>
             </Card>
           </TabsContent>
@@ -7378,6 +7546,7 @@ export default function InventorySystem() {
           <TabsContent value="home" className="space-y-6" forceMount={isTabLoaded("home") ? true : undefined}>
             {/* Season Progress Strip */}
             <div className="rounded-2xl border border-black/5 bg-white/90 px-5 py-3.5 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+
               <div className="flex items-center gap-2.5">
                 <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-emerald-50">
                   <svg className="h-3.5 w-3.5 text-emerald-700" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -7401,6 +7570,141 @@ export default function InventorySystem() {
                 </span>
               </div>
             </div>
+
+            {/* ── Morning Brief — first thing you see, always ── */}
+            {canShowIntelligence && (
+              <div className={cn(
+                "rounded-2xl border overflow-hidden",
+                intelligenceHighlights.length > 0
+                  ? "border-emerald-200/70 bg-gradient-to-br from-emerald-700 to-emerald-800 text-white shadow-[0_8px_32px_-12px_rgba(5,100,70,0.45)]"
+                  : "border-black/5 bg-white/90",
+              )}>
+                {/* Header row */}
+                <div className={cn(
+                  "flex items-center justify-between px-5 py-3.5",
+                  intelligenceHighlights.length > 0 ? "border-b border-white/10" : "border-b border-black/5",
+                )}>
+                  <div className="flex items-center gap-2.5">
+                    <Brain className={cn("h-4 w-4 shrink-0", intelligenceHighlights.length > 0 ? "text-emerald-300" : "text-emerald-600")} />
+                    <p className={cn("text-sm font-semibold", intelligenceHighlights.length > 0 ? "text-white" : "text-neutral-800")}>
+                      What to focus on today
+                    </p>
+                  </div>
+                  {intelligenceLoading && (
+                    <div className="flex items-center gap-1.5">
+                      <Loader2 className={cn("h-3.5 w-3.5 animate-spin", intelligenceHighlights.length > 0 ? "text-emerald-300" : "text-neutral-400")} />
+                      <span className={cn("text-xs", intelligenceHighlights.length > 0 ? "text-emerald-300" : "text-neutral-400")}>
+                        Analysing...
+                      </span>
+                    </div>
+                  )}
+                  {!intelligenceLoading && intelligenceHighlights.length > 0 && (
+                    <span className="text-[11px] font-medium text-emerald-300">
+                      {new Date().toLocaleDateString("en-IN", { weekday: "short", day: "numeric", month: "short" })}
+                    </span>
+                  )}
+                </div>
+
+                {/* Content */}
+                <div className="px-5 py-4">
+                  {intelligenceLoading && intelligenceHighlights.length === 0 ? (
+                    <div className="space-y-3">
+                      <div className="h-4 w-3/4 animate-pulse rounded-lg bg-neutral-100" />
+                      <div className="h-4 w-5/6 animate-pulse rounded-lg bg-neutral-100" />
+                      <div className="h-4 w-2/3 animate-pulse rounded-lg bg-neutral-100" />
+                    </div>
+                  ) : intelligenceError ? (
+                    <p className="text-sm text-rose-600">{intelligenceError}</p>
+                  ) : intelligenceHighlights.length > 0 ? (
+                    <div className="space-y-3">
+                      {/* Highlights — no generic "Insight N" labels, just the text + action */}
+                      {intelligenceHighlights.slice(0, 4).map((highlight, index) => {
+                        const linkedAction = intelligenceActions.find(
+                          (action) => visibleTabs.includes(action.tab) && highlight.toLowerCase().includes(action.label.toLowerCase()),
+                        )
+                        const actionTab = linkedAction?.tab || inferBriefTabFromText(highlight)
+                        return (
+                          <button
+                            key={`brief-${index}`}
+                            type="button"
+                            data-testid={`home-brief-insight-${index + 1}`}
+                            onClick={() => openDrilldown({ tab: actionTab })}
+                            className="group flex w-full items-start gap-3 text-left"
+                          >
+                            <span className="mt-1 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-white/15 text-[10px] font-bold text-white">
+                              {index + 1}
+                            </span>
+                            <div className="min-w-0 flex-1">
+                              <p className="text-sm leading-snug text-white/90 group-hover:text-white">
+                                {highlight}
+                              </p>
+                              <p className="mt-1 text-[11px] font-medium text-emerald-300 group-hover:text-emerald-200">
+                                Review →
+                              </p>
+                            </div>
+                          </button>
+                        )
+                      })}
+
+                      {/* Cost code pins */}
+                      {(intelligenceTopCostCode || intelligenceTopFrequencyCode) && (
+                        <div className="mt-1 grid grid-cols-1 gap-2 border-t border-white/10 pt-3 sm:grid-cols-2">
+                          {intelligenceTopCostCode && (
+                            <button
+                              type="button"
+                              onClick={() => openDrilldown({ tab: "accounts", transactionSearch: intelligenceTopCostCode.code })}
+                              className="rounded-xl bg-white/10 px-3 py-2 text-left hover:bg-white/15 transition-colors"
+                            >
+                              <p className="text-[10px] font-semibold uppercase tracking-wider text-emerald-300">Top cost</p>
+                              <p className="mt-0.5 text-sm font-semibold text-white">
+                                {intelligenceTopCostCode.code} — ₹{formatNumber(intelligenceTopCostCode.totalAmount, 0)}
+                              </p>
+                              <p className="text-[11px] text-white/60">{intelligenceTopCostCode.reference}</p>
+                            </button>
+                          )}
+                          {intelligenceTopFrequencyCode && (
+                            <button
+                              type="button"
+                              onClick={() => openDrilldown({ tab: "accounts", transactionSearch: intelligenceTopFrequencyCode.code })}
+                              className="rounded-xl bg-white/10 px-3 py-2 text-left hover:bg-white/15 transition-colors"
+                            >
+                              <p className="text-[10px] font-semibold uppercase tracking-wider text-emerald-300">Most frequent</p>
+                              <p className="mt-0.5 text-sm font-semibold text-white">
+                                {intelligenceTopFrequencyCode.code} — {formatCount(intelligenceTopFrequencyCode.entryCount)} entries
+                              </p>
+                              <p className="text-[11px] text-white/60">{intelligenceTopFrequencyCode.reference}</p>
+                            </button>
+                          )}
+                        </div>
+                      )}
+
+                      {/* Action buttons */}
+                      {intelligenceActions.filter((a) => visibleTabs.includes(a.tab)).length > 0 && (
+                        <div className="flex flex-wrap gap-2 border-t border-white/10 pt-3">
+                          {intelligenceActions
+                            .filter((a) => visibleTabs.includes(a.tab))
+                            .map((action) => (
+                              <Button
+                                key={`${action.tab}-${action.label}`}
+                                size="sm"
+                                onClick={() => openDrilldown({ tab: action.tab })}
+                                className="border-white/20 bg-white/15 text-white hover:bg-white/25 text-xs h-8"
+                                variant="outline"
+                              >
+                                {action.label}
+                              </Button>
+                            ))}
+                        </div>
+                      )}
+                    </div>
+                  ) : (
+                    <p className="text-sm text-muted-foreground">
+                      No patterns detected yet. The brief activates once you have processing, accounts, and dispatch data for the current season.
+                    </p>
+                  )}
+                </div>
+              </div>
+            )}
 
             <div
               className={cn(
@@ -7855,26 +8159,33 @@ export default function InventorySystem() {
               </Card>
             )}
 
-            {isMobile && mobileHomeQuickActions.length > 0 && (
+            {mobileHomeQuickActions.length > 0 && (
               <Card className="border-black/5 bg-white/90">
                 <CardHeader className="pb-3">
-                  <CardTitle>Quick Actions</CardTitle>
-                  <CardDescription>Open common tasks faster on phone.</CardDescription>
+                  <CardTitle className={isMobile ? "text-lg" : "text-base"}>Jump to a section</CardTitle>
+                  <CardDescription>Your most-used areas — tap to go straight there.</CardDescription>
                 </CardHeader>
                 <CardContent>
-                  <div className="grid grid-cols-2 gap-2">
+                  <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3">
                     {mobileHomeQuickActions.map((action) => {
                       const ActionIcon = action.icon
                       return (
-                        <Button
+                        <button
                           key={action.tab}
-                          variant="outline"
-                          className="h-11 justify-start gap-2 bg-white text-sm"
-                          onClick={() => openDrilldown({ tab: action.tab })}
+                          type="button"
+                          onClick={() => handleTabChange(action.tab)}
+                          className={cn(
+                            "flex items-center gap-3 rounded-xl border border-black/8 bg-white px-3.5 text-left shadow-sm transition-colors hover:bg-slate-50 touch-manipulation",
+                            isMobile ? "min-h-[60px] py-3.5" : "min-h-[52px] py-2.5",
+                          )}
                         >
-                          <ActionIcon className="h-4 w-4 text-emerald-700" />
-                          {action.label}
-                        </Button>
+                          <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-emerald-50">
+                            <ActionIcon className="h-4 w-4 text-emerald-700" />
+                          </span>
+                          <span className={cn("font-semibold text-slate-800", isMobile ? "text-[15px]" : "text-sm")}>
+                            {action.label}
+                          </span>
+                        </button>
                       )
                     })}
                   </div>
@@ -8082,120 +8393,7 @@ export default function InventorySystem() {
               )}
             </div>
 
-            {!isScopedUser && (
-              <Card className="border-black/5 bg-white/90">
-                <CardHeader className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                  <div>
-                    <CardTitle>Today&apos;s Brief</CardTitle>
-                    <CardDescription>Pattern-aware summary from operations and accounts signals.</CardDescription>
-                  </div>
-                  <Badge variant="outline" className="w-fit bg-emerald-50 text-emerald-700 border-emerald-200">
-                    Smart Layer
-                  </Badge>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  {intelligenceLoading ? (
-                    <div className="flex items-center gap-2 text-sm text-neutral-500">
-                      <Loader2 className="h-4 w-4 animate-spin" />
-                      Building daily brief...
-                    </div>
-                  ) : intelligenceError ? (
-                    <p className="text-sm text-rose-600">{intelligenceError}</p>
-                  ) : intelligenceHighlights.length > 0 ? (
-                    <>
-                      <div className="grid gap-2 md:grid-cols-2">
-                        {intelligenceHighlights.slice(0, 4).map((highlight, index) => {
-                          const linkedAction = intelligenceActions.find(
-                            (action) => visibleTabs.includes(action.tab) && highlight.toLowerCase().includes(action.label.toLowerCase()),
-                          )
-                          const actionTab = linkedAction?.tab || inferBriefTabFromText(highlight)
-                          return (
-                            <button
-                              key={`${highlight}-${index}`}
-                              type="button"
-                              data-testid={`home-brief-insight-${index + 1}`}
-                              className="rounded-xl border border-black/5 bg-white p-3 text-left transition-colors hover:bg-emerald-50/40"
-                              onClick={() => openDrilldown({ tab: actionTab })}
-                            >
-                              <p className="text-xs uppercase tracking-[0.16em] text-neutral-500">Insight {index + 1}</p>
-                              <p className="mt-1 text-sm text-neutral-800">{highlight}</p>
-                              <p className="mt-2 text-xs text-emerald-700">Open details →</p>
-                            </button>
-                          )
-                        })}
-                      </div>
-                      {(intelligenceTopCostCode || intelligenceTopFrequencyCode) && (
-                        <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-                          {intelligenceTopCostCode && (
-                            <button
-                              type="button"
-                              className="rounded-xl border border-black/5 bg-white p-3 text-left transition-colors hover:bg-emerald-50/40"
-                              onClick={() =>
-                                openDrilldown({
-                                  tab: "accounts",
-                                  transactionSearch: intelligenceTopCostCode.code,
-                                })
-                              }
-                            >
-                              <p className="text-xs uppercase tracking-[0.18em] text-neutral-500">Highest Cost Code</p>
-                              <p className="mt-1 text-sm font-semibold text-neutral-900">
-                                {intelligenceTopCostCode.code} · {intelligenceTopCostCode.reference}
-                              </p>
-                              <p className="mt-1 text-xs text-muted-foreground">
-                                ₹{formatNumber(intelligenceTopCostCode.totalAmount, 0)} across{" "}
-                                {formatCount(intelligenceTopCostCode.entryCount)} entries
-                              </p>
-                              <p className="mt-2 text-xs text-emerald-700">Open accounts detail →</p>
-                            </button>
-                          )}
-                          {intelligenceTopFrequencyCode && (
-                            <button
-                              type="button"
-                              className="rounded-xl border border-black/5 bg-white p-3 text-left transition-colors hover:bg-emerald-50/40"
-                              onClick={() =>
-                                openDrilldown({
-                                  tab: "accounts",
-                                  transactionSearch: intelligenceTopFrequencyCode.code,
-                                })
-                              }
-                            >
-                              <p className="text-xs uppercase tracking-[0.18em] text-neutral-500">Most Frequent Code</p>
-                              <p className="mt-1 text-sm font-semibold text-neutral-900">
-                                {intelligenceTopFrequencyCode.code} · {intelligenceTopFrequencyCode.reference}
-                              </p>
-                              <p className="mt-1 text-xs text-muted-foreground">
-                                {formatCount(intelligenceTopFrequencyCode.entryCount)} entries · ₹
-                                {formatNumber(intelligenceTopFrequencyCode.totalAmount, 0)}
-                              </p>
-                              <p className="mt-2 text-xs text-emerald-700">Open accounts detail →</p>
-                            </button>
-                          )}
-                        </div>
-                      )}
-                      {intelligenceActions.length > 0 && (
-                        <div className="flex flex-wrap gap-2">
-                          {intelligenceActions
-                            .filter((action) => visibleTabs.includes(action.tab))
-                            .map((action) => (
-                              <Button
-                                key={`${action.tab}-${action.label}`}
-                                size="sm"
-                                variant="outline"
-                                onClick={() => openDrilldown({ tab: action.tab })}
-                                className="bg-white"
-                              >
-                                {action.label}
-                              </Button>
-                            ))}
-                        </div>
-                      )}
-                    </>
-                  ) : (
-                    <p className="text-sm text-muted-foreground">No insights yet. Add more operations data to activate the daily brief.</p>
-                  )}
-                </CardContent>
-              </Card>
-            )}
+            {/* Today's Brief — moved lower, kept for spacing; actual render is at top of home */}
 
             {canShowAiAnalysis && !isScopedUser && (seasonCompareLoading || seasonCompareNarrative || seasonCompareError) && (
               <Card className="border-black/5 bg-white/90">
@@ -8879,6 +9077,12 @@ export default function InventorySystem() {
             </TabsContent>
           )}
 
+          {canShowSeasonPl && (
+            <TabsContent value="season-pl" className="space-y-6" forceMount={isTabLoaded("season-pl") ? true : undefined}>
+              <SeasonPlTab />
+            </TabsContent>
+          )}
+
           {canShowReceivables && (
             <TabsContent value="receivables" className="space-y-6" forceMount={isTabLoaded("receivables") ? true : undefined}>
               <ReceivablesTab />
@@ -8887,65 +9091,104 @@ export default function InventorySystem() {
 
           {canShowProcessingWorkspace && (
             <TabsContent value="processing" className="space-y-6" forceMount={isTabLoaded("processing") ? true : undefined}>
-              {canShowProcessing && canShowPepper ? (
-                <Tabs
-                  value={resolvedProcessingWorkspaceView}
-                  onValueChange={(value) => setProcessingWorkspaceView(value as ProcessingWorkspaceView)}
-                  className="space-y-6"
-                >
-                  <Card className="border-border/70 bg-white/90">
-                    <CardHeader className="pb-3">
-                    <CardTitle className="text-xs uppercase tracking-[0.2em] text-muted-foreground">Pulping Workspace</CardTitle>
-                      <CardDescription>
-                        Use one workspace for coffee pulping and pepper processing.
-                      </CardDescription>
-                    </CardHeader>
-                    <CardContent className="grid gap-4 lg:grid-cols-[1.6fr_1fr]">
-                      <div className="space-y-2">
-                        <div>
-                          <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">Current View</p>
-                          <p className="text-2xl font-semibold text-foreground">
-                            {resolvedProcessingWorkspaceView === "coffee" ? "Coffee Pulping" : "Pepper Processing"}
-                          </p>
-                        </div>
-                        <div>
-                          <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">Use This For</p>
-                          <p className="text-sm font-semibold text-foreground">
-                            {resolvedProcessingWorkspaceView === "coffee"
-                              ? "Cherry intake, pulping, parchment, dry cherry, and daily output."
-                              : "Pepper picking, green-to-dry conversion, and location-wise pepper yield."}
-                          </p>
-                        </div>
-                      </div>
-                      <div className="rounded-xl border border-border/60 bg-muted/20 p-3">
-                        <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">Crop Flow</p>
-                        <TabsList className="mt-3 grid w-full grid-cols-2 rounded-xl border border-border/60 bg-white p-1 shadow-none">
-                          <TabsTrigger value="coffee" className="min-h-10 rounded-lg">
-                            Coffee Pulping
-                          </TabsTrigger>
-                          <TabsTrigger value="pepper" className="min-h-10 rounded-lg">
-                            Pepper Processing
-                          </TabsTrigger>
-                        </TabsList>
-                        <p className="mt-3 text-xs text-muted-foreground">
-                          Switch between coffee and pepper here when needed.
-                        </p>
-                      </div>
-                    </CardContent>
-                  </Card>
+              {(() => {
+                const activeCropTabs = [
+                  canShowProcessing && "coffee",
+                  canShowPepper && "pepper",
+                  canShowRubber && "rubber",
+                ].filter(Boolean) as ProcessingWorkspaceView[]
 
-                  <TabsContent value="coffee" className="space-y-6">
-                    <ProcessingTab showDataToolsControls={showDataToolsControls} />
-                  </TabsContent>
-                  <TabsContent value="pepper" className="space-y-6">
-                    <PepperTab />
-                  </TabsContent>
-                </Tabs>
-              ) : canShowPepper && !canShowProcessing ? (
-                <PepperTab />
-              ) : (
-                <ProcessingTab showDataToolsControls={showDataToolsControls} />
-              )}
+                if (activeCropTabs.length === 1) {
+                  if (activeCropTabs[0] === "pepper") return <PepperTab />
+                  if (activeCropTabs[0] === "rubber") return <RubberTab />
+                  return <ProcessingTab showDataToolsControls={showDataToolsControls} />
+                }
+
+                const viewLabel: Record<ProcessingWorkspaceView, string> = {
+                  coffee: "Coffee Pulping",
+                  pepper: "Pepper Processing",
+                  rubber: "Rubber Tapping",
+                }
+                const viewDescription: Record<ProcessingWorkspaceView, string> = {
+                  coffee: "Cherry intake, pulping, parchment, dry cherry, and daily output.",
+                  pepper: "Pepper picking, green-to-dry conversion, and location-wise pepper yield.",
+                  rubber: "Daily latex collection, coagulation, sheet production, and RSS grading.",
+                }
+
+                return (
+                  <Tabs
+                    value={resolvedProcessingWorkspaceView}
+                    onValueChange={(value) => setProcessingWorkspaceView(value as ProcessingWorkspaceView)}
+                    className="space-y-6"
+                  >
+                    <Card className="border-border/70 bg-white/90">
+                      <CardHeader className="pb-3">
+                        <CardTitle className="text-xs uppercase tracking-[0.2em] text-muted-foreground">Post-Harvest Workspace</CardTitle>
+                        <CardDescription>
+                          Switch between crops in one workspace to keep records clean.
+                        </CardDescription>
+                      </CardHeader>
+                      <CardContent className="grid gap-4 lg:grid-cols-[1.6fr_1fr]">
+                        <div className="space-y-2">
+                          <div>
+                            <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">Current View</p>
+                            <p className="text-2xl font-semibold text-foreground">
+                              {viewLabel[resolvedProcessingWorkspaceView]}
+                            </p>
+                          </div>
+                          <div>
+                            <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">Use This For</p>
+                            <p className="text-sm font-semibold text-foreground">
+                              {viewDescription[resolvedProcessingWorkspaceView]}
+                            </p>
+                          </div>
+                        </div>
+                        <div className="rounded-xl border border-border/60 bg-muted/20 p-3">
+                          <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">Crop Flow</p>
+                          <TabsList
+                            className={`mt-3 grid w-full rounded-xl border border-border/60 bg-white p-1 shadow-none grid-cols-${activeCropTabs.length}`}
+                          >
+                            {activeCropTabs.includes("coffee") && (
+                              <TabsTrigger value="coffee" className="min-h-10 rounded-lg">
+                                Coffee
+                              </TabsTrigger>
+                            )}
+                            {activeCropTabs.includes("pepper") && (
+                              <TabsTrigger value="pepper" className="min-h-10 rounded-lg">
+                                Pepper
+                              </TabsTrigger>
+                            )}
+                            {activeCropTabs.includes("rubber") && (
+                              <TabsTrigger value="rubber" className="min-h-10 rounded-lg">
+                                Rubber
+                              </TabsTrigger>
+                            )}
+                          </TabsList>
+                          <p className="mt-3 text-xs text-muted-foreground">
+                            Switch between crops here when needed.
+                          </p>
+                        </div>
+                      </CardContent>
+                    </Card>
+
+                    {activeCropTabs.includes("coffee") && (
+                      <TabsContent value="coffee" className="space-y-6">
+                        <ProcessingTab showDataToolsControls={showDataToolsControls} />
+                      </TabsContent>
+                    )}
+                    {activeCropTabs.includes("pepper") && (
+                      <TabsContent value="pepper" className="space-y-6">
+                        <PepperTab />
+                      </TabsContent>
+                    )}
+                    {activeCropTabs.includes("rubber") && (
+                      <TabsContent value="rubber" className="space-y-6">
+                        <RubberTab />
+                      </TabsContent>
+                    )}
+                  </Tabs>
+                )
+              })()}
             </TabsContent>
           )}
           {canShowDispatch && (

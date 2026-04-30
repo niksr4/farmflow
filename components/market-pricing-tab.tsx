@@ -10,8 +10,9 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Textarea } from "@/components/ui/textarea"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Dialog, DialogContent, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
-import { TrendingUp, Users, Plus, Phone, Mail, IndianRupee } from "lucide-react"
+import { TrendingUp, TrendingDown, Users, Plus, Phone, Mail, IndianRupee, Bell, BellOff } from "lucide-react"
 import { formatDateOnly } from "@/lib/date-utils"
+import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, ReferenceLine } from "recharts"
 
 interface Buyer {
   id: string
@@ -60,6 +61,40 @@ export default function MarketPricingTab() {
   const [buyerDialogOpen, setBuyerDialogOpen] = useState(false)
   const [priceDialogOpen, setPriceDialogOpen] = useState(false)
   const [submitting, setSubmitting] = useState(false)
+
+  // Price alert threshold (stored in localStorage for simplicity)
+  const [alertThreshold, setAlertThreshold] = useState<number | null>(null)
+  const [alertDraft, setAlertDraft] = useState("")
+  const [alertAbove, setAlertAbove] = useState(true)  // true = alert when price crosses ABOVE threshold
+
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem("farmflow_price_alert")
+      if (saved) {
+        const parsed = JSON.parse(saved)
+        setAlertThreshold(parsed.threshold ?? null)
+        setAlertAbove(parsed.above ?? true)
+        setAlertDraft(parsed.threshold != null ? String(parsed.threshold) : "")
+      }
+    } catch {}
+  }, [])
+
+  const saveAlert = () => {
+    const threshold = parseFloat(alertDraft)
+    if (!Number.isFinite(threshold) || threshold <= 0) {
+      localStorage.removeItem("farmflow_price_alert")
+      setAlertThreshold(null)
+      return
+    }
+    localStorage.setItem("farmflow_price_alert", JSON.stringify({ threshold, above: alertAbove }))
+    setAlertThreshold(threshold)
+  }
+
+  const clearAlert = () => {
+    localStorage.removeItem("farmflow_price_alert")
+    setAlertThreshold(null)
+    setAlertDraft("")
+  }
 
   const [buyerForm, setBuyerForm] = useState({
     name: "",
@@ -171,6 +206,25 @@ export default function MarketPricingTab() {
       ? priceRecords.reduce((sum, r) => sum + parseFloat(r.price_per_kg), 0) / priceRecords.length
       : null
 
+  // Build chart data: sort oldest-first, limit 30 points
+  const chartData = [...priceRecords]
+    .sort((a, b) => new Date(a.record_date).getTime() - new Date(b.record_date).getTime())
+    .slice(-30)
+    .map((r) => ({
+      date: r.record_date.slice(5),  // MM-DD
+      price: parseFloat(r.price_per_kg),
+      buyer: r.buyer_name ?? "Unknown",
+      grade: r.grade ?? "",
+    }))
+
+  const latestPrice = chartData.length ? chartData[chartData.length - 1].price : null
+  const prevPrice = chartData.length > 1 ? chartData[chartData.length - 2].price : null
+  const priceDelta = latestPrice != null && prevPrice != null ? latestPrice - prevPrice : null
+  const alertTriggered =
+    alertThreshold != null &&
+    latestPrice != null &&
+    (alertAbove ? latestPrice >= alertThreshold : latestPrice <= alertThreshold)
+
   return (
     <div className="space-y-6">
       {error && (
@@ -178,6 +232,138 @@ export default function MarketPricingTab() {
           {error}
         </div>
       )}
+
+      {/* Alert banner when threshold is triggered */}
+      {alertTriggered && latestPrice != null && alertThreshold != null && (
+        <div className="flex items-center gap-3 rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+          <Bell className="h-4 w-4 shrink-0 text-amber-600" />
+          <span>
+            <strong>Price alert:</strong> Latest recorded price ₹{latestPrice.toFixed(0)}/kg has{" "}
+            {alertAbove ? "crossed above" : "dropped below"} your ₹{alertThreshold.toFixed(0)}/kg threshold.
+          </span>
+        </div>
+      )}
+
+      {/* Price trend chart */}
+      {chartData.length > 1 && (
+        <Card className="border-border/70">
+          <CardHeader className="pb-2">
+            <div className="flex items-center justify-between">
+              <CardTitle className="flex items-center gap-2 text-base">
+                <TrendingUp className="h-4 w-4 text-emerald-600" />
+                Price Trend
+                {latestPrice != null && (
+                  <span className="ml-2 text-xl font-bold">₹{latestPrice.toFixed(0)}/kg</span>
+                )}
+                {priceDelta != null && (
+                  <Badge
+                    variant="outline"
+                    className={priceDelta >= 0 ? "border-emerald-300 text-emerald-700" : "border-red-300 text-red-700"}
+                  >
+                    {priceDelta >= 0 ? "+" : ""}
+                    {priceDelta.toFixed(0)} vs prev
+                  </Badge>
+                )}
+              </CardTitle>
+            </div>
+          </CardHeader>
+          <CardContent>
+            <ResponsiveContainer width="100%" height={160}>
+              <LineChart data={chartData} margin={{ top: 4, right: 8, bottom: 0, left: 0 }}>
+                <XAxis
+                  dataKey="date"
+                  tick={{ fontSize: 11 }}
+                  tickLine={false}
+                  axisLine={false}
+                  interval="preserveStartEnd"
+                />
+                <YAxis
+                  tick={{ fontSize: 11 }}
+                  tickLine={false}
+                  axisLine={false}
+                  tickFormatter={(v) => `₹${v}`}
+                  width={52}
+                />
+                <Tooltip
+                  formatter={(value: number | undefined) => [`₹${(value ?? 0).toFixed(0)}/kg`, "Price"]}
+                  labelFormatter={(label) => `Date: ${label}`}
+                  contentStyle={{ fontSize: 12 }}
+                />
+                {alertThreshold != null && (
+                  <ReferenceLine
+                    y={alertThreshold}
+                    stroke="#f59e0b"
+                    strokeDasharray="4 4"
+                    label={{ value: `Alert ₹${alertThreshold}`, position: "right", fontSize: 10, fill: "#d97706" }}
+                  />
+                )}
+                <Line
+                  type="monotone"
+                  dataKey="price"
+                  stroke="#10b981"
+                  strokeWidth={2}
+                  dot={{ r: 3, fill: "#10b981" }}
+                  activeDot={{ r: 5 }}
+                />
+              </LineChart>
+            </ResponsiveContainer>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Price Alert Configuration */}
+      <Card className="border-border/70">
+        <CardHeader className="pb-2">
+          <CardTitle className="flex items-center gap-2 text-base">
+            <Bell className="h-4 w-4 text-amber-600" />
+            Price Alert
+            {alertThreshold != null && (
+              <Badge variant="outline" className="text-xs font-normal">
+                {alertAbove ? "Above" : "Below"} ₹{alertThreshold.toFixed(0)}/kg
+              </Badge>
+            )}
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <p className="mb-3 text-xs text-muted-foreground">
+            Set a threshold — you'll see a banner here whenever the latest recorded price crosses it.
+          </p>
+          <div className="flex flex-wrap items-end gap-3">
+            <div className="space-y-1">
+              <Label className="text-xs">Trigger when price is</Label>
+              <Select value={alertAbove ? "above" : "below"} onValueChange={(v) => setAlertAbove(v === "above")}>
+                <SelectTrigger className="h-8 w-24 text-xs">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="above">Above</SelectItem>
+                  <SelectItem value="below">Below</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1">
+              <Label className="text-xs">₹/kg threshold</Label>
+              <Input
+                type="number"
+                className="h-8 w-32 text-sm font-mono"
+                placeholder="e.g. 12000"
+                value={alertDraft}
+                onChange={(e) => setAlertDraft(e.target.value)}
+                min={0}
+              />
+            </div>
+            <Button size="sm" className="h-8 bg-amber-600 hover:bg-amber-700 text-xs" onClick={saveAlert}>
+              Set Alert
+            </Button>
+            {alertThreshold != null && (
+              <Button size="sm" variant="ghost" className="h-8 text-xs text-muted-foreground" onClick={clearAlert}>
+                <BellOff className="mr-1 h-3.5 w-3.5" />
+                Clear
+              </Button>
+            )}
+          </div>
+        </CardContent>
+      </Card>
 
       {/* Summary row */}
       <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">

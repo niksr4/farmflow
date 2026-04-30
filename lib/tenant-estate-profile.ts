@@ -36,7 +36,7 @@ export const mergeTenantEstateProfile = (input?: Partial<TenantEstateProfile> | 
 })
 
 // Valid crop family ids — keep in sync with CROP_FAMILIES in crop-config.ts
-const VALID_CROP_FAMILIES = ["coffee", "tea", "cocoa", "spices", "tree_nuts", "grains", "horticulture"]
+const VALID_CROP_FAMILIES = ["coffee", "tea", "cocoa", "spices", "tree_nuts", "grains", "horticulture", "rubber"]
 
 export const getCropLabel = (profile?: TenantEstateProfile | null): string => {
   const family = String(profile?.cropFamily || "coffee").trim().toLowerCase()
@@ -48,6 +48,7 @@ export const getCropLabel = (profile?: TenantEstateProfile | null): string => {
     tree_nuts: "tree nuts",
     grains: "grains",
     horticulture: "horticulture",
+    rubber: "rubber",
   }
   return labels[family] ?? family
 }

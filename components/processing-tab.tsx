@@ -25,6 +25,8 @@ import { canAcceptNonNegative, isBlockedNumericKey } from "@/lib/number-input"
 import TaskGuideCard from "@/components/task-guide-card"
 import { SkeletonTable } from "@/components/ui/skeleton"
 import WorkflowEmptyState from "@/components/workflow-empty-state"
+import { AiValidationHint } from "@/components/ui/ai-validation-hint"
+import { useAiValidate } from "@/hooks/use-ai-validate"
 
 interface ProcessingRecord {
   id?: number
@@ -151,6 +153,20 @@ export default function ProcessingTab({ showDataToolsControls = false }: Process
   const recordsPageSize = 25
 
   const selectedLocation = locations.find((loc) => loc.id === selectedLocationId) || null
+
+  // AI inline validation
+  const cropValidationCtx = { locationId: selectedLocationId, coffeeType }
+  const { result: cropValidation, validating: cropValidating } = useAiValidate(
+    record.crop_today,
+    cropValidationCtx,
+    { field: "processing.cropToday", debounceMs: 900 },
+  )
+  const wetParchValidationCtx = { locationId: selectedLocationId, coffeeType, cropToday: record.crop_today }
+  const { result: wetParchValidation, validating: wetParchValidating } = useAiValidate(
+    record.wet_parchment,
+    wetParchValidationCtx,
+    { field: "processing.wetParchment", debounceMs: 900 },
+  )
 
   const loadLocations = useCallback(async () => {
     try {
@@ -1123,6 +1139,11 @@ export default function ProcessingTab({ showDataToolsControls = false }: Process
                       onChange={handleNonNegativeFloat("crop_today")}
                       placeholder="Enter crop today"
                     />
+                    <AiValidationHint
+                      warning={cropValidation?.warning ?? null}
+                      severity={cropValidation?.severity ?? null}
+                      validating={cropValidating}
+                    />
                   </div>
                   <div>
                     <Label>Intake to date (kg)</Label>
@@ -1291,6 +1312,11 @@ export default function ProcessingTab({ showDataToolsControls = false }: Process
                       onKeyDown={blockInvalidNumberKey}
                       onChange={handleNonNegativeFloat("wet_parchment")}
                       placeholder="Enter wet parchment"
+                    />
+                    <AiValidationHint
+                      warning={wetParchValidation?.warning ?? null}
+                      severity={wetParchValidation?.severity ?? null}
+                      validating={wetParchValidating}
                     />
                   </div>
                   <div>
@@ -1569,29 +1595,48 @@ export default function ProcessingTab({ showDataToolsControls = false }: Process
                 </div>
               )}
               {recentRecords.map((rec) => (
-                <Button
-                  key={rec.id}
-                  variant="outline"
-                  className={cn(
-                    "h-auto w-full justify-start border-border/60 bg-white/70 py-3 text-left hover:bg-muted/40",
-                    selectedRecentRecord?.id === rec.id && selectedRecentRecord?.process_date === rec.process_date
-                      ? "border-emerald-200 bg-emerald-50/60"
-                      : "",
+                <div key={rec.id} className="relative">
+                  <Button
+                    variant="outline"
+                    className={cn(
+                      "h-auto w-full justify-start border-border/60 bg-white/70 py-3 text-left hover:bg-muted/40",
+                      selectedRecentRecord?.id === rec.id && selectedRecentRecord?.process_date === rec.process_date
+                        ? "border-emerald-200 bg-emerald-50/60"
+                        : "",
+                    )}
+                    onClick={() => {
+                      setSelectedRecentRecord(rec)
+                      setDate(new Date(rec.process_date))
+                    }}
+                  >
+                    <div className="flex w-full flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+                      <div className="flex items-center gap-2">
+                        <span className="font-medium">{formatDateOnly(rec.process_date)}</span>
+                        {rec.lot_id && (
+                          <span className="rounded bg-emerald-100 px-1.5 py-0.5 text-[10px] font-mono text-emerald-700">
+                            {rec.lot_id}
+                          </span>
+                        )}
+                      </div>
+                      <span className="text-xs text-muted-foreground sm:text-sm">
+                        Crop: {rec.crop_today ?? 0}kg | Bags: {rec.dry_p_bags}
+                        {rec.quality_grade ? ` | Grade: ${rec.quality_grade}` : ""}
+                        {rec.moisture_pct ? ` | Moisture: ${rec.moisture_pct}%` : ""}
+                      </span>
+                    </div>
+                  </Button>
+                  {rec.lot_id && (
+                    <Link
+                      href={`/lot/${encodeURIComponent(rec.lot_id)}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      onClick={(e) => e.stopPropagation()}
+                      className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1 rounded-md border border-emerald-200 bg-white px-2 py-1 text-[10px] font-medium text-emerald-700 hover:bg-emerald-50 transition-colors"
+                    >
+                      Trace
+                    </Link>
                   )}
-                  onClick={() => {
-                    setSelectedRecentRecord(rec)
-                    setDate(new Date(rec.process_date))
-                  }}
-                >
-                  <div className="flex w-full flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
-                    <span className="font-medium">{formatDateOnly(rec.process_date)}</span>
-                    <span className="text-xs text-muted-foreground sm:text-sm">
-                      Crop: {rec.crop_today ?? 0}kg | Bags: {rec.dry_p_bags}
-                      {rec.quality_grade ? ` | Grade: ${rec.quality_grade}` : ""}
-                      {rec.moisture_pct ? ` | Moisture: ${rec.moisture_pct}%` : ""}
-                    </span>
-                  </div>
-                </Button>
+                </div>
               ))}
               {hasMoreRecords && (
                 <div className="flex justify-center pt-2">

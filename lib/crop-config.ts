@@ -103,6 +103,20 @@ export const CROP_FAMILIES: CropFamily[] = [
     },
   },
   {
+    id: "rubber",
+    label: "Rubber",
+    varieties: ["RRII 105", "GT 1", "PB 260", "RRIM 600", "PB 217"],
+    notes: "Kerala-dominant crop. Tapping → latex collection → coagulation → RSS sheet production. Use the dedicated Rubber module for daily tapping records.",
+    processingTerms: {
+      intake: "Latex collected (kg)",
+      primarySort: "Cup lump (kg)",
+      secondarySort: "Rejected / waste (kg)",
+      wetProcess: "Rolled sheets (kg)",
+      primaryOutput: "RSS sheets (bags)",
+      secondaryOutput: "",
+    },
+  },
+  {
     id: "horticulture",
     label: "Horticulture",
     varieties: ["Banana", "Pineapple", "Avocado", "Mango", "Citrus"],
