@@ -43,6 +43,8 @@ import {
   Moon,
   LifeBuoy,
   ShieldCheck,
+  Menu,
+  X,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -556,6 +558,7 @@ export default function InventorySystem() {
   const [trialDaysRemaining, setTrialDaysRemaining] = useState<number | null>(null)
   const [trialBannerDismissed, setTrialBannerDismissed] = useState(false)
   const [activityStreak, setActivityStreak] = useState<number>(0)
+  const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false)
 
   // auth + router
   const { user, logout, status } = useAuth()
@@ -5587,17 +5590,6 @@ export default function InventorySystem() {
     if (activeTabGroup === "insights") return insightsTabItems
     return []
   }, [activeTabGroup, financeTabItems, insightsTabItems, operationsTabItems])
-  const mobileAppSectionGroups = useMemo(
-    () =>
-      [
-        { id: "dashboard" as TabGroupKey, label: "Home", icon: Home, visible: true },
-        { id: "operations" as TabGroupKey, label: "Operations", icon: Factory, visible: showOperationsTabs },
-        { id: "finance" as TabGroupKey, label: "Finance", icon: Scale, visible: showFinanceTabs },
-        { id: "insights" as TabGroupKey, label: "Reports", icon: BarChart3, visible: showInsightsTabs },
-      ].filter((group) => group.visible),
-    [showFinanceTabs, showInsightsTabs, showOperationsTabs],
-  )
-
   const launcherSections = useMemo(
     () =>
       [
@@ -6427,9 +6419,8 @@ export default function InventorySystem() {
     </div>
   )
 
-  // Bottom tab bar is one fixed row: 56px + safe-area inset.
   const mobileBottomSpacingClass = isMobile
-    ? "pb-[calc(3.5rem+env(safe-area-inset-bottom))]"
+    ? "pb-[calc(1rem+env(safe-area-inset-bottom))]"
     : "pb-8"
 
   return (
@@ -6474,64 +6465,42 @@ export default function InventorySystem() {
         )}>
           <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-emerald-500/40 via-amber-300/30 to-emerald-600/40" />
           {isMobile ? (
-            /* Mobile header: logo + estate name + user controls */
-            <div className="flex flex-col gap-3">
-              <div className="flex flex-wrap items-center gap-3">
-                <Image
-                  src="/brand-logo.svg"
-                  alt="FarmFlow"
-                  width={220}
-                  height={86}
-                  className="h-9 w-auto rounded-xl border border-emerald-100/80 bg-white/90 px-2 py-1 shadow-sm"
-                />
-                {!isPreviewMode && tenantSettings.estateName && (
-                  <p className="flex items-center gap-1.5 text-base font-semibold text-emerald-700">
-                    <Leaf className="h-4 w-4" />
-                    {tenantSettings.estateName}
-                  </p>
-                )}
-                {(isPreviewMode || !tenantSettings.estateName) && (
-                  <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-100 bg-white/80 px-3 py-1 text-xs text-emerald-700">
-                    <Leaf className="h-3 w-3" />
-                    {tenantLabel}
-                  </span>
-                )}
-              </div>
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <div className="flex items-center gap-2 rounded-full border border-emerald-100 bg-white/80 px-3 py-1.5">
-                  <Badge variant="outline" className="bg-emerald-100 text-emerald-700 border-emerald-200 text-xs">
-                    {roleBadgeLabel}
-                  </Badge>
-                  <span className="text-sm text-slate-700">{user.username}</span>
-                </div>
-                <div className="flex flex-wrap gap-1.5">
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
-                    className="h-9 w-9 px-0"
-                    aria-label="Toggle theme"
-                  >
-                    {theme === "dark" ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
-                  </Button>
-                  <Button variant="ghost" size="sm" asChild>
-                    <Link href={buildWorkspaceHref("/manuals")}>
-                      <BookOpen className="h-4 w-4 mr-1.5" />
-                      Manuals
-                    </Link>
-                  </Button>
-                  {isAdmin && (
-                    <Button variant="ghost" size="sm" asChild>
-                      <Link href={buildWorkspaceHref("/settings")}>
-                        <Settings className="h-4 w-4 mr-1.5" />
-                        Settings
-                      </Link>
-                    </Button>
+            /* Mobile header: lean bar — hamburger + estate name + theme toggle */
+            <div className="flex items-center justify-between gap-2">
+              <div className="flex items-center gap-2.5">
+                <button
+                  type="button"
+                  onClick={() => setIsMobileSidebarOpen(true)}
+                  className="flex h-10 w-10 items-center justify-center rounded-xl border border-black/8 bg-white/80 text-neutral-700 shadow-sm transition-colors hover:bg-neutral-50 touch-manipulation"
+                  aria-label="Open navigation"
+                >
+                  <Menu className="h-5 w-5" />
+                </button>
+                <div className="flex items-center gap-2 min-w-0">
+                  <Image
+                    src="/brand-logo.svg"
+                    alt="FarmFlow"
+                    width={120}
+                    height={47}
+                    className="h-7 w-auto"
+                  />
+                  {!isPreviewMode && tenantSettings.estateName && (
+                    <span className="hidden text-sm font-semibold text-emerald-700 sm:block truncate max-w-[140px]">
+                      {tenantSettings.estateName}
+                    </span>
                   )}
-                  <Button variant="ghost" size="sm" onClick={handleLogout}>
-                    <LogOut className="h-4 w-4 mr-1.5" /> Logout
-                  </Button>
                 </div>
+              </div>
+              <div className="flex items-center gap-1">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
+                  className="h-9 w-9 px-0"
+                  aria-label="Toggle theme"
+                >
+                  {theme === "dark" ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
+                </Button>
               </div>
             </div>
           ) : (
@@ -6643,6 +6612,130 @@ export default function InventorySystem() {
             </>
           )}
         </header>
+
+        {/* ── Mobile sidebar drawer ── */}
+        {isMobile && (
+          <>
+            {/* Backdrop */}
+            {isMobileSidebarOpen && (
+              <div
+                className="fixed inset-0 z-50 bg-black/40 backdrop-blur-[2px]"
+                onClick={() => setIsMobileSidebarOpen(false)}
+              />
+            )}
+
+            {/* Drawer panel */}
+            <div
+              className={cn(
+                "fixed inset-y-0 left-0 z-50 flex w-[280px] flex-col bg-white shadow-2xl transition-transform duration-300 ease-in-out dark:bg-neutral-900",
+                isMobileSidebarOpen ? "translate-x-0" : "-translate-x-full",
+              )}
+            >
+              {/* Drawer header */}
+              <div className="flex items-center justify-between border-b border-black/8 px-4 py-3">
+                <div className="flex items-center gap-2.5">
+                  <Image src="/icon.svg" alt="FarmFlow" width={28} height={28} className="rounded-lg" />
+                  <div className="min-w-0">
+                    <p className="text-sm font-bold text-neutral-900 dark:text-white truncate">
+                      {tenantSettings.estateName || "FarmFlow"}
+                    </p>
+                    <p className="text-[11px] text-neutral-500 dark:text-neutral-400">{user.username} · {roleBadgeLabel}</p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setIsMobileSidebarOpen(false)}
+                  className="flex h-8 w-8 items-center justify-center rounded-lg text-neutral-400 hover:bg-neutral-100 hover:text-neutral-600 transition-colors touch-manipulation"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
+
+              {/* Navigation list — scrollable */}
+              <nav className="flex-1 overflow-y-auto py-3">
+                {/* Home */}
+                <button
+                  type="button"
+                  onClick={() => { goToWorkspaceNavigator(); setIsMobileSidebarOpen(false) }}
+                  className={cn(
+                    "flex w-full items-center gap-3 px-4 py-2.5 text-left text-sm font-semibold transition-colors touch-manipulation",
+                    (activeTab === DASHBOARD_LAUNCHER_TAB || activeTab === "home")
+                      ? "bg-emerald-50 text-emerald-700"
+                      : "text-neutral-700 hover:bg-neutral-50",
+                  )}
+                >
+                  <Home className="h-4.5 w-4.5 shrink-0" />
+                  Dashboard
+                </button>
+
+                {/* Sections */}
+                {launcherSections.map((section) => (
+                  <div key={section.id} className="mt-3">
+                    <div className="flex items-center gap-2 px-4 pb-1">
+                      <section.icon className={cn("h-3 w-3 shrink-0", section.iconClassName)} />
+                      <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-neutral-400">
+                        {section.label}
+                      </p>
+                    </div>
+                    {section.tabs.map((tab) => {
+                      const TabIcon = tab.icon
+                      const isActive = activeTab === tab.value
+                      return (
+                        <button
+                          key={tab.value}
+                          type="button"
+                          onClick={() => { handleTabChange(tab.value); setIsMobileSidebarOpen(false) }}
+                          className={cn(
+                            "flex w-full items-center gap-3 px-4 py-2.5 text-left text-[13px] font-medium transition-colors touch-manipulation",
+                            isActive
+                              ? "bg-emerald-50 text-emerald-700 font-semibold"
+                              : "text-neutral-600 hover:bg-neutral-50 hover:text-neutral-900",
+                          )}
+                        >
+                          {isActive && (
+                            <span className="absolute left-0 h-6 w-[3px] rounded-r-full bg-emerald-500" />
+                          )}
+                          <TabIcon className={cn("h-4 w-4 shrink-0", isActive ? "text-emerald-600" : "text-neutral-400")} />
+                          {tab.label}
+                        </button>
+                      )
+                    })}
+                  </div>
+                ))}
+              </nav>
+
+              {/* Drawer footer — settings, manuals, logout */}
+              <div className="border-t border-black/8 px-3 py-3 space-y-1">
+                <Link
+                  href={buildWorkspaceHref("/manuals")}
+                  onClick={() => setIsMobileSidebarOpen(false)}
+                  className="flex items-center gap-3 rounded-lg px-3 py-2.5 text-[13px] font-medium text-neutral-600 transition-colors hover:bg-neutral-50 touch-manipulation"
+                >
+                  <BookOpen className="h-4 w-4 text-neutral-400" />
+                  Training Manuals
+                </Link>
+                {isAdmin && (
+                  <Link
+                    href={buildWorkspaceHref("/settings")}
+                    onClick={() => setIsMobileSidebarOpen(false)}
+                    className="flex items-center gap-3 rounded-lg px-3 py-2.5 text-[13px] font-medium text-neutral-600 transition-colors hover:bg-neutral-50 touch-manipulation"
+                  >
+                    <Settings className="h-4 w-4 text-neutral-400" />
+                    Settings
+                  </Link>
+                )}
+                <button
+                  type="button"
+                  onClick={() => { setIsMobileSidebarOpen(false); handleLogout() }}
+                  className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-[13px] font-medium text-rose-600 transition-colors hover:bg-rose-50 touch-manipulation"
+                >
+                  <LogOut className="h-4 w-4" />
+                  Sign out
+                </button>
+              </div>
+            </div>
+          </>
+        )}
 
         {isPreviewMode && (
           <Card className="mb-6 border-amber-200 bg-amber-50/70">
@@ -9025,56 +9118,6 @@ export default function InventorySystem() {
             </TabsContent>
           )}
         </Tabs>
-        {/* ── Mobile bottom tab bar — icon-stacked-above-label, standard mobile pattern ── */}
-        {isMobile && (
-          <div className="fixed inset-x-0 bottom-0 z-40 border-t border-black/[0.07] bg-white/98 backdrop-blur-sm"
-            style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
-          >
-            <div className="flex">
-              {/* Home */}
-              {(() => {
-                const isHomeActive = activeTab === DASHBOARD_LAUNCHER_TAB || activeTab === "home"
-                return (
-                  <button
-                    type="button"
-                    onClick={goToWorkspaceNavigator}
-                    className="relative flex flex-1 flex-col items-center justify-center gap-[3px] py-2 min-h-[56px] touch-manipulation"
-                  >
-                    {isHomeActive && (
-                      <span className="absolute top-0 left-1/2 h-[3px] w-8 -translate-x-1/2 rounded-b-full bg-emerald-500" />
-                    )}
-                    <Home className={cn("h-[22px] w-[22px]", isHomeActive ? "text-emerald-600" : "text-neutral-400")} />
-                    <span className={cn("text-[10px] font-semibold tracking-tight", isHomeActive ? "text-emerald-600" : "text-neutral-400")}>
-                      Home
-                    </span>
-                  </button>
-                )
-              })()}
-
-              {/* Section tabs */}
-              {mobileAppSectionGroups.map((group) => {
-                const GroupIcon = group.icon
-                const isActive = activeTabGroup === group.id
-                return (
-                  <button
-                    key={group.id}
-                    type="button"
-                    onClick={() => handleSectionSelect(group.id)}
-                    className="relative flex flex-1 flex-col items-center justify-center gap-[3px] py-2 min-h-[56px] touch-manipulation"
-                  >
-                    {isActive && (
-                      <span className="absolute top-0 left-1/2 h-[3px] w-8 -translate-x-1/2 rounded-b-full bg-emerald-500" />
-                    )}
-                    <GroupIcon className={cn("h-[22px] w-[22px]", isActive ? "text-emerald-600" : "text-neutral-400")} />
-                    <span className={cn("text-[10px] font-semibold tracking-tight", isActive ? "text-emerald-600" : "text-neutral-400")}>
-                      {group.label}
-                    </span>
-                  </button>
-                )
-              })}
-            </div>
-          </div>
-        )}
         {isInventoryDrilldownOpen && (
           <div
             className="fixed inset-0 z-50 bg-black/40"
