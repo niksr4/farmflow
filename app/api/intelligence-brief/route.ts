@@ -4,6 +4,7 @@ import { getCurrentFiscalYear } from "@/lib/fiscal-year-utils"
 import { normalizeTenantContext, runTenantQueries, runTenantQuery } from "@/lib/server/tenant-db"
 import { getEnabledModules, isModuleAccessError, requireAnyModuleAccess } from "@/lib/server/module-access"
 import { sanitizeRouteError } from "@/lib/server/sanitize-route-error"
+import { getClaudeClient, isClaudeConfigured, CLAUDE_HAIKU } from "@/lib/server/claude"
 
 export const dynamic = "force-dynamic"
 export const revalidate = 0
@@ -559,6 +560,60 @@ export async function GET(request: Request) {
       actions.push({ label: "Open Activity Log", tab: "activity-log" })
     }
 
+    // Enrich each highlight with a one-sentence "why + what to do" reasoning via Claude Haiku.
+    // The rules engine produces the observation; Claude adds the interpretation.
+    // This runs in ~300-500ms and is non-blocking — on failure we fall back to raw highlights.
+    let insights: Array<{ observation: string; reasoning: string }> = []
+    if (highlights.length > 0 && isClaudeConfigured()) {
+      try {
+        const client = getClaudeClient()
+        const highlightList = highlights.map((h, i) => `${i + 1}. ${h}`).join("\n")
+        const contextBlurb = accountsPatterns
+          ? `Labor share: ${Math.round(accountsPatterns.laborSharePct)}% of spend. Total spend: ₹${Math.round(accountsPatterns.totalSpend).toLocaleString()}.`
+          : ""
+
+        const reasoningResponse = await client.messages.create({
+          model: CLAUDE_HAIKU,
+          max_tokens: 512,
+          temperature: 0.2,
+          system: [
+            {
+              type: "text",
+              text: "You are a farm operations analyst for Indian coffee and pepper estates. You receive data observations and add exactly one actionable sentence to each — explaining the likely cause and what the manager should do. Be specific, practical, and direct. Never invent numbers not in the observation.",
+              cache_control: { type: "ephemeral" },
+            },
+          ],
+          messages: [
+            {
+              role: "user",
+              content: `For each observation below, add ONE sentence (15 words max) explaining WHY it matters or WHAT to do.
+${contextBlurb ? `\nContext: ${contextBlurb}` : ""}
+
+Observations:
+${highlightList}
+
+Respond ONLY with a JSON array, no prose, no markdown:
+[{"observation":"...exact original text...","reasoning":"...one sentence..."}]`,
+            },
+          ],
+        })
+
+        const raw = reasoningResponse.content[0]?.type === "text" ? reasoningResponse.content[0].text.trim() : ""
+        const jsonMatch = raw.match(/\[[\s\S]*\]/)
+        if (jsonMatch) {
+          const parsed = JSON.parse(jsonMatch[0])
+          if (Array.isArray(parsed)) {
+            insights = parsed.filter(
+              (item): item is { observation: string; reasoning: string } =>
+                typeof item?.observation === "string" && typeof item?.reasoning === "string",
+            )
+          }
+        }
+      } catch {
+        // Reasoning failure is non-fatal — highlights still render without it
+      }
+    }
+
     return NextResponse.json({
       success: true,
       dateRange: {
@@ -567,6 +622,7 @@ export async function GET(request: Request) {
       },
       generatedAt: new Date().toISOString(),
       highlights,
+      insights,
       actions: actions.slice(0, 4),
       reconciliation,
       accountsPatterns,

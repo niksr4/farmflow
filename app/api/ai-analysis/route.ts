@@ -75,6 +75,7 @@ export async function POST(req: Request) {
       max_tokens: 2048,
       temperature: 0.3,
       system: SYSTEM_PROMPT,
+      cacheSystem: true,
       messages: [{ role: "user", content: buildAnalysisPrompt(dataSummary) }],
     })
 

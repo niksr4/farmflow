@@ -9,6 +9,9 @@ import { normalizeTenantContext, runTenantQuery } from "@/lib/server/tenant-db"
 import { buildTenantWeatherQuery } from "@/lib/tenant-estate-profile"
 import { WEATHER_FORECAST_DAYS } from "@/lib/weather-guidance"
 import { DEFAULT_WEATHER_QUERY, normalizeWeatherLocationQuery } from "@/lib/weather-config"
+import { withResponseCache } from "@/lib/server/response-cache"
+
+const WEATHER_CACHE_TTL_SECONDS = 30 * 60 // 30 minutes
 
 export const dynamic = "force-dynamic"
 export const revalidate = 0
@@ -54,20 +57,21 @@ export async function GET(request: NextRequest) {
       locationQuery,
     )}&days=${WEATHER_FORECAST_DAYS}&aqi=no&alerts=no`
 
-    const response = await fetchWithTimeout(url, {
-      next: { revalidate: 3600 }, // Revalidate every hour
-      timeoutMs: 8_000,
+    const cacheKey = `weather:${locationQuery.toLowerCase().replace(/\s+/g, "_")}`
+
+    const { data, fromCache } = await withResponseCache(cacheKey, WEATHER_CACHE_TTL_SECONDS, async () => {
+      const response = await fetchWithTimeout(url, { timeoutMs: 8_000 })
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}))
+        logServerError("Error from WeatherAPI.com", errorData)
+        const errorMessage = (errorData as any)?.error?.message || response.statusText
+        throw new Error(`Weather API error: ${errorMessage}`)
+      }
+      return response.json()
     })
 
-    if (!response.ok) {
-      const errorData = await response.json()
-      logServerError("Error from WeatherAPI.com", errorData)
-      const errorMessage = errorData?.error?.message || response.statusText
-      return NextResponse.json({ error: `Failed to fetch weather data: ${errorMessage}` }, { status: response.status, headers: rateHeaders })
-    }
-
-    const data = await response.json()
-    return NextResponse.json(data, { headers: rateHeaders })
+    const cacheHeaders = fromCache ? { "X-Cache": "HIT" } : { "X-Cache": "MISS" }
+    return NextResponse.json(data, { headers: { ...rateHeaders, ...cacheHeaders } })
   } catch (error) {
     logServerError("Error fetching weather data", error)
     if (isModuleAccessError(error)) {

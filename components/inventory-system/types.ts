@@ -32,6 +32,8 @@ export interface IntelligenceBrief {
   }
   generatedAt: string
   highlights: string[]
+  /** Claude Haiku reasoning added to each highlight — observation + why/what-to-do sentence */
+  insights?: Array<{ observation: string; reasoning: string }>
   actions: Array<{
     label: string
     tab: string
