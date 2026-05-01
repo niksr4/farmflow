@@ -5587,17 +5587,6 @@ export default function InventorySystem() {
     if (activeTabGroup === "insights") return insightsTabItems
     return []
   }, [activeTabGroup, financeTabItems, insightsTabItems, operationsTabItems])
-  const mobilePrimarySectionTabs = useMemo(() => {
-    if (activeSectionTabs.length <= 4) return activeSectionTabs
-    const primaryTabs = activeSectionTabs.slice(0, 3)
-    const activeSectionTab = activeSectionTabs.find((tab) => tab.value === activeTab)
-    if (activeSectionTab && !primaryTabs.some((tab) => tab.value === activeSectionTab.value)) {
-      return [...primaryTabs, activeSectionTab]
-    }
-    return [...primaryTabs, activeSectionTabs[3]]
-  }, [activeSectionTabs, activeTab])
-  const hiddenMobileSectionTabCount = Math.max(activeSectionTabs.length - mobilePrimarySectionTabs.length, 0)
-
   const mobileAppSectionGroups = useMemo(
     () =>
       [
@@ -6438,13 +6427,9 @@ export default function InventorySystem() {
     </div>
   )
 
-  const showMobileSectionRail = isMobile && activeTabGroup !== "dashboard" && activeSectionTabs.length > 0
-  // Always show both rows on mobile: section nav (always) + sub-tab rail (in-section).
-  // One row ≈ 3.5rem, two rows ≈ 7rem, plus safe-area.
+  // Bottom tab bar is one fixed row: 56px + safe-area inset.
   const mobileBottomSpacingClass = isMobile
-    ? showMobileSectionRail
-      ? "pb-[calc(8rem+env(safe-area-inset-bottom))]"
-      : "pb-[calc(4rem+env(safe-area-inset-bottom))]"
+    ? "pb-[calc(3.5rem+env(safe-area-inset-bottom))]"
     : "pb-8"
 
   return (
@@ -7312,114 +7297,54 @@ export default function InventorySystem() {
           )
         })()}
         <Tabs value={activeTab} onValueChange={handleTabChange} className="w-full space-y-4">
-          {/* Desktop: slim section sub-tabs only (sidebar handles main navigation) */}
-          {!isMobile && activeTab !== DASHBOARD_LAUNCHER_TAB && activeTabGroup !== "dashboard" && activeSectionTabs.length > 0 && (
-            <div className="sticky top-2 z-20 mb-1">
-              <TabsList className="h-auto flex-wrap items-center gap-2 rounded-2xl border border-black/10 bg-gradient-to-br from-white/95 via-white to-neutral-100/80 p-2 shadow-[0_8px_24px_-16px_rgba(15,23,42,0.6)] backdrop-blur dark:border-white/[0.08] dark:from-card dark:via-card dark:to-card/90">
-                {activeSectionTabs.map((tab) => {
-                  const TabIcon = tab.icon
-                  return (
-                    <TabsTrigger
-                      key={tab.value}
-                      value={tab.value}
-                      className="min-h-10 rounded-lg border border-black/10 bg-white/90 px-4 text-[13px] font-semibold data-[state=active]:border-emerald-600 data-[state=active]:bg-emerald-600 data-[state=active]:text-white data-[state=active]:shadow-[0_10px_20px_-14px_rgba(5,150,105,0.9)] dark:border-white/[0.08] dark:bg-white/[0.04] dark:text-foreground dark:data-[state=active]:border-emerald-500 dark:data-[state=active]:bg-emerald-600"
-                    >
-                      <TabIcon className="mr-2 h-4 w-4" />
-                      {tab.label}
-                    </TabsTrigger>
-                  )
-                })}
-              </TabsList>
-            </div>
-          )}
-
-          {/* Mobile: section navigation with workspace navigator + section cards */}
-          {!isStandaloneMobileApp && isMobile && (
-            <div className="relative space-y-2.5 rounded-3xl border border-black/10 bg-gradient-to-br from-white/95 via-white to-neutral-100/80 p-3 shadow-[0_12px_30px_-24px_rgba(15,23,42,0.75)] backdrop-blur">
-            {activeTab !== DASHBOARD_LAUNCHER_TAB && (
-              <div className="space-y-2">
-                {/* Back button + quick-jump row */}
-                <div className="flex items-center gap-2 min-w-0">
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    onClick={goToWorkspaceNavigator}
-                    className="bg-white min-h-11 shrink-0 gap-1.5 px-3"
-                  >
-                    <Home className="h-4 w-4" />
-                    <span className="text-sm">All sections</span>
-                  </Button>
-                  {/* Horizontal scroll of most-used tabs — skip the current one */}
-                  <div className="flex min-w-0 flex-1 overflow-x-auto no-scrollbar gap-2">
-                    {mobileHomeQuickActions
-                      .filter((a) => a.tab !== activeTab)
-                      .map((action) => {
-                        const ActionIcon = action.icon
-                        return (
-                          <button
-                            key={action.tab}
-                            type="button"
-                            onClick={() => handleTabChange(action.tab)}
-                            className="flex shrink-0 items-center gap-1.5 rounded-xl border border-black/10 bg-white px-3 py-2 text-sm font-medium text-slate-700 shadow-sm transition-colors hover:bg-slate-50 touch-manipulation min-h-11"
-                          >
-                            <ActionIcon className="h-4 w-4 text-emerald-600" />
-                            <span className="whitespace-nowrap">{action.label}</span>
-                          </button>
-                        )
-                      })}
-                  </div>
-                </div>
-              </div>
-            )}
-            {activeTab === DASHBOARD_LAUNCHER_TAB && (
-            <>
-            {/* Quick-access grid on mobile home — all sections inline */}
-            {launcherSections.map((section) => (
-              <div key={section.id} className="space-y-2">
-                <div className="flex items-center gap-2 px-1">
-                  <section.icon className={cn("h-3.5 w-3.5", section.iconClassName)} />
-                  <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-neutral-500">
-                    {section.label}
-                  </p>
-                </div>
-                <div className="flex snap-x snap-mandatory overflow-x-auto no-scrollbar gap-2 pb-0.5">
-                  {section.tabs.map((tab) => {
+          {/* Sub-tab bar — desktop wraps, mobile scrolls horizontally */}
+          {activeTab !== DASHBOARD_LAUNCHER_TAB && activeTabGroup !== "dashboard" && activeSectionTabs.length > 0 && (
+            <div className={cn("sticky top-2 z-20 mb-1", isMobile && "top-0")}>
+              {isMobile ? (
+                /* Mobile: horizontal scroll strip — compact, pill-shaped, no wrap */
+                <div className="flex gap-2 overflow-x-auto no-scrollbar px-1 py-1 -mx-1">
+                  {activeSectionTabs.map((tab) => {
                     const TabIcon = tab.icon
+                    const isActive = activeTab === tab.value
                     return (
                       <button
                         key={tab.value}
                         type="button"
                         onClick={() => handleTabChange(tab.value)}
                         className={cn(
-                          "flex min-w-[148px] shrink-0 snap-start items-center gap-3 rounded-2xl border px-3.5 py-3.5 text-left shadow-sm transition-colors touch-manipulation",
-                          section.tabClassName,
+                          "flex shrink-0 items-center gap-1.5 rounded-full border px-4 py-2 text-sm font-semibold transition-all touch-manipulation",
+                          isActive
+                            ? "border-emerald-600 bg-emerald-600 text-white shadow-[0_4px_12px_-4px_rgba(5,150,105,0.5)]"
+                            : "border-black/10 bg-white text-neutral-600",
                         )}
                       >
-                        <span className={cn(
-                          "flex h-9 w-9 shrink-0 items-center justify-center rounded-xl",
-                          section.badgeClassName,
-                        )}>
-                          <TabIcon className={cn("h-4 w-4", section.iconClassName)} />
-                        </span>
-                        <div className="min-w-0">
-                          <p className="text-sm font-semibold leading-tight">{tab.label}</p>
-                          {tab.subtabs?.length ? (
-                            <p className="mt-0.5 truncate text-[10px] text-muted-foreground">
-                              {tab.subtabs.slice(0, 2).join(" · ")}
-                            </p>
-                          ) : null}
-                        </div>
+                        <TabIcon className="h-3.5 w-3.5 shrink-0" />
+                        {tab.label}
                       </button>
                     )
                   })}
                 </div>
-              </div>
-            ))}
-            </>
-            )}
+              ) : (
+                /* Desktop: wrapping pill tabs with shadow card */
+                <TabsList className="h-auto flex-wrap items-center gap-2 rounded-2xl border border-black/10 bg-gradient-to-br from-white/95 via-white to-neutral-100/80 p-2 shadow-[0_8px_24px_-16px_rgba(15,23,42,0.6)] backdrop-blur dark:border-white/[0.08] dark:from-card dark:via-card dark:to-card/90">
+                  {activeSectionTabs.map((tab) => {
+                    const TabIcon = tab.icon
+                    return (
+                      <TabsTrigger
+                        key={tab.value}
+                        value={tab.value}
+                        className="min-h-10 rounded-lg border border-black/10 bg-white/90 px-4 text-[13px] font-semibold data-[state=active]:border-emerald-600 data-[state=active]:bg-emerald-600 data-[state=active]:text-white data-[state=active]:shadow-[0_10px_20px_-14px_rgba(5,150,105,0.9)] dark:border-white/[0.08] dark:bg-white/[0.04] dark:text-foreground dark:data-[state=active]:border-emerald-500 dark:data-[state=active]:bg-emerald-600"
+                      >
+                        <TabIcon className="mr-2 h-4 w-4" />
+                        {tab.label}
+                      </TabsTrigger>
+                    )
+                  })}
+                </TabsList>
+              )}
             </div>
           )}
+
 
           <TabsContent
             value={DASHBOARD_LAUNCHER_TAB}
@@ -9100,81 +9025,53 @@ export default function InventorySystem() {
             </TabsContent>
           )}
         </Tabs>
+        {/* ── Mobile bottom tab bar — icon-stacked-above-label, standard mobile pattern ── */}
         {isMobile && (
-          <div className="fixed inset-x-0 bottom-0 z-40 border-t border-black/10 bg-white/95 shadow-[0_-8px_24px_-16px_rgba(15,23,42,0.45)] backdrop-blur">
-            <div className="mx-auto flex max-w-7xl flex-col gap-2 px-3 pb-[calc(0.5rem+env(safe-area-inset-bottom))] pt-2">
-              {/* Section group nav — always visible on mobile, equivalent to desktop sidebar */}
-              <div className="flex items-center gap-2 overflow-x-auto no-scrollbar">
-                <button
-                  type="button"
-                  onClick={goToWorkspaceNavigator}
-                  className={cn(
-                    "flex min-h-11 flex-1 min-w-[5.5rem] items-center justify-center gap-1.5 rounded-xl border px-2 py-2 text-xs font-semibold transition-colors touch-manipulation",
-                    activeTab === DASHBOARD_LAUNCHER_TAB
-                      ? "border-neutral-900 bg-neutral-900 text-white"
-                      : "border-black/10 bg-white text-neutral-700",
-                  )}
-                >
-                  <Home className="h-3.5 w-3.5 shrink-0" />
-                  <span className="truncate">Home</span>
-                </button>
+          <div className="fixed inset-x-0 bottom-0 z-40 border-t border-black/[0.07] bg-white/98 backdrop-blur-sm"
+            style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
+          >
+            <div className="flex">
+              {/* Home */}
+              {(() => {
+                const isHomeActive = activeTab === DASHBOARD_LAUNCHER_TAB || activeTab === "home"
+                return (
+                  <button
+                    type="button"
+                    onClick={goToWorkspaceNavigator}
+                    className="relative flex flex-1 flex-col items-center justify-center gap-[3px] py-2 min-h-[56px] touch-manipulation"
+                  >
+                    {isHomeActive && (
+                      <span className="absolute top-0 left-1/2 h-[3px] w-8 -translate-x-1/2 rounded-b-full bg-emerald-500" />
+                    )}
+                    <Home className={cn("h-[22px] w-[22px]", isHomeActive ? "text-emerald-600" : "text-neutral-400")} />
+                    <span className={cn("text-[10px] font-semibold tracking-tight", isHomeActive ? "text-emerald-600" : "text-neutral-400")}>
+                      Home
+                    </span>
+                  </button>
+                )
+              })()}
 
-                {mobileAppSectionGroups.map((group) => {
-                  const GroupIcon = group.icon
-                  const isActive = activeTabGroup === group.id
-                  return (
-                    <button
-                      key={group.id}
-                      type="button"
-                      onClick={() => handleSectionSelect(group.id)}
-                      className={cn(
-                        "flex min-h-11 flex-1 min-w-[5.5rem] items-center justify-center gap-1.5 rounded-xl border px-2 py-2 text-xs font-semibold transition-colors touch-manipulation",
-                        isActive
-                          ? "border-neutral-900 bg-neutral-900 text-white"
-                          : "border-black/10 bg-white text-neutral-700",
-                      )}
-                    >
-                      <GroupIcon className="h-3.5 w-3.5 shrink-0" />
-                      <span className="truncate">{group.label}</span>
-                    </button>
-                  )
-                })}
-              </div>
-
-              {/* Sub-tab rail — only visible when inside a section */}
-              {showMobileSectionRail && (
-                <div className="flex items-center gap-2 overflow-x-auto no-scrollbar">
-                  {mobilePrimarySectionTabs.map((tab) => {
-                    const TabIcon = tab.icon
-                    const isActive = activeTab === tab.value
-                    return (
-                      <button
-                        key={tab.value}
-                        type="button"
-                        onClick={() => handleTabChange(tab.value)}
-                        className={cn(
-                          "flex min-h-10 flex-1 min-w-[7rem] items-center justify-center gap-1.5 rounded-xl border px-3 py-2 text-xs font-semibold transition-colors touch-manipulation",
-                          isActive
-                            ? "border-emerald-600 bg-emerald-600 text-white"
-                            : "border-black/10 bg-white text-neutral-700",
-                        )}
-                      >
-                        <TabIcon className="h-3.5 w-3.5 shrink-0" />
-                        <span className="truncate">{tab.label}</span>
-                      </button>
-                    )
-                  })}
-                  {hiddenMobileSectionTabCount > 0 && (
-                    <button
-                      type="button"
-                      onClick={goToWorkspaceNavigator}
-                      className="flex min-h-10 min-w-[7rem] items-center justify-center rounded-xl border border-dashed border-black/15 bg-white px-3 py-2 text-xs font-semibold text-neutral-700 transition-colors touch-manipulation hover:border-emerald-200 hover:text-emerald-700"
-                    >
-                      More →
-                    </button>
-                  )}
-                </div>
-              )}
+              {/* Section tabs */}
+              {mobileAppSectionGroups.map((group) => {
+                const GroupIcon = group.icon
+                const isActive = activeTabGroup === group.id
+                return (
+                  <button
+                    key={group.id}
+                    type="button"
+                    onClick={() => handleSectionSelect(group.id)}
+                    className="relative flex flex-1 flex-col items-center justify-center gap-[3px] py-2 min-h-[56px] touch-manipulation"
+                  >
+                    {isActive && (
+                      <span className="absolute top-0 left-1/2 h-[3px] w-8 -translate-x-1/2 rounded-b-full bg-emerald-500" />
+                    )}
+                    <GroupIcon className={cn("h-[22px] w-[22px]", isActive ? "text-emerald-600" : "text-neutral-400")} />
+                    <span className={cn("text-[10px] font-semibold tracking-tight", isActive ? "text-emerald-600" : "text-neutral-400")}>
+                      {group.label}
+                    </span>
+                  </button>
+                )
+              })}
             </div>
           </div>
         )}
