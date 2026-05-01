@@ -20,7 +20,6 @@ export type SeasonPLResponse = {
   costs: {
     laborTotalInr: number
     expensesTotalInr: number
-    inputInventoryCostInr: number
     totalCostsInr: number
     byCategory: Array<{ category: string; amountInr: number; pct: number }>
   }
@@ -64,7 +63,6 @@ export async function GET(request: NextRequest) {
       laborRows,
       expenseRows,
       processingRows,
-      inventoryDepleRows,
     ] = await runTenantQueries(sql, tenantContext, [
       // Revenue: from sales records
       sql.query(
@@ -124,16 +122,6 @@ export async function GET(request: NextRequest) {
         [tenantId, start, end],
       ),
 
-      // Inventory depleted (cost of inputs used) — from transaction_history depletion
-      sql.query(
-        `SELECT COALESCE(SUM(ABS(total_cost)), 0) AS depleted_cost
-         FROM transaction_history
-         WHERE tenant_id = $1
-           AND lower(transaction_type) IN ('deplete', 'depleting')
-           AND transaction_date >= $2::timestamp
-           AND transaction_date <= $3::timestamp + INTERVAL '1 day'`,
-        [tenantId, start, end],
-      ),
     ])
 
     // Revenue
@@ -160,9 +148,6 @@ export async function GET(request: NextRequest) {
     const expensesTotalInr = expenseData.reduce((s, r) => s + Number(r.total_amount ?? 0), 0)
 
     // Input inventory cost
-    const inventoryData = toRows(inventoryDepleRows)[0] ?? {}
-    const inputInventoryCostInr = Number(inventoryData.depleted_cost ?? 0)
-
     const totalCostsInr = laborTotalInr + expensesTotalInr
 
     // Cost breakdown
@@ -207,7 +192,6 @@ export async function GET(request: NextRequest) {
       costs: {
         laborTotalInr,
         expensesTotalInr,
-        inputInventoryCostInr,
         totalCostsInr,
         byCategory,
       },

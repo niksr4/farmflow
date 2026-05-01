@@ -5,7 +5,6 @@ import { normalizeTenantContext, runTenantQueries } from "@/lib/server/tenant-db
 import { finishAgentRun, saveAgentFinding, startAgentRun } from "@/lib/server/agents/agent-store"
 import { safeDivide, toNumber } from "@/lib/server/agents/utils"
 import { sendAgentAlertEmail } from "@/lib/server/agents/alert-email"
-import { sendWhatsAppAlert } from "@/lib/server/whatsapp-alerts"
 
 type IntegritySeverity = "low" | "medium" | "high" | "critical"
 
@@ -581,15 +580,8 @@ export async function runDataIntegrityAgent(input?: {
         text,
       })
       summary.emailNotification = emailResult
-      const whatsappResult = await sendWhatsAppAlert({ text })
-      summary.whatsAppNotification = whatsappResult
     } else {
       summary.emailNotification = {
-        sent: false,
-        provider: "none",
-        reason: dryRun ? "dry-run" : "no new or escalated findings",
-      }
-      summary.whatsAppNotification = {
         sent: false,
         provider: "none",
         reason: dryRun ? "dry-run" : "no new or escalated findings",

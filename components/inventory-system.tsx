@@ -555,6 +555,7 @@ export default function InventorySystem() {
   const [isSavingOnboardingDefaults, setIsSavingOnboardingDefaults] = useState(false)
   const [trialDaysRemaining, setTrialDaysRemaining] = useState<number | null>(null)
   const [trialBannerDismissed, setTrialBannerDismissed] = useState(false)
+  const [activityStreak, setActivityStreak] = useState<number>(0)
 
   // auth + router
   const { user, logout, status } = useAuth()
@@ -662,7 +663,8 @@ export default function InventorySystem() {
   const canShowPepper = isModuleEnabled("pepper")
   const canShowRubber = isModuleEnabled("rubber")
   const canShowAiAnalysis = isModuleEnabled("ai-analysis")
-  const canLaunchAssistant = canShowAiAnalysis && (!isOwner || isPreviewMode)
+  // Assistant available on Core (accounts module) and above — not Enterprise-only
+  const canLaunchAssistant = (canShowAiAnalysis || canShowAccounts) && (!isOwner || isPreviewMode)
   const canShowNews = isModuleEnabled("news")
   const canShowMarketPricing = isModuleEnabled("market-pricing")
   const canShowCompliance = isModuleEnabled("compliance")
@@ -3830,6 +3832,14 @@ export default function InventorySystem() {
       ignore = true
     }
   }, [canShowIntelligence, currentFiscalYear.endDate, currentFiscalYear.startDate, effectiveRole, shouldLoadHomeMetrics, tenantId])
+
+  useEffect(() => {
+    if (!tenantId || !shouldLoadHomeMetrics) return
+    fetch("/api/activity-streak", { cache: "no-store" })
+      .then((r) => r.json())
+      .then((d) => { if (d.success && d.streak > 0) setActivityStreak(d.streak) })
+      .catch(() => {})
+  }, [shouldLoadHomeMetrics, tenantId])
 
   useEffect(() => {
     if (!canShowAiAnalysis || !shouldLoadHomeMetrics) return
@@ -7430,7 +7440,6 @@ export default function InventorySystem() {
           <TabsContent value="home" className="space-y-6" forceMount={isTabLoaded("home") ? true : undefined}>
             {/* Season Progress Strip */}
             <div className="rounded-2xl border border-black/5 bg-white/90 px-5 py-3.5 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-
               <div className="flex items-center gap-2.5">
                 <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-emerald-50">
                   <svg className="h-3.5 w-3.5 text-emerald-700" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -7453,6 +7462,15 @@ export default function InventorySystem() {
                   {seasonProgress.pct}% · {seasonProgress.daysRemaining}d left
                 </span>
               </div>
+              {activityStreak >= 2 && (
+                <div className="flex items-center gap-1.5 rounded-xl border border-amber-200 bg-amber-50 px-3 py-1.5 shrink-0">
+                  <span className="text-base leading-none">🔥</span>
+                  <div>
+                    <p className="text-xs font-bold text-amber-800">{activityStreak}-day streak</p>
+                    <p className="text-[10px] text-amber-600">Keep logging daily</p>
+                  </div>
+                </div>
+              )}
             </div>
 
             {/* ── Morning Brief ── */}

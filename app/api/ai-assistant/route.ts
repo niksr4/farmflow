@@ -10,7 +10,7 @@ import { buildClaudeRouteErrorResponse, classifyClaudeRouteError } from "@/lib/s
 import { CLAUDE_HAIKU } from "@/lib/server/claude"
 import { callAI, isAIConfigured } from "@/lib/server/ai-provider"
 import { searchAssistantData } from "@/lib/server/assistant-search"
-import { getEnabledModules, requireModuleAccess, isModuleAccessError } from "@/lib/server/module-access"
+import { getEnabledModules, requireModuleAccess, requireAnyModuleAccess, isModuleAccessError } from "@/lib/server/module-access"
 import { logServerError, logServerWarning } from "@/lib/server/safe-logging"
 import { sanitizeRouteError } from "@/lib/server/sanitize-route-error"
 
@@ -48,7 +48,9 @@ const buildSearchFallbackAnswer = (input: {
 export async function POST(req: Request) {
   let rateHeaders: Record<string, string> = {}
   try {
-    const sessionUser = await requireModuleAccess("ai-analysis")
+    // Assistant is available on Core (accounts) and above — not Enterprise-only.
+    // Full AI analysis tab remains Enterprise-gated; the assistant is a help/navigation tool.
+    const sessionUser = await requireAnyModuleAccess(["ai-analysis", "accounts"])
     if (!sessionUser.tenantId) {
       return Response.json(
         { success: false, error: "Open a tenant workspace first before using the assistant." },

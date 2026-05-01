@@ -5,7 +5,6 @@ import { finishAgentRun, saveAgentFinding, startAgentRun } from "@/lib/server/ag
 import { sendAgentAlertEmail } from "@/lib/server/agents/alert-email"
 import { logAppErrorEvent } from "@/lib/server/error-events"
 import { fetchWithTimeout } from "@/lib/server/http"
-import { sendWhatsAppAlert } from "@/lib/server/whatsapp-alerts"
 import {
   buildTenantSmokeCoverage,
   parseTenantSmokeTargetsEnv,
@@ -750,14 +749,8 @@ export async function runTenantSmokeAgent(input?: {
         subject: `[FarmFlow] Tenant Smoke Alerts (${failedResults.length})`,
         text,
       })
-      summary.whatsAppNotification = await sendWhatsAppAlert({ text })
     } else {
       summary.emailNotification = {
-        sent: false,
-        provider: "none",
-        reason: dryRun ? "dry-run" : "no failing checks",
-      }
-      summary.whatsAppNotification = {
         sent: false,
         provider: "none",
         reason: dryRun ? "dry-run" : "no failing checks",
