@@ -8,7 +8,6 @@ import { resolveAgentModel } from "@/lib/server/agents/ai-model"
 import { buildErrorFingerprint, DAY_MS, normalizeMessage } from "@/lib/server/agents/utils"
 import { finishAgentRun, saveAgentFinding, startAgentRun } from "@/lib/server/agents/agent-store"
 import { sendAgentAlertEmail } from "@/lib/server/agents/alert-email"
-import { sendWhatsAppAlert } from "@/lib/server/whatsapp-alerts"
 
 type AnomalySeverity = "low" | "medium" | "high" | "critical"
 
@@ -428,15 +427,8 @@ export async function runLogAnomalyAgent(input?: {
         text,
       })
       summary.emailNotification = emailResult
-      const whatsappResult = await sendWhatsAppAlert({ text })
-      summary.whatsAppNotification = whatsappResult
     } else {
       summary.emailNotification = {
-        sent: false,
-        provider: "none",
-        reason: dryRun ? "dry-run" : "no new or critical clusters",
-      }
-      summary.whatsAppNotification = {
         sent: false,
         provider: "none",
         reason: dryRun ? "dry-run" : "no new or critical clusters",
