@@ -144,6 +144,7 @@ Treat the tenant data above as the working dataset for ${fiscalYearLabel}. Use t
           max_tokens: 900,
           temperature: 0.25,
           system: systemPrompt,
+          cacheSystem: true,
           messages: claudeMessages,
         })
       ).trim()

@@ -1,6 +1,7 @@
 import "server-only"
 
 import Anthropic from "@anthropic-ai/sdk"
+import type { MessageCreateParamsNonStreaming, TextBlockParam } from "@anthropic-ai/sdk/resources/messages"
 import { generateText } from "ai"
 import { openai } from "@ai-sdk/openai"
 
@@ -44,6 +45,17 @@ export type CallAIParams = {
   temperature?: number
   system?: string
   messages: AIMessageParam[]
+  /**
+   * When true, wraps the system prompt with Anthropic's ephemeral cache_control.
+   * Reduces cost ~80% and latency ~30-50% for long, stable system prompts.
+   * Has no effect when falling back to OpenAI.
+   */
+  cacheSystem?: boolean
+}
+
+/** Build a system param with ephemeral cache_control for cost/latency reduction. */
+function buildCachedSystem(text: string): Anthropic.TextBlockParam[] {
+  return [{ type: "text", text, cache_control: { type: "ephemeral" } }]
 }
 
 async function callWithOpenAI(params: CallAIParams): Promise<string> {
@@ -71,7 +83,16 @@ export async function callAI(params: CallAIParams): Promise<string> {
 
   try {
     const client = getClaudeClient()
-    const response = await client.messages.create(params)
+    const claudeParams: Anthropic.MessageCreateParamsNonStreaming = {
+      model: params.model,
+      max_tokens: params.max_tokens,
+      temperature: params.temperature,
+      messages: params.messages,
+      ...(params.system
+        ? { system: params.cacheSystem ? buildCachedSystem(params.system) : params.system }
+        : {}),
+    }
+    const response = await client.messages.create(claudeParams)
     return extractClaudeText(response)
   } catch (error) {
     if (shouldFallbackToOpenAI(error) && isOpenAIConfigured()) {

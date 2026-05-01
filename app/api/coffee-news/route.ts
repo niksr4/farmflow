@@ -4,6 +4,9 @@ import { buildRateLimitHeaders, checkRateLimit } from "@/lib/rate-limit"
 import { fetchWithTimeout } from "@/lib/server/http"
 import { logServerError } from "@/lib/server/safe-logging"
 import { sanitizeRouteError } from "@/lib/server/sanitize-route-error"
+import { withResponseCache } from "@/lib/server/response-cache"
+
+const NEWS_CACHE_TTL_SECONDS = 60 * 60 // 1 hour — news doesn't change by the minute
 
 export const dynamic = "force-dynamic"
 export const revalidate = 0
@@ -77,51 +80,54 @@ export async function GET() {
     const ninetyDaysAgo = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString().split("T")[0]
     const oneEightyDaysAgo = new Date(Date.now() - 180 * 24 * 60 * 60 * 1000).toISOString().split("T")[0]
 
-    // Parallel fetch: coffee market news + pepper/spice market news (India-focused)
-    // Most Karnataka/Kerala estates grow both; pepper prices are equally important
-    const [coffeeResult, pepperResult] = await Promise.allSettled([
-      fetchNewsPage(apiKey, "coffee arabica robusta India price market Karnataka", ninetyDaysAgo, 20),
-      fetchNewsPage(apiKey, "pepper spice India price market export Karnataka Kerala", oneEightyDaysAgo, 10),
-    ])
+    // Cache key is date-scoped so it refreshes naturally each day
+    const today = new Date().toISOString().slice(0, 10)
+    const cacheKey = `coffee-news:${today}`
 
-    const coffeeArticles = coffeeResult.status === "fulfilled" ? coffeeResult.value : []
-    const pepperArticles = pepperResult.status === "fulfilled" ? pepperResult.value : []
+    const { data: payload, fromCache } = await withResponseCache(
+      cacheKey,
+      NEWS_CACHE_TTL_SECONDS,
+      async () => {
+        // Parallel fetch: coffee market news + pepper/spice market news (India-focused)
+        const [coffeeResult, pepperResult] = await Promise.allSettled([
+          fetchNewsPage(apiKey, "coffee arabica robusta India price market Karnataka", ninetyDaysAgo, 20),
+          fetchNewsPage(apiKey, "pepper spice India price market export Karnataka Kerala", oneEightyDaysAgo, 10),
+        ])
 
-    // Merge and deduplicate by URL, then sort newest first
-    const seen = new Set<string>()
-    const merged = [...coffeeArticles, ...pepperArticles]
-      .filter((a) => {
-        if (!a.url || a.url === "#" || seen.has(a.url)) return false
-        seen.add(a.url)
-        return true
-      })
-      .sort((a, b) => new Date(b.publishedAt).getTime() - new Date(a.publishedAt).getTime())
-      .slice(0, 25)
+        const coffeeArticles = coffeeResult.status === "fulfilled" ? coffeeResult.value : []
+        const pepperArticles = pepperResult.status === "fulfilled" ? pepperResult.value : []
 
-    if (merged.length === 0) {
-      logServerError("coffee-news: both upstream queries returned empty", { ninetyDaysAgo, oneEightyDaysAgo })
-    }
+        const seen = new Set<string>()
+        const merged = [...coffeeArticles, ...pepperArticles]
+          .filter((a) => {
+            if (!a.url || a.url === "#" || seen.has(a.url)) return false
+            seen.add(a.url)
+            return true
+          })
+          .sort((a, b) => new Date(b.publishedAt).getTime() - new Date(a.publishedAt).getTime())
+          .slice(0, 25)
 
-    let trendScore = 0
-    const priceSignals: { title: string; value: string; source: string }[] = []
+        if (merged.length === 0) {
+          logServerError("coffee-news: both upstream queries returned empty", { ninetyDaysAgo, oneEightyDaysAgo })
+        }
 
-    for (const article of merged) {
-      const combined = `${article.title} ${article.description}`
-      trendScore += scoreHeadline(combined)
-      extractPriceMentions(combined).forEach((value) => {
-        priceSignals.push({ title: article.title, value, source: article.source })
-      })
-    }
+        let trendScore = 0
+        const priceSignals: { title: string; value: string; source: string }[] = []
+        for (const article of merged) {
+          const combined = `${article.title} ${article.description}`
+          trendScore += scoreHeadline(combined)
+          extractPriceMentions(combined).forEach((value) => {
+            priceSignals.push({ title: article.title, value, source: article.source })
+          })
+        }
 
-    const trend = trendScore > 2 ? "Bullish" : trendScore < -2 ? "Bearish" : "Neutral"
+        const trend = trendScore > 2 ? "Bullish" : trendScore < -2 ? "Bearish" : "Neutral"
+        return { success: true, articles: merged, trend, trendScore, priceSignals: priceSignals.slice(0, 6) }
+      },
+    )
 
-    return NextResponse.json({
-      success: true,
-      articles: merged,
-      trend,
-      trendScore,
-      priceSignals: priceSignals.slice(0, 6),
-    }, { headers: rateHeaders })
+    const cacheHeaders = fromCache ? { "X-Cache": "HIT" } : { "X-Cache": "MISS" }
+    return NextResponse.json(payload, { headers: { ...rateHeaders, ...cacheHeaders } })
   } catch (error: any) {
     logServerError("Error fetching coffee news", error)
     if (isModuleAccessError(error)) {

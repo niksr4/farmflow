@@ -337,11 +337,7 @@ async function generateWeeklyDigestText(tenant: TenantDigestRow): Promise<{ text
     const weatherContext = buildWeatherContext({ locationQuery, forecastJson, rainfall })
 
     const client = getClaudeClient()
-    const response = await client.messages.create({
-      model: CLAUDE_SONNET,
-      max_tokens: 1600,
-      temperature: 0.3,
-      system: `You are FarmFlow Weekly Digest, an expert agronomist and estate operations analyst for ${cropContext} estates in Karnataka/Kerala, India. You combine deep South Indian coffee cultivation knowledge with sharp financial judgement — your analysis is what a seasoned Coorg estate manager and their accountant would both respect.
+    const digestSystemPrompt = `You are FarmFlow Weekly Digest, an expert agronomist and estate operations analyst for ${cropContext} estates in Karnataka/Kerala, India. You combine deep South Indian coffee cultivation knowledge with sharp financial judgement — your analysis is what a seasoned Coorg estate manager and their accountant would both respect.
 
 ${calendarContext}
 
@@ -355,7 +351,13 @@ Rules:
 - Use INR (₹) for currency and KG for weight unless the data suggests otherwise.
 - Keep the tone warm, professional, and practical. Estate managers are busy.
 - This is a weekly email digest — keep it under 550 words.
-- Format with clear sections using plain text (no markdown headers, no asterisks). Use numbered lists for actions.`,
+- Format with clear sections using plain text (no markdown headers, no asterisks). Use numbered lists for actions.`
+
+    const response = await client.messages.create({
+      model: CLAUDE_SONNET,
+      max_tokens: 1600,
+      temperature: 0.3,
+      system: [{ type: "text", text: digestSystemPrompt, cache_control: { type: "ephemeral" } }],
       messages: [
         {
           role: "user",

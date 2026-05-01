@@ -225,6 +225,8 @@ const PepperTab = dynamic(() => import("./pepper-tab").then((module) => module.P
 const RubberTab = dynamic(() => import("./rubber-tab").then((module) => module.RubberTab), {
   loading: () => <TabPanelLoading label="Rubber tapping" />,
 })
+const MorningBriefCard = dynamic(() => import("@/components/morning-brief-card"), { ssr: false })
+const WorkspaceLauncher = dynamic(() => import("@/components/workspace-launcher"), { ssr: false })
 
 type WriteQueueBlockedEntry = {
   id: number
@@ -3974,6 +3976,7 @@ export default function InventorySystem() {
   const reconciliationStatusTone =
     overdrawnCoffeeKgs > 0 ? "text-rose-700 border-rose-200 bg-rose-50/70" : "text-emerald-700 border-emerald-200 bg-emerald-50/70"
   const intelligenceHighlights = useMemo(() => intelligenceBrief?.highlights || [], [intelligenceBrief])
+  const intelligenceInsights = useMemo(() => intelligenceBrief?.insights || [], [intelligenceBrief])
   const intelligenceActions = useMemo(() => intelligenceBrief?.actions || [], [intelligenceBrief])
   const intelligenceTopCostCode = intelligenceBrief?.accountsPatterns?.topCostCodes?.[0] || null
   const intelligenceTopFrequencyCode = intelligenceBrief?.accountsPatterns?.mostFrequentCodes?.[0] || null
@@ -6426,10 +6429,12 @@ export default function InventorySystem() {
   )
 
   const showMobileSectionRail = isMobile && activeTabGroup !== "dashboard" && activeSectionTabs.length > 0
+  // Always show both rows on mobile: section nav (always) + sub-tab rail (in-section).
+  // One row ≈ 3.5rem, two rows ≈ 7rem, plus safe-area.
   const mobileBottomSpacingClass = isMobile
-    ? isStandaloneMobileApp
-      ? "pb-[calc(11rem+env(safe-area-inset-bottom))]"
-      : "pb-[calc(6.5rem+env(safe-area-inset-bottom))]"
+    ? showMobileSectionRail
+      ? "pb-[calc(8rem+env(safe-area-inset-bottom))]"
+      : "pb-[calc(4rem+env(safe-area-inset-bottom))]"
     : "pb-8"
 
   return (
@@ -7411,136 +7416,15 @@ export default function InventorySystem() {
             className="space-y-4"
             forceMount={isTabLoaded(DASHBOARD_LAUNCHER_TAB) ? true : undefined}
           >
-            <Card className="overflow-hidden border-black/10 bg-gradient-to-br from-white via-neutral-50 to-neutral-100/80 shadow-sm">
-              <CardHeader className="space-y-1 pb-3">
-                <CardTitle className={cn("leading-tight", isMobile ? "text-xl" : "text-2xl")}>
-                  Where do you want to go?
-                </CardTitle>
-                <CardDescription>
-                  Tap any section to jump straight there — no extra steps.
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-6">
-
-                {/* ── Task shortcuts ── */}
-                {canShowAccounts && (
-                  <div className="grid grid-cols-2 gap-2.5">
-                    <button
-                      type="button"
-                      onClick={() => { setAccountsInitialTab("expenses"); handleTabChange("accounts") }}
-                      className={cn(
-                        "flex items-center gap-3 rounded-2xl border border-emerald-200 bg-emerald-50/70 px-4 text-left transition-colors hover:bg-emerald-100/60 touch-manipulation",
-                        isMobile ? "py-4" : "py-3.5",
-                      )}
-                    >
-                      <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-emerald-700 text-white shadow-sm">
-                        <Receipt className="h-4 w-4" />
-                      </div>
-                      <div>
-                        <p className={cn("font-semibold text-slate-900", isMobile ? "text-base" : "text-sm")}>Record Expense</p>
-                        <p className="text-xs text-emerald-700">Log a cost or input used</p>
-                      </div>
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => { setAccountsInitialTab("labor"); handleTabChange("accounts") }}
-                      className={cn(
-                        "flex items-center gap-3 rounded-2xl border border-emerald-200 bg-emerald-50/70 px-4 text-left transition-colors hover:bg-emerald-100/60 touch-manipulation",
-                        isMobile ? "py-4" : "py-3.5",
-                      )}
-                    >
-                      <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-emerald-700 text-white shadow-sm">
-                        <Users className="h-4 w-4" />
-                      </div>
-                      <div>
-                        <p className={cn("font-semibold text-slate-900", isMobile ? "text-base" : "text-sm")}>Record Labor</p>
-                        <p className="text-xs text-emerald-700">Workers and daily wages</p>
-                      </div>
-                    </button>
-                  </div>
-                )}
-
-                {/* ── All tabs — direct access, grouped ── */}
-                {launcherSections.map((section) => (
-                  <div key={section.id} className="space-y-2.5">
-                    {/* Section divider label */}
-                    <div className="flex items-center gap-2">
-                      <section.icon className={cn("h-3.5 w-3.5", section.iconClassName)} />
-                      <p className="text-[11px] font-bold uppercase tracking-[0.2em] text-neutral-500">
-                        {section.label}
-                      </p>
-                      <div className="flex-1 border-t border-neutral-100" />
-                    </div>
-
-                    {/* Tab buttons — 2 per row, direct navigation */}
-                    <div className="grid grid-cols-2 gap-2">
-                      {section.tabs.map((tab) => {
-                        const TabIcon = tab.icon
-                        return (
-                          <button
-                            key={tab.value}
-                            type="button"
-                            onClick={() => handleTabChange(tab.value)}
-                            className={cn(
-                              "flex items-center gap-3 rounded-xl border text-left touch-manipulation transition-colors",
-                              isMobile ? "min-h-[64px] px-3.5 py-3.5" : "min-h-[52px] px-3 py-2.5",
-                              section.tabClassName,
-                            )}
-                          >
-                            {/* Icon bubble */}
-                            <span className={cn(
-                              "flex shrink-0 items-center justify-center rounded-lg",
-                              isMobile ? "h-9 w-9" : "h-7 w-7",
-                              section.badgeClassName,
-                            )}>
-                              <TabIcon className={cn(isMobile ? "h-4 w-4" : "h-3.5 w-3.5", section.iconClassName)} />
-                            </span>
-
-                            {/* Label + subtabs */}
-                            <div className="min-w-0">
-                              <p className={cn(
-                                "font-semibold leading-tight",
-                                isMobile ? "text-[15px]" : "text-[13px]",
-                              )}>
-                                {tab.label}
-                              </p>
-                              {tab.subtabs?.length ? (
-                                <p className="mt-0.5 truncate text-[11px] text-muted-foreground">
-                                  {tab.subtabs.slice(0, 2).join(" · ")}
-                                </p>
-                              ) : null}
-                            </div>
-                          </button>
-                        )
-                      })}
-                    </div>
-                  </div>
-                ))}
-
-                {/* ── Bottom links ── */}
-                <div className="flex flex-wrap gap-2 border-t border-neutral-100 pt-3">
-                  <Button
-                    variant="outline"
-                    className={cn("bg-white text-slate-700", isMobile ? "w-full min-h-[48px] text-base" : "")}
-                    onClick={() => handleTabChange("home")}
-                  >
-                    <Home className="mr-2 h-4 w-4" />
-                    Open Dashboard
-                  </Button>
-                  <Button
-                    asChild
-                    variant="outline"
-                    className={cn("bg-white text-slate-700", isMobile ? "w-full min-h-[48px] text-base" : "")}
-                  >
-                    <Link href={buildWorkspaceHref("/manuals")}>
-                      <BookOpen className="mr-2 h-4 w-4" />
-                      Training Manuals
-                    </Link>
-                  </Button>
-                </div>
-
-              </CardContent>
-            </Card>
+            <WorkspaceLauncher
+              sections={launcherSections}
+              canShowAccounts={canShowAccounts}
+              isMobile={isMobile}
+              onTabChange={handleTabChange}
+              onAccountsExpense={() => { setAccountsInitialTab("expenses"); handleTabChange("accounts") }}
+              onAccountsLabor={() => { setAccountsInitialTab("labor"); handleTabChange("accounts") }}
+              buildWorkspaceHref={buildWorkspaceHref}
+            />
           </TabsContent>
 
           <TabsContent value="home" className="space-y-6" forceMount={isTabLoaded("home") ? true : undefined}>
@@ -7571,139 +7455,20 @@ export default function InventorySystem() {
               </div>
             </div>
 
-            {/* ── Morning Brief — first thing you see, always ── */}
+            {/* ── Morning Brief ── */}
             {canShowIntelligence && (
-              <div className={cn(
-                "rounded-2xl border overflow-hidden",
-                intelligenceHighlights.length > 0
-                  ? "border-emerald-200/70 bg-gradient-to-br from-emerald-700 to-emerald-800 text-white shadow-[0_8px_32px_-12px_rgba(5,100,70,0.45)]"
-                  : "border-black/5 bg-white/90",
-              )}>
-                {/* Header row */}
-                <div className={cn(
-                  "flex items-center justify-between px-5 py-3.5",
-                  intelligenceHighlights.length > 0 ? "border-b border-white/10" : "border-b border-black/5",
-                )}>
-                  <div className="flex items-center gap-2.5">
-                    <Brain className={cn("h-4 w-4 shrink-0", intelligenceHighlights.length > 0 ? "text-emerald-300" : "text-emerald-600")} />
-                    <p className={cn("text-sm font-semibold", intelligenceHighlights.length > 0 ? "text-white" : "text-neutral-800")}>
-                      What to focus on today
-                    </p>
-                  </div>
-                  {intelligenceLoading && (
-                    <div className="flex items-center gap-1.5">
-                      <Loader2 className={cn("h-3.5 w-3.5 animate-spin", intelligenceHighlights.length > 0 ? "text-emerald-300" : "text-neutral-400")} />
-                      <span className={cn("text-xs", intelligenceHighlights.length > 0 ? "text-emerald-300" : "text-neutral-400")}>
-                        Analysing...
-                      </span>
-                    </div>
-                  )}
-                  {!intelligenceLoading && intelligenceHighlights.length > 0 && (
-                    <span className="text-[11px] font-medium text-emerald-300">
-                      {new Date().toLocaleDateString("en-IN", { weekday: "short", day: "numeric", month: "short" })}
-                    </span>
-                  )}
-                </div>
-
-                {/* Content */}
-                <div className="px-5 py-4">
-                  {intelligenceLoading && intelligenceHighlights.length === 0 ? (
-                    <div className="space-y-3">
-                      <div className="h-4 w-3/4 animate-pulse rounded-lg bg-neutral-100" />
-                      <div className="h-4 w-5/6 animate-pulse rounded-lg bg-neutral-100" />
-                      <div className="h-4 w-2/3 animate-pulse rounded-lg bg-neutral-100" />
-                    </div>
-                  ) : intelligenceError ? (
-                    <p className="text-sm text-rose-600">{intelligenceError}</p>
-                  ) : intelligenceHighlights.length > 0 ? (
-                    <div className="space-y-3">
-                      {/* Highlights — no generic "Insight N" labels, just the text + action */}
-                      {intelligenceHighlights.slice(0, 4).map((highlight, index) => {
-                        const linkedAction = intelligenceActions.find(
-                          (action) => visibleTabs.includes(action.tab) && highlight.toLowerCase().includes(action.label.toLowerCase()),
-                        )
-                        const actionTab = linkedAction?.tab || inferBriefTabFromText(highlight)
-                        return (
-                          <button
-                            key={`brief-${index}`}
-                            type="button"
-                            data-testid={`home-brief-insight-${index + 1}`}
-                            onClick={() => openDrilldown({ tab: actionTab })}
-                            className="group flex w-full items-start gap-3 text-left"
-                          >
-                            <span className="mt-1 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-white/15 text-[10px] font-bold text-white">
-                              {index + 1}
-                            </span>
-                            <div className="min-w-0 flex-1">
-                              <p className="text-sm leading-snug text-white/90 group-hover:text-white">
-                                {highlight}
-                              </p>
-                              <p className="mt-1 text-[11px] font-medium text-emerald-300 group-hover:text-emerald-200">
-                                Review →
-                              </p>
-                            </div>
-                          </button>
-                        )
-                      })}
-
-                      {/* Cost code pins */}
-                      {(intelligenceTopCostCode || intelligenceTopFrequencyCode) && (
-                        <div className="mt-1 grid grid-cols-1 gap-2 border-t border-white/10 pt-3 sm:grid-cols-2">
-                          {intelligenceTopCostCode && (
-                            <button
-                              type="button"
-                              onClick={() => openDrilldown({ tab: "accounts", transactionSearch: intelligenceTopCostCode.code })}
-                              className="rounded-xl bg-white/10 px-3 py-2 text-left hover:bg-white/15 transition-colors"
-                            >
-                              <p className="text-[10px] font-semibold uppercase tracking-wider text-emerald-300">Top cost</p>
-                              <p className="mt-0.5 text-sm font-semibold text-white">
-                                {intelligenceTopCostCode.code} — ₹{formatNumber(intelligenceTopCostCode.totalAmount, 0)}
-                              </p>
-                              <p className="text-[11px] text-white/60">{intelligenceTopCostCode.reference}</p>
-                            </button>
-                          )}
-                          {intelligenceTopFrequencyCode && (
-                            <button
-                              type="button"
-                              onClick={() => openDrilldown({ tab: "accounts", transactionSearch: intelligenceTopFrequencyCode.code })}
-                              className="rounded-xl bg-white/10 px-3 py-2 text-left hover:bg-white/15 transition-colors"
-                            >
-                              <p className="text-[10px] font-semibold uppercase tracking-wider text-emerald-300">Most frequent</p>
-                              <p className="mt-0.5 text-sm font-semibold text-white">
-                                {intelligenceTopFrequencyCode.code} — {formatCount(intelligenceTopFrequencyCode.entryCount)} entries
-                              </p>
-                              <p className="text-[11px] text-white/60">{intelligenceTopFrequencyCode.reference}</p>
-                            </button>
-                          )}
-                        </div>
-                      )}
-
-                      {/* Action buttons */}
-                      {intelligenceActions.filter((a) => visibleTabs.includes(a.tab)).length > 0 && (
-                        <div className="flex flex-wrap gap-2 border-t border-white/10 pt-3">
-                          {intelligenceActions
-                            .filter((a) => visibleTabs.includes(a.tab))
-                            .map((action) => (
-                              <Button
-                                key={`${action.tab}-${action.label}`}
-                                size="sm"
-                                onClick={() => openDrilldown({ tab: action.tab })}
-                                className="border-white/20 bg-white/15 text-white hover:bg-white/25 text-xs h-8"
-                                variant="outline"
-                              >
-                                {action.label}
-                              </Button>
-                            ))}
-                        </div>
-                      )}
-                    </div>
-                  ) : (
-                    <p className="text-sm text-muted-foreground">
-                      No patterns detected yet. The brief activates once you have processing, accounts, and dispatch data for the current season.
-                    </p>
-                  )}
-                </div>
-              </div>
+              <MorningBriefCard
+                highlights={intelligenceHighlights}
+                insights={intelligenceInsights}
+                actions={intelligenceActions}
+                topCostCode={intelligenceTopCostCode}
+                topFrequencyCode={intelligenceTopFrequencyCode}
+                loading={intelligenceLoading}
+                error={intelligenceError}
+                visibleTabs={visibleTabs}
+                onDrilldown={openDrilldown}
+                inferTab={inferBriefTabFromText}
+              />
             )}
 
             <div
@@ -9317,114 +9082,82 @@ export default function InventorySystem() {
             </TabsContent>
           )}
         </Tabs>
-        {(showMobileSectionRail || isStandaloneMobileApp) && (
+        {isMobile && (
           <div className="fixed inset-x-0 bottom-0 z-40 border-t border-black/10 bg-white/95 shadow-[0_-8px_24px_-16px_rgba(15,23,42,0.45)] backdrop-blur">
-            {isStandaloneMobileApp ? (
-              <div className="mx-auto flex max-w-7xl flex-col gap-2 px-3 pb-[calc(0.5rem+env(safe-area-inset-bottom))] pt-2">
-                <div className="flex items-center gap-2 overflow-x-auto no-scrollbar">
-                  <button
-                    type="button"
-                    onClick={goToWorkspaceNavigator}
-                    className={cn(
-                      "flex min-h-11 flex-1 min-w-[6.75rem] items-center justify-center gap-1.5 rounded-xl border px-3 py-2 text-xs font-semibold transition-colors touch-manipulation",
-                      activeTab === DASHBOARD_LAUNCHER_TAB
-                        ? "border-neutral-900 bg-neutral-900 text-white"
-                        : "border-black/10 bg-white text-neutral-700",
-                    )}
-                  >
-                    <Home className="h-3.5 w-3.5" />
-                    <span className="truncate">Workspace</span>
-                  </button>
+            <div className="mx-auto flex max-w-7xl flex-col gap-2 px-3 pb-[calc(0.5rem+env(safe-area-inset-bottom))] pt-2">
+              {/* Section group nav — always visible on mobile, equivalent to desktop sidebar */}
+              <div className="flex items-center gap-2 overflow-x-auto no-scrollbar">
+                <button
+                  type="button"
+                  onClick={goToWorkspaceNavigator}
+                  className={cn(
+                    "flex min-h-11 flex-1 min-w-[5.5rem] items-center justify-center gap-1.5 rounded-xl border px-2 py-2 text-xs font-semibold transition-colors touch-manipulation",
+                    activeTab === DASHBOARD_LAUNCHER_TAB
+                      ? "border-neutral-900 bg-neutral-900 text-white"
+                      : "border-black/10 bg-white text-neutral-700",
+                  )}
+                >
+                  <Home className="h-3.5 w-3.5 shrink-0" />
+                  <span className="truncate">Home</span>
+                </button>
 
-                  {mobileAppSectionGroups.map((group) => {
-                    const GroupIcon = group.icon
-                    const isActive = activeTabGroup === group.id
-                    return (
-                      <button
-                        key={group.id}
-                        type="button"
-                        onClick={() => handleSectionSelect(group.id)}
-                        className={cn(
-                          "flex min-h-11 flex-1 min-w-[6.75rem] items-center justify-center gap-1.5 rounded-xl border px-3 py-2 text-xs font-semibold transition-colors touch-manipulation",
-                          isActive
-                            ? "border-neutral-900 bg-neutral-900 text-white"
-                            : "border-black/10 bg-white text-neutral-700",
-                        )}
-                      >
-                        <GroupIcon className="h-3.5 w-3.5" />
-                        <span className="truncate">{group.label}</span>
-                      </button>
-                    )
-                  })}
-                </div>
-
-                {showMobileSectionRail && (
-                  <div className="flex items-center gap-2 overflow-x-auto no-scrollbar">
-                    {mobilePrimarySectionTabs.map((tab) => {
-                      const TabIcon = tab.icon
-                      const isActive = activeTab === tab.value
-                      return (
-                        <button
-                          key={tab.value}
-                          type="button"
-                          onClick={() => handleTabChange(tab.value)}
-                          className={cn(
-                            "flex min-h-11 flex-1 min-w-[8.25rem] items-center justify-center gap-1.5 rounded-xl border px-3 py-2 text-xs font-semibold transition-colors touch-manipulation",
-                            isActive
-                              ? "border-emerald-600 bg-emerald-600 text-white"
-                              : "border-black/10 bg-white text-neutral-700",
-                          )}
-                        >
-                          <TabIcon className="h-3.5 w-3.5" />
-                          <span className="truncate">{tab.label}</span>
-                        </button>
-                      )
-                    })}
-                    {hiddenMobileSectionTabCount > 0 && (
-                      <button
-                        type="button"
-                        onClick={goToWorkspaceNavigator}
-                        className="flex min-h-11 min-w-[8.25rem] items-center justify-center rounded-xl border border-dashed border-black/15 bg-white px-3 py-2 text-xs font-semibold text-neutral-700 transition-colors touch-manipulation hover:border-emerald-200 hover:text-emerald-700"
-                      >
-                        More tabs
-                      </button>
-                    )}
-                  </div>
-                )}
-              </div>
-            ) : (
-              <div className="mx-auto flex max-w-7xl items-center gap-2 overflow-x-auto px-3 pb-[calc(0.5rem+env(safe-area-inset-bottom))] pt-2 no-scrollbar">
-                {mobilePrimarySectionTabs.map((tab) => {
-                  const TabIcon = tab.icon
-                  const isActive = activeTab === tab.value
+                {mobileAppSectionGroups.map((group) => {
+                  const GroupIcon = group.icon
+                  const isActive = activeTabGroup === group.id
                   return (
                     <button
-                      key={tab.value}
+                      key={group.id}
                       type="button"
-                      onClick={() => handleTabChange(tab.value)}
+                      onClick={() => handleSectionSelect(group.id)}
                       className={cn(
-                        "flex min-h-11 flex-1 min-w-[8.25rem] items-center justify-center gap-1.5 rounded-xl border px-3 py-2 text-xs font-semibold transition-colors touch-manipulation",
+                        "flex min-h-11 flex-1 min-w-[5.5rem] items-center justify-center gap-1.5 rounded-xl border px-2 py-2 text-xs font-semibold transition-colors touch-manipulation",
                         isActive
-                          ? "border-emerald-600 bg-emerald-600 text-white"
+                          ? "border-neutral-900 bg-neutral-900 text-white"
                           : "border-black/10 bg-white text-neutral-700",
                       )}
                     >
-                      <TabIcon className="h-3.5 w-3.5" />
-                      <span className="truncate">{tab.label}</span>
+                      <GroupIcon className="h-3.5 w-3.5 shrink-0" />
+                      <span className="truncate">{group.label}</span>
                     </button>
                   )
                 })}
-                {hiddenMobileSectionTabCount > 0 && (
-                  <button
-                    type="button"
-                    onClick={goToWorkspaceNavigator}
-                    className="flex min-h-11 min-w-[8.25rem] items-center justify-center rounded-xl border border-dashed border-black/15 bg-white px-3 py-2 text-xs font-semibold text-neutral-700 transition-colors touch-manipulation hover:border-emerald-200 hover:text-emerald-700"
-                  >
-                    More tabs
-                  </button>
-                )}
               </div>
-            )}
+
+              {/* Sub-tab rail — only visible when inside a section */}
+              {showMobileSectionRail && (
+                <div className="flex items-center gap-2 overflow-x-auto no-scrollbar">
+                  {mobilePrimarySectionTabs.map((tab) => {
+                    const TabIcon = tab.icon
+                    const isActive = activeTab === tab.value
+                    return (
+                      <button
+                        key={tab.value}
+                        type="button"
+                        onClick={() => handleTabChange(tab.value)}
+                        className={cn(
+                          "flex min-h-10 flex-1 min-w-[7rem] items-center justify-center gap-1.5 rounded-xl border px-3 py-2 text-xs font-semibold transition-colors touch-manipulation",
+                          isActive
+                            ? "border-emerald-600 bg-emerald-600 text-white"
+                            : "border-black/10 bg-white text-neutral-700",
+                        )}
+                      >
+                        <TabIcon className="h-3.5 w-3.5 shrink-0" />
+                        <span className="truncate">{tab.label}</span>
+                      </button>
+                    )
+                  })}
+                  {hiddenMobileSectionTabCount > 0 && (
+                    <button
+                      type="button"
+                      onClick={goToWorkspaceNavigator}
+                      className="flex min-h-10 min-w-[7rem] items-center justify-center rounded-xl border border-dashed border-black/15 bg-white px-3 py-2 text-xs font-semibold text-neutral-700 transition-colors touch-manipulation hover:border-emerald-200 hover:text-emerald-700"
+                    >
+                      More →
+                    </button>
+                  )}
+                </div>
+              )}
+            </div>
           </div>
         )}
         {isInventoryDrilldownOpen && (

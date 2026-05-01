@@ -39,7 +39,7 @@ export async function parseMessage(
   const response = await client.messages.create({
     model: CLAUDE_HAIKU,
     max_tokens: 1024,
-    system: buildBotSystemPrompt(ctx),
+    system: [{ type: "text", text: buildBotSystemPrompt(ctx), cache_control: { type: "ephemeral" } }],
     tools: BOT_TOOLS,
     tool_choice: { type: "any" },
     messages: [{ role: "user", content: message }],
