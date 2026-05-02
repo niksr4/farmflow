@@ -398,9 +398,18 @@ End with: "Powered by FarmFlow — your estate, always in view."`,
       return { text: null, error: `Claude returned empty (${detail})` }
     }
     return { text: digestText }
-  } catch (error) {
-    const msg = String((error as any)?.message || error || "unknown error")
-    logServerError(`Weekly digest generation failed for tenant ${tenant.tenantId}`, error)
+  } catch (error: any) {
+    const msg = String(error?.message || error || "unknown error")
+    // Anthropic billing errors (402 / 400 with credit balance message) are config issues,
+    // not code bugs — log as warning so they don't surface as unhandled Sentry errors.
+    const isBillingError =
+      error?.status === 402 ||
+      (error?.status === 400 && typeof msg === "string" && msg.toLowerCase().includes("credit balance"))
+    if (isBillingError) {
+      logServerWarning(`Weekly digest skipped for tenant ${tenant.tenantId} — Anthropic billing: ${msg}`)
+    } else {
+      logServerError(`Weekly digest generation failed for tenant ${tenant.tenantId}`, error)
+    }
     return { text: null, error: msg }
   }
 }
