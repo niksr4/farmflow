@@ -1,6 +1,10 @@
+"use client"
 /**
  * Builds the per-tab hero content (badge, title, description, stats, chips) for
  * the workspace header. Extracted from inventory-system.tsx to keep that file lean.
+ *
+ * Marked "use client" because it imports React component references (lucide icons)
+ * and must always be bundled in the client graph — never evaluated as a server module.
  *
  * Pure function — no React, no hooks. Pass all inputs as a single params object.
  */

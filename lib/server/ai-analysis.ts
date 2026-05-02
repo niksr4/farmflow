@@ -236,6 +236,8 @@ async function fetchProcessingData(startDate: string, endDate: string, tenantCon
 async function fetchRainfallData(tenantContext: TenantContext) {
   try {
     const currentYear = new Date().getFullYear()
+    const yearStart = `${currentYear}-01-01`
+    const yearEnd = `${currentYear}-12-31`
     const tenantId = tenantContext.tenantId
     return await runTenantQuery(
       sql,
@@ -246,7 +248,7 @@ async function fetchRainfallData(tenantContext: TenantContext) {
           inches,
           cents
         FROM rainfall_records
-        WHERE EXTRACT(YEAR FROM record_date) = ${currentYear}
+        WHERE record_date BETWEEN ${yearStart}::date AND ${yearEnd}::date
           AND tenant_id = ${tenantId}
         ORDER BY record_date DESC
         LIMIT 365
