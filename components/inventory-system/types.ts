@@ -1,3 +1,13 @@
+export type HeroChip = { icon: React.ElementType; label: string; metricValue?: number | null }
+export type HeroStat = { label: string; value: string; subValue?: string; metricValue?: number | null }
+export type HeroContent = {
+  badge: string
+  title: string
+  description: string
+  chips: HeroChip[]
+  stats: HeroStat[]
+}
+
 export interface LocationOption {
   id: string
   name: string
