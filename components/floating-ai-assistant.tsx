@@ -178,7 +178,7 @@ export default function FloatingAiAssistant() {
         const assistantContext = buildAssistantWorkspaceContextFromModules(modules, effectiveAssistantRole)
         setAvailableWorkspaces(assistantContext.availableWorkspaces)
         setWorkspaceHints(assistantContext.workspaceHints)
-        setIsEnabled(Boolean(response.ok && data?.success && modules.includes("ai-analysis")))
+        setIsEnabled(Boolean(response.ok && data?.success && (modules.includes("ai-analysis") || modules.includes("accounts"))))
       } catch {
         if (!cancelled) {
           setIsEnabled(false)
