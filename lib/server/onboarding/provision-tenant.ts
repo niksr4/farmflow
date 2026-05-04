@@ -9,6 +9,7 @@ import { sql } from "@/lib/server/db"
 import { persistTenantPlanId } from "@/lib/server/tenant-subscriptions"
 import { normalizeTenantContext, runTenantQuery } from "@/lib/server/tenant-db"
 import { sendOwnerTenantCreatedAlert } from "@/lib/server/onboarding/owner-alerts"
+import { ACCOUNT_ACTIVITY_SUGGESTIONS } from "@/lib/account-activity-suggestions"
 import type { SignupRequestRecord, SignupVerificationLookup, SignupVerificationResult } from "@/lib/server/onboarding/types"
 import {
   buildStarterLocationCode,
@@ -229,6 +230,33 @@ const ensureTenantModules = async (tenantId: string) => {
       `,
     )
   }
+}
+
+const ensureDefaultActivityCodes = async (tenantId: string) => {
+  const existing = await runTenantQuery(
+    sql,
+    ownerContext,
+    sql.query(`SELECT 1 FROM account_activities WHERE tenant_id = $1 LIMIT 1`, [tenantId]),
+  )
+  if (existing.length > 0) return
+
+  const params: string[] = [tenantId]
+  const valueClauses = ACCOUNT_ACTIVITY_SUGGESTIONS.map(({ code, reference }, i) => {
+    params.push(code, reference)
+    const p = 2 + i * 2
+    return `($1, $${p}, $${p + 1})`
+  })
+
+  await runTenantQuery(
+    sql,
+    ownerContext,
+    sql.query(
+      `INSERT INTO account_activities (tenant_id, code, activity)
+       VALUES ${valueClauses.join(", ")}
+       ON CONFLICT ON CONSTRAINT account_activities_tenant_code_unique DO NOTHING`,
+      params,
+    ),
+  )
 }
 
 const ensureStarterLocation = async (tenantId: string, estateName: string) => {
@@ -549,6 +577,7 @@ const provisionSignupRequestRecord = async (
     const tenant = await ensureTenant(signupRequest)
     await ensureTenantModules(tenant.id)
     await ensureStarterLocation(tenant.id, signupRequest.estate_name)
+    await ensureDefaultActivityCodes(tenant.id)
     const user = await ensureUser(signupRequest, tenant.id)
 
     await runTenantQuery(

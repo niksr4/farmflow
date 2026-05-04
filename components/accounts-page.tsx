@@ -1373,10 +1373,34 @@ export default function AccountsPage({
         <TabsContent value="activities">
           <Card>
             <CardHeader>
-              <CardTitle>Account Activity Codes</CardTitle>
-              <CardDescription>
-                Define tenant-specific labor and expense codes, then edit them as your accounting structure evolves.
-              </CardDescription>
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                <div>
+                  <CardTitle>Account Activity Codes</CardTitle>
+                  <CardDescription className="mt-1">
+                    Pre-filled with the standard HoneyFarm and Seshagiri estate structure. Edit, add, or remove codes to match your accounting setup.
+                  </CardDescription>
+                </div>
+                <div className="flex flex-wrap gap-2 shrink-0">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => downloadActivityReference("pdf")}
+                  >
+                    <FileText className="mr-2 h-4 w-4" />
+                    Reference PDF
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => downloadActivityReference("xlsx")}
+                  >
+                    <FileSpreadsheet className="mr-2 h-4 w-4" />
+                    Excel
+                  </Button>
+                </div>
+              </div>
             </CardHeader>
             <CardContent className="space-y-4">
               {!isAddingActivity ? (
@@ -1423,48 +1447,25 @@ export default function AccountsPage({
                 <div className="space-y-3 rounded-lg border border-emerald-200/70 bg-emerald-50/60 p-4">
                   <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                     <div>
-                      <p className="text-sm font-medium text-emerald-900">Starter suggestions from HoneyFarm and Seshagiri</p>
+                      <p className="text-sm font-medium text-emerald-900">
+                        {activitySuggestions.length} standard codes not yet in your list
+                      </p>
                       <p className="text-xs text-emerald-800">
-                        Use these proven activity codes as a starting point instead of creating every category from scratch.
+                        These are from the HoneyFarm and Seshagiri structure — add any that fit your estate.
                       </p>
                     </div>
-                    <div className="flex flex-wrap gap-2">
+                    {activitySuggestions.length > 12 && (
                       <Button
                         type="button"
                         variant="outline"
                         size="sm"
                         className="bg-white"
-                        onClick={() => downloadActivityReference("pdf")}
+                        onClick={() => setShowAllActivitySuggestions((current) => !current)}
                       >
-                        <FileText className="mr-2 h-4 w-4" />
-                        Reference PDF
+                        {showAllActivitySuggestions ? "Show fewer" : `Show all ${activitySuggestions.length}`}
                       </Button>
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        className="bg-white"
-                        onClick={() => downloadActivityReference("xlsx")}
-                      >
-                        <FileSpreadsheet className="mr-2 h-4 w-4" />
-                        Excel
-                      </Button>
-                      {activitySuggestions.length > 12 && (
-                        <Button
-                          type="button"
-                          variant="outline"
-                          size="sm"
-                          className="bg-white"
-                          onClick={() => setShowAllActivitySuggestions((current) => !current)}
-                        >
-                          {showAllActivitySuggestions ? "Show fewer" : `Show all ${activitySuggestions.length}`}
-                        </Button>
-                      )}
-                    </div>
+                    )}
                   </div>
-                  <p className="text-xs text-emerald-800/90">
-                    Download the printable reference if a new tenant wants the full starter list before deciding which codes to copy into their own estate.
-                  </p>
                   <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-3">
                     {visibleActivitySuggestions.map((suggestion) => (
                       <div key={suggestion.code} className="rounded-lg border border-emerald-200 bg-white/90 p-3">
