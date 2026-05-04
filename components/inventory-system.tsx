@@ -671,8 +671,7 @@ export default function InventorySystem() {
   const canShowPepper = isModuleEnabled("pepper")
   const canShowRubber = isModuleEnabled("rubber")
   const canShowAiAnalysis = isModuleEnabled("ai-analysis")
-  // Assistant available on Core (accounts module) and above — not Enterprise-only
-  const canLaunchAssistant = (canShowAiAnalysis || canShowAccounts) && (!isOwner || isPreviewMode)
+  const canLaunchAssistant = !isOwner || isPreviewMode
   const canShowNews = isModuleEnabled("news")
   const canShowMarketPricing = isModuleEnabled("market-pricing")
   const canShowCompliance = isModuleEnabled("compliance")
