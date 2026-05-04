@@ -69,7 +69,7 @@ export async function GET(request: NextRequest) {
         `SELECT
            COALESCE(buyer_name, 'Unknown') AS buyer,
            COALESCE(SUM(total_revenue), 0) AS total_inr,
-           COALESCE(SUM(kgs_sold), 0) AS kgs_sold
+           COALESCE(SUM(COALESCE(NULLIF(kgs, 0), NULLIF(weight_kgs, 0), bags_sold * 50)), 0) AS kgs_sold
          FROM sales_records
          WHERE tenant_id = $1
            AND sale_date >= $2::date
