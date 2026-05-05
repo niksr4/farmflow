@@ -13,6 +13,10 @@ import {
   Zap,
   Lock,
   Smartphone,
+  Brain,
+  TrendingUp,
+  Mail,
+  AlertCircle,
 } from "lucide-react"
 import { PublicSiteShell } from "@/components/public-site-shell"
 import { useLocale } from "@/components/locale-provider"
@@ -65,10 +69,49 @@ const benefits = [
     icon: Users,
   },
   {
-    title: "Your season's numbers in one place",
+    title: "Your season's P&L, always current",
     description:
-      "Intake, dispatch, receipts, and sales stay connected. No more reconciling three notebooks and a spreadsheet to know where you stand.",
+      "Revenue, labor, expenses, and production connected automatically. Your gross margin and cost per kg update the moment you log a sale — no spreadsheet assembly at the end of the season.",
     icon: Wallet,
+  },
+]
+
+const advisorCards = [
+  {
+    eyebrow: "Every Monday morning",
+    title: "Your weekly digest, written by AI",
+    detail:
+      "Last week's cherry yield, labor efficiency, field conditions, and three specific actions for this week — grounded in your actual estate data, not generic advice.",
+    icon: Mail,
+    accent: "border-violet-400/20 bg-violet-400/[0.06]",
+    iconAccent: "border-violet-300/15 bg-violet-300/[0.08] text-violet-200",
+  },
+  {
+    eyebrow: "Coffee market intelligence",
+    title: "Know when to sell, not just what you have",
+    detail:
+      "ICO benchmark prices tracked against your unsold parchment stock. When coffee is at a 3-month high, you hear about it before your buyer calls.",
+    icon: TrendingUp,
+    accent: "border-emerald-400/20 bg-emerald-400/[0.06]",
+    iconAccent: "border-emerald-300/15 bg-emerald-300/[0.08] text-emerald-200",
+  },
+  {
+    eyebrow: "Always-on assistant",
+    title: "Ask about your own numbers",
+    detail:
+      "\"Why did my cost per kg jump last month?\" \"How does this week's yield compare to last season?\" Direct answers from your own data — not a dashboard you have to interpret.",
+    icon: Brain,
+    accent: "border-sky-400/20 bg-sky-400/[0.06]",
+    iconAccent: "border-sky-300/15 bg-sky-300/[0.08] text-sky-200",
+  },
+  {
+    eyebrow: "Automatic exception detection",
+    title: "Catches what you'd miss",
+    detail:
+      "Labor costs running 40% above last season? Processing yield below your historical average? Flagged in your weekly brief before it becomes a costly pattern.",
+    icon: AlertCircle,
+    accent: "border-amber-400/20 bg-amber-400/[0.06]",
+    iconAccent: "border-amber-300/15 bg-amber-300/[0.08] text-amber-200",
   },
 ]
 
@@ -132,6 +175,10 @@ const coreSurfacePills = [
   "Sales",
   "Labor & wages",
   "Accounts",
+  "Season P&L",
+  "Weekly digest",
+  "Market timing",
+  "AI assistant",
   "Rainfall",
 ]
 
@@ -329,10 +376,10 @@ export default function LandingPage() {
           <div className="mb-14 text-center">
             <p className="text-sm font-medium text-emerald-400">Why planters choose FarmFlow</p>
             <h2 className="mt-3 font-display text-4xl font-semibold text-stone-50 sm:text-5xl">
-              {"Your season's numbers shouldn't live in three notebooks"}
+              {"The numbers you need, before you think to ask"}
             </h2>
             <p className="mx-auto mt-4 max-w-2xl text-base leading-7 text-stone-400">
-              Most estates run on a mix of registers, WhatsApp forwards, and spreadsheets assembled at the end of the season. FarmFlow keeps it all in one place, updated daily.
+              Most estates run on registers and spreadsheets assembled at the end of the season. FarmFlow keeps everything connected — and tells you what it means every week.
             </p>
           </div>
           <div className="grid gap-5 lg:grid-cols-3">
@@ -347,6 +394,40 @@ export default function LandingPage() {
                     <div>
                       <h3 className="text-xl font-semibold text-stone-50">{card.title}</h3>
                       <p className="mt-2 text-sm leading-7 text-stone-400">{card.description}</p>
+                    </div>
+                  </div>
+                </MotionDiv>
+              )
+            })}
+          </div>
+        </MotionSection>
+
+        {/* ── Advisor section ── */}
+        <MotionSection {...reveal(0.04)}>
+          <div className="mb-14 text-center">
+            <p className="text-sm font-medium text-emerald-400">Proactive intelligence</p>
+            <h2 className="mt-3 font-display text-4xl font-semibold text-stone-50 sm:text-5xl">
+              An advisor, not just a ledger
+            </h2>
+            <p className="mx-auto mt-4 max-w-2xl text-base leading-7 text-stone-400">
+              Most farm software records what happened. FarmFlow tells you what it means — and what to do. It watches your numbers so you don't have to.
+            </p>
+          </div>
+          <div className="grid gap-4 sm:grid-cols-2">
+            {advisorCards.map((card, i) => {
+              const Icon = card.icon
+              return (
+                <MotionDiv key={card.eyebrow} {...reveal(0.05 + i * 0.07)} {...lift}>
+                  <div className={`flex h-full flex-col gap-5 rounded-3xl border p-8 ${card.accent}`}>
+                    <div className={`flex h-11 w-11 items-center justify-center rounded-2xl border ${card.iconAccent}`}>
+                      <Icon className="h-5 w-5" />
+                    </div>
+                    <div>
+                      <p className="text-[11px] font-medium uppercase tracking-[0.2em] text-stone-500">
+                        {card.eyebrow}
+                      </p>
+                      <h3 className="mt-2 text-xl font-semibold text-stone-50">{card.title}</h3>
+                      <p className="mt-2 text-sm leading-7 text-stone-400">{card.detail}</p>
                     </div>
                   </div>
                 </MotionDiv>
@@ -582,10 +663,10 @@ export default function LandingPage() {
             <div className="relative z-10 space-y-6">
               <p className="text-sm font-medium text-emerald-400">No credit card. No sales call. No waiting.</p>
               <h2 className="mx-auto max-w-3xl font-display text-4xl font-semibold text-stone-50 sm:text-5xl">
-                Your estate can be live today.
+                Your estate live today. Your first digest next Monday.
               </h2>
               <p className="mx-auto max-w-xl text-base leading-7 text-stone-400">
-                Sign up, complete a 5-minute setup, and start logging cherry intake. Most estates are recording live entries within the hour.
+                Sign up, complete a 5-minute setup, and start logging. Most estates are recording live entries within the hour — and get their first AI-written weekly brief the following Monday morning.
               </p>
               <div className="flex flex-wrap items-center justify-center gap-3 pt-2">
                 <Button
