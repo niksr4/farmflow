@@ -52,7 +52,7 @@ export const MODULE_BUNDLES: ModuleBundle[] = [
   {
     id: "basic",
     label: "Basic",
-    description: "Digital books for estates that don't need the full operational workflow yet. Inventory, accounts, and a live balance sheet.",
+    description: "Digital books for estates that don't need the full operational workflow yet. Accounts, inventory, balance sheet, and estate awareness.",
     modules: [
       "inventory",
       "transactions",
@@ -60,12 +60,14 @@ export const MODULE_BUNDLES: ModuleBundle[] = [
       "balance-sheet",
       "rainfall",
       "weather",
+      "news",
+      "resources",
     ],
   },
   {
     id: "core",
     label: "Core",
-    description: "The full harvest-to-sale workflow for estates running their own pulping. Processing, dispatch, sales, accounts, and labor tracking.",
+    description: "The full harvest-to-sale workflow for estates running their own pulping. Processing, dispatch, sales, labor, and AI insights.",
     modules: [
       "inventory",
       "transactions",
