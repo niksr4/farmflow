@@ -1089,12 +1089,13 @@ export default function InventorySystem() {
         canShowProcessing: isModuleEnabled("processing"),
         canShowDispatch: isModuleEnabled("dispatch"),
         canShowSales: isAdmin && isModuleEnabled("sales"),
+        canManageUsers: isAdmin,
       }
       const locationsEndpoint =
         isPreviewMode && previewTenantId
           ? `/api/locations?tenantId=${encodeURIComponent(previewTenantId)}`
           : "/api/locations"
-      const requests = getOnboardingStatusRequests(locationsEndpoint, onboardingAccess)
+      const requests = getOnboardingStatusRequests(locationsEndpoint, onboardingAccess, tenantId)
 
       if (requests.length === 0) {
         setOnboardingStatus(INITIAL_ONBOARDING_STATUS)
@@ -1143,8 +1144,13 @@ export default function InventorySystem() {
             (Array.isArray(payload?.items) && payload.items.length > 0)
           return
         }
+        if (request.key === "team_member") {
+          // Done when at least one additional user exists beyond the admin themselves
+          nextStatus.team_member = Array.isArray(payload?.users) && payload.users.length > 1
+          return
+        }
 
-        nextStatus[request.key as Exclude<OnboardingStatusKey, "locations" | "account_codes" | "inventory">] = hasRecords(payload)
+        nextStatus[request.key as Exclude<OnboardingStatusKey, "locations" | "account_codes" | "inventory" | "team_member">] = hasRecords(payload)
       })
 
       setOnboardingStatus(nextStatus)
@@ -3525,6 +3531,7 @@ export default function InventorySystem() {
       canShowProcessing,
       canShowDispatch,
       canShowSales,
+      canManageUsers: isAdmin,
     }
     const onboardingStepConfigs = buildOnboardingSteps(onboardingStatus, smartOnboardingAccess)
     const onboardingCompletedCountLocal = onboardingStepConfigs.filter((step) => step.done).length
@@ -5066,6 +5073,7 @@ export default function InventorySystem() {
     canShowProcessing,
     canShowDispatch,
     canShowSales,
+    canManageUsers: isAdmin,
   }
   const onboardingStepConfigs = buildOnboardingSteps(onboardingStatus, onboardingAccess)
   const onboardingSteps: OnboardingStep[] = onboardingStepConfigs.map((step) => ({
@@ -5074,7 +5082,9 @@ export default function InventorySystem() {
     description: step.description,
     done: step.done,
     actionLabel: step.actionLabel,
-    onAction: () => handleTabChange(step.actionTab),
+    onAction: step.actionTab === "settings"
+      ? () => router.push(buildWorkspaceHref("/settings"))
+      : () => handleTabChange(step.actionTab),
   }))
   const onboardingCompletedCount = onboardingStepConfigs.filter((step) => step.done).length
   const onboardingTotalCount = onboardingStepConfigs.length
