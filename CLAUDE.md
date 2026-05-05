@@ -2,7 +2,7 @@
 
 ## Project Overview
 
-FarmFlow is a multi-tenant farm management SaaS for coffee/pepper estates.
+FarmFlow is a multi-tenant farm management SaaS for coffee/pepper/rubber estates.
 Live production URL: **thefarmflow.in**
 Primary market: India (INR billing via Razorpay planned)
 
@@ -12,8 +12,9 @@ Primary market: India (INR billing via Razorpay planned)
 - Deployed on Vercel
 - PostHog (EU) for analytics, routed via `/ingest/` rewrites
 - Sentry for error tracking
-- pnpm workspace
+- pnpm 10 workspace
 - Vitest for unit tests; Playwright for e2e
+- GitHub Actions CI runs on every push to main (lint → unit tests → build → public e2e)
 
 ---
 
@@ -27,6 +28,7 @@ Primary market: India (INR billing via Razorpay planned)
 
 ### Auth
 - Credentials-based (username + password). `lib/auth.ts` (client), `lib/server/auth.ts` (server)
+- Sessions are always 30 days (`sessionMode: "app"`) — no short web sessions
 - Email verification via one-time tokens (signup flow)
 - MFA supported (`scripts/43-mfa.sql`, `lib/server/mfa.ts`)
 - Roles: `owner`, `manager`, `user` — owner bypasses all module checks
@@ -41,20 +43,22 @@ Primary market: India (INR billing via Razorpay planned)
 
 Defined in `lib/modules.ts` and `lib/module-access.ts`.
 
-**24 modules** across three plan tiers:
+**27 modules** across three plan tiers:
 
-| Plan | Module count | Key additions |
-|------|-------------|---------------|
-| basic | 6 | inventory, transactions, accounts, balance-sheet, rainfall, weather |
-| core | 15 | + processing, curing, quality, dispatch, sales, other-sales, receivables, labor, picking |
-| enterprise | 24 | + all remaining modules |
+| Plan | Modules |
+|------|---------|
+| basic | inventory, transactions, accounts, balance-sheet, rainfall, weather, news, resources |
+| core | everything in basic + processing, dispatch, sales, other-sales, labor, picking, season, journal, pepper, rubber, ai-analysis |
+| enterprise | everything (adds quality, curing, receivables, billing, documents, compliance, market-pricing, plant-health) |
 
 **Key rules:**
 - Module IDs are strings (not enums) — extensible without migrations
-- Plan IDs are enums: `basic | core | enterprise`
-- Plans are a ceiling, not a hard rule — owners can override individual modules outside their plan via the admin console
-- `balance-sheet` module is always blocked for `role=user` system-wide (regardless of plan)
+- Plan IDs: `basic | core | enterprise`
+- Plans are a ceiling — owners can override individual modules via the admin console
+- `balance-sheet` always blocked for `role=user` system-wide
 - Hierarchical resolution: plan → tenant overrides (`tenant_modules`) → per-user exceptions (`user_modules`)
+- `defaultEnabled: true` modules activate automatically for new tenants within their plan
+- AI assistant (`/api/ai-assistant`) is open to all authenticated users regardless of modules
 
 ---
 
@@ -77,11 +81,27 @@ Key files:
 - `app/signup/` — public signup page
 - `app/verify-email/` — email verification
 - `app/api/onboarding/` — provisioning API
-- `lib/server/onboarding/` — provision-tenant.ts, signup.ts, setup.ts, email.ts, owner-alerts.ts
+- `lib/server/onboarding/provision-tenant.ts` — creates tenant, modules, location, **seeds 91 default activity codes**
 - `components/welcome-onboarding-page.tsx`, `components/onboarding-checklist.tsx`
+
+**Onboarding checklist steps** (in order):
+1. Add estate manager (creates a second user account)
+2. Add estate locations (if processing/dispatch/sales enabled)
+3. Set up activity codes (auto-completed — 91 codes pre-seeded)
+4. Add first inventory item
+5. Log first labor deployment
 
 **Owner alert:** owner gets an email the moment a new tenant self-provisions.
 `/signup` is a live public URL — anyone can self-register.
+
+---
+
+## Activity Codes (91 default codes)
+
+- On every new tenant provisioning, `ensureDefaultActivityCodes()` seeds 91 codes from HoneyFarm/Seshagiri estate structure
+- Codes are pre-seeded for any existing tenant with 0 codes via `scripts/87-default-activity-codes.sql`
+- Constraint changed from global unique `(code)` to per-tenant `(tenant_id, code)` in script 87
+- Users can edit, add, or delete codes at any time
 
 ---
 
@@ -93,15 +113,7 @@ Files (all untracked / not committed):
 - `lib/server/billing/razorpay.ts` + `checkout/`, `invoices/`, `subscription/`, `webhooks/`
 - `app/api/billing/checkout/`, `app/api/billing/subscription/`, `app/api/billing/webhooks/`
 - `lib/server/tenant-commercial-access.ts`
-- `app/legal/billing/` — billing policy page
 - `scripts/74-tenant-commercial-access.sql` — already applied
-- `scripts/75-product-intelligence-events.sql`
-
-Webhook events handled: `authenticated→trialing`, `active`, `pending→past_due`, `halted→unpaid`, `cancelled`, `completed→expired`
-
-Idempotent: `billing_webhook_events` deduplicates by `(provider, external_event_id)`
-
-Plan IDs from env vars: `RAZORPAY_PLAN_*_MONTHLY_ID`
 
 **Remaining billing work when ready:**
 1. Deploy untracked billing code + set Razorpay env vars in production
@@ -110,12 +122,14 @@ Plan IDs from env vars: `RAZORPAY_PLAN_*_MONTHLY_ID`
 
 ---
 
-## Product Intelligence (BUILT — NOT DEPLOYED)
+## Coffee Price Advisor
 
-- `lib/server/product-intelligence-events.ts`
-- `scripts/75-product-intelligence-events.sql`
-- `tenant_usage_events` table — tenant-scoped, first-party, no cross-tenant aggregation
-- Events: `self_serve_tenant_provisioned`, `guided_setup_completed`, `billing_checkout_created`, `billing_webhook_processed`, `permission_change`
+- `lib/server/coffee-prices.ts` — fetches ICO benchmark prices from Alpha Vantage COFFEE commodity endpoint
+- Prices cached 22 hours in `api_response_cache` table so one API call serves all tenants per day
+- `estimateSellableStock()` — queries `dry_parch + dry_cherry` from processing records minus sales kg for the fiscal year
+- `buildMarketTimingSection()` — formats market context for the weekly digest prompt
+- Weekly digest gains a "Market Timing" section: current price, 3-month signal, estimated unsold stock
+- Requires: `ALPHAVANTAGE_API_KEY` env var (free tier, 25 calls/day sufficient)
 
 ---
 
@@ -132,13 +146,16 @@ Plan IDs from env vars: `RAZORPAY_PLAN_*_MONTHLY_ID`
 | `lib/roles.ts` | Role definitions |
 | `lib/tenant.ts` | Tenant resolution helpers |
 | `lib/tenant-guidance.ts` | Context-aware hints for workspace |
-| `lib/server/billing/razorpay.ts` | Razorpay API wrapper |
-| `lib/server/onboarding/provision-tenant.ts` | Tenant provisioning logic |
+| `lib/server/coffee-prices.ts` | Coffee price advisor — Alpha Vantage fetch + analysis |
+| `lib/server/billing/razorpay.ts` | Razorpay API wrapper (undeployed) |
+| `lib/server/onboarding/provision-tenant.ts` | Tenant provisioning + activity code seeding |
 | `lib/server/auth.ts` | Server-side auth helpers |
 | `lib/server/db.ts` | Neon DB connection |
 | `lib/server/audit-log.ts` | Audit trail writes |
-| `lib/server/security-events.ts` | Security event logging |
-| `lib/server/whatsapp-alerts.ts` | WhatsApp alert dispatch |
+| `lib/server/audit-log.ts` | Audit trail writes |
+| `lib/server/response-cache.ts` | `withResponseCache` — DB-backed API response cache |
+| `lib/workspace-hero-content.ts` | `buildHeroContent()` — per-tab hero section data |
+| `lib/account-activity-suggestions.ts` | 91 default activity codes + PDF/CSV export |
 
 ---
 
@@ -155,6 +172,23 @@ Route: `app/admin/`
 
 ---
 
+## Component Architecture
+
+`components/inventory-system.tsx` is the main dashboard shell (~8,300 lines — ongoing decomposition).
+
+Extracted components so far:
+- `components/inventory-system/` — types, constants, utils, onboarding, data-tools-export
+- `lib/workspace-hero-content.ts` — `buildHeroContent()` utility
+- `components/inventory-dialogs.tsx` — 4 inventory dialogs (NewItem, EditTransaction, InventoryEdit, DeleteConfirm)
+- `components/morning-brief-card.tsx` — AI insights morning brief
+- `components/workspace-launcher.tsx` — workspace nav launcher tab
+- `components/feedback-widget.tsx` — floating feedback/support widget
+- `components/floating-ai-assistant.tsx` — floating AI chat assistant
+
+Decomposition target: keep all files under 1000 lines.
+
+---
+
 ## Testing
 
 ```bash
@@ -168,42 +202,51 @@ pnpm test:regression         # Dashboard regression
 
 E2e test files in `tests/e2e/`. Key helpers in `tests/e2e/helpers.ts`.
 
+CI runs automatically on every push to main via `.github/workflows/ci.yml`.
+
 ---
 
 ## Database Migrations
 
 Sequential SQL files in `scripts/`. Highest numbered = latest schema state.
-As of 2026-04-07: up to `76-expense-inventory-links-table.sql`.
+As of 2026-05-05: up to `87-default-activity-codes.sql`.
 
 Apply via Neon console or psql. No ORM — raw SQL only.
+
+Both prod (`DATABASE_URL`) and dev (`DATABASE_URL_DEV`) Neon instances must be migrated separately.
 
 ---
 
 ## Cron Jobs
 
 - Vercel cron: `GET /api/cron/orchestrator` runs daily at 02:00 UTC
+- Weekly digest agent runs Monday mornings; includes market timing section when `ALPHAVANTAGE_API_KEY` is set
 
 ---
 
 ## Deployment
 
 Deployed on Vercel. Config in `vercel.json`.
-Env vars needed for billing: `RAZORPAY_KEY_ID`, `RAZORPAY_KEY_SECRET`, `RAZORPAY_WEBHOOK_SECRET`, `RAZORPAY_PLAN_BASIC_MONTHLY_ID`, `RAZORPAY_PLAN_CORE_MONTHLY_ID`, `RAZORPAY_PLAN_ENTERPRISE_MONTHLY_ID`
 
----
-
-## Active Branch: `feature/self-serve-onboarding-plan`
-
-Current git status summary:
-- Modified (tracked): `app/api/labor-neon/route.ts`, `app/api/privacy/*`, `components/task-guide-card.tsx`, `components/workspace-hints.tsx`, `lib/tenant-guidance.ts`, `package.json`, `playwright.config.ts`, e2e test files
-- Untracked (not deployed): all billing files, commercial-access lib, product-intelligence-events, `scripts/74-tenant-commercial-access.sql`, `tests/commercial-access.test.ts`, `tests/razorpay-billing.test.ts`, `tests/e2e/workspace-hints.spec.ts`
+Key env vars:
+- `DATABASE_URL` — prod Neon connection
+- `DATABASE_URL_DEV` — dev Neon connection (used in non-production)
+- `ANTHROPIC_API_KEY` — Claude API (AI assistant, weekly digest, AI analysis)
+- `ALPHAVANTAGE_API_KEY` — coffee price data (weekly digest market timing)
+- `WEATHERAPI_API_KEY` — weather forecast in weekly digest
+- `THENEWSAPI_API_KEY` — coffee market news tab
+- `RESEND_API_KEY` — transactional email (digest, onboarding, alerts)
+- Razorpay vars (when billing is activated): `RAZORPAY_KEY_ID`, `RAZORPAY_KEY_SECRET`, `RAZORPAY_WEBHOOK_SECRET`, plan IDs
 
 ---
 
 ## Strategic Decisions (Do Not Second-Guess Without Asking)
 
-- **Billing enforcement deferred** — validating product with 3–5 real customers first; manual billing is acceptable
+- **Billing enforcement deferred** — validating product with real customers first; manual billing is acceptable
 - **Razorpay first** — India-first, INR-native; Stripe is for later when global traction exists
 - **Module IDs are strings** — deliberate, avoids enum migration churn
 - **Owner bypasses modules** — by design, owner should never be locked out
 - **Missing commercial record = legacy/always-active** — safe rollout path for existing tenants
+- **AI assistant open to all users** — it's a help/navigation tool, not a premium analytics feature
+- **Sessions always 30 days** — estate managers use personal devices; short sessions add friction with no security benefit
+- **Activity codes pre-seeded** — 91 codes from HoneyFarm/Seshagiri structure provisioned on signup; removes blank-slate friction
