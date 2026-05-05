@@ -41,7 +41,7 @@ async function fetchRawPrices(): Promise<CoffeePricePoint[]> {
   }
 
   const url = `https://www.alphavantage.co/query?function=COFFEE&interval=monthly&apikey=${apiKey}`
-  const res = await fetchWithTimeout(url, {}, 12_000)
+  const res = await fetchWithTimeout(url, { timeoutMs: 12_000 })
   if (!res.ok) return []
 
   const json = await res.json().catch(() => null)
@@ -55,7 +55,7 @@ async function fetchRawPrices(): Promise<CoffeePricePoint[]> {
 
 export async function getCoffeePriceAnalysis(): Promise<CoffeePriceAnalysis | null> {
   try {
-    const prices = await withResponseCache<CoffeePricePoint[]>(
+    const { data: prices } = await withResponseCache<CoffeePricePoint[]>(
       CACHE_KEY,
       CACHE_TTL,
       fetchRawPrices,
@@ -64,8 +64,8 @@ export async function getCoffeePriceAnalysis(): Promise<CoffeePriceAnalysis | nu
     if (!prices || prices.length < 3) return null
 
     const latest = prices[0]
-    const vals3m = prices.slice(0, 3).map((p) => p.usdPerLb)
-    const vals9m = prices.slice(0, 9).map((p) => p.usdPerLb)
+    const vals3m = prices.slice(0, 3).map((p: CoffeePricePoint) => p.usdPerLb)
+    const vals9m = prices.slice(0, 9).map((p: CoffeePricePoint) => p.usdPerLb)
 
     const high3m = Math.max(...vals3m)
     const low3m = Math.min(...vals3m)
@@ -73,7 +73,7 @@ export async function getCoffeePriceAnalysis(): Promise<CoffeePriceAnalysis | nu
     const low9m = Math.min(...vals9m)
 
     // Trend: compare latest vs 2 months ago (±2% threshold = stable)
-    const older = prices[2]?.usdPerLb ?? latest.usdPerLb
+    const older = (prices[2] as CoffeePricePoint | undefined)?.usdPerLb ?? latest.usdPerLb
     const trendPct = ((latest.usdPerLb - older) / older) * 100
     const trend = trendPct > 2 ? "rising" : trendPct < -2 ? "falling" : "stable"
 
