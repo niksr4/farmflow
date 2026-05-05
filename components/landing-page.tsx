@@ -410,7 +410,7 @@ export default function LandingPage() {
               An advisor, not just a ledger
             </h2>
             <p className="mx-auto mt-4 max-w-2xl text-base leading-7 text-stone-400">
-              Most farm software records what happened. FarmFlow tells you what it means — and what to do. It watches your numbers so you don't have to.
+              Most farm software records what happened. FarmFlow tells you what it means — and what to do. It watches your numbers so you don&apos;t have to.
             </p>
           </div>
           <div className="grid gap-4 sm:grid-cols-2">

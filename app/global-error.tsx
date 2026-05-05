@@ -1,6 +1,7 @@
 "use client"
 
 import { useEffect } from "react"
+import Link from "next/link"
 import * as Sentry from "@sentry/nextjs"
 
 export default function GlobalError({
@@ -43,12 +44,12 @@ export default function GlobalError({
               >
                 Reload app
               </button>
-              <a
+              <Link
                 href="/"
                 style={{ fontSize: "13px", color: "#78716c", textDecoration: "none" }}
               >
                 Go to homepage
-              </a>
+              </Link>
             </div>
 
             {error.digest && (

@@ -91,7 +91,7 @@ export default function FeedbackWidget({ currentTab }: Props) {
               </div>
               <div>
                 <p className="text-sm font-semibold text-neutral-800">Got it — thank you!</p>
-                <p className="mt-1 text-xs text-neutral-500">We'll look into it and reply if needed.</p>
+                <p className="mt-1 text-xs text-neutral-500">We&apos;ll look into it and reply if needed.</p>
               </div>
               <Button size="sm" variant="outline" className="mt-1" onClick={() => { reset(); setOpen(false) }}>
                 Close
