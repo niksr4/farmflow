@@ -326,7 +326,7 @@ export default function MarketPricingTab() {
         </CardHeader>
         <CardContent>
           <p className="mb-3 text-xs text-muted-foreground">
-            Set a threshold — you'll see a banner here whenever the latest recorded price crosses it.
+            Set a threshold — you&apos;ll see a banner here whenever the latest recorded price crosses it.
           </p>
           <div className="flex flex-wrap items-end gap-3">
             <div className="space-y-1">

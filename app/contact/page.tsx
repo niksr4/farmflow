@@ -130,7 +130,7 @@ export default function ContactPage() {
           <Card className="border border-white/10 bg-[#0a1714]/92">
             <CardHeader>
               <CardTitle className={`${display.className} text-xl text-stone-50`}>Send a message</CardTitle>
-              <CardDescription className="text-stone-300">Fill in the form and we'll get back to you.</CardDescription>
+              <CardDescription className="text-stone-300">Fill in the form and we&apos;ll get back to you.</CardDescription>
             </CardHeader>
             <CardContent>
               {submitted ? (
@@ -140,7 +140,7 @@ export default function ContactPage() {
                   </div>
                   <div>
                     <p className={`${display.className} text-lg text-stone-50`}>Message received</p>
-                    <p className="mt-1 text-sm text-stone-400">We'll reply to {form.email} within one business day.</p>
+                    <p className="mt-1 text-sm text-stone-400">We&apos;ll reply to {form.email} within one business day.</p>
                   </div>
                   <Button variant="ghost" className="border-white/10 bg-white/[0.04] text-stone-100 hover:bg-white/[0.08]" asChild>
                     <Link href="/">Back to home</Link>
