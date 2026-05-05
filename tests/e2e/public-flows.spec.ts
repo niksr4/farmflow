@@ -5,7 +5,7 @@ test("landing page shows concise header links and CTAs", async ({ page }) => {
 
   const desktopNavLinks = page.locator("header nav .lg\\:flex a")
   await expect(page.getByRole("link", { name: "Login" }).first()).toBeVisible()
-  await expect(page.getByRole("link", { name: "Create your workspace" }).first()).toBeVisible()
+  await expect(page.getByRole("link", { name: /try free/i }).first()).toBeVisible()
   await expect(page.getByRole("link", { name: "Plans" }).first()).toBeVisible()
   await expect(page.getByRole("link", { name: "Contact" }).first()).toBeVisible()
   await expect(page.getByRole("link", { name: "Trust" }).first()).toBeVisible()
