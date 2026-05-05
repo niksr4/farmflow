@@ -1,4 +1,4 @@
-export type OnboardingStatusKey = "locations" | "account_codes" | "inventory" | "labor" | "processing" | "dispatch" | "sales"
+export type OnboardingStatusKey = "locations" | "account_codes" | "inventory" | "labor" | "processing" | "dispatch" | "sales" | "team_member"
 
 export type OnboardingStatusSnapshot = Record<OnboardingStatusKey, boolean>
 
@@ -10,6 +10,7 @@ export const INITIAL_ONBOARDING_STATUS: OnboardingStatusSnapshot = {
   processing: false,
   dispatch: false,
   sales: false,
+  team_member: false,
 }
 
 export type OnboardingAccess = {
@@ -19,6 +20,7 @@ export type OnboardingAccess = {
   canShowProcessing: boolean
   canShowDispatch: boolean
   canShowSales: boolean
+  canManageUsers: boolean
 }
 
 export type OnboardingStatusRequest = {
@@ -68,6 +70,7 @@ const getActionLabel = (tab: string) => {
 export const getOnboardingStatusRequests = (
   locationsEndpoint: string,
   access: OnboardingAccess,
+  tenantId?: string | null,
 ): OnboardingStatusRequest[] => {
   const requests: OnboardingStatusRequest[] = []
 
@@ -92,6 +95,9 @@ export const getOnboardingStatusRequests = (
   if (access.canShowSales) {
     requests.push({ key: "sales", endpoint: "/api/sales?limit=1&offset=0" })
   }
+  if (access.canManageUsers && tenantId) {
+    requests.push({ key: "team_member", endpoint: `/api/admin/users?tenantId=${encodeURIComponent(tenantId)}` })
+  }
 
   return requests
 }
@@ -101,6 +107,17 @@ export const buildOnboardingSteps = (
   access: OnboardingAccess,
 ): OnboardingStepConfig[] => {
   const steps: OnboardingStepConfig[] = []
+
+  if (access.canManageUsers) {
+    steps.push({
+      key: "team_member",
+      title: "Add your estate manager",
+      description: "Create a login for the person who will log daily data — processing, labor, expenses. Each user gets their own secure account.",
+      done: status.team_member,
+      actionLabel: "Go to Settings",
+      actionTab: "settings",
+    })
+  }
 
   if (needsLocationSetup(access)) {
     const actionTab = getSetupActionTab(access)
