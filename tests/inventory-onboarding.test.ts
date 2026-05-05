@@ -16,6 +16,7 @@ describe("inventory onboarding helpers", () => {
       canShowProcessing: true,
       canShowDispatch: true,
       canShowSales: false,
+      canManageUsers: false,
     }
 
     const requests = getOnboardingStatusRequests("/api/locations", access)
@@ -37,6 +38,7 @@ describe("inventory onboarding helpers", () => {
       canShowProcessing: false,
       canShowDispatch: false,
       canShowSales: false,
+      canManageUsers: false,
     }
     const status = {
       ...INITIAL_ONBOARDING_STATUS,

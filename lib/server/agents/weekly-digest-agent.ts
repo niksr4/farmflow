@@ -12,6 +12,7 @@ import { buildAgronomyContext } from "@/lib/coffee-agronomy"
 import { upsertWeeklyMetrics, fetchHistoricalMetrics, buildHistoricalBaselineContext } from "@/lib/server/tenant-weekly-metrics"
 import { summarizeForecastWindow, deriveIrrigationAdvice, deriveWeatherAnomalySignal, WEATHER_FORECAST_DAYS } from "@/lib/weather-guidance"
 import { DEFAULT_WEATHER_QUERY } from "@/lib/weather-config"
+import { getCoffeePriceAnalysis, estimateSellableStock, buildMarketTimingSection } from "@/lib/server/coffee-prices"
 
 type TenantDigestRow = {
   tenantId: string
@@ -288,11 +289,13 @@ function buildWeatherContext(params: {
 async function generateWeeklyDigestText(tenant: TenantDigestRow): Promise<{ text: string; error?: undefined } | { text: null; error: string }> {
   try {
     const locationQuery = tenant.weatherLocationQuery ?? DEFAULT_WEATHER_QUERY
-    const [{ dataSummary, fiscalYearLabel }, lastWeek, rainfall, forecastJson] = await Promise.all([
+    const [{ dataSummary, fiscalYearLabel }, lastWeek, rainfall, forecastJson, coffeePrices, sellableStock] = await Promise.all([
       buildTenantAiDataSummary({ tenantId: tenant.tenantId, role: "owner" }),
       fetchLastWeekActivity(tenant.tenantId),
       fetchRecentRainfallSummary(tenant.tenantId),
       fetchWeatherForecast(locationQuery),
+      getCoffeePriceAnalysis(),
+      estimateSellableStock(tenant.tenantId),
     ])
 
     // Persist this week's metrics, then load historical baselines in parallel
@@ -335,6 +338,9 @@ async function generateWeeklyDigestText(tenant: TenantDigestRow): Promise<{ text
     const calendarContext = buildEstateCalendarContext()
     const agronomyContext = buildAgronomyContext()
     const weatherContext = buildWeatherContext({ locationQuery, forecastJson, rainfall })
+    const marketTimingSection = coffeePrices
+      ? buildMarketTimingSection(coffeePrices, sellableStock)
+      : null
 
     const client = getClaudeClient()
     const digestSystemPrompt = `You are FarmFlow Weekly Digest, an expert agronomist and estate operations analyst for ${cropContext} estates in Karnataka/Kerala, India. You combine deep South Indian coffee cultivation knowledge with sharp financial judgement — your analysis is what a seasoned Coorg estate manager and their accountant would both respect.
@@ -371,8 +377,9 @@ ${historySection}
 ${dataSummary}
 
 ${weatherContext}
+${marketTimingSection ? `\n${marketTimingSection}` : ""}
 
-Structure your digest in exactly four sections:
+Structure your digest in exactly ${marketTimingSection ? "five" : "four"} sections:
 
 1. Last Week at a Glance — 2-3 sentences summarising what actually happened last week using exact figures from the data above.
 
@@ -383,8 +390,11 @@ Structure your digest in exactly four sections:
    If data is insufficient for any signal, say "Insufficient data this week" rather than guessing.
 
 3. Field Signal — combine the recorded rainfall, the 3-day forecast, and the irrigation signal from the Weather & Irrigation Context above into a single, specific observation. State whether to irrigate or hold, cite the forecast figures, and flag any anomaly vs the recent trend. If no forecast data is available, use the logged rainfall and seasonal norms only.
+${marketTimingSection ? `
+4. Market Timing — using the Market Timing data above, give one specific, direct sentence on whether current prices favour selling now or holding. Reference the signal (near-high / mid-range / near-low), the estimated unsold stock if available, and what the estate owner should ask their buyer this week. Never give financial advice — frame as market context only.
 
-4. Three actions for this week — one financial, two agronomic. The agronomic actions must factor in the forecast: if rain is coming, defer irrigation and focus on fertiliser timing; if it is dry, prioritise irrigation. Be specific: name the activity, timing, quantity or threshold where relevant. If data shows a gap vs benchmark, call it out directly in the action.
+5. Three actions for this week` : `
+4. Three actions for this week`} — one financial, two agronomic. The agronomic actions must factor in the forecast: if rain is coming, defer irrigation and focus on fertiliser timing; if it is dry, prioritise irrigation. Be specific: name the activity, timing, quantity or threshold where relevant. If data shows a gap vs benchmark, call it out directly in the action.
 
 End with: "Powered by FarmFlow — your estate, always in view."`,
         },
