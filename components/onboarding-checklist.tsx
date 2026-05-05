@@ -416,6 +416,13 @@ export default function OnboardingChecklist({
                 </p>
               </div>
             )}
+
+            <p className="text-xs text-muted-foreground">
+              Starting fresh is fine — just enter today&apos;s data and go forward.{" "}
+              <Link href="/settings/import" className="underline underline-offset-2 hover:text-foreground">
+                Have existing spreadsheet records? Import them here.
+              </Link>
+            </p>
           </CardContent>
         </CollapsibleContent>
       </Collapsible>
