@@ -133,6 +133,8 @@ import {
   transactionDateToInputValue,
 } from "@/components/inventory-system/utils"
 import { downloadDataToolsTemplate, exportOpsCsv, getDataToolsSelection } from "@/components/inventory-system/data-tools-export"
+import RecordMovementPanel from "@/components/inventory-system/record-movement-panel"
+import InventoryDrilldownPanel from "@/components/inventory-system/inventory-drilldown-panel"
 import {
   INITIAL_ONBOARDING_STATUS,
   buildOnboardingSteps,
@@ -5103,463 +5105,44 @@ export default function InventorySystem() {
     onboardingTotalCount > 0 &&
     onboardingCompletedCount === onboardingTotalCount
   const recordMovementPanel = (
-    <div className="rounded-[28px] border border-emerald-100 bg-[linear-gradient(180deg,#ffffff_0%,#fbfffd_46%,#fafaf8_100%)] p-6 shadow-[0_24px_80px_-45px_rgba(14,93,82,0.35)]">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-        <div>
-          <h3 className="text-lg font-semibold text-neutral-900">Record inventory movement</h3>
-          <p className="text-xs text-neutral-500">
-            Restock, deplete, or correct stock without leaving the inventory workspace.
-          </p>
-        </div>
-        <Button type="button" variant="ghost" size="sm" onClick={() => setIsMovementDrawerOpen(false)}>
-          Close
-        </Button>
-      </div>
-      <div className="mt-4 flex flex-wrap gap-2 text-xs">
-        <Badge variant="outline" className="border-emerald-200 bg-white text-emerald-700">
-          Audit trail
-        </Badge>
-        <Badge variant="outline" className="border-emerald-200 bg-white text-emerald-700">
-          Backdated entries
-        </Badge>
-        <Badge variant="outline" className="border-emerald-200 bg-white text-emerald-700">
-          Estate linked
-        </Badge>
-      </div>
-      <div className="mt-4 rounded-2xl border border-emerald-100 bg-emerald-50/70 px-4 py-3 text-sm text-emerald-900">
-        Record restocks when stock arrives. Record depletions when stock is used, lost, or corrected.
-      </div>
-      <div className="mt-6 space-y-5">
-        {lastTransactionWriteFailure && (
-          <div
-            data-testid="transaction-write-failure-banner"
-            className="rounded-xl border border-rose-200 bg-rose-50/90 px-4 py-3 text-sm"
-          >
-            <p className="font-medium text-rose-900">Last transaction did not save</p>
-            <p className="mt-1 text-xs text-rose-800">
-              {lastTransactionWriteFailure.message}
-              {lastTransactionWriteFailure.occurredAt > 0
-                ? ` (at ${new Date(lastTransactionWriteFailure.occurredAt).toLocaleTimeString()})`
-                : ""}
-            </p>
-            <div className="mt-2 flex flex-wrap gap-2">
-              <Button size="sm" variant="outline" className="bg-white" onClick={handleRetryTransactionWrite}>
-                Retry last transaction
-              </Button>
-              <Button size="sm" variant="ghost" className="text-rose-700" onClick={() => setLastTransactionWriteFailure(null)}>
-                Dismiss
-              </Button>
-            </div>
-          </div>
-        )}
-        <div className="space-y-2">
-          <div className="flex items-center gap-2">
-            <label className="text-sm font-medium text-neutral-700">Item / crop</label>
-            <TooltipProvider>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <button
-                    type="button"
-                    aria-label="Item type help"
-                    className="inline-flex h-5 w-5 items-center justify-center rounded-full border border-black/10 text-neutral-500 hover:text-neutral-700"
-                  >
-                    <Info className="h-3 w-3" />
-                  </button>
-                </TooltipTrigger>
-                <TooltipContent>Select the crop or inventory item being adjusted.</TooltipContent>
-              </Tooltip>
-            </TooltipProvider>
-          </div>
-          <Select
-            disabled={!hasMovementItemTypes}
-            value={newTransaction?.item_type || ""}
-            onValueChange={(value) => {
-              handleFieldChange("item_type", value)
-              handleFieldChange("unit", resolveInventoryUnitForItemType(value))
-            }}
-          >
-            <SelectTrigger
-              data-testid="movement-item-type-select"
-              className="w-full h-11 rounded-xl border-black/5 bg-white focus-visible:ring-2 focus-visible:ring-emerald-200"
-            >
-              <SelectValue placeholder={hasMovementItemTypes ? "Select item type" : "No items yet"} />
-            </SelectTrigger>
-            <SelectContent className="z-[70] max-h-[40vh] overflow-y-auto">
-              {hasMovementItemTypes ? (
-                allItemTypesForDropdown.map((type) => (
-                  <SelectItem key={type} value={type}>
-                    {type}
-                  </SelectItem>
-                ))
-              ) : (
-                <SelectItem value="__no_items" disabled>
-                  Add an inventory item first
-                </SelectItem>
-              )}
-            </SelectContent>
-          </Select>
-          {!hasMovementItemTypes && (
-            <p className="text-xs text-neutral-500">
-              No inventory item types yet. Add an inventory item or restock first.
-            </p>
-          )}
-          {newTransaction?.item_type && (
-            <p className="text-xs text-neutral-500">
-              Current inventory unit: <span className="font-medium text-neutral-700">{selectedMovementUnit}</span>
-            </p>
-          )}
-        </div>
-
-        <div className="space-y-2">
-          <div className="flex items-center gap-2">
-            <label className="text-sm font-medium text-neutral-700">Estate block</label>
-            <TooltipProvider>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <button
-                    type="button"
-                    aria-label="Location help"
-                    className="inline-flex h-5 w-5 items-center justify-center rounded-full border border-black/10 text-neutral-500 hover:text-neutral-700"
-                  >
-                    <Info className="h-3 w-3" />
-                  </button>
-                </TooltipTrigger>
-                <TooltipContent>Tag by estate block for traceability and yield accuracy.</TooltipContent>
-              </Tooltip>
-            </TooltipProvider>
-          </div>
-          <Select value={transactionLocationId} onValueChange={setTransactionLocationId}>
-            <SelectTrigger className="w-full h-11 rounded-xl border-black/5 bg-white focus-visible:ring-2 focus-visible:ring-emerald-200">
-              <SelectValue placeholder={locations.length ? "Select location" : "No locations yet"} />
-            </SelectTrigger>
-            <SelectContent className="z-[70] max-h-[40vh] overflow-y-auto">
-              <SelectItem value={LOCATION_UNASSIGNED}>{UNASSIGNED_LABEL}</SelectItem>
-              {locations.map((loc) => (
-                <SelectItem key={loc.id} value={loc.id}>
-                  {loc.name || loc.code || "Unnamed location"}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          <p className="text-xs text-neutral-500">
-            Tag transactions to a location for accurate inventory usage.
-          </p>
-        </div>
-
-        <div className="grid gap-5 sm:grid-cols-[minmax(0,220px)_minmax(0,1fr)]">
-          <div className="space-y-2">
-            <div className="flex items-center gap-2">
-              <label className="text-sm font-medium text-neutral-700">Movement Date</label>
-              <TooltipProvider>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <button
-                      type="button"
-                      aria-label="Movement date help"
-                      className="inline-flex h-5 w-5 items-center justify-center rounded-full border border-black/10 text-neutral-500 hover:text-neutral-700"
-                    >
-                      <Info className="h-3 w-3" />
-                    </button>
-                  </TooltipTrigger>
-                  <TooltipContent>Choose when the movement actually happened, including backfilled entries.</TooltipContent>
-                </Tooltip>
-              </TooltipProvider>
-            </div>
-            <Input
-              type="date"
-              value={transactionDateToInputValue(newTransaction?.transaction_date)}
-              max={getTodayDateInputValue()}
-              onChange={(event) => handleFieldChange("transaction_date", buildTransactionDateFromInput(event.target.value))}
-              className="h-11 rounded-xl border-black/5 bg-white focus-visible:ring-2 focus-visible:ring-emerald-200"
-            />
-            <p className="text-xs text-neutral-500">Defaults to today, but you can record movements from earlier dates.</p>
-          </div>
-
-          <div className="space-y-2">
-            <div className="flex items-center gap-2">
-              <label className="text-sm font-medium text-neutral-700">Quantity</label>
-              <TooltipProvider>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <button
-                      type="button"
-                      aria-label="Quantity help"
-                      className="inline-flex h-5 w-5 items-center justify-center rounded-full border border-black/10 text-neutral-500 hover:text-neutral-700"
-                    >
-                      <Info className="h-3 w-3" />
-                    </button>
-                  </TooltipTrigger>
-                  <TooltipContent>Enter the exact kg or unit amount for this movement.</TooltipContent>
-                </Tooltip>
-              </TooltipProvider>
-            </div>
-            <div className="relative">
-              <Input
-                data-testid="movement-quantity-input"
-                type="number"
-                min={0}
-                step="0.01"
-                placeholder="Enter quantity"
-                value={newTransaction?.quantity ?? ""}
-                onKeyDown={preventNegativeKey}
-                onWheel={preventNumberScrollChange}
-                onChange={(e) => {
-                  const nextValue = coerceNonNegativeNumber(e.target.value)
-                  if (nextValue === null) return
-                  handleFieldChange("quantity", nextValue)
-                }}
-                className="h-11 rounded-xl border-black/5 bg-white pr-12 focus-visible:ring-2 focus-visible:ring-emerald-200"
-              />
-              <div className="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none text-neutral-500 text-sm">
-                {selectedMovementUnit}
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <div className="space-y-2">
-          <div className="flex items-center gap-2">
-            <label className="text-sm font-medium text-neutral-700">Transaction Type</label>
-            <TooltipProvider>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <button
-                    type="button"
-                    aria-label="Transaction type help"
-                    className="inline-flex h-5 w-5 items-center justify-center rounded-full border border-black/10 text-neutral-500 hover:text-neutral-700"
-                  >
-                    <Info className="h-3 w-3" />
-                  </button>
-                </TooltipTrigger>
-                <TooltipContent>Restocking adds stock when goods arrive. Depleting records stock used, issued, lost, or corrected.</TooltipContent>
-              </Tooltip>
-            </TooltipProvider>
-          </div>
-          <RadioGroup
-            value={newTransaction?.transaction_type === "restock" ? "Restocking" : "Depleting"}
-            onValueChange={(value: "Depleting" | "Restocking") =>
-              handleFieldChange("transaction_type", value === "Restocking" ? "restock" : "deplete")
-            }
-            className="grid gap-3 sm:grid-cols-2"
-          >
-            <label
-              htmlFor="restocking"
-              className={cn(
-                "flex cursor-pointer items-start gap-3 rounded-2xl border p-4 transition-colors",
-                newTransaction?.transaction_type === "restock"
-                  ? "border-emerald-200 bg-emerald-50/80"
-                  : "border-black/5 bg-white hover:border-emerald-200 hover:bg-neutral-50",
-              )}
-            >
-              <RadioGroupItem value="Restocking" id="restocking" className="mt-1 h-4 w-4" />
-              <div className="space-y-1">
-                <p className="text-sm font-semibold text-neutral-900">Restocking</p>
-                <p className="text-xs leading-relaxed text-neutral-500">Goods received, replenishment, or transfers in.</p>
-              </div>
-            </label>
-            <label
-              htmlFor="depleting"
-              className={cn(
-                "flex cursor-pointer items-start gap-3 rounded-2xl border p-4 transition-colors",
-                newTransaction?.transaction_type !== "restock"
-                  ? "border-amber-200 bg-amber-50/80"
-                  : "border-black/5 bg-white hover:border-amber-200 hover:bg-neutral-50",
-              )}
-            >
-              <RadioGroupItem value="Depleting" id="depleting" className="mt-1 h-4 w-4" />
-              <div className="space-y-1">
-                <p className="text-sm font-semibold text-neutral-900">Depleting</p>
-                <p className="text-xs leading-relaxed text-neutral-500">Used, issued, lost, or corrected stock.</p>
-              </div>
-            </label>
-          </RadioGroup>
-          {newTransaction?.transaction_type !== "restock" && (
-            <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
-              {canShowAccounts ? (
-                <>
-                  Use this when you only need stock tracking. If the same usage should also appear in Accounts and P&amp;L, record it in{" "}
-                  <strong>Accounts → Other Expenses</strong> instead.
-                </>
-              ) : (
-                "Use this for regular stock usage, losses, or corrections."
-              )}
-            </p>
-          )}
-        </div>
-
-        <div className="space-y-2">
-          <div className="flex items-center gap-2">
-            <label className="text-sm font-medium text-neutral-700">Notes (Optional)</label>
-            <TooltipProvider>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <button
-                    type="button"
-                    aria-label="Notes help"
-                    className="inline-flex h-5 w-5 items-center justify-center rounded-full border border-black/10 text-neutral-500 hover:text-neutral-700"
-                  >
-                    <Info className="h-3 w-3" />
-                  </button>
-                </TooltipTrigger>
-                <TooltipContent>Use notes for processing stage, buyer references, or extra context.</TooltipContent>
-              </Tooltip>
-            </TooltipProvider>
-          </div>
-          <Textarea
-            placeholder="Add any additional details"
-            value={newTransaction?.notes ?? ""}
-            onChange={(e) => handleFieldChange("notes", e.target.value)}
-            className="min-h-[110px] rounded-xl border-black/5 bg-white focus-visible:ring-2 focus-visible:ring-emerald-200"
-          />
-        </div>
-
-        <Button
-          type="button"
-          data-testid="movement-record-transaction"
-          onClick={handleRecordTransaction}
-          className="w-full h-11 text-base bg-emerald-700 hover:bg-emerald-800 text-white shadow-sm"
-        >
-          <Check className="mr-2 h-5 w-5" /> Record movement
-        </Button>
-      </div>
-    </div>
+    <RecordMovementPanel
+      newTransaction={newTransaction}
+      transactionLocationId={transactionLocationId}
+      lastTransactionWriteFailure={lastTransactionWriteFailure}
+      hasMovementItemTypes={hasMovementItemTypes}
+      allItemTypesForDropdown={allItemTypesForDropdown}
+      selectedMovementUnit={selectedMovementUnit}
+      locations={locations}
+      canShowAccounts={canShowAccounts}
+      onClose={() => setIsMovementDrawerOpen(false)}
+      onFieldChange={handleFieldChange}
+      onLocationChange={setTransactionLocationId}
+      onRecordTransaction={handleRecordTransaction}
+      onRetryTransaction={handleRetryTransactionWrite}
+      onDismissFailure={() => setLastTransactionWriteFailure(null)}
+      transactionDateToInputValue={transactionDateToInputValue}
+      getTodayDateInputValue={getTodayDateInputValue}
+      buildTransactionDateFromInput={buildTransactionDateFromInput}
+      resolveInventoryUnitForItemType={resolveInventoryUnitForItemType}
+      coerceNonNegativeNumber={coerceNonNegativeNumber}
+      preventNegativeKey={preventNegativeKey}
+      preventNumberScrollChange={preventNumberScrollChange}
+    />
   )
-
   const inventoryDrilldownPanel = (
-    <div className="rounded-[28px] border border-emerald-100 bg-[linear-gradient(180deg,#ffffff_0%,#fbfffd_48%,#fafaf8_100%)] p-6 shadow-[0_24px_80px_-45px_rgba(14,93,82,0.3)]">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-        <div>
-          <h3 className="text-lg font-semibold text-neutral-900">Item timeline</h3>
-          <p className="text-xs text-neutral-500">On-hand stock, value snapshot, and recent movements for the selected item.</p>
-        </div>
-        <Button variant="ghost" size="sm" onClick={() => setIsInventoryDrilldownOpen(false)}>
-          Close
-        </Button>
-      </div>
-      <div className="mt-5 space-y-4">
-        {!selectedInventoryDrilldownItem ? (
-          <div className="rounded-xl border border-dashed border-black/10 bg-neutral-50/70 px-4 py-5 text-sm text-neutral-600">
-            Select an inventory item to open its recent transaction timeline.
-          </div>
-        ) : (
-          <>
-            <div className="rounded-2xl border border-emerald-100 bg-emerald-50/60 p-4">
-              <div className="flex items-start justify-between gap-3">
-                <div>
-                  <p className="text-sm font-semibold text-neutral-900">{selectedInventoryDrilldownItem.name}</p>
-                  <p className="text-xs text-neutral-500">
-                    {formatNumber(Number(selectedInventoryDrilldownItem.quantity) || 0)}{" "}
-                    {selectedInventoryDrilldownItem.unit || "unit"} on hand
-                  </p>
-                </div>
-                <Badge variant="outline" className="text-xs uppercase tracking-[0.1em]">
-                  {selectedLocationLabel}
-                </Badge>
-              </div>
-              <div className="mt-3 flex flex-wrap gap-2 text-xs">
-                <span className="rounded-full border border-white/80 bg-white px-3 py-1.5 text-neutral-700">
-                  Avg cost {formatCurrency(selectedInventoryDrilldownValue?.avgPrice || 0)}
-                </span>
-                <span className="rounded-full border border-white/80 bg-white px-3 py-1.5 text-amber-700">
-                  Value {formatCurrency(selectedInventoryDrilldownValue?.totalValue || 0)}
-                </span>
-              </div>
-            </div>
-
-            <div className="space-y-2">
-              <div className="flex items-center justify-between">
-                <p className="text-xs uppercase tracking-[0.18em] text-neutral-500">
-                  {drilldownShowAll ? `All Transactions (${itemDrilldownTransactions.length})` : "Recent Transactions"}
-                </p>
-                {isLoadingItemDrilldown ? (
-                  <span className="text-xs text-neutral-400">Loading…</span>
-                ) : drilldownShowAll ? (
-                  <Button variant="link" size="sm" className="h-auto p-0 text-emerald-700" onClick={() => setDrilldownShowAll(false)}>
-                    Show less
-                  </Button>
-                ) : itemDrilldownTransactions.length > 6 ? (
-                  <Button variant="link" size="sm" className="h-auto p-0 text-emerald-700" onClick={handleOpenItemDrilldownHistory}>
-                    View all {itemDrilldownTransactions.length}
-                  </Button>
-                ) : null}
-              </div>
-              {isLoadingItemDrilldown ? (
-                <div className="rounded-xl border border-dashed border-black/10 bg-white px-3 py-4 text-xs text-neutral-400">
-                  Loading transaction history…
-                </div>
-              ) : recentDrilldownTransactions.length === 0 ? (
-                <div className="rounded-xl border border-dashed border-black/10 bg-white px-3 py-4 text-xs text-neutral-500">
-                  No transactions recorded for this item yet.
-                </div>
-              ) : (
-                <div className="space-y-2">
-                  {recentDrilldownTransactions.map((transaction) => {
-                    const txType = String(transaction.transaction_type || "").toLowerCase()
-                    const isDepleting = txType.includes("deplet")
-                    const isExpenseUsage = transaction.source_type === "expense"
-                    const movementTone = isExpenseUsage
-                      ? "border-amber-200 bg-amber-50/70"
-                      : isDepleting
-                        ? "border-rose-200 bg-rose-50/70"
-                        : "border-emerald-200 bg-emerald-50/70"
-                    return (
-                      <div
-                        key={`drilldown-${transaction.id ?? `${transaction.item_type}-${transaction.transaction_date}`}`}
-                        className={cn("rounded-2xl border px-3 py-3 shadow-sm", movementTone)}
-                      >
-                        <div className="flex items-start justify-between gap-2">
-                          <div>
-                            <p className="text-xs text-neutral-500">{formatDate(transaction.transaction_date)}</p>
-                            <p className="mt-1 text-sm font-semibold text-neutral-900">
-                              {isExpenseUsage
-                                ? transaction.source_label || "Expense usage"
-                                : isDepleting
-                                  ? "Stock out"
-                                  : "Restock"}
-                            </p>
-                          </div>
-                          <Badge
-                            variant="outline"
-                            className={
-                              isExpenseUsage
-                                ? "border-amber-200 bg-amber-50 text-amber-700"
-                                : isDepleting
-                                  ? "border-red-200 bg-red-50 text-red-700"
-                              : "border-emerald-200 bg-emerald-50 text-emerald-700"
-                            }
-                          >
-                            {isExpenseUsage ? transaction.source_label || "Expense Usage" : isDepleting ? "Stock Out" : "Restock"}
-                          </Badge>
-                        </div>
-                        <div className="mt-3 flex flex-wrap items-end justify-between gap-3">
-                          <div>
-                            <p className="text-lg font-semibold text-neutral-900 tabular-nums">
-                              {isDepleting ? "-" : "+"}
-                              {formatNumber(Number(transaction.quantity) || 0)}{" "}
-                              {transaction.unit || selectedInventoryDrilldownItem.unit || "unit"}
-                            </p>
-                            <p className="text-xs text-neutral-500">
-                              {resolveLocationLabel(transaction.location_id, transaction.location_name || transaction.location_code)}
-                            </p>
-                          </div>
-                          <p className="text-xs text-neutral-500">
-                            {isExpenseUsage
-                              ? "Recorded from Accounts expense"
-                              : isDepleting
-                                ? "Leaves the stock balance"
-                                : "Adds to the stock balance"}
-                          </p>
-                        </div>
-                      </div>
-                    )
-                  })}
-                </div>
-              )}
-            </div>
-          </>
-        )}
-      </div>
-    </div>
+    <InventoryDrilldownPanel
+      selectedItem={selectedInventoryDrilldownItem}
+      selectedLocationLabel={selectedLocationLabel}
+      selectedValue={selectedInventoryDrilldownValue}
+      transactions={itemDrilldownTransactions}
+      recentTransactions={recentDrilldownTransactions}
+      isLoading={isLoadingItemDrilldown}
+      showAll={drilldownShowAll}
+      onClose={() => setIsInventoryDrilldownOpen(false)}
+      onShowAll={handleOpenItemDrilldownHistory}
+      onHideAll={() => setDrilldownShowAll(false)}
+      resolveLocationLabel={resolveLocationLabel}
+    />
   )
 
   const mobileBottomSpacingClass = isMobile
