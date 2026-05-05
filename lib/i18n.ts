@@ -76,7 +76,7 @@ const EN_TRANSLATIONS: TranslationTree = {
       password: "Password",
       passwordHelp: "Credentials are unique to each estate tenant.",
       capsLock: "Caps Lock is on. Passwords are case-sensitive.",
-      sessionModeApp: "App mode: stay signed in is enabled.",
+      sessionModeApp: "You'll stay signed in for 30 days.",
       sessionModeWeb: "Web mode: session expires sooner for safety.",
       needAccess: "Need access?",
       createWorkspace: "Create your workspace",

@@ -23,17 +23,10 @@ export default function LoginPage() {
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [showPassword, setShowPassword] = useState(false)
   const [capsLockOn, setCapsLockOn] = useState(false)
-  const [sessionMode, setSessionMode] = useState<"app" | "web">("web")
+  const [sessionMode] = useState<"app" | "web">("app")
   const { login } = useAuth()
   const { t } = useLocale()
   const router = useRouter()
-
-  useEffect(() => {
-    if (typeof window === "undefined") return
-    const isIosStandalone = Boolean((window.navigator as Navigator & { standalone?: boolean }).standalone)
-    const isStandalone = isIosStandalone || window.matchMedia("(display-mode: standalone)").matches
-    setSessionMode(isStandalone ? "app" : "web")
-  }, [])
 
   const ensurePrivacyNoticeAccepted = async (role: string, tenantId: string) => {
     if (!tenantId || role === "owner") {
@@ -284,7 +277,7 @@ export default function LoginPage() {
               {isSubmitting ? "Signing in..." : t("public.login.title")}
             </Button>
             <p className="text-[11px] text-stone-400">
-              {sessionMode === "app" ? t("public.login.sessionModeApp") : t("public.login.sessionModeWeb")}
+              {t("public.login.sessionModeApp")}
             </p>
           </form>
           <p className="mt-4 text-xs text-stone-400">
