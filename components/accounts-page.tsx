@@ -959,7 +959,7 @@ export default function AccountsPage({
       tooltip: "Total wages, advances, and labor costs recorded for the selected fiscal year and active filters.",
     },
     {
-      label: "Other Expenses",
+      label: "Expenses",
       value: summaryLoading ? "Loading..." : formatCurrency(filteredOtherExpensesTotal),
       detail: `${formatNumber(consumablesCount || consumableDeployments.length, 0)} expense records in range`,
       tooltip: "Non-labor operational expenses: consumables, equipment, repairs, and other coded activities.",
