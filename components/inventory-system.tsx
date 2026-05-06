@@ -135,6 +135,9 @@ import {
 import { downloadDataToolsTemplate, exportOpsCsv, getDataToolsSelection } from "@/components/inventory-system/data-tools-export"
 import RecordMovementPanel from "@/components/inventory-system/record-movement-panel"
 import InventoryDrilldownPanel from "@/components/inventory-system/inventory-drilldown-panel"
+import SeasonProgressStrip from "@/components/inventory-system/season-progress-strip"
+import SeasonCompareCard from "@/components/inventory-system/season-compare-card"
+import PriorityAlertsCard from "@/components/inventory-system/priority-alerts-card"
 import {
   INITIAL_ONBOARDING_STATUS,
   buildOnboardingSteps,
@@ -6182,40 +6185,11 @@ export default function InventorySystem() {
           </TabsContent>
 
           <TabsContent value="home" className="space-y-6" forceMount={isTabLoaded("home") ? true : undefined}>
-            {/* Season Progress Strip */}
-            <div className="rounded-2xl border border-black/5 bg-white/90 px-5 py-3.5 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-              <div className="flex items-center gap-2.5">
-                <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-emerald-50">
-                  <svg className="h-3.5 w-3.5 text-emerald-700" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                  </svg>
-                </div>
-                <div>
-                  <span className="text-xs font-semibold text-neutral-800">{currentFiscalYear.label}</span>
-                  <span className="ml-2 text-xs text-neutral-400">Harvest Season</span>
-                </div>
-              </div>
-              <div className="flex flex-1 items-center gap-3 sm:max-w-xs">
-                <div className="relative flex-1 h-1.5 rounded-full bg-stone-100 overflow-hidden">
-                  <div
-                    className="absolute inset-y-0 left-0 rounded-full bg-emerald-500 transition-all"
-                    style={{ width: `${seasonProgress.pct}%` }}
-                  />
-                </div>
-                <span className="shrink-0 text-xs tabular-nums text-neutral-500">
-                  {seasonProgress.pct}% · {seasonProgress.daysRemaining}d left
-                </span>
-              </div>
-              {activityStreak >= 2 && (
-                <div className="flex items-center gap-1.5 rounded-xl border border-amber-200 bg-amber-50 px-3 py-1.5 shrink-0">
-                  <span className="text-base leading-none">🔥</span>
-                  <div>
-                    <p className="text-xs font-bold text-amber-800">{activityStreak}-day streak</p>
-                    <p className="text-[10px] text-amber-600">Keep logging daily</p>
-                  </div>
-                </div>
-              )}
-            </div>
+            <SeasonProgressStrip
+              fiscalYear={currentFiscalYear}
+              progress={seasonProgress}
+              activityStreak={activityStreak}
+            />
 
             {/* ── Morning Brief ── */}
             {canShowIntelligence && (
@@ -6923,36 +6897,12 @@ export default function InventorySystem() {
             {/* Today's Brief — moved lower, kept for spacing; actual render is at top of home */}
 
             {canShowAiAnalysis && !isScopedUser && (seasonCompareLoading || seasonCompareNarrative || seasonCompareError) && (
-              <Card className="border-black/5 bg-white/90">
-                <CardHeader className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                  <div>
-                    <CardTitle>Season Comparison</CardTitle>
-                    <CardDescription>
-                      {seasonCompareFYLabels
-                        ? `${seasonCompareFYLabels.prev} vs ${seasonCompareFYLabels.curr} — year-on-year view`
-                        : "Year-on-year season overview"}
-                    </CardDescription>
-                  </div>
-                  <Badge variant="outline" className="w-fit border-violet-200 bg-violet-50 text-violet-700">
-                    AI
-                  </Badge>
-                </CardHeader>
-                <CardContent>
-                  {seasonCompareLoading ? (
-                    <div className="flex items-center gap-2 text-sm text-neutral-500">
-                      <Loader2 className="h-4 w-4 animate-spin" />
-                      Comparing seasons...
-                    </div>
-                  ) : seasonCompareError ? (
-                    <div className="rounded-xl border border-amber-200 bg-amber-50/70 p-3 text-sm text-amber-900">
-                      <p className="font-medium">Season comparison temporarily unavailable.</p>
-                      <p className="mt-1 text-muted-foreground">{seasonCompareError}</p>
-                    </div>
-                  ) : seasonCompareNarrative ? (
-                    <p className="text-sm leading-relaxed text-neutral-700">{seasonCompareNarrative}</p>
-                  ) : null}
-                </CardContent>
-              </Card>
+              <SeasonCompareCard
+                loading={seasonCompareLoading}
+                narrative={seasonCompareNarrative}
+                error={seasonCompareError}
+                fyLabels={seasonCompareFYLabels}
+              />
             )}
 
             {canShowAiAnalysis && !isScopedUser && (
@@ -7014,65 +6964,18 @@ export default function InventorySystem() {
               </Card>
             )}
 
-            <Card className="border-black/5 bg-white/90">
-              <CardHeader className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                <div>
-                  <CardTitle>Priority Alerts</CardTitle>
-                  <CardDescription>High-signal issues to clear before day-end close.</CardDescription>
-                </div>
-                {canShowSeason && (
-                  <Button size="sm" variant="outline" onClick={() => openDrilldown({ tab: "season" })} className="bg-white">
-                    Open Season Alerts
-                  </Button>
-                )}
-              </CardHeader>
-              <CardContent>
-                {exceptionsLoading ? (
-                  <div className="flex items-center gap-2 text-sm text-neutral-500">
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                    Loading alerts...
-                  </div>
-                ) : exceptionsError ? (
-                  <p className="text-sm text-rose-600">{exceptionsError}</p>
-                ) : exceptionsSummary.count === 0 ? (
-                  <p className="text-sm text-emerald-700">No active alerts right now.</p>
-                ) : (
-                  <div className="grid gap-3 md:grid-cols-3">
-                    {(exceptionsSummary.alerts || []).slice(0, 3).map((alert, index) => {
-                      const summaryLine = [alert.location, alert.coffeeType].filter(Boolean).join(" • ")
-                      const cardTone =
-                        alert.severity === "high" || alert.severity === "critical"
-                          ? "border-rose-100 bg-rose-50/70"
-                          : "border-amber-100 bg-amber-50/70"
-                      const textTone =
-                        alert.severity === "high" || alert.severity === "critical" ? "text-rose-800" : "text-amber-900"
-                      return (
-                        <button
-                          key={`${alert.id}-${index}`}
-                          type="button"
-                          data-testid={`home-priority-alert-${index + 1}`}
-                          className={cn("rounded-xl border p-3 text-left transition-colors hover:bg-white", cardTone)}
-                          onClick={() =>
-                            openDrilldown({
-                              tab: resolveExceptionDrilldownTab(alert.metric),
-                              seasonAlertId: alert.id,
-                              seasonMetric: alert.metric || null,
-                            })
-                          }
-                        >
-                          <p className={cn("text-xs uppercase tracking-[0.16em]", alert.severity === "high" || alert.severity === "critical" ? "text-rose-700" : "text-amber-700")}>
-                            Alert {index + 1}
-                          </p>
-                          <p className={cn("mt-1 text-sm font-medium", textTone)}>{alert.title}</p>
-                          {summaryLine ? <p className="mt-1 text-xs text-muted-foreground">{summaryLine}</p> : null}
-                          <p className="mt-2 text-xs text-emerald-700">Investigate →</p>
-                        </button>
-                      )
-                    })}
-                  </div>
-                )}
-              </CardContent>
-            </Card>
+            <PriorityAlertsCard
+              loading={exceptionsLoading}
+              error={exceptionsError}
+              summary={exceptionsSummary}
+              canShowSeason={canShowSeason}
+              onOpenSeason={() => openDrilldown({ tab: "season" })}
+              onOpenAlert={(alert) => openDrilldown({
+                tab: resolveExceptionDrilldownTab(alert.metric),
+                seasonAlertId: alert.id,
+                seasonMetric: alert.metric || null,
+              })}
+            />
           </TabsContent>
 
           {canShowInventoryWorkspace && (
