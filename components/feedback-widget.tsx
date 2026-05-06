@@ -1,12 +1,15 @@
 "use client"
 
 import { useCallback, useEffect, useState } from "react"
+import { usePathname } from "next/navigation"
 import { MessageCircle, X, Bug, HelpCircle, Lightbulb, MessageSquare, CheckCircle2, BookOpen, Mail } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Textarea } from "@/components/ui/textarea"
 import { cn } from "@/lib/utils"
 import Link from "next/link"
 import { DEFAULT_SUPPORT_EMAIL } from "@/lib/email-addresses"
+
+const APP_PATH_PREFIXES = ["/dashboard", "/settings", "/welcome", "/admin"]
 
 type FeedbackType = "bug" | "question" | "suggestion" | "other"
 
@@ -20,6 +23,8 @@ const TYPES: Array<{ value: FeedbackType; label: string; icon: React.ElementType
 type Props = { currentTab?: string }
 
 export default function FeedbackWidget({ currentTab }: Props) {
+  const pathname = usePathname()
+  const isAppPage = APP_PATH_PREFIXES.some((prefix) => pathname.startsWith(prefix))
   const [open, setOpen] = useState(false)
   const [type, setType] = useState<FeedbackType>("question")
   const [message, setMessage] = useState("")
@@ -65,6 +70,8 @@ export default function FeedbackWidget({ currentTab }: Props) {
       setSubmitting(false)
     }
   }
+
+  if (!isAppPage) return null
 
   return (
     <>
