@@ -2874,7 +2874,7 @@ export default function InventorySystem() {
               value: "accounts",
               label: "Accounts",
               icon: Users,
-              subtabs: ["Labor Deployments", "Other Expenses", "Attendance", "Account Activities"],
+              subtabs: ["Daily Labor", "Expenses", "Attendance", "Cost Codes"],
             }
           : null,
         canShowBalanceSheet ? { value: "balance-sheet", label: "Live Balance", icon: Scale } : null,
@@ -3219,13 +3219,13 @@ export default function InventorySystem() {
         pepper: { label: "Pepper", icon: Leaf },
         rubber: { label: "Rubber", icon: Leaf },
         accounts: { label: "Accounts", icon: Users },
-        "balance-sheet": { label: "Live Balance", icon: Scale },
+        "balance-sheet": { label: "Balance Sheet", icon: Scale },
         "season-pl": { label: "P&L Report", icon: TrendingUp },
         receivables: { label: "Receivables", icon: Receipt },
         billing: { label: "Billing", icon: Receipt },
-        season: { label: "Season Summary", icon: BarChart3 },
+        season: { label: "This Season", icon: BarChart3 },
         "yield-forecast": { label: "Harvest Forecast", icon: TrendingUp },
-        "activity-log": { label: "Audit Log", icon: History },
+        "activity-log": { label: "Activity Log", icon: History },
         rainfall: { label: "Rain & Weather", icon: CloudRain },
         documents: { label: "Documents", icon: FileText },
         journal: { label: "Journal", icon: NotebookPen },
@@ -6398,14 +6398,14 @@ export default function InventorySystem() {
             <div className={cn("grid grid-cols-1 gap-4", canShowSales && "xl:grid-cols-2")}>
               <Card className="border-black/5 bg-white/90">
                 <CardHeader>
-                  <CardTitle>Estate Snapshot</CardTitle>
-                  <CardDescription>Live operational context for this tenant.</CardDescription>
+                  <CardTitle>Estate Overview</CardTitle>
+                  <CardDescription>Quick numbers for your estate right now.</CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-4">
                   <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
                     <div className="rounded-xl border border-black/5 bg-white p-3">
                       <div className="flex items-center gap-1">
-                        <p className="text-xs uppercase tracking-[0.18em] text-neutral-500">Active Locations</p>
+                        <p className="text-xs uppercase tracking-[0.18em] text-neutral-500">Estate Blocks</p>
                         <TooltipProvider>
                           <Tooltip>
                             <TooltipTrigger asChild>
@@ -6437,7 +6437,7 @@ export default function InventorySystem() {
                     </div>
                     <div className="rounded-xl border border-black/5 bg-white p-3">
                       <div className="flex items-center gap-1">
-                        <p className="text-xs uppercase tracking-[0.18em] text-neutral-500">24h Activity</p>
+                        <p className="text-xs uppercase tracking-[0.18em] text-neutral-500">Entries Today</p>
                         <TooltipProvider>
                           <Tooltip>
                             <TooltipTrigger asChild>
@@ -6469,7 +6469,7 @@ export default function InventorySystem() {
                     </div>
                     <div className="rounded-xl border border-black/5 bg-white p-3">
                       <div className="flex items-center gap-1">
-                        <p className="text-xs uppercase tracking-[0.18em] text-neutral-500">Open Alerts</p>
+                        <p className="text-xs uppercase tracking-[0.18em] text-neutral-500">Issues to Fix</p>
                         <TooltipProvider>
                           <Tooltip>
                             <TooltipTrigger asChild>
@@ -6506,27 +6506,27 @@ export default function InventorySystem() {
               {canShowSales && (
                 <Card className="border-black/5 bg-gradient-to-br from-emerald-50/60 to-white">
                   <CardHeader>
-                    <CardTitle>Operational Confidence</CardTitle>
-                    <CardDescription>Single source logic used in cards, Dispatch, and Sales guardrails.</CardDescription>
+                    <CardTitle>Coffee Stock Check</CardTitle>
+                    <CardDescription>How much coffee is ready to sell, based on what the buyer confirmed receiving.</CardDescription>
                   </CardHeader>
                   <CardContent className="space-y-3">
                     <div className={cn("inline-flex items-center rounded-full border px-3 py-1 text-xs font-medium", reconciliationStatusTone)}>
-                      Reconciliation: {reconciliationStatusLabel}
+                      Stock balance: {reconciliationStatusLabel}
                     </div>
                     <div className="rounded-xl border border-black/5 bg-white/90 p-3">
-                      <p className="text-xs uppercase tracking-[0.18em] text-neutral-500">Formula</p>
+                      <p className="text-xs uppercase tracking-[0.18em] text-neutral-500">How it&apos;s calculated</p>
                       <p className="mt-1 text-sm text-neutral-700">
-                        Saleable KGs = Dispatch Received KGs - Sales Sold KGs
+                        Ready to Sell = Bags at Buyer − Coffee Already Sold
                       </p>
                       <p className="mt-2 text-sm text-neutral-700">
-                        {formatNumber(dispatchReceivedKgsTotal, 0)} - {formatNumber(salesSoldKgsTotal, 0)} ={" "}
+                        {formatNumber(dispatchReceivedKgsTotal, 0)} kg − {formatNumber(salesSoldKgsTotal, 0)} kg ={" "}
                         <span className={cn("font-semibold", overdrawnCoffeeKgs > 0 ? "text-rose-700" : "text-emerald-700")}>
                           {overdrawnCoffeeKgs > 0 ? `-${formatNumber(overdrawnCoffeeKgs, 0)}` : formatNumber(saleableCoffeeKgs, 0)} kg
                         </span>
                       </p>
                     </div>
                     <p className="text-xs text-muted-foreground">
-                      Sales validation checks coffee type + bag type stock first. Location is retained for traceability.
+                      FarmFlow checks coffee type and bag type before allowing a sale, so your records stay accurate.
                     </p>
                     <div className="flex flex-wrap gap-2">
                       {canShowDispatch && (
@@ -6536,7 +6536,7 @@ export default function InventorySystem() {
                           onClick={() => openDrilldown({ tab: "dispatch", locationId: selectedLocationId })}
                           className="bg-white"
                         >
-                          Reconcile Dispatch
+                          Open Dispatch
                         </Button>
                       )}
                       {canShowSales && (
@@ -6546,12 +6546,12 @@ export default function InventorySystem() {
                           onClick={() => openDrilldown({ tab: "sales", locationId: selectedLocationId })}
                           className="bg-white"
                         >
-                          Review Sales Guardrails
+                          Open Sales
                         </Button>
                       )}
                       {canShowActivityLog && (
                         <Button size="sm" variant="outline" onClick={() => openDrilldown({ tab: "activity-log" })} className="bg-white">
-                          Open Activity Log
+                          Activity Log
                         </Button>
                       )}
                     </div>
