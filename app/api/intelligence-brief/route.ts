@@ -5,6 +5,8 @@ import { normalizeTenantContext, runTenantQueries, runTenantQuery } from "@/lib/
 import { getEnabledModules, isModuleAccessError, requireAnyModuleAccess } from "@/lib/server/module-access"
 import { sanitizeRouteError } from "@/lib/server/sanitize-route-error"
 import { getClaudeClient, isClaudeConfigured, CLAUDE_HAIKU } from "@/lib/server/claude"
+import { fetchWithTimeout } from "@/lib/server/http"
+import { buildWeatherFarmAdvice } from "@/lib/coffee-agronomy"
 
 export const dynamic = "force-dynamic"
 export const revalidate = 0
@@ -614,6 +616,54 @@ Respond ONLY with a JSON array, no prose, no markdown:
       }
     }
 
+    // ── Weather-aware farm advice ──────────────────────────────────────────
+    let farmAdvice = null
+    try {
+      const weatherApiKey = String(process.env.WEATHERAPI_API_KEY || "").trim()
+      // Fetch last 7 days rainfall from DB
+      const rainfallRows = await runTenantQuery(
+        sql,
+        tenantContext,
+        sql`
+          SELECT COALESCE(SUM(inches + cents::numeric / 100), 0) AS total_inches
+          FROM rainfall_records
+          WHERE tenant_id = ${tenantContext.tenantId}
+            AND record_date >= (CURRENT_DATE - INTERVAL '7 days')
+        `,
+      )
+      const last7DaysRainInches = Number((rainfallRows as any)?.[0]?.total_inches ?? 0)
+
+      // Fetch tenant location for weather
+      const tenantRows = await runTenantQuery(
+        sql,
+        tenantContext,
+        sql`SELECT ui_preferences FROM tenants WHERE id = ${tenantContext.tenantId} LIMIT 1`,
+      )
+      const prefs = (tenantRows as any)?.[0]?.ui_preferences ?? {}
+      const locationQuery = prefs?.estateProfile?.weatherLocationQuery || prefs?.estateProfile?.location || "Coorg, India"
+
+      if (weatherApiKey && locationQuery) {
+        const weatherUrl = `https://api.weatherapi.com/v1/forecast.json?key=${weatherApiKey}&q=${encodeURIComponent(locationQuery)}&days=3&aqi=no&alerts=no`
+        const weatherRes = await fetchWithTimeout(weatherUrl, { timeoutMs: 6_000 })
+        if (weatherRes.ok) {
+          const weatherData = await weatherRes.json().catch(() => null)
+          const forecastDays: Array<{ day: { totalprecip_mm: number; daily_chance_of_rain: number } }> =
+            weatherData?.forecast?.forecastday ?? []
+          const precipMm = forecastDays.map((d) => d.day?.totalprecip_mm ?? 0)
+          const chancePct = forecastDays.map((d) => d.day?.daily_chance_of_rain ?? 0)
+          const monthIndex = new Date().getMonth()
+          farmAdvice = buildWeatherFarmAdvice({
+            last7DaysRainInches,
+            next3DaysForecastMm: precipMm,
+            next3DaysChancePct: chancePct,
+            monthIndex,
+          })
+        }
+      }
+    } catch {
+      // Farm advice is non-fatal — morning brief renders without it
+    }
+
     return NextResponse.json({
       success: true,
       dateRange: {
@@ -626,6 +676,7 @@ Respond ONLY with a JSON array, no prose, no markdown:
       actions: actions.slice(0, 4),
       reconciliation,
       accountsPatterns,
+      farmAdvice,
     })
   } catch (error) {
     console.error("Error generating intelligence brief:", error)

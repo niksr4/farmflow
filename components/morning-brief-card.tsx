@@ -1,15 +1,23 @@
 "use client"
 
-import { Brain, Loader2 } from "lucide-react"
+import { Brain, CloudRain, Loader2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 import { formatNumber } from "@/lib/format"
+import type { WeatherFarmAdvice } from "@/lib/coffee-agronomy"
 
 type BriefAction = { label: string; tab: string }
 type CostCode = { code: string; reference: string; totalAmount: number; entryCount: number }
 type Insight = { observation: string; reasoning: string }
 
 const formatCount = (n: number) => formatNumber(n, 0)
+
+const FARM_ADVICE_STYLES: Record<WeatherFarmAdvice["signal"], { bg: string; text: string; icon: string }> = {
+  "apply-now":    { bg: "bg-emerald-500/20 border-emerald-300/30", text: "text-emerald-100", icon: "🌱" },
+  "wait-for-rain":{ bg: "bg-sky-500/20 border-sky-300/30",     text: "text-sky-100",     icon: "⏳" },
+  "avoid-rain":   { bg: "bg-amber-500/20 border-amber-300/30", text: "text-amber-100",   icon: "🌧️" },
+  "neutral":      { bg: "bg-white/10 border-white/20",         text: "text-white/80",    icon: "🌤️" },
+}
 
 type Props = {
   highlights: string[]
@@ -20,6 +28,7 @@ type Props = {
   loading: boolean
   error: string | null
   visibleTabs: string[]
+  farmAdvice?: WeatherFarmAdvice | null
   onDrilldown: (opts: { tab: string; transactionSearch?: string }) => void
   inferTab: (text: string) => string
 }
@@ -33,6 +42,7 @@ export default function MorningBriefCard({
   loading,
   error,
   visibleTabs,
+  farmAdvice,
   onDrilldown,
   inferTab,
 }: Props) {
@@ -87,6 +97,23 @@ export default function MorningBriefCard({
           <p className="text-sm text-rose-600">{error}</p>
         ) : hasContent ? (
           <div className="space-y-3">
+            {/* Weather farm advice chip */}
+            {farmAdvice && (() => {
+              const s = FARM_ADVICE_STYLES[farmAdvice.signal]
+              return (
+                <div className={cn("flex items-start gap-2.5 rounded-xl border px-3 py-2.5", s.bg)}>
+                  <CloudRain className="mt-0.5 h-4 w-4 shrink-0 text-white/70" />
+                  <div className="min-w-0">
+                    <p className={cn("text-xs font-semibold", s.text)}>
+                      {farmAdvice.title}
+                    </p>
+                    <p className="mt-0.5 text-[11px] leading-relaxed text-white/70">
+                      {farmAdvice.body}
+                    </p>
+                  </div>
+                </div>
+              )
+            })()}
             {highlights.slice(0, 4).map((highlight, index) => {
               const insight = insights[index]
               const linkedAction = actions.find(

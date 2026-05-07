@@ -343,5 +343,119 @@ Robusta: 1200–1800 kg/ha average, 2000–2500 kg/ha good.
 Labour = 40–55% of cost. Fertiliser = 15–20%. Efficient total cost of production: ₹70–100/kg clean coffee. Above ₹150/kg = margin risk.
 
 ### Premium Opportunities
-Specialty/direct trade premium: 30–80% over commodity. Certifications (RFA, Organic): 5–15%. Coorg Arabica, Chikmagalur Arabica, Wayanad Robusta all carry GI status — premium in export markets.`
+Specialty/direct trade premium: 30–80% over commodity. Certifications (RFA, Organic): 5–15%. Coorg Arabica, Chikmagalur Arabica, Wayanad Robusta all carry GI status — premium in export markets.
+
+### Fertilizer Timing Rules (weather-sensitive)
+NEVER apply urea or water-soluble NPK to dry soil — burns roots and volatilises.
+WAIT for rain: apply granular fertilisers 1–2 days after at least 0.5 in (12mm) of rain to ensure soil moisture enables uptake.
+AVOID applying before heavy rain (>1 in forecast in 24h) — leaches nutrients.
+IDEAL window: soil moist from recent rain, no heavy rain forecast for 2–3 days.
+For foliar sprays: apply in early morning or evening. Avoid if rain expected within 4 hours — spray washes off before absorption.
+Post-blossom (Mar–Apr): if pre-monsoon showers haven't started, irrigate 1–2 days before applying NPK 17:17:17.
+Monsoon season: skip fertiliser applications during continuous heavy rain periods; resume during dry spells within the monsoon.`
 }
+
+// ---------------------------------------------------------------------------
+// WEATHER-BASED PROACTIVE ADVICE
+// Generates actionable advice based on recent rainfall + forecast
+// ---------------------------------------------------------------------------
+
+type ForecastDay = {
+  precipMm: number
+  chanceOfRainPct: number
+  date?: string
+}
+
+export type WeatherFarmAdvice = {
+  signal: "apply-now" | "wait-for-rain" | "avoid-rain" | "neutral"
+  title: string
+  body: string
+  urgency: "high" | "medium" | "low"
+}
+
+/**
+ * Given recent rainfall and upcoming forecast, generate fertilizer/field advice.
+ * Rules derived from ICAR-CCRI and Coffee Board of India extension guidelines.
+ */
+export function buildWeatherFarmAdvice(params: {
+  last7DaysRainInches: number
+  next3DaysForecastMm: number[]     // mm per day for next 3 days
+  next3DaysChancePct: number[]      // % chance of rain per day
+  monthIndex: number                // 0-based month (0=Jan)
+}): WeatherFarmAdvice | null {
+  const { last7DaysRainInches, next3DaysForecastMm, next3DaysChancePct, monthIndex } = params
+
+  const totalForecastMm = next3DaysForecastMm.reduce((s, v) => s + v, 0)
+  const maxDailyForecastMm = Math.max(...next3DaysForecastMm, 0)
+  const heavyRainIncoming = maxDailyForecastMm > 25 || totalForecastMm > 50
+  const goodRainIncoming = next3DaysForecastMm.some((mm) => mm >= 12)
+  const highChanceRain = next3DaysChancePct.some((pct) => pct >= 60)
+  const soilMoist = last7DaysRainInches >= 0.5
+  const veraDrought = last7DaysRainInches < 0.1
+
+  // Blossom shower season: Feb–Mar — irrigation + fertiliser timing is critical
+  const isBlossomSeason = monthIndex === 1 || monthIndex === 2
+  // Post-blossom: Apr — NPK application window
+  const isPostBlossom = monthIndex === 3
+  // Monsoon onset: Jun–Jul — key nutrition window
+  const isMonsoonOnset = monthIndex === 5 || monthIndex === 6
+  // Berry fill: Aug–Sep — potassium timing
+  const isBerryFill = monthIndex === 7 || monthIndex === 8
+
+  if (heavyRainIncoming) {
+    return {
+      signal: "avoid-rain",
+      title: "Hold fertiliser — heavy rain incoming",
+      body: `${Math.round(totalForecastMm)}mm forecast in the next 3 days. Applying fertiliser now will leach nutrients before roots can absorb them. Wait for the rain to pass and soil to settle (1–2 days).`,
+      urgency: "high",
+    }
+  }
+
+  if (veraDrought && (isBlossomSeason || isPostBlossom) && !goodRainIncoming) {
+    return {
+      signal: "wait-for-rain",
+      title: `Irrigate before ${isBlossomSeason ? "blossom shower" : "post-blossom NPK"} application`,
+      body: `Less than 0.1 in recorded in the last 7 days and no significant rain forecast. Soil is too dry for effective fertiliser uptake. Irrigate 1–2 days before applying, or wait for pre-monsoon showers.`,
+      urgency: "high",
+    }
+  }
+
+  if (soilMoist && !heavyRainIncoming && !highChanceRain) {
+    if (isPostBlossom) {
+      return {
+        signal: "apply-now",
+        title: "Good window to apply post-blossom NPK",
+        body: `Soil is moist from recent rain and no heavy rain forecast. This is the right window to apply NPK 17:17:17 for berry development. Apply in the morning and work into the soil.`,
+        urgency: "high",
+      }
+    }
+    if (isMonsoonOnset) {
+      return {
+        signal: "apply-now",
+        title: "Apply nitrogen + micronutrients now",
+        body: `Monsoon season — soil is moist and conditions are right for nitrogen and zinc/boron foliar application. No heavy rain in the immediate forecast. Apply early morning.`,
+        urgency: "medium",
+      }
+    }
+    if (isBerryFill) {
+      return {
+        signal: "apply-now",
+        title: "Apply potassium for berry fill",
+        body: `Berry fill stage with adequate soil moisture — ideal for potassium + calcium application to improve bean density and cup quality. Apply before next rainfall cycle.`,
+        urgency: "medium",
+      }
+    }
+  }
+
+  if (goodRainIncoming && (isPostBlossom || isMonsoonOnset || isBerryFill)) {
+    return {
+      signal: "wait-for-rain",
+      title: "Rain coming — prepare to fertilise after",
+      body: `${Math.round(totalForecastMm)}mm expected in the next 3 days. Stage your fertiliser so you can apply 1–2 days after the rain, when soil is moist but before the next heavy spell.`,
+      urgency: "low",
+    }
+  }
+
+  return null
+}
+
