@@ -6203,6 +6203,7 @@ export default function InventorySystem() {
                 loading={intelligenceLoading}
                 error={intelligenceError}
                 visibleTabs={visibleTabs}
+                farmAdvice={intelligenceBrief?.farmAdvice ?? null}
                 onDrilldown={openDrilldown}
                 inferTab={inferBriefTabFromText}
               />

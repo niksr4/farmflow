@@ -80,6 +80,7 @@ export default function RainfallTab({ username, showDataToolsControls = false }:
   const [cents, setCents] = useState("")
   const [notes, setNotes] = useState("")
   const [loading, setLoading] = useState(false)
+  const [drilldownMonthIndex, setDrilldownMonthIndex] = useState<number | null>(null)
 
   const handleWholeNumberChange = (setter: (value: string) => void) => (event: ChangeEvent<HTMLInputElement>) => {
     const nextValue = event.target.value
@@ -319,6 +320,18 @@ export default function RainfallTab({ username, showDataToolsControls = false }:
     return map
   }, [normalizedRecords])
 
+  // Per-day breakdown for the selected month drilldown
+  const drilldownDays = useMemo(() => {
+    if (drilldownMonthIndex === null) return []
+    const daysInMonth = new Date(currentYear, drilldownMonthIndex + 1, 0).getDate()
+    return Array.from({ length: daysInMonth }, (_, i) => {
+      const day = i + 1
+      const isoDate = `${currentYear}-${String(drilldownMonthIndex + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`
+      const rain = dailyRainMap.get(isoDate) ?? null
+      return { day, isoDate, rainfallInches: rain }
+    })
+  }, [drilldownMonthIndex, currentYear, dailyRainMap])
+
   const trendSeries = useMemo<RainfallTrendPoint[]>(() => {
     const today = new Date()
     today.setHours(0, 0, 0, 0)
@@ -520,7 +533,9 @@ export default function RainfallTab({ username, showDataToolsControls = false }:
 
           <div className="grid gap-4 xl:grid-cols-[2fr_1fr]">
             <div className="rounded-xl border border-border/60 bg-white/80 p-3">
-              <p className="mb-2 text-xs uppercase tracking-[0.16em] text-muted-foreground">Monthly distribution ({currentYear})</p>
+              <p className="mb-2 text-xs uppercase tracking-[0.16em] text-muted-foreground">
+                Monthly distribution ({currentYear}) · <span className="text-sky-600">tap a bar to see daily breakdown</span>
+              </p>
               <ChartContainer config={MONTHLY_RAIN_CHART_CONFIG} className="h-[240px] w-full">
                 <BarChart data={monthlyTotalsData} margin={{ left: 8, right: 8, top: 8, bottom: 8 }}>
                   <CartesianGrid vertical={false} />
@@ -534,9 +549,68 @@ export default function RainfallTab({ username, showDataToolsControls = false }:
                       />
                     }
                   />
-                  <Bar dataKey="totalInches" fill="var(--color-totalInches)" radius={[4, 4, 0, 0]} maxBarSize={24} />
+                  <Bar
+                    dataKey="totalInches"
+                    fill="var(--color-totalInches)"
+                    radius={[4, 4, 0, 0]}
+                    maxBarSize={24}
+                    className="cursor-pointer"
+                    onClick={(_data, index) => setDrilldownMonthIndex(drilldownMonthIndex === index ? null : index)}
+                  />
                 </BarChart>
               </ChartContainer>
+              {drilldownMonthIndex !== null && (
+                <div className="mt-4 rounded-xl border border-sky-200 bg-sky-50/60 p-3">
+                  <div className="mb-2 flex items-center justify-between">
+                    <p className="text-xs font-semibold uppercase tracking-[0.16em] text-sky-800">
+                      {MONTHS[drilldownMonthIndex]} {currentYear} — daily rainfall
+                    </p>
+                    <button
+                      type="button"
+                      className="text-xs text-sky-600 hover:text-sky-800"
+                      onClick={() => setDrilldownMonthIndex(null)}
+                    >
+                      Close ×
+                    </button>
+                  </div>
+                  <div className="grid grid-cols-7 gap-1">
+                    {drilldownDays.map(({ day, rainfallInches }) => {
+                      const hasData = rainfallInches !== null
+                      const isWet = hasData && rainfallInches > 0
+                      return (
+                        <div
+                          key={day}
+                          title={hasData ? `${formatNumber(rainfallInches!, 2)} in` : "No entry"}
+                          className={[
+                            "flex flex-col items-center rounded-lg px-1 py-1.5 text-center",
+                            isWet
+                              ? "bg-sky-200/80 text-sky-900"
+                              : hasData
+                                ? "bg-stone-100 text-stone-400"
+                                : "bg-white/50 text-stone-300",
+                          ].join(" ")}
+                        >
+                          <span className="text-[10px] font-medium leading-none">{day}</span>
+                          {isWet && (
+                            <span className="mt-0.5 text-[9px] tabular-nums leading-none">
+                              {formatNumber(rainfallInches!, 1)}
+                            </span>
+                          )}
+                          {!isWet && hasData && (
+                            <span className="mt-0.5 text-[9px] leading-none">dry</span>
+                          )}
+                        </div>
+                      )
+                    })}
+                  </div>
+                  <div className="mt-2 flex flex-wrap gap-3 text-[10px] text-sky-700">
+                    <span>🔵 Wet days: {drilldownDays.filter(d => d.rainfallInches !== null && d.rainfallInches > 0).length}</span>
+                    <span>⬜ Dry days logged: {drilldownDays.filter(d => d.rainfallInches === 0).length}</span>
+                    <span>— No entry: {drilldownDays.filter(d => d.rainfallInches === null).length}</span>
+                    <span className="font-medium">Total: {formatNumber(drilldownDays.reduce((s, d) => s + (d.rainfallInches ?? 0), 0), 2)} in</span>
+                  </div>
+                </div>
+              )}
             </div>
             <div className="rounded-xl border border-border/60 bg-white/80 p-3">
               <p className="text-xs uppercase tracking-[0.16em] text-muted-foreground">Top rainfall months</p>

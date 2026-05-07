@@ -72,6 +72,12 @@ export interface IntelligenceBrief {
     laborTrendPct: number | null
     expenseTrendPct: number | null
   } | null
+  farmAdvice?: {
+    signal: "apply-now" | "wait-for-rain" | "avoid-rain" | "neutral"
+    title: string
+    body: string
+    urgency: "high" | "medium" | "low"
+  } | null
 }
 
 export interface ExceptionSummaryAlert {
