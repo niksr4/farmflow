@@ -36,7 +36,7 @@ const resolveTrialInfo = async (tenantId: string): Promise<{ trialDaysRemaining:
     const trialEndsMs = provisionedMs + TRIAL_DAYS * 24 * 60 * 60 * 1000
     const remainingMs = trialEndsMs - Date.now()
     const trialDaysRemaining = Math.max(0, Math.ceil(remainingMs / (24 * 60 * 60 * 1000)))
-    // Only surface within the trial window (0–30 days); return null after expiry
+    // 0 = expired; 1–30 = active trial; >30 = impossible (clamp) → null
     if (trialDaysRemaining > TRIAL_DAYS) return { trialDaysRemaining: null }
     return { trialDaysRemaining }
   } catch {

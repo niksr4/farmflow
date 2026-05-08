@@ -792,7 +792,13 @@ export default function InventorySystem() {
       setEnabledModules(Array.isArray(data.modules) ? data.modules.map((moduleId) => String(moduleId)) : null)
       setLocations(Array.isArray(data.locations) ? data.locations : [])
       setCurrentPlanId(data.planId ? String(data.planId) : null)
-      if (typeof data.trialDaysRemaining === "number") setTrialDaysRemaining(data.trialDaysRemaining)
+      if (typeof data.trialDaysRemaining === "number") {
+        if (data.trialDaysRemaining === 0) {
+          router.replace("/trial-expired")
+          return false
+        }
+        setTrialDaysRemaining(data.trialDaysRemaining)
+      }
       resolved = true
       return true
     } catch (error) {

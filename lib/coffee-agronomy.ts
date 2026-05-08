@@ -352,7 +352,58 @@ AVOID applying before heavy rain (>1 in forecast in 24h) — leaches nutrients.
 IDEAL window: soil moist from recent rain, no heavy rain forecast for 2–3 days.
 For foliar sprays: apply in early morning or evening. Avoid if rain expected within 4 hours — spray washes off before absorption.
 Post-blossom (Mar–Apr): if pre-monsoon showers haven't started, irrigate 1–2 days before applying NPK 17:17:17.
-Monsoon season: skip fertiliser applications during continuous heavy rain periods; resume during dry spells within the monsoon.`
+Monsoon season: skip fertiliser applications during continuous heavy rain periods; resume during dry spells within the monsoon.
+
+### Precise Fertilizer Doses (Coffee Board of India / CCRI)
+
+Arabica N:P2O5:K2O kg/ha per year, 4 splits (March, May, August, October):
+- Bearing <1 tonne/ha: 140:90:120. Bearing ≥1 tonne/ha: 160:120:160.
+- Young year 1: 45:30:45. Years 2–3: 60:45:60. Year 4: 80:60:80.
+Per plant (young): Years 1–2: Urea 43g + Rock Phosphate 55g + MOP 33g. Years 3–4: Urea 54g + 82g + 42g. Mature 100kg/yr: Urea 65g + 150g + 50g. Mature 1000kg/yr: 308g + 495g + 200g.
+Robusta kg/ha: <1 tonne: 80:60:80. ≥1 tonne: 120:90:120.
+Robusta high-yield (700 kg clean/acre) practical splits: Feb–Mar: Urea 46kg + DAP 50kg + MOP 50kg/acre. May: Urea 65kg + Rock Phosphate 128kg + MOP 50kg/acre. Aug: 50kg urea broadcast (prevents fruit drop). Sep: 115kg Factomphos + 50kg MOP/acre.
+Organic manure: FYM/compost 5 tonnes/ha every 2 years.
+
+### Irrigation (Robusta irrigated estates)
+
+Winter (Nov–Dec): First irrigation within 15 days of last NE monsoon rain; 1 acre-inch. Follow-up 0.75 acre-inch every 3 weeks.
+MANDATORY stress: Min 45 days from January — NO irrigation. Critical for flower bud differentiation.
+Blossom shower: S-274 Robusta 2nd week Feb (1.5 acre-inches). Old Robusta 1st week Mar (0.75 acre-inches). DEADLINE: before March 15 — missing = 25–30% bud damage.
+Backing showers: Every 21 days at 0.75–0.5 acre-inches until monsoon. Young plants: 5–10 L/plant/week.
+
+### Training and Pruning
+
+Topping: Arabica first 0.75m, second 1.35–1.50m (9–12 months). Robusta single top 1.35–1.50m (18–24 months). Maintain at 1.8m.
+Pruning: Begin 3–4 weeks after harvest, continue until monsoon onset. First handling (thin new flush) June–July.
+Stumping: After first summer showers (Mar–Apr). Collar cut 30cm from ground, 45° angle facing East. Select 3–4 shoots, reduce to 2–3.
+
+### Harvest Maturity
+
+Deep red Arabica, amber/yellow for yellow-fruited varieties. Plump cherry yielding slightly under pressure. Brix 15–22 (refractometer) for ripe mucilage.
+Arabica: flower→cherry 8–9 months. Robusta: 10–11 months.
+Calendar: Arabica fly picking Oct; main Nov–Feb (peak Dec–Jan). Robusta Dec–Mar (peak Jan–Feb). 4–6 rounds at 10–15 day intervals.
+
+### Processing (Precise Ratios)
+
+Cherry→parchment (wet): 5 kg cherry = 1 kg parchment. Cherry→green bean: 5–6 kg = 1 kg. Parchment→green bean: 1.25 kg = 1 kg (80% conversion).
+Fermentation: 12–72 hours (shorter hot lowland Robusta; longer high-altitude Arabica). Drying: 7–15 days sun; 24–48h mechanical (max 40°C).
+Moisture: Ideal 10–11.5%. Export: Arabica parchment 10.5%, Robusta cherry 11.0%. >13% = milling problems. <9% = brittle beans.
+
+### Pest Thresholds and Doses
+
+White Stem Borer: 25 pheromone traps/ha at 20m grid; lure = 2-hydroxy-3-decanone. Flights: Apr–May and Oct–Dec (10:00–16:00 daily). Pre-flight: 10% lime wash on stems (March and September). Chemical: Chlorpyrifos 20EC 600ml/200L water, mid-April and end-October.
+Coffee Berry Borer: 60 pheromone traps/acre; methanol:ethanol 3:1. Beauveria bassiana 150–450ml/100L water per 0.5 ha at early fruit development. Threshold: >5% infestation = intervene; >10% = significant loss.
+
+### Disease Rates
+
+Leaf Rust: 0.5% Bordeaux mixture 4×/year (Feb–Mar, May–Jun, Jul–Aug, Sep–Oct). Systemic: Tebuconazole 430 SC 0.5–0.75ml/L or Oxycarboxin 0.03%.
+Black Rot/Koleroga: 1% Bordeaux during monsoon rain breaks; add Planofix for fruit drop prevention.
+Brown Eye Spot (Sep): Mancozeb 2g/L or Carbendazim 0.5g/L.
+Mealy bugs: 300 coccinellid beetles/acre biological. Chemical: Folithion 50EC 300ml/200L.
+
+### Storage
+
+Ballooning: 100-micron LDPE sheet over stacked bags; maintains 10–11% MC for up to 5 months. Warehouse: 18–22°C, 55–65% RH. Mill as close to sale as possible.`
 }
 
 // ---------------------------------------------------------------------------
