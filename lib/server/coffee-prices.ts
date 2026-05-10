@@ -84,7 +84,7 @@ export async function getCoffeePriceAnalysis(): Promise<CoffeePriceAnalysis | nu
     const signal: CoffeePriceSignal =
       pctFromHigh3m >= -5 ? "near-high" : pctFromHigh3m <= -20 ? "near-low" : "mid-range"
 
-    const usdPerKg = (latest.usdPerLb / 100) * 2.2046 // cents/lb → USD/kg
+    const usdPerKg = latest.usdPerLb * 2.2046 // USD/lb → USD/kg
 
     const trendWord = trend === "rising" ? "↑ rising" : trend === "falling" ? "↓ falling" : "→ stable"
     const signalSummary =
@@ -128,7 +128,8 @@ export async function estimateSellableStock(tenantId: string): Promise<SellableS
       ),
       sql.query(
         `SELECT COALESCE(SUM(
-           COALESCE(NULLIF(kgs, 0), NULLIF(weight_kgs, 0), bags_sold * 50)
+           COALESCE(NULLIF(kgs, 0), NULLIF(weight_kgs, 0),
+             bags_sold * COALESCE((SELECT bag_weight_kg FROM tenants WHERE id = $1 LIMIT 1), 50))
          ), 0) AS total_kg
          FROM sales_records
          WHERE tenant_id = $1
@@ -155,7 +156,7 @@ export function buildMarketTimingSection(
   const lines: string[] = ["## Market Timing"]
 
   lines.push(`- ICO benchmark: $${price.usdPerKg.toFixed(2)}/kg (${price.latest.date})`)
-  lines.push(`- 3-month range: $${(price.low3m / 100 * 2.2046).toFixed(2)} – $${(price.high3m / 100 * 2.2046).toFixed(2)}/kg`)
+  lines.push(`- 3-month range: $${(price.low3m * 2.2046).toFixed(2)} – $${(price.high3m * 2.2046).toFixed(2)}/kg`)
   lines.push(`- Trend: ${price.trend} | Signal: ${price.signal === "near-high" ? "🟢 near 3-month high" : price.signal === "near-low" ? "🔴 near 3-month low" : "🟡 mid-range"}`)
 
   if (stock && stock.availableKg > 0) {

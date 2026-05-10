@@ -81,7 +81,7 @@ export async function GET(request: Request) {
         SELECT
           t.id AS tenant_id,
           AVG(pr.ripe_today::float / NULLIF(pr.crop_today, 0)) AS avg_ripe_rate,
-          AVG(sr.price_per_bag) AS avg_sale_price_per_kg,
+          AVG(sr.price_per_bag / NULLIF(COALESCE(t.bag_weight_kg, 50)::float, 0)) AS avg_sale_price_per_kg,
           COUNT(DISTINCT pr.id) AS processing_days
         FROM tenants t
         LEFT JOIN processing_records pr

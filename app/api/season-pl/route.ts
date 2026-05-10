@@ -28,7 +28,6 @@ export type SeasonPLResponse = {
     grossMarginPct: number
     costPerKgProduced: number
     revenuePerKgSold: number
-    netEstimatedInr: number
   }
   production: {
     totalCherryKg: number
@@ -58,6 +57,12 @@ export async function GET(request: NextRequest) {
 
     const tenantId = tenantContext.tenantId
 
+    const tenantRow = toRows(await sql.query(
+      `SELECT COALESCE(bag_weight_kg, 50) AS bag_weight_kg FROM tenants WHERE id = $1 LIMIT 1`,
+      [tenantId],
+    ))[0]
+    const bagWeightKg = Number(tenantRow?.bag_weight_kg) || 50
+
     const [
       salesRows,
       laborRows,
@@ -69,7 +74,7 @@ export async function GET(request: NextRequest) {
         `SELECT
            COALESCE(buyer_name, 'Unknown') AS buyer,
            COALESCE(SUM(total_revenue), 0) AS total_inr,
-           COALESCE(SUM(COALESCE(NULLIF(kgs, 0), NULLIF(weight_kgs, 0), bags_sold * 50)), 0) AS kgs_sold
+           COALESCE(SUM(COALESCE(NULLIF(kgs, 0), NULLIF(weight_kgs, 0), bags_sold * ${bagWeightKg})), 0) AS kgs_sold
          FROM sales_records
          WHERE tenant_id = $1
            AND sale_date >= $2::date
@@ -200,7 +205,6 @@ export async function GET(request: NextRequest) {
         grossMarginPct,
         costPerKgProduced,
         revenuePerKgSold,
-        netEstimatedInr: grossProfitInr,
       },
       production: {
         totalCherryKg,
