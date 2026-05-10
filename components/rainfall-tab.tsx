@@ -73,7 +73,7 @@ const toIsoDate = (date: Date) => format(date, "yyyy-MM-dd")
 
 export default function RainfallTab({ username, showDataToolsControls = false }: RainfallTabProps) {
   const { user } = useAuth()
-  const canDelete = user?.role === "admin" || user?.role === "owner" || user?.role === "user"
+  const canDelete = user?.role === "admin" || user?.role === "owner"
   const [records, setRecords] = useState<RainfallRecord[]>([])
   const [selectedDate, setSelectedDate] = useState<Date>(new Date())
   const [inches, setInches] = useState("")

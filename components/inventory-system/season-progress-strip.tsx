@@ -31,7 +31,7 @@ export default function SeasonProgressStrip({ fiscalYear, progress, activityStre
         <div className="relative flex-1 h-1.5 rounded-full bg-stone-100 overflow-hidden">
           <div
             className="absolute inset-y-0 left-0 rounded-full bg-emerald-500 transition-all"
-            style={{ width: `${progress.pct}%` }}
+            style={{ width: `${Math.min(100, Math.max(0, progress.pct))}%` }}
           />
         </div>
         <span className="shrink-0 text-xs tabular-nums text-neutral-500">
