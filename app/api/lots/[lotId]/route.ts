@@ -1,17 +1,29 @@
 import { NextResponse, type NextRequest } from "next/server"
 import { sql } from "@/lib/server/db"
+import { checkRateLimit, buildRateLimitHeaders } from "@/lib/rate-limit"
 
 export const dynamic = "force-dynamic"
 export const revalidate = 0
 
+const getIp = (req: NextRequest) =>
+  (req.headers.get("x-forwarded-for") || req.headers.get("x-real-ip") || "").split(",")[0]?.trim() || "unknown"
+
 // Public endpoint — no auth required. Returns only non-sensitive trace data for a lot.
 export async function GET(
-  _request: NextRequest,
+  request: NextRequest,
   { params }: { params: Promise<{ lotId: string }> },
 ) {
   try {
     if (!sql) {
       return NextResponse.json({ success: false, error: "Database not configured" }, { status: 500 })
+    }
+
+    const rateLimit = await checkRateLimit("registerInterest", `lot:${getIp(request)}`).catch(() => null)
+    if (rateLimit && !rateLimit.success) {
+      return NextResponse.json(
+        { success: false, error: "Too many requests" },
+        { status: 429, headers: buildRateLimitHeaders(rateLimit) },
+      )
     }
 
     const { lotId } = await params
