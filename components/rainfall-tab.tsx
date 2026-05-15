@@ -10,8 +10,8 @@ import { FieldLabel } from "@/components/ui/field-label"
 import { Calendar } from "@/components/ui/calendar"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { toast } from "@/components/ui/use-toast"
-import { CalendarIcon, CloudRain, Download, Trash2 } from "lucide-react"
-import { format } from "date-fns"
+import { CalendarIcon, ChevronLeft, ChevronRight, CloudRain, Download, Trash2 } from "lucide-react"
+import { addYears, format, subYears } from "date-fns"
 import { useAuth } from "@/hooks/use-auth"
 import { formatDateOnly } from "@/lib/date-utils"
 import { formatNumber } from "@/lib/format"
@@ -706,6 +706,8 @@ export default function RainfallTab({ username, showDataToolsControls = false }:
         </CardContent>
       </Card>
 
+      <RainfallHeatmap records={normalizedRecords} currentYear={currentYear} />
+
       <Card>
         <CardHeader>
           <CardTitle>Add Rainfall Record</CardTitle>
@@ -723,6 +725,34 @@ export default function RainfallTab({ username, showDataToolsControls = false }:
                   </Button>
                 </PopoverTrigger>
                 <PopoverContent className="w-auto p-0">
+                  <div className="flex items-center justify-between border-b px-3 py-2">
+                    <span className="text-xs text-muted-foreground">Year</span>
+                    <div className="flex items-center gap-1">
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        className="h-7 w-7"
+                        onClick={() => setCalendarMonth((m) => subYears(m, 1))}
+                        disabled={calendarMonth.getFullYear() <= 2015}
+                      >
+                        <ChevronLeft className="h-4 w-4" />
+                      </Button>
+                      <span className="w-10 text-center text-sm font-semibold tabular-nums">
+                        {calendarMonth.getFullYear()}
+                      </span>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        className="h-7 w-7"
+                        onClick={() => setCalendarMonth((m) => addYears(m, 1))}
+                        disabled={calendarMonth.getFullYear() >= currentYear}
+                      >
+                        <ChevronRight className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  </div>
                   <Calendar
                     mode="single"
                     selected={selectedDate}
@@ -734,9 +764,7 @@ export default function RainfallTab({ username, showDataToolsControls = false }:
                         setCalendarMonth(date)
                       }
                     }}
-                    captionLayout="dropdown"
-                    fromYear={2015}
-                    toYear={currentYear}
+                    disabled={{ after: new Date() }}
                   />
                 </PopoverContent>
               </Popover>
@@ -825,5 +853,111 @@ export default function RainfallTab({ username, showDataToolsControls = false }:
         </CardContent>
       </Card>
     </div>
+  )
+}
+
+// ── Rainfall Heatmap ──────────────────────────────────────────────────────────
+
+function rainfallColor(inches: number | null): string {
+  if (inches === null) return "bg-neutral-100 dark:bg-neutral-800"
+  if (inches === 0) return "bg-neutral-200 dark:bg-neutral-700"
+  if (inches < 0.5) return "bg-sky-100"
+  if (inches < 1.0) return "bg-sky-200"
+  if (inches < 2.0) return "bg-sky-300"
+  if (inches < 3.5) return "bg-sky-500"
+  if (inches < 5.0) return "bg-sky-600"
+  return "bg-sky-800"
+}
+
+function RainfallHeatmap({
+  records,
+  currentYear,
+}: {
+  records: NormalizedRainfallRecord[]
+  currentYear: number
+}) {
+  const monthlyByYear = useMemo(() => {
+    const map = new Map<number, number[]>() // year → 12 monthly totals
+    records.forEach((r) => {
+      const y = r.date.getFullYear()
+      const m = r.date.getMonth()
+      if (!map.has(y)) map.set(y, Array(12).fill(null))
+      const arr = map.get(y)!
+      arr[m] = round2((arr[m] ?? 0) + r.rainfallInches)
+    })
+    return map
+  }, [records])
+
+  const years = useMemo(
+    () => [...monthlyByYear.keys()].sort((a, b) => a - b),
+    [monthlyByYear],
+  )
+
+  if (years.length === 0) return null
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Rainfall History Heatmap</CardTitle>
+        <CardDescription>Monthly totals across all years — darker blue means more rain. Grey means no entry logged.</CardDescription>
+      </CardHeader>
+      <CardContent>
+        <div className="overflow-x-auto">
+          <table className="min-w-full text-xs">
+            <thead>
+              <tr>
+                <th className="w-10 text-left text-muted-foreground font-normal pb-2 pr-3"></th>
+                {MONTHS.map((m) => (
+                  <th key={m} className="text-center text-muted-foreground font-normal pb-2 px-0.5 min-w-[2.25rem]">
+                    {m}
+                  </th>
+                ))}
+                <th className="text-right text-muted-foreground font-normal pb-2 pl-3 min-w-[3rem]">Total</th>
+              </tr>
+            </thead>
+            <tbody>
+              {years.map((year) => {
+                const monthly = monthlyByYear.get(year)!
+                const yearTotal = round2(monthly.reduce((s, v) => s + (v ?? 0), 0))
+                return (
+                  <tr key={year}>
+                    <td className="pr-3 py-0.5 font-semibold text-neutral-700 tabular-nums">{year}</td>
+                    {monthly.map((val, mi) => (
+                      <td key={mi} className="px-0.5 py-0.5">
+                        <div
+                          title={val !== null ? `${MONTHS[mi]} ${year}: ${formatNumber(val, 2)} in` : `${MONTHS[mi]} ${year}: no entry`}
+                          className={[
+                            "h-8 w-8 rounded-md flex items-end justify-center pb-0.5 mx-auto transition-colors",
+                            rainfallColor(val),
+                            // grey out future months in current year
+                            year === currentYear && mi > new Date().getMonth() ? "opacity-30" : "",
+                          ].join(" ")}
+                        >
+                          {val !== null && val > 0 && (
+                            <span className={`text-[9px] font-medium tabular-nums leading-none ${val >= 2 ? "text-white" : "text-sky-900"}`}>
+                              {val < 10 ? val.toFixed(1) : Math.round(val)}
+                            </span>
+                          )}
+                        </div>
+                      </td>
+                    ))}
+                    <td className="pl-3 py-0.5 text-right font-semibold tabular-nums text-neutral-700">
+                      {formatNumber(yearTotal, 1)}"
+                    </td>
+                  </tr>
+                )
+              })}
+            </tbody>
+          </table>
+        </div>
+        <div className="mt-3 flex flex-wrap items-center gap-3 text-[10px] text-muted-foreground">
+          <span className="flex items-center gap-1"><span className="inline-block h-3 w-3 rounded bg-neutral-100 border" />No entry</span>
+          <span className="flex items-center gap-1"><span className="inline-block h-3 w-3 rounded bg-neutral-200" />0 in (dry day logged)</span>
+          <span className="flex items-center gap-1"><span className="inline-block h-3 w-3 rounded bg-sky-200" />&lt;1 in</span>
+          <span className="flex items-center gap-1"><span className="inline-block h-3 w-3 rounded bg-sky-400" />1–3 in</span>
+          <span className="flex items-center gap-1"><span className="inline-block h-3 w-3 rounded bg-sky-700" />3+ in</span>
+        </div>
+      </CardContent>
+    </Card>
   )
 }
