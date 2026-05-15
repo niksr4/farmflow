@@ -317,14 +317,22 @@ export async function POST(request: Request) {
       ? accountsSql` AND location_id IS NOT DISTINCT FROM ${validLocationId}::uuid`
       : accountsSql``
 
-    // Extract estate and outside labor details
-    const hfEntry = laborEntries.find((e: any) => e.name === "Estate Labor")
-    const outsideEntry = laborEntries.find((e: any) => e.name === "Outside Labor")
+    // Extract estate and outside labor details.
+    // Accept both legacy names ("Estate Labor", "Outside Labor") and current names
+    // ("In-house", "Outside") so old saved entries and new entries both work.
+    // Extra groups beyond the first two contribute to total_cost only.
+    const IN_HOUSE_NAMES = new Set(["Estate Labor", "In-house"])
+    const OUTSIDE_NAMES = new Set(["Outside Labor", "Outside"])
+    const hfEntry = laborEntries.find((e: any) => IN_HOUSE_NAMES.has(e.name)) ?? laborEntries[0]
+    const outsideEntry = laborEntries.find((e: any) => OUTSIDE_NAMES.has(e.name)) ?? (laborEntries.length > 1 ? laborEntries[1] : null)
     const hfLaborers = Number(hfEntry?.laborCount) || 0
     const hfCostPer = Number(hfEntry?.costPerLabor) || 0
     const outsideLaborers = Number(outsideEntry?.laborCount) || 0
     const outsideCostPer = Number(outsideEntry?.costPerLabor) || 0
-    const computedTotalCost = hfLaborers * hfCostPer + outsideLaborers * outsideCostPer
+    const computedTotalCost = laborEntries.reduce(
+      (sum: number, e: any) => sum + (Number(e.laborCount) || 0) * (Number(e.costPerLabor) || 0),
+      0,
+    )
 
     // De-dupe accidental rapid double-submit from UI (same payload within the last 90 seconds).
     if (supportsTaskDescription || !requestedTaskDescription) {
@@ -518,14 +526,19 @@ export async function PUT(request: Request) {
       return NextResponse.json({ success: false, error: "Selected location is invalid for this tenant" }, { status: 400 })
     }
 
-    // Extract estate and outside labor details
-    const hfEntry = laborEntries.find((e: any) => e.name === "Estate Labor")
-    const outsideEntry = laborEntries.find((e: any) => e.name === "Outside Labor")
+    // Extract estate and outside labor details (same flexible matching as POST).
+    const IN_HOUSE_NAMES = new Set(["Estate Labor", "In-house"])
+    const OUTSIDE_NAMES = new Set(["Outside Labor", "Outside"])
+    const hfEntry = laborEntries.find((e: any) => IN_HOUSE_NAMES.has(e.name)) ?? laborEntries[0]
+    const outsideEntry = laborEntries.find((e: any) => OUTSIDE_NAMES.has(e.name)) ?? (laborEntries.length > 1 ? laborEntries[1] : null)
     const hfLaborers = Number(hfEntry?.laborCount) || 0
     const hfCostPer = Number(hfEntry?.costPerLabor) || 0
     const outsideLaborers = Number(outsideEntry?.laborCount) || 0
     const outsideCostPer = Number(outsideEntry?.costPerLabor) || 0
-    const computedTotalCost = hfLaborers * hfCostPer + outsideLaborers * outsideCostPer
+    const computedTotalCost = laborEntries.reduce(
+      (sum: number, e: any) => sum + (Number(e.laborCount) || 0) * (Number(e.costPerLabor) || 0),
+      0,
+    )
 
     const existing = await runTenantQuery(
       accountsSql,
