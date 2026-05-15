@@ -76,6 +76,7 @@ export default function RainfallTab({ username, showDataToolsControls = false }:
   const canDelete = user?.role === "admin" || user?.role === "owner"
   const [records, setRecords] = useState<RainfallRecord[]>([])
   const [selectedDate, setSelectedDate] = useState<Date>(new Date())
+  const [calendarMonth, setCalendarMonth] = useState<Date>(new Date())
   const [inches, setInches] = useState("")
   const [cents, setCents] = useState("")
   const [notes, setNotes] = useState("")
@@ -722,7 +723,21 @@ export default function RainfallTab({ username, showDataToolsControls = false }:
                   </Button>
                 </PopoverTrigger>
                 <PopoverContent className="w-auto p-0">
-                  <Calendar mode="single" selected={selectedDate} onSelect={(date) => date && setSelectedDate(date)} />
+                  <Calendar
+                    mode="single"
+                    selected={selectedDate}
+                    month={calendarMonth}
+                    onMonthChange={setCalendarMonth}
+                    onSelect={(date) => {
+                      if (date) {
+                        setSelectedDate(date)
+                        setCalendarMonth(date)
+                      }
+                    }}
+                    captionLayout="dropdown"
+                    fromYear={2015}
+                    toYear={currentYear}
+                  />
                 </PopoverContent>
               </Popover>
             </div>
