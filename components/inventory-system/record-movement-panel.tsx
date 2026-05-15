@@ -322,6 +322,51 @@ export default function RecordMovementPanel({
           )}
         </div>
 
+        {/* Price per unit — only meaningful for restocks; drives weighted average cost */}
+        {newTransaction?.transaction_type === "restock" && (
+          <div className="space-y-2">
+            <div className="flex items-center gap-2">
+              <label className="text-sm font-medium text-neutral-700">Unit Price (Optional)</label>
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <button type="button" aria-label="Unit price help" className="inline-flex h-5 w-5 items-center justify-center rounded-full border border-black/10 text-neutral-500 hover:text-neutral-700">
+                      <Info className="h-3 w-3" />
+                    </button>
+                  </TooltipTrigger>
+                  <TooltipContent className="max-w-[230px] text-xs leading-relaxed">
+                    Enter the price you paid per unit for this batch. FarmFlow uses weighted average costing — each restock recalculates the average as total spend ÷ total quantity. Depletions are then valued at that running average.
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+            </div>
+            <Input
+              type="number"
+              min={0}
+              step="0.01"
+              placeholder="e.g. 60 for ₹60/kg"
+              value={newTransaction?.price ?? ""}
+              onKeyDown={preventNegativeKey}
+              onWheel={preventNumberScrollChange}
+              onChange={(e) => {
+                const next = coerceNonNegativeNumber(e.target.value)
+                if (next === null) return
+                onFieldChange("price", next)
+              }}
+              className="h-11 rounded-xl border-black/5 bg-white focus-visible:ring-2 focus-visible:ring-emerald-200"
+            />
+            <p className="text-xs text-neutral-500">
+              Leave blank if price is unknown — inventory quantity will still update correctly.
+            </p>
+          </div>
+        )}
+
+        {newTransaction?.transaction_type !== "restock" && (
+          <p className="text-xs text-neutral-600 bg-neutral-50 border border-black/5 rounded-lg px-3 py-2">
+            Depleted stock is valued at the <strong>weighted average cost</strong> on record — total spend divided by current quantity.
+          </p>
+        )}
+
         {/* Notes */}
         <div className="space-y-2">
           <div className="flex items-center gap-2">

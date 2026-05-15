@@ -263,7 +263,7 @@ export default function InventoryDialogs(p: DialogProps) {
                 />
               </div>
               <div className="space-y-2">
-                <FieldLabel htmlFor="edit-transaction-price" label="Unit Price" tooltip="Used to compute total cost for this transaction." />
+                <FieldLabel htmlFor="edit-transaction-price" label="Unit Price" tooltip="Price per unit for this transaction. For restocks, this updates the weighted average cost (total spend ÷ total quantity). Depletions are always valued at the running average, not this field." />
                 <Input id="edit-transaction-price" type="number" value={p.editingTransaction.price ?? ""} onChange={(e) => p.handleEditTransactionChange("price", Number(e.target.value))} />
               </div>
             </div>

@@ -6875,9 +6875,22 @@ export default function InventorySystem() {
                                 <div>
                                   <div className="text-base font-semibold text-neutral-900">{item.name}</div>
                                   <div className="text-xs text-neutral-500">
-                                    {avgPrice > 0
-                                      ? `Avg ${formatCurrency(avgPrice)}/${item.unit || "unit"}`
-                                      : "Pricing not yet recorded"}
+                                    {avgPrice > 0 ? (
+                                      <TooltipProvider>
+                                        <Tooltip>
+                                          <TooltipTrigger asChild>
+                                            <span className="cursor-default underline decoration-dotted decoration-neutral-400">
+                                              Avg cost {formatCurrency(avgPrice)}/{item.unit || "unit"}
+                                            </span>
+                                          </TooltipTrigger>
+                                          <TooltipContent className="max-w-[230px] text-xs leading-relaxed">
+                                            Weighted average cost — FarmFlow divides total spend by total quantity each time you restock. Depletions are valued at this running average, not the original purchase price.
+                                          </TooltipContent>
+                                        </Tooltip>
+                                      </TooltipProvider>
+                                    ) : (
+                                      "Pricing not yet recorded"
+                                    )}
                                   </div>
                                 </div>
                               </div>
