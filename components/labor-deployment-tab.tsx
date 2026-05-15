@@ -4,13 +4,14 @@ import type React from "react"
 
 import { useState, useEffect, useRef, useCallback } from "react"
 import { useLaborData } from "@/hooks/use-labor-data"
+import { useTenantSettings } from "@/hooks/use-tenant-settings"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
-import { PlusCircle, Trash2, Edit2, Save, X, ChevronDown, ChevronUp } from "lucide-react"
+import { PlusCircle, Trash2, Edit2, Save, X, ChevronDown, ChevronUp, Plus } from "lucide-react"
 import { Textarea } from "@/components/ui/textarea"
 import { Badge } from "@/components/ui/badge"
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
@@ -27,16 +28,28 @@ interface ActivityCode {
   reference: string
 }
 
+interface LaborSet {
+  label: string
+  laborers: number
+  costPerLaborer: number
+}
+
 interface FormData {
   date: string
   code: string
   reference: string
-  hfLaborers: number
-  hfCostPerLaborer: number
-  outsideLaborers: number
-  outsideCostPerLaborer: number
+  laborSets: LaborSet[]
   notes: string
   taskDescription: string
+}
+
+const DEFAULT_SET_LABELS = ["In-house", "Outside"]
+
+function makeDefaultSets(inHouseWage: number, outsideWage: number): LaborSet[] {
+  return [
+    { label: "In-house", laborers: 0, costPerLaborer: inHouseWage },
+    { label: "Outside", laborers: 0, costPerLaborer: outsideWage },
+  ]
 }
 
 export default function LaborDeploymentTab({
@@ -61,9 +74,14 @@ export default function LaborDeploymentTab({
     updateDeployment,
     deleteDeployment,
   } = useLaborData(locationId, { startDate, endDate })
+  const { settings } = useTenantSettings()
   const { toast } = useToast()
 
+  const inHouseWage = settings.laborWages?.defaultInHouseWage ?? 0
+  const outsideWage = settings.laborWages?.defaultOutsideWage ?? 0
+
   const [isAdding, setIsAdding] = useState(false)
+  const [prefilled, setPrefilled] = useState(false)
   const [editingId, setEditingId] = useState<string | null>(null)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [activities, setActivities] = useState<ActivityCode[]>([])
@@ -72,10 +90,7 @@ export default function LaborDeploymentTab({
     date: new Date().toISOString().split("T")[0],
     code: "",
     reference: "",
-    hfLaborers: 0,
-    hfCostPerLaborer: 475,
-    outsideLaborers: 0,
-    outsideCostPerLaborer: 450,
+    laborSets: makeDefaultSets(inHouseWage, outsideWage),
     notes: "",
     taskDescription: "",
   })
@@ -100,43 +115,93 @@ export default function LaborDeploymentTab({
     fetchActivities()
   }, [fetchActivities])
 
-  // Autofill reference when code changes
   const handleCodeChange = (code: string) => {
     setFormData((prev) => ({ ...prev, code }))
-
-    // Find matching activity and autofill reference
-    const matchingActivity = activities.find((activity) => activity.code.toLowerCase() === code.toLowerCase())
-
+    const matchingActivity = activities.find((a) => a.code.toLowerCase() === code.toLowerCase())
     if (matchingActivity) {
       setFormData((prev) => ({ ...prev, reference: matchingActivity.reference }))
     }
   }
 
-  const calculateTotal = () => {
-    const hfTotal = formData.hfLaborers * formData.hfCostPerLaborer
-    const outsideTotal = formData.outsideLaborers * formData.outsideCostPerLaborer
-    return hfTotal + outsideTotal
-  }
+  const calculateTotal = (sets = formData.laborSets) =>
+    sets.reduce((sum, s) => sum + s.laborers * s.costPerLaborer, 0)
 
   const formatLaborCount = (value: number) => {
-    const numericValue = Number(value) || 0
-    return Number.isInteger(numericValue) ? formatNumber(numericValue, 0) : formatNumber(numericValue, 1)
+    const n = Number(value) || 0
+    return Number.isInteger(n) ? formatNumber(n, 0) : formatNumber(n, 1)
   }
+
+  const openNewForm = useCallback(() => {
+    const last = deployments[0]
+    if (last && last.laborEntries?.length > 0) {
+      const sets: LaborSet[] = last.laborEntries.map((e: any) => ({
+        label: e.name === "Estate Labor" ? "In-house" : e.name === "Outside Labor" ? "Outside" : e.name,
+        laborers: Number(e.laborCount) || 0,
+        costPerLaborer: Number(e.costPerLabor) || 0,
+      }))
+      setFormData({
+        date: new Date().toISOString().split("T")[0],
+        code: last.code || "",
+        reference: last.reference || "",
+        laborSets: sets,
+        notes: "",
+        taskDescription: "",
+      })
+      setPrefilled(true)
+    } else {
+      setFormData({
+        date: new Date().toISOString().split("T")[0],
+        code: "",
+        reference: "",
+        laborSets: makeDefaultSets(inHouseWage, outsideWage),
+        notes: "",
+        taskDescription: "",
+      })
+      setPrefilled(false)
+    }
+    setIsAdding(true)
+  }, [deployments, inHouseWage, outsideWage])
 
   const resetForm = () => {
     setFormData({
       date: new Date().toISOString().split("T")[0],
       code: "",
       reference: "",
-      hfLaborers: 0,
-      hfCostPerLaborer: 475,
-      outsideLaborers: 0,
-      outsideCostPerLaborer: 450,
+      laborSets: makeDefaultSets(inHouseWage, outsideWage),
       notes: "",
       taskDescription: "",
     })
+    setPrefilled(false)
     setIsAdding(false)
     setEditingId(null)
+  }
+
+  const updateSet = (index: number, field: keyof LaborSet, value: string | number) => {
+    setFormData((prev) => {
+      const sets = prev.laborSets.map((s, i) => (i === index ? { ...s, [field]: value } : s))
+      return { ...prev, laborSets: sets }
+    })
+  }
+
+  const addSet = () => {
+    setFormData((prev) => ({
+      ...prev,
+      laborSets: [
+        ...prev.laborSets,
+        {
+          label: `Group ${prev.laborSets.length + 1}`,
+          laborers: 0,
+          costPerLaborer: prev.laborSets[prev.laborSets.length - 1]?.costPerLaborer ?? 0,
+        },
+      ],
+    }))
+  }
+
+  const removeSet = (index: number) => {
+    setFormData((prev) => ({
+      ...prev,
+      laborSets: prev.laborSets.filter((_, i) => i !== index),
+    }))
   }
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -144,20 +209,14 @@ export default function LaborDeploymentTab({
     if (isSubmitting) return
     setIsSubmitting(true)
 
-    const laborEntries = [
-      {
-        name: "Estate Labor",
-        laborCount: formData.hfLaborers,
-        costPerLabor: formData.hfCostPerLaborer,
-      },
-    ]
+    const laborEntries = formData.laborSets
+      .filter((s) => s.laborers > 0)
+      .map((s) => ({ name: s.label, laborCount: s.laborers, costPerLabor: s.costPerLaborer }))
 
-    if (formData.outsideLaborers > 0) {
-      laborEntries.push({
-        name: "Outside Labor",
-        laborCount: formData.outsideLaborers,
-        costPerLabor: formData.outsideCostPerLaborer,
-      })
+    if (laborEntries.length === 0) {
+      toast({ title: "No workers logged", description: "Enter at least one worker count above zero.", variant: "destructive" })
+      setIsSubmitting(false)
+      return
     }
 
     const deployment = {
@@ -189,25 +248,25 @@ export default function LaborDeploymentTab({
   }
 
   const startEdit = (deployment: any) => {
-
-    const hfEntry = deployment.laborEntries.find((entry: any) => entry.name === "Estate Labor")
-    const outsideEntry = deployment.laborEntries.find((entry: any) => entry.name === "Outside Labor")
-
+    const sets: LaborSet[] = (deployment.laborEntries || []).map((e: any) => ({
+      label: e.name === "Estate Labor" ? "In-house" : e.name === "Outside Labor" ? "Outside" : e.name,
+      laborers: Number(e.laborCount) || 0,
+      costPerLaborer: Number(e.costPerLabor) || 0,
+    }))
+    if (sets.length === 0) {
+      sets.push(...makeDefaultSets(inHouseWage, outsideWage))
+    }
     setFormData({
       date: deployment.date.split("T")[0],
       code: deployment.code,
       reference: deployment.reference,
-      hfLaborers: hfEntry?.laborCount || 0,
-      hfCostPerLaborer: hfEntry?.costPerLabor || 475,
-      outsideLaborers: outsideEntry?.laborCount || 0,
-      outsideCostPerLaborer: outsideEntry?.costPerLabor || 450,
+      laborSets: sets,
       notes: deployment.notes || "",
       taskDescription: deployment.taskDescription || "",
     })
+    setPrefilled(false)
     setEditingId(deployment.id)
     setIsAdding(true)
-
-
     setTimeout(() => {
       formRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })
     }, 100)
@@ -215,13 +274,9 @@ export default function LaborDeploymentTab({
 
   const toggleRow = (id: string) => {
     setExpandedRows((prev) => {
-      const newSet = new Set(prev)
-      if (newSet.has(id)) {
-        newSet.delete(id)
-      } else {
-        newSet.add(id)
-      }
-      return newSet
+      const next = new Set(prev)
+      next.has(id) ? next.delete(id) : next.add(id)
+      return next
     })
   }
 
@@ -271,7 +326,7 @@ export default function LaborDeploymentTab({
                 <p className="mt-1 text-sm font-semibold text-foreground">One day, one activity code</p>
               </div>
               <div className="rounded-xl border border-white/70 bg-white/85 p-3">
-                <p className="text-[11px] uppercase tracking-[0.18em] text-emerald-700">Estate team</p>
+                <p className="text-[11px] uppercase tracking-[0.18em] text-emerald-700">In-house team</p>
                 <p className="mt-1 text-sm font-semibold text-foreground">Workers paid by the estate</p>
               </div>
               <div className="rounded-xl border border-white/70 bg-white/85 p-3">
@@ -282,11 +337,27 @@ export default function LaborDeploymentTab({
           </div>
 
           {!isAdding ? (
-            <Button onClick={() => setIsAdding(true)} className="w-full h-12 text-base">
+            <Button onClick={openNewForm} className="w-full h-12 text-base">
               <PlusCircle className="mr-2 h-5 w-5" /> Add labor entry
             </Button>
           ) : (
             <form onSubmit={handleSubmit} className="space-y-4 border rounded-lg p-3 sm:p-4 bg-muted/50" ref={formRef}>
+              {prefilled && (
+                <div className="flex items-center justify-between rounded-xl border border-blue-200 bg-blue-50/80 px-4 py-2.5 text-sm text-blue-800">
+                  <span>Prefilled from your last entry — update as needed.</span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setFormData((prev) => ({ ...prev, code: "", reference: "", laborSets: makeDefaultSets(inHouseWage, outsideWage), taskDescription: "" }))
+                      setPrefilled(false)
+                    }}
+                    className="ml-3 text-blue-600 underline text-xs hover:text-blue-800"
+                  >
+                    Clear
+                  </button>
+                </div>
+              )}
+
               <div className="rounded-xl border border-border/60 bg-white/80 p-4">
                 <p className="text-sm font-semibold text-foreground">Entry basics</p>
                 <p className="mt-1 text-xs text-muted-foreground">
@@ -296,9 +367,7 @@ export default function LaborDeploymentTab({
 
               <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
                 <div className="space-y-2">
-                  <Label htmlFor="date" className="text-base">
-                    Date
-                  </Label>
+                  <Label htmlFor="date" className="text-base">Date</Label>
                   <Input
                     id="date"
                     type="date"
@@ -310,9 +379,7 @@ export default function LaborDeploymentTab({
                 </div>
 
                 <div className="space-y-2">
-                  <Label htmlFor="code" className="text-base">
-                    Activity code
-                  </Label>
+                  <Label htmlFor="code" className="text-base">Activity code</Label>
                   <Input
                     id="code"
                     value={formData.code}
@@ -324,18 +391,14 @@ export default function LaborDeploymentTab({
                   />
                   <datalist id="activity-codes">
                     {activities.map((activity) => (
-                      <option key={activity.code} value={activity.code}>
-                        {activity.reference}
-                      </option>
+                      <option key={activity.code} value={activity.code}>{activity.reference}</option>
                     ))}
                   </datalist>
                   <p className="text-xs text-muted-foreground">Saved codes appear here, but you can type a short estate work code now.</p>
                 </div>
 
                 <div className="space-y-2">
-                  <Label htmlFor="reference" className="text-base">
-                    Category name
-                  </Label>
+                  <Label htmlFor="reference" className="text-base">Category name</Label>
                   <Input
                     id="reference"
                     value={formData.reference}
@@ -348,99 +411,73 @@ export default function LaborDeploymentTab({
                 </div>
               </div>
 
-              <div className="rounded-xl border border-border/60 bg-white/80 p-4">
-                <div className="mb-3 flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
-                  <h4 className="font-medium text-base">Estate team</h4>
-                  <p className="text-sm text-muted-foreground">
-                    Subtotal: {formatCurrency(formData.hfLaborers * formData.hfCostPerLaborer)}
-                  </p>
-                </div>
-                <div className="grid gap-4 md:grid-cols-2">
-                  <div className="space-y-2">
-                    <Label htmlFor="hfLaborers" className="text-base">
-                      Number of workers (0.5 for half day)
-                    </Label>
-                    <Input
-                      id="hfLaborers"
-                      type="number"
-                      min="0"
-                      step="0.5"
-                      value={formData.hfLaborers}
-                      onChange={(e) =>
-                        setFormData((prev) => ({ ...prev, hfLaborers: Number.parseFloat(e.target.value) || 0 }))
-                      }
-                      className="h-11"
-                    />
+              {/* Dynamic labor sets */}
+              <div className="space-y-3">
+                {formData.laborSets.map((set, i) => (
+                  <div key={i} className="rounded-xl border border-border/60 bg-white/80 p-4">
+                    <div className="mb-3 flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+                      <div className="flex items-center gap-2">
+                        <Input
+                          value={set.label}
+                          onChange={(e) => updateSet(i, "label", e.target.value)}
+                          className="h-8 w-36 text-sm font-medium"
+                          aria-label="Labor group label"
+                        />
+                        {formData.laborSets.length > 1 && (
+                          <button
+                            type="button"
+                            onClick={() => removeSet(i)}
+                            className="text-muted-foreground hover:text-destructive"
+                            aria-label="Remove labor group"
+                          >
+                            <X className="h-4 w-4" />
+                          </button>
+                        )}
+                      </div>
+                      <p className="text-sm text-muted-foreground">
+                        Subtotal: {formatCurrency(set.laborers * set.costPerLaborer)}
+                      </p>
+                    </div>
+                    <div className="grid gap-4 md:grid-cols-2">
+                      <div className="space-y-2">
+                        <Label className="text-base">Number of workers (0.5 for half day)</Label>
+                        <Input
+                          type="number"
+                          min="0"
+                          step="0.5"
+                          value={set.laborers}
+                          onChange={(e) => updateSet(i, "laborers", Number.parseFloat(e.target.value) || 0)}
+                          className="h-11"
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label className="text-base">Cost per worker (₹)</Label>
+                        <Input
+                          type="number"
+                          min="0"
+                          step="0.01"
+                          value={set.costPerLaborer}
+                          onChange={(e) => updateSet(i, "costPerLaborer", Number.parseFloat(e.target.value) || 0)}
+                          className="h-11"
+                        />
+                      </div>
+                    </div>
                   </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="hfCostPerLaborer" className="text-base">
-                      Cost per worker (₹)
-                    </Label>
-                    <Input
-                      id="hfCostPerLaborer"
-                      type="number"
-                      min="0"
-                      step="0.01"
-                      value={formData.hfCostPerLaborer}
-                      onChange={(e) =>
-                        setFormData((prev) => ({ ...prev, hfCostPerLaborer: Number.parseFloat(e.target.value) || 0 }))
-                      }
-                      className="h-11"
-                    />
-                  </div>
-                </div>
-              </div>
+                ))}
 
-              <div className="rounded-xl border border-border/60 bg-white/80 p-4">
-                <div className="mb-3 flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
-                  <h4 className="font-medium text-base">Outside team</h4>
-                  <p className="text-sm text-muted-foreground">
-                    Subtotal: {formatCurrency(formData.outsideLaborers * formData.outsideCostPerLaborer)}
-                  </p>
-                </div>
-                <div className="grid gap-4 md:grid-cols-2">
-                  <div className="space-y-2">
-                    <Label htmlFor="outsideLaborers" className="text-base">
-                      Number of workers (0.5 for half day)
-                    </Label>
-                    <Input
-                      id="outsideLaborers"
-                      type="number"
-                      min="0"
-                      step="0.5"
-                      value={formData.outsideLaborers}
-                      onChange={(e) =>
-                        setFormData((prev) => ({ ...prev, outsideLaborers: Number.parseFloat(e.target.value) || 0 }))
-                      }
-                      className="h-11"
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="outsideCostPerLaborer" className="text-base">
-                      Cost per worker (₹)
-                    </Label>
-                    <Input
-                      id="outsideCostPerLaborer"
-                      type="number"
-                      min="0"
-                      step="0.01"
-                      value={formData.outsideCostPerLaborer}
-                      onChange={(e) =>
-                        setFormData((prev) => ({
-                          ...prev,
-                          outsideCostPerLaborer: Number.parseFloat(e.target.value) || 0,
-                        }))
-                      }
-                      className="h-11"
-                    />
-                  </div>
-                </div>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={addSet}
+                  className="w-full border-dashed bg-transparent"
+                >
+                  <Plus className="mr-2 h-4 w-4" /> Add another labor group
+                </Button>
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="taskDescription" className="text-base">
-                  What work was done
-                </Label>
+                <Label htmlFor="taskDescription" className="text-base">What work was done</Label>
                 <Textarea
                   id="taskDescription"
                   value={formData.taskDescription}
@@ -452,9 +489,7 @@ export default function LaborDeploymentTab({
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="notes" className="text-base">
-                  Notes
-                </Label>
+                <Label htmlFor="notes" className="text-base">Notes</Label>
                 <Textarea
                   id="notes"
                   value={formData.notes}
@@ -500,10 +535,7 @@ export default function LaborDeploymentTab({
             {/* Mobile View */}
             <div className="block sm:hidden">
               {deployments.map((deployment) => {
-                const hfEntry = deployment.laborEntries.find((entry: any) => entry.name === "Estate Labor")
-                const outsideEntry = deployment.laborEntries.find((entry: any) => entry.name === "Outside Labor")
                 const isExpanded = expandedRows.has(deployment.id)
-
                 return (
                   <Collapsible key={deployment.id} open={isExpanded} onOpenChange={() => toggleRow(deployment.id)}>
                     <div className="border-b p-4">
@@ -511,34 +543,26 @@ export default function LaborDeploymentTab({
                         <div className="flex justify-between items-start">
                           <div className="text-left flex-1">
                             <div className="flex items-center gap-2 mb-1">
-                              <Badge variant="outline" className="font-mono text-xs">
-                                {deployment.code}
-                              </Badge>
+                              <Badge variant="outline" className="font-mono text-xs">{deployment.code}</Badge>
                               <span className="text-xs text-muted-foreground">{formatDateOnly(deployment.date)}</span>
                             </div>
                             <p className="font-medium text-sm line-clamp-1">{deployment.reference}</p>
                             <p className="text-lg font-bold text-green-700 mt-1">{formatCurrency(deployment.totalCost)}</p>
                           </div>
-                          {isExpanded ? (
-                            <ChevronUp className="h-5 w-5 text-muted-foreground" />
-                          ) : (
-                            <ChevronDown className="h-5 w-5 text-muted-foreground" />
-                          )}
+                          {isExpanded ? <ChevronUp className="h-5 w-5 text-muted-foreground" /> : <ChevronDown className="h-5 w-5 text-muted-foreground" />}
                         </div>
                       </CollapsibleTrigger>
 
                       <CollapsibleContent className="pt-3 space-y-2">
-                        {hfEntry && Number(hfEntry.laborCount) > 0 && (
-                          <div className="text-sm">
-                            <span className="font-medium">Estate team:</span> {formatLaborCount(Number(hfEntry.laborCount) || 0)} @{" "}
-                            {formatCurrency(hfEntry.costPerLabor)}
-                          </div>
-                        )}
-                        {outsideEntry && Number(outsideEntry.laborCount) > 0 && (
-                          <div className="text-sm">
-                            <span className="font-medium">Outside team:</span> {formatLaborCount(Number(outsideEntry.laborCount) || 0)} @{" "}
-                            {formatCurrency(outsideEntry.costPerLabor)}
-                          </div>
+                        {(deployment.laborEntries || []).map((entry: any, i: number) =>
+                          Number(entry.laborCount) > 0 ? (
+                            <div key={i} className="text-sm">
+                              <span className="font-medium">
+                                {entry.name === "Estate Labor" ? "In-house" : entry.name === "Outside Labor" ? "Outside" : entry.name}:
+                              </span>{" "}
+                              {formatLaborCount(Number(entry.laborCount))} @ {formatCurrency(entry.costPerLabor)}
+                            </div>
+                          ) : null
                         )}
                         {deployment.taskDescription && (
                           <div className="text-sm text-muted-foreground">
@@ -585,68 +609,67 @@ export default function LaborDeploymentTab({
                     <TableHead className="sticky top-0 bg-muted/60">Date</TableHead>
                     <TableHead className="sticky top-0 bg-muted/60">Code</TableHead>
                     <TableHead className="sticky top-0 bg-muted/60">Category</TableHead>
-                    <TableHead className="sticky top-0 bg-muted/60">Estate Team</TableHead>
-                    <TableHead className="sticky top-0 bg-muted/60">Outside Team</TableHead>
+                    <TableHead className="sticky top-0 bg-muted/60">Labor groups</TableHead>
                     <TableHead className="text-right sticky top-0 bg-muted/60">Total Cost</TableHead>
                     <TableHead className="w-[100px] sticky top-0 bg-muted/60">Actions</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {deployments.map((deployment, index) => {
-                    const hfEntry = deployment.laborEntries.find((entry) => entry.name === "Estate Labor")
-                    const outsideEntry = deployment.laborEntries.find((entry) => entry.name === "Outside Labor")
-                    return (
-                      <TableRow key={deployment.id} className={index % 2 === 0 ? "bg-white" : "bg-muted/20"}>
-                        <TableCell>{formatDateOnly(deployment.date)}</TableCell>
-                        <TableCell className="font-medium">{deployment.code}</TableCell>
-                        <TableCell>{deployment.reference}</TableCell>
-                        <TableCell>
-                          {hfEntry
-                            ? `${formatLaborCount(Number(hfEntry.laborCount) || 0)} @ ${formatCurrency(hfEntry.costPerLabor)}`
-                            : "-"}
-                        </TableCell>
-                        <TableCell>
-                          {outsideEntry
-                            ? `${formatLaborCount(Number(outsideEntry.laborCount) || 0)} @ ${formatCurrency(outsideEntry.costPerLabor)}`
-                            : "-"}
-                        </TableCell>
-                        <TableCell className="text-right font-semibold">{formatCurrency(deployment.totalCost)}</TableCell>
-                        <TableCell>
-                          <TooltipProvider>
-                            <div className="flex gap-2">
-                              <Tooltip>
-                                <TooltipTrigger asChild>
-                                  <Button variant="ghost" size="icon" onClick={() => startEdit(deployment)}>
-                                    <Edit2 className="h-4 w-4" />
-                                  </Button>
-                                </TooltipTrigger>
-                                <TooltipContent>Edit deployment</TooltipContent>
-                              </Tooltip>
-                              <Tooltip>
-                                <TooltipTrigger asChild>
-                                  <Button
-                                    variant="ghost"
-                                    size="icon"
-                                    onClick={async () => {
-                                      if (confirm("Are you sure you want to delete this deployment?")) {
-                                        const result = await deleteDeployment(deployment.id)
-                                        if (!result.ok) {
-                                          toast({ title: "Couldn't delete record", description: result.error, variant: "destructive" })
-                                        }
+                  {deployments.map((deployment, index) => (
+                    <TableRow key={deployment.id} className={index % 2 === 0 ? "bg-white" : "bg-muted/20"}>
+                      <TableCell>{formatDateOnly(deployment.date)}</TableCell>
+                      <TableCell className="font-medium">{deployment.code}</TableCell>
+                      <TableCell>{deployment.reference}</TableCell>
+                      <TableCell>
+                        <div className="space-y-0.5">
+                          {(deployment.laborEntries || []).map((entry: any, i: number) =>
+                            Number(entry.laborCount) > 0 ? (
+                              <div key={i} className="text-sm">
+                                <span className="text-muted-foreground text-xs">
+                                  {entry.name === "Estate Labor" ? "In-house" : entry.name === "Outside Labor" ? "Outside" : entry.name}:
+                                </span>{" "}
+                                {formatLaborCount(Number(entry.laborCount))} @ {formatCurrency(entry.costPerLabor)}
+                              </div>
+                            ) : null
+                          )}
+                        </div>
+                      </TableCell>
+                      <TableCell className="text-right font-semibold">{formatCurrency(deployment.totalCost)}</TableCell>
+                      <TableCell>
+                        <TooltipProvider>
+                          <div className="flex gap-2">
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <Button variant="ghost" size="icon" onClick={() => startEdit(deployment)}>
+                                  <Edit2 className="h-4 w-4" />
+                                </Button>
+                              </TooltipTrigger>
+                              <TooltipContent>Edit deployment</TooltipContent>
+                            </Tooltip>
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  onClick={async () => {
+                                    if (confirm("Are you sure you want to delete this deployment?")) {
+                                      const result = await deleteDeployment(deployment.id)
+                                      if (!result.ok) {
+                                        toast({ title: "Couldn't delete record", description: result.error, variant: "destructive" })
                                       }
-                                    }}
-                                  >
-                                    <Trash2 className="h-4 w-4" />
-                                  </Button>
-                                </TooltipTrigger>
-                                <TooltipContent>Delete deployment</TooltipContent>
-                              </Tooltip>
-                            </div>
-                          </TooltipProvider>
-                        </TableCell>
-                      </TableRow>
-                    )
-                  })}
+                                    }
+                                  }}
+                                >
+                                  <Trash2 className="h-4 w-4" />
+                                </Button>
+                              </TooltipTrigger>
+                              <TooltipContent>Delete deployment</TooltipContent>
+                            </Tooltip>
+                          </div>
+                        </TooltipProvider>
+                      </TableCell>
+                    </TableRow>
+                  ))}
                 </TableBody>
               </Table>
             </div>
@@ -665,12 +688,12 @@ export default function LaborDeploymentTab({
           description="Start with one real workday and one activity code. That is enough to begin tracking labor cost cleanly."
           steps={[
             "Use the real date and work code for the task your team completed.",
-            "Enter estate workers and outside workers separately only if both were actually used.",
+            "Enter in-house workers and outside workers separately only if both were actually used.",
             "Leave extra notes for later if they are slowing you down.",
           ]}
           tip="One entry should represent one day and one activity. Keeping that rule makes labor totals much easier to trust."
           askPrompt="How do I record my first labor entry?"
-          primaryAction={{ label: isAdding ? "Continue entry" : "Add labor entry", onClick: () => setIsAdding(true) }}
+          primaryAction={{ label: isAdding ? "Continue entry" : "Add labor entry", onClick: openNewForm }}
           className="mt-2"
         />
       )}
