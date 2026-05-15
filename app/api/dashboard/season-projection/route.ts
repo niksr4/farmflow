@@ -30,7 +30,7 @@ export async function GET() {
       sql!.query(
         `
         SELECT
-          COALESCE(SUM(crop_today + COALESCE(ripe_today, 0) + COALESCE(green_today, 0)), 0) AS season_total_kg,
+          COALESCE(SUM(crop_today), 0) AS season_total_kg,
           COUNT(DISTINCT process_date)::int AS season_days
         FROM processing_records
         WHERE tenant_id = $1
@@ -43,7 +43,7 @@ export async function GET() {
         `
         SELECT
           process_date::text,
-          SUM(crop_today + COALESCE(ripe_today, 0) + COALESCE(green_today, 0)) AS daily_kg
+          SUM(crop_today) AS daily_kg
         FROM processing_records
         WHERE tenant_id = $1
           AND process_date >= (CURRENT_DATE - $2::int)::date

@@ -25,9 +25,10 @@ export async function GET(_request: NextRequest) {
       sql,
       tenantContext,
       sql`
-        SELECT * FROM rainfall_records 
+        SELECT * FROM rainfall_records
         WHERE tenant_id = ${tenantContext.tenantId}
         ORDER BY record_date DESC
+        LIMIT 3650
       `,
     )
     return NextResponse.json({ success: true, records })

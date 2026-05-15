@@ -4,6 +4,7 @@ import {
   sanitizeAssistantMessages,
 } from "@/lib/ai-assistant"
 import { findAssistantActions } from "@/lib/assistant-search"
+import { buildAgronomyContext } from "@/lib/coffee-agronomy"
 import { buildRateLimitHeaders, checkRateLimit } from "@/lib/rate-limit"
 import { buildTenantAiDataSummary } from "@/lib/server/ai-analysis"
 import { buildClaudeRouteErrorResponse, classifyClaudeRouteError } from "@/lib/server/claude-errors"
@@ -17,6 +18,8 @@ import { sanitizeRouteError } from "@/lib/server/sanitize-route-error"
 
 export const dynamic = "force-dynamic"
 export const revalidate = 0
+
+const AGRONOMY_CONTEXT = buildAgronomyContext()
 
 const normalizePreviewRole = (value: unknown) => {
   const normalized = String(value || "").trim().toLowerCase()
@@ -122,7 +125,9 @@ export async function POST(req: Request) {
       role: effectiveAssistantRole,
     })
 
-    const systemPrompt = `You are FarmFlow Assistant, a concise operations guide for coffee estates. Answer only from the tenant data and workspace guidance provided. Help users understand their data, explain discrepancies, and point them to the exact FarmFlow workspace or button they should use. If data is missing, say so plainly. Do not invent numbers or hidden features. Keep answers practical and easy to follow.`
+    const systemPrompt = `You are FarmFlow Assistant, a knowledgeable operations guide for South Indian coffee, pepper, and rubber estates. You have two sources of knowledge: (1) deep agronomic expertise about South Indian estate management, and (2) the tenant's own operational data loaded below. Use both together. When answering agronomic questions (fertiliser timing, pest thresholds, irrigation, harvest maturity, processing ratios), draw on your domain knowledge and be specific — cite doses, dates, and thresholds. When answering data questions, use only the tenant data provided. Point users to the exact FarmFlow tab or button they should use. If data is missing, say so plainly. Do not invent numbers. Keep answers practical and actionable.
+
+${AGRONOMY_CONTEXT}`
 
     const groundingMessage = `Grounding context for the current tenant:
 

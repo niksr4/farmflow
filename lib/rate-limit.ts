@@ -20,6 +20,7 @@ type RateLimitKey =
   | "authSignup"
   | "authSignupResend"
   | "authSignupVerify"
+  | "authSignupIp"
   | "opsErrorIngest"
 
 type RateLimitResult = {
@@ -71,6 +72,7 @@ const limiters: Record<RateLimitKey, Ratelimit | null> = {
   authSignup: redis ? new Ratelimit({ redis, limiter: Ratelimit.fixedWindow(6, "10 m") }) : null,
   authSignupResend: redis ? new Ratelimit({ redis, limiter: Ratelimit.fixedWindow(6, "10 m") }) : null,
   authSignupVerify: redis ? new Ratelimit({ redis, limiter: Ratelimit.fixedWindow(20, "10 m") }) : null,
+  authSignupIp: redis ? new Ratelimit({ redis, limiter: Ratelimit.fixedWindow(15, "1 h") }) : null,
   opsErrorIngest: redis ? new Ratelimit({ redis, limiter: Ratelimit.fixedWindow(20, "1 m") }) : null,
 }
 
@@ -97,6 +99,7 @@ const localLimiterConfig: Record<RateLimitKey, LocalLimiterConfig> = {
   authSignup: { limit: 6, windowMs: 10 * 60_000 },
   authSignupResend: { limit: 6, windowMs: 10 * 60_000 },
   authSignupVerify: { limit: 20, windowMs: 10 * 60_000 },
+  authSignupIp: { limit: 15, windowMs: 60 * 60_000 },
   opsErrorIngest: { limit: 20, windowMs: 60_000 },
 }
 

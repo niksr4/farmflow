@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server"
 import { sql, accountsSql } from "@/lib/server/db"
-import { requireModuleAccess, isModuleAccessError } from "@/lib/server/module-access"
+import { isModuleAccessError } from "@/lib/server/module-access"
+import { requireSessionUser } from "@/lib/server/auth"
 import { normalizeTenantContext, runTenantQuery } from "@/lib/server/tenant-db"
 import { getClaudeClient, CLAUDE_HAIKU, isClaudeConfigured, extractClaudeText } from "@/lib/server/claude"
 
@@ -52,16 +53,31 @@ async function buildBaseline(
       return `Last 60 days — avg: ${Number(r.avg).toFixed(0)} kg, stddev: ${Number(r.stddev).toFixed(0)} kg, range: ${Number(r.min).toFixed(0)}–${Number(r.max).toFixed(0)} kg (${r.cnt} records)`
     }
 
-    if (field === "processing.wetParchment" || field === "processing.dryParch") {
+    if (field === "processing.wetParchment") {
       const cropToday = Number(context?.cropToday ?? 0)
       if (!cropToday) return "No cherry intake value to compare against."
-      const parchField = field === "processing.wetParchment" ? "wet_parchment" : "dry_parch"
       const rows = await sql`
-        SELECT AVG(${sql.unsafe(parchField)} / NULLIF(crop_today, 0) * 100) AS avg_ratio, COUNT(*) AS cnt
+        SELECT AVG(wet_parchment / NULLIF(crop_today, 0) * 100) AS avg_ratio, COUNT(*) AS cnt
         FROM processing_records
         WHERE tenant_id = ${tenantId}
           AND crop_today > 0
-          AND ${sql.unsafe(parchField)} > 0
+          AND wet_parchment > 0
+          AND process_date >= CURRENT_DATE - INTERVAL '60 days'
+      `
+      const r = (Array.isArray(rows) ? rows[0] : (rows as any)?.rows?.[0]) ?? {}
+      if (!r.cnt || Number(r.cnt) < 3) return "Insufficient history."
+      return `Average conversion ratio last 60 days: ${Number(r.avg_ratio).toFixed(1)}%`
+    }
+
+    if (field === "processing.dryParch") {
+      const cropToday = Number(context?.cropToday ?? 0)
+      if (!cropToday) return "No cherry intake value to compare against."
+      const rows = await sql`
+        SELECT AVG(dry_parch / NULLIF(crop_today, 0) * 100) AS avg_ratio, COUNT(*) AS cnt
+        FROM processing_records
+        WHERE tenant_id = ${tenantId}
+          AND crop_today > 0
+          AND dry_parch > 0
           AND process_date >= CURRENT_DATE - INTERVAL '60 days'
       `
       const r = (Array.isArray(rows) ? rows[0] : (rows as any)?.rows?.[0]) ?? {}
@@ -120,7 +136,7 @@ async function buildBaseline(
 
 export async function POST(request: Request) {
   try {
-    const sessionUser = await requireModuleAccess("inventory")
+    const sessionUser = await requireSessionUser()
     if (!isClaudeConfigured()) {
       return NextResponse.json<ValidateResponse>({ ok: true, warning: null, severity: null })
     }

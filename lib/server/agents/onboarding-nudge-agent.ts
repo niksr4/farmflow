@@ -33,13 +33,15 @@ async function fetchNudgeCandidates(): Promise<NudgeCandidate[]> {
         sr.nudge_sent_at,
         sr.nudge_2_sent_at
       FROM signup_requests sr
-      JOIN users u
-        ON u.tenant_id = sr.tenant_id
-        AND u.role = 'admin'
       WHERE sr.status = 'provisioned'
+        AND EXISTS (
+          SELECT 1 FROM users u
+          WHERE u.tenant_id = sr.tenant_id
+            AND u.role = 'admin'
+            AND u.setup_completed_at IS NULL
+            AND u.requires_guided_setup = TRUE
+        )
         AND sr.provisioned_at >= NOW() - INTERVAL '60 days'
-        AND u.setup_completed_at IS NULL
-        AND u.requires_guided_setup = TRUE
         AND sr.email IS NOT NULL
         AND (
           -- Nudge 1: not yet sent, provisioned 3+ days ago
@@ -67,11 +69,11 @@ async function fetchNudgeCandidates(): Promise<NudgeCandidate[]> {
 
 async function markNudgeSent(signupRequestId: string, nudgeNumber: 1 | 2): Promise<void> {
   if (!sql) return
-  const column = nudgeNumber === 1 ? "nudge_sent_at" : "nudge_2_sent_at"
-  await sql.query(
-    `UPDATE signup_requests SET ${column} = NOW() WHERE id = $1`,
-    [signupRequestId],
-  )
+  if (nudgeNumber === 1) {
+    await sql.query(`UPDATE signup_requests SET nudge_sent_at = NOW() WHERE id = $1`, [signupRequestId])
+  } else {
+    await sql.query(`UPDATE signup_requests SET nudge_2_sent_at = NOW() WHERE id = $1`, [signupRequestId])
+  }
 }
 
 function buildNudge1Email(candidate: NudgeCandidate): { subject: string; html: string; text: string } {

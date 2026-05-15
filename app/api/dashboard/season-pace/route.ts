@@ -35,7 +35,7 @@ export async function GET() {
           CEIL(
             (process_date::date - $2::date + 1)::numeric / 7
           )::int AS week_num,
-          SUM(crop_today + COALESCE(ripe_today, 0) + COALESCE(green_today, 0)) AS weekly_cherry
+          SUM(crop_today) AS weekly_cherry
         FROM processing_records
         WHERE tenant_id = $1
           AND process_date >= $2::date
@@ -49,7 +49,7 @@ export async function GET() {
           CEIL(
             (process_date::date - $4::date + 1)::numeric / 7
           )::int AS week_num,
-          SUM(crop_today + COALESCE(ripe_today, 0) + COALESCE(green_today, 0)) AS weekly_cherry
+          SUM(crop_today) AS weekly_cherry
         FROM processing_records
         WHERE tenant_id = $1
           AND process_date >= $4::date

@@ -557,41 +557,55 @@ export async function runWeeklyDigestAgent(input?: {
     ? allTenants.filter((t) => t.tenantId === input.tenantId)
     : allTenants
 
+  // Process tenants in parallel batches of 3 — avoids serial bottleneck with 5-10 tenants
+  // while staying within Anthropic and Resend concurrency limits.
+  const BATCH_SIZE = 3
   const results: DigestResult[] = []
 
-  for (const tenant of tenants) {
-    const generated = await generateWeeklyDigestText(tenant)
+  for (let i = 0; i < tenants.length; i += BATCH_SIZE) {
+    const batch = tenants.slice(i, i + BATCH_SIZE)
+    const batchResults = await Promise.allSettled(
+      batch.map(async (tenant): Promise<DigestResult> => {
+        const generated = await generateWeeklyDigestText(tenant)
 
-    if (!generated.text) {
-      results.push({
-        tenantId: tenant.tenantId,
-        tenantName: tenant.tenantName,
-        ownerEmail: tenant.ownerEmail,
-        status: "failed",
-        reason: generated.error ?? "AI digest generation returned empty",
-      })
-      continue
+        if (!generated.text) {
+          return {
+            tenantId: tenant.tenantId,
+            tenantName: tenant.tenantName,
+            ownerEmail: tenant.ownerEmail,
+            status: "failed",
+            reason: generated.error ?? "AI digest generation returned empty",
+          }
+        }
+
+        if (dryRun) {
+          return {
+            tenantId: tenant.tenantId,
+            tenantName: tenant.tenantName,
+            ownerEmail: tenant.ownerEmail,
+            status: "skipped",
+            reason: "dry-run",
+          }
+        }
+
+        const sent = await sendDigestEmail(tenant, generated.text)
+        return {
+          tenantId: tenant.tenantId,
+          tenantName: tenant.tenantName,
+          ownerEmail: tenant.ownerEmail,
+          status: sent ? "sent" : "failed",
+          reason: sent ? undefined : "Resend delivery failed",
+        }
+      }),
+    )
+
+    for (const settled of batchResults) {
+      results.push(
+        settled.status === "fulfilled"
+          ? settled.value
+          : { tenantId: "unknown", tenantName: "unknown", ownerEmail: "unknown", status: "failed", reason: String(settled.reason) },
+      )
     }
-
-    if (dryRun) {
-      results.push({
-        tenantId: tenant.tenantId,
-        tenantName: tenant.tenantName,
-        ownerEmail: tenant.ownerEmail,
-        status: "skipped",
-        reason: "dry-run",
-      })
-      continue
-    }
-
-    const sent = await sendDigestEmail(tenant, generated.text)
-    results.push({
-      tenantId: tenant.tenantId,
-      tenantName: tenant.tenantName,
-      ownerEmail: tenant.ownerEmail,
-      status: sent ? "sent" : "failed",
-      reason: sent ? undefined : "Resend delivery failed",
-    })
   }
 
   const summary = {

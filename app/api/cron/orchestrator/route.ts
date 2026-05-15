@@ -9,10 +9,12 @@ import { runTenantSmokeAgent } from "@/lib/server/agents/tenant-smoke-agent"
 import { runTenantEngagementAgent } from "@/lib/server/agents/tenant-engagement-agent"
 import { runWeeklyDigestAgent } from "@/lib/server/agents/weekly-digest-agent"
 import { runOnboardingNudgeAgent } from "@/lib/server/agents/onboarding-nudge-agent"
+import { sql } from "@/lib/server/db"
 import { extractBearerToken, sharedSecretMatches } from "@/lib/server/request-security"
 import { logServerError } from "@/lib/server/safe-logging"
 
 export const dynamic = "force-dynamic"
+export const maxDuration = 300
 
 const getCronSecret = () => process.env.CRON_SECRET || null
 
@@ -42,6 +44,23 @@ async function handleCronInvocation(request: Request) {
 
     const isMonday = new Date().getDay() === 1
 
+    // Guard: skip weekly digest if a successful run already completed this calendar week.
+    // Prevents double-sends on Vercel cron retries or manual re-triggers on Monday.
+    let digestAlreadySentThisWeek = false
+    if (isMonday && sql) {
+      try {
+        const guard = await sql`
+          SELECT id FROM agent_runs
+          WHERE agent_name = 'weekly-digest'
+            AND status = 'success'
+            AND completed_at >= date_trunc('week', NOW())
+          LIMIT 1
+        `
+        const rows = Array.isArray(guard) ? guard : (guard as any)?.rows ?? []
+        digestAlreadySentThisWeek = rows.length > 0
+      } catch { /* non-critical — allow digest to run if guard fails */ }
+    }
+
     const [dataIntegrity, logAnomaly, retention, tenantSmoke, tenantEngagement, weeklyDigest, onboardingNudge] =
       await Promise.allSettled([
         runDataIntegrityAgent({ triggerSource: "cron" }),
@@ -49,9 +68,9 @@ async function handleCronInvocation(request: Request) {
         runRetentionCleanup().then(() => runImportJobRetentionCleanup()),
         runTenantSmokeAgent({ triggerSource: "cron" }),
         runTenantEngagementAgent({ triggerSource: "cron" }),
-        isMonday
+        isMonday && !digestAlreadySentThisWeek
           ? runWeeklyDigestAgent({ triggerSource: "cron" })
-          : Promise.resolve({ skipped: true }),
+          : Promise.resolve({ skipped: true, reason: isMonday ? "already-sent-this-week" : "not-monday" }),
         runOnboardingNudgeAgent({ triggerSource: "cron" }),
       ])
 

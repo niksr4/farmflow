@@ -63,7 +63,7 @@ export async function GET(request: Request) {
           pr.coffee_type,
           l.name as location_name
         FROM processing_records pr
-        JOIN locations l ON l.id = pr.location_id
+        LEFT JOIN locations l ON l.id = pr.location_id
         WHERE pr.process_date >= ${start}::date AND pr.process_date <= ${end}::date
           AND pr.tenant_id = ${tenantId}
         ORDER BY pr.process_date DESC

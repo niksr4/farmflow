@@ -79,6 +79,20 @@ export async function GET(request: Request) {
     const tenantId = sessionUser.role === "owner" && requestedTenantId ? requestedTenantId : sessionUser.tenantId
     const tenantContext = normalizeTenantContext(tenantId, sessionUser.role)
 
+    const todayIso = new Date().toISOString().slice(0, 10)
+    const dueSoonCutoffIso = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10)
+
+    // Summary is computed against ALL rows (no LIMIT) so totals are always accurate
+    const summaryRows = await runTenantQuery(
+      sql,
+      tenantContext,
+      sql`
+        SELECT amount, status, due_date
+        FROM receivables
+        WHERE tenant_id = ${tenantId}
+      `,
+    )
+
     const rows = await runTenantQuery(
       sql,
       tenantContext,
@@ -99,12 +113,15 @@ export async function GET(request: Request) {
         FROM receivables r
         LEFT JOIN locations l ON l.id = r.location_id
         WHERE r.tenant_id = ${tenantId}
+          ${locationFilter ? sql`AND r.location_id = ${locationFilter}::uuid` : sql``}
+          ${searchQuery ? sql`AND (
+            lower(r.buyer_name) LIKE ${'%' + searchQuery + '%'}
+            OR lower(r.invoice_no) LIKE ${'%' + searchQuery + '%'}
+          )` : sql``}
         ORDER BY r.invoice_date DESC, r.created_at DESC
         LIMIT 1000
       `,
     )
-    const todayIso = new Date().toISOString().slice(0, 10)
-    const dueSoonCutoffIso = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10)
 
     const normalizedRows = (rows || []).map((row: any) => {
       const amount = Math.max(0, toNumber(row.amount, 0))
@@ -115,6 +132,12 @@ export async function GET(request: Request) {
         effective_status: effectiveStatus,
       }
     })
+
+    const normalizedSummaryRows = (summaryRows || []).map((row: any) => ({
+      amount: Math.max(0, toNumber(row.amount, 0)),
+      effective_status: resolveEffectiveStatus(row.status, row.due_date, todayIso),
+      due_date: row.due_date,
+    }))
 
     const filteredRows = normalizedRows.filter((row: any) => {
       if (locationFilter && String(row.location_id || "") !== locationFilter) {
@@ -142,7 +165,8 @@ export async function GET(request: Request) {
       return true
     })
 
-    const summary = normalizedRows.reduce(
+    // Summary uses the full unfiltered/unlimited dataset so totals are always accurate
+    const summary = normalizedSummaryRows.reduce(
       (acc, row: any) => {
         const amount = Math.max(0, Number(row.amount) || 0)
         acc.totalInvoiced += amount

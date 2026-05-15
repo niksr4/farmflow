@@ -34,6 +34,11 @@ if (posthogKey && posthogHost) {
     const loaded = Boolean((posthog as any).__loaded)
     if (!loaded) {
       const uiHost = posthogHost.includes("eu.") ? "https://eu.posthog.com" : "https://app.posthog.com"
+      const IGNORED_ERRORS = [
+        "ResizeObserver loop limit exceeded",
+        "ResizeObserver loop completed with undelivered notifications",
+      ]
+
       posthog.init(posthogKey, {
         api_host: isLocal ? posthogHost : "/ingest",
         ui_host: uiHost,
@@ -42,6 +47,16 @@ if (posthogKey && posthogHost) {
         capture_pageleave: "if_capture_pageview",
         autocapture: true,
         capture_exceptions: true,
+        before_send: (event) => {
+          if (!event) return null
+          if (event.event === "$exception") {
+            const exceptions = (event.properties as any)?.$exception_list as Array<{ value?: string }> | undefined
+            if (exceptions?.some((e) => IGNORED_ERRORS.some((msg) => e.value?.includes(msg)))) {
+              return null
+            }
+          }
+          return event
+        },
         person_profiles: "identified_only",
         session_recording: {
           maskAllInputs: true,

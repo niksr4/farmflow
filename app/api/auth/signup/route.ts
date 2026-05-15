@@ -41,6 +41,15 @@ export async function POST(request: Request) {
 
   let headers: Record<string, string> = {}
   try {
+    // IP-level check (15/hour) — prevents bypassing per-email limit by rotating addresses
+    const ipLimit = await checkRateLimit("authSignupIp", `auth-signup-ip:${ipAddress}`)
+    if (!ipLimit.success) {
+      return NextResponse.json(
+        { success: false, error: "Too many signup attempts. Please try again later." },
+        { status: 429, headers: buildRateLimitHeaders(ipLimit) },
+      )
+    }
+    // Per-email check (6/10min)
     const rateLimit = await checkRateLimit("authSignup", `auth-signup:${ipAddress}::${email}`)
     headers = buildRateLimitHeaders(rateLimit)
     if (!rateLimit.success) {

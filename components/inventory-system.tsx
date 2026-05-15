@@ -792,7 +792,13 @@ export default function InventorySystem() {
       setEnabledModules(Array.isArray(data.modules) ? data.modules.map((moduleId) => String(moduleId)) : null)
       setLocations(Array.isArray(data.locations) ? data.locations : [])
       setCurrentPlanId(data.planId ? String(data.planId) : null)
-      if (typeof data.trialDaysRemaining === "number") setTrialDaysRemaining(data.trialDaysRemaining)
+      if (typeof data.trialDaysRemaining === "number") {
+        if (data.trialDaysRemaining === 0) {
+          router.replace("/trial-expired")
+          return false
+        }
+        setTrialDaysRemaining(data.trialDaysRemaining)
+      }
       resolved = true
       return true
     } catch (error) {
@@ -6869,9 +6875,22 @@ export default function InventorySystem() {
                                 <div>
                                   <div className="text-base font-semibold text-neutral-900">{item.name}</div>
                                   <div className="text-xs text-neutral-500">
-                                    {avgPrice > 0
-                                      ? `Avg ${formatCurrency(avgPrice)}/${item.unit || "unit"}`
-                                      : "Pricing not yet recorded"}
+                                    {avgPrice > 0 ? (
+                                      <TooltipProvider>
+                                        <Tooltip>
+                                          <TooltipTrigger asChild>
+                                            <span className="cursor-default underline decoration-dotted decoration-neutral-400">
+                                              Avg cost {formatCurrency(avgPrice)}/{item.unit || "unit"}
+                                            </span>
+                                          </TooltipTrigger>
+                                          <TooltipContent className="max-w-[230px] text-xs leading-relaxed">
+                                            Weighted average cost — FarmFlow divides total spend by total quantity each time you restock. Depletions are valued at this running average, not the original purchase price.
+                                          </TooltipContent>
+                                        </Tooltip>
+                                      </TooltipProvider>
+                                    ) : (
+                                      "Pricing not yet recorded"
+                                    )}
                                   </div>
                                 </div>
                               </div>
