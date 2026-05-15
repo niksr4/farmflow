@@ -646,3 +646,76 @@ export function UserModuleOverridesSection({
     </Card>
   )
 }
+
+type LaborDefaultsSectionProps = {
+  defaultInHouseWage: number
+  defaultOutsideWage: number
+  isSaving: boolean
+  onInHouseWageChange: (value: number) => void
+  onOutsideWageChange: (value: number) => void
+  onSave: () => void
+}
+
+export function LaborDefaultsSection({
+  defaultInHouseWage,
+  defaultOutsideWage,
+  isSaving,
+  onInHouseWageChange,
+  onOutsideWageChange,
+  onSave,
+}: LaborDefaultsSectionProps) {
+  return (
+    <Card id="labor-defaults">
+      <CardHeader>
+        <CardTitle>Labor wage defaults</CardTitle>
+        <CardDescription>
+          Set the default wage rates that pre-fill when logging a new labor entry. Each entry can still be adjusted individually.
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        <div className="grid gap-4 sm:grid-cols-2">
+          <div className="space-y-2">
+            <HelpLabel
+              htmlFor="default-inhouse-wage"
+              label="In-house wage (₹ per worker)"
+              help="Wage for estate-employed workers. Pre-fills the In-house group when you open a new labor entry."
+            />
+            <Input
+              id="default-inhouse-wage"
+              type="number"
+              min={0}
+              step={1}
+              value={defaultInHouseWage}
+              onChange={(e) => onInHouseWageChange(Number(e.target.value) || 0)}
+              className="h-11"
+              placeholder="e.g. 475"
+            />
+          </div>
+          <div className="space-y-2">
+            <HelpLabel
+              htmlFor="default-outside-wage"
+              label="Outside wage (₹ per worker)"
+              help="Wage for contract or outside workers. Pre-fills the Outside group when you open a new labor entry."
+            />
+            <Input
+              id="default-outside-wage"
+              type="number"
+              min={0}
+              step={1}
+              value={defaultOutsideWage}
+              onChange={(e) => onOutsideWageChange(Number(e.target.value) || 0)}
+              className="h-11"
+              placeholder="e.g. 450"
+            />
+          </div>
+        </div>
+        <p className="text-xs text-muted-foreground">
+          These are starting defaults only. You can override the wage on any individual entry or add extra labor groups at any time.
+        </p>
+        <Button onClick={onSave} disabled={isSaving}>
+          {isSaving ? "Saving..." : "Save labor defaults"}
+        </Button>
+      </CardContent>
+    </Card>
+  )
+}

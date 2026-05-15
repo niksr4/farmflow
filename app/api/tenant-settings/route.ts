@@ -92,6 +92,15 @@ const sanitizeAlertThresholds = (input: any) => {
   return Object.keys(cleaned).length > 0 ? cleaned : null
 }
 
+const sanitizeLaborWages = (input: any) => {
+  if (!input || typeof input !== "object") return null
+  const defaultInHouseWage = Number(input.defaultInHouseWage)
+  const defaultOutsideWage = Number(input.defaultOutsideWage)
+  if (!Number.isFinite(defaultInHouseWage) || !Number.isFinite(defaultOutsideWage)) return null
+  if (defaultInHouseWage < 0 || defaultOutsideWage < 0) return null
+  return { defaultInHouseWage, defaultOutsideWage }
+}
+
 const sanitizeUiPreferences = (input: any) => {
   if (!input || typeof input !== "object") return null
   const cleaned: any = {}
@@ -163,9 +172,10 @@ export async function GET(request: Request) {
       parseJsonObject(rows?.[0]?.feature_flags, "feature flags JSON"),
     )
     const featureFlags = mergeTenantFeatureFlags(parsedFeatureFlags || DEFAULT_TENANT_FEATURE_FLAGS)
+    const laborWages = sanitizeLaborWages(parsedUiPreferences?.laborWages) ?? { defaultInHouseWage: 0, defaultOutsideWage: 0 }
     return NextResponse.json({
       success: true,
-      settings: { bagWeightKg, estateName, estateProfile, alertThresholds, uiPreferences, uiVariant, featureFlags },
+      settings: { bagWeightKg, estateName, estateProfile, alertThresholds, uiPreferences, uiVariant, featureFlags, laborWages },
     })
   } catch (error: any) {
     console.error("Error loading tenant settings:", error)
@@ -193,6 +203,7 @@ export async function PUT(request: Request) {
       body.estateProfile === undefined ? null : sanitizeTenantEstateProfile(body.estateProfile)
     const alertThresholdsInput = sanitizeAlertThresholds(body.alertThresholds)
     const uiPreferencesInput = sanitizeUiPreferences(body.uiPreferences)
+    const laborWagesInput = body.laborWages === undefined ? null : sanitizeLaborWages(body.laborWages)
     const uiVariantInput = body.uiVariant === undefined ? null : sanitizeTenantUiVariant(body.uiVariant)
     const featureFlagsInput = body.featureFlags === undefined ? null : sanitizeTenantFeatureFlags(body.featureFlags)
 
@@ -281,6 +292,7 @@ export async function PUT(request: Request) {
       ...existingUiPreferences,
       ...(uiPreferencesInput || {}),
       estateProfile: mergedEstateProfile,
+      ...(laborWagesInput ? { laborWages: laborWagesInput } : {}),
     }
 
     const rows = columnStatus.hasUiVariant && columnStatus.hasFeatureFlags
@@ -328,6 +340,7 @@ export async function PUT(request: Request) {
       parseJsonObject(rows?.[0]?.feature_flags, "stored feature flags"),
     )
     const featureFlags = mergeTenantFeatureFlags(parsedFeatureFlags || DEFAULT_TENANT_FEATURE_FLAGS)
+    const laborWages = sanitizeLaborWages(parsedUiPreferences?.laborWages) ?? { defaultInHouseWage: 0, defaultOutsideWage: 0 }
 
     const auditUser = tenantId === sessionUser.tenantId ? sessionUser : { ...sessionUser, tenantId }
 
@@ -341,7 +354,7 @@ export async function PUT(request: Request) {
 
     return NextResponse.json({
       success: true,
-      settings: { bagWeightKg: updated, estateName, estateProfile, alertThresholds, uiPreferences, uiVariant, featureFlags },
+      settings: { bagWeightKg: updated, estateName, estateProfile, alertThresholds, uiPreferences, uiVariant, featureFlags, laborWages },
     })
   } catch (error: any) {
     await logRouteMutationFailure({ source: "tenant-settings", endpoint: "/api/tenant-settings", action: "update", error })

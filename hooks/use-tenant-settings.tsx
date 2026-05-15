@@ -17,6 +17,11 @@ import {
   type TenantUiVariant,
 } from "@/lib/tenant-experience"
 
+export type LaborWages = {
+  defaultInHouseWage: number
+  defaultOutsideWage: number
+}
+
 export type TenantSettings = {
   bagWeightKg: number
   estateName: string
@@ -25,6 +30,7 @@ export type TenantSettings = {
   uiPreferences?: UiPreferences
   uiVariant?: TenantUiVariant
   featureFlags?: TenantFeatureFlags
+  laborWages?: LaborWages
 }
 
 export type UiPreferences = {
@@ -51,6 +57,10 @@ export type AlertThresholds = {
 const DEFAULT_BAG_WEIGHT_KG = 50
 const DEFAULT_UI_PREFERENCES: UiPreferences = {
   hideEmptyMetrics: false,
+}
+export const DEFAULT_LABOR_WAGES: LaborWages = {
+  defaultInHouseWage: 0,
+  defaultOutsideWage: 0,
 }
 const DEFAULT_ALERT_THRESHOLDS: AlertThresholds = {
   floatRateIncreasePct: 0.15,
@@ -122,7 +132,11 @@ export function useTenantSettings() {
         data.settings?.featureFlags && typeof data.settings.featureFlags === "object"
           ? mergeTenantFeatureFlags(data.settings.featureFlags)
           : DEFAULT_TENANT_FEATURE_FLAGS
-      setSettings({ bagWeightKg, estateName, estateProfile, alertThresholds, uiPreferences, uiVariant, featureFlags })
+      const laborWages: LaborWages =
+        data.settings?.laborWages && typeof data.settings.laborWages === "object"
+          ? { ...DEFAULT_LABOR_WAGES, ...data.settings.laborWages }
+          : DEFAULT_LABOR_WAGES
+      setSettings({ bagWeightKg, estateName, estateProfile, alertThresholds, uiPreferences, uiVariant, featureFlags, laborWages })
     } catch (err: any) {
       console.error("Error loading tenant settings:", err)
       setError(err.message || "Failed to load tenant settings")
@@ -167,6 +181,10 @@ export function useTenantSettings() {
         nextSettings.featureFlags && typeof nextSettings.featureFlags === "object"
           ? mergeTenantFeatureFlags(nextSettings.featureFlags)
           : undefined
+      const laborWages =
+        nextSettings.laborWages && typeof nextSettings.laborWages === "object"
+          ? { ...DEFAULT_LABOR_WAGES, ...nextSettings.laborWages }
+          : undefined
       if (estateName !== undefined && estateName.length === 0) {
         throw new Error("Estate name cannot be empty")
       }
@@ -178,6 +196,7 @@ export function useTenantSettings() {
         ...(uiPreferences ? { uiPreferences } : {}),
         ...(uiVariant ? { uiVariant } : {}),
         ...(featureFlags ? { featureFlags } : {}),
+        ...(laborWages ? { laborWages } : {}),
       }
       const data = await apiRequest<{ success: boolean; settings: TenantSettings }>("/api/tenant-settings", {
         method: "PUT",
@@ -209,6 +228,10 @@ export function useTenantSettings() {
         data.settings?.featureFlags && typeof data.settings.featureFlags === "object"
           ? mergeTenantFeatureFlags(data.settings.featureFlags)
           : settings.featureFlags ?? DEFAULT_TENANT_FEATURE_FLAGS
+      const updatedLaborWages: LaborWages =
+        data.settings?.laborWages && typeof data.settings.laborWages === "object"
+          ? { ...DEFAULT_LABOR_WAGES, ...data.settings.laborWages }
+          : settings.laborWages ?? DEFAULT_LABOR_WAGES
       setSettings({
         bagWeightKg: updatedBagWeightKg,
         estateName: updatedEstateName,
@@ -217,6 +240,7 @@ export function useTenantSettings() {
         uiPreferences: updatedUiPreferences,
         uiVariant: updatedUiVariant,
         featureFlags: updatedFeatureFlags,
+        laborWages: updatedLaborWages,
       })
       return {
         bagWeightKg: updatedBagWeightKg,
@@ -226,6 +250,7 @@ export function useTenantSettings() {
         uiPreferences: updatedUiPreferences,
         uiVariant: updatedUiVariant,
         featureFlags: updatedFeatureFlags,
+        laborWages: updatedLaborWages,
       }
     },
     [
@@ -236,6 +261,7 @@ export function useTenantSettings() {
       settings.uiPreferences,
       settings.uiVariant,
       settings.featureFlags,
+      settings.laborWages,
       user?.tenantId,
       isPreviewMode,
     ],

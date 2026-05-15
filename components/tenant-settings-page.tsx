@@ -44,6 +44,7 @@ import {
 } from "@/components/tenant-settings/overview-sections"
 import {
   LocationsSection,
+  LaborDefaultsSection,
   TenantModulesSection,
   TenantUsersSection,
   UserModuleOverridesSection,
@@ -699,6 +700,30 @@ export default function TenantSettingsPage() {
     }
   }
 
+  const [laborWagesDraft, setLaborWagesDraft] = useState({ defaultInHouseWage: 0, defaultOutsideWage: 0 })
+  const [isSavingLaborWages, setIsSavingLaborWages] = useState(false)
+
+  useEffect(() => {
+    if (settings.laborWages) {
+      setLaborWagesDraft({
+        defaultInHouseWage: settings.laborWages.defaultInHouseWage ?? 0,
+        defaultOutsideWage: settings.laborWages.defaultOutsideWage ?? 0,
+      })
+    }
+  }, [settings.laborWages])
+
+  const handleSaveLaborWages = async () => {
+    setIsSavingLaborWages(true)
+    try {
+      await updateSettings({ laborWages: laborWagesDraft })
+      toast({ title: "Labor defaults saved", description: "Default wage rates updated." })
+    } catch (error: any) {
+      toast({ title: "Save failed", description: error.message || "Unable to save labor defaults.", variant: "destructive" })
+    } finally {
+      setIsSavingLaborWages(false)
+    }
+  }
+
   const handleSaveUiPreferences = async () => {
     setIsSavingUiPreferences(true)
     try {
@@ -1161,11 +1186,19 @@ export default function TenantSettingsPage() {
         <SettingsGroup
           groupId="operations"
           title="Operations"
-          summary="Manage the live structures daily work depends on: locations for traceability and import tools for bulk setup."
-          sectionCountLabel="2 sections"
+          summary="Manage the live structures daily work depends on: locations for traceability, labor wage defaults, and import tools for bulk setup."
+          sectionCountLabel="3 sections"
           open={openGroup === "operations"}
           onOpenChange={setOpenGroup}
         >
+          <LaborDefaultsSection
+            defaultInHouseWage={laborWagesDraft.defaultInHouseWage}
+            defaultOutsideWage={laborWagesDraft.defaultOutsideWage}
+            isSaving={isSavingLaborWages}
+            onInHouseWageChange={(v) => setLaborWagesDraft((prev) => ({ ...prev, defaultInHouseWage: v }))}
+            onOutsideWageChange={(v) => setLaborWagesDraft((prev) => ({ ...prev, defaultOutsideWage: v }))}
+            onSave={handleSaveLaborWages}
+          />
           <LocationsSection
             locations={locations}
             newLocationName={newLocationName}
