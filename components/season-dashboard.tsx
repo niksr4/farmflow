@@ -670,7 +670,7 @@ export default function SeasonDashboard() {
           ? TENANT_KPI_BASELINE_TARGETS[user.tenantId][metricId as KpiMetricId]
           : null
       if (tenantTarget != null) {
-        return `${formatPercent(tenantTarget, 2)} (HoneyFarm baseline)`
+        return `${formatPercent(tenantTarget, 2)} (estate baseline)`
       }
       return defaultTargetPct || null
     },

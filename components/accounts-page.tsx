@@ -1377,7 +1377,7 @@ export default function AccountsPage({
                 <div>
                   <CardTitle>Account Activity Codes</CardTitle>
                   <CardDescription className="mt-1">
-                    Pre-filled with the standard HoneyFarm and Seshagiri estate structure. Edit, add, or remove codes to match your accounting setup.
+                    Pre-filled with a standard coffee and pepper estate structure. Edit, add, or remove codes to match your accounting setup.
                   </CardDescription>
                 </div>
                 <div className="flex flex-wrap gap-2 shrink-0">
@@ -1451,7 +1451,7 @@ export default function AccountsPage({
                         {activitySuggestions.length} standard codes not yet in your list
                       </p>
                       <p className="text-xs text-emerald-800">
-                        These are from the HoneyFarm and Seshagiri structure — add any that fit your estate.
+                        Standard estate codes — add any that fit your operation.
                       </p>
                     </div>
                     {activitySuggestions.length > 12 && (
