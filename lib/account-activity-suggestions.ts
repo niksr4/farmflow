@@ -5,8 +5,8 @@ export type AccountActivitySuggestion = {
 
 export type AccountActivityReferenceExportFormat = "csv" | "xlsx" | "pdf"
 
-// Snapshot derived from the live HoneyFarm and Seshagiri activity lists so
-// newer tenants can start from a proven structure instead of a blank screen.
+// Starter activity codes derived from real estate operations so new tenants
+// begin with a proven structure instead of a blank screen.
 export const ACCOUNT_ACTIVITY_SUGGESTIONS: AccountActivitySuggestion[] = [
   { code: "101", reference: "Salaries And Allowances" },
   { code: "101A", reference: "Writer Wage & Benefits" },
@@ -93,7 +93,7 @@ export const ACCOUNT_ACTIVITY_SUGGESTIONS: AccountActivitySuggestion[] = [
 const normalizeCode = (value: unknown) => String(value || "").trim().toUpperCase()
 
 const REFERENCE_TITLE = "FarmFlow Account Activity Reference"
-const REFERENCE_SUBTITLE = "Starter structure based on the current HoneyFarm and Seshagiri activity setup."
+const REFERENCE_SUBTITLE = "Starter structure based on a real coffee and pepper estate activity setup."
 const PDF_PAGE_ROW_LIMIT = 42
 
 const csvEscape = (value: string) => `"${String(value || "").replace(/"/g, '""')}"`
