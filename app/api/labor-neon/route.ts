@@ -321,10 +321,12 @@ export async function POST(request: Request) {
     // Accept both legacy names ("Estate Labor", "Outside Labor") and current names
     // ("In-house", "Outside") so old saved entries and new entries both work.
     // Extra groups beyond the first two contribute to total_cost only.
+    // Do NOT fall back to laborEntries[0] — that would write outside-group data
+    // into the hf columns when in-house was intentionally removed.
     const IN_HOUSE_NAMES = new Set(["Estate Labor", "In-house"])
     const OUTSIDE_NAMES = new Set(["Outside Labor", "Outside"])
-    const hfEntry = laborEntries.find((e: any) => IN_HOUSE_NAMES.has(e.name)) ?? laborEntries[0]
-    const outsideEntry = laborEntries.find((e: any) => OUTSIDE_NAMES.has(e.name)) ?? (laborEntries.length > 1 ? laborEntries[1] : null)
+    const hfEntry = laborEntries.find((e: any) => IN_HOUSE_NAMES.has(e.name)) ?? null
+    const outsideEntry = laborEntries.find((e: any) => OUTSIDE_NAMES.has(e.name)) ?? null
     const hfLaborers = Number(hfEntry?.laborCount) || 0
     const hfCostPer = Number(hfEntry?.costPerLabor) || 0
     const outsideLaborers = Number(outsideEntry?.laborCount) || 0
@@ -526,11 +528,11 @@ export async function PUT(request: Request) {
       return NextResponse.json({ success: false, error: "Selected location is invalid for this tenant" }, { status: 400 })
     }
 
-    // Extract estate and outside labor details (same flexible matching as POST).
+    // Extract estate and outside labor details (same flexible matching as POST, no fallback).
     const IN_HOUSE_NAMES = new Set(["Estate Labor", "In-house"])
     const OUTSIDE_NAMES = new Set(["Outside Labor", "Outside"])
-    const hfEntry = laborEntries.find((e: any) => IN_HOUSE_NAMES.has(e.name)) ?? laborEntries[0]
-    const outsideEntry = laborEntries.find((e: any) => OUTSIDE_NAMES.has(e.name)) ?? (laborEntries.length > 1 ? laborEntries[1] : null)
+    const hfEntry = laborEntries.find((e: any) => IN_HOUSE_NAMES.has(e.name)) ?? null
+    const outsideEntry = laborEntries.find((e: any) => OUTSIDE_NAMES.has(e.name)) ?? null
     const hfLaborers = Number(hfEntry?.laborCount) || 0
     const hfCostPer = Number(hfEntry?.costPerLabor) || 0
     const outsideLaborers = Number(outsideEntry?.laborCount) || 0
