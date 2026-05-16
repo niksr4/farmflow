@@ -4349,20 +4349,20 @@ export default function InventorySystem() {
           throw new Error(json?.error || "Failed to load rainfall totals")
         }
         const records = Array.isArray(json.records) ? json.records : []
-        const startDate = new Date(`${currentFiscalYear.startDate}T00:00:00`)
-        const endDate = new Date(`${currentFiscalYear.endDate}T23:59:59`)
+        const fyStart = currentFiscalYear.startDate
+        const fyEnd = currentFiscalYear.endDate
         let totalInches = 0
         let totalRecords = 0
         let latestDate: string | null = null
         for (const record of records) {
-          const recordDate = new Date(record?.record_date)
-          if (Number.isNaN(recordDate.getTime())) continue
-          if (recordDate < startDate || recordDate > endDate) continue
+          const recordDateStr = String(record?.record_date || "").slice(0, 10)
+          if (!recordDateStr) continue
+          if (recordDateStr < fyStart || recordDateStr > fyEnd) continue
           const inches = Number(record?.inches) || 0
           const cents = Number(record?.cents) || 0
           totalInches += inches + cents / 100
           totalRecords += 1
-          if (!latestDate || recordDate > new Date(latestDate)) {
+          if (!latestDate || recordDateStr > String(latestDate).slice(0, 10)) {
             latestDate = String(record?.record_date || "")
           }
         }
