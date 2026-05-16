@@ -942,7 +942,7 @@ function RainfallHeatmap({
                       </td>
                     ))}
                     <td className="pl-3 py-0.5 text-right font-semibold tabular-nums text-neutral-700">
-                      {formatNumber(yearTotal, 1)}"
+                      {formatNumber(yearTotal, 1)}&quot;
                     </td>
                   </tr>
                 )
