@@ -103,6 +103,12 @@ export async function POST(request: NextRequest) {
     if (isModuleAccessError(error)) {
       return NextResponse.json({ success: false, error: "Module access disabled" }, { status: 403 })
     }
+    if (String(error?.code) === "23505") {
+      return NextResponse.json(
+        { success: false, error: "A rainfall record for this date already exists. Delete the existing entry first if you want to replace it." },
+        { status: 409 },
+      )
+    }
     console.error("[v0] Error saving rainfall record:", error)
     await logRouteMutationFailure({
       tenantId,

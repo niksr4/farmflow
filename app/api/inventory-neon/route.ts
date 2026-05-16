@@ -48,75 +48,52 @@ const ensureInventorySlotExists = async (
     )
   }
 
+  // current_inventory has no id column — use composite key for existence check and update.
   const applyFallback = async () => {
     if (locationValue) {
-      const existingRows = await runTenantQuery(
+      const updated = await runTenantQuery(
         inventorySql,
         tenantContext,
         inventorySql`
-          SELECT id
-          FROM current_inventory
+          UPDATE current_inventory
+          SET unit = ${unit}
           WHERE tenant_id = ${tenantContext.tenantId}
             AND item_type = ${itemType}
             AND location_id = ${locationValue}
-          ORDER BY id ASC
-          LIMIT 1
         `,
       )
-      if (existingRows?.length) {
-        await runTenantQuery(
-          inventorySql,
-          tenantContext,
-          inventorySql`
-            UPDATE current_inventory
-            SET unit = ${unit}
-            WHERE id = ${existingRows[0].id}
-          `,
-        )
-        return
-      }
+      if ((updated as any)?.rowCount ?? (updated as any[])?.length) return
       await runTenantQuery(
         inventorySql,
         tenantContext,
         inventorySql`
           INSERT INTO current_inventory (item_type, quantity, unit, avg_price, total_cost, tenant_id, location_id)
           VALUES (${itemType}, 0, ${unit}, 0, 0, ${tenantContext.tenantId}, ${locationValue})
+          ON CONFLICT DO NOTHING
         `,
       )
       return
     }
 
-    const existingRows = await runTenantQuery(
+    const updated = await runTenantQuery(
       inventorySql,
       tenantContext,
       inventorySql`
-        SELECT id
-        FROM current_inventory
+        UPDATE current_inventory
+        SET unit = ${unit}
         WHERE tenant_id = ${tenantContext.tenantId}
           AND item_type = ${itemType}
           AND location_id IS NULL
-        ORDER BY id ASC
-        LIMIT 1
       `,
     )
-    if (existingRows?.length) {
-      await runTenantQuery(
-        inventorySql,
-        tenantContext,
-        inventorySql`
-          UPDATE current_inventory
-          SET unit = ${unit}
-          WHERE id = ${existingRows[0].id}
-        `,
-      )
-      return
-    }
+    if ((updated as any)?.rowCount ?? (updated as any[])?.length) return
     await runTenantQuery(
       inventorySql,
       tenantContext,
       inventorySql`
         INSERT INTO current_inventory (item_type, quantity, unit, avg_price, total_cost, tenant_id, location_id)
         VALUES (${itemType}, 0, ${unit}, 0, 0, ${tenantContext.tenantId}, NULL)
+        ON CONFLICT DO NOTHING
       `,
     )
   }
