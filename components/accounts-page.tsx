@@ -562,7 +562,7 @@ export default function AccountsPage({
       }))
 
       return [...typedLaborDeployments, ...typedConsumableDeployments].sort(
-        (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime(),
+        (a, b) => String(b.date || "").slice(0, 10).localeCompare(String(a.date || "").slice(0, 10)),
       )
     } catch (error) {
       console.error("Error fetching export data:", error)
@@ -584,13 +584,13 @@ export default function AccountsPage({
 
     let deploymentsToExport = [...allDeployments]
     if (resolvedExportStartDate && resolvedExportEndDate) {
-      const startDate = new Date(resolvedExportStartDate)
-      startDate.setHours(0, 0, 0, 0)
-      const endDate = new Date(resolvedExportEndDate)
-      endDate.setHours(23, 59, 59, 999)
+      // Compare date strings directly (first 10 chars = YYYY-MM-DD) to avoid
+      // timezone drift from new Date() + setHours() — all API date fields start
+      // with YYYY-MM-DD regardless of format ("2026-05-14", "2026-05-14T00:00:00.000Z",
+      // "2026-05-14 00:00:00+00"), so slice(0,10) gives a reliable, tz-safe comparison.
       deploymentsToExport = deploymentsToExport.filter((d) => {
-        const deploymentDate = new Date(d.date)
-        return deploymentDate >= startDate && deploymentDate <= endDate
+        const dateStr = String(d.date || "").slice(0, 10)
+        return dateStr >= resolvedExportStartDate && dateStr <= resolvedExportEndDate
       })
     }
 
@@ -609,7 +609,7 @@ export default function AccountsPage({
   }
 
   const buildCombinedAccountsCsv = (deploymentsToExport: CombinedDeployment[]) => {
-    const sortedDeployments = [...deploymentsToExport].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
+    const sortedDeployments = [...deploymentsToExport].sort((a, b) => String(b.date || "").slice(0, 10).localeCompare(String(a.date || "").slice(0, 10)))
     const headers = [
       "Date",
       "Entry Type",
