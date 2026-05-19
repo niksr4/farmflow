@@ -55,7 +55,13 @@ const isInventoryUnderflowError = (error: unknown) => {
   const message = String((error as any)?.message || "")
   return (
     code === "23514" &&
-    (constraint === "check_non_negative_quantity" || message.toLowerCase().includes("check_non_negative_quantity"))
+    (
+      constraint === "check_non_negative_quantity" ||
+      message.toLowerCase().includes("check_non_negative_quantity") ||
+      // Trigger RAISE EXCEPTION USING CONSTRAINT doesn't propagate constraint name
+      // to the JS driver — match by message prefix instead
+      message.toLowerCase().includes("insufficient stock")
+    )
   )
 }
 
