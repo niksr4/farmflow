@@ -37,7 +37,7 @@ export async function GET(request: Request) {
 
     const [workersRows, presentRows, weeklyRows] = await runTenantQueries(accountsSql, tenantContext, [
       accountsSql`
-        SELECT id, full_name, created_at
+        SELECT id, full_name, daily_rate, created_at
         FROM attendance_workers
         WHERE tenant_id = ${tenantContext.tenantId}
           AND active = TRUE
@@ -74,6 +74,7 @@ export async function GET(request: Request) {
       workers: workersRows.map((row: any) => ({
         id: String(row.id),
         name: String(row.full_name || ""),
+        dailyRate: row.daily_rate != null ? Number(row.daily_rate) : null,
       })),
       presentWorkerIds: presentRows.map((row: any) => String(row.worker_id)).filter(Boolean),
       weeklySummary: weeklyRows.map((row: any) => ({
