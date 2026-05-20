@@ -390,6 +390,12 @@ export default function RecordMovementPanel({
           />
         </div>
 
+        {newTransaction?.transaction_type === "restock" && !newTransaction?.price && (
+          <p className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+            No purchase price entered — cost tracking stays at ₹0. Add the unit price above if you have the rate.
+          </p>
+        )}
+
         <Button
           type="button"
           data-testid="movement-record-transaction"

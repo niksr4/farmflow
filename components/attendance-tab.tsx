@@ -1,7 +1,7 @@
 "use client"
 
 import { useCallback, useEffect, useMemo, useState } from "react"
-import { Check, Loader2, PlusCircle, RotateCcw, Users } from "lucide-react"
+import { Check, IndianRupee, Loader2, PlusCircle, RotateCcw, Users } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -17,6 +17,7 @@ import TaskGuideCard from "@/components/task-guide-card"
 type AttendanceWorker = {
   id: string
   name: string
+  dailyRate: number | null
 }
 
 type AttendanceSummaryRow = {
@@ -44,6 +45,8 @@ export default function AttendanceTab() {
   const [isSaving, setIsSaving] = useState(false)
   const [isAddingWorker, setIsAddingWorker] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [editingRate, setEditingRate] = useState<{ workerId: string; value: string } | null>(null)
+  const [isSavingRate, setIsSavingRate] = useState(false)
 
   const loadAttendanceSnapshot = useCallback(async (date: string) => {
     setLoading(true)
@@ -79,6 +82,7 @@ export default function AttendanceTab() {
 
   const presentWorkerIdSet = useMemo(() => new Set(presentWorkerIds), [presentWorkerIds])
   const presentCount = presentWorkerIds.length
+  const workersWithoutRate = useMemo(() => workers.filter((w) => w.dailyRate === null), [workers])
 
   const toggleWorkerPresence = (workerId: string) => {
     setPresentWorkerIds((current) => {
@@ -140,6 +144,35 @@ export default function AttendanceTab() {
       toast.error(workerError?.message || "Failed to add employee")
     } finally {
       setIsAddingWorker(false)
+    }
+  }
+
+  const handleSaveRate = async (workerId: string, rateValue: string) => {
+    const parsed = parseFloat(rateValue)
+    if (!rateValue.trim() || Number.isNaN(parsed) || parsed < 0) {
+      toast.error("Enter a valid daily rate")
+      return
+    }
+    setIsSavingRate(true)
+    try {
+      const response = await fetch(`/api/attendance/workers/${workerId}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ dailyRate: parsed }),
+      })
+      const data = await response.json().catch(() => ({}))
+      if (!response.ok || !data?.success) {
+        throw new Error(data?.error || "Failed to save rate")
+      }
+      setWorkers((current) =>
+        current.map((w) => (w.id === workerId ? { ...w, dailyRate: parsed } : w)),
+      )
+      setEditingRate(null)
+      toast.success("Daily rate saved")
+    } catch (saveError: any) {
+      toast.error(saveError?.message || "Failed to save rate")
+    } finally {
+      setIsSavingRate(false)
     }
   }
 
@@ -264,6 +297,16 @@ export default function AttendanceTab() {
           <CardDescription>Tap each employee who was present on {formatDateOnly(selectedDate)}.</CardDescription>
         </CardHeader>
         <CardContent className="space-y-3">
+          {!loading && workers.length > 0 && workersWithoutRate.length > 0 && (
+            <div className="flex items-start gap-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+              <IndianRupee className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" />
+              <p>
+                {workersWithoutRate.length === workers.length
+                  ? "No daily rates set yet — add rates below to track wage costs automatically."
+                  : `${workersWithoutRate.length} ${workersWithoutRate.length === 1 ? "worker has" : "workers have"} no daily rate — add rates below to track wage costs.`}
+              </p>
+            </div>
+          )}
           {loading ? (
             <div className="space-y-2">
               {[1, 2, 3].map((i) => (
@@ -279,16 +322,70 @@ export default function AttendanceTab() {
           ) : (
             workers.map((worker) => {
               const isPresent = presentWorkerIdSet.has(worker.id)
+              const isEditingThisRate = editingRate?.workerId === worker.id
               return (
                 <div
                   key={worker.id}
                   className="flex flex-col gap-3 rounded-lg border border-border/70 bg-white/80 p-3 sm:flex-row sm:items-center sm:justify-between"
                 >
-                  <div>
+                  <div className="min-w-0">
                     <p className="font-medium text-foreground">{worker.name}</p>
-                    <p className="text-xs text-muted-foreground">
-                      {isPresent ? "Marked present for this date." : "Not marked present yet."}
-                    </p>
+                    <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-1">
+                      <p className="text-xs text-muted-foreground">
+                        {isPresent ? "Marked present for this date." : "Not marked present yet."}
+                      </p>
+                      {isEditingThisRate ? (
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-xs text-muted-foreground">₹</span>
+                          <Input
+                            type="number"
+                            min={0}
+                            step="1"
+                            placeholder="Daily rate"
+                            value={editingRate.value}
+                            onChange={(e) => setEditingRate({ workerId: worker.id, value: e.target.value })}
+                            className="h-6 w-24 rounded-md px-2 py-0 text-xs"
+                            autoFocus
+                            onKeyDown={(e) => {
+                              if (e.key === "Enter") void handleSaveRate(worker.id, editingRate.value)
+                              if (e.key === "Escape") setEditingRate(null)
+                            }}
+                          />
+                          <Button
+                            type="button"
+                            size="sm"
+                            className="h-6 px-2 text-xs"
+                            disabled={isSavingRate}
+                            onClick={() => void handleSaveRate(worker.id, editingRate.value)}
+                          >
+                            {isSavingRate ? <Loader2 className="h-3 w-3 animate-spin" /> : "Save"}
+                          </Button>
+                          <button
+                            type="button"
+                            className="text-xs text-muted-foreground underline"
+                            onClick={() => setEditingRate(null)}
+                          >
+                            Cancel
+                          </button>
+                        </div>
+                      ) : worker.dailyRate !== null ? (
+                        <button
+                          type="button"
+                          className="text-xs text-emerald-700 hover:underline"
+                          onClick={() => setEditingRate({ workerId: worker.id, value: String(worker.dailyRate) })}
+                        >
+                          ₹{worker.dailyRate}/day
+                        </button>
+                      ) : (
+                        <button
+                          type="button"
+                          className="text-xs text-amber-700 hover:underline"
+                          onClick={() => setEditingRate({ workerId: worker.id, value: "" })}
+                        >
+                          Set daily rate
+                        </button>
+                      )}
+                    </div>
                   </div>
                   <Button
                     type="button"
