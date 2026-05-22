@@ -333,24 +333,15 @@ export default function QuickLogPanel({ onNavigateToFull, locationId, className 
                           </button>
                           <input
                             type="date"
-                            value={entryDate}
-                            onChange={(e) => setEntryDate(e.target.value)}
-                            className="w-10 opacity-0 absolute pointer-events-none"
-                            id="qlp-date-picker"
-                          />
-                          <label
-                            htmlFor="qlp-date-picker"
+                            value={entryDate !== today && entryDate !== yesterday ? entryDate : ""}
+                            onChange={(e) => e.target.value && setEntryDate(e.target.value)}
                             className={cn(
-                              "flex-1 rounded-lg border py-2 text-xs font-medium text-center cursor-pointer touch-manipulation transition-all",
+                              "flex-1 rounded-lg border py-2 text-xs font-medium text-center touch-manipulation transition-all",
                               entryDate !== today && entryDate !== yesterday
-                                ? "border-emerald-400 bg-emerald-700 text-white"
-                                : "border-black/[0.08] bg-white text-neutral-600 hover:bg-neutral-50",
+                                ? "border-emerald-400 bg-emerald-700 text-white [color-scheme:dark]"
+                                : "border-black/[0.08] bg-white text-neutral-500",
                             )}
-                          >
-                            {entryDate !== today && entryDate !== yesterday
-                              ? format(new Date(entryDate + "T12:00:00"), "d MMM")
-                              : "Other"}
-                          </label>
+                          />
                         </div>
                       </div>
 

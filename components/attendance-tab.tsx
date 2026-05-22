@@ -4,7 +4,6 @@ import { useCallback, useEffect, useMemo, useState } from "react"
 import {
   addDays,
   format,
-  isSameDay,
   isToday,
   isFuture,
   startOfWeek,
@@ -392,7 +391,7 @@ export default function AttendanceTab() {
 
       {/* Sticky save bar */}
       {!loading && workers.length > 0 && !error && (
-        <div className="fixed bottom-[3.5rem] inset-x-0 px-3 pb-2 pt-1 bg-white/90 backdrop-blur-sm border-t border-black/[0.05] z-30">
+        <div className="fixed bottom-16 inset-x-0 px-3 pb-2 pt-1 bg-white/90 backdrop-blur-sm border-t border-black/[0.05] z-30">
           <button
             type="button"
             onClick={handleSave}
