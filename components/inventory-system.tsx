@@ -139,6 +139,12 @@ import SeasonProgressStrip from "@/components/inventory-system/season-progress-s
 import SeasonCompareCard from "@/components/inventory-system/season-compare-card"
 import PriorityAlertsCard from "@/components/inventory-system/priority-alerts-card"
 import HomeKpiCardsGrid from "@/components/inventory-system/home-kpi-cards-grid"
+import MobileBottomNav from "@/components/mobile-bottom-nav"
+import DailyPulseCard from "@/components/daily-pulse-card"
+import TodayGapsCard from "@/components/today-gaps-card"
+import QuickLogPanel from "@/components/quick-log-panel"
+import WeekBatchEntry from "@/components/week-batch-entry"
+import { getSeasonAwareTabOrder, getSeasonQuickActions } from "@/lib/season-utils"
 import {
   INITIAL_ONBOARDING_STATUS,
   buildOnboardingSteps,
@@ -3183,7 +3189,9 @@ export default function InventorySystem() {
     if (canShowCompliance) tabs.push("compliance")
     if (canShowReceivables) tabs.push("receivables")
     if (canShowBilling) tabs.push("billing")
-    return tabs
+    // Apply season-aware ordering so harvest tabs surface in Oct-Mar,
+    // maintenance tabs (accounts, rainfall, inventory) lead in off-season
+    return getSeasonAwareTabOrder(tabs)
   }, [
     canShowAccounts,
     canShowBalanceSheet,
@@ -3232,23 +3240,23 @@ export default function InventorySystem() {
     () =>
       ({
         home: { label: "Dashboard", icon: Home },
-        inventory: { label: "Stock & Inventory", icon: List },
+        inventory: { label: "Stock & Inputs", icon: List },
         processing: { label: processingWorkspaceLabel, icon: processingWorkspaceIcon },
         dispatch: { label: "Dispatch", icon: Truck },
         sales: { label: "Sales", icon: TrendingUp },
         pepper: { label: "Pepper", icon: Leaf },
         rubber: { label: "Rubber", icon: Leaf },
-        accounts: { label: "Accounts", icon: Users },
-        "balance-sheet": { label: "Balance Sheet", icon: Scale },
-        "season-pl": { label: "P&L Report", icon: TrendingUp },
-        receivables: { label: "Receivables", icon: Receipt },
+        accounts: { label: "Labor & Costs", icon: Users },
+        "balance-sheet": { label: "Financial Summary", icon: Scale },
+        "season-pl": { label: "Profit & Loss", icon: TrendingUp },
+        receivables: { label: "Money Owed", icon: Receipt },
         billing: { label: "Billing", icon: Receipt },
         season: { label: "This Season", icon: BarChart3 },
         "yield-forecast": { label: "Harvest Forecast", icon: TrendingUp },
         "activity-log": { label: "Activity Log", icon: History },
         rainfall: { label: "Rain & Weather", icon: CloudRain },
         documents: { label: "Documents", icon: FileText },
-        journal: { label: "Journal", icon: NotebookPen },
+        journal: { label: "All Transactions", icon: NotebookPen },
         resources: { label: "Resources", icon: BookOpen },
         "plant-health": { label: "Crop Health", icon: Leaf },
         "ai-analysis": { label: "AI Insights", icon: Brain },
@@ -3262,26 +3270,11 @@ export default function InventorySystem() {
     [processingWorkspaceIcon, processingWorkspaceLabel],
   )
   const mobileHomeQuickActions = useMemo(() => {
-    const preferred = [
-      "processing",
-      "dispatch",
-      "sales",
-      "inventory",
-      "accounts",
-      "season",
-      "rainfall",
-      "documents",
-      "resources",
-      "plant-health",
-    ]
-    return preferred
-      .filter((tab) => visibleTabs.includes(tab))
-      .slice(0, 6)
-      .map((tab) => ({
-        tab,
-        label: tabMeta[tab]?.label || tab,
-        icon: tabMeta[tab]?.icon || Home,
-      }))
+    return getSeasonQuickActions(visibleTabs).map((tab) => ({
+      tab,
+      label: tabMeta[tab]?.label || tab,
+      icon: tabMeta[tab]?.icon || Home,
+    }))
   }, [tabMeta, visibleTabs])
   type ExecutionOutcomeStatus = "good" | "attention" | "blocked"
   type ExecutionOutcomeCheck = {
@@ -5170,7 +5163,7 @@ export default function InventorySystem() {
   )
 
   const mobileBottomSpacingClass = isMobile
-    ? "pb-[calc(1rem+env(safe-area-inset-bottom))]"
+    ? "pb-[calc(5rem+env(safe-area-inset-bottom))]"
     : "pb-8"
 
   return (
@@ -5196,6 +5189,15 @@ export default function InventorySystem() {
           buildWorkspaceHref={buildWorkspaceHref}
         />
       )}
+      {isMobile && (
+        <MobileBottomNav
+          activeTab={activeTab}
+          visibleTabs={visibleTabs}
+          tabMeta={tabMeta}
+          onTabChange={handleTabChange}
+          onOpenSidebar={() => setIsMobileSidebarOpen(true)}
+        />
+      )}
       <div
         className={cn(
           "flex-1 min-w-0",
@@ -5208,12 +5210,15 @@ export default function InventorySystem() {
         <div className="pointer-events-none absolute -top-16 right-[5%] h-[200px] w-[200px] rounded-full bg-[radial-gradient(circle_at_center,rgba(69,111,96,0.25),transparent_70%)] blur-[110px]" />
 
         <header className={cn(
-          "relative mb-4 overflow-hidden backdrop-blur",
+          "relative mb-4 overflow-hidden",
           isMobile
-            ? "rounded-2xl border border-black/5 bg-white/80 p-4 shadow-sm dark:border-white/[0.07] dark:bg-card/80"
-            : "flex items-center justify-between rounded-xl border border-black/5 bg-white/75 px-4 py-2.5 shadow-sm dark:border-white/[0.07] dark:bg-card/70",
+            ? "rounded-2xl border border-black/[0.06] bg-white/70 backdrop-blur-xl backdrop-saturate-150 p-4 shadow-[0_4px_24px_-4px_rgba(0,0,0,0.08),0_1px_2px_rgba(0,0,0,0.04)] dark:border-white/[0.07] dark:bg-card/80"
+            : "flex items-center justify-between rounded-xl border border-black/[0.06] bg-white/70 backdrop-blur-xl backdrop-saturate-150 px-4 py-2.5 shadow-[0_2px_12px_-2px_rgba(0,0,0,0.06),0_1px_2px_rgba(0,0,0,0.04)] dark:border-white/[0.07] dark:bg-card/70",
         )}>
-          <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-emerald-500/40 via-amber-300/30 to-emerald-600/40" />
+          {/* Prismatic shimmer line */}
+          <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-emerald-400/50 via-amber-300/40 to-sky-400/40" />
+          {/* Inner glass highlight */}
+          <div className="pointer-events-none absolute inset-x-0 top-0 h-1/2 bg-gradient-to-b from-white/30 to-transparent rounded-t-2xl" />
           {isMobile ? (
             /* Mobile header: lean bar — hamburger + estate name + theme toggle */
             <div className="flex items-center justify-between gap-2">
@@ -6211,6 +6216,28 @@ export default function InventorySystem() {
               progress={seasonProgress}
               activityStreak={activityStreak}
             />
+
+            {/* ── Today gaps + Quick log (mobile) ── */}
+            {isMobile && (
+              <div className="space-y-3">
+                <TodayGapsCard onNavigate={handleTabChange} />
+                {canShowAccounts && (
+                  <QuickLogPanel
+                    locationId={selectedLocationId || undefined}
+                    onNavigateToFull={() => handleTabChange("accounts")}
+                  />
+                )}
+                {canShowAccounts && (
+                  <WeekBatchEntry
+                    locationId={selectedLocationId || undefined}
+                    defaultWage={tenantSettings.laborWages?.defaultInHouseWage}
+                    onSuccess={() => {
+                      window.dispatchEvent(new CustomEvent("farmflow:record-saved"))
+                    }}
+                  />
+                )}
+              </div>
+            )}
 
             {/* ── Morning Brief ── */}
             {canShowIntelligence && (

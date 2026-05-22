@@ -1,18 +1,21 @@
 "use client"
 
 import { useCallback, useEffect, useMemo, useState } from "react"
-import { Check, IndianRupee, Loader2, PlusCircle, RotateCcw, Users } from "lucide-react"
+import {
+  addDays,
+  format,
+  isToday,
+  isFuture,
+  startOfWeek,
+} from "date-fns"
+import { Check, IndianRupee, Loader2, PlusCircle, Users } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
-import { Badge } from "@/components/ui/badge"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
+import { cn } from "@/lib/utils"
 import { formatDateOnly } from "@/lib/date-utils"
 import { toast } from "sonner"
 import { Skeleton } from "@/components/ui/skeleton"
 import { EmptyState } from "@/components/ui/empty-state"
-import TaskGuideCard from "@/components/task-guide-card"
 
 type AttendanceWorker = {
   id: string
@@ -26,15 +29,18 @@ type AttendanceSummaryRow = {
   daysPresent: number
 }
 
-const getTodayInputValue = () => new Date().toISOString().split("T")[0]
+function dateToInputStr(d: Date): string {
+  return format(d, "yyyy-MM-dd")
+}
 
-const buildWeekLabel = (startDate: string | null, endDate: string | null) => {
-  if (!startDate || !endDate) return "Current week"
-  return `${formatDateOnly(startDate)} to ${formatDateOnly(endDate)}`
+function getWeekDays(): Date[] {
+  const start = startOfWeek(new Date(), { weekStartsOn: 1 })
+  return Array.from({ length: 7 }, (_, i) => addDays(start, i))
 }
 
 export default function AttendanceTab() {
-  const [selectedDate, setSelectedDate] = useState(getTodayInputValue())
+  const today = new Date()
+  const [selectedDate, setSelectedDate] = useState(dateToInputStr(today))
   const [workers, setWorkers] = useState<AttendanceWorker[]>([])
   const [presentWorkerIds, setPresentWorkerIds] = useState<string[]>([])
   const [weeklySummary, setWeeklySummary] = useState<AttendanceSummaryRow[]>([])
@@ -45,86 +51,92 @@ export default function AttendanceTab() {
   const [isSaving, setIsSaving] = useState(false)
   const [isAddingWorker, setIsAddingWorker] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [editingRate, setEditingRate] = useState<{ workerId: string; value: string } | null>(null)
-  const [isSavingRate, setIsSavingRate] = useState(false)
+  const [showAddWorker, setShowAddWorker] = useState(false)
+  const [showSummary, setShowSummary] = useState(false)
+  const [autoSelectedDate, setAutoSelectedDate] = useState<string | null>(null)
+
+  const weekDays = useMemo(() => getWeekDays(), [])
 
   const loadAttendanceSnapshot = useCallback(async (date: string) => {
     setLoading(true)
     try {
-      const params = new URLSearchParams({ date })
-      const response = await fetch(`/api/attendance?${params.toString()}`, { cache: "no-store" })
+      const response = await fetch(`/api/attendance?date=${date}`, { cache: "no-store" })
       const data = await response.json().catch(() => ({}))
       if (!response.ok || !data?.success) {
         throw new Error(data?.error || "Failed to load attendance")
       }
 
-      setWorkers(Array.isArray(data.workers) ? data.workers : [])
-      setPresentWorkerIds(Array.isArray(data.presentWorkerIds) ? data.presentWorkerIds : [])
+      const fetchedWorkers: AttendanceWorker[] = Array.isArray(data.workers) ? data.workers : []
+      const fetchedPresent: string[] = Array.isArray(data.presentWorkerIds) ? data.presentWorkerIds : []
+
+      setWorkers(fetchedWorkers)
       setWeeklySummary(Array.isArray(data.weeklySummary) ? data.weeklySummary : [])
       setWeekStartDate(String(data.weekStartDate || ""))
       setWeekEndDate(String(data.weekEndDate || ""))
       setError(null)
-    } catch (loadError: any) {
+
+      // Default everyone to present if no saved data exists for this date
+      if (fetchedPresent.length === 0 && fetchedWorkers.length > 0 && autoSelectedDate !== date) {
+        setPresentWorkerIds(fetchedWorkers.map((w) => w.id))
+        setAutoSelectedDate(date)
+      } else {
+        setPresentWorkerIds(fetchedPresent)
+      }
+    } catch (loadError: unknown) {
+      const msg = loadError instanceof Error ? loadError.message : "Failed to load attendance"
       setWorkers([])
       setPresentWorkerIds([])
       setWeeklySummary([])
       setWeekStartDate(null)
       setWeekEndDate(null)
-      setError(loadError?.message || "Failed to load attendance")
+      setError(msg)
     } finally {
       setLoading(false)
     }
-  }, [])
+  }, [autoSelectedDate])
 
   useEffect(() => {
     void loadAttendanceSnapshot(selectedDate)
-  }, [loadAttendanceSnapshot, selectedDate])
+  }, [selectedDate]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  const presentWorkerIdSet = useMemo(() => new Set(presentWorkerIds), [presentWorkerIds])
+  const presentSet = useMemo(() => new Set(presentWorkerIds), [presentWorkerIds])
   const presentCount = presentWorkerIds.length
-  const workersWithoutRate = useMemo(() => workers.filter((w) => w.dailyRate === null), [workers])
+  const absentCount = workers.length - presentCount
+  const workersWithoutRate = workers.filter((w) => w.dailyRate === null)
 
-  const toggleWorkerPresence = (workerId: string) => {
+  const toggleWorker = (workerId: string) => {
     setPresentWorkerIds((current) => {
       const next = new Set(current)
-      if (next.has(workerId)) {
-        next.delete(workerId)
-      } else {
-        next.add(workerId)
-      }
+      next.has(workerId) ? next.delete(workerId) : next.add(workerId)
       return Array.from(next)
     })
   }
 
-  const handleSaveAttendance = async () => {
+  const handleSave = async () => {
     setIsSaving(true)
     try {
       const response = await fetch("/api/attendance", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          date: selectedDate,
-          presentWorkerIds,
-        }),
+        body: JSON.stringify({ date: selectedDate, presentWorkerIds }),
       })
       const data = await response.json().catch(() => ({}))
       if (!response.ok || !data?.success) {
         throw new Error(data?.error || "Failed to save attendance")
       }
-
-      toast.success(`Attendance saved for ${formatDateOnly(selectedDate)}`)
+      toast.success(`Muster saved — ${presentCount} present`)
       await loadAttendanceSnapshot(selectedDate)
-    } catch (saveError: any) {
-      toast.error(saveError?.message || "Failed to save attendance")
+    } catch (saveError: unknown) {
+      const msg = saveError instanceof Error ? saveError.message : "Failed to save attendance"
+      toast.error(msg)
     } finally {
       setIsSaving(false)
     }
   }
 
-  const handleAddWorker = async (event: React.FormEvent<HTMLFormElement>) => {
-    event.preventDefault()
+  const handleAddWorker = async (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault()
     if (!newWorkerName.trim()) return
-
     setIsAddingWorker(true)
     try {
       const response = await fetch("/api/attendance/workers", {
@@ -136,304 +148,272 @@ export default function AttendanceTab() {
       if (!response.ok || !data?.success) {
         throw new Error(data?.error || "Failed to add employee")
       }
-
       toast.success(`${data.worker?.name || "Employee"} added`)
       setNewWorkerName("")
+      setShowAddWorker(false)
+      // Reset auto-select so new worker gets added to present list
+      setAutoSelectedDate(null)
       await loadAttendanceSnapshot(selectedDate)
-    } catch (workerError: any) {
-      toast.error(workerError?.message || "Failed to add employee")
+    } catch (workerError: unknown) {
+      const msg = workerError instanceof Error ? workerError.message : "Failed to add employee"
+      toast.error(msg)
     } finally {
       setIsAddingWorker(false)
     }
   }
 
-  const handleSaveRate = async (workerId: string, rateValue: string) => {
-    const parsed = parseFloat(rateValue)
-    if (!rateValue.trim() || Number.isNaN(parsed) || parsed < 0) {
-      toast.error("Enter a valid daily rate")
-      return
-    }
-    setIsSavingRate(true)
-    try {
-      const response = await fetch(`/api/attendance/workers/${workerId}`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ dailyRate: parsed }),
-      })
-      const data = await response.json().catch(() => ({}))
-      if (!response.ok || !data?.success) {
-        throw new Error(data?.error || "Failed to save rate")
-      }
-      setWorkers((current) =>
-        current.map((w) => (w.id === workerId ? { ...w, dailyRate: parsed } : w)),
-      )
-      setEditingRate(null)
-      toast.success("Daily rate saved")
-    } catch (saveError: any) {
-      toast.error(saveError?.message || "Failed to save rate")
-    } finally {
-      setIsSavingRate(false)
-    }
-  }
-
   return (
-    <div className="space-y-4">
-      <TaskGuideCard
-        eyebrow="Attendance guide"
-        title="Mark who came in today"
-        description="Use this as the morning or day-end muster. Keep it simple: choose the date, mark who was present, then save."
-        bullets={[
-          "Add workers once, then reuse the same list every day.",
-          "Mark only the people who actually came in for that date.",
-          "This tab can run on its own for daily muster; rates and payroll can come later.",
-        ]}
-        tip="A clean daily muster makes weekly attendance, wages, and labor review easier for the owner."
-        tone="operations"
-      />
+    <div className="space-y-0 pb-24">
+      {/* Day strip */}
+      <div className="sticky top-0 z-10 bg-white border-b border-black/[0.06] px-3 py-2">
+        <div className="flex items-stretch gap-1">
+          {weekDays.map((day) => {
+            const str = dateToInputStr(day)
+            const isSelected = str === selectedDate
+            const isT = isToday(day)
+            const isFut = isFuture(day) && !isToday(day)
+            return (
+              <button
+                key={str}
+                type="button"
+                disabled={isFut}
+                onClick={() => setSelectedDate(str)}
+                className={cn(
+                  "flex-1 flex flex-col items-center py-1.5 rounded-xl transition-all touch-manipulation",
+                  isSelected
+                    ? "bg-emerald-700 text-white"
+                    : isFut
+                      ? "text-neutral-300 cursor-default"
+                      : "text-neutral-500 hover:bg-neutral-50 active:bg-neutral-100",
+                )}
+              >
+                <span className="text-[9px] font-medium uppercase tracking-wide">
+                  {format(day, "EEE").charAt(0)}
+                </span>
+                <span className={cn(
+                  "text-sm font-bold leading-tight",
+                  isT && !isSelected && "text-emerald-700",
+                )}>
+                  {format(day, "d")}
+                </span>
+                {isT && (
+                  <span className={cn(
+                    "h-1 w-1 rounded-full mt-0.5",
+                    isSelected ? "bg-white/70" : "bg-emerald-600",
+                  )} />
+                )}
+              </button>
+            )
+          })}
+        </div>
 
-      <Card>
-        <CardHeader className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-          <div>
-            <CardTitle className="text-xl sm:text-2xl">Daily attendance</CardTitle>
-            <CardDescription>Mark who came today and keep a simple weekly roll-up.</CardDescription>
-          </div>
-          <div className="flex flex-wrap gap-2">
-            <Badge variant="outline">{workers.length} employees</Badge>
-            <Badge variant="outline">{presentCount} present</Badge>
-          </div>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="rounded-2xl border border-emerald-100 bg-emerald-50/50 p-4">
-            <div className="grid gap-3 md:grid-cols-3">
-              <div className="rounded-xl border border-white/70 bg-white/85 p-3">
-                <p className="text-[11px] uppercase tracking-[0.18em] text-emerald-700">Muster date</p>
-                <p className="mt-1 text-sm font-semibold text-foreground">{formatDateOnly(selectedDate)}</p>
-              </div>
-              <div className="rounded-xl border border-white/70 bg-white/85 p-3">
-                <p className="text-[11px] uppercase tracking-[0.18em] text-emerald-700">Present now</p>
-                <p className="mt-1 text-sm font-semibold text-foreground">{presentCount} workers marked</p>
-              </div>
-              <div className="rounded-xl border border-white/70 bg-white/85 p-3">
-                <p className="text-[11px] uppercase tracking-[0.18em] text-emerald-700">This week</p>
-                <p className="mt-1 text-sm font-semibold text-foreground">{buildWeekLabel(weekStartDate, weekEndDate)}</p>
-              </div>
+        {/* Status bar */}
+        <div className="flex items-center justify-between mt-2 px-0.5">
+          <p className="text-xs font-medium text-neutral-600">
+            {formatDateOnly(selectedDate)}
+          </p>
+          {!loading && workers.length > 0 && (
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-semibold text-emerald-700">{presentCount} present</span>
+              {absentCount > 0 && (
+                <span className="text-xs text-neutral-400">{absentCount} absent</span>
+              )}
             </div>
-          </div>
+          )}
+        </div>
+      </div>
 
-          <form onSubmit={handleAddWorker} className="grid gap-3 md:grid-cols-[minmax(0,1fr)_auto]">
-            <div className="space-y-2">
-              <Label htmlFor="attendance-worker-name">Add employee</Label>
+      {/* Workers list */}
+      <div className="px-3 pt-2 space-y-1.5">
+        {/* Rate warning — compact */}
+        {!loading && workers.length > 0 && workersWithoutRate.length > 0 && (
+          <div className="flex items-center gap-2 rounded-xl border border-amber-100 bg-amber-50 px-3 py-2.5 text-xs text-amber-800">
+            <IndianRupee className="h-3.5 w-3.5 shrink-0 text-amber-600" />
+            <span>
+              {workersWithoutRate.length} worker{workersWithoutRate.length > 1 ? "s" : ""} missing daily rate — wages won&apos;t be calculated.
+            </span>
+          </div>
+        )}
+
+        {error && (
+          <p className="text-sm text-rose-600 px-1">{error}</p>
+        )}
+
+        {loading ? (
+          <div className="space-y-1.5">
+            {[1, 2, 3, 4].map((i) => (
+              <Skeleton key={i} className="h-14 w-full rounded-xl bg-neutral-100" />
+            ))}
+          </div>
+        ) : workers.length === 0 ? (
+          <EmptyState
+            title="No employees yet"
+            description="Add your first employee below."
+            size="sm"
+          />
+        ) : (
+          workers.map((worker) => {
+            const isPresent = presentSet.has(worker.id)
+            return (
+              <button
+                key={worker.id}
+                type="button"
+                onClick={() => toggleWorker(worker.id)}
+                className={cn(
+                  "w-full flex items-center justify-between rounded-xl border px-3.5 py-3 transition-all",
+                  "touch-manipulation active:scale-[0.98]",
+                  isPresent
+                    ? "border-emerald-200 bg-emerald-50"
+                    : "border-black/[0.06] bg-white",
+                )}
+              >
+                <div className="min-w-0 text-left">
+                  <p className={cn(
+                    "text-sm font-semibold leading-tight",
+                    isPresent ? "text-emerald-900" : "text-neutral-500",
+                  )}>
+                    {worker.name}
+                  </p>
+                  <p className={cn(
+                    "text-[11px] mt-0.5",
+                    isPresent ? "text-emerald-600" : "text-neutral-400",
+                  )}>
+                    {worker.dailyRate !== null
+                      ? `₹${worker.dailyRate}/day`
+                      : "No rate set"}
+                  </p>
+                </div>
+
+                <div className={cn(
+                  "flex h-8 w-8 shrink-0 items-center justify-center rounded-full border-2 transition-all",
+                  isPresent
+                    ? "border-emerald-500 bg-emerald-500"
+                    : "border-neutral-200 bg-white",
+                )}>
+                  {isPresent && <Check className="h-4 w-4 text-white stroke-[3]" />}
+                </div>
+              </button>
+            )
+          })
+        )}
+
+        {/* Quick-select row */}
+        {!loading && workers.length > 0 && (
+          <div className="flex gap-2 pt-1">
+            <button
+              type="button"
+              onClick={() => setPresentWorkerIds(workers.map((w) => w.id))}
+              className="flex-1 flex items-center justify-center gap-1.5 rounded-xl border border-black/[0.06] bg-white py-2.5 text-xs font-medium text-neutral-600 hover:bg-neutral-50 active:scale-[0.98] touch-manipulation"
+            >
+              <Users className="h-3.5 w-3.5" />
+              All present
+            </button>
+            <button
+              type="button"
+              onClick={() => setPresentWorkerIds([])}
+              disabled={presentCount === 0}
+              className="flex-1 flex items-center justify-center gap-1.5 rounded-xl border border-black/[0.06] bg-white py-2.5 text-xs font-medium text-neutral-600 hover:bg-neutral-50 active:scale-[0.98] touch-manipulation disabled:opacity-40"
+            >
+              Clear all
+            </button>
+          </div>
+        )}
+
+        {/* Add employee */}
+        <div className="pt-1">
+          {!showAddWorker ? (
+            <button
+              type="button"
+              onClick={() => setShowAddWorker(true)}
+              className="w-full flex items-center justify-center gap-1.5 rounded-xl border border-dashed border-neutral-200 py-3 text-xs font-medium text-neutral-400 hover:border-neutral-300 hover:text-neutral-500 transition-colors touch-manipulation"
+            >
+              <PlusCircle className="h-3.5 w-3.5" />
+              Add employee
+            </button>
+          ) : (
+            <form
+              onSubmit={handleAddWorker}
+              className="flex items-center gap-2 rounded-xl border border-neutral-200 bg-neutral-50 px-3 py-2"
+            >
               <Input
-                id="attendance-worker-name"
                 value={newWorkerName}
-                onChange={(event) => setNewWorkerName(event.target.value)}
-                placeholder="e.g. Asha, Ravi Kumar"
-                disabled={isAddingWorker || Boolean(error)}
+                onChange={(e) => setNewWorkerName(e.target.value)}
+                placeholder="Employee name"
+                className="flex-1 h-8 text-sm border-0 bg-transparent p-0 focus-visible:ring-0 placeholder:text-neutral-400"
+                autoFocus
+                disabled={isAddingWorker}
               />
-            </div>
-            <div className="flex items-end">
               <Button
                 type="submit"
-                className="w-full md:w-auto"
-                disabled={isAddingWorker || Boolean(error) || !newWorkerName.trim()}
+                size="sm"
+                className="h-8 bg-emerald-700 hover:bg-emerald-800 text-white"
+                disabled={isAddingWorker || !newWorkerName.trim()}
               >
-                {isAddingWorker ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <PlusCircle className="mr-2 h-4 w-4" />}
-                Add employee
+                {isAddingWorker ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : "Add"}
               </Button>
-            </div>
-          </form>
-
-          <div className="grid gap-3 md:grid-cols-[220px_minmax(0,1fr)_auto] md:items-end">
-            <div className="space-y-2">
-              <Label htmlFor="attendance-date">Muster date</Label>
-              <Input
-                id="attendance-date"
-                type="date"
-                value={selectedDate}
-                onChange={(event) => setSelectedDate(event.target.value)}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label>Weekly summary window</Label>
-              <div className="rounded-md border bg-muted/40 px-3 py-2 text-sm text-muted-foreground">
-                {buildWeekLabel(weekStartDate, weekEndDate)}
-              </div>
-            </div>
-            <div className="flex flex-wrap gap-2">
-              <Button
+              <button
                 type="button"
-                variant="outline"
-                className="bg-transparent"
-                onClick={() => setPresentWorkerIds(workers.map((worker) => worker.id))}
-                disabled={workers.length === 0}
+                onClick={() => { setShowAddWorker(false); setNewWorkerName("") }}
+                className="text-xs text-neutral-400 hover:text-neutral-600 px-1"
               >
-                <Users className="mr-2 h-4 w-4" />
-                Mark all
-              </Button>
-              <Button
-                type="button"
-                variant="outline"
-                className="bg-transparent"
-                onClick={() => setPresentWorkerIds([])}
-                disabled={presentWorkerIds.length === 0}
-              >
-                <RotateCcw className="mr-2 h-4 w-4" />
-                Clear
-              </Button>
-              <Button type="button" onClick={handleSaveAttendance} disabled={isSaving || Boolean(error)}>
-                {isSaving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Check className="mr-2 h-4 w-4" />}
-                Save muster
-              </Button>
-            </div>
-          </div>
-
-          {error ? <p className="text-sm text-rose-600">{error}</p> : null}
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader>
-          <CardTitle>Who came today</CardTitle>
-          <CardDescription>Tap each employee who was present on {formatDateOnly(selectedDate)}.</CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-3">
-          {!loading && workers.length > 0 && workersWithoutRate.length > 0 && (
-            <div className="flex items-start gap-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
-              <IndianRupee className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" />
-              <p>
-                {workersWithoutRate.length === workers.length
-                  ? "No daily rates set yet — add rates below to track wage costs automatically."
-                  : `${workersWithoutRate.length} ${workersWithoutRate.length === 1 ? "worker has" : "workers have"} no daily rate — add rates below to track wage costs.`}
-              </p>
-            </div>
+                Cancel
+              </button>
+            </form>
           )}
-          {loading ? (
-            <div className="space-y-2">
-              {[1, 2, 3].map((i) => (
-                <Skeleton key={i} className="h-16 w-full rounded-xl bg-stone-100" />
-              ))}
-            </div>
-          ) : workers.length === 0 ? (
-            <EmptyState
-              title="No employees added yet"
-              description="Add your first employee above. Use Workers later if you want daily rates, bank details, or the full roster."
-              size="sm"
-            />
-          ) : (
-            workers.map((worker) => {
-              const isPresent = presentWorkerIdSet.has(worker.id)
-              const isEditingThisRate = editingRate?.workerId === worker.id
-              return (
-                <div
-                  key={worker.id}
-                  className="flex flex-col gap-3 rounded-lg border border-border/70 bg-white/80 p-3 sm:flex-row sm:items-center sm:justify-between"
-                >
-                  <div className="min-w-0">
-                    <p className="font-medium text-foreground">{worker.name}</p>
-                    <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-1">
-                      <p className="text-xs text-muted-foreground">
-                        {isPresent ? "Marked present for this date." : "Not marked present yet."}
-                      </p>
-                      {isEditingThisRate ? (
-                        <div className="flex items-center gap-1.5">
-                          <span className="text-xs text-muted-foreground">₹</span>
-                          <Input
-                            type="number"
-                            min={0}
-                            step="1"
-                            placeholder="Daily rate"
-                            value={editingRate.value}
-                            onChange={(e) => setEditingRate({ workerId: worker.id, value: e.target.value })}
-                            className="h-6 w-24 rounded-md px-2 py-0 text-xs"
-                            autoFocus
-                            onKeyDown={(e) => {
-                              if (e.key === "Enter") void handleSaveRate(worker.id, editingRate.value)
-                              if (e.key === "Escape") setEditingRate(null)
-                            }}
-                          />
-                          <Button
-                            type="button"
-                            size="sm"
-                            className="h-6 px-2 text-xs"
-                            disabled={isSavingRate}
-                            onClick={() => void handleSaveRate(worker.id, editingRate.value)}
-                          >
-                            {isSavingRate ? <Loader2 className="h-3 w-3 animate-spin" /> : "Save"}
-                          </Button>
-                          <button
-                            type="button"
-                            className="text-xs text-muted-foreground underline"
-                            onClick={() => setEditingRate(null)}
-                          >
-                            Cancel
-                          </button>
-                        </div>
-                      ) : worker.dailyRate !== null ? (
-                        <button
-                          type="button"
-                          className="text-xs text-emerald-700 hover:underline"
-                          onClick={() => setEditingRate({ workerId: worker.id, value: String(worker.dailyRate) })}
-                        >
-                          ₹{worker.dailyRate}/day
-                        </button>
-                      ) : (
-                        <button
-                          type="button"
-                          className="text-xs text-amber-700 hover:underline"
-                          onClick={() => setEditingRate({ workerId: worker.id, value: "" })}
-                        >
-                          Set daily rate
-                        </button>
-                      )}
-                    </div>
+        </div>
+
+        {/* Weekly summary — collapsed by default */}
+        {weeklySummary.length > 0 && (
+          <div className="pt-2">
+            <button
+              type="button"
+              onClick={() => setShowSummary(!showSummary)}
+              className="w-full flex items-center justify-between px-1 py-2 text-xs font-medium text-neutral-500 hover:text-neutral-700 transition-colors"
+            >
+              <span>This week&apos;s summary</span>
+              <span className="text-neutral-300">{showSummary ? "▲" : "▼"}</span>
+            </button>
+            {showSummary && (
+              <div className="rounded-xl border border-black/[0.06] bg-neutral-50 overflow-hidden divide-y divide-black/[0.04]">
+                {weeklySummary.map((row) => (
+                  <div key={row.workerId} className="flex items-center justify-between px-3 py-2.5">
+                    <span className="text-sm text-neutral-700">{row.name}</span>
+                    <span className="text-sm font-semibold text-neutral-900">
+                      {row.daysPresent} {row.daysPresent === 1 ? "day" : "days"}
+                    </span>
                   </div>
-                  <Button
-                    type="button"
-                    variant={isPresent ? "default" : "outline"}
-                    className={isPresent ? "" : "bg-transparent"}
-                    onClick={() => toggleWorkerPresence(worker.id)}
-                  >
-                    {isPresent ? "Present" : "Mark present"}
-                  </Button>
-                </div>
-              )
-            })
-          )}
-        </CardContent>
-      </Card>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+      </div>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>This week</CardTitle>
-          <CardDescription>Days present in the selected week.</CardDescription>
-        </CardHeader>
-        <CardContent>
-          {loading ? (
-            <Skeleton className="h-32 w-full rounded-xl bg-stone-100" />
-          ) : weeklySummary.length === 0 ? (
-            <EmptyState title="No data for this week" description="Mark attendance above to populate the weekly summary." size="sm" />
-          ) : (
-            <div className="overflow-x-auto">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Employee</TableHead>
-                    <TableHead className="text-right">Days Present</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {weeklySummary.map((row) => (
-                    <TableRow key={row.workerId}>
-                      <TableCell>{row.name}</TableCell>
-                      <TableCell className="text-right font-medium">{row.daysPresent}</TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </div>
-          )}
-        </CardContent>
-      </Card>
+      {/* Sticky save bar */}
+      {!loading && workers.length > 0 && !error && (
+        <div className="fixed bottom-16 inset-x-0 px-3 pb-2 pt-1 bg-white/90 backdrop-blur-sm border-t border-black/[0.05] z-30">
+          <button
+            type="button"
+            onClick={handleSave}
+            disabled={isSaving}
+            className={cn(
+              "w-full flex items-center justify-center gap-2 h-12 rounded-2xl",
+              "bg-emerald-700 text-white text-sm font-semibold shadow-sm",
+              "hover:bg-emerald-800 active:scale-[0.98] transition-all touch-manipulation",
+              isSaving && "opacity-70 cursor-wait",
+            )}
+          >
+            {isSaving ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <>
+                <Check className="h-4 w-4 stroke-[2.5]" />
+                Save muster · {presentCount} present
+              </>
+            )}
+          </button>
+        </div>
+      )}
     </div>
   )
 }
