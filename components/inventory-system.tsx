@@ -1023,13 +1023,25 @@ export default function InventorySystem() {
     }
   }, [selectedLocationId])
 
+  // One-time: when locations first arrive, auto-select the sole location so new
+  // transactions don't silently fall into the unassigned bucket.
+  const locationDefaultApplied = useRef(false)
+  useEffect(() => {
+    if (!locationDefaultApplied.current && locations.length > 0) {
+      locationDefaultApplied.current = true
+      if (locations.length === 1) {
+        setTransactionLocationId(locations[0].id)
+      }
+    }
+  }, [locations])
+
   useEffect(() => {
     if (
       transactionLocationId !== LOCATION_UNASSIGNED &&
       transactionLocationId !== LOCATION_ALL &&
       !locations.find((loc) => loc.id === transactionLocationId)
     ) {
-      setTransactionLocationId(LOCATION_UNASSIGNED)
+      setTransactionLocationId(locations.length === 1 ? locations[0].id : LOCATION_UNASSIGNED)
     }
   }, [locations, transactionLocationId])
 
@@ -1864,7 +1876,9 @@ export default function InventorySystem() {
             </SelectTrigger>
             <SelectContent className="max-h-[40vh] overflow-y-auto">
               <SelectItem value={LOCATION_ALL}>All locations</SelectItem>
-              <SelectItem value={LOCATION_UNASSIGNED}>{UNASSIGNED_LABEL}</SelectItem>
+              {(hasLegacyUnassignedTransactions || selectedLocationId === LOCATION_UNASSIGNED) && (
+                <SelectItem value={LOCATION_UNASSIGNED}>{UNASSIGNED_LABEL}</SelectItem>
+              )}
               {locations.map((loc) => (
                 <SelectItem key={loc.id} value={loc.id}>
                   {loc.name || loc.code || "Unnamed location"}
@@ -6811,7 +6825,9 @@ export default function InventorySystem() {
                         </SelectTrigger>
                         <SelectContent className="max-h-[40vh] overflow-y-auto">
                           <SelectItem value={LOCATION_ALL}>All locations</SelectItem>
-                          <SelectItem value={LOCATION_UNASSIGNED}>{UNASSIGNED_LABEL}</SelectItem>
+                          {(hasLegacyUnassignedTransactions || selectedLocationId === LOCATION_UNASSIGNED) && (
+                            <SelectItem value={LOCATION_UNASSIGNED}>{UNASSIGNED_LABEL}</SelectItem>
+                          )}
                           {locations.map((loc) => (
                             <SelectItem key={loc.id} value={loc.id}>
                               {loc.name || loc.code || "Unnamed location"}
