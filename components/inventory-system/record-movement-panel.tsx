@@ -9,7 +9,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Textarea } from "@/components/ui/textarea"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import { cn } from "@/lib/utils"
-import { LOCATION_UNASSIGNED, UNASSIGNED_LABEL } from "@/components/inventory-system/constants"
+import { LOCATION_UNASSIGNED, UNASSIGNED_LABEL_PICKER } from "@/components/inventory-system/constants"
 import type { Transaction } from "@/lib/inventory-types"
 import type { LocationOption } from "@/components/inventory-system/types"
 
@@ -181,7 +181,7 @@ export default function RecordMovementPanel({
               <SelectValue placeholder={locations.length ? "Select location" : "No locations yet"} />
             </SelectTrigger>
             <SelectContent className="z-[70] max-h-[40vh] overflow-y-auto">
-              <SelectItem value={LOCATION_UNASSIGNED}>{UNASSIGNED_LABEL}</SelectItem>
+              <SelectItem value={LOCATION_UNASSIGNED}>{UNASSIGNED_LABEL_PICKER}</SelectItem>
               {locations.map((loc) => (
                 <SelectItem key={loc.id} value={loc.id}>
                   {loc.name || loc.code || "Unnamed location"}

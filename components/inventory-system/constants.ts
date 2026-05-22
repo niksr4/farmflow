@@ -8,6 +8,8 @@ export const FARMFLOW_RECORD_SAVED_EVENT = "farmflow:record-saved"
 export const LOCATION_ALL = "all"
 export const LOCATION_UNASSIGNED = "unassigned"
 export const UNASSIGNED_LABEL = "Unassigned (legacy)"
+// Used in transaction creation pickers — avoids "legacy" language for new entries
+export const UNASSIGNED_LABEL_PICKER = "No location"
 export const PREVIEW_TENANT_COOKIE = "farmflow_preview_tenant"
 export const DASHBOARD_LAUNCHER_TAB = "launcher"
 export const DRILLDOWN_TXN_SEARCH_PARAM = "txnSearch"
