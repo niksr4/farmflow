@@ -1,31 +1,23 @@
 "use client"
 
 import { useEffect, useState, useCallback } from "react"
-import { ChevronRight, Loader2, Plus, Zap } from "lucide-react"
+import { ArrowRight, Check, ChevronDown, Loader2, Minus, Plus, Search, X, Zap } from "lucide-react"
 import { cn } from "@/lib/utils"
-import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
+import { formatCurrency } from "@/lib/format"
+import { useTenantSettings } from "@/hooks/use-tenant-settings"
+import { format, subDays } from "date-fns"
+import { toast } from "sonner"
 
-type ActivityCode = {
-  code: string
-  reference: string
-}
-
-type RecentCode = ActivityCode & {
-  useCount: number
-  lastUsedDate: string
-}
+type ActivityCode = { code: string; reference: string }
+type RecentCode = ActivityCode & { useCount: number; lastUsedDate: string }
 
 type QuickLogPanelProps = {
-  // Called when user wants to open the full labor form pre-filled
-  onQuickLog: (code: string, reference: string) => void
+  onNavigateToFull?: () => void
+  locationId?: string
   className?: string
 }
 
-// Top HoneyFarm activity codes by real usage (from DB analysis):
-// 210 Nursery (86), 152 Robusta Pruning (48), 150 Drip Maintenance (46),
-// 132 Arabica Pruning (46), 163 Robusta Irrigation (45)
-// These are the fallback if no recent entries found
 const ESTATE_TOP_CODES: ActivityCode[] = [
   { code: "210", reference: "Nursery" },
   { code: "152", reference: "Robusta Pruning" },
@@ -34,25 +26,33 @@ const ESTATE_TOP_CODES: ActivityCode[] = [
   { code: "163", reference: "Irrigation" },
 ]
 
-const CODE_COLORS = [
-  "bg-emerald-100 border-emerald-200 text-emerald-800 hover:bg-emerald-200",
-  "bg-sky-100 border-sky-200 text-sky-800 hover:bg-sky-200",
-  "bg-violet-100 border-violet-200 text-violet-800 hover:bg-violet-200",
-  "bg-amber-100 border-amber-200 text-amber-800 hover:bg-amber-200",
-  "bg-rose-100 border-rose-200 text-rose-800 hover:bg-rose-200",
-]
+function todayStr() {
+  return format(new Date(), "yyyy-MM-dd")
+}
+function yesterdayStr() {
+  return format(subDays(new Date(), 1), "yyyy-MM-dd")
+}
 
-export default function QuickLogPanel({ onQuickLog, className }: QuickLogPanelProps) {
+export default function QuickLogPanel({ onNavigateToFull, locationId, className }: QuickLogPanelProps) {
   const [recentCodes, setRecentCodes] = useState<RecentCode[]>([])
   const [allActivities, setAllActivities] = useState<ActivityCode[]>([])
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState("")
   const [showSearch, setShowSearch] = useState(false)
 
+  const [activeCode, setActiveCode] = useState<RecentCode | null>(null)
+  const [workers, setWorkers] = useState(0)
+  const [entryDate, setEntryDate] = useState(todayStr())
+  const [saving, setSaving] = useState(false)
+  const [savedCode, setSavedCode] = useState<string | null>(null)
+
+  const { settings } = useTenantSettings()
+  const wage = settings.laborWages?.defaultInHouseWage ?? 0
+
   const fetchData = useCallback(async () => {
     try {
       const [activitiesRes, laborRes] = await Promise.all([
-        fetch("/api/get-activity"),
+        fetch(locationId ? `/api/get-activity?locationId=${locationId}` : "/api/get-activity"),
         fetch("/api/labor-neon?limit=100"),
       ])
       const [activitiesData, laborData] = await Promise.all([
@@ -63,14 +63,13 @@ export default function QuickLogPanel({ onQuickLog, className }: QuickLogPanelPr
       const activities: ActivityCode[] = activitiesData.success ? (activitiesData.activities || []) : []
       setAllActivities(activities)
 
-      // Count recent code usage
       const codeCount = new Map<string, { count: number; lastDate: string; reference: string }>()
       if (laborData.success && Array.isArray(laborData.deployments)) {
         for (const dep of laborData.deployments) {
           const code = String(dep.code || "")
           const date = String(dep.date || "").slice(0, 10)
+          const ref = dep.reference || activities.find((a) => a.code === code)?.reference || code
           const existing = codeCount.get(code)
-          const ref = dep.reference || activities.find(a => a.code === code)?.reference || code
           if (!existing || date > existing.lastDate) {
             codeCount.set(code, { count: (existing?.count || 0) + 1, lastDate: date, reference: ref })
           } else {
@@ -79,96 +78,148 @@ export default function QuickLogPanel({ onQuickLog, className }: QuickLogPanelPr
         }
       }
 
-      // Build sorted recent list
       const recent: RecentCode[] = Array.from(codeCount.entries())
         .map(([code, v]) => ({ code, reference: v.reference, useCount: v.count, lastUsedDate: v.lastDate }))
         .sort((a, b) => b.useCount - a.useCount || b.lastUsedDate.localeCompare(a.lastUsedDate))
         .slice(0, 5)
 
-      if (recent.length > 0) {
-        setRecentCodes(recent)
-      } else {
-        // Fall back to pre-seeded top codes enriched with activity labels
-        setRecentCodes(
-          ESTATE_TOP_CODES.map(c => {
-            const found = activities.find(a => a.code === c.code)
-            return { ...c, reference: found?.reference || c.reference, useCount: 0, lastUsedDate: "" }
-          }),
-        )
-      }
+      setRecentCodes(
+        recent.length > 0
+          ? recent
+          : ESTATE_TOP_CODES.map((c) => ({
+              ...c,
+              reference: activities.find((a) => a.code === c.code)?.reference || c.reference,
+              useCount: 0,
+              lastUsedDate: "",
+            })),
+      )
     } catch {
-      setRecentCodes(ESTATE_TOP_CODES.map(c => ({ ...c, useCount: 0, lastUsedDate: "" })))
+      setRecentCodes(ESTATE_TOP_CODES.map((c) => ({ ...c, useCount: 0, lastUsedDate: "" })))
     } finally {
       setLoading(false)
     }
-  }, [])
+  }, [locationId])
 
   useEffect(() => {
     fetchData()
   }, [fetchData])
 
+  const openEntry = (code: ActivityCode) => {
+    const rc: RecentCode = "useCount" in code
+      ? (code as RecentCode)
+      : { ...code, useCount: 0, lastUsedDate: "" }
+    setActiveCode(rc)
+    setWorkers(0)
+    setEntryDate(todayStr())
+    setShowSearch(false)
+    setSearch("")
+  }
+
+  const handleSave = async () => {
+    if (!activeCode || workers <= 0) {
+      toast.error("Enter at least 1 worker")
+      return
+    }
+    setSaving(true)
+    try {
+      const res = await fetch("/api/labor-neon", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          date: new Date(entryDate + "T12:00:00").toISOString(),
+          code: activeCode.code,
+          reference: activeCode.reference,
+          laborEntries: [{ name: "In-house", laborCount: workers, costPerLabor: wage }],
+          totalCost: workers * wage,
+          ...(locationId ? { locationId } : {}),
+        }),
+      })
+      const data = await res.json()
+      if (!res.ok || !data.success) throw new Error(data.error || "Save failed")
+
+      setSavedCode(activeCode.code)
+      setActiveCode(null)
+      window.dispatchEvent(new CustomEvent("farmflow:record-saved"))
+      setTimeout(() => {
+        setSavedCode(null)
+        fetchData()
+      }, 2000)
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Couldn't save — try again"
+      toast.error(msg)
+    } finally {
+      setSaving(false)
+    }
+  }
+
   const filteredActivities = search.trim()
-    ? allActivities.filter(
-        (a) =>
-          a.code.toLowerCase().includes(search.toLowerCase()) ||
-          a.reference.toLowerCase().includes(search.toLowerCase()),
-      )
+    ? allActivities
+        .filter(
+          (a) =>
+            a.code.toLowerCase().includes(search.toLowerCase()) ||
+            a.reference.toLowerCase().includes(search.toLowerCase()),
+        )
+        .slice(0, 8)
     : []
 
+  const total = workers * wage
+  const today = todayStr()
+  const yesterday = yesterdayStr()
+
   return (
-    <div className={cn(
-      "rounded-2xl border border-black/[0.06] bg-white/60 backdrop-blur-xl backdrop-saturate-150",
-      "shadow-[0_8px_32px_-8px_rgba(0,0,0,0.10),0_1px_2px_rgba(0,0,0,0.04)]",
-      "overflow-hidden",
-      className,
-    )}>
-      {/* Glass gradient overlay */}
-      <div className="pointer-events-none absolute inset-0 bg-gradient-to-br from-white/40 to-transparent rounded-2xl" />
-
-      <div className="relative px-4 pt-4 pb-3">
-        <div className="flex items-center justify-between mb-3">
-          <div className="flex items-center gap-2">
-            <div className="flex h-7 w-7 items-center justify-center rounded-xl bg-emerald-700 shadow-sm">
-              <Zap className="h-3.5 w-3.5 text-white" />
-            </div>
-            <div>
-              <p className="text-sm font-semibold text-neutral-900 leading-tight">Quick log labor</p>
-              <p className="text-[10px] text-neutral-400">Your most-used activity codes</p>
-            </div>
+    <div
+      className={cn(
+        "rounded-2xl border border-black/[0.06] bg-white overflow-hidden",
+        "shadow-[0_2px_16px_rgba(0,0,0,0.06)]",
+        className,
+      )}
+    >
+      {/* Header */}
+      <div className="flex items-center justify-between px-4 py-3 border-b border-black/[0.05]">
+        <div className="flex items-center gap-2.5">
+          <div className="flex h-7 w-7 items-center justify-center rounded-xl bg-emerald-700 shadow-sm">
+            <Zap className="h-3.5 w-3.5 text-white" />
           </div>
-          <button
-            type="button"
-            onClick={() => setShowSearch(!showSearch)}
-            className="text-[11px] text-emerald-700 font-medium hover:text-emerald-800 flex items-center gap-0.5"
-          >
-            <Plus className="h-3 w-3" />
-            Other
-          </button>
+          <div>
+            <p className="text-sm font-semibold text-neutral-900 leading-tight">Quick log labor</p>
+            <p className="text-[10px] text-neutral-400 leading-none mt-0.5">Tap to log, no form needed</p>
+          </div>
         </div>
+        <button
+          type="button"
+          onClick={() => {
+            setShowSearch(!showSearch)
+            setSearch("")
+          }}
+          className="flex items-center gap-1 rounded-lg px-2 py-1.5 text-[11px] font-medium text-neutral-500 hover:bg-neutral-100 transition-colors"
+        >
+          <Search className="h-3 w-3" />
+          Other
+        </button>
+      </div>
 
+      <div className="px-3 py-3 space-y-2">
+        {/* Search */}
         {showSearch && (
-          <div className="mb-3">
+          <div className="space-y-1.5">
             <Input
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder="Search activity codes..."
-              className="h-9 text-sm rounded-xl border-black/10 bg-white/80"
+              className="h-9 text-sm rounded-xl border-black/[0.08]"
               autoFocus
             />
             {filteredActivities.length > 0 && (
-              <div className="mt-1.5 rounded-xl border border-black/[0.06] bg-white/90 backdrop-blur-sm overflow-hidden divide-y divide-black/[0.04] shadow-lg max-h-48 overflow-y-auto">
-                {filteredActivities.slice(0, 8).map((a) => (
+              <div className="rounded-xl border border-black/[0.06] bg-white overflow-hidden divide-y divide-black/[0.04] shadow-lg max-h-52 overflow-y-auto">
+                {filteredActivities.map((a) => (
                   <button
                     key={a.code}
                     type="button"
-                    onClick={() => { onQuickLog(a.code, a.reference); setShowSearch(false); setSearch("") }}
-                    className="w-full flex items-center justify-between px-3 py-2.5 text-left hover:bg-emerald-50 transition-colors"
+                    onClick={() => openEntry(a)}
+                    className="w-full flex items-center gap-3 px-3 py-3 text-left hover:bg-emerald-50 transition-colors active:bg-emerald-100"
                   >
-                    <div>
-                      <span className="text-[11px] font-mono text-neutral-400 mr-2">{a.code}</span>
-                      <span className="text-sm text-neutral-800">{a.reference}</span>
-                    </div>
-                    <ChevronRight className="h-3.5 w-3.5 text-neutral-300" />
+                    <span className="font-mono text-[10px] text-neutral-400 shrink-0 w-8">{a.code}</span>
+                    <span className="text-sm text-neutral-800 flex-1">{a.reference}</span>
                   </button>
                 ))}
               </div>
@@ -176,36 +227,193 @@ export default function QuickLogPanel({ onQuickLog, className }: QuickLogPanelPr
           </div>
         )}
 
-        {/* Quick-tap tiles */}
+        {/* Code tiles */}
         {loading ? (
           <div className="flex items-center justify-center py-6">
             <Loader2 className="h-4 w-4 animate-spin text-neutral-300" />
           </div>
         ) : (
           <div className="space-y-1.5">
-            {recentCodes.map((code, i) => (
-              <button
-                key={code.code}
-                type="button"
-                onClick={() => onQuickLog(code.code, code.reference)}
-                className={cn(
-                  "w-full flex items-center justify-between rounded-xl border px-3 py-2.5 text-left transition-all active:scale-[0.98] shadow-[0_1px_3px_rgba(0,0,0,0.05)]",
-                  CODE_COLORS[i % CODE_COLORS.length],
-                )}
-              >
-                <div className="flex items-center gap-2.5">
-                  <span className="font-mono text-[11px] font-bold opacity-60">{code.code}</span>
-                  <span className="text-sm font-medium">{code.reference}</span>
-                </div>
-                <div className="flex items-center gap-1.5">
-                  {code.useCount > 0 && (
-                    <span className="text-[10px] opacity-50">{code.useCount}×</span>
+            {recentCodes.map((code) => {
+              const isActive = activeCode?.code === code.code
+              const justSaved = savedCode === code.code
+
+              return (
+                <div key={code.code}>
+                  <button
+                    type="button"
+                    onClick={() => (isActive ? setActiveCode(null) : openEntry(code))}
+                    className={cn(
+                      "w-full flex items-center justify-between rounded-xl border px-3 py-3 text-left",
+                      "transition-all active:scale-[0.98] touch-manipulation",
+                      isActive
+                        ? "border-emerald-300 bg-emerald-50"
+                        : justSaved
+                          ? "border-emerald-200 bg-emerald-50/60"
+                          : "border-black/[0.06] bg-white hover:bg-neutral-50",
+                    )}
+                  >
+                    <div className="flex items-center gap-2.5 min-w-0">
+                      <span className="font-mono text-[10px] text-neutral-400 shrink-0">{code.code}</span>
+                      <span className="text-sm font-medium text-neutral-800 truncate">{code.reference}</span>
+                    </div>
+                    <div className="flex items-center gap-1.5 shrink-0">
+                      {justSaved ? (
+                        <Check className="h-3.5 w-3.5 text-emerald-600" />
+                      ) : (
+                        <>
+                          {code.useCount > 0 && (
+                            <span className="text-[10px] text-neutral-400">{code.useCount}×</span>
+                          )}
+                          <ChevronDown
+                            className={cn(
+                              "h-3.5 w-3.5 text-neutral-300 transition-transform duration-200",
+                              isActive && "-rotate-180",
+                            )}
+                          />
+                        </>
+                      )}
+                    </div>
+                  </button>
+
+                  {/* Inline entry form — expands under the tile */}
+                  {isActive && (
+                    <div className="mt-1.5 rounded-xl border border-emerald-200 bg-emerald-50/50 px-3 py-3 space-y-3">
+                      {/* Workers stepper */}
+                      <div className="flex items-center justify-between gap-4">
+                        <span className="text-sm font-medium text-neutral-700">Workers today</span>
+                        <div className="flex items-center gap-3">
+                          <button
+                            type="button"
+                            onClick={() => setWorkers((w) => Math.max(0, w - 1))}
+                            className="flex h-10 w-10 items-center justify-center rounded-xl border border-black/[0.08] bg-white text-neutral-700 shadow-sm active:scale-95 transition-transform touch-manipulation"
+                          >
+                            <Minus className="h-4 w-4" />
+                          </button>
+                          <span className="w-10 text-center text-2xl font-bold text-neutral-900 tabular-nums">
+                            {workers}
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => setWorkers((w) => w + 1)}
+                            className="flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-700 text-white shadow-sm active:scale-95 transition-transform touch-manipulation"
+                          >
+                            <Plus className="h-4 w-4" />
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* Date selector */}
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm font-medium text-neutral-700 shrink-0 w-10">Date</span>
+                        <div className="flex items-center gap-1.5 flex-1">
+                          <button
+                            type="button"
+                            onClick={() => setEntryDate(today)}
+                            className={cn(
+                              "flex-1 rounded-lg border py-2 text-xs font-medium transition-all touch-manipulation",
+                              entryDate === today
+                                ? "border-emerald-400 bg-emerald-700 text-white"
+                                : "border-black/[0.08] bg-white text-neutral-600 hover:bg-neutral-50",
+                            )}
+                          >
+                            Today
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setEntryDate(yesterday)}
+                            className={cn(
+                              "flex-1 rounded-lg border py-2 text-xs font-medium transition-all touch-manipulation",
+                              entryDate === yesterday
+                                ? "border-emerald-400 bg-emerald-700 text-white"
+                                : "border-black/[0.08] bg-white text-neutral-600 hover:bg-neutral-50",
+                            )}
+                          >
+                            Yesterday
+                          </button>
+                          <input
+                            type="date"
+                            value={entryDate}
+                            onChange={(e) => setEntryDate(e.target.value)}
+                            className="w-10 opacity-0 absolute pointer-events-none"
+                            id="qlp-date-picker"
+                          />
+                          <label
+                            htmlFor="qlp-date-picker"
+                            className={cn(
+                              "flex-1 rounded-lg border py-2 text-xs font-medium text-center cursor-pointer touch-manipulation transition-all",
+                              entryDate !== today && entryDate !== yesterday
+                                ? "border-emerald-400 bg-emerald-700 text-white"
+                                : "border-black/[0.08] bg-white text-neutral-600 hover:bg-neutral-50",
+                            )}
+                          >
+                            {entryDate !== today && entryDate !== yesterday
+                              ? format(new Date(entryDate + "T12:00:00"), "d MMM")
+                              : "Other"}
+                          </label>
+                        </div>
+                      </div>
+
+                      {/* Cost summary */}
+                      {wage > 0 && workers > 0 && (
+                        <p className="text-xs text-right text-neutral-500">
+                          {workers} × {formatCurrency(wage)} ={" "}
+                          <span className="font-semibold text-neutral-800">{formatCurrency(total)}</span>
+                        </p>
+                      )}
+                      {wage === 0 && (
+                        <p className="text-xs text-amber-600">
+                          Set a default wage in Settings to track cost automatically.
+                        </p>
+                      )}
+
+                      {/* Save / cancel */}
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => setActiveCode(null)}
+                          className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-black/[0.08] bg-white text-neutral-400 active:scale-95 touch-manipulation"
+                        >
+                          <X className="h-4 w-4" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={handleSave}
+                          disabled={saving || workers <= 0}
+                          className={cn(
+                            "flex-1 h-10 rounded-xl text-sm font-semibold transition-all active:scale-[0.98] touch-manipulation",
+                            workers > 0
+                              ? "bg-emerald-700 text-white shadow-sm hover:bg-emerald-800"
+                              : "bg-neutral-100 text-neutral-400 cursor-not-allowed",
+                          )}
+                        >
+                          {saving ? (
+                            <Loader2 className="h-4 w-4 animate-spin mx-auto" />
+                          ) : workers > 0 && wage > 0 ? (
+                            `Save · ${formatCurrency(total)}`
+                          ) : (
+                            "Save"
+                          )}
+                        </button>
+                      </div>
+                    </div>
                   )}
-                  <ChevronRight className="h-3.5 w-3.5 opacity-40" />
                 </div>
-              </button>
-            ))}
+              )
+            })}
           </div>
+        )}
+
+        {/* Link to full labor log */}
+        {onNavigateToFull && (
+          <button
+            type="button"
+            onClick={onNavigateToFull}
+            className="w-full flex items-center justify-between px-2 py-2 text-xs text-neutral-400 hover:text-neutral-600 transition-colors"
+          >
+            <span>View full labor log & history</span>
+            <ArrowRight className="h-3 w-3" />
+          </button>
         )}
       </div>
     </div>

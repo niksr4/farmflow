@@ -2,10 +2,6 @@ import "server-only"
 
 import type { NeonQueryFunction } from "@neondatabase/serverless"
 import { runTenantQuery } from "@/lib/server/tenant-db"
-import {
-  isMissingCurrentInventoryUpsertConstraintError,
-  repairCurrentInventoryUpsertConstraints,
-} from "@/lib/server/current-inventory-constraints"
 
 type TenantContext = {
   tenantId: string
@@ -73,49 +69,57 @@ async function recalculateInventoryForLocation(
   )
   const unit = unitRow?.[0]?.unit ? String(unitRow[0].unit) : "kg"
 
-  const upsertInventorySnapshot = async () => {
-    if (locationId) {
+  // UPDATE first; if no row exists yet, fall through to INSERT.
+  // Avoids ON CONFLICT with partial-index clauses which fail (42P10) when
+  // the specific index is missing or not yet visible to the session.
+  if (locationId) {
+    const updated = await runTenantQuery(
+      sql,
+      tenantContext,
+      sql`
+        UPDATE current_inventory
+        SET quantity = ${runningQty}, unit = ${unit}, avg_price = ${avgPrice}, total_cost = ${runningCost}
+        WHERE item_type = ${itemType}
+          AND tenant_id = ${tenantContext.tenantId}
+          AND location_id = ${locationId}
+        RETURNING item_type
+      `,
+    )
+    if (updated.length === 0) {
       await runTenantQuery(
         sql,
         tenantContext,
         sql`
           INSERT INTO current_inventory (item_type, quantity, unit, avg_price, total_cost, tenant_id, location_id)
           VALUES (${itemType}, ${runningQty}, ${unit}, ${avgPrice}, ${runningCost}, ${tenantContext.tenantId}, ${locationId})
-          ON CONFLICT (item_type, tenant_id, location_id)
-          DO UPDATE SET
-            quantity = ${runningQty},
-            unit = ${unit},
-            avg_price = ${avgPrice},
-            total_cost = ${runningCost}
+          ON CONFLICT DO NOTHING
         `,
       )
-      return
     }
-
-    await runTenantQuery(
+  } else {
+    const updated = await runTenantQuery(
       sql,
       tenantContext,
       sql`
-        INSERT INTO current_inventory (item_type, quantity, unit, avg_price, total_cost, tenant_id, location_id)
-        VALUES (${itemType}, ${runningQty}, ${unit}, ${avgPrice}, ${runningCost}, ${tenantContext.tenantId}, NULL)
-        ON CONFLICT (item_type, tenant_id) WHERE location_id IS NULL
-        DO UPDATE SET
-          quantity = ${runningQty},
-          unit = ${unit},
-          avg_price = ${avgPrice},
-          total_cost = ${runningCost}
+        UPDATE current_inventory
+        SET quantity = ${runningQty}, unit = ${unit}, avg_price = ${avgPrice}, total_cost = ${runningCost}
+        WHERE item_type = ${itemType}
+          AND tenant_id = ${tenantContext.tenantId}
+          AND location_id IS NULL
+        RETURNING item_type
       `,
     )
-  }
-
-  try {
-    await upsertInventorySnapshot()
-  } catch (error) {
-    if (!isMissingCurrentInventoryUpsertConstraintError(error)) {
-      throw error
+    if (updated.length === 0) {
+      await runTenantQuery(
+        sql,
+        tenantContext,
+        sql`
+          INSERT INTO current_inventory (item_type, quantity, unit, avg_price, total_cost, tenant_id, location_id)
+          VALUES (${itemType}, ${runningQty}, ${unit}, ${avgPrice}, ${runningCost}, ${tenantContext.tenantId}, NULL)
+          ON CONFLICT DO NOTHING
+        `,
+      )
     }
-    await repairCurrentInventoryUpsertConstraints(sql, tenantContext)
-    await upsertInventorySnapshot()
   }
 
   return {

@@ -141,6 +141,7 @@ import PriorityAlertsCard from "@/components/inventory-system/priority-alerts-ca
 import HomeKpiCardsGrid from "@/components/inventory-system/home-kpi-cards-grid"
 import MobileBottomNav from "@/components/mobile-bottom-nav"
 import DailyPulseCard from "@/components/daily-pulse-card"
+import TodayGapsCard from "@/components/today-gaps-card"
 import QuickLogPanel from "@/components/quick-log-panel"
 import WeekBatchEntry from "@/components/week-batch-entry"
 import { getSeasonAwareTabOrder, getSeasonQuickActions } from "@/lib/season-utils"
@@ -6202,19 +6203,16 @@ export default function InventorySystem() {
               activityStreak={activityStreak}
             />
 
-            {/* ── Daily Pulse (mobile) — this week summary + quick log ── */}
+            {/* ── Today gaps + Quick log (mobile) ── */}
             {isMobile && (
               <div className="space-y-3">
-                <DailyPulseCard onNavigate={handleTabChange} />
-                <QuickLogPanel
-                  onQuickLog={(code, reference) => {
-                    handleTabChange("accounts")
-                    // Small delay to let tab render, then trigger prefill via event
-                    setTimeout(() => {
-                      window.dispatchEvent(new CustomEvent("farmflow:quick-log", { detail: { code, reference } }))
-                    }, 150)
-                  }}
-                />
+                <TodayGapsCard onNavigate={handleTabChange} />
+                {canShowAccounts && (
+                  <QuickLogPanel
+                    locationId={selectedLocationId || undefined}
+                    onNavigateToFull={() => handleTabChange("accounts")}
+                  />
+                )}
                 {canShowAccounts && (
                   <WeekBatchEntry
                     locationId={selectedLocationId || undefined}
