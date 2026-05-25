@@ -13,7 +13,7 @@
 
 import { useCallback, useEffect, useState } from "react"
 import { addDays, format, isToday, startOfWeek } from "date-fns"
-import { AlertTriangle, ArrowRight, Check, Droplets, Loader2, Users } from "lucide-react"
+import { AlertTriangle, ArrowRight, Check, CloudRain, Droplets, Loader2, Users } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { formatCurrency, formatNumber } from "@/lib/format"
 import { getSeasonBadge } from "@/lib/season-utils"
@@ -136,14 +136,12 @@ export default function TodayGapsCard({ onNavigate, className }: Props) {
   const allCaughtUp = !hasGaps && stats && stats.laborCost > 0
 
   return (
-    <div className={cn("space-y-2.5", className)}>
+    <div className={cn("space-y-3", className)}>
       {/* Season label */}
       <div className="flex items-center justify-between px-1">
-        <p className="text-[11px] font-bold uppercase tracking-[0.15em] text-stone-400">
-          This week
-        </p>
+        <p className="text-sm font-black text-stone-700">This week</p>
         <span className={cn(
-          "inline-flex items-center rounded-full px-2.5 py-0.5 text-[10px] font-semibold",
+          "inline-flex items-center rounded-full px-3 py-1 text-xs font-bold",
           badgeColors[seasonBadge.color] || badgeColors.green,
         )}>
           {seasonBadge.label}
@@ -154,58 +152,70 @@ export default function TodayGapsCard({ onNavigate, className }: Props) {
       {hasGaps ? (
         <div className="rounded-3xl bg-amber-400 overflow-hidden shadow-md shadow-amber-100">
           {/* Header */}
-          <div className="flex items-center gap-3 px-5 pt-5 pb-4">
-            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-white/30">
-              <AlertTriangle className="h-5 w-5 text-amber-900 stroke-[2.5]" />
+          <div className="flex items-center gap-3 px-5 pt-5 pb-3">
+            <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-white/30">
+              <AlertTriangle className="h-6 w-6 text-amber-900 stroke-[2.5]" />
             </div>
             <div>
-              <p className="text-lg font-black text-amber-950 leading-tight">
+              <p className="text-xl font-black text-amber-950 leading-tight">
                 Labor not logged
               </p>
-              <p className="text-xs font-semibold text-amber-800 mt-0.5">
+              <p className="text-sm font-semibold text-amber-800 mt-0.5">
                 {gaps.length} day{gaps.length > 1 ? "s" : ""} missing this week
               </p>
             </div>
           </div>
 
           {/* Gap day rows */}
-          <div className="mx-3 mb-3 rounded-2xl bg-white/90 overflow-hidden divide-y divide-amber-50">
-            {gaps.map((gap) => (
-              <button
-                key={gap.date}
-                type="button"
-                onClick={() => onNavigate("accounts")}
-                className="w-full flex items-center justify-between px-4 py-4 text-left active:bg-amber-50 transition-colors touch-manipulation"
-              >
-                <div className="flex items-center gap-3">
-                  <div className={cn(
-                    "h-2.5 w-2.5 rounded-full shrink-0",
-                    gap.isToday ? "bg-amber-500" : "bg-amber-300",
-                  )} />
-                  <span className={cn(
-                    "text-base font-bold",
-                    gap.isToday ? "text-amber-900" : "text-stone-700",
-                  )}>
-                    {gap.label}
-                  </span>
-                </div>
-                <div className="flex items-center gap-1.5 rounded-xl bg-amber-400 px-3 py-1.5">
-                  <span className="text-xs font-bold text-amber-950">Log now</span>
-                  <ArrowRight className="h-3 w-3 text-amber-950 stroke-[2.5]" />
-                </div>
-              </button>
-            ))}
+          <div className="mx-3 mb-3 rounded-2xl bg-white/95 overflow-hidden divide-y divide-amber-50/50">
+            {gaps.map((gap) => {
+              const [dayName, dayNum] = gap.label.split(" ")
+              return (
+                <button
+                  key={gap.date}
+                  type="button"
+                  onClick={() => onNavigate("accounts")}
+                  className="w-full flex items-center justify-between px-4 py-3.5 text-left active:bg-amber-50 transition-colors touch-manipulation"
+                >
+                  <div className="flex items-center gap-3">
+                    <div className={cn(
+                      "flex items-center justify-center rounded-xl px-2.5 py-1.5 min-w-[52px]",
+                      gap.isToday ? "bg-amber-400" : "bg-stone-100",
+                    )}>
+                      <div className="text-center">
+                        <p className={cn("text-[10px] font-bold uppercase tracking-wide leading-none",
+                          gap.isToday ? "text-amber-950" : "text-stone-500"
+                        )}>{gap.isToday ? "TODAY" : dayName}</p>
+                        {dayNum && <p className={cn("text-base font-black leading-tight",
+                          gap.isToday ? "text-amber-950" : "text-stone-700"
+                        )}>{dayNum}</p>}
+                      </div>
+                    </div>
+                    <span className={cn(
+                      "text-sm font-bold",
+                      gap.isToday ? "text-amber-900" : "text-stone-600",
+                    )}>
+                      {gap.isToday ? "Log today now" : "Missing"}
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-1.5 rounded-xl bg-amber-500 px-4 py-2.5">
+                    <span className="text-sm font-black text-white">Log</span>
+                    <ArrowRight className="h-3.5 w-3.5 text-white stroke-[2.5]" />
+                  </div>
+                </button>
+              )
+            })}
           </div>
         </div>
       ) : allCaughtUp ? (
         <div className="rounded-3xl bg-emerald-500 px-5 py-5 shadow-md shadow-emerald-100">
           <div className="flex items-center gap-3">
-            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-white/30">
-              <Check className="h-5 w-5 text-white stroke-[3]" />
+            <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-white/30">
+              <Check className="h-6 w-6 text-white stroke-[3]" />
             </div>
             <div>
-              <p className="text-lg font-black text-white leading-tight">All logged</p>
-              <p className="text-xs font-semibold text-emerald-100">Labor entered for all work days</p>
+              <p className="text-xl font-black text-white leading-tight">All logged ✓</p>
+              <p className="text-sm font-semibold text-emerald-100 mt-0.5">Every work day this week has labor entered</p>
             </div>
           </div>
         </div>
@@ -217,50 +227,59 @@ export default function TodayGapsCard({ onNavigate, className }: Props) {
           className="w-full rounded-3xl bg-stone-900 px-5 py-5 shadow-sm flex items-center justify-between touch-manipulation active:scale-[0.98] transition-transform"
         >
           <div>
-            <p className="text-base font-black text-white">Log this week&apos;s labor</p>
-            <p className="text-xs text-stone-400 mt-0.5">No entries yet</p>
+            <p className="text-lg font-black text-white">Start logging labor</p>
+            <p className="text-sm text-stone-400 mt-0.5">No entries this week yet</p>
           </div>
           <ArrowRight className="h-5 w-5 text-stone-400 stroke-[2.5]" />
         </button>
       )}
 
-      {/* Stats row */}
+      {/* Stats row — tap each to navigate */}
       {stats && (
         <div className="grid grid-cols-3 gap-2">
           <button
             type="button"
             onClick={() => onNavigate("accounts")}
-            className="flex flex-col rounded-2xl bg-white shadow-sm p-3.5 text-left active:scale-[0.97] touch-manipulation"
+            className="flex flex-col rounded-2xl bg-emerald-50 border border-emerald-100 p-3.5 text-left active:scale-[0.97] touch-manipulation"
           >
-            <Users className="h-4 w-4 text-emerald-600 mb-2" />
+            <div className="flex items-center gap-1.5 mb-2">
+              <Users className="h-4 w-4 text-emerald-600 shrink-0" />
+              <p className="text-[10px] font-bold uppercase tracking-wide text-emerald-600">Labor</p>
+            </div>
             <p className="text-base font-black text-stone-900 tabular-nums leading-none">
               {formatCurrency(stats.laborCost)}
             </p>
-            <p className="text-[10px] font-semibold uppercase tracking-wide text-stone-400 mt-1">Labor</p>
+            <p className="text-[10px] text-stone-400 mt-1">this week</p>
           </button>
 
           <button
             type="button"
             onClick={() => onNavigate("accounts")}
-            className="flex flex-col rounded-2xl bg-white shadow-sm p-3.5 text-left active:scale-[0.97] touch-manipulation"
+            className="flex flex-col rounded-2xl bg-stone-50 border border-stone-100 p-3.5 text-left active:scale-[0.97] touch-manipulation"
           >
-            <span className="text-base leading-none mb-2">💸</span>
+            <div className="flex items-center gap-1.5 mb-2">
+              <span className="text-sm leading-none">💸</span>
+              <p className="text-[10px] font-bold uppercase tracking-wide text-stone-500">Expenses</p>
+            </div>
             <p className="text-base font-black text-stone-900 tabular-nums leading-none">
               {formatCurrency(stats.expenseCost)}
             </p>
-            <p className="text-[10px] font-semibold uppercase tracking-wide text-stone-400 mt-1">Expenses</p>
+            <p className="text-[10px] text-stone-400 mt-1">this week</p>
           </button>
 
           <button
             type="button"
             onClick={() => onNavigate("rainfall")}
-            className="flex flex-col rounded-2xl bg-white shadow-sm p-3.5 text-left active:scale-[0.97] touch-manipulation"
+            className="flex flex-col rounded-2xl bg-sky-50 border border-sky-100 p-3.5 text-left active:scale-[0.97] touch-manipulation"
           >
-            <Droplets className="h-4 w-4 text-sky-500 mb-2" />
+            <div className="flex items-center gap-1.5 mb-2">
+              <CloudRain className="h-4 w-4 text-sky-500 shrink-0" />
+              <p className="text-[10px] font-bold uppercase tracking-wide text-sky-600">Rain</p>
+            </div>
             <p className="text-base font-black text-stone-900 tabular-nums leading-none">
               {stats.rainfallDays > 0 ? `${formatNumber(stats.rainfallInches, 1)}"` : "—"}
             </p>
-            <p className="text-[10px] font-semibold uppercase tracking-wide text-stone-400 mt-1">Rain</p>
+            <p className="text-[10px] text-stone-400 mt-1">{stats.rainfallDays > 0 ? `${stats.rainfallDays} days` : "no rain"}</p>
           </button>
         </div>
       )}

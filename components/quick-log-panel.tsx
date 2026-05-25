@@ -302,9 +302,14 @@ export default function QuickLogPanel({ onNavigateToFull, locationId, className 
                     >
                       <Minus className="h-5 w-5 stroke-[2.5]" />
                     </button>
-                    <span className="text-5xl font-black text-stone-900 tabular-nums w-20 text-center">
-                      {workers}
-                    </span>
+                    <div className="flex flex-col items-center w-20">
+                      <span className="text-5xl font-black text-stone-900 tabular-nums text-center leading-none">
+                        {workers}
+                      </span>
+                      <span className="text-xs font-semibold text-stone-400 mt-1.5 uppercase tracking-wide">
+                        {workers === 1 ? "person" : "people"}
+                      </span>
+                    </div>
                     <button
                       type="button"
                       onClick={() => setWorkers((w) => w + 1)}

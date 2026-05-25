@@ -2,7 +2,7 @@
 
 import type React from "react"
 
-import { useState, useEffect, useCallback } from "react"
+import { useState, useEffect, useCallback, useRef } from "react"
 import { FARMFLOW_RECORD_SAVED_EVENT } from "@/components/inventory-system/constants"
 import { useConsumablesData } from "@/hooks/use-consumables-data"
 import { Button } from "@/components/ui/button"
@@ -225,13 +225,36 @@ export default function OtherExpensesTab({
   const totalExpenses = totalAmount || computedTotalAmount
   const resolvedTotalCount = totalCount || deployments.length
 
+  const formSectionRef = useRef<HTMLDivElement>(null)
+  const historySectionRef = useRef<HTMLDivElement>(null)
+
   return (
     <div className="space-y-4">
-      <Card>
+      {/* Mobile quick-nav strip */}
+      {isMobile && (
+        <div className="flex gap-2 overflow-x-auto pb-0.5 -mx-3 px-3">
+          <button
+            type="button"
+            onClick={() => formSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })}
+            className="flex items-center gap-1.5 shrink-0 px-4 py-2.5 rounded-full bg-emerald-50 border border-emerald-200 text-emerald-800 text-[13px] font-bold touch-manipulation active:scale-95"
+          >
+            💸 Log expense
+          </button>
+          <button
+            type="button"
+            onClick={() => historySectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })}
+            className="flex items-center gap-1.5 shrink-0 px-4 py-2.5 rounded-full bg-stone-100 text-stone-700 text-[13px] font-bold touch-manipulation active:scale-95"
+          >
+            📋 History
+          </button>
+        </div>
+      )}
+
+      <Card ref={formSectionRef}>
         <CardHeader>
           <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
             <div>
-              <CardTitle className="text-xl sm:text-2xl">Other Expenses</CardTitle>
+              <CardTitle className="text-xl sm:text-2xl">💸 Other Expenses</CardTitle>
               <CardDescription className="text-sm">Track real spend with a simple estate code and category</CardDescription>
             </div>
             <div className="text-left sm:text-right">
@@ -496,9 +519,9 @@ export default function OtherExpensesTab({
       {loading ? (
         <Card><CardContent className="p-0"><SkeletonTable rows={4} cols={5} /></CardContent></Card>
       ) : deployments.length > 0 ? (
-        <Card>
+        <Card ref={historySectionRef}>
           <CardHeader>
-            <CardTitle className="text-xl sm:text-2xl">Expense History</CardTitle>
+            <CardTitle className="text-xl sm:text-2xl">📋 Expense History</CardTitle>
           </CardHeader>
           <CardContent className="p-0">
             {/* Mobile View */}

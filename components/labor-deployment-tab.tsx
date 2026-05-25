@@ -287,8 +287,31 @@ export default function LaborDeploymentTab({
   const totalDeploymentCost = totalCost || computedTotalCost
   const resolvedTotalCount = totalCount || deployments.length
 
+  const formSectionRef = useRef<HTMLDivElement>(null)
+  const historySectionRef = useRef<HTMLDivElement>(null)
+
   return (
     <div className="space-y-4">
+      {/* Mobile quick-nav strip */}
+      {isMobile && (
+        <div className="flex gap-2 overflow-x-auto pb-0.5 -mx-3 px-3">
+          <button
+            type="button"
+            onClick={() => formSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })}
+            className="flex items-center gap-1.5 shrink-0 px-4 py-2.5 rounded-full bg-emerald-50 border border-emerald-200 text-emerald-800 text-[13px] font-bold touch-manipulation active:scale-95"
+          >
+            ✏️ Log labor
+          </button>
+          <button
+            type="button"
+            onClick={() => historySectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })}
+            className="flex items-center gap-1.5 shrink-0 px-4 py-2.5 rounded-full bg-stone-100 text-stone-700 text-[13px] font-bold touch-manipulation active:scale-95"
+          >
+            📋 History
+          </button>
+        </div>
+      )}
+
       {!loading && activities.length === 0 && (
         <TaskGuideCard
           tone="finance"
@@ -303,11 +326,11 @@ export default function LaborDeploymentTab({
           tip="A simple code like HARVEST, WEEDING, or PRUNING is better than waiting for a perfect accounting structure."
         />
       )}
-      <Card>
+      <Card ref={formSectionRef}>
         <CardHeader>
           <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
             <div>
-              <CardTitle className="text-xl sm:text-2xl">Labor</CardTitle>
+              <CardTitle className="text-xl sm:text-2xl">👷 Log labor</CardTitle>
               <CardDescription className="text-sm">Log what work was done and how many people were paid.</CardDescription>
             </div>
             <div className="text-left sm:text-right">
@@ -590,15 +613,16 @@ export default function LaborDeploymentTab({
       {loading ? (
         <Card><CardContent className="p-0"><SkeletonTable rows={4} cols={5} /></CardContent></Card>
       ) : deployments.length > 0 ? (
-        <Card>
+        <Card ref={historySectionRef}>
           <CardHeader>
-            <CardTitle className="text-xl sm:text-2xl">Labor history</CardTitle>
+            <CardTitle className="text-xl sm:text-2xl">📋 Labor history</CardTitle>
           </CardHeader>
           <CardContent className="p-0">
             {/* Mobile View */}
             <div className="block sm:hidden divide-y divide-stone-50">
               {deployments.map((deployment) => {
                 const isExpanded = expandedRows.has(deployment.id)
+                const totalWorkers = (deployment.laborEntries || []).reduce((sum: number, e: any) => sum + (Number(e.laborCount) || 0), 0)
                 return (
                   <Collapsible key={deployment.id} open={isExpanded} onOpenChange={() => toggleRow(deployment.id)}>
                     <CollapsibleTrigger className="w-full text-left">
@@ -612,10 +636,17 @@ export default function LaborDeploymentTab({
                               {deployment.code}
                             </span>
                           </div>
-                          <p className="text-base font-bold text-stone-800 truncate leading-tight">{deployment.reference}</p>
-                          <p className="text-lg font-black text-emerald-700 mt-0.5 tabular-nums leading-none">
-                            {formatCurrency(deployment.totalCost)}
-                          </p>
+                          <p className="text-sm font-bold text-stone-800 truncate leading-tight">{deployment.reference}</p>
+                          <div className="flex items-center gap-3 mt-1">
+                            <p className="text-xl font-black text-emerald-700 tabular-nums leading-none">
+                              {formatCurrency(deployment.totalCost)}
+                            </p>
+                            {totalWorkers > 0 && (
+                              <span className="text-xs font-bold text-stone-400">
+                                👷 {formatLaborCount(totalWorkers)} {totalWorkers === 1 ? "person" : "people"}
+                              </span>
+                            )}
+                          </div>
                         </div>
                         <div className="shrink-0 ml-3 text-stone-400">
                           {isExpanded ? <ChevronUp className="h-5 w-5" /> : <ChevronDown className="h-5 w-5" />}
