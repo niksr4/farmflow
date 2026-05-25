@@ -13,8 +13,10 @@ import { toast } from "@/components/ui/use-toast"
 import { CalendarIcon, ChevronLeft, ChevronRight, CloudRain, Download, Trash2 } from "lucide-react"
 import { addYears, format, subYears } from "date-fns"
 import { useAuth } from "@/hooks/use-auth"
+import { useMediaQuery } from "@/hooks/use-media-query"
 import { formatDateOnly } from "@/lib/date-utils"
 import { formatNumber } from "@/lib/format"
+import { Minus, Plus } from "lucide-react"
 
 type RainfallRecord = {
   id: number
@@ -74,6 +76,7 @@ const toIsoDate = (date: Date) => format(date, "yyyy-MM-dd")
 export default function RainfallTab({ username, showDataToolsControls = false }: RainfallTabProps) {
   const { user } = useAuth()
   const canDelete = user?.role === "admin" || user?.role === "owner"
+  const isMobile = useMediaQuery("(max-width: 768px)")
   const [records, setRecords] = useState<RainfallRecord[]>([])
   const [selectedDate, setSelectedDate] = useState<Date>(new Date())
   const [calendarMonth, setCalendarMonth] = useState<Date>(new Date())
@@ -477,6 +480,186 @@ export default function RainfallTab({ username, showDataToolsControls = false }:
       : insights.monthAnomalyPct >= 0
         ? "text-amber-700"
         : "text-emerald-700"
+
+  if (isMobile) {
+    const inchesNum = parseInt(inches || "0", 10)
+    const centsNum = parseInt(cents || "0", 10)
+    const totalDisplay = `${inchesNum}.${String(centsNum).padStart(2, "0")}"`
+
+    return (
+      <div className="pb-28">
+        {/* Entry form */}
+        <div className="px-3 pt-4 pb-5 bg-white border-b border-stone-100">
+          <p className="text-[11px] font-bold uppercase tracking-[0.15em] text-stone-400 mb-4">Log rainfall</p>
+
+          {/* Date */}
+          <div className="flex items-center justify-between mb-4">
+            <p className="text-sm font-bold text-stone-700">📅 Date</p>
+            <input
+              type="date"
+              value={format(selectedDate, "yyyy-MM-dd")}
+              max={format(new Date(), "yyyy-MM-dd")}
+              onChange={(e) => {
+                const d = new Date(e.target.value + "T12:00:00")
+                if (!isNaN(d.getTime())) {
+                  setSelectedDate(d)
+                  setCalendarMonth(d)
+                }
+              }}
+              className="h-11 rounded-xl border border-stone-200 px-3 text-base font-semibold text-stone-800 bg-stone-50 focus:outline-none focus:ring-2 focus:ring-sky-400"
+            />
+          </div>
+
+          {/* Inches stepper */}
+          <div className="mb-4">
+            <p className="text-sm font-bold text-stone-700 mb-2">💧 Inches (whole number)</p>
+            <div className="flex items-center gap-4">
+              <button
+                type="button"
+                onClick={() => setInches(String(Math.max(0, inchesNum - 1)))}
+                className="h-14 w-14 rounded-2xl bg-stone-100 flex items-center justify-center active:scale-95 transition-transform touch-manipulation"
+              >
+                <Minus className="h-6 w-6 text-stone-600" />
+              </button>
+              <input
+                type="text"
+                inputMode="numeric"
+                pattern="[0-9]*"
+                value={inches}
+                onChange={handleWholeNumberChange(setInches)}
+                className="text-5xl font-black w-16 text-center bg-transparent border-none outline-none text-stone-900 tabular-nums"
+                placeholder="0"
+              />
+              <button
+                type="button"
+                onClick={() => setInches(String(inchesNum + 1))}
+                className="h-14 w-14 rounded-2xl bg-stone-100 flex items-center justify-center active:scale-95 transition-transform touch-manipulation"
+              >
+                <Plus className="h-6 w-6 text-stone-600" />
+              </button>
+            </div>
+          </div>
+
+          {/* Cents stepper */}
+          <div className="mb-4">
+            <p className="text-sm font-bold text-stone-700 mb-2">Points 0–99 (each = 0.01")</p>
+            <div className="flex items-center gap-4">
+              <button
+                type="button"
+                onClick={() => setCents(String(Math.max(0, centsNum - 1)))}
+                className="h-14 w-14 rounded-2xl bg-stone-100 flex items-center justify-center active:scale-95 transition-transform touch-manipulation"
+              >
+                <Minus className="h-6 w-6 text-stone-600" />
+              </button>
+              <input
+                type="text"
+                inputMode="numeric"
+                pattern="[0-9]*"
+                value={cents}
+                onChange={handleWholeNumberChange(setCents)}
+                className="text-5xl font-black w-16 text-center bg-transparent border-none outline-none text-stone-900 tabular-nums"
+                placeholder="0"
+              />
+              <button
+                type="button"
+                onClick={() => setCents(String(Math.min(99, centsNum + 1)))}
+                className="h-14 w-14 rounded-2xl bg-stone-100 flex items-center justify-center active:scale-95 transition-transform touch-manipulation"
+              >
+                <Plus className="h-6 w-6 text-stone-600" />
+              </button>
+            </div>
+          </div>
+
+          {/* Total preview */}
+          <div className="flex items-center justify-between rounded-2xl bg-sky-50 px-4 py-3 mb-4">
+            <p className="text-sm font-bold text-sky-700">Total today</p>
+            <p className="text-2xl font-black text-sky-700 tabular-nums">{totalDisplay}</p>
+          </div>
+
+          {/* Notes */}
+          <input
+            type="text"
+            value={notes}
+            onChange={(e) => setNotes(e.target.value)}
+            placeholder="Notes — e.g. heavy rain in afternoon"
+            className="w-full h-11 rounded-xl border border-stone-200 px-4 text-base mb-4 focus:outline-none focus:ring-2 focus:ring-sky-400"
+          />
+
+          {/* Save */}
+          <button
+            type="button"
+            onClick={handleSaveRecord}
+            disabled={loading}
+            className="w-full h-14 rounded-2xl bg-sky-600 text-white text-base font-bold flex items-center justify-center gap-2 shadow-md shadow-sky-100 active:scale-[0.98] transition-all touch-manipulation disabled:opacity-70"
+          >
+            <CloudRain className="h-5 w-5" />
+            {loading ? "Saving…" : "Save rainfall"}
+          </button>
+        </div>
+
+        {/* Recent records */}
+        <div className="px-3 pt-4">
+          <p className="text-[11px] font-bold uppercase tracking-[0.15em] text-stone-400 mb-3">Recent records</p>
+          {records.length === 0 ? (
+            <div className="rounded-3xl bg-white shadow-sm px-5 py-8 text-center">
+              <p className="text-base font-bold text-stone-400">No records yet</p>
+              <p className="text-sm text-stone-300 mt-1">Log today&apos;s rainfall above</p>
+            </div>
+          ) : (
+            <div className="space-y-2">
+              {[...records].sort((a, b) => b.record_date.localeCompare(a.record_date)).slice(0, 20).map((record) => (
+                <div key={record.id} className="rounded-2xl bg-white shadow-sm px-4 py-3 flex items-center justify-between">
+                  <div>
+                    <p className="text-sm font-bold text-stone-800">{formatDateOnly(record.record_date)}</p>
+                    {record.notes && <p className="text-xs text-stone-400 mt-0.5">{record.notes}</p>}
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <p className="text-xl font-black text-sky-700 tabular-nums">
+                      {parseInt(String(record.inches || 0), 10)}.{String(parseInt(String(record.cents || 0), 10)).padStart(2, "0")}&quot;
+                    </p>
+                    {canDelete && (
+                      <button
+                        type="button"
+                        onClick={() => handleDeleteRecord(record.id)}
+                        className="text-stone-300 p-1.5 rounded-xl hover:bg-red-50 hover:text-red-400 transition-colors touch-manipulation"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </button>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* Stats summary */}
+        <div className="px-3 pt-4">
+          <p className="text-[11px] font-bold uppercase tracking-[0.15em] text-stone-400 mb-3">This year stats</p>
+          <div className="grid grid-cols-2 gap-2">
+            <div className="rounded-2xl bg-white shadow-sm p-3.5">
+              <CloudRain className="h-4 w-4 text-sky-500 mb-2" />
+              <p className="text-xl font-black text-stone-900 tabular-nums">{formatNumber(annualTotal, 2)}&quot;</p>
+              <p className="text-[10px] font-bold uppercase text-stone-400 mt-1">Annual total</p>
+            </div>
+            <div className="rounded-2xl bg-white shadow-sm p-3.5">
+              <CloudRain className="h-4 w-4 text-sky-400 mb-2" />
+              <p className="text-xl font-black text-stone-900 tabular-nums">{formatNumber(insights.last30Total, 2)}&quot;</p>
+              <p className="text-[10px] font-bold uppercase text-stone-400 mt-1">Last 30 days</p>
+            </div>
+            <div className="rounded-2xl bg-white shadow-sm p-3.5">
+              <p className="text-xl font-black text-stone-900 tabular-nums">{insights.wetDaysLast30}</p>
+              <p className="text-[10px] font-bold uppercase text-stone-400 mt-1">Wet days (30d)</p>
+            </div>
+            <div className="rounded-2xl bg-white shadow-sm p-3.5">
+              <p className="text-xl font-black text-stone-900 tabular-nums">{insights.longestDryStreak}d</p>
+              <p className="text-[10px] font-bold uppercase text-stone-400 mt-1">Dry streak</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className="space-y-5">

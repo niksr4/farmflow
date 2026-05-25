@@ -20,6 +20,7 @@ import { formatCurrency } from "@/lib/format"
 import { SkeletonTable } from "@/components/ui/skeleton"
 import WorkflowEmptyState from "@/components/workflow-empty-state"
 import { toast } from "sonner"
+import { useMediaQuery } from "@/hooks/use-media-query"
 
 interface ActivityCode {
   code: string
@@ -64,6 +65,7 @@ export default function OtherExpensesTab({
     deleteDeployment,
   } = useConsumablesData(locationId, { startDate, endDate })
 
+  const isMobile = useMediaQuery("(max-width: 768px)")
   const [isAdding, setIsAdding] = useState(false)
   const [editingId, setEditingId] = useState<number | null>(null)
   const [isSubmitting, setIsSubmitting] = useState(false)
@@ -253,9 +255,13 @@ export default function OtherExpensesTab({
             </div>
           )}
           {!isAdding ? (
-            <Button onClick={() => setIsAdding(true)} className="w-full h-12 text-base">
-              <PlusCircle className="mr-2 h-5 w-5" /> Add Expense
-            </Button>
+            <button
+              type="button"
+              onClick={() => setIsAdding(true)}
+              className="w-full h-14 rounded-2xl bg-emerald-700 text-white text-base font-bold flex items-center justify-center gap-2 shadow-md shadow-emerald-100 active:scale-[0.98] transition-transform touch-manipulation"
+            >
+              <PlusCircle className="h-5 w-5" /> Add expense
+            </button>
           ) : (
             <form onSubmit={handleSubmit} className="space-y-4 border rounded-lg p-3 sm:p-4 bg-muted/50">
               <div className="rounded-lg border border-border/60 bg-background/80 p-3">
@@ -302,23 +308,41 @@ export default function OtherExpensesTab({
                   <Label htmlFor="expense-code" className="text-base">
                     Activity code
                   </Label>
-                  <Input
-                    id="expense-code"
-                    value={formData.code}
-                    onChange={(e) => handleCodeChange(e.target.value)}
-                    placeholder="e.g. 555"
-                    required
-                    list="expense-activity-codes"
-                    className="h-11"
-                  />
-                  <p className="text-xs text-muted-foreground">Saved codes appear here, but you can type a short estate cost code yourself.</p>
-                  <datalist id="expense-activity-codes">
-                    {activities.map((activity) => (
-                      <option key={activity.code} value={activity.code}>
-                        {activity.reference}
-                      </option>
-                    ))}
-                  </datalist>
+                  {isMobile && activities.length > 0 ? (
+                    <select
+                      value={formData.code}
+                      onChange={(e) => handleCodeChange(e.target.value)}
+                      required
+                      className="w-full h-12 rounded-xl border border-input bg-background px-3 text-base font-medium focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                    >
+                      <option value="">Select activity code…</option>
+                      {activities.map((activity) => (
+                        <option key={activity.code} value={activity.code}>
+                          {activity.code} — {activity.reference}
+                        </option>
+                      ))}
+                    </select>
+                  ) : (
+                    <>
+                      <Input
+                        id="expense-code"
+                        value={formData.code}
+                        onChange={(e) => handleCodeChange(e.target.value)}
+                        placeholder="e.g. 555"
+                        required
+                        list="expense-activity-codes"
+                        className="h-11"
+                      />
+                      <p className="text-xs text-muted-foreground">Saved codes appear here, but you can type a short estate cost code yourself.</p>
+                      <datalist id="expense-activity-codes">
+                        {activities.map((activity) => (
+                          <option key={activity.code} value={activity.code}>
+                            {activity.reference}
+                          </option>
+                        ))}
+                      </datalist>
+                    </>
+                  )}
                 </div>
 
                 <div className="space-y-2">
@@ -444,19 +468,25 @@ export default function OtherExpensesTab({
               )}
 
               <div className="flex flex-col sm:flex-row gap-2">
-                <Button type="submit" className="flex-1 h-12 text-base" disabled={isSubmitting}>
-                  <Save className="mr-2 h-5 w-5" />
-                  {isSubmitting ? "Saving..." : `${editingId ? "Update" : "Save"} Expense`}
-                </Button>
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={resetForm}
-                  className="h-12 text-base bg-transparent"
+                <button
+                  type="submit"
                   disabled={isSubmitting}
+                  className="flex-1 h-14 rounded-2xl bg-emerald-700 text-white text-base font-bold flex items-center justify-center gap-2 shadow-md shadow-emerald-100 active:scale-[0.98] transition-all touch-manipulation disabled:opacity-70"
                 >
-                  <X className="mr-2 h-5 w-5" /> Cancel
-                </Button>
+                  {isSubmitting ? (
+                    <span className="flex items-center gap-2"><Save className="h-5 w-5 animate-pulse" />Saving…</span>
+                  ) : (
+                    <><Save className="h-5 w-5" />{editingId ? "Update" : "Save"} expense</>
+                  )}
+                </button>
+                <button
+                  type="button"
+                  onClick={resetForm}
+                  disabled={isSubmitting}
+                  className="h-12 rounded-2xl border border-stone-200 bg-white text-base font-semibold text-stone-500 px-6 touch-manipulation"
+                >
+                  Cancel
+                </button>
               </div>
             </form>
           )}
@@ -472,75 +502,72 @@ export default function OtherExpensesTab({
           </CardHeader>
           <CardContent className="p-0">
             {/* Mobile View */}
-            <div className="block sm:hidden">
+            <div className="block sm:hidden divide-y divide-stone-50">
               {deployments.map((deployment) => {
                 const isExpanded = expandedRows.has(deployment.id)
-
                 return (
                   <Collapsible key={deployment.id} open={isExpanded} onOpenChange={() => toggleRow(deployment.id)}>
-                    <div className="border-b p-4">
-                      <CollapsibleTrigger className="w-full">
-                        <div className="flex justify-between items-start">
-                          <div className="text-left flex-1">
-                            <div className="flex items-center gap-2 mb-1">
-                              <Badge variant="outline" className="font-mono text-xs">
-                                {deployment.code}
-                              </Badge>
-                              <span className="text-xs text-muted-foreground">{formatDateOnly(deployment.date)}</span>
-                            </div>
-                            <p className="font-medium text-sm line-clamp-1">
-                              {deployment.reference || deployment.code}
-                            </p>
-                            <p className="text-lg font-bold text-green-700 mt-1">
-                              {formatCurrency(deployment.amount)}
-                            </p>
+                    <CollapsibleTrigger className="w-full text-left">
+                      <div className="flex items-center justify-between px-4 py-4 active:bg-stone-50 touch-manipulation">
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center gap-2 mb-1">
+                            <span className="text-xs font-bold text-stone-400 uppercase tracking-wide">
+                              {formatDateOnly(deployment.date)}
+                            </span>
+                            <span className="text-xs bg-stone-100 text-stone-600 px-2 py-0.5 rounded-full font-mono font-semibold">
+                              {deployment.code}
+                            </span>
                           </div>
-                          {isExpanded ? (
-                            <ChevronUp className="h-5 w-5 text-muted-foreground" />
-                          ) : (
-                            <ChevronDown className="h-5 w-5 text-muted-foreground" />
-                          )}
+                          <p className="text-base font-bold text-stone-800 truncate leading-tight">
+                            {deployment.reference || deployment.code}
+                          </p>
+                          <p className="text-lg font-black text-emerald-700 mt-0.5 tabular-nums leading-none">
+                            {formatCurrency(deployment.amount)}
+                          </p>
                         </div>
-                      </CollapsibleTrigger>
-
-                      <CollapsibleContent className="pt-3 space-y-2">
-                        {(Array.isArray(deployment.inventoryItems) && deployment.inventoryItems.length > 0) || deployment.inventoryItemType ? (
-                          <div className="text-sm text-muted-foreground">
-                            <span className="font-medium">Inventory used:</span>{" "}
+                        <div className="shrink-0 ml-3 text-stone-400">
+                          {isExpanded ? <ChevronUp className="h-5 w-5" /> : <ChevronDown className="h-5 w-5" />}
+                        </div>
+                      </div>
+                    </CollapsibleTrigger>
+                    <CollapsibleContent>
+                      <div className="px-4 pb-4 space-y-2 bg-stone-50/50">
+                        {((Array.isArray(deployment.inventoryItems) && deployment.inventoryItems.length > 0) || deployment.inventoryItemType) && (
+                          <p className="text-sm text-stone-500">
+                            <span className="font-semibold text-stone-600">Stock: </span>
                             {formatInventoryUsage(
                               Array.isArray(deployment.inventoryItems) && deployment.inventoryItems.length > 0
                                 ? deployment.inventoryItems
-                                : deployment.inventoryItemType
-                                  ? [{ itemType: deployment.inventoryItemType, quantity: deployment.inventoryQuantity }]
-                                  : [],
+                                : [{ itemType: deployment.inventoryItemType ?? "", quantity: deployment.inventoryQuantity }],
                             )}
-                          </div>
-                        ) : null}
+                          </p>
+                        )}
                         {deployment.notes && (
-                          <div className="text-sm text-muted-foreground">
-                            <span className="font-medium">Notes:</span> {deployment.notes}
-                          </div>
+                          <p className="text-sm text-stone-500 italic">{deployment.notes}</p>
                         )}
                         <div className="flex gap-2 pt-2">
-                          <Button variant="outline" size="sm" onClick={() => startEdit(deployment)} className="flex-1">
-                            <Edit2 className="h-4 w-4 mr-1" /> Edit
-                          </Button>
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            className="flex-1 bg-transparent"
+                          <button
+                            type="button"
+                            onClick={() => startEdit(deployment)}
+                            className="flex-1 flex items-center justify-center gap-1.5 h-10 rounded-xl border border-stone-200 bg-white text-sm font-semibold text-stone-600 touch-manipulation"
+                          >
+                            <Edit2 className="h-3.5 w-3.5" /> Edit
+                          </button>
+                          <button
+                            type="button"
                             onClick={async () => {
-                              if (confirm("Are you sure you want to delete this expense?")) {
+                              if (confirm("Delete this expense?")) {
                                 const result = await deleteDeployment(deployment.id)
                                 if (!result.ok) toast.error(result.error)
                               }
                             }}
+                            className="flex-1 flex items-center justify-center gap-1.5 h-10 rounded-xl border border-stone-200 bg-white text-sm font-semibold text-red-500 touch-manipulation"
                           >
-                            <Trash2 className="h-4 w-4 mr-1" /> Delete
-                          </Button>
+                            <Trash2 className="h-3.5 w-3.5" /> Delete
+                          </button>
                         </div>
-                      </CollapsibleContent>
-                    </div>
+                      </div>
+                    </CollapsibleContent>
                   </Collapsible>
                 )
               })}
