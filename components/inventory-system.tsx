@@ -6222,7 +6222,7 @@ export default function InventorySystem() {
 
             {/* ── Mobile home: greeting + gaps + quick log ── */}
             {isMobile && (
-              <div className="space-y-5">
+              <div className="space-y-5 pb-24">
                 {/* Greeting */}
                 <div className="px-1">
                   <p className="text-3xl font-black text-stone-900 leading-tight">

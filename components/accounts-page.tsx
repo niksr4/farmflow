@@ -1014,7 +1014,7 @@ export default function AccountsPage({
 
   if (isMobile) {
     return (
-      <div className="pb-4">
+      <div className="pb-24">
         {/* Compact mobile header */}
         <div className="sticky top-0 z-10 bg-white border-b border-stone-100 px-3 pt-3 pb-2">
           <div className="flex items-center justify-between">
