@@ -89,6 +89,17 @@ export default function RainfallTab({ username, showDataToolsControls = false }:
   const recordsSectionRef = useRef<HTMLDivElement>(null)
   const statsSectionRef = useRef<HTMLDivElement>(null)
 
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const section = (e as CustomEvent<string>).detail
+      if (section === "log") logSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })
+      else if (section === "records") recordsSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })
+      else if (section === "stats") statsSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })
+    }
+    window.addEventListener("farmflow:scroll-to-section", handler)
+    return () => window.removeEventListener("farmflow:scroll-to-section", handler)
+  }, [])
+
   const handleWholeNumberChange = (setter: (value: string) => void) => (event: ChangeEvent<HTMLInputElement>) => {
     const nextValue = event.target.value
     if (!/^\d*$/.test(nextValue)) return

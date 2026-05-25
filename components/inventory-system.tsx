@@ -4610,6 +4610,23 @@ export default function InventorySystem() {
     [canShowInventory, canShowSales, openDrilldown],
   )
 
+  const handleSubNavClick = useCallback(
+    (tabId: string, sub: { accountsPanel?: string; section?: string }) => {
+      if (tabId === "accounts" && sub.accountsPanel && isAccountsWorkspaceTab(sub.accountsPanel)) {
+        setAccountsInitialTab(sub.accountsPanel as AccountsWorkspaceTab)
+        handleTabChange("accounts")
+      } else {
+        handleTabChange(tabId)
+        if (sub.section) {
+          setTimeout(() => {
+            window.dispatchEvent(new CustomEvent("farmflow:scroll-to-section", { detail: sub.section }))
+          }, 150)
+        }
+      }
+    },
+    [handleTabChange],
+  )
+
   const handleWorkspaceHintAction = useCallback(
     (action: WorkspaceHintAction) => {
       if (action.href) {
@@ -5079,7 +5096,9 @@ export default function InventorySystem() {
       <div className="w-full h-screen flex items-center justify-center">
         <div className="text-center">
           <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-emerald-600 mx-auto"></div>
-          <p className="mt-4 text-muted-foreground">Loading inventory data...</p>
+          <p className="mt-4 text-muted-foreground">
+            {tenantSettings.estateName ? `Loading ${tenantSettings.estateName}…` : "Loading…"}
+          </p>
         </div>
       </div>
     )
@@ -5179,6 +5198,7 @@ export default function InventorySystem() {
           visibleTabs={visibleTabs}
           tabMeta={tabMeta}
           onTabChange={handleTabChange}
+          onSubNavClick={handleSubNavClick}
           launcherTab={DASHBOARD_LAUNCHER_TAB}
           username={user.username}
           estateName={tenantSettings.estateName}

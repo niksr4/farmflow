@@ -9,11 +9,39 @@ import { LogOut, Settings } from "lucide-react"
 import Image from "next/image"
 import Link from "next/link"
 
+type SubItem = { emoji: string; label: string; accountsPanel?: string; section?: string }
+
+const TAB_SUB_SECTIONS: Record<string, SubItem[]> = {
+  accounts: [
+    { emoji: "👷", label: "Labor", accountsPanel: "labor" },
+    { emoji: "💸", label: "Expenses", accountsPanel: "expenses" },
+    { emoji: "📒", label: "Ledger", accountsPanel: "ledger" },
+  ],
+  rainfall: [
+    { emoji: "🌧️", label: "Log", section: "log" },
+    { emoji: "📋", label: "Records", section: "records" },
+    { emoji: "📊", label: "Stats", section: "stats" },
+  ],
+  processing: [
+    { emoji: "✏️", label: "Log batch" },
+    { emoji: "📋", label: "History" },
+  ],
+  dispatch: [
+    { emoji: "🚚", label: "Log" },
+    { emoji: "📋", label: "History" },
+  ],
+  sales: [
+    { emoji: "💰", label: "Log sale" },
+    { emoji: "📋", label: "History" },
+  ],
+}
+
 type AppSidebarProps = {
   activeTab: string
   visibleTabs: string[]
   tabMeta: Record<string, { label: string; icon: React.ComponentType<{ className?: string }> }>
   onTabChange: (tab: string) => void
+  onSubNavClick?: (tabId: string, sub: SubItem) => void
   launcherTab: string
   username: string
   estateName?: string
@@ -66,6 +94,7 @@ export default function AppSidebar({
   visibleTabs,
   tabMeta,
   onTabChange,
+  onSubNavClick,
   launcherTab,
   username,
   estateName,
@@ -134,6 +163,7 @@ export default function AppSidebar({
                   if (!meta) return null
                   const Icon = meta.icon
                   const isActive = activeTab === itemId
+                  const subItems = TAB_SUB_SECTIONS[itemId]
 
                   // Shorten labels to fit in narrow sidebar
                   const shortLabel = meta.label
@@ -153,34 +183,54 @@ export default function AppSidebar({
                     .replace("Picking Log", "Picking")
 
                   return (
-                    <Tooltip key={itemId}>
-                      <TooltipTrigger asChild>
-                        <button
-                          type="button"
-                          onClick={() => onTabChange(itemId)}
-                          className={cn(
-                            "group relative flex h-auto w-full flex-col items-center justify-center gap-0.5 rounded-lg py-2 transition-all duration-150",
-                            isActive
-                              ? "bg-emerald-50 text-emerald-700 dark:bg-emerald-500/14 dark:text-emerald-400"
-                              : "text-slate-500 hover:bg-slate-100 hover:text-slate-800 dark:text-white/55 dark:hover:bg-white/[0.08] dark:hover:text-white/90",
-                          )}
-                        >
-                          {isActive && (
-                            <span className="absolute left-0 top-1/2 h-4 w-0.5 -translate-y-1/2 rounded-r-full bg-emerald-500 dark:bg-emerald-400/80" />
-                          )}
-                          <Icon className="h-[17px] w-[17px]" />
-                          <span className={cn(
-                            "text-center leading-none",
-                            isActive ? "text-[8.5px] font-semibold" : "text-[8px] font-medium",
-                          )}>
-                            {shortLabel}
-                          </span>
-                        </button>
-                      </TooltipTrigger>
-                      <TooltipContent side="right" sideOffset={10} className={TOOLTIP_CLS}>
-                        {meta.label}
-                      </TooltipContent>
-                    </Tooltip>
+                    <div key={itemId}>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <button
+                            type="button"
+                            onClick={() => onTabChange(itemId)}
+                            className={cn(
+                              "group relative flex h-auto w-full flex-col items-center justify-center gap-0.5 rounded-lg py-2 transition-all duration-150",
+                              isActive
+                                ? "bg-emerald-50 text-emerald-700 dark:bg-emerald-500/14 dark:text-emerald-400"
+                                : "text-slate-500 hover:bg-slate-100 hover:text-slate-800 dark:text-white/55 dark:hover:bg-white/[0.08] dark:hover:text-white/90",
+                            )}
+                          >
+                            {isActive && (
+                              <span className="absolute left-0 top-1/2 h-4 w-0.5 -translate-y-1/2 rounded-r-full bg-emerald-500 dark:bg-emerald-400/80" />
+                            )}
+                            <Icon className="h-[17px] w-[17px]" />
+                            <span className={cn(
+                              "text-center leading-none",
+                              isActive ? "text-[8.5px] font-semibold" : "text-[8px] font-medium",
+                            )}>
+                              {shortLabel}
+                            </span>
+                          </button>
+                        </TooltipTrigger>
+                        <TooltipContent side="right" sideOffset={10} className={TOOLTIP_CLS}>
+                          {meta.label}
+                        </TooltipContent>
+                      </Tooltip>
+                      {isActive && subItems && (
+                        <div className="flex flex-col gap-px mt-0.5 mb-1 px-1">
+                          {subItems.map((sub) => (
+                            <button
+                              key={sub.label}
+                              type="button"
+                              onClick={() => onSubNavClick ? onSubNavClick(itemId, sub) : onTabChange(itemId)}
+                              className={cn(
+                                "w-full text-center text-[8px] font-semibold leading-none py-1 rounded-md transition-colors",
+                                "text-emerald-600 hover:text-emerald-900 hover:bg-emerald-50",
+                                "dark:text-emerald-400/80 dark:hover:text-emerald-300 dark:hover:bg-emerald-500/10",
+                              )}
+                            >
+                              {sub.emoji} {sub.label}
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </div>
                   )
                 })}
               </div>
