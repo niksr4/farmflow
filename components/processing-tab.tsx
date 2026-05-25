@@ -27,6 +27,7 @@ import { SkeletonTable } from "@/components/ui/skeleton"
 import WorkflowEmptyState from "@/components/workflow-empty-state"
 import { AiValidationHint } from "@/components/ui/ai-validation-hint"
 import { useAiValidate } from "@/hooks/use-ai-validate"
+import { useMediaQuery } from "@/hooks/use-media-query"
 
 interface ProcessingRecord {
   id?: number
@@ -128,6 +129,7 @@ export default function ProcessingTab({ showDataToolsControls = false }: Process
   const { settings } = useTenantSettings()
   const bagWeightKg = Number(settings.bagWeightKg) || 50
   const canDelete = user?.role === "admin" || user?.role === "owner" || user?.role === "user"
+  const isMobile = useMediaQuery("(max-width: 768px)")
 
   const [date, setDate] = useState<Date>(new Date())
   const [locations, setLocations] = useState<LocationOption[]>([])
@@ -1044,51 +1046,85 @@ export default function ProcessingTab({ showDataToolsControls = false }: Process
           <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
             <div className="space-y-2">
               <Label>Location</Label>
-              <Select value={selectedLocationId} onValueChange={setSelectedLocationId}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Select location" />
-                </SelectTrigger>
-                <SelectContent>
-                  {locations.map((loc) => (
-                    <SelectItem key={loc.id} value={loc.id}>
-                      {loc.name || loc.code || "Unnamed location"}
-                    </SelectItem>
+              {isMobile ? (
+                <select
+                  value={selectedLocationId}
+                  onChange={e => setSelectedLocationId(e.target.value)}
+                  className="w-full h-12 rounded-xl border border-input bg-background px-3 text-base font-medium focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                >
+                  <option value="">Select location</option>
+                  {locations.map(loc => (
+                    <option key={loc.id} value={loc.id}>{loc.name || loc.code || "Unnamed location"}</option>
                   ))}
-                </SelectContent>
-              </Select>
+                </select>
+              ) : (
+                <Select value={selectedLocationId} onValueChange={setSelectedLocationId}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select location" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {locations.map((loc) => (
+                      <SelectItem key={loc.id} value={loc.id}>
+                        {loc.name || loc.code || "Unnamed location"}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              )}
             </div>
             <div className="space-y-2">
               <Label>Coffee Type</Label>
-              <Select value={coffeeType} onValueChange={setCoffeeType}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Select type" />
-                </SelectTrigger>
-                <SelectContent>
-                  {COFFEE_TYPES.map((type) => (
-                    <SelectItem key={type} value={type}>
-                      {type}
-                    </SelectItem>
+              {isMobile ? (
+                <select
+                  value={coffeeType}
+                  onChange={e => setCoffeeType(e.target.value)}
+                  className="w-full h-12 rounded-xl border border-input bg-background px-3 text-base font-medium focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                >
+                  {COFFEE_TYPES.map(type => (
+                    <option key={type} value={type}>{type}</option>
                   ))}
-                </SelectContent>
-              </Select>
+                </select>
+              ) : (
+                <Select value={coffeeType} onValueChange={setCoffeeType}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select type" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {COFFEE_TYPES.map((type) => (
+                      <SelectItem key={type} value={type}>
+                        {type}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              )}
             </div>
             <div className="space-y-2">
               <Label>Date</Label>
               <div className="flex items-center gap-2">
-                <Popover>
-                  <PopoverTrigger asChild>
-                    <Button
-                      variant="outline"
-                      className={cn("w-full justify-start text-left font-normal", !date && "text-muted-foreground")}
-                    >
-                      <CalendarIcon className="mr-2 h-4 w-4" />
-                      {date ? formatDateOnly(date) : <span>Pick a date</span>}
-                    </Button>
-                  </PopoverTrigger>
-                  <PopoverContent className="w-auto p-0" align="start">
-                    <Calendar mode="single" selected={date} onSelect={(d) => d && setDate(d)} initialFocus />
-                  </PopoverContent>
-                </Popover>
+                {isMobile ? (
+                  <input
+                    type="date"
+                    value={format(date, "yyyy-MM-dd")}
+                    onChange={e => { const d = new Date(e.target.value + "T00:00:00"); if (!isNaN(d.getTime())) setDate(d) }}
+                    className="w-full h-12 rounded-xl border border-input bg-background px-3 text-base font-medium focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                  />
+                ) : (
+                  <Popover>
+                    <PopoverTrigger asChild>
+                      <Button
+                        variant="outline"
+                        className={cn("w-full justify-start text-left font-normal", !date && "text-muted-foreground")}
+                      >
+                        <CalendarIcon className="mr-2 h-4 w-4" />
+                        {date ? formatDateOnly(date) : <span>Pick a date</span>}
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-auto p-0" align="start">
+                      <Calendar mode="single" selected={date} onSelect={(d) => d && setDate(d)} initialFocus />
+                    </PopoverContent>
+                  </Popover>
+                )}
                 {isLoading && <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />}
               </div>
             </div>
@@ -1485,8 +1521,12 @@ export default function ProcessingTab({ showDataToolsControls = false }: Process
                 />
               </div>
 
-              <div className="flex flex-wrap gap-3">
-                <Button onClick={handleSave} disabled={isSaving}>
+              <div className={cn("flex flex-wrap gap-3", isMobile && "flex-col")}>
+                <Button
+                  onClick={handleSave}
+                  disabled={isSaving}
+                  className={cn(isMobile && "h-14 rounded-2xl text-base bg-emerald-700 hover:bg-emerald-800 text-white w-full")}
+                >
                   {isSaving ? (
                     <>
                       <Loader2 className="mr-2 h-4 w-4 animate-spin" />
@@ -1596,42 +1636,48 @@ export default function ProcessingTab({ showDataToolsControls = false }: Process
               )}
               {recentRecords.map((rec) => (
                 <div key={rec.id} className="relative">
-                  <Button
-                    variant="outline"
+                  <button
+                    type="button"
                     className={cn(
-                      "h-auto w-full justify-start border-border/60 bg-white/70 py-3 text-left hover:bg-muted/40",
+                      "w-full text-left rounded-2xl border p-4 transition-colors",
                       selectedRecentRecord?.id === rec.id && selectedRecentRecord?.process_date === rec.process_date
                         ? "border-emerald-200 bg-emerald-50/60"
-                        : "",
+                        : "border-black/[0.06] bg-white hover:bg-stone-50",
                     )}
                     onClick={() => {
                       setSelectedRecentRecord(rec)
                       setDate(new Date(rec.process_date))
                     }}
                   >
-                    <div className="flex w-full flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
-                      <div className="flex items-center gap-2">
-                        <span className="font-medium">{formatDateOnly(rec.process_date)}</span>
+                    <div className="flex items-start justify-between gap-2">
+                      <div>
+                        <p className="text-base font-bold text-stone-900">{formatDateOnly(rec.process_date)}</p>
                         {rec.lot_id && (
-                          <span className="rounded bg-emerald-100 px-1.5 py-0.5 text-[10px] font-mono text-emerald-700">
+                          <span className="mt-1 inline-block rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-mono font-semibold text-emerald-700">
                             {rec.lot_id}
                           </span>
                         )}
                       </div>
-                      <span className="text-xs text-muted-foreground sm:text-sm">
-                        Crop: {rec.crop_today ?? 0}kg | Bags: {rec.dry_p_bags}
-                        {rec.quality_grade ? ` | Grade: ${rec.quality_grade}` : ""}
-                        {rec.moisture_pct ? ` | Moisture: ${rec.moisture_pct}%` : ""}
-                      </span>
+                      <div className="text-right">
+                        <p className="text-xl font-black text-stone-900">{rec.crop_today ?? 0}<span className="text-sm font-normal text-stone-400">kg</span></p>
+                        <p className="text-xs text-stone-400">{rec.dry_p_bags} bags</p>
+                      </div>
                     </div>
-                  </Button>
+                    {(rec.quality_grade || rec.moisture_pct) && (
+                      <p className="mt-2 text-xs text-stone-400">
+                        {rec.quality_grade ? `Grade: ${rec.quality_grade}` : ""}
+                        {rec.quality_grade && rec.moisture_pct ? " · " : ""}
+                        {rec.moisture_pct ? `Moisture: ${rec.moisture_pct}%` : ""}
+                      </p>
+                    )}
+                  </button>
                   {rec.lot_id && (
                     <Link
                       href={`/lot/${encodeURIComponent(rec.lot_id)}`}
                       target="_blank"
                       rel="noopener noreferrer"
                       onClick={(e) => e.stopPropagation()}
-                      className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1 rounded-md border border-emerald-200 bg-white px-2 py-1 text-[10px] font-medium text-emerald-700 hover:bg-emerald-50 transition-colors"
+                      className="absolute right-2 bottom-3 flex items-center gap-1 rounded-md border border-emerald-200 bg-white px-2 py-1 text-[10px] font-medium text-emerald-700 hover:bg-emerald-50 transition-colors"
                     >
                       Trace
                     </Link>

@@ -28,6 +28,7 @@ import { SkeletonTable } from "@/components/ui/skeleton"
 import { EmptyStateTable } from "@/components/ui/empty-state"
 import WorkflowEmptyState from "@/components/workflow-empty-state"
 import WorkspacePageShell from "@/components/workspace-page-shell"
+import { useMediaQuery } from "@/hooks/use-media-query"
 import posthog from "posthog-js"
 
 interface DispatchRecord {
@@ -102,7 +103,8 @@ export default function DispatchTab({ showDataToolsControls = false }: DispatchT
   const { settings } = useTenantSettings()
   const bagWeightKg = Number(settings.bagWeightKg) || 50
   const canDelete = user?.role === "admin" || user?.role === "owner" || user?.role === "user"
-  
+  const isMobile = useMediaQuery("(max-width: 768px)")
+
   const [locations, setLocations] = useState<LocationOption[]>([])
   const [date, setDate] = useState<Date>(new Date())
   const [selectedLocationId, setSelectedLocationId] = useState<string>("")
@@ -1111,37 +1113,60 @@ export default function DispatchTab({ showDataToolsControls = false }: DispatchT
             {/* Date */}
             <div className="space-y-2">
               <Label>Date</Label>
-              <Popover>
-                <PopoverTrigger asChild>
-                  <Button
-                    variant="outline"
-                    className={cn("w-full justify-start text-left font-normal bg-transparent", !date && "text-muted-foreground")}
-                  >
-                    <CalendarIcon className="mr-2 h-4 w-4" />
-                    {date ? formatDateOnly(date) : <span>Pick a date</span>}
-                  </Button>
-                </PopoverTrigger>
-                <PopoverContent className="w-auto p-0">
-                  <Calendar mode="single" selected={date} onSelect={(d) => d && setDate(d)} initialFocus />
-                </PopoverContent>
-              </Popover>
+              {isMobile ? (
+                <input
+                  type="date"
+                  value={format(date, "yyyy-MM-dd")}
+                  onChange={e => { const d = new Date(e.target.value + "T00:00:00"); if (!isNaN(d.getTime())) setDate(d) }}
+                  className="w-full h-12 rounded-xl border border-input bg-background px-3 text-base font-medium focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                />
+              ) : (
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <Button
+                      variant="outline"
+                      className={cn("w-full justify-start text-left font-normal bg-transparent", !date && "text-muted-foreground")}
+                    >
+                      <CalendarIcon className="mr-2 h-4 w-4" />
+                      {date ? formatDateOnly(date) : <span>Pick a date</span>}
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-auto p-0">
+                    <Calendar mode="single" selected={date} onSelect={(d) => d && setDate(d)} initialFocus />
+                  </PopoverContent>
+                </Popover>
+              )}
             </div>
 
             {/* Location */}
             <div className="space-y-2">
               <Label>Location</Label>
-              <Select value={selectedLocationId} onValueChange={setSelectedLocationId} disabled={!locations.length}>
-                <SelectTrigger>
-                  <SelectValue placeholder={locations.length ? "Select location" : "Add a location first"} />
-                </SelectTrigger>
-                <SelectContent>
-                  {locations.map((loc) => (
-                    <SelectItem key={loc.id} value={loc.id}>
-                      {loc.name || loc.code}
-                    </SelectItem>
+              {isMobile ? (
+                <select
+                  value={selectedLocationId}
+                  onChange={e => setSelectedLocationId(e.target.value)}
+                  disabled={!locations.length}
+                  className="w-full h-12 rounded-xl border border-input bg-background px-3 text-base font-medium focus:outline-none focus:ring-2 focus:ring-emerald-500 disabled:opacity-50"
+                >
+                  <option value="">{locations.length ? "Select location" : "Add a location first"}</option>
+                  {locations.map(loc => (
+                    <option key={loc.id} value={loc.id}>{loc.name || loc.code}</option>
                   ))}
-                </SelectContent>
-              </Select>
+                </select>
+              ) : (
+                <Select value={selectedLocationId} onValueChange={setSelectedLocationId} disabled={!locations.length}>
+                  <SelectTrigger>
+                    <SelectValue placeholder={locations.length ? "Select location" : "Add a location first"} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {locations.map((loc) => (
+                      <SelectItem key={loc.id} value={loc.id}>
+                        {loc.name || loc.code}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              )}
               <p className="text-xs text-muted-foreground">
                 {isLegacyPooledAvailability
                   ? "Legacy pooled mode is active, so available stock is shown estate-wide."
@@ -1152,18 +1177,30 @@ export default function DispatchTab({ showDataToolsControls = false }: DispatchT
             {/* Coffee Type */}
             <div className="space-y-2">
               <Label>Coffee Type</Label>
-              <Select value={coffeeType} onValueChange={setCoffeeType}>
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {COFFEE_TYPES.map((ct) => (
-                    <SelectItem key={ct} value={ct}>
-                      {ct}
-                    </SelectItem>
+              {isMobile ? (
+                <select
+                  value={coffeeType}
+                  onChange={e => setCoffeeType(e.target.value)}
+                  className="w-full h-12 rounded-xl border border-input bg-background px-3 text-base font-medium focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                >
+                  {COFFEE_TYPES.map(ct => (
+                    <option key={ct} value={ct}>{ct}</option>
                   ))}
-                </SelectContent>
-              </Select>
+                </select>
+              ) : (
+                <Select value={coffeeType} onValueChange={setCoffeeType}>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {COFFEE_TYPES.map((ct) => (
+                      <SelectItem key={ct} value={ct}>
+                        {ct}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              )}
             </div>
 
             {/* Bag Type */}
@@ -1172,18 +1209,30 @@ export default function DispatchTab({ showDataToolsControls = false }: DispatchT
                 label="Bag Type"
                 tooltip="Select dry parchment or dry cherry to match processing output."
               />
-              <Select value={bagType} onValueChange={setBagType}>
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {BAG_TYPES.map((bt) => (
-                    <SelectItem key={bt} value={bt}>
-                      {bt}
-                    </SelectItem>
+              {isMobile ? (
+                <select
+                  value={bagType}
+                  onChange={e => setBagType(e.target.value)}
+                  className="w-full h-12 rounded-xl border border-input bg-background px-3 text-base font-medium focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                >
+                  {BAG_TYPES.map(bt => (
+                    <option key={bt} value={bt}>{bt}</option>
                   ))}
-                </SelectContent>
-              </Select>
+                </select>
+              ) : (
+                <Select value={bagType} onValueChange={setBagType}>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {BAG_TYPES.map((bt) => (
+                      <SelectItem key={bt} value={bt}>
+                        {bt}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              )}
               <p className={cn("text-xs", allowedBalance > 0 ? "text-emerald-600" : "text-rose-600")}>
                 Available now: {formatNumber(allowedBalance)} bags ({formatNumber(allowedBalance * bagWeightKg)} KGs)
               </p>
@@ -1209,6 +1258,7 @@ export default function DispatchTab({ showDataToolsControls = false }: DispatchT
                 onKeyDown={blockInvalidNumberKey}
                 onChange={handleNonNegativeChange(setBagsDispatched)}
                 max={Math.max(0, allowedBalance)}
+                className={cn(isMobile && "h-12 text-base")}
               />
               {exceedsAvailability && (
                 <p className="text-xs text-rose-600">
@@ -1256,13 +1306,17 @@ export default function DispatchTab({ showDataToolsControls = false }: DispatchT
             </div>
           </div>
 
-          <div className="mt-4 flex flex-wrap justify-end gap-2">
+          <div className={cn("mt-4 flex flex-wrap gap-2", isMobile ? "flex-col" : "justify-end")}>
             {editingRecord && (
-              <Button variant="outline" onClick={resetForm}>
+              <Button variant="outline" onClick={resetForm} className={cn(isMobile && "h-12 rounded-xl")}>
                 Cancel
               </Button>
             )}
-            <Button onClick={handleSave} disabled={!canSubmitDispatch} className="bg-emerald-700 hover:bg-emerald-800">
+            <Button
+              onClick={handleSave}
+              disabled={!canSubmitDispatch}
+              className={cn("bg-emerald-700 hover:bg-emerald-800", isMobile && "h-14 rounded-2xl text-base w-full")}
+            >
               {isSaving ? (
                 <>
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
@@ -1361,38 +1415,36 @@ export default function DispatchTab({ showDataToolsControls = false }: DispatchT
                     <div
                       key={record.id}
                       className={cn(
-                        "rounded-xl border border-border/70 bg-white p-3 shadow-sm",
-                        selectedDispatchRecord?.id === record.id ? "border-emerald-200 bg-emerald-50/40" : "",
+                        "rounded-2xl border bg-white p-4 shadow-sm",
+                        selectedDispatchRecord?.id === record.id ? "border-emerald-200 bg-emerald-50/30" : "border-black/[0.06]",
                       )}
                       onClick={() => setSelectedDispatchRecord(record)}
                     >
                       <div className="flex items-start justify-between gap-2">
                         <div>
-                          <p className="text-sm font-semibold text-foreground">{formatDateOnly(record.dispatch_date)}</p>
-                          <p className="text-xs text-muted-foreground">{getLocationLabel(record)}</p>
+                          <p className="text-base font-bold text-stone-900">{formatDateOnly(record.dispatch_date)}</p>
+                          <p className="text-xs text-stone-400 mt-0.5">{getLocationLabel(record)}</p>
                         </div>
-                        <span className="rounded-md border border-border/70 bg-muted/40 px-2 py-0.5 text-xs font-medium">
+                        <span className="rounded-full bg-stone-100 px-2.5 py-1 text-xs font-semibold text-stone-600">
                           {record.coffee_type}
                         </span>
                       </div>
-                      <div className="mt-2 grid grid-cols-2 gap-2 text-xs">
-                        <div className="rounded-md border border-black/5 bg-white px-2 py-1.5">
-                          <p className="text-[11px] uppercase tracking-wide text-muted-foreground">Bag Type</p>
-                          <p className="font-medium text-foreground">{formatBagTypeLabel(record.bag_type)}</p>
+                      <div className="mt-3 grid grid-cols-3 gap-2">
+                        <div className="rounded-xl bg-stone-50 px-3 py-2">
+                          <p className="text-[10px] uppercase tracking-wide text-stone-400">Type</p>
+                          <p className="text-sm font-semibold text-stone-800 mt-0.5">{formatBagTypeLabel(record.bag_type)}</p>
                         </div>
-                        <div className="rounded-md border border-black/5 bg-white px-2 py-1.5">
-                          <p className="text-[11px] uppercase tracking-wide text-muted-foreground">Bags</p>
-                          <p className="font-medium text-foreground">{formatNumber(Number(record.bags_dispatched) || 0)}</p>
+                        <div className="rounded-xl bg-stone-50 px-3 py-2">
+                          <p className="text-[10px] uppercase tracking-wide text-stone-400">Bags</p>
+                          <p className="text-xl font-black text-stone-900 mt-0.5">{formatNumber(Number(record.bags_dispatched) || 0)}</p>
                         </div>
-                        <div className="rounded-md border border-black/5 bg-white px-2 py-1.5">
-                          <p className="text-[11px] uppercase tracking-wide text-muted-foreground">Received KGs</p>
-                          <p className="font-medium text-foreground">{formatNumber(receivedKgs)}</p>
+                        <div className="rounded-xl bg-stone-50 px-3 py-2">
+                          <p className="text-[10px] uppercase tracking-wide text-stone-400">Rcvd KGs</p>
+                          <p className="text-xl font-black text-emerald-700 mt-0.5">{formatNumber(receivedKgs)}</p>
                         </div>
                       </div>
                       {record.notes ? (
-                        <p className="mt-2 rounded-md border border-black/5 bg-white px-2 py-1.5 text-xs text-muted-foreground">
-                          {record.notes}
-                        </p>
+                        <p className="mt-2 text-xs text-stone-400 italic">{record.notes}</p>
                       ) : null}
                       <div className="mt-3 flex gap-2">
                         <Button
@@ -1404,7 +1456,7 @@ export default function DispatchTab({ showDataToolsControls = false }: DispatchT
                             setSelectedDispatchRecord(record)
                             handleEdit(record)
                           }}
-                          className="h-10 flex-1 border-blue-200 bg-blue-50 text-blue-700 hover:bg-blue-100"
+                          className="h-10 flex-1 rounded-xl border-blue-200 bg-blue-50 text-blue-700 hover:bg-blue-100"
                         >
                           <Pencil className="mr-1.5 h-4 w-4" />
                           Edit
@@ -1418,7 +1470,7 @@ export default function DispatchTab({ showDataToolsControls = false }: DispatchT
                               event.stopPropagation()
                               handleDelete(record.id!)
                             }}
-                            className="h-10 flex-1 border-red-200 bg-red-50 text-red-700 hover:bg-red-100"
+                            className="h-10 flex-1 rounded-xl border-red-200 bg-red-50 text-red-700 hover:bg-red-100"
                           >
                             <Trash2 className="mr-1.5 h-4 w-4" />
                             Delete
