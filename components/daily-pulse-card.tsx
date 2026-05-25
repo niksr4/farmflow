@@ -41,12 +41,21 @@ export default function DailyPulseCard({ onNavigate, className }: DailyPulseCard
     loading: true,
   })
 
-  const week = getWeekBounds()
-  const seasonBadge = getSeasonBadge()
-  const contextLine = getSeasonContextLine()
-  const isBatchWindow = isBatchLoggingWindow()
+  // Computed client-side only to avoid SSR/client timezone mismatch (server=UTC, client=IST)
+  const [week, setWeek] = useState<ReturnType<typeof getWeekBounds> | null>(null)
+  const [seasonBadge, setSeasonBadge] = useState<ReturnType<typeof getSeasonBadge> | null>(null)
+  const [contextLine, setContextLine] = useState("")
+  const [isBatchWindow, setIsBatchWindow] = useState(false)
+
+  useEffect(() => {
+    setWeek(getWeekBounds())
+    setSeasonBadge(getSeasonBadge())
+    setContextLine(getSeasonContextLine())
+    setIsBatchWindow(isBatchLoggingWindow())
+  }, [])
 
   const fetchWeekSummary = useCallback(async () => {
+    if (!week) return
     try {
       const [laborRes, expenseRes, rainRes] = await Promise.all([
         fetch(`/api/labor-neon?startDate=${week.startDate}&endDate=${week.endDate}&limit=200`),
@@ -88,7 +97,7 @@ export default function DailyPulseCard({ onNavigate, className }: DailyPulseCard
     } catch {
       setSummary(prev => ({ ...prev, loading: false }))
     }
-  }, [week.startDate, week.endDate])
+  }, [week])
 
   useEffect(() => {
     fetchWeekSummary()
@@ -117,12 +126,14 @@ export default function DailyPulseCard({ onNavigate, className }: DailyPulseCard
         <div className="flex items-center justify-between mb-3">
           <div>
             <div className="flex items-center gap-2">
-              <span className={cn(
-                "inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] font-medium",
-                badgeColors[seasonBadge.color],
-              )}>
-                {seasonBadge.label}
-              </span>
+              {seasonBadge && (
+                <span className={cn(
+                  "inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] font-medium",
+                  badgeColors[seasonBadge.color],
+                )}>
+                  {seasonBadge.label}
+                </span>
+              )}
               {isBatchWindow && (
                 <span className="inline-flex items-center gap-1 rounded-full bg-violet-100 border border-violet-200 px-2 py-0.5 text-[11px] font-medium text-violet-700">
                   <Zap className="h-2.5 w-2.5" />
@@ -130,11 +141,11 @@ export default function DailyPulseCard({ onNavigate, className }: DailyPulseCard
                 </span>
               )}
             </div>
-            <p className="mt-1.5 text-[11px] text-neutral-500 leading-relaxed max-w-[240px]">{contextLine}</p>
+            {contextLine && <p className="mt-1.5 text-[11px] text-neutral-500 leading-relaxed max-w-[240px]">{contextLine}</p>}
           </div>
           <div className="text-right shrink-0">
             <p className="text-[10px] uppercase tracking-[0.16em] text-neutral-400">This week</p>
-            <p className="text-xs text-neutral-500">{week.label}</p>
+            {week && <p className="text-xs text-neutral-500">{week.label}</p>}
           </div>
         </div>
 
