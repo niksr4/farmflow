@@ -5203,6 +5203,7 @@ export default function InventorySystem() {
           "flex-1 min-w-0",
           !isMobile && "pl-[76px]",
           isMobile ? mobileBottomSpacingClass : "pb-8",
+          isMobile && "bg-stone-50",
         )}
       >
       <div className="relative max-w-7xl mx-auto px-3 pt-4 sm:px-6 sm:pt-5">
@@ -6211,16 +6212,36 @@ export default function InventorySystem() {
           </TabsContent>
 
           <TabsContent value="home" className="space-y-6" forceMount={isTabLoaded("home") ? true : undefined}>
-            <SeasonProgressStrip
-              fiscalYear={currentFiscalYear}
-              progress={seasonProgress}
-              activityStreak={activityStreak}
-            />
+            {!isMobile && (
+              <SeasonProgressStrip
+                fiscalYear={currentFiscalYear}
+                progress={seasonProgress}
+                activityStreak={activityStreak}
+              />
+            )}
 
-            {/* ── Today gaps + Quick log (mobile) ── */}
+            {/* ── Mobile home: greeting + gaps + quick log ── */}
             {isMobile && (
-              <div className="space-y-3">
+              <div className="space-y-5">
+                {/* Greeting */}
+                <div className="px-1">
+                  <p className="text-3xl font-black text-stone-900 leading-tight">
+                    {(() => {
+                      const h = new Date().getHours()
+                      if (h < 12) return "Good morning"
+                      if (h < 17) return "Good afternoon"
+                      return "Good evening"
+                    })()}
+                  </p>
+                  {tenantSettings.estateName && (
+                    <p className="text-base font-semibold text-stone-400 mt-0.5">
+                      {tenantSettings.estateName}
+                    </p>
+                  )}
+                </div>
+
                 <TodayGapsCard onNavigate={handleTabChange} />
+
                 {canShowAccounts && (
                   <QuickLogPanel
                     locationId={selectedLocationId || undefined}
