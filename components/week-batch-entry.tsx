@@ -17,6 +17,7 @@ import { Input } from "@/components/ui/input"
 import { useToast } from "@/hooks/use-toast"
 import { format, startOfWeek, addDays } from "date-fns"
 import { formatCurrency } from "@/lib/format"
+import { useMediaQuery } from "@/hooks/use-media-query"
 
 type ActivityCode = { code: string; reference: string }
 
@@ -48,10 +49,15 @@ function getWeekDays(): { iso: string; short: string; letter: string }[] {
 
 export default function WeekBatchEntry({ locationId, defaultWage = 0, onSuccess, className }: WeekBatchEntryProps) {
   const { toast } = useToast()
+  const isMobile = useMediaQuery("(max-width: 768px)")
   const [activities, setActivities] = useState<ActivityCode[]>([])
   const [rows, setRows] = useState<LaborRow[]>([])
   const [submitting, setSubmitting] = useState(false)
   const [expanded, setExpanded] = useState(true)
+
+  useEffect(() => {
+    if (isMobile) setExpanded(false)
+  }, [isMobile])
   const [addingCode, setAddingCode] = useState(false)
   const [codeSearch, setCodeSearch] = useState("")
 
@@ -217,7 +223,7 @@ export default function WeekBatchEntry({ locationId, defaultWage = 0, onSuccess,
                             step={50}
                             value={row.costPerWorker || ""}
                             onChange={e => updateWage(rowIdx, e.target.value)}
-                            className="h-7 w-16 text-xs rounded-lg border-black/10 bg-white/80 px-2 text-center"
+                            className="h-9 w-16 text-sm rounded-lg border-black/10 bg-white/80 px-2 text-center"
                             placeholder="₹"
                           />
                         </td>
@@ -230,7 +236,7 @@ export default function WeekBatchEntry({ locationId, defaultWage = 0, onSuccess,
                               value={row.dayCounts[d.iso] || ""}
                               onChange={e => updateCount(rowIdx, d.iso, e.target.value)}
                               className={cn(
-                                "h-7 w-10 text-xs rounded-lg border-black/10 bg-white/80 px-1 text-center",
+                                "h-9 w-11 text-sm rounded-lg border-black/10 bg-white/80 px-1 text-center touch-manipulation",
                                 row.dayCounts[d.iso] > 0 && "border-emerald-300 bg-emerald-50/80 text-emerald-800 font-medium",
                               )}
                               placeholder="0"

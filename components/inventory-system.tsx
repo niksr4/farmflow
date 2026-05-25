@@ -7136,7 +7136,7 @@ export default function InventorySystem() {
                         data-testid="inventory-action-record-movement"
                         type="button"
                         onClick={() => openMovementDrawer()}
-                        className="flex w-full items-center justify-between rounded-xl border border-black/5 bg-white px-4 py-3 text-sm text-neutral-800 transition-colors hover:bg-neutral-50"
+                        className="flex w-full items-center justify-between rounded-xl border border-black/5 bg-white px-4 py-3.5 text-sm text-neutral-800 transition-colors hover:bg-neutral-50 touch-manipulation active:scale-[0.99]"
                       >
                         <span className="flex items-center gap-2">
                           <Plus className="h-4 w-4 text-emerald-600" />
@@ -7149,15 +7149,15 @@ export default function InventorySystem() {
                           data-testid="inventory-action-restocking"
                           type="button"
                           onClick={() => openMovementDrawer("restock")}
-                          className="flex min-h-11 items-center justify-center rounded-xl border border-emerald-200 bg-emerald-50/80 px-3 py-2 text-sm font-medium text-emerald-800 transition-colors hover:bg-emerald-100"
+                          className="flex h-14 items-center justify-center rounded-xl border border-emerald-200 bg-emerald-50/80 px-3 text-sm font-semibold text-emerald-800 transition-colors hover:bg-emerald-100 touch-manipulation active:scale-[0.98]"
                         >
-                          Record restock
+                          Restock
                         </button>
                         <button
                           data-testid="inventory-action-depleting"
                           type="button"
                           onClick={() => openMovementDrawer("deplete")}
-                          className="flex min-h-11 items-center justify-center rounded-xl border border-amber-200 bg-amber-50/80 px-3 py-2 text-sm font-medium text-amber-800 transition-colors hover:bg-amber-100"
+                          className="flex h-14 items-center justify-center rounded-xl border border-amber-200 bg-amber-50/80 px-3 text-sm font-semibold text-amber-800 transition-colors hover:bg-amber-100 touch-manipulation active:scale-[0.98]"
                         >
                           Record usage
                         </button>
