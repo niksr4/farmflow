@@ -11,7 +11,7 @@ import { Label } from "@/components/ui/label"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
-import { PlusCircle, Trash2, Edit2, Save, X, ChevronDown, ChevronUp, Plus } from "lucide-react"
+import { PlusCircle, Trash2, Edit2, Save, X, ChevronDown, ChevronUp, Plus, Minus } from "lucide-react"
 import { Textarea } from "@/components/ui/textarea"
 import { Badge } from "@/components/ui/badge"
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
@@ -22,6 +22,8 @@ import TaskGuideCard from "@/components/task-guide-card"
 import WorkflowEmptyState from "@/components/workflow-empty-state"
 import { useToast } from "@/hooks/use-toast"
 import { FARMFLOW_RECORD_SAVED_EVENT } from "@/components/inventory-system/constants"
+import { useMediaQuery } from "@/hooks/use-media-query"
+
 
 interface ActivityCode {
   code: string
@@ -75,6 +77,7 @@ export default function LaborDeploymentTab({
     deleteDeployment,
   } = useLaborData(locationId, { startDate, endDate })
   const { settings } = useTenantSettings()
+  const isMobile = useMediaQuery("(max-width: 768px)")
   const { toast } = useToast()
 
   const inHouseWage = settings.laborWages?.defaultInHouseWage ?? 0
@@ -337,9 +340,13 @@ export default function LaborDeploymentTab({
           </div>
 
           {!isAdding ? (
-            <Button onClick={openNewForm} className="w-full h-12 text-base">
-              <PlusCircle className="mr-2 h-5 w-5" /> Add labor entry
-            </Button>
+            <button
+              type="button"
+              onClick={openNewForm}
+              className="w-full h-14 rounded-2xl bg-emerald-700 text-white text-base font-bold flex items-center justify-center gap-2 shadow-md shadow-emerald-100 active:scale-[0.98] transition-transform touch-manipulation"
+            >
+              <PlusCircle className="h-5 w-5" /> Add labor entry
+            </button>
           ) : (
             <form onSubmit={handleSubmit} className="space-y-4 border rounded-lg p-3 sm:p-4 bg-muted/50" ref={formRef}>
               {prefilled && (
@@ -380,21 +387,39 @@ export default function LaborDeploymentTab({
 
                 <div className="space-y-2">
                   <Label htmlFor="code" className="text-base">Activity code</Label>
-                  <Input
-                    id="code"
-                    value={formData.code}
-                    onChange={(e) => handleCodeChange(e.target.value)}
-                    placeholder="Enter activity code"
-                    required
-                    list="activity-codes"
-                    className="h-11"
-                  />
-                  <datalist id="activity-codes">
-                    {activities.map((activity) => (
-                      <option key={activity.code} value={activity.code}>{activity.reference}</option>
-                    ))}
-                  </datalist>
-                  <p className="text-xs text-muted-foreground">Saved codes appear here, but you can type a short estate work code now.</p>
+                  {isMobile && activities.length > 0 ? (
+                    <select
+                      value={formData.code}
+                      onChange={(e) => handleCodeChange(e.target.value)}
+                      required
+                      className="w-full h-12 rounded-xl border border-input bg-background px-3 text-base font-medium focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                    >
+                      <option value="">Select activity code…</option>
+                      {activities.map((activity) => (
+                        <option key={activity.code} value={activity.code}>
+                          {activity.code} — {activity.reference}
+                        </option>
+                      ))}
+                    </select>
+                  ) : (
+                    <>
+                      <Input
+                        id="code"
+                        value={formData.code}
+                        onChange={(e) => handleCodeChange(e.target.value)}
+                        placeholder="Enter activity code"
+                        required
+                        list="activity-codes"
+                        className="h-11"
+                      />
+                      <datalist id="activity-codes">
+                        {activities.map((activity) => (
+                          <option key={activity.code} value={activity.code}>{activity.reference}</option>
+                        ))}
+                      </datalist>
+                      <p className="text-xs text-muted-foreground">Saved codes appear here, but you can type a short estate work code now.</p>
+                    </>
+                  )}
                 </div>
 
                 <div className="space-y-2">
@@ -438,17 +463,48 @@ export default function LaborDeploymentTab({
                         Subtotal: {formatCurrency(set.laborers * set.costPerLaborer)}
                       </p>
                     </div>
-                    <div className="grid gap-4 md:grid-cols-2">
-                      <div className="space-y-2">
-                        <Label className="text-base">Number of workers (0.5 for half day)</Label>
-                        <Input
-                          type="number"
-                          min="0"
-                          step="0.5"
-                          value={set.laborers}
-                          onChange={(e) => updateSet(i, "laborers", Number.parseFloat(e.target.value) || 0)}
-                          className="h-11"
-                        />
+                    <div className={isMobile ? "space-y-4" : "grid gap-4 md:grid-cols-2"}>
+                      <div>
+                        <p className={isMobile ? "text-sm font-semibold text-stone-700 mb-3" : "text-sm font-medium mb-2"}>
+                          {isMobile ? "Workers" : "Number of workers (0.5 for half day)"}
+                        </p>
+                        {isMobile ? (
+                          <div className="flex items-center gap-5">
+                            <button
+                              type="button"
+                              onClick={() => updateSet(i, "laborers", Math.max(0, set.laborers - 1))}
+                              className="h-14 w-14 rounded-2xl bg-stone-100 flex items-center justify-center active:scale-95 transition-transform touch-manipulation"
+                            >
+                              <Minus className="h-6 w-6 text-stone-600" />
+                            </button>
+                            <span className="text-5xl font-black text-stone-900 w-14 text-center tabular-nums leading-none">
+                              {set.laborers}
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() => updateSet(i, "laborers", set.laborers + 1)}
+                              className="h-14 w-14 rounded-2xl bg-stone-100 flex items-center justify-center active:scale-95 transition-transform touch-manipulation"
+                            >
+                              <Plus className="h-6 w-6 text-stone-600" />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => updateSet(i, "laborers", set.laborers + 0.5)}
+                              className="h-10 px-3 rounded-xl bg-stone-50 border border-stone-200 text-xs font-bold text-stone-500 touch-manipulation"
+                            >
+                              +½
+                            </button>
+                          </div>
+                        ) : (
+                          <Input
+                            type="number"
+                            min="0"
+                            step="0.5"
+                            value={set.laborers}
+                            onChange={(e) => updateSet(i, "laborers", Number.parseFloat(e.target.value) || 0)}
+                            className="h-11"
+                          />
+                        )}
                       </div>
                       <div className="space-y-2">
                         <Label className="text-base">Cost per worker (₹)</Label>
@@ -500,24 +556,31 @@ export default function LaborDeploymentTab({
                 />
               </div>
 
-              <div className="border-t pt-4">
-                <p className="text-lg font-semibold">Total Cost: {formatCurrency(calculateTotal())}</p>
+              <div className="rounded-2xl bg-stone-50 border border-stone-100 px-4 py-3 flex items-center justify-between">
+                <p className="text-sm font-bold text-stone-500">Total</p>
+                <p className="text-xl font-black text-stone-900 tabular-nums">{formatCurrency(calculateTotal())}</p>
               </div>
 
               <div className="flex flex-col sm:flex-row gap-2">
-                <Button type="submit" className="flex-1 h-12 text-base" disabled={isSubmitting}>
-                  <Save className="mr-2 h-5 w-5" />
-                  {isSubmitting ? "Saving..." : `${editingId ? "Update" : "Save"} labor entry`}
-                </Button>
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={resetForm}
-                  className="h-12 text-base bg-transparent"
+                <button
+                  type="submit"
                   disabled={isSubmitting}
+                  className="flex-1 h-14 rounded-2xl bg-emerald-700 text-white text-base font-bold flex items-center justify-center gap-2 shadow-md shadow-emerald-100 active:scale-[0.98] transition-all touch-manipulation disabled:opacity-70"
                 >
-                  <X className="mr-2 h-5 w-5" /> Cancel
-                </Button>
+                  {isSubmitting ? (
+                    <span className="flex items-center gap-2"><Save className="h-5 w-5 animate-pulse" />Saving…</span>
+                  ) : (
+                    <><Save className="h-5 w-5" />{editingId ? "Update" : "Save"} entry</>
+                  )}
+                </button>
+                <button
+                  type="button"
+                  onClick={resetForm}
+                  disabled={isSubmitting}
+                  className="h-12 rounded-2xl border border-stone-200 bg-white text-base font-semibold text-stone-500 px-6 touch-manipulation"
+                >
+                  Cancel
+                </button>
               </div>
             </form>
           )}
@@ -533,69 +596,78 @@ export default function LaborDeploymentTab({
           </CardHeader>
           <CardContent className="p-0">
             {/* Mobile View */}
-            <div className="block sm:hidden">
+            <div className="block sm:hidden divide-y divide-stone-50">
               {deployments.map((deployment) => {
                 const isExpanded = expandedRows.has(deployment.id)
                 return (
                   <Collapsible key={deployment.id} open={isExpanded} onOpenChange={() => toggleRow(deployment.id)}>
-                    <div className="border-b p-4">
-                      <CollapsibleTrigger className="w-full">
-                        <div className="flex justify-between items-start">
-                          <div className="text-left flex-1">
-                            <div className="flex items-center gap-2 mb-1">
-                              <Badge variant="outline" className="font-mono text-xs">{deployment.code}</Badge>
-                              <span className="text-xs text-muted-foreground">{formatDateOnly(deployment.date)}</span>
-                            </div>
-                            <p className="font-medium text-sm line-clamp-1">{deployment.reference}</p>
-                            <p className="text-lg font-bold text-green-700 mt-1">{formatCurrency(deployment.totalCost)}</p>
+                    <CollapsibleTrigger className="w-full text-left">
+                      <div className="flex items-center justify-between px-4 py-4 active:bg-stone-50 touch-manipulation">
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center gap-2 mb-1">
+                            <span className="text-xs font-bold text-stone-400 uppercase tracking-wide">
+                              {formatDateOnly(deployment.date)}
+                            </span>
+                            <span className="text-xs bg-stone-100 text-stone-600 px-2 py-0.5 rounded-full font-mono font-semibold">
+                              {deployment.code}
+                            </span>
                           </div>
-                          {isExpanded ? <ChevronUp className="h-5 w-5 text-muted-foreground" /> : <ChevronDown className="h-5 w-5 text-muted-foreground" />}
+                          <p className="text-base font-bold text-stone-800 truncate leading-tight">{deployment.reference}</p>
+                          <p className="text-lg font-black text-emerald-700 mt-0.5 tabular-nums leading-none">
+                            {formatCurrency(deployment.totalCost)}
+                          </p>
                         </div>
-                      </CollapsibleTrigger>
+                        <div className="shrink-0 ml-3 text-stone-400">
+                          {isExpanded ? <ChevronUp className="h-5 w-5" /> : <ChevronDown className="h-5 w-5" />}
+                        </div>
+                      </div>
+                    </CollapsibleTrigger>
 
-                      <CollapsibleContent className="pt-3 space-y-2">
+                    <CollapsibleContent>
+                      <div className="px-4 pb-4 space-y-2 bg-stone-50/50">
                         {(deployment.laborEntries || []).map((entry: any, i: number) =>
                           Number(entry.laborCount) > 0 ? (
-                            <div key={i} className="text-sm">
-                              <span className="font-medium">
-                                {entry.name === "Estate Labor" ? "In-house" : entry.name === "Outside Labor" ? "Outside" : entry.name}:
-                              </span>{" "}
-                              {formatLaborCount(Number(entry.laborCount))} @ {formatCurrency(entry.costPerLabor)}
+                            <div key={i} className="flex justify-between text-sm">
+                              <span className="font-semibold text-stone-600">
+                                {entry.name === "Estate Labor" ? "In-house" : entry.name === "Outside Labor" ? "Outside" : entry.name}
+                              </span>
+                              <span className="text-stone-800 font-medium">
+                                {formatLaborCount(Number(entry.laborCount))} × {formatCurrency(entry.costPerLabor)}
+                              </span>
                             </div>
                           ) : null
                         )}
                         {deployment.taskDescription && (
-                          <div className="text-sm text-muted-foreground">
-                            <span className="font-medium">Task:</span> {deployment.taskDescription}
-                          </div>
+                          <p className="text-sm text-stone-500 pt-1">{deployment.taskDescription}</p>
                         )}
                         {deployment.notes && (
-                          <div className="text-sm text-muted-foreground">
-                            <span className="font-medium">Notes:</span> {deployment.notes}
-                          </div>
+                          <p className="text-xs text-stone-400 italic">{deployment.notes}</p>
                         )}
                         <div className="flex gap-2 pt-2">
-                          <Button variant="outline" size="sm" onClick={() => startEdit(deployment)} className="flex-1">
-                            <Edit2 className="h-4 w-4 mr-1" /> Edit
-                          </Button>
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            className="flex-1 bg-transparent"
+                          <button
+                            type="button"
+                            onClick={() => startEdit(deployment)}
+                            className="flex-1 flex items-center justify-center gap-1.5 h-10 rounded-xl border border-stone-200 bg-white text-sm font-semibold text-stone-600 touch-manipulation"
+                          >
+                            <Edit2 className="h-3.5 w-3.5" /> Edit
+                          </button>
+                          <button
+                            type="button"
                             onClick={async () => {
-                              if (confirm("Are you sure you want to delete this deployment?")) {
+                              if (confirm("Delete this labor entry?")) {
                                 const result = await deleteDeployment(deployment.id)
                                 if (!result.ok) {
                                   toast({ title: "Couldn't delete record", description: result.error, variant: "destructive" })
                                 }
                               }
                             }}
+                            className="flex-1 flex items-center justify-center gap-1.5 h-10 rounded-xl border border-stone-200 bg-white text-sm font-semibold text-red-500 touch-manipulation"
                           >
-                            <Trash2 className="h-4 w-4 mr-1" /> Delete
-                          </Button>
+                            <Trash2 className="h-3.5 w-3.5" /> Delete
+                          </button>
                         </div>
-                      </CollapsibleContent>
-                    </div>
+                      </div>
+                    </CollapsibleContent>
                   </Collapsible>
                 )
               })}

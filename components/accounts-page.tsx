@@ -45,6 +45,7 @@ import {
   type AccountActivityReferenceExportFormat,
 } from "@/lib/account-activity-suggestions"
 import posthog from "posthog-js"
+import { useMediaQuery } from "@/hooks/use-media-query"
 
 interface AccountActivity {
   code: string
@@ -132,6 +133,7 @@ export default function AccountsPage({
   showLaborManagement = false,
   showPickingLog = false,
 }: AccountsPageProps) {
+  const isMobile = useMediaQuery("(max-width: 768px)")
   const { isAdmin, isOwner, user } = useAuth()
   const canManageActivities = isAdmin || isOwner || user?.role === "user"
   const [selectedFiscalYear, setSelectedFiscalYear] = useState<FiscalYear>(getCurrentFiscalYear())
@@ -945,6 +947,22 @@ export default function AccountsPage({
   const topFrequencyCodes = patterns?.mostFrequentCodes?.slice(0, 5) || []
   const topHighlights = (accountsIntelligence?.highlights || []).slice(0, 3)
   const visibleActivitySuggestions = showAllActivitySuggestions ? activitySuggestions : activitySuggestions.slice(0, 12)
+
+  const mobileTabItems = useMemo(() => {
+    const items: Array<{ value: AccountsTabValue; label: string; icon: React.ComponentType<{ className?: string }> }> = [
+      { value: "labor", label: "Labor", icon: Users },
+      { value: "attendance", label: "Attend", icon: Check },
+      { value: "expenses", label: "Expenses", icon: Receipt },
+      { value: "activities", label: "Codes", icon: Settings },
+    ]
+    if (showPickingLog || showLaborManagement) items.push({ value: "picking", label: "Picking", icon: Wheat })
+    if (showLaborManagement) {
+      items.push({ value: "workers", label: "Workers", icon: UserCheck })
+      items.push({ value: "ledger", label: "Ledger", icon: BookOpen })
+      items.push({ value: "payroll", label: "Payroll", icon: DollarSign })
+    }
+    return items
+  }, [showLaborManagement, showPickingLog])
   const accountsShellStats = [
     {
       label: "Fiscal Year",
@@ -993,6 +1011,172 @@ export default function AccountsPage({
     }
     void run()
   }, [onRequestedExportHandled, requestedExport])
+
+  if (isMobile) {
+    return (
+      <div className="pb-4">
+        {/* Compact mobile header */}
+        <div className="sticky top-0 z-10 bg-white border-b border-stone-100 px-3 pt-3 pb-2">
+          <div className="flex items-center justify-between">
+            <div>
+              {summaryLoading ? (
+                <div className="h-7 w-28 rounded-xl bg-stone-100 animate-pulse" />
+              ) : (
+                <p className="text-2xl font-black text-stone-900">{formatCurrency(summaryTotals.grandTotal)}</p>
+              )}
+              <p className="text-xs font-semibold text-stone-400 mt-0.5">{selectedFiscalYear.label}</p>
+            </div>
+            <Select
+              value={selectedFiscalYear.label}
+              onValueChange={(value) => {
+                const fy = availableFiscalYears.find((f) => f.label === value)
+                if (fy) setSelectedFiscalYear(fy)
+              }}
+            >
+              <SelectTrigger className="h-9 rounded-xl border-stone-200 bg-stone-50 text-xs font-semibold w-auto max-w-[130px]">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {availableFiscalYears.map((fy) => (
+                  <SelectItem key={fy.label} value={fy.label}>{fy.label}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          {!summaryLoading && (
+            <div className="flex gap-2 mt-2">
+              <span className="flex items-center gap-1 text-xs bg-emerald-50 text-emerald-700 px-2.5 py-1 rounded-full font-semibold">
+                <Users className="h-3 w-3" />{formatCurrency(summaryTotals.laborTotal)}
+              </span>
+              <span className="flex items-center gap-1 text-xs bg-stone-100 text-stone-600 px-2.5 py-1 rounded-full font-semibold">
+                💸 {formatCurrency(summaryTotals.otherTotal)}
+              </span>
+            </div>
+          )}
+
+          <div className="overflow-x-auto mt-2.5 -mx-3 px-3">
+            <div className="flex gap-1.5 w-max pb-0.5">
+              {mobileTabItems.map((item) => {
+                const Icon = item.icon
+                return (
+                  <button
+                    key={item.value}
+                    type="button"
+                    onClick={() => setActiveTab(item.value)}
+                    className={cn(
+                      "flex items-center gap-1.5 px-3 py-2 rounded-full text-[13px] font-bold whitespace-nowrap transition-all touch-manipulation active:scale-95",
+                      activeTab === item.value
+                        ? "bg-emerald-700 text-white shadow-sm"
+                        : "bg-stone-100 text-stone-500",
+                    )}
+                  >
+                    <Icon className="h-3.5 w-3.5 shrink-0" />
+                    {item.label}
+                  </button>
+                )
+              })}
+            </div>
+          </div>
+        </div>
+
+        <div className="pt-2">
+          {activeTab === "labor" && (
+            <LaborDeploymentTab startDate={fiscalYearStartDate} endDate={fiscalYearEndDate} />
+          )}
+          {activeTab === "expenses" && (
+            <OtherExpensesTab startDate={fiscalYearStartDate} endDate={fiscalYearEndDate} />
+          )}
+          {activeTab === "attendance" && <AttendanceTab />}
+          {activeTab === "activities" && (
+            <div className="px-3 pt-2 space-y-4">
+              {!isAddingActivity ? (
+                <button
+                  type="button"
+                  onClick={() => setIsAddingActivity(true)}
+                  disabled={!canManageActivities}
+                  className="w-full flex items-center justify-center gap-2 rounded-2xl border-2 border-dashed border-stone-200 py-4 text-sm font-semibold text-stone-400 touch-manipulation"
+                >
+                  <PlusCircle className="h-4 w-4" />
+                  Add activity code
+                </button>
+              ) : (
+                <form onSubmit={handleAddActivity} className="space-y-3 rounded-2xl border border-stone-200 bg-white p-4">
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <p className="text-xs font-semibold text-stone-500 mb-1">Code</p>
+                      <Input
+                        placeholder="e.g. 163"
+                        value={newActivityCode}
+                        onChange={(e) => setNewActivityCode(e.target.value.toUpperCase())}
+                        disabled={isSubmitting || !canManageActivities}
+                        className="h-11"
+                      />
+                    </div>
+                    <div>
+                      <p className="text-xs font-semibold text-stone-500 mb-1">Name</p>
+                      <Input
+                        placeholder="e.g. Irrigation"
+                        value={newActivityReference}
+                        onChange={(e) => setNewActivityReference(e.target.value)}
+                        disabled={isSubmitting || !canManageActivities}
+                        className="h-11"
+                      />
+                    </div>
+                  </div>
+                  <div className="flex gap-2">
+                    <Button type="submit" disabled={isSubmitting || !canManageActivities} className="flex-1 h-11 rounded-xl bg-emerald-700 hover:bg-emerald-800">
+                      {isSubmitting ? <Loader2 className="h-4 w-4 animate-spin" /> : "Add"}
+                    </Button>
+                    <button type="button" onClick={() => { setIsAddingActivity(false); setNewActivityCode(""); setNewActivityReference("") }}
+                      className="px-4 text-sm text-stone-400 font-semibold">Cancel</button>
+                  </div>
+                </form>
+              )}
+              {loadingActivities ? (
+                <div className="space-y-2">
+                  {[1, 2, 3].map((i) => <div key={i} className="h-14 rounded-2xl bg-stone-100 animate-pulse" />)}
+                </div>
+              ) : (
+                <div className="rounded-2xl bg-white shadow-sm divide-y divide-stone-50 overflow-hidden">
+                  {accountActivities.map((activity) => {
+                    const usageCount = (activity.labor_count || 0) + (activity.expense_count || 0)
+                    return (
+                      <div key={activity.code} className="flex items-center justify-between px-4 py-3.5">
+                        <div>
+                          <p className="text-sm font-bold text-stone-800">{activity.code} · {activity.reference}</p>
+                          <p className="text-xs text-stone-400">{usageCount > 0 ? `${usageCount} records` : "Unused"}</p>
+                        </div>
+                        <div className="flex gap-2">
+                          <button type="button" onClick={() => {
+                            setEditingActivityCode(activity.code)
+                            setEditingActivityNextCode(activity.code)
+                            setEditingActivityReference(activity.reference)
+                          }} className="text-stone-400 p-1.5 rounded-xl hover:bg-stone-100">
+                            <Pencil className="h-4 w-4" />
+                          </button>
+                          {usageCount === 0 && canManageActivities && (
+                            <button type="button" onClick={() => handleDeleteActivity(activity.code)}
+                              className="text-stone-400 p-1.5 rounded-xl hover:bg-red-50">
+                              <Trash2 className="h-4 w-4" />
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+              )}
+            </div>
+          )}
+          {(showPickingLog || showLaborManagement) && activeTab === "picking" && <PickingLogTab />}
+          {showLaborManagement && activeTab === "workers" && <WorkerProfilesTab />}
+          {showLaborManagement && activeTab === "ledger" && <WorkerLedgerTab />}
+          {showLaborManagement && activeTab === "payroll" && <PayrollSummaryTab />}
+        </div>
+      </div>
+    )
+  }
 
   return (
     <WorkspacePageShell

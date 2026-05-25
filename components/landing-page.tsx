@@ -1,7 +1,7 @@
 "use client"
 
 import Link from "next/link"
-import { motion, useReducedMotion } from "framer-motion"
+import { motion } from "framer-motion"
 import {
   ArrowRight,
   CheckCircle2,
@@ -199,23 +199,17 @@ const heroBeanSpecs = [
 
 export default function LandingPage() {
   const { t } = useLocale()
-  const prefersReducedMotion = useReducedMotion()
   const MotionDiv = motion.div as any
   const MotionSection = motion.section as any
 
-  const reveal = (delay = 0) =>
-    prefersReducedMotion
-      ? { initial: { opacity: 1, y: 0 }, animate: { opacity: 1, y: 0 } }
-      : {
-          initial: { opacity: 0, y: 24 },
-          whileInView: { opacity: 1, y: 0 },
-          viewport: { once: true, amount: 0.15 },
-          transition: { duration: 0.6, delay, ease: "easeOut" as const },
-        }
+  const reveal = (delay = 0) => ({
+    initial: { opacity: 0, y: 24 },
+    whileInView: { opacity: 1, y: 0 },
+    viewport: { once: true, amount: 0.15 },
+    transition: { duration: 0.6, delay, ease: "easeOut" as const },
+  })
 
-  const lift = prefersReducedMotion
-    ? {}
-    : { whileHover: { y: -4, transition: { duration: 0.2, ease: "easeOut" } } }
+  const lift = { whileHover: { y: -4, transition: { duration: 0.2, ease: "easeOut" } } }
 
   return (
     <PublicSiteShell theme="dark">
@@ -223,26 +217,24 @@ export default function LandingPage() {
 
         {/* ── Hero ── */}
         <MotionDiv {...reveal(0)} className="relative overflow-hidden pt-12 text-center sm:pt-20">
-          {!prefersReducedMotion && (
-            <div aria-hidden className="pointer-events-none absolute inset-0 hidden lg:block">
-              {heroBeanSpecs.map((bean, index) => (
-                <span
-                  key={`${bean.left}-${bean.top}-${index}`}
-                  className="coffee-bean"
-                  style={{
-                    left: bean.left,
-                    top: bean.top,
-                    width: `${bean.size}px`,
-                    height: `${Math.round(bean.size * 1.45)}px`,
-                    opacity: bean.opacity,
-                    animationDuration: bean.duration,
-                    animationDelay: bean.delay,
-                    animationIterationCount: "infinite",
-                  }}
-                />
-              ))}
-            </div>
-          )}
+          <div aria-hidden className="pointer-events-none absolute inset-0 hidden lg:block">
+            {heroBeanSpecs.map((bean, index) => (
+              <span
+                key={`${bean.left}-${bean.top}-${index}`}
+                className="coffee-bean"
+                style={{
+                  left: bean.left,
+                  top: bean.top,
+                  width: `${bean.size}px`,
+                  height: `${Math.round(bean.size * 1.45)}px`,
+                  opacity: bean.opacity,
+                  animationDuration: bean.duration,
+                  animationDelay: bean.delay,
+                  animationIterationCount: "infinite",
+                }}
+              />
+            ))}
+          </div>
           <div className="relative z-10">
             <Badge className="mb-6 border-emerald-300/20 bg-emerald-300/[0.08] text-emerald-200">
               {t("public.landing.badge")}

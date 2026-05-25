@@ -403,6 +403,12 @@ aside a[href]:active {
   border-radius: 999px;
 }
 
+@media (prefers-reduced-motion: reduce) {
+  .coffee-bean {
+    display: none;
+  }
+}
+
 /* ── Dark-mode adapters for hardcoded light colours ────────────────────
    The dashboard UI was originally built with literal bg-white / text-slate-*
    classes. These overrides remap them to CSS-variable equivalents so the
