@@ -5583,52 +5583,58 @@ export default function InventorySystem() {
           <WorkspaceHints onAction={handleWorkspaceHintAction} />
         )}
 
-        {activeTab === "home" && (
-          <div className="relative mb-6 overflow-hidden rounded-2xl border border-black/5 bg-white p-6 shadow-sm">
-            <div className="relative flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between lg:gap-8">
-              <div className="space-y-2 max-w-xl">
-                <Badge className="bg-emerald-600 text-white border-emerald-600 shadow-sm">
-                  {visibleHeroContent.badge}
-                </Badge>
-                <h2 className="font-display text-2xl text-[color:var(--foreground)]">
-                  {visibleHeroContent.title}
-                </h2>
-                <p className="text-sm text-muted-foreground leading-relaxed max-w-lg">
-                  {visibleHeroContent.description}
-                </p>
-                {visibleHeroContent.chips.length > 0 && (
-                  <p className="text-xs text-neutral-500">
-                    {visibleHeroContent.chips
-                      .slice(0, 3)
-                      .map((chip) => chip.label)
-                      .join(" · ")}
+        {activeTab === "home" && !isMobile && (
+          <div className="relative mb-6 overflow-hidden rounded-3xl border border-stone-200/60">
+            <div className="absolute inset-0 bg-gradient-to-br from-amber-50/80 via-stone-50 to-emerald-50/40" />
+            <div className="pointer-events-none absolute inset-0 opacity-[0.025]"
+              style={{ backgroundImage: "radial-gradient(ellipse at 70% 0%, #d97706 0%, transparent 50%), radial-gradient(ellipse at 20% 100%, #059669 0%, transparent 50%)" }}
+            />
+            <div className="relative px-7 py-6">
+              <div className="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between lg:gap-8">
+                <div className="space-y-2.5 max-w-xl">
+                  <span className="inline-flex items-center rounded-full border border-emerald-200/80 bg-emerald-100/80 px-2.5 py-0.5 text-[11px] font-bold text-emerald-700">
+                    {visibleHeroContent.badge}
+                  </span>
+                  <h2 className="text-xl font-black text-stone-900 leading-tight">
+                    {visibleHeroContent.title}
+                  </h2>
+                  <p className="text-sm text-stone-600/90 leading-relaxed max-w-lg">
+                    {visibleHeroContent.description}
                   </p>
-                )}
-              </div>
-              <div className="grid w-full gap-3 sm:grid-cols-2 xl:grid-cols-3 lg:flex-1">
-                {visibleHeroContent.stats.slice(0, 3).map((stat) => (
-                  <div
-                    key={stat.label}
-                    className="min-w-0 rounded-2xl border border-black/5 bg-white p-4 shadow-sm flex flex-col gap-2"
-                  >
-                    <p className="text-xs font-medium uppercase tracking-[0.22em] text-neutral-500">
-                      {stat.label}
+                  {visibleHeroContent.chips.length > 0 && (
+                    <p className="text-xs text-stone-500">
+                      {visibleHeroContent.chips
+                        .slice(0, 3)
+                        .map((chip) => chip.label)
+                        .join(" · ")}
                     </p>
-                    <p className="text-2xl font-semibold leading-tight text-neutral-900 tabular-nums">
-                      {stat.value}
-                    </p>
-                    {stat.subValue && (
-                      <p className="text-xs text-muted-foreground">{stat.subValue}</p>
-                    )}
-                  </div>
-                ))}
+                  )}
+                </div>
+                <div className="grid w-full gap-3 sm:grid-cols-2 xl:grid-cols-3 lg:flex-1">
+                  {visibleHeroContent.stats.slice(0, 3).map((stat) => (
+                    <div
+                      key={stat.label}
+                      className="min-w-0 rounded-2xl border border-stone-200/60 bg-white/70 p-4 shadow-sm backdrop-blur-sm flex flex-col gap-1.5"
+                    >
+                      <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-stone-500">
+                        {stat.label}
+                      </p>
+                      <p className="text-2xl font-black leading-tight text-stone-900 tabular-nums">
+                        {stat.value}
+                      </p>
+                      {stat.subValue && (
+                        <p className="text-xs text-stone-500">{stat.subValue}</p>
+                      )}
+                    </div>
+                  ))}
+                </div>
               </div>
             </div>
           </div>
         )}
 
         {activeTab === "home" && smartNextSteps.length > 0 && (
-          <Card data-testid="home-smart-next-steps" className="mb-5 border-black/5 bg-white/90">
+          <Card data-testid="home-smart-next-steps" className="mb-5 border-stone-200/60 bg-stone-50/40">
             <CardHeader className="gap-4 pb-3">
               <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
                 <div className="space-y-2">
@@ -5738,15 +5744,15 @@ export default function InventorySystem() {
                   type="button"
                   onClick={() => handleTabChange(item.tab)}
                   className={cn(
-                    "rounded-2xl border bg-white p-4 text-left transition",
+                    "rounded-2xl border p-4 text-left transition",
                     isActive
-                      ? "border-emerald-300 shadow-sm ring-2 ring-emerald-100"
-                      : "border-black/5 hover:border-emerald-200 hover:shadow-sm",
+                      ? "border-emerald-200 bg-emerald-50/60 shadow-sm ring-2 ring-emerald-100"
+                      : "border-stone-200/70 bg-amber-50/20 hover:border-amber-200 hover:bg-amber-50/40 hover:shadow-sm",
                   )}
                 >
-                  <p className="text-xs uppercase tracking-[0.18em] text-neutral-500">{item.label}</p>
-                  <p className="mt-2 text-xl font-semibold text-neutral-900 tabular-nums">{item.value}</p>
-                  <p className="mt-1 text-xs text-neutral-500">{item.subValue}</p>
+                  <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-stone-500">{item.label}</p>
+                  <p className="mt-2 text-xl font-black text-stone-900 tabular-nums">{item.value}</p>
+                  <p className="mt-1 text-xs text-stone-500">{item.subValue}</p>
                 </button>
               )
             })}
@@ -5754,7 +5760,7 @@ export default function InventorySystem() {
         )}
 
         <div className="mb-5 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-          <div className="inline-flex items-center gap-2 rounded-full border border-black/10 bg-white/80 px-3 py-1.5 text-xs text-slate-600">
+          <div className="inline-flex items-center gap-2 rounded-full border border-stone-200/70 bg-stone-50/80 px-3 py-1.5 text-xs text-stone-600">
             {syncError ? (
               <>
                 <AlertTriangle className="h-3.5 w-3.5 text-rose-500" />
@@ -6165,6 +6171,32 @@ export default function InventorySystem() {
             </div>
           )
         })()}
+        {/* ── Earthy tab page header — non-home desktop ─────── */}
+        {activeTab !== DASHBOARD_LAUNCHER_TAB && activeTab !== "home" && !isMobile && tabMeta[activeTab] && (() => {
+          const meta = tabMeta[activeTab]
+          const Icon = meta.icon
+          const groupStyle: Record<string, { icon: string; groupLabel: string }> = {
+            operations: { icon: "bg-emerald-100/60 border-emerald-200/80 text-emerald-700", groupLabel: "Operations" },
+            finance:    { icon: "bg-amber-100/60 border-amber-200/80 text-amber-700",       groupLabel: "Finance" },
+            insights:   { icon: "bg-stone-100 border-stone-200 text-stone-600",             groupLabel: "Reports" },
+            dashboard:  { icon: "bg-stone-100 border-stone-200 text-stone-600",             groupLabel: "" },
+          }
+          const gs = groupStyle[activeTabGroup] ?? groupStyle.dashboard
+          return (
+            <div className="mb-4 flex items-center gap-3">
+              <span className={cn("flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border", gs.icon)}>
+                <Icon className="h-[17px] w-[17px]" />
+              </span>
+              <div>
+                {gs.groupLabel && (
+                  <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-stone-400 leading-none mb-0.5">{gs.groupLabel}</p>
+                )}
+                <h1 className="text-lg font-black text-stone-900 leading-tight">{meta.label}</h1>
+              </div>
+            </div>
+          )
+        })()}
+
         <Tabs value={activeTab} onValueChange={handleTabChange} className="w-full space-y-4">
           {/* Sub-tab bar — desktop wraps, mobile scrolls horizontally */}
           {activeTab !== DASHBOARD_LAUNCHER_TAB && activeTabGroup !== "dashboard" && activeSectionTabs.length > 0 && (
@@ -6234,26 +6266,13 @@ export default function InventorySystem() {
           </TabsContent>
 
           <TabsContent value="home" className="space-y-6" forceMount={isTabLoaded("home") ? true : undefined}>
-            {/* ── Desktop: estate header + season strip ── */}
+            {/* ── Desktop: season strip ── */}
             {!isMobile && (
-              <div className="space-y-3">
-                <div className="relative overflow-hidden rounded-3xl border border-stone-200/80 bg-gradient-to-br from-stone-900 via-stone-800 to-emerald-900 px-7 py-5">
-                  <div className="pointer-events-none absolute inset-0 opacity-[0.04]"
-                    style={{ backgroundImage: "radial-gradient(ellipse at 80% 20%, #d4a574 0%, transparent 60%), radial-gradient(ellipse at 10% 80%, #4ade80 0%, transparent 50%)" }}
-                  />
-                  <div className="relative">
-                    <p className="text-stone-400/80 text-[10px] font-bold uppercase tracking-[0.2em] mb-1">Dashboard</p>
-                    <h1 className="text-2xl font-black text-white leading-tight">
-                      {tenantSettings.estateName || "FarmFlow"}
-                    </h1>
-                  </div>
-                </div>
-                <SeasonProgressStrip
-                  fiscalYear={currentFiscalYear}
-                  progress={seasonProgress}
-                  activityStreak={activityStreak}
-                />
-              </div>
+              <SeasonProgressStrip
+                fiscalYear={currentFiscalYear}
+                progress={seasonProgress}
+                activityStreak={activityStreak}
+              />
             )}
 
             {/* ── Mobile home: estate header + gaps + quick log ── */}
