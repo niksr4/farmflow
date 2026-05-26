@@ -124,7 +124,7 @@ export default function TodayGapsCard({ onNavigate, className }: Props) {
 
   if (loading) {
     return (
-      <div className={cn("rounded-3xl bg-white shadow-sm overflow-hidden", className)}>
+      <div className={cn("rounded-3xl border border-stone-100 bg-stone-50 overflow-hidden", className)}>
         <div className="flex items-center justify-center py-10">
           <Loader2 className="h-6 w-6 animate-spin text-stone-300" />
         </div>
