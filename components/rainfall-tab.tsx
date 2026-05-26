@@ -77,6 +77,7 @@ export default function RainfallTab({ username, showDataToolsControls = false }:
   const { user } = useAuth()
   const canDelete = user?.role === "admin" || user?.role === "owner"
   const isMobile = useMediaQuery("(max-width: 768px)")
+  const [showAnalysis, setShowAnalysis] = useState(false)
   const [records, setRecords] = useState<RainfallRecord[]>([])
   const [selectedDate, setSelectedDate] = useState<Date>(new Date())
   const [calendarMonth, setCalendarMonth] = useState<Date>(new Date())
@@ -862,7 +863,17 @@ export default function RainfallTab({ username, showDataToolsControls = false }:
         </CardContent>
       </Card>
 
-      <Card className="border-border/70 bg-white/90">
+      <div className="flex justify-center">
+        <button
+          type="button"
+          onClick={() => setShowAnalysis(v => !v)}
+          className="inline-flex items-center gap-1.5 rounded-full border border-sky-200 bg-sky-50 px-4 py-1.5 text-xs font-semibold text-sky-700 hover:bg-sky-100 transition-colors"
+        >
+          {showAnalysis ? "Hide pattern analysis ▲" : "Show pattern analysis ▼"}
+        </button>
+      </div>
+
+      {showAnalysis && <Card className="border-border/70 bg-white/90">
         <CardHeader>
           <CardTitle>Rainfall Pattern Watch (Last 8 Weeks)</CardTitle>
           <CardDescription>Daily rainfall signal vs rolling 7-day average to detect wet and dry streaks.</CardDescription>
@@ -934,9 +945,9 @@ export default function RainfallTab({ username, showDataToolsControls = false }:
             </div>
           </div>
         </CardContent>
-      </Card>
+      </Card>}
 
-      <RainfallHeatmap records={normalizedRecords} currentYear={currentYear} />
+      {showAnalysis && <RainfallHeatmap records={normalizedRecords} currentYear={currentYear} />}
 
       <Card>
         <CardHeader>
