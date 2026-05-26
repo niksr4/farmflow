@@ -6223,41 +6223,53 @@ export default function InventorySystem() {
             <WorkspaceLauncher
               sections={launcherSections}
               canShowAccounts={canShowAccounts}
+              canShowRainfall={canShowRainfall}
               isMobile={isMobile}
               onTabChange={handleTabChange}
               onAccountsExpense={() => { setAccountsInitialTab("expenses"); handleTabChange("accounts") }}
               onAccountsLabor={() => { setAccountsInitialTab("labor"); handleTabChange("accounts") }}
               buildWorkspaceHref={buildWorkspaceHref}
+              estateName={tenantSettings.estateName}
             />
           </TabsContent>
 
           <TabsContent value="home" className="space-y-6" forceMount={isTabLoaded("home") ? true : undefined}>
+            {/* ── Desktop: estate header + season strip ── */}
             {!isMobile && (
-              <SeasonProgressStrip
-                fiscalYear={currentFiscalYear}
-                progress={seasonProgress}
-                activityStreak={activityStreak}
-              />
+              <div className="space-y-3">
+                <div className="relative overflow-hidden rounded-3xl border border-stone-200/80 bg-gradient-to-br from-stone-900 via-stone-800 to-emerald-900 px-7 py-5">
+                  <div className="pointer-events-none absolute inset-0 opacity-[0.04]"
+                    style={{ backgroundImage: "radial-gradient(ellipse at 80% 20%, #d4a574 0%, transparent 60%), radial-gradient(ellipse at 10% 80%, #4ade80 0%, transparent 50%)" }}
+                  />
+                  <div className="relative">
+                    <p className="text-stone-400/80 text-[10px] font-bold uppercase tracking-[0.2em] mb-1">Dashboard</p>
+                    <h1 className="text-2xl font-black text-white leading-tight">
+                      {tenantSettings.estateName || "FarmFlow"}
+                    </h1>
+                  </div>
+                </div>
+                <SeasonProgressStrip
+                  fiscalYear={currentFiscalYear}
+                  progress={seasonProgress}
+                  activityStreak={activityStreak}
+                />
+              </div>
             )}
 
-            {/* ── Mobile home: greeting + gaps + quick log ── */}
+            {/* ── Mobile home: estate header + gaps + quick log ── */}
             {isMobile && (
-              <div className="space-y-5 pb-24">
-                {/* Greeting */}
-                <div className="px-1">
-                  <p className="text-3xl font-black text-stone-900 leading-tight">
-                    {(() => {
-                      const h = new Date().getHours()
-                      if (h < 12) return "Good morning"
-                      if (h < 17) return "Good afternoon"
-                      return "Good evening"
-                    })()}
-                  </p>
-                  {tenantSettings.estateName && (
-                    <p className="text-base font-semibold text-stone-400 mt-0.5">
-                      {tenantSettings.estateName}
-                    </p>
-                  )}
+              <div className="space-y-4 pb-24">
+                {/* Estate morning header */}
+                <div className="relative overflow-hidden rounded-3xl border border-stone-200/80 bg-gradient-to-br from-stone-900 via-stone-800 to-emerald-900 px-5 py-5">
+                  <div className="pointer-events-none absolute inset-0 opacity-[0.04]"
+                    style={{ backgroundImage: "radial-gradient(ellipse at 80% 20%, #d4a574 0%, transparent 60%), radial-gradient(ellipse at 10% 80%, #4ade80 0%, transparent 50%)" }}
+                  />
+                  <div className="relative">
+                    <p className="text-stone-400/80 text-[10px] font-bold uppercase tracking-[0.2em] mb-0.5">Home</p>
+                    <h1 className="text-2xl font-black text-white leading-tight">
+                      {tenantSettings.estateName || "FarmFlow"}
+                    </h1>
+                  </div>
                 </div>
 
                 <TodayGapsCard onNavigate={handleTabChange} />
