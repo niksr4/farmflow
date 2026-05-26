@@ -29,39 +29,44 @@ const toneStyles: Record<
     icon: string
     accent: string
     chevron: string
+    bullet: string
   }
 > = {
   operations: {
-    card: "border-emerald-200/80 bg-[linear-gradient(180deg,rgba(236,253,245,0.95)_0%,rgba(255,255,255,0.98)_100%)]",
-    badge: "border-emerald-200 bg-white text-emerald-700",
-    tip: "border-emerald-100 bg-white/85 text-emerald-900",
-    icon: "border border-emerald-100 bg-emerald-50 text-emerald-600",
+    card: "border-emerald-200/60 bg-gradient-to-br from-stone-50 via-emerald-50/60 to-stone-50/80",
+    badge: "border-emerald-200/80 bg-emerald-100/90 text-emerald-700",
+    tip: "border-emerald-200/60 bg-emerald-50/60 text-emerald-900",
+    icon: "border border-emerald-200/60 bg-emerald-100/70 text-emerald-700",
     accent: "bg-emerald-500",
     chevron: "text-emerald-600 hover:bg-emerald-50",
+    bullet: "border-stone-200/50 bg-stone-50/70",
   },
   finance: {
-    card: "border-amber-200/80 bg-[linear-gradient(180deg,rgba(255,251,235,0.95)_0%,rgba(255,255,255,0.98)_100%)]",
-    badge: "border-amber-200 bg-white text-amber-700",
-    tip: "border-amber-100 bg-white/85 text-amber-950",
-    icon: "border border-amber-100 bg-amber-50 text-amber-600",
+    card: "border-amber-200/60 bg-gradient-to-br from-amber-50/70 via-stone-50 to-amber-50/40",
+    badge: "border-amber-200/80 bg-amber-100/90 text-amber-700",
+    tip: "border-amber-200/60 bg-amber-50/60 text-amber-950",
+    icon: "border border-amber-200/60 bg-amber-100/70 text-amber-700",
     accent: "bg-amber-500",
     chevron: "text-amber-600 hover:bg-amber-50",
+    bullet: "border-stone-200/50 bg-stone-50/70",
   },
   settings: {
-    card: "border-slate-200/80 bg-[linear-gradient(180deg,rgba(248,250,252,0.96)_0%,rgba(255,255,255,0.98)_100%)]",
-    badge: "border-slate-200 bg-white text-slate-700",
-    tip: "border-slate-200 bg-white/85 text-slate-900",
-    icon: "border border-slate-200 bg-slate-50 text-slate-600",
-    accent: "bg-slate-500",
-    chevron: "text-slate-600 hover:bg-slate-50",
+    card: "border-stone-200/70 bg-gradient-to-br from-stone-50 via-stone-100/50 to-stone-50/80",
+    badge: "border-stone-200/80 bg-stone-100/90 text-stone-700",
+    tip: "border-stone-200/60 bg-stone-100/60 text-stone-900",
+    icon: "border border-stone-200/60 bg-stone-100/70 text-stone-600",
+    accent: "bg-stone-500",
+    chevron: "text-stone-600 hover:bg-stone-50",
+    bullet: "border-stone-200/50 bg-stone-50/70",
   },
   onboarding: {
-    card: "border-cyan-200/80 bg-[linear-gradient(180deg,rgba(236,254,255,0.96)_0%,rgba(255,255,255,0.98)_100%)]",
-    badge: "border-cyan-200 bg-white text-cyan-700",
-    tip: "border-cyan-100 bg-white/85 text-cyan-950",
-    icon: "border border-cyan-100 bg-cyan-50 text-cyan-600",
-    accent: "bg-cyan-500",
-    chevron: "text-cyan-600 hover:bg-cyan-50",
+    card: "border-sky-200/60 bg-gradient-to-br from-stone-50 via-sky-50/60 to-stone-50/80",
+    badge: "border-sky-200/80 bg-sky-100/90 text-sky-700",
+    tip: "border-sky-200/60 bg-sky-50/60 text-sky-950",
+    icon: "border border-sky-200/60 bg-sky-100/70 text-sky-700",
+    accent: "bg-sky-500",
+    chevron: "text-sky-600 hover:bg-sky-50",
+    bullet: "border-stone-200/50 bg-stone-50/70",
   },
 }
 
@@ -142,22 +147,22 @@ export default function TaskGuideCard({
         {!isCollapsed && (
           <div className="space-y-2">
             <CardTitle className="text-lg leading-tight">{title}</CardTitle>
-            <CardDescription className="max-w-2xl text-sm leading-relaxed text-slate-700">{description}</CardDescription>
+            <CardDescription className="max-w-2xl text-sm leading-relaxed text-stone-600">{description}</CardDescription>
           </div>
         )}
         {isCollapsed && (
-          <p className="text-sm text-slate-500">{title}</p>
+          <p className="text-sm text-stone-500">{title}</p>
         )}
       </CardHeader>
       {!isCollapsed && (
         <CardContent className="space-y-4 pt-0">
-          <ul className="space-y-2 text-sm text-slate-700">
+          <ul className="space-y-2 text-sm text-stone-700">
             {bullets.map((bullet) => (
-              <li key={bullet} className="flex gap-3 rounded-2xl border border-white/80 bg-white/80 px-3.5 py-3 shadow-sm">
+              <li key={bullet} className={cn("flex gap-3 rounded-2xl border px-3.5 py-3 shadow-sm", toneStyle.bullet)}>
                 <span className={cn("mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full", toneStyle.icon)}>
                   <CheckCircle2 className="h-4 w-4" />
                 </span>
-                <span className="leading-relaxed text-slate-700">{bullet}</span>
+                <span className="leading-relaxed text-stone-700">{bullet}</span>
               </li>
             ))}
           </ul>

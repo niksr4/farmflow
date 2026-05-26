@@ -54,14 +54,14 @@ export default function MorningBriefCard({
         "rounded-2xl border overflow-hidden",
         hasContent
           ? "border-emerald-200/70 bg-gradient-to-br from-emerald-700 to-emerald-800 text-white shadow-[0_8px_32px_-12px_rgba(5,100,70,0.45)]"
-          : "border-black/5 bg-white/90",
+          : "border-stone-200/60 bg-gradient-to-br from-stone-50 to-stone-50/80",
       )}
     >
       {/* Header */}
       <div
         className={cn(
           "flex items-center justify-between px-5 py-3.5",
-          hasContent ? "border-b border-white/10" : "border-b border-black/5",
+          hasContent ? "border-b border-white/10" : "border-b border-stone-200/50",
         )}
       >
         <div className="flex items-center gap-2.5">
