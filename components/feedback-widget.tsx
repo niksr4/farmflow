@@ -77,7 +77,7 @@ export default function FeedbackWidget({ currentTab }: Props) {
     <>
       {/* Panel */}
       {open && (
-        <div className="fixed bottom-[136px] left-4 z-50 w-[min(340px,calc(100vw-2rem))] overflow-hidden rounded-2xl border border-black/10 bg-white shadow-[0_20px_60px_-20px_rgba(0,0,0,0.35)] animate-in fade-in slide-in-from-bottom-2 duration-200 sm:bottom-[88px] sm:left-24">
+        <div className="fixed bottom-[calc(9rem+env(safe-area-inset-bottom))] left-4 z-50 w-[min(340px,calc(100vw-2rem))] overflow-hidden rounded-2xl border border-black/10 bg-white shadow-[0_20px_60px_-20px_rgba(0,0,0,0.35)] animate-in fade-in slide-in-from-bottom-2 duration-200 sm:bottom-[88px] sm:left-24">
           {/* Header */}
           <div className="flex items-center justify-between border-b border-black/5 px-4 py-3">
             <p className="text-sm font-semibold text-neutral-800">Help &amp; Feedback</p>
@@ -181,7 +181,7 @@ export default function FeedbackWidget({ currentTab }: Props) {
 
       {/* Floating trigger — desktop: right of 76px sidebar, aligned with AI assistant baseline.
           Mobile: elevated above the 60px bottom nav bar on the left. */}
-      <div className="fixed bottom-[72px] left-4 z-50 sm:bottom-6 sm:left-24">
+      <div className="fixed bottom-[calc(5rem+env(safe-area-inset-bottom))] left-4 z-50 sm:bottom-6 sm:left-24">
         <button
           type="button"
           onClick={open ? () => setOpen(false) : handleOpen}
