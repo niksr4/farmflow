@@ -5583,7 +5583,7 @@ export default function InventorySystem() {
           </Card>
         )}
 
-        {activeTab === "home" && !isOwner && !showOnboarding && (
+        {activeTab === "home" && !isOwner && !showOnboarding && !isMobile && (
           <WorkspaceHints onAction={handleWorkspaceHintAction} />
         )}
 
@@ -5664,7 +5664,7 @@ export default function InventorySystem() {
           </div>
         )}
 
-        {activeTab === "home" && smartNextSteps.length > 0 && (
+        {activeTab === "home" && smartNextSteps.length > 0 && !isMobile && (
           <Card data-testid="home-smart-next-steps" className="mb-5 border-stone-200/60 bg-stone-50/40">
             <CardHeader className="gap-4 pb-3">
               <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
@@ -6393,8 +6393,8 @@ export default function InventorySystem() {
               </div>
             )}
 
-            {/* ── Morning Brief ── */}
-            {canShowIntelligence && (
+            {/* ── Morning Brief — desktop only ── */}
+            {canShowIntelligence && !isMobile && (
               <MorningBriefCard
                 highlights={intelligenceHighlights}
                 insights={intelligenceInsights}
@@ -6410,7 +6410,7 @@ export default function InventorySystem() {
               />
             )}
 
-            <HomeKpiCardsGrid
+            {!isMobile && <HomeKpiCardsGrid
               fiscalYear={currentFiscalYear}
               showFinancialHomeCards={showFinancialHomeCards}
               processingTotals={processingTotals}
@@ -6435,10 +6435,10 @@ export default function InventorySystem() {
               canShowSeason={canShowSeason}
               selectedLocationId={selectedLocationId}
               onDrilldown={openDrilldown}
-            />
+            />}
 
-            {/* Recent Activity Feed */}
-            {(recentActivityLoading || (recentActivity && recentActivity.length > 0)) && (
+            {/* Recent Activity Feed — desktop only */}
+            {!isMobile && (recentActivityLoading || (recentActivity && recentActivity.length > 0)) && (
               <Card className="border-black/5 bg-white/90">
                 <CardHeader className="pb-3">
                   <CardTitle className="text-base">Recent Activity</CardTitle>
