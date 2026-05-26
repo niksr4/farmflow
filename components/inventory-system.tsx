@@ -4729,11 +4729,12 @@ export default function InventorySystem() {
   }, [])
 
   const goToWorkspaceNavigator = useCallback(() => {
-    setActiveTab(DASHBOARD_LAUNCHER_TAB)
-    markTabAsLoaded(DASHBOARD_LAUNCHER_TAB)
+    const targetTab = isMobile ? "home" : DASHBOARD_LAUNCHER_TAB
+    setActiveTab(targetTab)
+    markTabAsLoaded(targetTab)
 
     const params = new URLSearchParams(searchParams.toString())
-    params.set("tab", DASHBOARD_LAUNCHER_TAB)
+    params.set("tab", targetTab)
     params.delete("locationId")
     params.delete(DRILLDOWN_ITEM_PARAM)
     params.delete(DRILLDOWN_TXN_SEARCH_PARAM)
@@ -4742,7 +4743,7 @@ export default function InventorySystem() {
 
     const nextPath = `/dashboard?${params.toString()}`
     router.replace(nextPath, { scroll: false })
-  }, [markTabAsLoaded, router, searchParams])
+  }, [isMobile, markTabAsLoaded, router, searchParams])
 
   type TabGroupKey = "dashboard" | "operations" | "finance" | "insights"
   type SectionTabItem = {
@@ -4921,14 +4922,17 @@ export default function InventorySystem() {
   }, [accountsPanelParam, tabParam])
 
   useEffect(() => {
+    const defaultTab = isMobile ? "home" : DASHBOARD_LAUNCHER_TAB
     if (!tabParam) {
-      if (activeTab !== DASHBOARD_LAUNCHER_TAB) {
-        setActiveTab(DASHBOARD_LAUNCHER_TAB)
+      if (activeTab !== defaultTab) {
+        setActiveTab(defaultTab)
       }
       return
     }
     if (tabParam === DASHBOARD_LAUNCHER_TAB) {
-      if (activeTab !== DASHBOARD_LAUNCHER_TAB) {
+      if (isMobile) {
+        setActiveTab("home")
+      } else if (activeTab !== DASHBOARD_LAUNCHER_TAB) {
         setActiveTab(DASHBOARD_LAUNCHER_TAB)
       }
       return
@@ -5629,6 +5633,33 @@ export default function InventorySystem() {
                   ))}
                 </div>
               </div>
+              {canShowAccounts && (
+                <div className="mt-4 flex flex-wrap gap-2 border-t border-stone-200/50 pt-4">
+                  <button
+                    type="button"
+                    onClick={() => { handleTabChange("accounts"); setTimeout(() => window.dispatchEvent(new CustomEvent("farmflow:open-quick-log", { detail: { type: "labor" } })), 100) }}
+                    className="flex items-center gap-2 rounded-full border border-emerald-200/80 bg-emerald-700 px-4 py-2 text-sm font-bold text-white shadow-sm hover:bg-emerald-800 transition-colors"
+                  >
+                    👷 Log labor
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => { handleTabChange("accounts"); setTimeout(() => window.dispatchEvent(new CustomEvent("farmflow:open-quick-log", { detail: { type: "expense" } })), 100) }}
+                    className="flex items-center gap-2 rounded-full border border-amber-200/80 bg-amber-700 px-4 py-2 text-sm font-bold text-white shadow-sm hover:bg-amber-800 transition-colors"
+                  >
+                    💸 Log expense
+                  </button>
+                  {canShowRainfallSection && (
+                    <button
+                      type="button"
+                      onClick={() => handleTabChange("rainfall")}
+                      className="flex items-center gap-2 rounded-full border border-sky-200/80 bg-sky-700 px-4 py-2 text-sm font-bold text-white shadow-sm hover:bg-sky-800 transition-colors"
+                    >
+                      🌧️ Log rainfall
+                    </button>
+                  )}
+                </div>
+              )}
             </div>
           </div>
         )}
@@ -5759,7 +5790,7 @@ export default function InventorySystem() {
           </div>
         )}
 
-        <div className="mb-5 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+        {!isMobile && <div className="mb-5 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
           <div className="inline-flex items-center gap-2 rounded-full border border-stone-200/70 bg-stone-50/80 px-3 py-1.5 text-xs text-stone-600">
             {syncError ? (
               <>
@@ -5813,7 +5844,7 @@ export default function InventorySystem() {
               {isSyncing ? "Syncing..." : "Sync"}
             </Button>
           </div>
-        </div>
+        </div>}
 
         {writeQueueStatus.pendingCount > 0 && (
           <Card className="mb-4 border-amber-200 bg-amber-50/70">
@@ -6291,6 +6322,47 @@ export default function InventorySystem() {
                   </div>
                 </div>
 
+                {/* Quick action tiles */}
+                {canShowAccounts && (
+                  <div className="grid grid-cols-3 gap-2">
+                    <button
+                      type="button"
+                      onClick={() => handleTabChange("accounts")}
+                      className="flex flex-col items-center justify-center gap-1.5 rounded-2xl bg-emerald-700 py-4 px-2 shadow-sm active:scale-[0.97] touch-manipulation"
+                    >
+                      <span className="text-xl leading-none">👷</span>
+                      <span className="text-[11px] font-bold text-white leading-tight text-center">Log Labor</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleTabChange("accounts")}
+                      className="flex flex-col items-center justify-center gap-1.5 rounded-2xl bg-amber-700 py-4 px-2 shadow-sm active:scale-[0.97] touch-manipulation"
+                    >
+                      <span className="text-xl leading-none">💸</span>
+                      <span className="text-[11px] font-bold text-white leading-tight text-center">Log Expense</span>
+                    </button>
+                    {canShowRainfallSection ? (
+                      <button
+                        type="button"
+                        onClick={() => handleTabChange("rainfall")}
+                        className="flex flex-col items-center justify-center gap-1.5 rounded-2xl bg-sky-700 py-4 px-2 shadow-sm active:scale-[0.97] touch-manipulation"
+                      >
+                        <span className="text-xl leading-none">🌧️</span>
+                        <span className="text-[11px] font-bold text-white leading-tight text-center">Rainfall</span>
+                      </button>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => handleTabChange("inventory")}
+                        className="flex flex-col items-center justify-center gap-1.5 rounded-2xl bg-violet-700 py-4 px-2 shadow-sm active:scale-[0.97] touch-manipulation"
+                      >
+                        <span className="text-xl leading-none">📦</span>
+                        <span className="text-[11px] font-bold text-white leading-tight text-center">Inventory</span>
+                      </button>
+                    )}
+                  </div>
+                )}
+
                 <TodayGapsCard onNavigate={handleTabChange} />
 
                 {canShowAccounts && (
@@ -6308,6 +6380,16 @@ export default function InventorySystem() {
                     }}
                   />
                 )}
+
+                {/* Explore all modules link */}
+                <button
+                  type="button"
+                  onClick={() => setIsMobileSidebarOpen(true)}
+                  className="w-full flex items-center justify-between rounded-2xl border border-stone-200 bg-stone-50 px-4 py-3.5 text-left touch-manipulation active:bg-stone-100 transition-colors"
+                >
+                  <span className="text-sm font-semibold text-stone-700">Explore all modules</span>
+                  <span className="text-stone-400 text-lg leading-none">›</span>
+                </button>
               </div>
             )}
 
