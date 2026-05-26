@@ -47,44 +47,44 @@ const accentStyles: Record<
   }
 > = {
   emerald: {
-    shell: "border-emerald-200/80 bg-gradient-to-br from-white via-emerald-50/80 to-slate-50/90",
+    shell: "border-emerald-200/60 bg-gradient-to-br from-stone-50 via-emerald-50/70 to-stone-50/90",
     darkShell: "dark:border-emerald-500/20 dark:bg-card dark:[background-image:none]",
-    glow: "bg-[radial-gradient(circle_at_top_right,_rgba(16,185,129,0.18),_transparent_42%),radial-gradient(circle_at_bottom_left,_rgba(52,211,153,0.14),_transparent_38%)]",
-    badge: "border-emerald-200 bg-white text-emerald-700",
-    text: "text-emerald-900",
-    statCard: "border-white/75",
+    glow: "bg-[radial-gradient(ellipse_at_top_right,_rgba(16,185,129,0.22),_transparent_50%),radial-gradient(ellipse_at_bottom_left,_rgba(180,140,80,0.1),_transparent_45%)]",
+    badge: "border-emerald-200/80 bg-emerald-100/90 text-emerald-700",
+    text: "text-stone-900",
+    statCard: "border-stone-200/50",
   },
   amber: {
-    shell: "border-amber-200/80 bg-gradient-to-br from-white via-amber-50/80 to-stone-50/90",
+    shell: "border-amber-200/60 bg-gradient-to-br from-amber-50/80 via-stone-50 to-amber-50/40",
     darkShell: "dark:border-amber-500/20 dark:bg-card dark:[background-image:none]",
-    glow: "bg-[radial-gradient(circle_at_top_right,_rgba(245,158,11,0.2),_transparent_42%),radial-gradient(circle_at_bottom_left,_rgba(251,191,36,0.16),_transparent_38%)]",
-    badge: "border-amber-200 bg-white text-amber-700",
-    text: "text-amber-950",
-    statCard: "border-white/75",
+    glow: "bg-[radial-gradient(ellipse_at_top_right,_rgba(245,158,11,0.26),_transparent_50%),radial-gradient(ellipse_at_bottom_left,_rgba(120,80,20,0.08),_transparent_45%)]",
+    badge: "border-amber-200/80 bg-amber-100/90 text-amber-700",
+    text: "text-stone-900",
+    statCard: "border-stone-200/50",
   },
   sky: {
-    shell: "border-sky-200/80 bg-gradient-to-br from-white via-sky-50/80 to-cyan-50/90",
+    shell: "border-sky-200/60 bg-gradient-to-br from-stone-50 via-sky-50/70 to-stone-50/90",
     darkShell: "dark:border-sky-500/20 dark:bg-card dark:[background-image:none]",
-    glow: "bg-[radial-gradient(circle_at_top_right,_rgba(14,165,233,0.16),_transparent_42%),radial-gradient(circle_at_bottom_left,_rgba(34,211,238,0.14),_transparent_38%)]",
-    badge: "border-sky-200 bg-white text-sky-700",
-    text: "text-sky-950",
-    statCard: "border-white/75",
+    glow: "bg-[radial-gradient(ellipse_at_top_right,_rgba(14,165,233,0.20),_transparent_50%),radial-gradient(ellipse_at_bottom_left,_rgba(100,150,180,0.1),_transparent_45%)]",
+    badge: "border-sky-200/80 bg-sky-100/90 text-sky-700",
+    text: "text-stone-900",
+    statCard: "border-stone-200/50",
   },
   slate: {
-    shell: "border-slate-200/90 bg-gradient-to-br from-white via-slate-50/85 to-zinc-50/90",
+    shell: "border-stone-200/70 bg-gradient-to-br from-stone-50 via-stone-100/60 to-stone-50/90",
     darkShell: "dark:border-white/[0.08] dark:bg-card dark:[background-image:none]",
-    glow: "bg-[radial-gradient(circle_at_top_right,_rgba(148,163,184,0.16),_transparent_42%),radial-gradient(circle_at_bottom_left,_rgba(203,213,225,0.14),_transparent_38%)]",
-    badge: "border-slate-200 bg-white text-slate-700",
-    text: "text-slate-900",
-    statCard: "border-white/75",
+    glow: "bg-[radial-gradient(ellipse_at_top_right,_rgba(120,100,80,0.12),_transparent_50%),radial-gradient(ellipse_at_bottom_left,_rgba(100,90,80,0.08),_transparent_45%)]",
+    badge: "border-stone-200/80 bg-stone-100/90 text-stone-600",
+    text: "text-stone-900",
+    statCard: "border-stone-200/50",
   },
   violet: {
-    shell: "border-violet-200/80 bg-gradient-to-br from-white via-violet-50/80 to-fuchsia-50/85",
+    shell: "border-violet-200/60 bg-gradient-to-br from-stone-50 via-violet-50/70 to-stone-50/90",
     darkShell: "dark:border-violet-500/20 dark:bg-card dark:[background-image:none]",
-    glow: "bg-[radial-gradient(circle_at_top_right,_rgba(139,92,246,0.16),_transparent_42%),radial-gradient(circle_at_bottom_left,_rgba(217,70,239,0.12),_transparent_38%)]",
-    badge: "border-violet-200 bg-white text-violet-700",
-    text: "text-violet-950",
-    statCard: "border-white/75",
+    glow: "bg-[radial-gradient(ellipse_at_top_right,_rgba(139,92,246,0.18),_transparent_50%),radial-gradient(ellipse_at_bottom_left,_rgba(217,70,239,0.10),_transparent_45%)]",
+    badge: "border-violet-200/80 bg-violet-100/90 text-violet-700",
+    text: "text-stone-900",
+    statCard: "border-stone-200/50",
   },
 }
 
@@ -105,10 +105,10 @@ const statToneStyles: Record<
   }
 > = {
   default: {
-    card: "border-slate-200/80 bg-white/88 dark:bg-card/70 dark:border-white/[0.07]",
-    label: "text-slate-500",
-    accent: "bg-slate-300/80 dark:bg-white/20",
-    detail: "text-slate-500",
+    card: "border-stone-200/70 bg-white/80 dark:bg-card/70 dark:border-white/[0.07]",
+    label: "text-stone-500",
+    accent: "bg-stone-300/70 dark:bg-white/20",
+    detail: "text-stone-500",
   },
   positive: {
     card: "border-emerald-200/80 bg-emerald-50/80 dark:bg-emerald-500/10 dark:border-emerald-500/25",
@@ -186,17 +186,17 @@ export default function WorkspacePageShell({
                 </Badge>
               ) : null}
               <div className="space-y-2">
-                <h1 className={cn("text-2xl font-semibold tracking-tight sm:text-[2rem]", accentStyle.text)}>{title}</h1>
-                <p className="max-w-3xl text-sm leading-6 text-slate-600 sm:text-[15px]">{description}</p>
+                <h1 className={cn("text-2xl font-black tracking-tight sm:text-[2rem] leading-tight", accentStyle.text)}>{title}</h1>
+                <p className="max-w-3xl text-sm leading-6 text-stone-600 sm:text-[15px]">{description}</p>
               </div>
               {supportingContent ? (
-                <div className="rounded-2xl border border-white/75 bg-white/72 px-4 py-3 text-sm leading-6 text-slate-700 shadow-sm backdrop-blur">
+                <div className="rounded-2xl border border-stone-200/60 bg-white/60 px-4 py-3 text-sm leading-6 text-stone-700 shadow-sm backdrop-blur">
                   {supportingContent}
                 </div>
               ) : null}
             </div>
             {actions ? (
-              <div className="shrink-0 rounded-[28px] border border-white/75 bg-white/82 p-3 shadow-[0_12px_28px_-24px_rgba(15,23,42,0.45)] backdrop-blur">
+              <div className="shrink-0 rounded-[28px] border border-stone-200/60 bg-white/70 p-3 shadow-[0_12px_28px_-24px_rgba(15,23,42,0.35)] backdrop-blur">
                 {actions}
               </div>
             ) : null}
@@ -223,7 +223,7 @@ export default function WorkspacePageShell({
                       </TooltipProvider>
                     )}
                   </div>
-                  <p className={cn("mt-2 text-xl font-semibold tracking-tight", statToneClasses[stat.tone || "default"])}>
+                  <p className={cn("mt-2 text-xl font-black tracking-tight tabular-nums", statToneClasses[stat.tone || "default"])}>
                     {stat.value}
                   </p>
                   {stat.detail ? (
