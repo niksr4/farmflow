@@ -1061,12 +1061,12 @@ export default function SalesTab({
       tone: "positive" as const,
       tooltip: "Total revenue from confirmed coffee sales records. Includes all coffee types sold this season.",
     },
-    {
+    ...(otherSalesEnabled ? [{
       label: "Other Revenue",
       value: formatCurrency(otherRevenue, 0),
-      detail: otherSalesEnabled ? `${formatNumber(otherSalesTotals.totalCount, 0)} other-sales records` : "Module not enabled",
-      tooltip: "Revenue from non-coffee estate products — pepper, timber, services, etc. Requires the Other Sales module.",
-    },
+      detail: `${formatNumber(otherSalesTotals.totalCount, 0)} other-sales records`,
+      tooltip: "Revenue from non-coffee estate products — pepper, timber, services, etc.",
+    }] : []),
     {
       label: "Available To Sell",
       value: `${formatNumber(selectionScopeAvailabilityTotals.totalAvailable, 0)} KGs`,
