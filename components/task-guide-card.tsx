@@ -86,7 +86,7 @@ export default function TaskGuideCard({
   const toneStyle = toneStyles[tone]
   const key = storageKey(eyebrow)
 
-  const [collapsed, setCollapsed] = useState(false)
+  const [collapsed, setCollapsed] = useState(true)
   const [mounted, setMounted] = useState(false)
 
   useEffect(() => {

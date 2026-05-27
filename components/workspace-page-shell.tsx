@@ -187,13 +187,8 @@ export default function WorkspacePageShell({
               ) : null}
               <div className="space-y-2">
                 <h1 className={cn("text-2xl font-black tracking-tight sm:text-[2rem] leading-tight", accentStyle.text)}>{title}</h1>
-                <p className="max-w-3xl text-sm leading-6 text-stone-600 sm:text-[15px]">{description}</p>
+                <p className="max-w-3xl text-xs text-stone-400">{description}</p>
               </div>
-              {supportingContent ? (
-                <div className="rounded-2xl border border-stone-200/60 bg-white/60 px-4 py-3 text-sm leading-6 text-stone-700 shadow-sm backdrop-blur">
-                  {supportingContent}
-                </div>
-              ) : null}
             </div>
             {actions ? (
               <div className="shrink-0 rounded-[28px] border border-stone-200/60 bg-white/70 p-3 shadow-[0_12px_28px_-24px_rgba(15,23,42,0.35)] backdrop-blur">
