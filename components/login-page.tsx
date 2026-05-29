@@ -159,7 +159,7 @@ export default function LoginPage() {
             </div>
           )}
 
-          <form onSubmit={handleLogin} className="space-y-4">
+          <form onSubmit={handleLogin} className="space-y-4" suppressHydrationWarning>
             <div>
               <div className="flex items-center gap-2">
                 <Label htmlFor="username" className="mb-1 block text-stone-200">
@@ -187,6 +187,7 @@ export default function LoginPage() {
                 <Input
                   id="username"
                   type="text"
+                  suppressHydrationWarning
                   value={username}
                   onChange={(e) => {
                     setUsername(e.target.value)
@@ -237,6 +238,7 @@ export default function LoginPage() {
                 <Input
                   id="password"
                   type={showPassword ? "text" : "password"}
+                  suppressHydrationWarning
                   value={password}
                   onChange={(e) => {
                     setPassword(e.target.value)

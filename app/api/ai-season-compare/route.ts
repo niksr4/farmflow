@@ -8,6 +8,7 @@ import { normalizeTenantContext, runTenantQuery } from "@/lib/server/tenant-db"
 import { CLAUDE_HAIKU } from "@/lib/server/claude"
 import { callAI, isAIConfigured } from "@/lib/server/ai-provider"
 import { sanitizeRouteError } from "@/lib/server/sanitize-route-error"
+import { readResponseCache, writeResponseCache } from "@/lib/server/response-cache"
 
 export const dynamic = "force-dynamic"
 export const revalidate = 0
@@ -84,6 +85,13 @@ export async function GET() {
   let rateHeaders: Record<string, string> = {}
   try {
     const sessionUser = await requireModuleAccess("ai-analysis")
+
+    const cacheKey = `ai-season-compare:${sessionUser.tenantId}`
+    const cachedCompare = await readResponseCache(cacheKey, 4 * 60 * 60)
+    if (cachedCompare !== null) {
+      return Response.json({ success: true, ...(cachedCompare as Record<string, unknown>) })
+    }
+
     const rateLimit = await checkRateLimit("aiSeasonCompare", sessionUser.tenantId)
     rateHeaders = buildRateLimitHeaders(rateLimit)
 
@@ -110,11 +118,21 @@ export async function GET() {
       endDate: `${prevFYStartYear + 1}-03-31`,
     }
 
+    // Cap both seasons at the same elapsed point so the comparison is fair.
+    // e.g. if today is May 28, compare Apr 1–May 28 this year vs Apr 1–May 28 last year.
+    const today = new Date()
+    const todayStr = today.toISOString().split("T")[0]
+    const prevYearEquivalent = new Date(today)
+    prevYearEquivalent.setFullYear(prevYearEquivalent.getFullYear() - 1)
+    const prevYearEquivalentStr = prevYearEquivalent.toISOString().split("T")[0]
+    // Clamp prev-year equivalent to within the previous FY bounds
+    const prevEndDate = prevYearEquivalentStr > prevFY.endDate ? prevFY.endDate : prevYearEquivalentStr
+
     const tenantContext = normalizeTenantContext(sessionUser.tenantId, sessionUser.role)
 
     const [curr, prev] = await Promise.all([
-      fetchSeasonAggregates(tenantContext, currentFY.startDate, currentFY.endDate),
-      fetchSeasonAggregates(tenantContext, prevFY.startDate, prevFY.endDate),
+      fetchSeasonAggregates(tenantContext, currentFY.startDate, todayStr),
+      fetchSeasonAggregates(tenantContext, prevFY.startDate, prevEndDate),
     ])
 
     // Check if there's enough data to compare
@@ -128,19 +146,22 @@ export async function GET() {
       )
     }
 
-    const dataSummary = `
-Season Comparison: ${prevFY.label} vs ${currentFY.label}
+    const periodLabel = `${currentFY.startDate} to ${todayStr}`
+    const prevPeriodLabel = `${prevFY.startDate} to ${prevEndDate}`
 
-${prevFY.label} (completed):
+    const dataSummary = `
+Same-period season comparison (both windows cover the same elapsed days into the fiscal year):
+
+${prevFY.label} — ${prevPeriodLabel}:
 - Pulping output: ${prev.pulpingKg.toLocaleString()} KG
 - Dispatch received: ${prev.dispatchBags.toLocaleString()} bags
 - Sales volume: ${prev.salesKg.toLocaleString()} KG | Revenue: ₹${prev.salesRevenue.toLocaleString()}
 - Labor cost: ₹${prev.laborCost.toLocaleString()} | Other expenses: ₹${prev.expenseCost.toLocaleString()}
 
-${currentFY.label} (in progress):
-- Pulping output: ${curr.pulpingKg.toLocaleString()} KG  (${pctChange(curr.pulpingKg, prev.pulpingKg)} vs last season)
-- Dispatch received: ${curr.dispatchBags.toLocaleString()} bags  (${pctChange(curr.dispatchBags, prev.dispatchBags)} vs last season)
-- Sales volume: ${curr.salesKg.toLocaleString()} KG | Revenue: ₹${curr.salesRevenue.toLocaleString()}  (${pctChange(curr.salesRevenue, prev.salesRevenue)} vs last season)
+${currentFY.label} — ${periodLabel} (in progress, same point in season):
+- Pulping output: ${curr.pulpingKg.toLocaleString()} KG  (${pctChange(curr.pulpingKg, prev.pulpingKg)} vs same point last season)
+- Dispatch received: ${curr.dispatchBags.toLocaleString()} bags  (${pctChange(curr.dispatchBags, prev.dispatchBags)} vs same point last season)
+- Sales volume: ${curr.salesKg.toLocaleString()} KG | Revenue: ₹${curr.salesRevenue.toLocaleString()}  (${pctChange(curr.salesRevenue, prev.salesRevenue)} vs same point last season)
 - Labor cost: ₹${curr.laborCost.toLocaleString()} | Other expenses: ₹${curr.expenseCost.toLocaleString()}
     `.trim()
 
@@ -151,26 +172,26 @@ ${currentFY.label} (in progress):
           max_tokens: 400,
           temperature: 0.2,
           system:
-            "You are FarmFlow Season Analyst. Write a concise 2–3 sentence year-on-year comparison for an estate manager. Ground every observation in the numbers provided. Use INR (₹) and KG. Be specific — name the metric and the percentage. No markdown, no bullet points, plain prose only.",
+            "You are FarmFlow Season Analyst. Write a concise 2–3 sentence year-on-year comparison for an estate manager. Both periods cover the same number of elapsed days into the fiscal year, so the comparison is apples-to-apples. Ground every observation in the numbers provided. Use INR (₹) and KG. Be specific — name the metric and the percentage. No markdown, no bullet points, plain prose only.",
           messages: [
             {
               role: "user",
-              content: `${dataSummary}\n\nWrite a 2–3 sentence YoY season summary highlighting the most important changes.`,
+              content: `${dataSummary}\n\nWrite a 2–3 sentence YoY season summary highlighting the most important changes. Both windows cover the same elapsed days into the season, so differences are meaningful.`,
             },
           ],
         })
       ).trim() || null
 
-    return Response.json(
-      {
-        success: true,
-        narrative,
-        currentFY: currentFY.label,
-        prevFY: prevFY.label,
-        metrics: { curr, prev },
-      },
-      { headers: rateHeaders },
-    )
+    const comparePayload = {
+      narrative,
+      currentFY: currentFY.label,
+      prevFY: prevFY.label,
+      currentPeriod: periodLabel,
+      prevPeriod: prevPeriodLabel,
+      metrics: { curr, prev },
+    }
+    await writeResponseCache(cacheKey, comparePayload)
+    return Response.json({ success: true, ...comparePayload }, { headers: rateHeaders })
   } catch (error) {
     if (isModuleAccessError(error)) {
       return Response.json({ success: false, error: "Module access disabled" }, { status: 403, headers: rateHeaders })

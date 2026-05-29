@@ -47,44 +47,44 @@ const accentStyles: Record<
   }
 > = {
   emerald: {
-    shell: "border-emerald-200/80 bg-gradient-to-br from-white via-emerald-50/80 to-slate-50/90",
+    shell: "border-emerald-200/60 bg-gradient-to-br from-stone-50 via-emerald-50/70 to-stone-50/90",
     darkShell: "dark:border-emerald-500/20 dark:bg-card dark:[background-image:none]",
-    glow: "bg-[radial-gradient(circle_at_top_right,_rgba(16,185,129,0.18),_transparent_42%),radial-gradient(circle_at_bottom_left,_rgba(52,211,153,0.14),_transparent_38%)]",
-    badge: "border-emerald-200 bg-white text-emerald-700",
-    text: "text-emerald-900",
-    statCard: "border-white/75",
+    glow: "bg-[radial-gradient(ellipse_at_top_right,_rgba(16,185,129,0.22),_transparent_50%),radial-gradient(ellipse_at_bottom_left,_rgba(180,140,80,0.1),_transparent_45%)]",
+    badge: "border-emerald-200/80 bg-emerald-100/90 text-emerald-700",
+    text: "text-stone-900",
+    statCard: "border-stone-200/50",
   },
   amber: {
-    shell: "border-amber-200/80 bg-gradient-to-br from-white via-amber-50/80 to-stone-50/90",
+    shell: "border-amber-200/60 bg-gradient-to-br from-amber-50/80 via-stone-50 to-amber-50/40",
     darkShell: "dark:border-amber-500/20 dark:bg-card dark:[background-image:none]",
-    glow: "bg-[radial-gradient(circle_at_top_right,_rgba(245,158,11,0.2),_transparent_42%),radial-gradient(circle_at_bottom_left,_rgba(251,191,36,0.16),_transparent_38%)]",
-    badge: "border-amber-200 bg-white text-amber-700",
-    text: "text-amber-950",
-    statCard: "border-white/75",
+    glow: "bg-[radial-gradient(ellipse_at_top_right,_rgba(245,158,11,0.26),_transparent_50%),radial-gradient(ellipse_at_bottom_left,_rgba(120,80,20,0.08),_transparent_45%)]",
+    badge: "border-amber-200/80 bg-amber-100/90 text-amber-700",
+    text: "text-stone-900",
+    statCard: "border-stone-200/50",
   },
   sky: {
-    shell: "border-sky-200/80 bg-gradient-to-br from-white via-sky-50/80 to-cyan-50/90",
+    shell: "border-sky-200/60 bg-gradient-to-br from-stone-50 via-sky-50/70 to-stone-50/90",
     darkShell: "dark:border-sky-500/20 dark:bg-card dark:[background-image:none]",
-    glow: "bg-[radial-gradient(circle_at_top_right,_rgba(14,165,233,0.16),_transparent_42%),radial-gradient(circle_at_bottom_left,_rgba(34,211,238,0.14),_transparent_38%)]",
-    badge: "border-sky-200 bg-white text-sky-700",
-    text: "text-sky-950",
-    statCard: "border-white/75",
+    glow: "bg-[radial-gradient(ellipse_at_top_right,_rgba(14,165,233,0.20),_transparent_50%),radial-gradient(ellipse_at_bottom_left,_rgba(100,150,180,0.1),_transparent_45%)]",
+    badge: "border-sky-200/80 bg-sky-100/90 text-sky-700",
+    text: "text-stone-900",
+    statCard: "border-stone-200/50",
   },
   slate: {
-    shell: "border-slate-200/90 bg-gradient-to-br from-white via-slate-50/85 to-zinc-50/90",
+    shell: "border-stone-200/70 bg-gradient-to-br from-stone-50 via-stone-100/60 to-stone-50/90",
     darkShell: "dark:border-white/[0.08] dark:bg-card dark:[background-image:none]",
-    glow: "bg-[radial-gradient(circle_at_top_right,_rgba(148,163,184,0.16),_transparent_42%),radial-gradient(circle_at_bottom_left,_rgba(203,213,225,0.14),_transparent_38%)]",
-    badge: "border-slate-200 bg-white text-slate-700",
-    text: "text-slate-900",
-    statCard: "border-white/75",
+    glow: "bg-[radial-gradient(ellipse_at_top_right,_rgba(120,100,80,0.12),_transparent_50%),radial-gradient(ellipse_at_bottom_left,_rgba(100,90,80,0.08),_transparent_45%)]",
+    badge: "border-stone-200/80 bg-stone-100/90 text-stone-600",
+    text: "text-stone-900",
+    statCard: "border-stone-200/50",
   },
   violet: {
-    shell: "border-violet-200/80 bg-gradient-to-br from-white via-violet-50/80 to-fuchsia-50/85",
+    shell: "border-violet-200/60 bg-gradient-to-br from-stone-50 via-violet-50/70 to-stone-50/90",
     darkShell: "dark:border-violet-500/20 dark:bg-card dark:[background-image:none]",
-    glow: "bg-[radial-gradient(circle_at_top_right,_rgba(139,92,246,0.16),_transparent_42%),radial-gradient(circle_at_bottom_left,_rgba(217,70,239,0.12),_transparent_38%)]",
-    badge: "border-violet-200 bg-white text-violet-700",
-    text: "text-violet-950",
-    statCard: "border-white/75",
+    glow: "bg-[radial-gradient(ellipse_at_top_right,_rgba(139,92,246,0.18),_transparent_50%),radial-gradient(ellipse_at_bottom_left,_rgba(217,70,239,0.10),_transparent_45%)]",
+    badge: "border-violet-200/80 bg-violet-100/90 text-violet-700",
+    text: "text-stone-900",
+    statCard: "border-stone-200/50",
   },
 }
 
@@ -105,10 +105,10 @@ const statToneStyles: Record<
   }
 > = {
   default: {
-    card: "border-slate-200/80 bg-white/88 dark:bg-card/70 dark:border-white/[0.07]",
-    label: "text-slate-500",
-    accent: "bg-slate-300/80 dark:bg-white/20",
-    detail: "text-slate-500",
+    card: "border-stone-200/70 bg-white/80 dark:bg-card/70 dark:border-white/[0.07]",
+    label: "text-stone-500",
+    accent: "bg-stone-300/70 dark:bg-white/20",
+    detail: "text-stone-500",
   },
   positive: {
     card: "border-emerald-200/80 bg-emerald-50/80 dark:bg-emerald-500/10 dark:border-emerald-500/25",
@@ -131,8 +131,9 @@ const statToneStyles: Record<
 }
 
 const textureStyle: CSSProperties = {
-  backgroundImage: "radial-gradient(circle at 1px 1px, rgba(15, 23, 42, 0.08) 1px, transparent 0)",
-  backgroundSize: "20px 20px",
+  backgroundImage: "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='200' viewBox='0 0 200 200'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.65' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='200' height='200' filter='url(%23n)' opacity='1'/%3E%3C/svg%3E\")",
+  opacity: 0.12,
+  mixBlendMode: "overlay" as const,
 }
 
 export default function WorkspacePageShell({
@@ -170,13 +171,17 @@ export default function WorkspacePageShell({
       <MotionSection
         {...headerAnimation}
         className={cn(
-          "relative overflow-hidden rounded-[32px] border shadow-[0_20px_48px_-32px_rgba(15,23,42,0.34)]",
+          "relative overflow-hidden rounded-[32px] border",
+          "shadow-[0_24px_60px_-28px_rgba(120,80,30,0.18),0_0_0_1px_rgba(200,160,80,0.05),inset_0_1px_0_rgba(255,255,255,0.55)]",
           accentStyle.shell,
           accentStyle.darkShell,
         )}
       >
         <div className={cn("absolute inset-0", accentStyle.glow)} />
-        <div className="absolute inset-0 opacity-35" style={textureStyle} />
+        {/* SVG grain noise — finer and blended */}
+        <div className="absolute inset-0 pointer-events-none" style={textureStyle} />
+        {/* Top-edge shimmer line */}
+        <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-white/50 to-transparent pointer-events-none" />
         <div className="relative flex flex-col gap-5 p-5 sm:p-6 lg:p-7">
           <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
             <div className="max-w-3xl space-y-3">
@@ -186,17 +191,12 @@ export default function WorkspacePageShell({
                 </Badge>
               ) : null}
               <div className="space-y-2">
-                <h1 className={cn("text-2xl font-semibold tracking-tight sm:text-[2rem]", accentStyle.text)}>{title}</h1>
-                <p className="max-w-3xl text-sm leading-6 text-slate-600 sm:text-[15px]">{description}</p>
+                <h1 className={cn("text-2xl font-black tracking-tight sm:text-[2rem] leading-tight", accentStyle.text)}>{title}</h1>
+                <p className="max-w-3xl text-xs text-stone-400">{description}</p>
               </div>
-              {supportingContent ? (
-                <div className="rounded-2xl border border-white/75 bg-white/72 px-4 py-3 text-sm leading-6 text-slate-700 shadow-sm backdrop-blur">
-                  {supportingContent}
-                </div>
-              ) : null}
             </div>
             {actions ? (
-              <div className="shrink-0 rounded-[28px] border border-white/75 bg-white/82 p-3 shadow-[0_12px_28px_-24px_rgba(15,23,42,0.45)] backdrop-blur">
+              <div className="shrink-0 rounded-[28px] border border-stone-200/60 bg-white/70 p-3 shadow-[0_12px_28px_-24px_rgba(15,23,42,0.35)] backdrop-blur">
                 {actions}
               </div>
             ) : null}
@@ -207,7 +207,12 @@ export default function WorkspacePageShell({
               {stats.map((stat) => (
                 <div
                   key={`${stat.label}-${stat.value}`}
-                  className={cn("rounded-2xl border p-4 shadow-[0_10px_20px_-18px_rgba(15,23,42,0.4)]", statToneStyles[stat.tone || "default"].card, accentStyle.statCard)}
+                  className={cn(
+                    "rounded-2xl border p-4",
+                    "shadow-[0_4px_16px_-6px_rgba(120,80,30,0.14),0_0_0_1px_rgba(200,160,80,0.04)]",
+                    "hover:shadow-[0_8px_24px_-6px_rgba(120,80,30,0.2)] transition-shadow duration-200",
+                    statToneStyles[stat.tone || "default"].card, accentStyle.statCard
+                  )}
                 >
                   <div className={cn("h-1.5 w-12 rounded-full", statToneStyles[stat.tone || "default"].accent)} />
                   <div className="mt-3 flex items-center gap-1.5">
@@ -223,7 +228,7 @@ export default function WorkspacePageShell({
                       </TooltipProvider>
                     )}
                   </div>
-                  <p className={cn("mt-2 text-xl font-semibold tracking-tight", statToneClasses[stat.tone || "default"])}>
+                  <p className={cn("mt-2 text-xl font-black tracking-tight tabular-nums", statToneClasses[stat.tone || "default"])}>
                     {stat.value}
                   </p>
                   {stat.detail ? (

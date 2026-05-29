@@ -2,7 +2,8 @@
 
 import { useCallback, useEffect, useState } from "react"
 import { useSession } from "next-auth/react"
-import { ChevronDown } from "lucide-react"
+import Link from "next/link"
+import { Building2, ChevronDown, KeyRound, Layers2, Lock, Settings2, UserCircle, Users } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -67,6 +68,7 @@ type SettingsGroupId = "profile" | "estate" | "operations" | "user-access" | "pr
 const SETTINGS_SECTION_TO_GROUP: Record<string, SettingsGroupId> = {
   "account-email": "profile",
   "account-language": "profile",
+  "account-security": "profile",
   "estate-identity": "estate",
   "estate-profile": "estate",
   "display-preferences": "estate",
@@ -87,6 +89,7 @@ function SettingsGroup({
   title,
   summary,
   sectionCountLabel,
+  icon: Icon,
   open,
   onOpenChange,
   children,
@@ -95,6 +98,7 @@ function SettingsGroup({
   title: string
   summary: string
   sectionCountLabel: string
+  icon?: React.ComponentType<{ className?: string }>
   open: boolean
   onOpenChange: (groupId: SettingsGroupId | null) => void
   children: React.ReactNode
@@ -114,19 +118,26 @@ function SettingsGroup({
             type="button"
             className="flex w-full items-start justify-between gap-4 px-5 py-4 text-left transition-colors hover:bg-slate-50/70 sm:px-6"
           >
-            <div className="space-y-2">
-              <div className="flex flex-wrap items-center gap-2">
-                <p className="text-sm font-semibold text-slate-900 sm:text-[15px]">{title}</p>
-                <Badge variant="outline" className="border-slate-200 bg-white/90 text-slate-600">
-                  {sectionCountLabel}
-                </Badge>
+            <div className="flex min-w-0 items-start gap-3">
+              {Icon ? (
+                <div className={cn(
+                  "mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border shadow-sm transition-colors",
+                  open ? "border-emerald-200 bg-emerald-50 text-emerald-700" : "border-slate-200 bg-white/80 text-slate-500",
+                )}>
+                  <Icon className="h-4 w-4" />
+                </div>
+              ) : null}
+              <div className="min-w-0 space-y-1.5">
+                <div className="flex flex-wrap items-center gap-2">
+                  <p className="text-sm font-semibold text-slate-900 sm:text-[15px]">{title}</p>
+                  <Badge variant="outline" className="border-slate-200 bg-white/90 text-slate-600">
+                    {sectionCountLabel}
+                  </Badge>
+                </div>
+                <p className="max-w-3xl text-sm leading-6 text-slate-600">{summary}</p>
               </div>
-              <p className="max-w-3xl text-sm leading-6 text-slate-600">{summary}</p>
             </div>
-            <div className="mt-0.5 flex shrink-0 items-center gap-2">
-              <span className="hidden text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-400 sm:inline">
-                {open ? "Open" : "Closed"}
-              </span>
+            <div className="mt-0.5 flex shrink-0 items-center">
               <span
                 className={cn(
                   "inline-flex h-9 w-9 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-500 transition-transform duration-200",
@@ -716,9 +727,9 @@ export default function TenantSettingsPage() {
     setIsSavingLaborWages(true)
     try {
       await updateSettings({ laborWages: laborWagesDraft })
-      toast({ title: "Labor defaults saved", description: "Default wage rates updated." })
+      toast({ title: "Labour defaults saved", description: "Default wage rates updated." })
     } catch (error: any) {
-      toast({ title: "Save failed", description: error.message || "Unable to save labor defaults.", variant: "destructive" })
+      toast({ title: "Save failed", description: error.message || "Unable to save labour defaults.", variant: "destructive" })
     } finally {
       setIsSavingLaborWages(false)
     }
@@ -1027,6 +1038,7 @@ export default function TenantSettingsPage() {
     { id: "estate-identity", label: "Estate" },
     { id: "estate-profile", label: "Footprint" },
     { id: "account-language", label: "Language" },
+    { id: "account-security", label: "Security" },
     { id: "display-preferences", label: "Display" },
     { id: "data-import", label: "Import" },
     { id: "thresholds", label: "Thresholds" },
@@ -1070,7 +1082,7 @@ export default function TenantSettingsPage() {
       detail: isOwner ? "Plan and module controls available" : "Owner-managed access bundle",
     },
   ]
-  const profileSectionCount = 2
+  const profileSectionCount = 3
   const estateSectionCount = isAdminOrOwner ? 4 : 3
   const userAccessSectionCount = 1 + (isAdminOrOwner ? 1 : 0) + (isOwner ? 1 : 0)
   const hasAdvancedSection = isOwner
@@ -1104,8 +1116,9 @@ export default function TenantSettingsPage() {
         <SettingsGroup
           groupId="profile"
           title="Profile"
-          summary="Keep your digest email and account language in one place without touching estate-wide operational settings."
+          summary="Digest email, account language, and password — your personal settings separate from estate-wide configuration."
           sectionCountLabel={`${profileSectionCount} sections`}
+          icon={UserCircle}
           open={openGroup === "profile"}
           onOpenChange={setOpenGroup}
         >
@@ -1139,6 +1152,26 @@ export default function TenantSettingsPage() {
             onPreferredLocaleChange={setAccountPreferredLocale}
             onSave={handleSaveAccountLanguage}
           />
+          <Card id="account-security" className="scroll-mt-24 border-border/70 bg-white/85">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <KeyRound className="h-4 w-4 text-muted-foreground" />
+                Account Security
+              </CardTitle>
+              <CardDescription>Keep your login credentials up to date.</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="flex flex-col gap-3 rounded-2xl border border-border/60 bg-white/90 p-4 shadow-sm sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  <p className="text-sm font-medium text-foreground">Password</p>
+                  <p className="text-xs text-muted-foreground">Update your account login password at any time.</p>
+                </div>
+                <Button asChild variant="outline" className="bg-white shrink-0">
+                  <Link href="/settings/reset-password">Change password</Link>
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
         </SettingsGroup>
 
         <SettingsGroup
@@ -1146,6 +1179,7 @@ export default function TenantSettingsPage() {
           title="Estate"
           summary="Set the estate identity, footprint, dashboard defaults, and exception thresholds that shape how the workspace behaves."
           sectionCountLabel={`${estateSectionCount} sections`}
+          icon={Building2}
           open={openGroup === "estate"}
           onOpenChange={setOpenGroup}
         >
@@ -1186,8 +1220,9 @@ export default function TenantSettingsPage() {
         <SettingsGroup
           groupId="operations"
           title="Operations"
-          summary="Manage the live structures daily work depends on: locations for traceability, labor wage defaults, and import tools for bulk setup."
-          sectionCountLabel="3 sections"
+          summary="Manage the live structures daily work depends on: locations for traceability, labour wage defaults, and import tools for bulk setup."
+          sectionCountLabel={locations.length > 0 ? `${locations.length} location${locations.length !== 1 ? "s" : ""}` : "3 sections"}
+          icon={Settings2}
           open={openGroup === "operations"}
           onOpenChange={setOpenGroup}
         >
@@ -1224,7 +1259,8 @@ export default function TenantSettingsPage() {
           groupId="user-access"
           title="User Access"
           summary="Control who can enter data, who gets exceptions from tenant defaults, and which modules the estate is allowed to use."
-          sectionCountLabel={`${userAccessSectionCount} sections`}
+          sectionCountLabel={users.length > 0 ? `${users.length} user${users.length !== 1 ? "s" : ""}` : `${userAccessSectionCount} sections`}
+          icon={Users}
           open={openGroup === "user-access"}
           onOpenChange={setOpenGroup}
         >
@@ -1281,6 +1317,7 @@ export default function TenantSettingsPage() {
             title="Privacy"
             summary="Handle consent, export, correction, and deletion requests without mixing them into daily estate setup work."
             sectionCountLabel="1 section"
+            icon={Lock}
             open={openGroup === "privacy"}
             onOpenChange={setOpenGroup}
           >
@@ -1311,6 +1348,7 @@ export default function TenantSettingsPage() {
             title="Advanced"
             summary="Keep owner-only tools, experience tuning, and audit history tucked away unless you are deliberately changing platform behavior."
             sectionCountLabel="3 sections"
+            icon={Layers2}
             open={openGroup === "advanced"}
             onOpenChange={setOpenGroup}
           >

@@ -5,6 +5,7 @@ import { requireModuleAccess, isModuleAccessError } from "@/lib/server/module-ac
 import { logServerError, logServerWarning } from "@/lib/server/safe-logging"
 import { CLAUDE_HAIKU } from "@/lib/server/claude"
 import { callAI, isAIConfigured } from "@/lib/server/ai-provider"
+import { readResponseCache, writeResponseCache } from "@/lib/server/response-cache"
 
 export const dynamic = "force-dynamic"
 export const revalidate = 0
@@ -23,7 +24,8 @@ Rules:
 - Be specific: name the location, coffee type, or cost code where relevant.
 - Use plain language. One sentence per insight.
 - Use INR (₹) for currency, KG for weight.
-- Respond ONLY with valid JSON — no markdown, no extra text.`
+- Respond ONLY with valid JSON — no markdown, no extra text.
+- Days or periods with no records are NOT automatically a problem — estates have rest days, off-season lulls, and days where nothing needs logging. Never flag the absence of records as "missing" unless there is a clear seasonal reason to expect records on those days (e.g. picking season with zero harvest logs).`
 
 const buildInsightPrompt = (dataSummary: string) => `
 Given this estate operations data, identify exactly 3 insights the manager most needs to know right now.
@@ -50,6 +52,13 @@ export async function GET() {
   let rateHeaders: Record<string, string> = {}
   try {
     const sessionUser = await requireModuleAccess("ai-analysis")
+
+    const cacheKey = `ai-proactive-insights:${sessionUser.tenantId}`
+    const cachedInsights = await readResponseCache<{ insights: ProactiveInsight[] }>(cacheKey, 60 * 60)
+    if (cachedInsights !== null) {
+      return Response.json({ success: true, insights: cachedInsights.insights })
+    }
+
     const rateLimit = await checkRateLimit("aiProactiveInsights", sessionUser.tenantId)
     rateHeaders = buildRateLimitHeaders(rateLimit)
 
@@ -96,6 +105,7 @@ export async function GET() {
       // Claude returned something non-JSON — surface nothing rather than bad data
     }
 
+    await writeResponseCache(cacheKey, { insights })
     return Response.json({ success: true, insights }, { headers: rateHeaders })
   } catch (error) {
     if (isModuleAccessError(error)) {

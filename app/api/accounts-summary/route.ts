@@ -12,6 +12,62 @@ export async function GET(request: Request) {
     const tenantContext = normalizeTenantContext(sessionUser.tenantId, sessionUser.role)
     const { searchParams } = new URL(request.url)
     const code = searchParams.get("code")
+    const grouped = searchParams.get("grouped") === "true"
+    const startDate = searchParams.get("startDate") || ""
+    const endDate = searchParams.get("endDate") || ""
+
+    // Grouped by-code summary with date range — for the accounts summary card
+    if (grouped && startDate && endDate) {
+      const [laborRows, expenseRows] = await runTenantQueries(accountsSql, tenantContext, [
+        accountsSql`
+          SELECT lt.code,
+            COALESCE(MAX(aa.activity), MAX(NULLIF(lt.task_description, '')), lt.code) AS reference,
+            COALESCE(SUM(lt.total_cost), 0) AS total
+          FROM labor_transactions lt
+          LEFT JOIN account_activities aa
+            ON aa.code = lt.code AND aa.tenant_id = ${tenantContext.tenantId}
+          WHERE lt.tenant_id = ${tenantContext.tenantId}
+            AND lt.deployment_date >= ${startDate}::date
+            AND lt.deployment_date <= ${endDate}::date
+            AND lt.code IS NOT NULL AND lt.code != ''
+          GROUP BY lt.code
+        `,
+        accountsSql`
+          SELECT et.code,
+            COALESCE(MAX(aa.activity), et.code) AS reference,
+            COALESCE(SUM(et.total_amount), 0) AS total
+          FROM expense_transactions et
+          LEFT JOIN account_activities aa
+            ON aa.code = et.code AND aa.tenant_id = ${tenantContext.tenantId}
+          WHERE et.tenant_id = ${tenantContext.tenantId}
+            AND et.entry_date >= ${startDate}::date
+            AND et.entry_date <= ${endDate}::date
+            AND et.code IS NOT NULL AND et.code != ''
+          GROUP BY et.code
+        `,
+      ])
+
+      const toArr = (r: unknown) => (Array.isArray(r) ? r : (r as any)?.rows ?? [])
+      const byCode = new Map<string, { code: string; reference: string; total: number }>()
+
+      for (const row of toArr(laborRows)) {
+        const c = String(row.code || "")
+        const existing = byCode.get(c)
+        byCode.set(c, { code: c, reference: existing?.reference || String(row.reference || c), total: (existing?.total || 0) + (Number(row.total) || 0) })
+      }
+      for (const row of toArr(expenseRows)) {
+        const c = String(row.code || "")
+        const existing = byCode.get(c)
+        byCode.set(c, { code: c, reference: existing?.reference || String(row.reference || c), total: (existing?.total || 0) + (Number(row.total) || 0) })
+      }
+
+      const rows = Array.from(byCode.values())
+        .filter((r) => r.total > 0)
+        .sort((a, b) => (Number(a.code) || 0) - (Number(b.code) || 0) || a.code.localeCompare(b.code))
+      const grandTotal = rows.reduce((s, r) => s + r.total, 0)
+
+      return NextResponse.json({ success: true, rows, grandTotal })
+    }
 
     if (code) {
       const params = [tenantContext.tenantId, code]

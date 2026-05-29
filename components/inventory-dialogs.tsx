@@ -191,11 +191,11 @@ export default function InventoryDialogs(p: DialogProps) {
             <div className="grid gap-4 sm:grid-cols-2">
               <div className="space-y-2">
                 <Label htmlFor="new-item-qty">Initial Quantity (optional)</Label>
-                <Input id="new-item-qty" type="number" min={0} step="0.01" value={p.newItemForm.quantity} onKeyDown={p.preventNegativeKey} onChange={(e) => p.setNewItemForm((prev) => ({ ...prev, quantity: e.target.value }))} />
+                <Input id="new-item-qty" type="number" inputMode="decimal" min={0} step="0.01" value={p.newItemForm.quantity} onKeyDown={p.preventNegativeKey} onChange={(e) => p.setNewItemForm((prev) => ({ ...prev, quantity: e.target.value }))} />
               </div>
               <div className="space-y-2">
                 <Label htmlFor="new-item-price">Unit Price (optional)</Label>
-                <Input id="new-item-price" type="number" min={0} step="0.01" value={p.newItemForm.price} onKeyDown={p.preventNegativeKey} onChange={(e) => p.setNewItemForm((prev) => ({ ...prev, price: e.target.value }))} />
+                <Input id="new-item-price" type="number" inputMode="decimal" min={0} step="0.01" value={p.newItemForm.price} onKeyDown={p.preventNegativeKey} onChange={(e) => p.setNewItemForm((prev) => ({ ...prev, price: e.target.value }))} />
               </div>
             </div>
             <div className="space-y-2">
@@ -255,7 +255,7 @@ export default function InventoryDialogs(p: DialogProps) {
               <div className="space-y-2">
                 <FieldLabel htmlFor="edit-transaction-qty" label="Quantity" tooltip="Adjusting quantity will recalc inventory totals." />
                 <Input
-                  id="edit-transaction-qty" type="number" min={0} step="0.01"
+                  id="edit-transaction-qty" type="number" inputMode="decimal" min={0} step="0.01"
                   value={p.editingTransaction.quantity ?? ""}
                   onKeyDown={p.preventNegativeKey}
                   onWheel={p.preventNumberScrollChange}
@@ -264,7 +264,7 @@ export default function InventoryDialogs(p: DialogProps) {
               </div>
               <div className="space-y-2">
                 <FieldLabel htmlFor="edit-transaction-price" label="Unit Price" tooltip="Price per unit for this transaction. For restocks, this updates the weighted average cost (total spend ÷ total quantity). Depletions are always valued at the running average, not this field." />
-                <Input id="edit-transaction-price" type="number" value={p.editingTransaction.price ?? ""} onChange={(e) => p.handleEditTransactionChange("price", Number(e.target.value))} />
+                <Input id="edit-transaction-price" type="number" inputMode="decimal" value={p.editingTransaction.price ?? ""} onChange={(e) => p.handleEditTransactionChange("price", Number(e.target.value))} />
               </div>
             </div>
             <div className="text-sm text-muted-foreground">Total Cost: {formatCurrency(Number(p.editingTransaction.total_cost || 0))}</div>
@@ -315,7 +315,7 @@ export default function InventoryDialogs(p: DialogProps) {
             <div className="space-y-2">
               <FieldLabel htmlFor="edit-item-qty" label="Quantity" tooltip="Updating quantity adds a correction transaction." />
               <Input
-                id="edit-item-qty" type="number" min={0} step="0.01"
+                id="edit-item-qty" type="number" inputMode="decimal" min={0} step="0.01"
                 value={p.inventoryEditForm.quantity}
                 onKeyDown={p.preventNegativeKey}
                 onWheel={p.preventNumberScrollChange}

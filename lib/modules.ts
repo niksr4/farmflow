@@ -51,8 +51,8 @@ export const MODULES: ModuleDefinition[] = [
 export const MODULE_BUNDLES: ModuleBundle[] = [
   {
     id: "basic",
-    label: "Basic",
-    description: "Digital books for estates that don't need the full operational workflow yet. Accounts, inventory, balance sheet, and estate awareness.",
+    label: "Starter",
+    description: "Replace your notebook and Excel. Log labour, expenses, and stock — with a live balance sheet and rainfall tracker. No harvest workflow needed.",
     modules: [
       "inventory",
       "transactions",
@@ -66,8 +66,8 @@ export const MODULE_BUNDLES: ModuleBundle[] = [
   },
   {
     id: "core",
-    label: "Core",
-    description: "The full harvest-to-sale workflow for estates running their own pulping. Processing, dispatch, sales, labor, and AI insights.",
+    label: "Operations",
+    description: "The full estate OS from picking season to bank payment. Adds processing, dispatch, sales, season P&L, and AI-powered weekly insights on top of Starter.",
     modules: [
       "inventory",
       "transactions",
@@ -93,7 +93,7 @@ export const MODULE_BUNDLES: ModuleBundle[] = [
   {
     id: "enterprise",
     label: "Enterprise",
-    description: "Everything in Core, plus quality management, full labor payroll, advanced finance, and AI-powered insights for large or commercially ambitious estates.",
+    description: "Everything in Operations, plus quality grading, curing records, receivables, compliance, and multi-estate oversight for large planters and estate groups.",
     modules: MODULES.map((module) => module.id),
   },
 ]

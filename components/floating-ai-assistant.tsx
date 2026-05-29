@@ -250,7 +250,7 @@ export default function FloatingAiAssistant() {
   }
 
   return (
-    <div className="fixed bottom-4 right-4 z-50 flex max-w-[calc(100vw-1rem)] flex-col items-end gap-3 sm:bottom-6 sm:right-6">
+    <div className="fixed bottom-[calc(5rem+env(safe-area-inset-bottom))] right-4 z-50 flex max-w-[calc(100vw-1rem)] flex-col items-end gap-3 sm:bottom-6 sm:right-6">
       {isOpen ? (
         <div className="w-[min(26rem,calc(100vw-1rem))] overflow-hidden rounded-[30px] border border-emerald-100 bg-[linear-gradient(180deg,#f7fdf9_0%,#ffffff_58%)] shadow-[0_22px_70px_-30px_rgba(14,93,82,0.45)]">
           <div className="flex items-start justify-between gap-3 border-b border-emerald-100 bg-[linear-gradient(135deg,#f5fbf8_0%,#ffffff_70%)] px-4 py-4">

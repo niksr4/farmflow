@@ -9,6 +9,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { LocaleSelector } from "@/components/locale-selector"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { Switch } from "@/components/ui/switch"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import { useLocale } from "@/components/locale-provider"
 import {
@@ -111,7 +112,7 @@ export function TenantSettingsOverview({
 }: TenantSettingsOverviewProps) {
   const getSections = (ids: string[]) => sectionLinks.filter((section) => ids.includes(section.id))
   const startSections = getSections(["estate-identity", "locations", "tenant-users"])
-  const nextSections = getSections(["estate-profile", "data-import", "account-language"])
+  const nextSections = getSections(["estate-profile", "data-import", "account-language", "account-security"])
   const advancedSections = getSections(["thresholds", "display-preferences", "tenant-modules", "user-module-overrides", "tenant-experience", "audit-log"])
 
   return (
@@ -137,26 +138,18 @@ export function TenantSettingsOverview({
           <CardDescription>Manage estate basics, people, access, locations, and workspace behavior in one place.</CardDescription>
         </CardHeader>
         <CardContent className="relative space-y-5">
-          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+          <div className="grid gap-3 sm:grid-cols-3">
             <div className="rounded-lg border border-emerald-100 bg-white/90 p-3">
-              <p className="text-xs uppercase tracking-wide text-emerald-700">Tenant ID</p>
-              <p className="mt-1 break-all font-mono text-xs text-foreground">{tenantId || "Unavailable"}</p>
+              <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-emerald-700">Your Role</p>
+              <p className="mt-1 text-lg font-black text-foreground">{roleDisplay}</p>
             </div>
             <div className="rounded-lg border border-emerald-100 bg-white/90 p-3">
-              <p className="text-xs uppercase tracking-wide text-emerald-700">Users</p>
-              <p className="mt-1 text-lg font-semibold text-foreground">{userCount}</p>
+              <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-emerald-700">Users</p>
+              <p className="mt-1 text-2xl font-black tabular-nums text-foreground">{userCount}</p>
             </div>
             <div className="rounded-lg border border-emerald-100 bg-white/90 p-3">
-              <p className="text-xs uppercase tracking-wide text-emerald-700">Locations</p>
-              <p className="mt-1 text-lg font-semibold text-foreground">{locationCount}</p>
-            </div>
-            <div className="rounded-lg border border-emerald-100 bg-white/90 p-3">
-              <p className="text-xs uppercase tracking-wide text-emerald-700">
-                {isOwner ? "Modules Enabled" : "Your Role"}
-              </p>
-              <p className="mt-1 text-lg font-semibold text-foreground">
-                {isOwner ? enabledTenantModuleCount : roleDisplay}
-              </p>
+              <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-emerald-700">Locations</p>
+              <p className="mt-1 text-2xl font-black tabular-nums text-foreground">{locationCount}</p>
             </div>
           </div>
 
@@ -477,20 +470,19 @@ export function DisplayPreferencesSection({
         <CardDescription>Hide empty highlights on the dashboard.</CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
-        <label className="flex items-start gap-3 rounded-lg border border-border/60 bg-white/80 p-3">
-          <input
-            type="checkbox"
-            className="mt-1"
-            checked={uiPreferencesDraft.hideEmptyMetrics}
-            onChange={(event) => onHideEmptyMetricsChange(event.target.checked)}
-          />
+        <div className="flex items-center justify-between gap-4 rounded-lg border border-border/60 bg-white/90 p-4">
           <div className="space-y-1">
             <p className="text-sm font-medium text-foreground">Hide empty metrics</p>
             <p className="text-xs text-muted-foreground">
               Removes 0-value highlights like &quot;24h activity&quot; when there is no recent activity.
             </p>
           </div>
-        </label>
+          <Switch
+            checked={uiPreferencesDraft.hideEmptyMetrics}
+            onCheckedChange={onHideEmptyMetricsChange}
+            disabled={settingsLoading}
+          />
+        </div>
         <Button onClick={onSaveUiPreferences} disabled={isSavingUiPreferences || settingsLoading}>
           {isSavingUiPreferences ? "Saving..." : "Save Preferences"}
         </Button>
@@ -580,18 +572,17 @@ export function TenantExperienceSection({
 
         <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
           {TENANT_FEATURE_FLAG_DEFINITIONS.map((flag) => (
-            <label key={flag.id} className="flex items-start gap-3 rounded-lg border border-border/60 bg-white/80 p-3">
-              <input
-                type="checkbox"
-                className="mt-1"
-                checked={Boolean(featureFlagsDraft[flag.id])}
-                onChange={(event) => onFeatureFlagChange(flag.id, event.target.checked)}
-              />
+            <div key={flag.id} className="flex items-center justify-between gap-4 rounded-lg border border-border/60 bg-white/80 p-3">
               <div className="space-y-1">
                 <p className="text-sm font-medium text-foreground">{flag.label}</p>
                 <p className="text-xs text-muted-foreground">{flag.description}</p>
               </div>
-            </label>
+              <Switch
+                checked={Boolean(featureFlagsDraft[flag.id])}
+                onCheckedChange={(checked) => onFeatureFlagChange(flag.id, checked)}
+                disabled={settingsLoading}
+              />
+            </div>
           ))}
         </div>
 

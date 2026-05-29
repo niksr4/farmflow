@@ -31,6 +31,7 @@ export async function GET(_request: Request) {
           SELECT
             aa.code,
             aa.activity as reference,
+            aa.module_hint,
             COALESCE(lt.usage_count, 0)::int AS labor_count,
             COALESCE(et.usage_count, 0)::int AS expense_count
           FROM account_activities aa
@@ -61,6 +62,7 @@ export async function GET(_request: Request) {
           SELECT
             code,
             activity as reference,
+            module_hint,
             0::int AS labor_count,
             0::int AS expense_count
           FROM account_activities

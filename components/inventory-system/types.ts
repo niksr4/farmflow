@@ -88,3 +88,25 @@ export interface ExceptionSummaryAlert {
   coffeeType?: string
   metric?: string
 }
+
+export type DrilldownOptions = {
+  tab: string
+  locationId?: string | null
+  itemType?: string | null
+  panel?: string | null
+  transactionSearch?: string | null
+  seasonAlertId?: string | null
+  seasonMetric?: string | null
+}
+
+export type SmartNextStepTone = "progress" | "attention" | "help"
+export type SmartNextStep = {
+  id: string
+  tone: SmartNextStepTone
+  title: string
+  description: string
+  reason: string
+  actionLabel: string
+  actionTab: string
+  askPrompt?: string
+}

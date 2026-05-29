@@ -1,66 +1,94 @@
-const OFFLINE_DB_NAME = "farmflow-offline-db"
-const RETIRED_MESSAGE = "farmflow-sw-retired"
+const CACHE_VERSION = "v1"
+const STATIC_CACHE = `farmflow-static-${CACHE_VERSION}`
+const IMAGE_CACHE = `farmflow-images-${CACHE_VERSION}`
 
-const isFarmflowCacheKey = (key) => key.startsWith("farmflow-pwa-") || key.includes("farmflow")
+// Assets that are safe to cache indefinitely — they have content hashes in their URLs
+const STATIC_EXTENSIONS = [".js", ".css", ".woff", ".woff2"]
+// Image extensions we cache in a separate store with a max-size eviction strategy
+const IMAGE_EXTENSIONS = [".jpg", ".jpeg", ".png", ".svg", ".webp", ".avif"]
 
-const clearFarmflowCaches = async () => {
-  if (!("caches" in self)) return
-  const cacheKeys = await caches.keys()
-  await Promise.all(cacheKeys.filter(isFarmflowCacheKey).map((key) => caches.delete(key)))
-}
+const MAX_IMAGE_CACHE_ENTRIES = 60
 
-const clearOfflineDb = async () => {
-  if (!("indexedDB" in self)) return
-  await new Promise((resolve) => {
-    try {
-      const request = indexedDB.deleteDatabase(OFFLINE_DB_NAME)
-      request.onsuccess = () => resolve(undefined)
-      request.onerror = () => resolve(undefined)
-      request.onblocked = () => resolve(undefined)
-    } catch {
-      resolve(undefined)
-    }
-  })
-}
+const isStaticAsset = (url) =>
+  STATIC_EXTENSIONS.some((ext) => url.pathname.endsWith(ext)) ||
+  url.pathname.startsWith("/_next/static/")
 
-const notifyClients = async () => {
-  const clients = await self.clients.matchAll({ type: "window", includeUncontrolled: true })
-  await Promise.all(
-    clients.map((client) =>
-      client.postMessage({
-        type: RETIRED_MESSAGE,
-      }),
-    ),
-  )
-}
+const isImage = (url) =>
+  IMAGE_EXTENSIONS.some((ext) => url.pathname.endsWith(ext))
 
-const retireLegacyWorker = async () => {
-  await Promise.all([clearFarmflowCaches(), clearOfflineDb()])
-  await self.registration.unregister().catch(() => undefined)
-  await notifyClients()
-}
+const isSameOrigin = (url) => url.origin === self.location.origin
 
-self.addEventListener("install", (event) => {
+// ── Install: no pre-caching — we populate caches lazily on first fetch ─────
+self.addEventListener("install", () => {
   self.skipWaiting()
-  event.waitUntil(retireLegacyWorker())
 })
 
+// ── Activate: clean up caches from old versions ─────────────────────────────
 self.addEventListener("activate", (event) => {
   event.waitUntil(
     (async () => {
+      const keys = await caches.keys()
+      await Promise.all(
+        keys
+          .filter((k) => k.startsWith("farmflow-") && k !== STATIC_CACHE && k !== IMAGE_CACHE)
+          .map((k) => caches.delete(k)),
+      )
       await self.clients.claim()
-      await retireLegacyWorker()
     })(),
   )
 })
 
-self.addEventListener("message", (event) => {
-  if (event?.data?.type !== "farmflow-sw-retire") return
-  if (typeof event.waitUntil === "function") {
-    event.waitUntil(retireLegacyWorker())
-  }
-})
+// ── Fetch: cache-first for static + images, network-first for everything else ─
+self.addEventListener("fetch", (event) => {
+  // Only handle GET requests to our own origin
+  if (event.request.method !== "GET") return
 
-self.addEventListener("fetch", () => {
-  // Intentionally empty. Legacy service workers should not intercept network traffic anymore.
+  let url
+  try {
+    url = new URL(event.request.url)
+  } catch {
+    return
+  }
+
+  if (!isSameOrigin(url)) return
+  // Never intercept API routes or auth — always go to network
+  if (url.pathname.startsWith("/api/") || url.pathname.startsWith("/ingest/")) return
+
+  if (isStaticAsset(url)) {
+    // Cache-first: hashed assets never change
+    event.respondWith(
+      caches.open(STATIC_CACHE).then(async (cache) => {
+        const cached = await cache.match(event.request)
+        if (cached) return cached
+        const response = await fetch(event.request)
+        if (response.ok) cache.put(event.request, response.clone())
+        return response
+      }),
+    )
+    return
+  }
+
+  if (isImage(url)) {
+    // Cache-first with entry-count eviction
+    event.respondWith(
+      caches.open(IMAGE_CACHE).then(async (cache) => {
+        const cached = await cache.match(event.request)
+        if (cached) return cached
+        const response = await fetch(event.request)
+        if (response.ok) {
+          cache.put(event.request, response.clone())
+          // Evict oldest entries if cache grows too large
+          cache.keys().then((keys) => {
+            if (keys.length > MAX_IMAGE_CACHE_ENTRIES) {
+              cache.delete(keys[0])
+            }
+          })
+        }
+        return response
+      }),
+    )
+    return
+  }
+
+  // Everything else (HTML, API-like pages): network-first, no caching
 })

@@ -116,6 +116,7 @@ export function LocationsSection({
                 placeholder="Seshagiri A, Main Estate, Washing Station"
                 value={newLocationName}
                 onChange={(event) => onNewLocationNameChange(event.target.value)}
+                onKeyDown={(event) => { if (event.key === "Enter") onCreateLocation() }}
               />
             </div>
 
@@ -130,6 +131,7 @@ export function LocationsSection({
                 placeholder="A or SG-A"
                 value={newLocationCode}
                 onChange={(event) => onNewLocationCodeChange(event.target.value)}
+                onKeyDown={(event) => { if (event.key === "Enter") onCreateLocation() }}
               />
             </div>
 
@@ -177,7 +179,7 @@ export function LocationsSection({
               ) : (
                 locations.map((location) => (
                   <TableRow key={location.id}>
-                    <TableCell>
+                    <TableCell className="font-medium">
                       {editingLocationId === location.id ? (
                         <Input
                           value={editingLocationName}
@@ -187,7 +189,7 @@ export function LocationsSection({
                         location.name
                       )}
                     </TableCell>
-                    <TableCell>
+                    <TableCell className="font-medium text-muted-foreground">
                       {editingLocationId === location.id ? (
                         <Input
                           value={editingLocationCode}
@@ -419,7 +421,7 @@ export function TenantUsersSection({
             </div>
 
             <div className="mt-4">
-              <Button onClick={onCreateUser} disabled={!tenantId}>
+              <Button onClick={onCreateUser} disabled={!tenantId || !newUsername.trim() || !newPassword}>
                 Create User
               </Button>
             </div>
@@ -476,7 +478,7 @@ export function TenantUsersSection({
                   const isOwnerUser = user.role === "owner"
                   return (
                     <TableRow key={user.id}>
-                      <TableCell>{user.username}</TableCell>
+                      <TableCell className="font-semibold">{user.username}</TableCell>
                       <TableCell>
                         {isOwnerUser ? (
                           <div className="text-sm font-medium text-emerald-700">{roleLabel(user.role)}</div>
@@ -665,11 +667,11 @@ export function LaborDefaultsSection({
   onSave,
 }: LaborDefaultsSectionProps) {
   return (
-    <Card id="labor-defaults">
+    <Card id="labour-defaults" className="scroll-mt-24 border-border/70 bg-white/85">
       <CardHeader>
-        <CardTitle>Labor wage defaults</CardTitle>
+        <CardTitle>Labour wage defaults</CardTitle>
         <CardDescription>
-          Set the default wage rates that pre-fill when logging a new labor entry. Each entry can still be adjusted individually.
+          Set the default wage rates that pre-fill when logging a new labour entry. Each entry can still be adjusted individually.
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
@@ -678,7 +680,7 @@ export function LaborDefaultsSection({
             <HelpLabel
               htmlFor="default-inhouse-wage"
               label="In-house wage (₹ per worker)"
-              help="Wage for estate-employed workers. Pre-fills the In-house group when you open a new labor entry."
+              help="Wage for estate-employed workers. Pre-fills the In-house group when you open a new labour entry."
             />
             <Input
               id="default-inhouse-wage"
@@ -695,7 +697,7 @@ export function LaborDefaultsSection({
             <HelpLabel
               htmlFor="default-outside-wage"
               label="Outside wage (₹ per worker)"
-              help="Wage for contract or outside workers. Pre-fills the Outside group when you open a new labor entry."
+              help="Wage for contract or outside workers. Pre-fills the Outside group when you open a new labour entry."
             />
             <Input
               id="default-outside-wage"
@@ -710,10 +712,10 @@ export function LaborDefaultsSection({
           </div>
         </div>
         <p className="text-xs text-muted-foreground">
-          These are starting defaults only. You can override the wage on any individual entry or add extra labor groups at any time.
+          These are starting defaults only. You can override the wage on any individual entry or add extra labour groups at any time.
         </p>
         <Button onClick={onSave} disabled={isSaving}>
-          {isSaving ? "Saving..." : "Save labor defaults"}
+          {isSaving ? "Saving..." : "Save labour defaults"}
         </Button>
       </CardContent>
     </Card>

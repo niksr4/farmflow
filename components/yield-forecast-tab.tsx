@@ -183,7 +183,22 @@ export default function YieldForecastTab() {
         </Card>
       ) : null}
 
-      {summary ? (
+      {summary && summary.toDateDryKgs === 0 && summary.projectedDailyKgs === 0 ? (
+        <Card className="border-border/70 bg-white/90">
+          <CardContent className="py-10 text-center">
+            <TrendingUp className="mx-auto mb-4 h-10 w-10 text-muted-foreground/30" />
+            <p className="font-medium text-foreground">No processing data yet this season</p>
+            <p className="mt-2 text-sm text-muted-foreground max-w-md mx-auto">
+              The yield forecast activates once you log your first cherry intake and processing records. For coffee estates, this typically begins in October when the harvest starts.
+            </p>
+            <p className="mt-4 text-xs text-muted-foreground">
+              Season: {summary.fiscalYearStart} → {summary.fiscalYearEnd} · {summary.elapsedDays} days elapsed · {summary.remainingDays} days remaining
+            </p>
+          </CardContent>
+        </Card>
+      ) : null}
+
+      {summary && summary.toDateDryKgs > 0 ? (
         <>
           <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
             <Card className="border-border/70 bg-white/90">
@@ -349,6 +364,7 @@ export default function YieldForecastTab() {
           ) : null}
         </>
       ) : null}
+
     </div>
   )
 }

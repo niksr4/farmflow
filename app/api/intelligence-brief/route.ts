@@ -7,6 +7,7 @@ import { sanitizeRouteError } from "@/lib/server/sanitize-route-error"
 import { getClaudeClient, isClaudeConfigured, CLAUDE_HAIKU } from "@/lib/server/claude"
 import { fetchWithTimeout } from "@/lib/server/http"
 import { buildWeatherFarmAdvice } from "@/lib/coffee-agronomy"
+import { readResponseCache, writeResponseCache } from "@/lib/server/response-cache"
 
 export const dynamic = "force-dynamic"
 export const revalidate = 0
@@ -100,6 +101,12 @@ export async function GET(request: Request) {
     const safeEnd = startDate <= endDate ? endDate : startDate
     const startDateIso = toIsoDate(safeStart)
     const endDateIso = toIsoDate(safeEnd)
+
+    const cacheKey = `intelligence-brief:${scopedUser.tenantId}:${startDateIso}:${endDateIso}`
+    const cachedBrief = await readResponseCache(cacheKey, 2 * 60 * 60)
+    if (cachedBrief !== null) {
+      return NextResponse.json({ success: true, ...(cachedBrief as Record<string, unknown>) })
+    }
 
     let bagWeightKg = 50
     try {
@@ -664,8 +671,7 @@ Respond ONLY with a JSON array, no prose, no markdown:
       // Farm advice is non-fatal — morning brief renders without it
     }
 
-    return NextResponse.json({
-      success: true,
+    const briefPayload = {
       dateRange: {
         startDate: startDateIso,
         endDate: endDateIso,
@@ -677,7 +683,9 @@ Respond ONLY with a JSON array, no prose, no markdown:
       reconciliation,
       accountsPatterns,
       farmAdvice,
-    })
+    }
+    await writeResponseCache(cacheKey, briefPayload)
+    return NextResponse.json({ success: true, ...briefPayload })
   } catch (error) {
     console.error("Error generating intelligence brief:", error)
     if (isModuleAccessError(error)) {

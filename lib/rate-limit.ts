@@ -1,11 +1,6 @@
-import { Ratelimit } from "@upstash/ratelimit"
-import { Redis } from "@upstash/redis"
+import { sql as dbSql } from "@/lib/server/db"
 
-const hasRedisConfig = Boolean(
-  process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN,
-)
-
-const redis = hasRedisConfig ? Redis.fromEnv() : null
+const toRows = (r: unknown): any[] => (Array.isArray(r) ? r : (r as any)?.rows ?? [])
 
 type RateLimitKey =
   | "aiAnalysis"
@@ -59,100 +54,62 @@ export class RateLimitUnavailableError extends Error {
 export const isRateLimitUnavailableError = (error: unknown): error is RateLimitUnavailableError =>
   Boolean(error && (error as Error).name === "RateLimitUnavailableError")
 
-const limiters: Record<RateLimitKey, Ratelimit | null> = {
-  aiAnalysis: redis ? new Ratelimit({ redis, limiter: Ratelimit.fixedWindow(5, "1 m") }) : null,
-  aiAssistant: redis ? new Ratelimit({ redis, limiter: Ratelimit.fixedWindow(12, "5 m") }) : null,
-  aiProactiveInsights: redis ? new Ratelimit({ redis, limiter: Ratelimit.fixedWindow(4, "30 m") }) : null,
-  aiSeasonCompare: redis ? new Ratelimit({ redis, limiter: Ratelimit.fixedWindow(3, "1 h") }) : null,
-  news: redis ? new Ratelimit({ redis, limiter: Ratelimit.fixedWindow(30, "1 m") }) : null,
-  weather: redis ? new Ratelimit({ redis, limiter: Ratelimit.fixedWindow(30, "1 m") }) : null,
-  authLogin: redis ? new Ratelimit({ redis, limiter: Ratelimit.fixedWindow(10, "10 m") }) : null,
-  accountPasswordChange: redis ? new Ratelimit({ redis, limiter: Ratelimit.fixedWindow(6, "15 m") }) : null,
-  registerInterest: redis ? new Ratelimit({ redis, limiter: Ratelimit.fixedWindow(6, "10 m") }) : null,
-  authSignup: redis ? new Ratelimit({ redis, limiter: Ratelimit.fixedWindow(6, "10 m") }) : null,
-  authSignupResend: redis ? new Ratelimit({ redis, limiter: Ratelimit.fixedWindow(6, "10 m") }) : null,
-  authSignupVerify: redis ? new Ratelimit({ redis, limiter: Ratelimit.fixedWindow(20, "10 m") }) : null,
-  authSignupIp: redis ? new Ratelimit({ redis, limiter: Ratelimit.fixedWindow(15, "1 h") }) : null,
-  opsErrorIngest: redis ? new Ratelimit({ redis, limiter: Ratelimit.fixedWindow(20, "1 m") }) : null,
-}
-
-type LocalLimiterConfig = {
-  limit: number
-  windowMs: number
-}
-
-type LocalLimiterEntry = {
-  count: number
-  reset: number
-}
-
-const localLimiterConfig: Record<RateLimitKey, LocalLimiterConfig> = {
-  aiAnalysis: { limit: 5, windowMs: 60_000 },
-  aiAssistant: { limit: 12, windowMs: 5 * 60_000 },
-  aiProactiveInsights: { limit: 4, windowMs: 30 * 60_000 },
-  aiSeasonCompare: { limit: 3, windowMs: 60 * 60_000 },
-  news: { limit: 30, windowMs: 60_000 },
-  weather: { limit: 30, windowMs: 60_000 },
-  authLogin: { limit: 10, windowMs: 10 * 60_000 },
-  accountPasswordChange: { limit: 6, windowMs: 15 * 60_000 },
-  registerInterest: { limit: 6, windowMs: 10 * 60_000 },
-  authSignup: { limit: 6, windowMs: 10 * 60_000 },
-  authSignupResend: { limit: 6, windowMs: 10 * 60_000 },
-  authSignupVerify: { limit: 20, windowMs: 10 * 60_000 },
-  authSignupIp: { limit: 15, windowMs: 60 * 60_000 },
-  opsErrorIngest: { limit: 20, windowMs: 60_000 },
-}
-
-const localLimiterStore = new Map<string, LocalLimiterEntry>()
-
-const runLocalRateLimit = (key: RateLimitKey, identifier: string): RateLimitResult => {
-  const config = localLimiterConfig[key]
-  const now = Date.now()
-  const scopedIdentifier = `${key}:${identifier}`
-  const current = localLimiterStore.get(scopedIdentifier)
-  let nextEntry: LocalLimiterEntry
-
-  if (!current || current.reset <= now) {
-    nextEntry = { count: 1, reset: now + config.windowMs }
-  } else {
-    nextEntry = { count: current.count + 1, reset: current.reset }
-  }
-
-  localLimiterStore.set(scopedIdentifier, nextEntry)
-
-  // Keep local fallback memory bounded when Redis is unavailable.
-  if (localLimiterStore.size > 5000) {
-    for (const [entryKey, entry] of localLimiterStore.entries()) {
-      if (entry.reset <= now) {
-        localLimiterStore.delete(entryKey)
-      }
-    }
-  }
-
-  return {
-    success: nextEntry.count <= config.limit,
-    limit: config.limit,
-    remaining: Math.max(0, config.limit - nextEntry.count),
-    reset: nextEntry.reset,
-  }
+const LIMITS: Record<RateLimitKey, { limit: number; windowMs: number }> = {
+  aiAnalysis:            { limit: 5,  windowMs: 60_000 },
+  aiAssistant:           { limit: 12, windowMs: 5 * 60_000 },
+  aiProactiveInsights:   { limit: 4,  windowMs: 30 * 60_000 },
+  aiSeasonCompare:       { limit: 3,  windowMs: 60 * 60_000 },
+  news:                  { limit: 30, windowMs: 60_000 },
+  weather:               { limit: 30, windowMs: 60_000 },
+  authLogin:             { limit: 10, windowMs: 10 * 60_000 },
+  accountPasswordChange: { limit: 6,  windowMs: 15 * 60_000 },
+  registerInterest:      { limit: 6,  windowMs: 10 * 60_000 },
+  authSignup:            { limit: 6,  windowMs: 10 * 60_000 },
+  authSignupResend:      { limit: 6,  windowMs: 10 * 60_000 },
+  authSignupVerify:      { limit: 20, windowMs: 10 * 60_000 },
+  authSignupIp:          { limit: 15, windowMs: 60 * 60_000 },
+  opsErrorIngest:        { limit: 20, windowMs: 60_000 },
 }
 
 export async function checkRateLimit(key: RateLimitKey, identifier: string): Promise<RateLimitResult> {
-  const limiter = limiters[key]
-  if (!limiter) {
-    if (requiresDistributedRateLimit(key)) {
-      console.warn(`[rate-limit] Redis unavailable for sensitive key "${key}" — falling back to local limiter`)
-    }
-    return runLocalRateLimit(key, identifier)
-  }
+  const config = LIMITS[key]
+  const now = Date.now()
+  const { windowMs } = config
+  const windowStart = Math.floor(now / windowMs) * windowMs
+  const dbKey = `${key}:${identifier}`
 
   try {
-    return await limiter.limit(identifier)
-  } catch (error) {
-    if (requiresDistributedRateLimit(key)) {
-      console.warn(`[rate-limit] Redis error for sensitive key "${key}" — falling back to local limiter`, error)
+    const rows = toRows(
+      await dbSql`
+        INSERT INTO rate_limit_counters (key, window_start, window_ms, count)
+        VALUES (${dbKey}, ${windowStart}, ${windowMs}, 1)
+        ON CONFLICT (key, window_start) DO UPDATE
+          SET count = rate_limit_counters.count + 1
+        RETURNING count
+      `,
+    )
+
+    const count = Number(rows[0]?.count ?? 1)
+
+    // 1% chance: purge windows older than 24 h to keep the table bounded
+    if (Math.random() < 0.01) {
+      const cutoff = now - 24 * 60 * 60 * 1000
+      dbSql`DELETE FROM rate_limit_counters WHERE window_start < ${cutoff}`.catch(() => {})
     }
-    return runLocalRateLimit(key, identifier)
+
+    return {
+      success: count <= config.limit,
+      limit: config.limit,
+      remaining: Math.max(0, config.limit - count),
+      reset: windowStart + windowMs,
+    }
+  } catch (error) {
+    if (isSensitiveRateLimitKey(key)) {
+      // Auth endpoints must not silently fail open — callers catch this and surface an error.
+      throw new RateLimitUnavailableError(key, error)
+    }
+    // Non-sensitive (AI, news, weather) — fail open rather than blocking legitimate users.
+    return { success: true, limit: config.limit, remaining: config.limit, reset: now + windowMs }
   }
 }
 

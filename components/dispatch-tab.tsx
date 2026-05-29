@@ -28,6 +28,7 @@ import { SkeletonTable } from "@/components/ui/skeleton"
 import { EmptyStateTable } from "@/components/ui/empty-state"
 import WorkflowEmptyState from "@/components/workflow-empty-state"
 import WorkspacePageShell from "@/components/workspace-page-shell"
+import { useMediaQuery } from "@/hooks/use-media-query"
 import posthog from "posthog-js"
 
 interface DispatchRecord {
@@ -102,7 +103,8 @@ export default function DispatchTab({ showDataToolsControls = false }: DispatchT
   const { settings } = useTenantSettings()
   const bagWeightKg = Number(settings.bagWeightKg) || 50
   const canDelete = user?.role === "admin" || user?.role === "owner" || user?.role === "user"
-  
+  const isMobile = useMediaQuery("(max-width: 768px)")
+
   const [locations, setLocations] = useState<LocationOption[]>([])
   const [date, setDate] = useState<Date>(new Date())
   const [selectedLocationId, setSelectedLocationId] = useState<string>("")
@@ -120,6 +122,7 @@ export default function DispatchTab({ showDataToolsControls = false }: DispatchT
   const [bagTotalsScope, setBagTotalsScope] = useState<LocationScope>("all")
   const [formBagTotalsScope, setFormBagTotalsScope] = useState<LocationScope>("location")
   const [formDispatchScope, setFormDispatchScope] = useState<LocationScope>("location")
+  const [showStockBreakdown, setShowStockBreakdown] = useState(false)
   const [dispatchTotalCount, setDispatchTotalCount] = useState(0)
   const [dispatchPage, setDispatchPage] = useState(0)
   const [dispatchHasMore, setDispatchHasMore] = useState(false)
@@ -886,224 +889,157 @@ export default function DispatchTab({ showDataToolsControls = false }: DispatchT
         Bags are logistics units; received KGs feed downstream sales availability.
       </p>
 
-      <Card className="order-4 border-border/70 bg-white/85">
-        <CardHeader className="pb-3">
-          <CardTitle className="text-xs uppercase tracking-[0.2em] text-muted-foreground">How stock moves</CardTitle>
-          <CardDescription>Bags show physical movement. Confirmed received KGs are what become saleable later.</CardDescription>
-        </CardHeader>
-        <CardContent className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
-          <div className="rounded-lg border border-border/60 bg-white/80 p-3">
-            <p className="text-xs text-muted-foreground">Processed bags</p>
-            <p className="mt-1 text-sm font-semibold text-foreground">{formatNumber(processedNominalBagsTotal)} bags</p>
-            <p className="mt-1 text-xs text-muted-foreground">{formatNumber(processedNominalBagsTotal * bagWeightKg)} KGs</p>
+      <div className="order-4 overflow-hidden rounded-xl border border-stone-200 bg-white shadow-sm dark:border-white/[0.06] dark:bg-card">
+        <div className="border-b border-stone-100 px-5 py-4 dark:border-white/[0.05]">
+          <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-stone-400">Stock flow</p>
+          <p className="mt-0.5 text-sm font-semibold text-stone-800 dark:text-stone-200">Bags are logistics units · received KGs are commercial stock</p>
+        </div>
+        <div className="grid grid-cols-1 gap-0 divide-y divide-stone-100 md:grid-cols-2 md:divide-x md:divide-y-0 xl:grid-cols-4 dark:divide-white/[0.05]">
+          <div className="px-5 py-4">
+            <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-stone-400">Processed</p>
+            <p className="mt-1 text-xl font-black tabular-nums text-stone-900 dark:text-white">{formatNumber(processedNominalBagsTotal)} bags</p>
+            <p className="mt-0.5 text-xs text-stone-400">{formatNumber(processedNominalBagsTotal * bagWeightKg)} KGs nominal</p>
           </div>
-          <div className="rounded-lg border border-border/60 bg-white/80 p-3">
-            <p className="text-xs text-muted-foreground">Dispatched bags</p>
-            <p className="mt-1 text-sm font-semibold text-foreground">{formatNumber(dispatchedNominalBagsTotal)} bags</p>
-            <p className="mt-1 text-xs text-muted-foreground">{formatNumber(dispatchedNominalBagsTotal * bagWeightKg)} KGs</p>
+          <div className="px-5 py-4">
+            <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-stone-400">Dispatched</p>
+            <p className="mt-1 text-xl font-black tabular-nums text-stone-900 dark:text-white">{formatNumber(dispatchedNominalBagsTotal)} bags</p>
+            <p className="mt-0.5 text-xs text-stone-400">{formatNumber(dispatchedNominalBagsTotal * bagWeightKg)} KGs nominal</p>
           </div>
-          <div className="rounded-lg border border-border/60 bg-white/80 p-3">
-            <p className="text-xs text-muted-foreground">Confirmed received KGs</p>
-            <p className="mt-1 text-sm font-semibold text-foreground">{formatNumber(dispatchedReceivedKgsTotal)} KGs</p>
-            <p className={cn("mt-1 text-xs", dispatchVarianceKgsTotal >= 0 ? "text-emerald-700" : "text-rose-700")}>
-              Difference vs bag weight: {dispatchVarianceKgsTotal >= 0 ? "+" : ""}
-              {formatNumber(dispatchVarianceKgsTotal)} KGs
+          <div className="px-5 py-4">
+            <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-stone-400">Received</p>
+            <p className="mt-1 text-xl font-black tabular-nums text-emerald-700 dark:text-emerald-400">{formatNumber(dispatchedReceivedKgsTotal)} KGs</p>
+            <p className={cn("mt-0.5 text-xs", dispatchVarianceKgsTotal >= 0 ? "text-emerald-600 dark:text-emerald-500" : "text-rose-600")}>
+              {dispatchVarianceKgsTotal >= 0 ? "+" : ""}{formatNumber(dispatchVarianceKgsTotal)} KGs vs nominal
             </p>
           </div>
-          <div className="rounded-lg border border-border/60 bg-white/80 p-3">
-            <p className="text-xs text-muted-foreground">Still on hand</p>
-            <p className={cn("mt-1 text-sm font-semibold", pendingNominalBags < 0 ? "text-rose-700" : "text-foreground")}>
+          <div className="px-5 py-4">
+            <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-stone-400">On hand</p>
+            <p className={cn("mt-1 text-xl font-black tabular-nums", pendingNominalBags < 0 ? "text-rose-600" : "text-stone-900 dark:text-white")}>
               {formatNumber(Math.abs(pendingNominalBags))} bags
             </p>
-            <p className="mt-1 text-xs text-muted-foreground">
-              {pendingNominalBags < 0 ? "More dispatched than processed" : "Still sitting in processed stock"}
+            <p className="mt-0.5 text-xs text-stone-400">
+              {pendingNominalBags < 0 ? "Exceeds processed" : "Awaiting dispatch"}
             </p>
           </div>
-        </CardContent>
-      </Card>
-
-      {/* Summary Cards */}
-      <div className="order-5 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-        {/* Arabica Dry Parchment */}
-        <Card className="border-border/60 bg-white/85">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-xs uppercase tracking-[0.2em] text-muted-foreground">
-              Arabica Dry Parchment
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-semibold text-foreground">
-              {formatNumber(bagTotals.arabica_dry_parchment_bags)}
-            </div>
-            <div className="text-sm text-muted-foreground mt-1">
-              Processed nominal: {formatNumber(bagTotals.arabica_dry_parchment_bags * bagWeightKg)} KGs
-            </div>
-            <div className="text-sm text-muted-foreground mt-1">
-              Dispatched: {formatNumber(dispatchedTotals.arabica_dry_parchment)} bags (
-              {formatNumber(dispatchedTotals.arabica_dry_parchment * bagWeightKg)} KGs)
-            </div>
-            <div className="text-xs text-muted-foreground mt-1">
-              Confirmed received: {formatNumber(dispatchReceivedKgsTotals.arabica_dry_parchment)} KGs
-            </div>
-            <div
-              className={cn(
-                "text-sm font-medium mt-1",
-                summaryBalanceArabicaDryParchment < 0 ? "text-rose-600" : "text-emerald-600",
-              )}
-            >
-              Balance: {formatNumber(summaryBalanceArabicaDryParchment)} bags
-            </div>
-            <div className="text-xs text-muted-foreground mt-1">
-              {formatNumber(summaryBalanceArabicaDryParchment * bagWeightKg)} KGs
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* Arabica Dry Cherry */}
-        <Card className="border-border/60 bg-white/85">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-xs uppercase tracking-[0.2em] text-muted-foreground">
-              Arabica Dry Cherry
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-semibold text-foreground">
-              {formatNumber(bagTotals.arabica_dry_cherry_bags)}
-            </div>
-            <div className="text-sm text-muted-foreground mt-1">
-              Processed nominal: {formatNumber(bagTotals.arabica_dry_cherry_bags * bagWeightKg)} KGs
-            </div>
-            <div className="text-sm text-muted-foreground mt-1">
-              Dispatched: {formatNumber(dispatchedTotals.arabica_dry_cherry)} bags (
-              {formatNumber(dispatchedTotals.arabica_dry_cherry * bagWeightKg)} KGs)
-            </div>
-            <div className="text-xs text-muted-foreground mt-1">
-              Confirmed received: {formatNumber(dispatchReceivedKgsTotals.arabica_dry_cherry)} KGs
-            </div>
-            <div
-              className={cn(
-                "text-sm font-medium mt-1",
-                summaryBalanceArabicaDryCherry < 0 ? "text-rose-600" : "text-emerald-600",
-              )}
-            >
-              Balance: {formatNumber(summaryBalanceArabicaDryCherry)} bags
-            </div>
-            <div className="text-xs text-muted-foreground mt-1">
-              {formatNumber(summaryBalanceArabicaDryCherry * bagWeightKg)} KGs
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* Robusta Dry Parchment */}
-        <Card className="border-border/60 bg-white/85">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-xs uppercase tracking-[0.2em] text-muted-foreground">
-              Robusta Dry Parchment
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-semibold text-foreground">
-              {formatNumber(bagTotals.robusta_dry_parchment_bags)}
-            </div>
-            <div className="text-sm text-muted-foreground mt-1">
-              Processed nominal: {formatNumber(bagTotals.robusta_dry_parchment_bags * bagWeightKg)} KGs
-            </div>
-            <div className="text-sm text-muted-foreground mt-1">
-              Dispatched: {formatNumber(dispatchedTotals.robusta_dry_parchment)} bags (
-              {formatNumber(dispatchedTotals.robusta_dry_parchment * bagWeightKg)} KGs)
-            </div>
-            <div className="text-xs text-muted-foreground mt-1">
-              Confirmed received: {formatNumber(dispatchReceivedKgsTotals.robusta_dry_parchment)} KGs
-            </div>
-            <div
-              className={cn(
-                "text-sm font-medium mt-1",
-                summaryBalanceRobustaDryParchment < 0 ? "text-rose-600" : "text-emerald-600",
-              )}
-            >
-              Balance: {formatNumber(summaryBalanceRobustaDryParchment)} bags
-            </div>
-            <div className="text-xs text-muted-foreground mt-1">
-              {formatNumber(summaryBalanceRobustaDryParchment * bagWeightKg)} KGs
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* Robusta Dry Cherry */}
-        <Card className="border-border/60 bg-white/85">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-xs uppercase tracking-[0.2em] text-muted-foreground">
-              Robusta Dry Cherry
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-semibold text-foreground">
-              {formatNumber(bagTotals.robusta_dry_cherry_bags)}
-            </div>
-            <div className="text-sm text-muted-foreground mt-1">
-              Processed nominal: {formatNumber(bagTotals.robusta_dry_cherry_bags * bagWeightKg)} KGs
-            </div>
-            <div className="text-sm text-muted-foreground mt-1">
-              Dispatched: {formatNumber(dispatchedTotals.robusta_dry_cherry)} bags (
-              {formatNumber(dispatchedTotals.robusta_dry_cherry * bagWeightKg)} KGs)
-            </div>
-            <div className="text-xs text-muted-foreground mt-1">
-              Confirmed received: {formatNumber(dispatchReceivedKgsTotals.robusta_dry_cherry)} KGs
-            </div>
-            <div
-              className={cn(
-                "text-sm font-medium mt-1",
-                summaryBalanceRobustaDryCherry < 0 ? "text-rose-600" : "text-emerald-600",
-              )}
-            >
-              Balance: {formatNumber(summaryBalanceRobustaDryCherry)} bags
-            </div>
-            <div className="text-xs text-muted-foreground mt-1">
-              {formatNumber(summaryBalanceRobustaDryCherry * bagWeightKg)} KGs
-            </div>
-          </CardContent>
-        </Card>
+        </div>
       </div>
 
+      {/* Stock breakdown toggle */}
+      <div className="flex justify-center">
+        <button
+          type="button"
+          onClick={() => setShowStockBreakdown(v => !v)}
+          className="inline-flex min-h-[44px] items-center gap-1.5 rounded-full border border-stone-200 bg-stone-50 px-5 py-2.5 text-sm font-semibold text-stone-600 hover:bg-stone-100 transition-colors touch-manipulation"
+        >
+          {showStockBreakdown ? "Hide stock breakdown ▲" : "Show stock breakdown ▼"}
+        </button>
+      </div>
+
+      {/* Summary Cards */}
+      {showStockBreakdown && <div className="order-5 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+        {/* Arabica Dry Parchment */}
+        <div className="overflow-hidden rounded-xl border border-stone-200 bg-white shadow-sm dark:border-white/[0.06] dark:bg-card">
+          <div className="border-b border-stone-100 px-5 py-3 dark:border-white/[0.05]">
+            <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-emerald-700 dark:text-emerald-500">Arabica Dry Parchment</p>
+          </div>
+          <div className="p-5">
+            <div className="text-2xl font-black tabular-nums text-stone-900 dark:text-white">{formatNumber(bagTotals.arabica_dry_parchment_bags)}</div>
+            <div className="mt-1 text-xs text-stone-500 dark:text-stone-400">Processed nominal: {formatNumber(bagTotals.arabica_dry_parchment_bags * bagWeightKg)} KGs</div>
+            <div className="mt-1 text-xs text-stone-500 dark:text-stone-400">Dispatched: {formatNumber(dispatchedTotals.arabica_dry_parchment)} bags ({formatNumber(dispatchedTotals.arabica_dry_parchment * bagWeightKg)} KGs)</div>
+            <div className="mt-1 text-xs text-stone-400 dark:text-stone-500">Confirmed received: {formatNumber(dispatchReceivedKgsTotals.arabica_dry_parchment)} KGs</div>
+            <div className={cn("mt-1 text-sm font-semibold", summaryBalanceArabicaDryParchment < 0 ? "text-rose-600" : "text-emerald-600")}>Balance: {formatNumber(summaryBalanceArabicaDryParchment)} bags</div>
+            <div className="text-xs text-stone-400 dark:text-stone-500">{formatNumber(summaryBalanceArabicaDryParchment * bagWeightKg)} KGs</div>
+          </div>
+        </div>
+
+        {/* Arabica Dry Cherry */}
+        <div className="overflow-hidden rounded-xl border border-stone-200 bg-white shadow-sm dark:border-white/[0.06] dark:bg-card">
+          <div className="border-b border-stone-100 px-5 py-3 dark:border-white/[0.05]">
+            <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-emerald-700 dark:text-emerald-500">Arabica Dry Cherry</p>
+          </div>
+          <div className="p-5">
+            <div className="text-2xl font-black tabular-nums text-stone-900 dark:text-white">{formatNumber(bagTotals.arabica_dry_cherry_bags)}</div>
+            <div className="mt-1 text-xs text-stone-500 dark:text-stone-400">Processed nominal: {formatNumber(bagTotals.arabica_dry_cherry_bags * bagWeightKg)} KGs</div>
+            <div className="mt-1 text-xs text-stone-500 dark:text-stone-400">Dispatched: {formatNumber(dispatchedTotals.arabica_dry_cherry)} bags ({formatNumber(dispatchedTotals.arabica_dry_cherry * bagWeightKg)} KGs)</div>
+            <div className="mt-1 text-xs text-stone-400 dark:text-stone-500">Confirmed received: {formatNumber(dispatchReceivedKgsTotals.arabica_dry_cherry)} KGs</div>
+            <div className={cn("mt-1 text-sm font-semibold", summaryBalanceArabicaDryCherry < 0 ? "text-rose-600" : "text-emerald-600")}>Balance: {formatNumber(summaryBalanceArabicaDryCherry)} bags</div>
+            <div className="text-xs text-stone-400 dark:text-stone-500">{formatNumber(summaryBalanceArabicaDryCherry * bagWeightKg)} KGs</div>
+          </div>
+        </div>
+
+        {/* Robusta Dry Parchment */}
+        <div className="overflow-hidden rounded-xl border border-stone-200 bg-white shadow-sm dark:border-white/[0.06] dark:bg-card">
+          <div className="border-b border-stone-100 px-5 py-3 dark:border-white/[0.05]">
+            <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-emerald-700 dark:text-emerald-500">Robusta Dry Parchment</p>
+          </div>
+          <div className="p-5">
+            <div className="text-2xl font-black tabular-nums text-stone-900 dark:text-white">{formatNumber(bagTotals.robusta_dry_parchment_bags)}</div>
+            <div className="mt-1 text-xs text-stone-500 dark:text-stone-400">Processed nominal: {formatNumber(bagTotals.robusta_dry_parchment_bags * bagWeightKg)} KGs</div>
+            <div className="mt-1 text-xs text-stone-500 dark:text-stone-400">Dispatched: {formatNumber(dispatchedTotals.robusta_dry_parchment)} bags ({formatNumber(dispatchedTotals.robusta_dry_parchment * bagWeightKg)} KGs)</div>
+            <div className="mt-1 text-xs text-stone-400 dark:text-stone-500">Confirmed received: {formatNumber(dispatchReceivedKgsTotals.robusta_dry_parchment)} KGs</div>
+            <div className={cn("mt-1 text-sm font-semibold", summaryBalanceRobustaDryParchment < 0 ? "text-rose-600" : "text-emerald-600")}>Balance: {formatNumber(summaryBalanceRobustaDryParchment)} bags</div>
+            <div className="text-xs text-stone-400 dark:text-stone-500">{formatNumber(summaryBalanceRobustaDryParchment * bagWeightKg)} KGs</div>
+          </div>
+        </div>
+
+        {/* Robusta Dry Cherry */}
+        <div className="overflow-hidden rounded-xl border border-stone-200 bg-white shadow-sm dark:border-white/[0.06] dark:bg-card">
+          <div className="border-b border-stone-100 px-5 py-3 dark:border-white/[0.05]">
+            <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-emerald-700 dark:text-emerald-500">Robusta Dry Cherry</p>
+          </div>
+          <div className="p-5">
+            <div className="text-2xl font-black tabular-nums text-stone-900 dark:text-white">{formatNumber(bagTotals.robusta_dry_cherry_bags)}</div>
+            <div className="mt-1 text-xs text-stone-500 dark:text-stone-400">Processed nominal: {formatNumber(bagTotals.robusta_dry_cherry_bags * bagWeightKg)} KGs</div>
+            <div className="mt-1 text-xs text-stone-500 dark:text-stone-400">Dispatched: {formatNumber(dispatchedTotals.robusta_dry_cherry)} bags ({formatNumber(dispatchedTotals.robusta_dry_cherry * bagWeightKg)} KGs)</div>
+            <div className="mt-1 text-xs text-stone-400 dark:text-stone-500">Confirmed received: {formatNumber(dispatchReceivedKgsTotals.robusta_dry_cherry)} KGs</div>
+            <div className={cn("mt-1 text-sm font-semibold", summaryBalanceRobustaDryCherry < 0 ? "text-rose-600" : "text-emerald-600")}>Balance: {formatNumber(summaryBalanceRobustaDryCherry)} bags</div>
+            <div className="text-xs text-stone-400 dark:text-stone-500">{formatNumber(summaryBalanceRobustaDryCherry * bagWeightKg)} KGs</div>
+          </div>
+        </div>
+      </div>}
+
       {/* Add Dispatch Form */}
-      <Card ref={dispatchFormRef} className="order-1 border-border/70 bg-white/85">
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Truck className="h-5 w-5" />
-            {editingRecord ? "Edit dispatch entry" : "Dispatch entry"}
-          </CardTitle>
-          <CardDescription>
+      <div ref={dispatchFormRef} className="order-1 overflow-hidden rounded-xl border border-stone-200 bg-white shadow-sm dark:border-white/[0.06] dark:bg-card">
+        <div className="border-b border-stone-100 px-5 py-4 dark:border-white/[0.05]">
+          <div className="flex items-center gap-3">
+            <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-emerald-800 dark:bg-emerald-900/40">
+              <Truck className="h-4 w-4 text-emerald-400" />
+            </div>
+            <div>
+              <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-emerald-700 dark:text-emerald-500">Operations</p>
+              <p className="mt-0.5 text-lg font-bold text-stone-900 dark:text-white">{editingRecord ? "Edit dispatch entry" : "New dispatch entry"}</p>
+            </div>
+          </div>
+          <p className="mt-2 text-xs text-stone-400 dark:text-stone-500">
             {editingRecord
               ? "Update what physically left this location."
               : "Record what physically left this location today. Add confirmed received KGs only when they are known."}
-          </CardDescription>
+          </p>
           {editingRecord ? (
-            <p className="text-xs text-emerald-700">
+            <p className="mt-1 text-xs text-emerald-700">
               Editing {formatDateOnly(editingRecord.dispatch_date)} for {getLocationLabel(editingRecord)}.
             </p>
           ) : null}
-        </CardHeader>
-        <CardContent>
-          <div className="mb-4 rounded-2xl border border-emerald-100 bg-emerald-50/55 p-4">
-            <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-              <div className="rounded-xl border border-white/70 bg-white/85 p-3">
-                <p className="text-[11px] uppercase tracking-[0.18em] text-emerald-700">Location</p>
-                <p className="mt-1 text-sm font-semibold text-foreground">
-                  {selectedLocation?.name || selectedLocation?.code || "Select a location"}
-                </p>
-              </div>
-              <div className="rounded-xl border border-white/70 bg-white/85 p-3">
-                <p className="text-[11px] uppercase tracking-[0.18em] text-emerald-700">Coffee</p>
-                <p className="mt-1 text-sm font-semibold text-foreground">{coffeeType}</p>
-              </div>
-              <div className="rounded-xl border border-white/70 bg-white/85 p-3">
-                <p className="text-[11px] uppercase tracking-[0.18em] text-emerald-700">Bag type</p>
-                <p className="mt-1 text-sm font-semibold text-foreground">{formatBagTypeLabel(bagType)}</p>
-              </div>
-              <div className="rounded-xl border border-white/70 bg-white/85 p-3">
-                <p className="text-[11px] uppercase tracking-[0.18em] text-emerald-700">Save rule</p>
-                <p className="mt-1 text-sm font-semibold text-foreground">One trip, one location, one stock line</p>
-              </div>
+        </div>
+        <div className="p-5">
+          <div className="mb-5 grid gap-2 md:grid-cols-2 xl:grid-cols-4">
+            <div className="rounded-lg border border-stone-200 bg-stone-50 p-3 dark:border-white/[0.05] dark:bg-white/[0.02]">
+              <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-stone-400">Location</p>
+              <p className="mt-1 text-sm font-semibold text-stone-800 dark:text-stone-200">
+                {selectedLocation?.name || selectedLocation?.code || "Select a location"}
+              </p>
+            </div>
+            <div className="rounded-lg border border-stone-200 bg-stone-50 p-3 dark:border-white/[0.05] dark:bg-white/[0.02]">
+              <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-stone-400">Coffee</p>
+              <p className="mt-1 text-sm font-semibold text-stone-800 dark:text-stone-200">{coffeeType}</p>
+            </div>
+            <div className="rounded-lg border border-stone-200 bg-stone-50 p-3 dark:border-white/[0.05] dark:bg-white/[0.02]">
+              <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-stone-400">Bag type</p>
+              <p className="mt-1 text-sm font-semibold text-stone-800 dark:text-stone-200">{formatBagTypeLabel(bagType)}</p>
+            </div>
+            <div className="rounded-lg border border-stone-200 bg-stone-50 p-3 dark:border-white/[0.05] dark:bg-white/[0.02]">
+              <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-stone-400">Rule</p>
+              <p className="mt-1 text-sm font-semibold text-stone-800 dark:text-stone-200">One trip · one location · one stock line</p>
             </div>
           </div>
 
@@ -1111,37 +1047,60 @@ export default function DispatchTab({ showDataToolsControls = false }: DispatchT
             {/* Date */}
             <div className="space-y-2">
               <Label>Date</Label>
-              <Popover>
-                <PopoverTrigger asChild>
-                  <Button
-                    variant="outline"
-                    className={cn("w-full justify-start text-left font-normal bg-transparent", !date && "text-muted-foreground")}
-                  >
-                    <CalendarIcon className="mr-2 h-4 w-4" />
-                    {date ? formatDateOnly(date) : <span>Pick a date</span>}
-                  </Button>
-                </PopoverTrigger>
-                <PopoverContent className="w-auto p-0">
-                  <Calendar mode="single" selected={date} onSelect={(d) => d && setDate(d)} initialFocus />
-                </PopoverContent>
-              </Popover>
+              {isMobile ? (
+                <input
+                  type="date"
+                  value={format(date, "yyyy-MM-dd")}
+                  onChange={e => { const d = new Date(e.target.value + "T00:00:00"); if (!isNaN(d.getTime())) setDate(d) }}
+                  className="w-full h-12 rounded-xl border border-input bg-background px-3 text-base font-medium focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                />
+              ) : (
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <Button
+                      variant="outline"
+                      className={cn("w-full justify-start text-left font-normal bg-transparent", !date && "text-muted-foreground")}
+                    >
+                      <CalendarIcon className="mr-2 h-4 w-4" />
+                      {date ? formatDateOnly(date) : <span>Pick a date</span>}
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-auto p-0">
+                    <Calendar mode="single" selected={date} onSelect={(d) => d && setDate(d)} initialFocus />
+                  </PopoverContent>
+                </Popover>
+              )}
             </div>
 
             {/* Location */}
             <div className="space-y-2">
               <Label>Location</Label>
-              <Select value={selectedLocationId} onValueChange={setSelectedLocationId} disabled={!locations.length}>
-                <SelectTrigger>
-                  <SelectValue placeholder={locations.length ? "Select location" : "Add a location first"} />
-                </SelectTrigger>
-                <SelectContent>
-                  {locations.map((loc) => (
-                    <SelectItem key={loc.id} value={loc.id}>
-                      {loc.name || loc.code}
-                    </SelectItem>
+              {isMobile ? (
+                <select
+                  value={selectedLocationId}
+                  onChange={e => setSelectedLocationId(e.target.value)}
+                  disabled={!locations.length}
+                  className="w-full h-12 rounded-xl border border-input bg-background px-3 text-base font-medium focus:outline-none focus:ring-2 focus:ring-emerald-500 disabled:opacity-50"
+                >
+                  <option value="">{locations.length ? "Select location" : "Add a location first"}</option>
+                  {locations.map(loc => (
+                    <option key={loc.id} value={loc.id}>{loc.name || loc.code}</option>
                   ))}
-                </SelectContent>
-              </Select>
+                </select>
+              ) : (
+                <Select value={selectedLocationId} onValueChange={setSelectedLocationId} disabled={!locations.length}>
+                  <SelectTrigger>
+                    <SelectValue placeholder={locations.length ? "Select location" : "Add a location first"} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {locations.map((loc) => (
+                      <SelectItem key={loc.id} value={loc.id}>
+                        {loc.name || loc.code}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              )}
               <p className="text-xs text-muted-foreground">
                 {isLegacyPooledAvailability
                   ? "Legacy pooled mode is active, so available stock is shown estate-wide."
@@ -1152,18 +1111,30 @@ export default function DispatchTab({ showDataToolsControls = false }: DispatchT
             {/* Coffee Type */}
             <div className="space-y-2">
               <Label>Coffee Type</Label>
-              <Select value={coffeeType} onValueChange={setCoffeeType}>
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {COFFEE_TYPES.map((ct) => (
-                    <SelectItem key={ct} value={ct}>
-                      {ct}
-                    </SelectItem>
+              {isMobile ? (
+                <select
+                  value={coffeeType}
+                  onChange={e => setCoffeeType(e.target.value)}
+                  className="w-full h-12 rounded-xl border border-input bg-background px-3 text-base font-medium focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                >
+                  {COFFEE_TYPES.map(ct => (
+                    <option key={ct} value={ct}>{ct}</option>
                   ))}
-                </SelectContent>
-              </Select>
+                </select>
+              ) : (
+                <Select value={coffeeType} onValueChange={setCoffeeType}>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {COFFEE_TYPES.map((ct) => (
+                      <SelectItem key={ct} value={ct}>
+                        {ct}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              )}
             </div>
 
             {/* Bag Type */}
@@ -1172,18 +1143,30 @@ export default function DispatchTab({ showDataToolsControls = false }: DispatchT
                 label="Bag Type"
                 tooltip="Select dry parchment or dry cherry to match processing output."
               />
-              <Select value={bagType} onValueChange={setBagType}>
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {BAG_TYPES.map((bt) => (
-                    <SelectItem key={bt} value={bt}>
-                      {bt}
-                    </SelectItem>
+              {isMobile ? (
+                <select
+                  value={bagType}
+                  onChange={e => setBagType(e.target.value)}
+                  className="w-full h-12 rounded-xl border border-input bg-background px-3 text-base font-medium focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                >
+                  {BAG_TYPES.map(bt => (
+                    <option key={bt} value={bt}>{bt}</option>
                   ))}
-                </SelectContent>
-              </Select>
+                </select>
+              ) : (
+                <Select value={bagType} onValueChange={setBagType}>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {BAG_TYPES.map((bt) => (
+                      <SelectItem key={bt} value={bt}>
+                        {bt}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              )}
               <p className={cn("text-xs", allowedBalance > 0 ? "text-emerald-600" : "text-rose-600")}>
                 Available now: {formatNumber(allowedBalance)} bags ({formatNumber(allowedBalance * bagWeightKg)} KGs)
               </p>
@@ -1209,6 +1192,7 @@ export default function DispatchTab({ showDataToolsControls = false }: DispatchT
                 onKeyDown={blockInvalidNumberKey}
                 onChange={handleNonNegativeChange(setBagsDispatched)}
                 max={Math.max(0, allowedBalance)}
+                className={cn(isMobile && "h-12 text-base")}
               />
               {exceedsAvailability && (
                 <p className="text-xs text-rose-600">
@@ -1256,13 +1240,17 @@ export default function DispatchTab({ showDataToolsControls = false }: DispatchT
             </div>
           </div>
 
-          <div className="mt-4 flex flex-wrap justify-end gap-2">
+          <div className={cn("mt-4 flex flex-wrap gap-2", isMobile ? "flex-col" : "justify-end")}>
             {editingRecord && (
-              <Button variant="outline" onClick={resetForm}>
+              <Button variant="outline" onClick={resetForm} className={cn(isMobile && "h-12 rounded-xl")}>
                 Cancel
               </Button>
             )}
-            <Button onClick={handleSave} disabled={!canSubmitDispatch} className="bg-emerald-700 hover:bg-emerald-800">
+            <Button
+              onClick={handleSave}
+              disabled={!canSubmitDispatch}
+              className={cn("bg-emerald-700 hover:bg-emerald-800", isMobile && "h-14 rounded-2xl text-base w-full")}
+            >
               {isSaving ? (
                 <>
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
@@ -1282,19 +1270,20 @@ export default function DispatchTab({ showDataToolsControls = false }: DispatchT
               Enter location and quantity. Quantity must be within available stock.
             </p>
           )}
-        </CardContent>
-      </Card>
+        </div>
+      </div>
 
       {/* Dispatch Records Table */}
-      <Card className="order-6 border-border/70 bg-white/85">
-        <CardHeader>
+      <div className="order-6 overflow-hidden rounded-xl border border-stone-200 bg-white shadow-sm dark:border-white/[0.06] dark:bg-card">
+        <div className="border-b border-stone-100 px-5 py-4 dark:border-white/[0.05]">
           <div className="flex items-center justify-between">
             <div>
-              <CardTitle className="flex items-center gap-2">
-                <Package className="h-5 w-5" />
-                Dispatch history
-              </CardTitle>
-              <CardDescription>Review and reopen previous dispatch entries · {resolvedCountLabel}</CardDescription>
+              <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-emerald-700 dark:text-emerald-500">History</p>
+              <p className="mt-0.5 flex items-center gap-2 text-lg font-bold text-stone-900 dark:text-white">
+                <Package className="h-4 w-4 text-stone-400" />
+                Dispatch records
+              </p>
+              <p className="text-xs text-stone-400 dark:text-stone-500">{resolvedCountLabel}</p>
             </div>
             {showDataToolsControls && (
               <Button variant="outline" size="sm" onClick={exportToCSV} className="bg-transparent">
@@ -1303,8 +1292,8 @@ export default function DispatchTab({ showDataToolsControls = false }: DispatchT
               </Button>
             )}
           </div>
-        </CardHeader>
-        <CardContent>
+        </div>
+        <div className="p-5">
           {selectedDispatchRecord && (
                 <div className="mb-4 rounded-xl border border-emerald-100 bg-emerald-50/50 p-3 text-sm">
                   <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
@@ -1361,38 +1350,36 @@ export default function DispatchTab({ showDataToolsControls = false }: DispatchT
                     <div
                       key={record.id}
                       className={cn(
-                        "rounded-xl border border-border/70 bg-white p-3 shadow-sm",
-                        selectedDispatchRecord?.id === record.id ? "border-emerald-200 bg-emerald-50/40" : "",
+                        "rounded-2xl border bg-white p-4 shadow-sm",
+                        selectedDispatchRecord?.id === record.id ? "border-emerald-200 bg-emerald-50/30" : "border-black/[0.06]",
                       )}
                       onClick={() => setSelectedDispatchRecord(record)}
                     >
                       <div className="flex items-start justify-between gap-2">
                         <div>
-                          <p className="text-sm font-semibold text-foreground">{formatDateOnly(record.dispatch_date)}</p>
-                          <p className="text-xs text-muted-foreground">{getLocationLabel(record)}</p>
+                          <p className="text-base font-bold text-stone-900">{formatDateOnly(record.dispatch_date)}</p>
+                          <p className="text-xs text-stone-400 mt-0.5">{getLocationLabel(record)}</p>
                         </div>
-                        <span className="rounded-md border border-border/70 bg-muted/40 px-2 py-0.5 text-xs font-medium">
+                        <span className="rounded-full bg-stone-100 px-2.5 py-1 text-xs font-semibold text-stone-600">
                           {record.coffee_type}
                         </span>
                       </div>
-                      <div className="mt-2 grid grid-cols-2 gap-2 text-xs">
-                        <div className="rounded-md border border-black/5 bg-white px-2 py-1.5">
-                          <p className="text-[11px] uppercase tracking-wide text-muted-foreground">Bag Type</p>
-                          <p className="font-medium text-foreground">{formatBagTypeLabel(record.bag_type)}</p>
+                      <div className="mt-3 grid grid-cols-3 gap-2">
+                        <div className="rounded-xl bg-stone-50 px-3 py-2">
+                          <p className="text-[10px] uppercase tracking-wide text-stone-400">Type</p>
+                          <p className="text-sm font-semibold text-stone-800 mt-0.5">{formatBagTypeLabel(record.bag_type)}</p>
                         </div>
-                        <div className="rounded-md border border-black/5 bg-white px-2 py-1.5">
-                          <p className="text-[11px] uppercase tracking-wide text-muted-foreground">Bags</p>
-                          <p className="font-medium text-foreground">{formatNumber(Number(record.bags_dispatched) || 0)}</p>
+                        <div className="rounded-xl bg-stone-50 px-3 py-2">
+                          <p className="text-[10px] uppercase tracking-wide text-stone-400">Bags</p>
+                          <p className="text-xl font-black text-stone-900 mt-0.5">{formatNumber(Number(record.bags_dispatched) || 0)}</p>
                         </div>
-                        <div className="rounded-md border border-black/5 bg-white px-2 py-1.5">
-                          <p className="text-[11px] uppercase tracking-wide text-muted-foreground">Received KGs</p>
-                          <p className="font-medium text-foreground">{formatNumber(receivedKgs)}</p>
+                        <div className="rounded-xl bg-stone-50 px-3 py-2">
+                          <p className="text-[10px] uppercase tracking-wide text-stone-400">Rcvd KGs</p>
+                          <p className="text-xl font-black text-emerald-700 mt-0.5">{formatNumber(receivedKgs)}</p>
                         </div>
                       </div>
                       {record.notes ? (
-                        <p className="mt-2 rounded-md border border-black/5 bg-white px-2 py-1.5 text-xs text-muted-foreground">
-                          {record.notes}
-                        </p>
+                        <p className="mt-2 text-xs text-stone-400 italic">{record.notes}</p>
                       ) : null}
                       <div className="mt-3 flex gap-2">
                         <Button
@@ -1404,7 +1391,7 @@ export default function DispatchTab({ showDataToolsControls = false }: DispatchT
                             setSelectedDispatchRecord(record)
                             handleEdit(record)
                           }}
-                          className="h-10 flex-1 border-blue-200 bg-blue-50 text-blue-700 hover:bg-blue-100"
+                          className="h-10 flex-1 rounded-xl border-blue-200 bg-blue-50 text-blue-700 hover:bg-blue-100"
                         >
                           <Pencil className="mr-1.5 h-4 w-4" />
                           Edit
@@ -1418,7 +1405,7 @@ export default function DispatchTab({ showDataToolsControls = false }: DispatchT
                               event.stopPropagation()
                               handleDelete(record.id!)
                             }}
-                            className="h-10 flex-1 border-red-200 bg-red-50 text-red-700 hover:bg-red-100"
+                            className="h-10 flex-1 rounded-xl border-red-200 bg-red-50 text-red-700 hover:bg-red-100"
                           >
                             <Trash2 className="mr-1.5 h-4 w-4" />
                             Delete
@@ -1432,15 +1419,15 @@ export default function DispatchTab({ showDataToolsControls = false }: DispatchT
               <div className="hidden overflow-x-auto md:block">
                 <Table>
                   <TableHeader>
-                    <TableRow>
-                      <TableHead className="sticky top-0 bg-muted/70 backdrop-blur">Date</TableHead>
-                      <TableHead className="sticky top-0 bg-muted/70 backdrop-blur">Location</TableHead>
-                      <TableHead className="sticky top-0 bg-muted/70 backdrop-blur">Coffee Type</TableHead>
-                      <TableHead className="sticky top-0 bg-muted/70 backdrop-blur">Bag Type</TableHead>
-                      <TableHead className="text-right sticky top-0 bg-muted/70 backdrop-blur">Bags</TableHead>
-                      <TableHead className="text-right sticky top-0 bg-muted/70 backdrop-blur">KGs (Received)</TableHead>
-                      <TableHead className="sticky top-0 bg-muted/70 backdrop-blur">Notes</TableHead>
-                      <TableHead className="text-right sticky top-0 bg-muted/70 backdrop-blur">Actions</TableHead>
+                    <TableRow className="bg-emerald-900 hover:bg-emerald-900">
+                      <TableHead className="text-emerald-300 font-bold text-[11px] uppercase tracking-[0.16em]">Date</TableHead>
+                      <TableHead className="text-emerald-300 font-bold text-[11px] uppercase tracking-[0.16em]">Location</TableHead>
+                      <TableHead className="text-emerald-300 font-bold text-[11px] uppercase tracking-[0.16em]">Coffee</TableHead>
+                      <TableHead className="text-emerald-300 font-bold text-[11px] uppercase tracking-[0.16em]">Bag type</TableHead>
+                      <TableHead className="text-right text-emerald-300 font-bold text-[11px] uppercase tracking-[0.16em]">Bags</TableHead>
+                      <TableHead className="text-right text-emerald-300 font-bold text-[11px] uppercase tracking-[0.16em]">KGs received</TableHead>
+                      <TableHead className="text-emerald-300 font-bold text-[11px] uppercase tracking-[0.16em]">Notes</TableHead>
+                      <TableHead className="text-right text-emerald-300 font-bold text-[11px] uppercase tracking-[0.16em]">Actions</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -1519,8 +1506,8 @@ export default function DispatchTab({ showDataToolsControls = false }: DispatchT
               )}
             </div>
           )}
-        </CardContent>
-      </Card>
+        </div>
+      </div>
     </WorkspacePageShell>
   )
 }

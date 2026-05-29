@@ -1,7 +1,8 @@
 "use client"
 
 import { useCallback, useEffect, useMemo, useState } from "react"
-import { ArrowDownCircle, ArrowUpCircle, CircleDashed, RefreshCw, TrendingUp, Wallet } from "lucide-react"
+import { ArrowDownCircle, ArrowUpCircle, CircleDashed, RefreshCw, TrendingUp, Wallet, CheckCircle2, AlertTriangle, XCircle, ShieldCheck } from "lucide-react"
+import type { ReconciliationResponse, ReconciliationCheck } from "@/app/api/reconciliation/route"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -67,6 +68,8 @@ export default function BalanceSheetTab() {
   const selectedFiscalYear = useMemo(() => getCurrentFiscalYear(), [])
   const [summary, setSummary] = useState<SummaryPayload>(emptySummary)
   const [isLoading, setIsLoading] = useState(false)
+  const [reconciliation, setReconciliation] = useState<ReconciliationResponse | null>(null)
+  const [reconLoading, setReconLoading] = useState(false)
   const selectedRange = useMemo(() => getFiscalYearDateRange(selectedFiscalYear), [selectedFiscalYear])
 
   const loadSummary = useCallback(async () => {
@@ -108,9 +111,22 @@ export default function BalanceSheetTab() {
     }
   }, [selectedRange.endDate, selectedRange.startDate, toast])
 
+  const loadReconciliation = useCallback(async () => {
+    setReconLoading(true)
+    try {
+      const params = new URLSearchParams({ start: selectedRange.startDate, end: selectedRange.endDate })
+      const res = await fetch(`/api/reconciliation?${params}`, { cache: "no-store" })
+      const data = await res.json()
+      if (data.success) setReconciliation(data)
+    } catch { /* non-fatal */ } finally {
+      setReconLoading(false)
+    }
+  }, [selectedRange.startDate, selectedRange.endDate])
+
   useEffect(() => {
     loadSummary()
-  }, [loadSummary])
+    loadReconciliation()
+  }, [loadSummary, loadReconciliation])
 
   const missingModules = useMemo(
     () => summary.modules.filter((line) => line.status === "missing").map((line) => line.tab),
@@ -164,7 +180,7 @@ export default function BalanceSheetTab() {
                 ) : (
                   <p className="mt-2 text-2xl font-semibold text-rose-800">{formatCurrency(summary.totals.outflowBooked, 0)}</p>
                 )}
-                <p className="mt-1 text-xs text-rose-700/80">Labor + expense + inventory restock spend.</p>
+                <p className="mt-1 text-xs text-rose-700/80">Labour + expense + inventory restock spend.</p>
               </CardContent>
             </Card>
             <Card className="border-slate-200 bg-slate-50/70">
@@ -232,7 +248,7 @@ export default function BalanceSheetTab() {
           </div>
 
           <div className="rounded-xl border border-black/5 bg-slate-50/70 px-4 py-3 text-xs text-slate-600">
-            Formula: <span className="font-medium">Booked Net = Sales Revenue - (Labor + Expense + Restock)</span>. Live net adds
+            Formula: <span className="font-medium">Booked Net = Sales Revenue - (Labour + Expense + Restock)</span>. Live net adds
             current receivables outstanding.
           </div>
 
@@ -310,6 +326,65 @@ export default function BalanceSheetTab() {
               </TableBody>
             </Table>
           </div>
+        </CardContent>
+      </Card>
+
+      {/* Reconciliation checks */}
+      <Card className="border-stone-200 bg-white">
+        <CardHeader className="border-b border-stone-100 pb-3">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <ShieldCheck className="h-4 w-4 text-emerald-700" />
+              <CardTitle className="text-base">Data Reconciliation</CardTitle>
+            </div>
+            {reconciliation && (
+              <div className="flex items-center gap-1.5">
+                {reconciliation.hasErrors && <span className="rounded-full bg-rose-100 px-2.5 py-0.5 text-xs font-semibold text-rose-700">{reconciliation.checks.filter(c => c.status === "error").length} error{reconciliation.checks.filter(c => c.status === "error").length > 1 ? "s" : ""}</span>}
+                {reconciliation.hasWarnings && <span className="rounded-full bg-amber-100 px-2.5 py-0.5 text-xs font-semibold text-amber-700">{reconciliation.checks.filter(c => c.status === "warning").length} warning{reconciliation.checks.filter(c => c.status === "warning").length > 1 ? "s" : ""}</span>}
+                {!reconciliation.hasErrors && !reconciliation.hasWarnings && <span className="rounded-full bg-emerald-100 px-2.5 py-0.5 text-xs font-semibold text-emerald-700">All clear</span>}
+              </div>
+            )}
+          </div>
+          <CardDescription>Cross-module consistency checks — dispatch vs sales, inventory ledger, and data gaps</CardDescription>
+        </CardHeader>
+        <CardContent className="pt-4">
+          {reconLoading ? (
+            <div className="space-y-2">
+              {[1,2,3,4,5].map(i => <Skeleton key={i} className="h-12 w-full" />)}
+            </div>
+          ) : reconciliation ? (
+            <div className="space-y-2">
+              {reconciliation.checks.map((check: ReconciliationCheck) => (
+                <div key={check.id} className={cn(
+                  "flex items-start gap-3 rounded-lg border px-4 py-3",
+                  check.status === "ok" && "border-emerald-100 bg-emerald-50/50",
+                  check.status === "warning" && "border-amber-200 bg-amber-50/50",
+                  check.status === "error" && "border-rose-200 bg-rose-50/50",
+                )}>
+                  {check.status === "ok" && <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-emerald-600" />}
+                  {check.status === "warning" && <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" />}
+                  {check.status === "error" && <XCircle className="mt-0.5 h-4 w-4 shrink-0 text-rose-600" />}
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <p className="text-sm font-semibold text-stone-800">{check.label}</p>
+                      {check.value && (
+                        <span className={cn(
+                          "rounded px-1.5 py-0.5 text-[10px] font-bold tabular-nums",
+                          check.status === "ok" && "bg-emerald-100 text-emerald-700",
+                          check.status === "warning" && "bg-amber-100 text-amber-700",
+                          check.status === "error" && "bg-rose-100 text-rose-700",
+                        )}>{check.value}</span>
+                      )}
+                    </div>
+                    <p className="mt-0.5 text-xs text-stone-500">{check.detail}</p>
+                  </div>
+                </div>
+              ))}
+              <p className="pt-1 text-right text-[10px] text-stone-400">Checked {new Date(reconciliation.checkedAt).toLocaleTimeString("en-IN")}</p>
+            </div>
+          ) : (
+            <p className="text-sm text-stone-400">Reconciliation data unavailable.</p>
+          )}
         </CardContent>
       </Card>
     </div>

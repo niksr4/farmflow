@@ -5,7 +5,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
-import { TrendingUp, TrendingDown, IndianRupee, Package, Users, BarChart2, Printer } from "lucide-react"
+import { TrendingUp, TrendingDown, IndianRupee, Package, Users, BarChart2, Printer, CheckCircle2, AlertTriangle, XCircle } from "lucide-react"
 import { cn } from "@/lib/utils"
 import type { SeasonPLResponse } from "@/app/api/season-pl/route"
 
@@ -202,7 +202,7 @@ export default function SeasonPlTab() {
             <KpiCard
               label="Total Costs"
               value={fmt(data.costs.totalCostsInr)}
-              sub={`Labor + expenses`}
+              sub={`Labour + expenses`}
               positive={false}
               icon={BarChart2}
             />
@@ -313,6 +313,64 @@ export default function SeasonPlTab() {
                     </tfoot>
                   </table>
                 </div>
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Reconciliation panel */}
+          {data.reconciliation && (
+            <Card className="border-stone-200 bg-white">
+              <CardHeader className="border-b border-stone-100 pb-3">
+                <div className="flex items-center gap-2">
+                  {!data.reconciliation.balanceOk ? (
+                    <XCircle className="h-4 w-4 text-rose-500" />
+                  ) : data.reconciliation.unsoldKg > 0 ? (
+                    <AlertTriangle className="h-4 w-4 text-amber-500" />
+                  ) : (
+                    <CheckCircle2 className="h-4 w-4 text-emerald-600" />
+                  )}
+                  <CardTitle className="text-base">Reconciliation</CardTitle>
+                </div>
+                <CardDescription>Dispatch ↔ Sales balance and closing inventory position</CardDescription>
+              </CardHeader>
+              <CardContent className="pt-4">
+                <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                  <div className="rounded-lg border border-stone-100 bg-stone-50 p-3">
+                    <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-stone-400">Dispatched & received</p>
+                    <p className="mt-1 text-xl font-black tabular-nums text-stone-900">{fmtKg(data.reconciliation.dispatchKgReceived)}</p>
+                    <p className="mt-0.5 text-xs text-stone-400">from curing works</p>
+                  </div>
+                  <div className="rounded-lg border border-stone-100 bg-stone-50 p-3">
+                    <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-stone-400">Sold this period</p>
+                    <p className="mt-1 text-xl font-black tabular-nums text-stone-900">{fmtKg(data.reconciliation.salesKgSold)}</p>
+                    <p className="mt-0.5 text-xs text-stone-400">recorded in sales</p>
+                  </div>
+                  <div className={cn("rounded-lg border p-3", data.reconciliation.balanceOk ? "border-emerald-100 bg-emerald-50" : "border-rose-200 bg-rose-50")}>
+                    <p className={cn("text-[10px] font-bold uppercase tracking-[0.18em]", data.reconciliation.balanceOk ? "text-emerald-600" : "text-rose-600")}>
+                      {data.reconciliation.balanceOk ? "Unsold balance" : "Balance error"}
+                    </p>
+                    <p className={cn("mt-1 text-xl font-black tabular-nums", data.reconciliation.balanceOk ? "text-emerald-800" : "text-rose-700")}>
+                      {data.reconciliation.balanceOk
+                        ? fmtKg(data.reconciliation.unsoldKg)
+                        : `−${fmtKg(Math.abs(data.reconciliation.unsoldKg))}`}
+                    </p>
+                    <p className={cn("mt-0.5 text-xs", data.reconciliation.balanceOk ? "text-emerald-600" : "text-rose-600")}>
+                      {data.reconciliation.balanceOk
+                        ? `${fmtPct(data.reconciliation.unsoldPct)} unsold`
+                        : "Sold more than dispatched — check records"}
+                    </p>
+                  </div>
+                  <div className="rounded-lg border border-sky-100 bg-sky-50 p-3">
+                    <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-sky-600">Closing inventory value</p>
+                    <p className="mt-1 text-xl font-black tabular-nums text-sky-900">{fmt(data.reconciliation.closingInventoryValue)}</p>
+                    <p className="mt-0.5 text-xs text-sky-600">inputs on hand (cost basis)</p>
+                  </div>
+                </div>
+                {!data.reconciliation.balanceOk && (
+                  <div className="mt-3 rounded-lg border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-800">
+                    <span className="font-bold">Data integrity issue:</span> Sales kg exceed dispatch kgs received by {fmtKg(Math.abs(data.reconciliation.unsoldKg))}. This means either dispatch records are incomplete or sales entries have incorrect kg figures. Review both tabs to reconcile.
+                  </div>
+                )}
               </CardContent>
             </Card>
           )}

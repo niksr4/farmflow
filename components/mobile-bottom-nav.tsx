@@ -1,20 +1,19 @@
 "use client"
 
 /**
- * MobileBottomNav — replaces the hamburger+drawer pattern on mobile.
+ * MobileBottomNav — redesigned for phone-first, low-literacy users.
  *
- * Shows 4 season-aware primary tabs + a "More" trigger that opens the existing
- * sidebar drawer. The 4 tabs are determined by getMobileBottomNavTabs() which
- * surfaces the right tabs based on the current estate season.
- *
- * Off-season (May–Sep): Home, Labor+Costs, Rain & Weather, Stock & Inventory
- * Harvest season (Oct–Mar): Home, Pulping, Labor+Costs, Rain & Weather
+ * Design principles:
+ *  - 5 slots: 4 primary tabs + More. Always visible.
+ *  - Active tab: large filled pill, emerald. Impossible to miss.
+ *  - Labels: short (1 word), large enough to read at arm's length.
+ *  - Touch targets: full height of the bar (~68px).
+ *  - Mirrors the mental model of WhatsApp / familiar Indian apps.
  */
 
 import { cn } from "@/lib/utils"
 import { MoreHorizontal } from "lucide-react"
-import { getMobileBottomNavTabs } from "@/lib/season-utils"
-import { isTabOffSeason } from "@/lib/season-utils"
+import { getMobileBottomNavTabs, isTabOffSeason } from "@/lib/season-utils"
 
 type MobileBottomNavProps = {
   activeTab: string
@@ -24,19 +23,18 @@ type MobileBottomNavProps = {
   onOpenSidebar: () => void
 }
 
-// Shorten labels for the tiny bottom nav
 const SHORT_LABELS: Record<string, string> = {
-  "home": "Home",
-  "accounts": "Labor & Costs",
-  "rainfall": "Rain",
-  "inventory": "Stock",
-  "processing": "Pulping",
-  "dispatch": "Dispatch",
-  "sales": "Sales",
-  "season": "Season",
+  home: "Home",
+  accounts: "Labour",
+  rainfall: "Rain",
+  inventory: "Stock",
+  processing: "Pulping",
+  dispatch: "Dispatch",
+  sales: "Sales",
+  season: "Season",
   "season-pl": "P&L",
   "balance-sheet": "Finance",
-  "ai-analysis": "AI",
+  "ai-analysis": "Insights",
   "plant-health": "Crop",
 }
 
@@ -53,16 +51,12 @@ export default function MobileBottomNav({
     <nav
       className={cn(
         "fixed bottom-0 inset-x-0 z-40",
-        "bg-white/80 backdrop-blur-xl backdrop-saturate-150",
-        "border-t border-black/[0.06]",
-        "shadow-[0_-4px_24px_-4px_rgba(0,0,0,0.08)]",
+        "bg-white border-t-2 border-stone-300",
         "pb-[env(safe-area-inset-bottom)]",
+        "shadow-[0_-4px_24px_rgba(0,0,0,0.14)]",
       )}
     >
-      {/* Subtle glass shimmer line at top */}
-      <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-white/60 to-transparent" />
-
-      <div className="flex items-stretch h-14">
+      <div className="flex items-stretch h-[68px]">
         {primaryTabs.map((tabId) => {
           const meta = tabMeta[tabId]
           if (!meta) return null
@@ -77,26 +71,33 @@ export default function MobileBottomNav({
               type="button"
               onClick={() => onTabChange(tabId)}
               className={cn(
-                "flex-1 flex flex-col items-center justify-center gap-0.5 min-w-0 px-1 relative transition-all",
-                "touch-manipulation active:scale-95",
-                isActive ? "text-emerald-700" : offSeason ? "text-neutral-300" : "text-neutral-500 hover:text-neutral-700",
+                "flex-1 flex flex-col items-center justify-center gap-1 min-w-0 px-1",
+                "touch-manipulation active:scale-95 transition-transform",
               )}
             >
-              {/* Active pill indicator */}
-              {isActive && (
-                <span className="absolute top-0 inset-x-[30%] h-0.5 rounded-full bg-emerald-600" />
-              )}
+              {/* Icon container — solid filled pill when active */}
               <div className={cn(
-                "flex h-8 w-8 items-center justify-center rounded-xl transition-all",
+                "flex h-9 w-14 items-center justify-center rounded-full transition-all",
                 isActive
-                  ? "bg-emerald-100 shadow-[0_1px_4px_rgba(16,185,129,0.2)]"
-                  : "group-hover:bg-neutral-100",
+                  ? "bg-emerald-700 shadow-[0_2px_8px_rgba(5,120,70,0.35)]"
+                  : "",
               )}>
-                <Icon className={cn("h-4 w-4", isActive ? "text-emerald-700" : "")} />
+                <Icon className={cn(
+                  "h-[22px] w-[22px] transition-all stroke-[2.5]",
+                  isActive
+                    ? "text-white"
+                    : offSeason
+                      ? "text-stone-500"
+                      : "text-stone-800",
+                )} />
               </div>
               <span className={cn(
-                "text-[9px] font-medium tracking-wide truncate max-w-full px-1",
-                isActive ? "text-emerald-700" : "",
+                "text-[11px] font-black tracking-wide truncate max-w-full px-1 leading-none",
+                isActive
+                  ? "text-emerald-700"
+                  : offSeason
+                    ? "text-stone-500"
+                    : "text-stone-800",
               )}>
                 {label}
               </span>
@@ -104,16 +105,16 @@ export default function MobileBottomNav({
           )
         })}
 
-        {/* More → opens sidebar drawer */}
+        {/* More */}
         <button
           type="button"
           onClick={onOpenSidebar}
-          className="flex-1 flex flex-col items-center justify-center gap-0.5 min-w-0 px-1 text-neutral-400 hover:text-neutral-600 transition-all touch-manipulation active:scale-95"
+          className="flex-1 flex flex-col items-center justify-center gap-1 min-w-0 px-1 touch-manipulation active:scale-95 transition-transform"
         >
-          <div className="flex h-8 w-8 items-center justify-center rounded-xl">
-            <MoreHorizontal className="h-4 w-4" />
+          <div className="flex h-9 w-14 items-center justify-center rounded-full">
+            <MoreHorizontal className="h-[22px] w-[22px] stroke-[2.5] text-stone-800" />
           </div>
-          <span className="text-[9px] font-medium tracking-wide">More</span>
+          <span className="text-[11px] font-black tracking-wide leading-none text-stone-800">More</span>
         </button>
       </div>
     </nav>

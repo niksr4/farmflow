@@ -181,8 +181,11 @@ export async function GET(request: NextRequest) {
           AND location_id IS NULL
       `
     } else {
+      // Items with location_id IS NULL are the global/shared pool — visible under
+      // any location filter. This handles the common pattern of one central warehouse
+      // with location tags only on processing/dispatch/sales records.
       inventoryQuery = inventorySql`
-        SELECT 
+        SELECT
           item_type,
           COALESCE(unit, 'kg') as unit,
           COALESCE(SUM(quantity), 0) as quantity,
@@ -193,18 +196,18 @@ export async function GET(request: NextRequest) {
           END as avg_price
         FROM current_inventory
         WHERE tenant_id = ${tenantContext.tenantId}
-          AND location_id = ${locationFilter}
+          AND (location_id = ${locationFilter} OR location_id IS NULL)
         GROUP BY item_type, unit
         ORDER BY item_type
       `
       summaryQuery = inventorySql`
-        SELECT 
+        SELECT
           COALESCE(SUM(total_cost), 0) as total_inventory_value,
           COUNT(DISTINCT item_type) as total_items,
           COALESCE(SUM(quantity), 0) as total_quantity
         FROM current_inventory
         WHERE tenant_id = ${tenantContext.tenantId}
-          AND location_id = ${locationFilter}
+          AND (location_id = ${locationFilter} OR location_id IS NULL)
       `
     }
 

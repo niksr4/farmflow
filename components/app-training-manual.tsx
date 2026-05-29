@@ -51,13 +51,13 @@ const firstWeekLessons = [
     number: 1,
     title: "Set up activity codes",
     duration: "5 min",
-    goal: "Create the codes your team uses to label what each labor or expense is for.",
+    goal: "Create the codes your team uses to label what each labour or expense is for.",
     how: [
       "Open the Accounts tab from the sidebar.",
       "Go to the Codes section.",
       "Add LABOR, SUPPLIES, MAINTENANCE, and ADMIN — or use the starter codes button in the setup checklist.",
     ],
-    doneLooksLike: "At least three codes appear in the Codes list. You can now select them when recording labor or expenses.",
+    doneLooksLike: "At least three codes appear in the Codes list. You can now select them when recording labour or expenses.",
   },
   {
     number: 2,
@@ -74,16 +74,16 @@ const firstWeekLessons = [
   },
   {
     number: 3,
-    title: "Log your first labor deployment",
+    title: "Log your first labour deployment",
     duration: "5–10 min",
     goal: "Track the workers who showed up for one activity — picking, pruning, irrigation, or any task.",
     how: [
-      "Open Accounts → Labor.",
+      "Open Accounts → Labour.",
       "Choose the date, number of workers, hours worked, and the activity code.",
       "Enter the total wages paid.",
       "Save the record.",
     ],
-    doneLooksLike: "A labor record appears in the list. You can see the cost per worker and hours tracked.",
+    doneLooksLike: "A labour record appears in the list. You can see the cost per worker and hours tracked.",
   },
   {
     number: 4,
@@ -105,7 +105,7 @@ const firstWeekLessons = [
     how: [
       "Open Accounts → Summary.",
       "Look at the cost breakdown by activity code.",
-      "Check that labor and expense totals make sense for the work done this week.",
+      "Check that labour and expense totals make sense for the work done this week.",
     ],
     doneLooksLike: "You can see totals by activity code. Any missing or miscoded records are visible and easy to fix.",
   },
@@ -204,7 +204,7 @@ const buildStartHereSteps = (enabledModules: string[]) => {
     },
     {
       title: "Use the Workspace Navigator to find your way around",
-      detail: "The home screen shows three sections: Finance, Operations, and Restock Inventory. Finance comes first because daily work — recording labor and expenses — happens there most often. Tap a section card to open it, or use the quick-action shortcuts to jump straight to common tasks.",
+      detail: "The home screen shows three sections: Finance, Operations, and Restock Inventory. Finance comes first because daily work — recording labour and expenses — happens there most often. Tap a section card to open it, or use the quick-action shortcuts to jump straight to common tasks.",
     },
     {
       title: "If stock changed physically, use Operations",
@@ -215,10 +215,10 @@ const buildStartHereSteps = (enabledModules: string[]) => {
     {
       title: "If money changed, use Finance",
       detail: financeEntries
-        ? `${financeEntries} are for labor, expenses, invoices, and money due.${hasBalanceSheet ? " Use Balance Sheet to review the summary after the source records are in." : ""}`
+        ? `${financeEntries} are for labour, expenses, invoices, and money due.${hasBalanceSheet ? " Use Balance Sheet to review the summary after the source records are in." : ""}`
         : hasBalanceSheet
           ? "Balance Sheet is for review after the source records are in."
-          : "Finance tabs are for labor, expenses, invoices, and money due.",
+          : "Finance tabs are for labour, expenses, invoices, and money due.",
     },
     {
       title: "If you are reviewing trends, use Insights",
@@ -331,7 +331,7 @@ const buildDailyRoutines = (
     {
       title: "Finance/admin operator",
       steps: compact([
-        hasModule(enabledModules, "accounts") ? "Use the 'Record Labor' or 'Record Expense' shortcuts on the home screen to jump straight into Accounts, or open Accounts directly from the Finance section." : null,
+        hasModule(enabledModules, "accounts") ? "Use the 'Record Labour' or 'Record Expense' shortcuts on the home screen to jump straight into Accounts, or open Accounts directly from the Finance section." : null,
         hasModule(enabledModules, "billing") ? "Raise invoices in Billing when needed." : null,
         hasModule(enabledModules, "receivables") ? "Track unpaid money in Receivables." : null,
         hasModule(enabledModules, "balance-sheet")
@@ -452,9 +452,9 @@ const buildManualGroups = (
     hasModule(enabledModules, "accounts")
       ? {
           name: "Accounts",
-          whatItIs: "Labor, other expenses, attendance, and activity codes. Tap 'Cost Patterns' to reveal a spending analysis when you need it.",
+          whatItIs: "Labour, other expenses, attendance, and activity codes. Tap 'Cost Patterns' to reveal a spending analysis when you need it.",
           openItWhen: "People worked, money was spent, or you need to maintain accounting categories.",
-          doneLooksLike: "Costs are captured with enough detail to explain the season and labor use. Cost Patterns shows where money is going without cluttering the entry view.",
+          doneLooksLike: "Costs are captured with enough detail to explain the season and labour use. Cost Patterns shows where money is going without cluttering the entry view.",
         }
       : null,
     hasModule(enabledModules, "balance-sheet")
@@ -584,7 +584,7 @@ const buildManualGroups = (
       items: [
         {
           name: "Workspace Navigator",
-          whatItIs: "The home screen that organises the workspace into Finance, Operations, and Restock Inventory. Quick-action shortcuts let you jump straight to Record Labor or Record Expense without navigating manually.",
+          whatItIs: "The home screen that organises the workspace into Finance, Operations, and Restock Inventory. Quick-action shortcuts let you jump straight to Record Labour or Record Expense without navigating manually.",
           openItWhen: "You are starting a session, switching between sections, or want to use a quick shortcut.",
           doneLooksLike: "You reach the right tab in one or two taps from the home screen.",
         },
@@ -622,7 +622,7 @@ const buildManualGroups = (
       ? {
           id: "finance",
           title: "Finance",
-          description: "Use these tabs when labor, expenses, invoices, or money due need control.",
+          description: "Use these tabs when labour, expenses, invoices, or money due need control.",
           icon: Scale,
           badgeClassName: "border-amber-200 bg-amber-50 text-amber-700",
           items: financeItems,

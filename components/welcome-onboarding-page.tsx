@@ -396,7 +396,7 @@ export default function WelcomeOnboardingPage() {
                             <span className="text-[10px] text-slate-400">{bundle.modules.length} modules</span>
                           </div>
                         </div>
-                        <div className="mt-3 flex flex-wrap gap-2">
+                        <div className="mt-3 hidden flex-wrap gap-2 sm:flex">
                           {bundle.modules.slice(0, 6).map((moduleName) => (
                             <span key={moduleName} className="rounded-full bg-white/90 px-2.5 py-1 text-[11px] text-slate-700">
                               {moduleName}
@@ -483,7 +483,7 @@ export default function WelcomeOnboardingPage() {
             </CardContent>
           </Card>
 
-          <div className="space-y-4">
+          <div className="hidden lg:block space-y-4">
             {setupHighlights.map((item) => (
               <Card key={item.title} className="border-white/70 bg-white/90">
                 <CardContent className="flex gap-4 p-5">

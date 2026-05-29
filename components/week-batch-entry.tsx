@@ -1,12 +1,12 @@
 "use client"
 
 /**
- * Week Batch Entry — log labor for Mon–Fri in one session.
+ * Week Batch Entry — log labour for Mon–Fri in one session.
  *
  * Design rationale: HoneyFarm's peak logging windows are Saturday 10am and
  * Monday 11am-12pm. They're entering a full week's data in one sitting.
  * This component surfaces a table where rows = activity codes, columns = days
- * of the week. Fill in worker counts, submit once, creates N labor entries.
+ * of the week. Fill in worker counts, submit once, creates N labour entries.
  */
 
 import { useState, useCallback, useEffect } from "react"
@@ -17,8 +17,9 @@ import { Input } from "@/components/ui/input"
 import { useToast } from "@/hooks/use-toast"
 import { format, startOfWeek, addDays } from "date-fns"
 import { formatCurrency } from "@/lib/format"
+import { useMediaQuery } from "@/hooks/use-media-query"
 
-type ActivityCode = { code: string; reference: string }
+type ActivityCode = { code: string; reference: string; labor_count?: number; expense_count?: number }
 
 type LaborRow = {
   code: string
@@ -48,10 +49,15 @@ function getWeekDays(): { iso: string; short: string; letter: string }[] {
 
 export default function WeekBatchEntry({ locationId, defaultWage = 0, onSuccess, className }: WeekBatchEntryProps) {
   const { toast } = useToast()
+  const isMobile = useMediaQuery("(max-width: 768px)")
   const [activities, setActivities] = useState<ActivityCode[]>([])
   const [rows, setRows] = useState<LaborRow[]>([])
   const [submitting, setSubmitting] = useState(false)
   const [expanded, setExpanded] = useState(true)
+
+  useEffect(() => {
+    if (isMobile) setExpanded(false)
+  }, [isMobile])
   const [addingCode, setAddingCode] = useState(false)
   const [codeSearch, setCodeSearch] = useState("")
 
@@ -136,7 +142,7 @@ export default function WeekBatchEntry({ locationId, defaultWage = 0, onSuccess,
 
       const failed = results.filter(r => !r.success)
       if (failed.length === 0) {
-        toast({ title: `${entries.length} labor entr${entries.length === 1 ? "y" : "ies"} saved`, description: `Total: ${formatCurrency(totalCost)}` })
+        toast({ title: `${entries.length} labour entr${entries.length === 1 ? "y" : "ies"} saved`, description: `Total: ${formatCurrency(totalCost)}` })
         setRows([])
         onSuccess?.()
       } else {
@@ -149,13 +155,16 @@ export default function WeekBatchEntry({ locationId, defaultWage = 0, onSuccess,
     }
   }
 
+  const sortedActivities = [...activities].sort(
+    (a, b) => ((b.labor_count ?? 0) + (b.expense_count ?? 0)) - ((a.labor_count ?? 0) + (a.expense_count ?? 0))
+  )
   const filteredActivities = codeSearch.trim()
-    ? activities.filter(
+    ? sortedActivities.filter(
         a =>
           a.code.toLowerCase().includes(codeSearch.toLowerCase()) ||
           a.reference.toLowerCase().includes(codeSearch.toLowerCase()),
       ).slice(0, 6)
-    : activities.slice(0, 6)
+    : sortedActivities.filter(a => (a.labor_count ?? 0) + (a.expense_count ?? 0) > 0).slice(0, 6)
 
   return (
     <div className={cn(
@@ -171,7 +180,7 @@ export default function WeekBatchEntry({ locationId, defaultWage = 0, onSuccess,
         className="w-full flex items-center justify-between px-4 py-3.5 text-left hover:bg-black/[0.02] transition-colors"
       >
         <div>
-          <p className="text-sm font-semibold text-neutral-900">Log this week&apos;s labor</p>
+          <p className="text-sm font-semibold text-neutral-900">Log this week&apos;s labour</p>
           <p className="text-[11px] text-neutral-400 mt-0.5">
             {rows.length === 0 ? "Add activity codes, fill in daily worker counts" : `${rows.length} activit${rows.length === 1 ? "y" : "ies"} · ${entryCount} entr${entryCount === 1 ? "y" : "ies"} · ${formatCurrency(totalCost)}`}
           </p>
@@ -217,7 +226,7 @@ export default function WeekBatchEntry({ locationId, defaultWage = 0, onSuccess,
                             step={50}
                             value={row.costPerWorker || ""}
                             onChange={e => updateWage(rowIdx, e.target.value)}
-                            className="h-7 w-16 text-xs rounded-lg border-black/10 bg-white/80 px-2 text-center"
+                            className="h-9 w-16 text-sm rounded-lg border-black/10 bg-white/80 px-2 text-center"
                             placeholder="₹"
                           />
                         </td>
@@ -230,7 +239,7 @@ export default function WeekBatchEntry({ locationId, defaultWage = 0, onSuccess,
                               value={row.dayCounts[d.iso] || ""}
                               onChange={e => updateCount(rowIdx, d.iso, e.target.value)}
                               className={cn(
-                                "h-7 w-10 text-xs rounded-lg border-black/10 bg-white/80 px-1 text-center",
+                                "h-9 w-11 text-sm rounded-lg border-black/10 bg-white/80 px-1 text-center touch-manipulation",
                                 row.dayCounts[d.iso] > 0 && "border-emerald-300 bg-emerald-50/80 text-emerald-800 font-medium",
                               )}
                               placeholder="0"
