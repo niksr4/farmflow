@@ -25,7 +25,7 @@ type MobileBottomNavProps = {
 
 const SHORT_LABELS: Record<string, string> = {
   home: "Home",
-  accounts: "Labor",
+  accounts: "Labour",
   rainfall: "Rain",
   inventory: "Stock",
   processing: "Pulping",
@@ -51,12 +51,12 @@ export default function MobileBottomNav({
     <nav
       className={cn(
         "fixed bottom-0 inset-x-0 z-40",
-        "bg-white border-t border-stone-200",
+        "bg-white border-t-2 border-stone-300",
         "pb-[env(safe-area-inset-bottom)]",
-        "shadow-[0_-4px_20px_rgba(0,0,0,0.08)]",
+        "shadow-[0_-4px_24px_rgba(0,0,0,0.14)]",
       )}
     >
-      <div className="flex items-stretch h-16">
+      <div className="flex items-stretch h-[68px]">
         {primaryTabs.map((tabId) => {
           const meta = tabMeta[tabId]
           if (!meta) return null
@@ -73,22 +73,31 @@ export default function MobileBottomNav({
               className={cn(
                 "flex-1 flex flex-col items-center justify-center gap-1 min-w-0 px-1",
                 "touch-manipulation active:scale-95 transition-transform",
-                isActive ? "text-emerald-700" : offSeason ? "text-stone-300" : "text-stone-400",
               )}
             >
-              {/* Icon container — filled pill when active */}
+              {/* Icon container — solid filled pill when active */}
               <div className={cn(
                 "flex h-9 w-14 items-center justify-center rounded-full transition-all",
-                isActive ? "bg-emerald-100" : "",
+                isActive
+                  ? "bg-emerald-700 shadow-[0_2px_8px_rgba(5,120,70,0.35)]"
+                  : "",
               )}>
                 <Icon className={cn(
-                  "h-5 w-5 transition-all",
-                  isActive ? "text-emerald-700 stroke-[2.5]" : "stroke-[1.5]",
+                  "h-[22px] w-[22px] transition-all stroke-[2.5]",
+                  isActive
+                    ? "text-white"
+                    : offSeason
+                      ? "text-stone-500"
+                      : "text-stone-800",
                 )} />
               </div>
               <span className={cn(
-                "text-[10px] font-bold tracking-wide truncate max-w-full px-1 leading-none",
-                isActive ? "text-emerald-700" : "",
+                "text-[11px] font-black tracking-wide truncate max-w-full px-1 leading-none",
+                isActive
+                  ? "text-emerald-700"
+                  : offSeason
+                    ? "text-stone-500"
+                    : "text-stone-800",
               )}>
                 {label}
               </span>
@@ -100,12 +109,12 @@ export default function MobileBottomNav({
         <button
           type="button"
           onClick={onOpenSidebar}
-          className="flex-1 flex flex-col items-center justify-center gap-1 min-w-0 px-1 text-stone-400 touch-manipulation active:scale-95 transition-transform"
+          className="flex-1 flex flex-col items-center justify-center gap-1 min-w-0 px-1 touch-manipulation active:scale-95 transition-transform"
         >
           <div className="flex h-9 w-14 items-center justify-center rounded-full">
-            <MoreHorizontal className="h-5 w-5 stroke-[1.5]" />
+            <MoreHorizontal className="h-[22px] w-[22px] stroke-[2.5] text-stone-800" />
           </div>
-          <span className="text-[10px] font-bold tracking-wide leading-none">More</span>
+          <span className="text-[11px] font-black tracking-wide leading-none text-stone-800">More</span>
         </button>
       </div>
     </nav>

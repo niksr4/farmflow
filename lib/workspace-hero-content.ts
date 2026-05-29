@@ -386,8 +386,22 @@ export function buildHeroContent(p: BuildHeroContentParams): HeroContent {
 
   // ── Per-tab return ────────────────────────────────────────────────────────
   switch (activeTab) {
-    case "home":
-      return { badge: "Home Screen", title: "Estate command center", description: "See key highlights first, then open the module you want to work in.", chips: chipsInventory, stats: inventoryStats }
+    case "home": {
+      const homeThirdStat: HeroStat = enabledModuleIds.has("rainfall") && !rainErr
+        ? { label: `Rainfall (${currentFiscalYearLabel})`, value: `${fmt(rainfallHeroTotals.totalInches, 2)} in`, metricValue: rainfallHeroTotals.totalInches }
+        : recentActivityStat
+      return {
+        badge: "Home Screen",
+        title: "Estate command center",
+        description: "See key highlights first, then open the module you want to work in.",
+        chips: chipsInventory,
+        stats: [
+          { label: "Labour this FY", value: accountsTotalsLoading ? "Loading..." : formatCurrency(accountsTotals.laborTotal, 0), metricValue: accountsTotalsLoading ? null : accountsTotals.laborTotal },
+          { label: "Expenses this FY", value: accountsTotalsLoading ? "Loading..." : formatCurrency(accountsTotals.otherTotal, 0), metricValue: accountsTotalsLoading ? null : accountsTotals.otherTotal },
+          homeThirdStat,
+        ],
+      }
+    }
     case "transactions":
       return { badge: "Traceability Log", title: "Audit-ready movements at a glance", description: "Review movements, pricing, and accountability in one place.", chips: chipsTransactions, stats: transactionStats }
     case "processing":

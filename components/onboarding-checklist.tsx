@@ -137,33 +137,23 @@ export default function OnboardingChecklist({
               </CollapsibleTrigger>
             </div>
           </div>
-          <div className="grid gap-3 lg:grid-cols-[1.25fr_0.85fr]">
-            <div className="rounded-2xl border border-emerald-100 bg-white/90 p-4 shadow-sm">
-              <div className="flex items-center justify-between text-xs uppercase tracking-[0.18em] text-emerald-700">
-                <span>Launch progress</span>
-                <span>{progressPct}% ready</span>
+          <div className="rounded-2xl border border-emerald-100 bg-white/90 p-4 shadow-sm">
+            <div className="flex items-center justify-between gap-4">
+              <div className="flex items-center gap-3 min-w-0">
+                <div className="inline-flex items-center gap-2 rounded-full border border-stone-200 bg-white px-3 py-1.5 text-xs font-medium text-stone-700 shrink-0">
+                  <span className={cn("h-2 w-2 rounded-full", progressPct >= 100 ? "bg-emerald-500" : "bg-amber-500")} />
+                  {setupStateLabel}
+                </div>
+                <p className="text-xs text-muted-foreground truncate hidden sm:block">
+                  {nextPendingStep
+                    ? `Next: ${nextPendingStep.title}`
+                    : "Core setup complete — ready for live records."}
+                </p>
               </div>
-              <div className="mt-3 h-2 overflow-hidden rounded-full bg-emerald-50/80">
-                <div className="h-full rounded-full bg-emerald-600 transition-all" style={{ width: `${progressPct}%` }} />
-              </div>
-              <p className="mt-3 text-xs leading-relaxed text-muted-foreground">
-                {nextPendingStep
-                  ? `Do this next: ${nextPendingStep.title}.`
-                  : "Core setup is complete. Your estate is ready for live records."}
-              </p>
+              <span className="text-xs font-semibold text-emerald-700 shrink-0">{progressPct}%</span>
             </div>
-            <div className="rounded-2xl border border-stone-200 bg-white/80 p-4 shadow-sm">
-              <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.18em] text-stone-700">
-                <Sparkles className="h-4 w-4 text-emerald-600" />
-                Setup flow
-              </div>
-              <p className="mt-2 text-sm leading-relaxed text-stone-600">
-                Keep the first pass short: estate defaults, one location, then the first live record.
-              </p>
-              <div className="mt-3 inline-flex items-center gap-2 rounded-full border border-stone-200 bg-white px-3 py-1.5 text-xs font-medium text-stone-700">
-                <span className={cn("h-2 w-2 rounded-full", progressPct >= 100 ? "bg-emerald-500" : "bg-amber-500")} />
-                {setupStateLabel}
-              </div>
+            <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-emerald-50/80">
+              <div className="h-full rounded-full bg-emerald-600 transition-all" style={{ width: `${progressPct}%` }} />
             </div>
           </div>
           {!isExpanded && nextPendingStep && (
@@ -304,7 +294,7 @@ export default function OnboardingChecklist({
                 <div className="space-y-1">
                   <p className="text-sm font-semibold text-foreground">Add starter activity codes</p>
                   <p className="text-xs text-muted-foreground">
-                    Activity codes organise labor and expenses by what the cost was for. Add these four to get started — you can rename or add more any time.
+                    Activity codes organise labour and expenses by what the cost was for. Add these four to get started — you can rename or add more any time.
                   </p>
                 </div>
                 <div className="flex flex-wrap gap-2">

@@ -122,6 +122,7 @@ export default function DispatchTab({ showDataToolsControls = false }: DispatchT
   const [bagTotalsScope, setBagTotalsScope] = useState<LocationScope>("all")
   const [formBagTotalsScope, setFormBagTotalsScope] = useState<LocationScope>("location")
   const [formDispatchScope, setFormDispatchScope] = useState<LocationScope>("location")
+  const [showStockBreakdown, setShowStockBreakdown] = useState(false)
   const [dispatchTotalCount, setDispatchTotalCount] = useState(0)
   const [dispatchPage, setDispatchPage] = useState(0)
   const [dispatchHasMore, setDispatchHasMore] = useState(false)
@@ -888,224 +889,157 @@ export default function DispatchTab({ showDataToolsControls = false }: DispatchT
         Bags are logistics units; received KGs feed downstream sales availability.
       </p>
 
-      <Card className="order-4 border-border/70 bg-white/85">
-        <CardHeader className="pb-3">
-          <CardTitle className="text-xs uppercase tracking-[0.2em] text-muted-foreground">How stock moves</CardTitle>
-          <CardDescription>Bags show physical movement. Confirmed received KGs are what become saleable later.</CardDescription>
-        </CardHeader>
-        <CardContent className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
-          <div className="rounded-lg border border-border/60 bg-white/80 p-3">
-            <p className="text-xs text-muted-foreground">Processed bags</p>
-            <p className="mt-1 text-sm font-semibold text-foreground">{formatNumber(processedNominalBagsTotal)} bags</p>
-            <p className="mt-1 text-xs text-muted-foreground">{formatNumber(processedNominalBagsTotal * bagWeightKg)} KGs</p>
+      <div className="order-4 overflow-hidden rounded-xl border border-stone-200 bg-white shadow-sm dark:border-white/[0.06] dark:bg-card">
+        <div className="border-b border-stone-100 px-5 py-4 dark:border-white/[0.05]">
+          <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-stone-400">Stock flow</p>
+          <p className="mt-0.5 text-sm font-semibold text-stone-800 dark:text-stone-200">Bags are logistics units · received KGs are commercial stock</p>
+        </div>
+        <div className="grid grid-cols-1 gap-0 divide-y divide-stone-100 md:grid-cols-2 md:divide-x md:divide-y-0 xl:grid-cols-4 dark:divide-white/[0.05]">
+          <div className="px-5 py-4">
+            <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-stone-400">Processed</p>
+            <p className="mt-1 text-xl font-black tabular-nums text-stone-900 dark:text-white">{formatNumber(processedNominalBagsTotal)} bags</p>
+            <p className="mt-0.5 text-xs text-stone-400">{formatNumber(processedNominalBagsTotal * bagWeightKg)} KGs nominal</p>
           </div>
-          <div className="rounded-lg border border-border/60 bg-white/80 p-3">
-            <p className="text-xs text-muted-foreground">Dispatched bags</p>
-            <p className="mt-1 text-sm font-semibold text-foreground">{formatNumber(dispatchedNominalBagsTotal)} bags</p>
-            <p className="mt-1 text-xs text-muted-foreground">{formatNumber(dispatchedNominalBagsTotal * bagWeightKg)} KGs</p>
+          <div className="px-5 py-4">
+            <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-stone-400">Dispatched</p>
+            <p className="mt-1 text-xl font-black tabular-nums text-stone-900 dark:text-white">{formatNumber(dispatchedNominalBagsTotal)} bags</p>
+            <p className="mt-0.5 text-xs text-stone-400">{formatNumber(dispatchedNominalBagsTotal * bagWeightKg)} KGs nominal</p>
           </div>
-          <div className="rounded-lg border border-border/60 bg-white/80 p-3">
-            <p className="text-xs text-muted-foreground">Confirmed received KGs</p>
-            <p className="mt-1 text-sm font-semibold text-foreground">{formatNumber(dispatchedReceivedKgsTotal)} KGs</p>
-            <p className={cn("mt-1 text-xs", dispatchVarianceKgsTotal >= 0 ? "text-emerald-700" : "text-rose-700")}>
-              Difference vs bag weight: {dispatchVarianceKgsTotal >= 0 ? "+" : ""}
-              {formatNumber(dispatchVarianceKgsTotal)} KGs
+          <div className="px-5 py-4">
+            <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-stone-400">Received</p>
+            <p className="mt-1 text-xl font-black tabular-nums text-emerald-700 dark:text-emerald-400">{formatNumber(dispatchedReceivedKgsTotal)} KGs</p>
+            <p className={cn("mt-0.5 text-xs", dispatchVarianceKgsTotal >= 0 ? "text-emerald-600 dark:text-emerald-500" : "text-rose-600")}>
+              {dispatchVarianceKgsTotal >= 0 ? "+" : ""}{formatNumber(dispatchVarianceKgsTotal)} KGs vs nominal
             </p>
           </div>
-          <div className="rounded-lg border border-border/60 bg-white/80 p-3">
-            <p className="text-xs text-muted-foreground">Still on hand</p>
-            <p className={cn("mt-1 text-sm font-semibold", pendingNominalBags < 0 ? "text-rose-700" : "text-foreground")}>
+          <div className="px-5 py-4">
+            <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-stone-400">On hand</p>
+            <p className={cn("mt-1 text-xl font-black tabular-nums", pendingNominalBags < 0 ? "text-rose-600" : "text-stone-900 dark:text-white")}>
               {formatNumber(Math.abs(pendingNominalBags))} bags
             </p>
-            <p className="mt-1 text-xs text-muted-foreground">
-              {pendingNominalBags < 0 ? "More dispatched than processed" : "Still sitting in processed stock"}
+            <p className="mt-0.5 text-xs text-stone-400">
+              {pendingNominalBags < 0 ? "Exceeds processed" : "Awaiting dispatch"}
             </p>
           </div>
-        </CardContent>
-      </Card>
-
-      {/* Summary Cards */}
-      <div className="order-5 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-        {/* Arabica Dry Parchment */}
-        <Card className="border-border/60 bg-white/85">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-xs uppercase tracking-[0.2em] text-muted-foreground">
-              Arabica Dry Parchment
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-semibold text-foreground">
-              {formatNumber(bagTotals.arabica_dry_parchment_bags)}
-            </div>
-            <div className="text-sm text-muted-foreground mt-1">
-              Processed nominal: {formatNumber(bagTotals.arabica_dry_parchment_bags * bagWeightKg)} KGs
-            </div>
-            <div className="text-sm text-muted-foreground mt-1">
-              Dispatched: {formatNumber(dispatchedTotals.arabica_dry_parchment)} bags (
-              {formatNumber(dispatchedTotals.arabica_dry_parchment * bagWeightKg)} KGs)
-            </div>
-            <div className="text-xs text-muted-foreground mt-1">
-              Confirmed received: {formatNumber(dispatchReceivedKgsTotals.arabica_dry_parchment)} KGs
-            </div>
-            <div
-              className={cn(
-                "text-sm font-medium mt-1",
-                summaryBalanceArabicaDryParchment < 0 ? "text-rose-600" : "text-emerald-600",
-              )}
-            >
-              Balance: {formatNumber(summaryBalanceArabicaDryParchment)} bags
-            </div>
-            <div className="text-xs text-muted-foreground mt-1">
-              {formatNumber(summaryBalanceArabicaDryParchment * bagWeightKg)} KGs
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* Arabica Dry Cherry */}
-        <Card className="border-border/60 bg-white/85">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-xs uppercase tracking-[0.2em] text-muted-foreground">
-              Arabica Dry Cherry
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-semibold text-foreground">
-              {formatNumber(bagTotals.arabica_dry_cherry_bags)}
-            </div>
-            <div className="text-sm text-muted-foreground mt-1">
-              Processed nominal: {formatNumber(bagTotals.arabica_dry_cherry_bags * bagWeightKg)} KGs
-            </div>
-            <div className="text-sm text-muted-foreground mt-1">
-              Dispatched: {formatNumber(dispatchedTotals.arabica_dry_cherry)} bags (
-              {formatNumber(dispatchedTotals.arabica_dry_cherry * bagWeightKg)} KGs)
-            </div>
-            <div className="text-xs text-muted-foreground mt-1">
-              Confirmed received: {formatNumber(dispatchReceivedKgsTotals.arabica_dry_cherry)} KGs
-            </div>
-            <div
-              className={cn(
-                "text-sm font-medium mt-1",
-                summaryBalanceArabicaDryCherry < 0 ? "text-rose-600" : "text-emerald-600",
-              )}
-            >
-              Balance: {formatNumber(summaryBalanceArabicaDryCherry)} bags
-            </div>
-            <div className="text-xs text-muted-foreground mt-1">
-              {formatNumber(summaryBalanceArabicaDryCherry * bagWeightKg)} KGs
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* Robusta Dry Parchment */}
-        <Card className="border-border/60 bg-white/85">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-xs uppercase tracking-[0.2em] text-muted-foreground">
-              Robusta Dry Parchment
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-semibold text-foreground">
-              {formatNumber(bagTotals.robusta_dry_parchment_bags)}
-            </div>
-            <div className="text-sm text-muted-foreground mt-1">
-              Processed nominal: {formatNumber(bagTotals.robusta_dry_parchment_bags * bagWeightKg)} KGs
-            </div>
-            <div className="text-sm text-muted-foreground mt-1">
-              Dispatched: {formatNumber(dispatchedTotals.robusta_dry_parchment)} bags (
-              {formatNumber(dispatchedTotals.robusta_dry_parchment * bagWeightKg)} KGs)
-            </div>
-            <div className="text-xs text-muted-foreground mt-1">
-              Confirmed received: {formatNumber(dispatchReceivedKgsTotals.robusta_dry_parchment)} KGs
-            </div>
-            <div
-              className={cn(
-                "text-sm font-medium mt-1",
-                summaryBalanceRobustaDryParchment < 0 ? "text-rose-600" : "text-emerald-600",
-              )}
-            >
-              Balance: {formatNumber(summaryBalanceRobustaDryParchment)} bags
-            </div>
-            <div className="text-xs text-muted-foreground mt-1">
-              {formatNumber(summaryBalanceRobustaDryParchment * bagWeightKg)} KGs
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* Robusta Dry Cherry */}
-        <Card className="border-border/60 bg-white/85">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-xs uppercase tracking-[0.2em] text-muted-foreground">
-              Robusta Dry Cherry
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-semibold text-foreground">
-              {formatNumber(bagTotals.robusta_dry_cherry_bags)}
-            </div>
-            <div className="text-sm text-muted-foreground mt-1">
-              Processed nominal: {formatNumber(bagTotals.robusta_dry_cherry_bags * bagWeightKg)} KGs
-            </div>
-            <div className="text-sm text-muted-foreground mt-1">
-              Dispatched: {formatNumber(dispatchedTotals.robusta_dry_cherry)} bags (
-              {formatNumber(dispatchedTotals.robusta_dry_cherry * bagWeightKg)} KGs)
-            </div>
-            <div className="text-xs text-muted-foreground mt-1">
-              Confirmed received: {formatNumber(dispatchReceivedKgsTotals.robusta_dry_cherry)} KGs
-            </div>
-            <div
-              className={cn(
-                "text-sm font-medium mt-1",
-                summaryBalanceRobustaDryCherry < 0 ? "text-rose-600" : "text-emerald-600",
-              )}
-            >
-              Balance: {formatNumber(summaryBalanceRobustaDryCherry)} bags
-            </div>
-            <div className="text-xs text-muted-foreground mt-1">
-              {formatNumber(summaryBalanceRobustaDryCherry * bagWeightKg)} KGs
-            </div>
-          </CardContent>
-        </Card>
+        </div>
       </div>
 
+      {/* Stock breakdown toggle */}
+      <div className="flex justify-center">
+        <button
+          type="button"
+          onClick={() => setShowStockBreakdown(v => !v)}
+          className="inline-flex min-h-[44px] items-center gap-1.5 rounded-full border border-stone-200 bg-stone-50 px-5 py-2.5 text-sm font-semibold text-stone-600 hover:bg-stone-100 transition-colors touch-manipulation"
+        >
+          {showStockBreakdown ? "Hide stock breakdown ▲" : "Show stock breakdown ▼"}
+        </button>
+      </div>
+
+      {/* Summary Cards */}
+      {showStockBreakdown && <div className="order-5 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+        {/* Arabica Dry Parchment */}
+        <div className="overflow-hidden rounded-xl border border-stone-200 bg-white shadow-sm dark:border-white/[0.06] dark:bg-card">
+          <div className="border-b border-stone-100 px-5 py-3 dark:border-white/[0.05]">
+            <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-emerald-700 dark:text-emerald-500">Arabica Dry Parchment</p>
+          </div>
+          <div className="p-5">
+            <div className="text-2xl font-black tabular-nums text-stone-900 dark:text-white">{formatNumber(bagTotals.arabica_dry_parchment_bags)}</div>
+            <div className="mt-1 text-xs text-stone-500 dark:text-stone-400">Processed nominal: {formatNumber(bagTotals.arabica_dry_parchment_bags * bagWeightKg)} KGs</div>
+            <div className="mt-1 text-xs text-stone-500 dark:text-stone-400">Dispatched: {formatNumber(dispatchedTotals.arabica_dry_parchment)} bags ({formatNumber(dispatchedTotals.arabica_dry_parchment * bagWeightKg)} KGs)</div>
+            <div className="mt-1 text-xs text-stone-400 dark:text-stone-500">Confirmed received: {formatNumber(dispatchReceivedKgsTotals.arabica_dry_parchment)} KGs</div>
+            <div className={cn("mt-1 text-sm font-semibold", summaryBalanceArabicaDryParchment < 0 ? "text-rose-600" : "text-emerald-600")}>Balance: {formatNumber(summaryBalanceArabicaDryParchment)} bags</div>
+            <div className="text-xs text-stone-400 dark:text-stone-500">{formatNumber(summaryBalanceArabicaDryParchment * bagWeightKg)} KGs</div>
+          </div>
+        </div>
+
+        {/* Arabica Dry Cherry */}
+        <div className="overflow-hidden rounded-xl border border-stone-200 bg-white shadow-sm dark:border-white/[0.06] dark:bg-card">
+          <div className="border-b border-stone-100 px-5 py-3 dark:border-white/[0.05]">
+            <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-emerald-700 dark:text-emerald-500">Arabica Dry Cherry</p>
+          </div>
+          <div className="p-5">
+            <div className="text-2xl font-black tabular-nums text-stone-900 dark:text-white">{formatNumber(bagTotals.arabica_dry_cherry_bags)}</div>
+            <div className="mt-1 text-xs text-stone-500 dark:text-stone-400">Processed nominal: {formatNumber(bagTotals.arabica_dry_cherry_bags * bagWeightKg)} KGs</div>
+            <div className="mt-1 text-xs text-stone-500 dark:text-stone-400">Dispatched: {formatNumber(dispatchedTotals.arabica_dry_cherry)} bags ({formatNumber(dispatchedTotals.arabica_dry_cherry * bagWeightKg)} KGs)</div>
+            <div className="mt-1 text-xs text-stone-400 dark:text-stone-500">Confirmed received: {formatNumber(dispatchReceivedKgsTotals.arabica_dry_cherry)} KGs</div>
+            <div className={cn("mt-1 text-sm font-semibold", summaryBalanceArabicaDryCherry < 0 ? "text-rose-600" : "text-emerald-600")}>Balance: {formatNumber(summaryBalanceArabicaDryCherry)} bags</div>
+            <div className="text-xs text-stone-400 dark:text-stone-500">{formatNumber(summaryBalanceArabicaDryCherry * bagWeightKg)} KGs</div>
+          </div>
+        </div>
+
+        {/* Robusta Dry Parchment */}
+        <div className="overflow-hidden rounded-xl border border-stone-200 bg-white shadow-sm dark:border-white/[0.06] dark:bg-card">
+          <div className="border-b border-stone-100 px-5 py-3 dark:border-white/[0.05]">
+            <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-emerald-700 dark:text-emerald-500">Robusta Dry Parchment</p>
+          </div>
+          <div className="p-5">
+            <div className="text-2xl font-black tabular-nums text-stone-900 dark:text-white">{formatNumber(bagTotals.robusta_dry_parchment_bags)}</div>
+            <div className="mt-1 text-xs text-stone-500 dark:text-stone-400">Processed nominal: {formatNumber(bagTotals.robusta_dry_parchment_bags * bagWeightKg)} KGs</div>
+            <div className="mt-1 text-xs text-stone-500 dark:text-stone-400">Dispatched: {formatNumber(dispatchedTotals.robusta_dry_parchment)} bags ({formatNumber(dispatchedTotals.robusta_dry_parchment * bagWeightKg)} KGs)</div>
+            <div className="mt-1 text-xs text-stone-400 dark:text-stone-500">Confirmed received: {formatNumber(dispatchReceivedKgsTotals.robusta_dry_parchment)} KGs</div>
+            <div className={cn("mt-1 text-sm font-semibold", summaryBalanceRobustaDryParchment < 0 ? "text-rose-600" : "text-emerald-600")}>Balance: {formatNumber(summaryBalanceRobustaDryParchment)} bags</div>
+            <div className="text-xs text-stone-400 dark:text-stone-500">{formatNumber(summaryBalanceRobustaDryParchment * bagWeightKg)} KGs</div>
+          </div>
+        </div>
+
+        {/* Robusta Dry Cherry */}
+        <div className="overflow-hidden rounded-xl border border-stone-200 bg-white shadow-sm dark:border-white/[0.06] dark:bg-card">
+          <div className="border-b border-stone-100 px-5 py-3 dark:border-white/[0.05]">
+            <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-emerald-700 dark:text-emerald-500">Robusta Dry Cherry</p>
+          </div>
+          <div className="p-5">
+            <div className="text-2xl font-black tabular-nums text-stone-900 dark:text-white">{formatNumber(bagTotals.robusta_dry_cherry_bags)}</div>
+            <div className="mt-1 text-xs text-stone-500 dark:text-stone-400">Processed nominal: {formatNumber(bagTotals.robusta_dry_cherry_bags * bagWeightKg)} KGs</div>
+            <div className="mt-1 text-xs text-stone-500 dark:text-stone-400">Dispatched: {formatNumber(dispatchedTotals.robusta_dry_cherry)} bags ({formatNumber(dispatchedTotals.robusta_dry_cherry * bagWeightKg)} KGs)</div>
+            <div className="mt-1 text-xs text-stone-400 dark:text-stone-500">Confirmed received: {formatNumber(dispatchReceivedKgsTotals.robusta_dry_cherry)} KGs</div>
+            <div className={cn("mt-1 text-sm font-semibold", summaryBalanceRobustaDryCherry < 0 ? "text-rose-600" : "text-emerald-600")}>Balance: {formatNumber(summaryBalanceRobustaDryCherry)} bags</div>
+            <div className="text-xs text-stone-400 dark:text-stone-500">{formatNumber(summaryBalanceRobustaDryCherry * bagWeightKg)} KGs</div>
+          </div>
+        </div>
+      </div>}
+
       {/* Add Dispatch Form */}
-      <Card ref={dispatchFormRef} className="order-1 border-border/70 bg-white/85">
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Truck className="h-5 w-5" />
-            {editingRecord ? "Edit dispatch entry" : "Dispatch entry"}
-          </CardTitle>
-          <CardDescription>
+      <div ref={dispatchFormRef} className="order-1 overflow-hidden rounded-xl border border-stone-200 bg-white shadow-sm dark:border-white/[0.06] dark:bg-card">
+        <div className="border-b border-stone-100 px-5 py-4 dark:border-white/[0.05]">
+          <div className="flex items-center gap-3">
+            <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-emerald-800 dark:bg-emerald-900/40">
+              <Truck className="h-4 w-4 text-emerald-400" />
+            </div>
+            <div>
+              <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-emerald-700 dark:text-emerald-500">Operations</p>
+              <p className="mt-0.5 text-lg font-bold text-stone-900 dark:text-white">{editingRecord ? "Edit dispatch entry" : "New dispatch entry"}</p>
+            </div>
+          </div>
+          <p className="mt-2 text-xs text-stone-400 dark:text-stone-500">
             {editingRecord
               ? "Update what physically left this location."
               : "Record what physically left this location today. Add confirmed received KGs only when they are known."}
-          </CardDescription>
+          </p>
           {editingRecord ? (
-            <p className="text-xs text-emerald-700">
+            <p className="mt-1 text-xs text-emerald-700">
               Editing {formatDateOnly(editingRecord.dispatch_date)} for {getLocationLabel(editingRecord)}.
             </p>
           ) : null}
-        </CardHeader>
-        <CardContent>
-          <div className="mb-4 rounded-2xl border border-emerald-100 bg-emerald-50/55 p-4">
-            <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-              <div className="rounded-xl border border-white/70 bg-white/85 p-3">
-                <p className="text-[11px] uppercase tracking-[0.18em] text-emerald-700">Location</p>
-                <p className="mt-1 text-sm font-semibold text-foreground">
-                  {selectedLocation?.name || selectedLocation?.code || "Select a location"}
-                </p>
-              </div>
-              <div className="rounded-xl border border-white/70 bg-white/85 p-3">
-                <p className="text-[11px] uppercase tracking-[0.18em] text-emerald-700">Coffee</p>
-                <p className="mt-1 text-sm font-semibold text-foreground">{coffeeType}</p>
-              </div>
-              <div className="rounded-xl border border-white/70 bg-white/85 p-3">
-                <p className="text-[11px] uppercase tracking-[0.18em] text-emerald-700">Bag type</p>
-                <p className="mt-1 text-sm font-semibold text-foreground">{formatBagTypeLabel(bagType)}</p>
-              </div>
-              <div className="rounded-xl border border-white/70 bg-white/85 p-3">
-                <p className="text-[11px] uppercase tracking-[0.18em] text-emerald-700">Save rule</p>
-                <p className="mt-1 text-sm font-semibold text-foreground">One trip, one location, one stock line</p>
-              </div>
+        </div>
+        <div className="p-5">
+          <div className="mb-5 grid gap-2 md:grid-cols-2 xl:grid-cols-4">
+            <div className="rounded-lg border border-stone-200 bg-stone-50 p-3 dark:border-white/[0.05] dark:bg-white/[0.02]">
+              <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-stone-400">Location</p>
+              <p className="mt-1 text-sm font-semibold text-stone-800 dark:text-stone-200">
+                {selectedLocation?.name || selectedLocation?.code || "Select a location"}
+              </p>
+            </div>
+            <div className="rounded-lg border border-stone-200 bg-stone-50 p-3 dark:border-white/[0.05] dark:bg-white/[0.02]">
+              <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-stone-400">Coffee</p>
+              <p className="mt-1 text-sm font-semibold text-stone-800 dark:text-stone-200">{coffeeType}</p>
+            </div>
+            <div className="rounded-lg border border-stone-200 bg-stone-50 p-3 dark:border-white/[0.05] dark:bg-white/[0.02]">
+              <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-stone-400">Bag type</p>
+              <p className="mt-1 text-sm font-semibold text-stone-800 dark:text-stone-200">{formatBagTypeLabel(bagType)}</p>
+            </div>
+            <div className="rounded-lg border border-stone-200 bg-stone-50 p-3 dark:border-white/[0.05] dark:bg-white/[0.02]">
+              <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-stone-400">Rule</p>
+              <p className="mt-1 text-sm font-semibold text-stone-800 dark:text-stone-200">One trip · one location · one stock line</p>
             </div>
           </div>
 
@@ -1336,19 +1270,20 @@ export default function DispatchTab({ showDataToolsControls = false }: DispatchT
               Enter location and quantity. Quantity must be within available stock.
             </p>
           )}
-        </CardContent>
-      </Card>
+        </div>
+      </div>
 
       {/* Dispatch Records Table */}
-      <Card className="order-6 border-border/70 bg-white/85">
-        <CardHeader>
+      <div className="order-6 overflow-hidden rounded-xl border border-stone-200 bg-white shadow-sm dark:border-white/[0.06] dark:bg-card">
+        <div className="border-b border-stone-100 px-5 py-4 dark:border-white/[0.05]">
           <div className="flex items-center justify-between">
             <div>
-              <CardTitle className="flex items-center gap-2">
-                <Package className="h-5 w-5" />
-                Dispatch history
-              </CardTitle>
-              <CardDescription>Review and reopen previous dispatch entries · {resolvedCountLabel}</CardDescription>
+              <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-emerald-700 dark:text-emerald-500">History</p>
+              <p className="mt-0.5 flex items-center gap-2 text-lg font-bold text-stone-900 dark:text-white">
+                <Package className="h-4 w-4 text-stone-400" />
+                Dispatch records
+              </p>
+              <p className="text-xs text-stone-400 dark:text-stone-500">{resolvedCountLabel}</p>
             </div>
             {showDataToolsControls && (
               <Button variant="outline" size="sm" onClick={exportToCSV} className="bg-transparent">
@@ -1357,8 +1292,8 @@ export default function DispatchTab({ showDataToolsControls = false }: DispatchT
               </Button>
             )}
           </div>
-        </CardHeader>
-        <CardContent>
+        </div>
+        <div className="p-5">
           {selectedDispatchRecord && (
                 <div className="mb-4 rounded-xl border border-emerald-100 bg-emerald-50/50 p-3 text-sm">
                   <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
@@ -1484,15 +1419,15 @@ export default function DispatchTab({ showDataToolsControls = false }: DispatchT
               <div className="hidden overflow-x-auto md:block">
                 <Table>
                   <TableHeader>
-                    <TableRow>
-                      <TableHead className="sticky top-0 bg-muted/70 backdrop-blur">Date</TableHead>
-                      <TableHead className="sticky top-0 bg-muted/70 backdrop-blur">Location</TableHead>
-                      <TableHead className="sticky top-0 bg-muted/70 backdrop-blur">Coffee Type</TableHead>
-                      <TableHead className="sticky top-0 bg-muted/70 backdrop-blur">Bag Type</TableHead>
-                      <TableHead className="text-right sticky top-0 bg-muted/70 backdrop-blur">Bags</TableHead>
-                      <TableHead className="text-right sticky top-0 bg-muted/70 backdrop-blur">KGs (Received)</TableHead>
-                      <TableHead className="sticky top-0 bg-muted/70 backdrop-blur">Notes</TableHead>
-                      <TableHead className="text-right sticky top-0 bg-muted/70 backdrop-blur">Actions</TableHead>
+                    <TableRow className="bg-emerald-900 hover:bg-emerald-900">
+                      <TableHead className="text-emerald-300 font-bold text-[11px] uppercase tracking-[0.16em]">Date</TableHead>
+                      <TableHead className="text-emerald-300 font-bold text-[11px] uppercase tracking-[0.16em]">Location</TableHead>
+                      <TableHead className="text-emerald-300 font-bold text-[11px] uppercase tracking-[0.16em]">Coffee</TableHead>
+                      <TableHead className="text-emerald-300 font-bold text-[11px] uppercase tracking-[0.16em]">Bag type</TableHead>
+                      <TableHead className="text-right text-emerald-300 font-bold text-[11px] uppercase tracking-[0.16em]">Bags</TableHead>
+                      <TableHead className="text-right text-emerald-300 font-bold text-[11px] uppercase tracking-[0.16em]">KGs received</TableHead>
+                      <TableHead className="text-emerald-300 font-bold text-[11px] uppercase tracking-[0.16em]">Notes</TableHead>
+                      <TableHead className="text-right text-emerald-300 font-bold text-[11px] uppercase tracking-[0.16em]">Actions</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -1571,8 +1506,8 @@ export default function DispatchTab({ showDataToolsControls = false }: DispatchT
               )}
             </div>
           )}
-        </CardContent>
-      </Card>
+        </div>
+      </div>
     </WorkspacePageShell>
   )
 }

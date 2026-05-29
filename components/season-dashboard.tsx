@@ -121,7 +121,7 @@ type SeasonSummary = {
   }
   totalsByCoffeeType: Record<string, SeasonCoffeeTotals>
   costs: {
-    labor: number
+    labour: number
     expenses: number
     restock: number
     total: number
@@ -320,7 +320,7 @@ const KPI_EXPLANATIONS: Record<string, KpiExplain> = {
     why: "Signals picking selectivity and cherry quality. Higher is usually better for cup quality.",
     causes: [
       "Picking crews mixing green + ripe cherry",
-      "Low labor availability leading to strip picking",
+      "Low labour availability leading to strip picking",
       "Weather forcing early harvest",
     ],
     checks: [
@@ -1548,7 +1548,7 @@ export default function SeasonDashboard() {
                 <CardTitle className="text-xl">{formatCurrency(summary.costs.total)}</CardTitle>
               </CardHeader>
               <CardContent className="text-xs text-muted-foreground space-y-1">
-                <div>Labor: {formatCurrency(summary.costs.labor)}</div>
+                <div>Labour: {formatCurrency(summary.costs.labour)}</div>
                 <div>Expenses: {formatCurrency(summary.costs.expenses)}</div>
                 <div>Restock: {formatCurrency(summary.costs.restock)}</div>
                 <div>Cost / KG (Processed): {formatCurrencyWithDecimals(summary.unitCosts.costPerProcessedKg)}</div>
@@ -1638,7 +1638,7 @@ export default function SeasonDashboard() {
                   <CardDescription>Cost / acre</CardDescription>
                   <CardTitle className="text-xl">{formatCurrency(perAcreMetrics.cost)}</CardTitle>
                 </CardHeader>
-                <CardContent className="text-xs text-muted-foreground">Labor, expenses, and restock per acre</CardContent>
+                <CardContent className="text-xs text-muted-foreground">Labour, expenses, and restock per acre</CardContent>
               </Card>
             </div>
           ) : (

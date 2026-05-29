@@ -1,7 +1,9 @@
 "use client"
 
+import { useEffect, useRef } from "react"
 import Link from "next/link"
 import { motion } from "framer-motion"
+import posthog from "posthog-js"
 import {
   ArrowRight,
   CheckCircle2,
@@ -63,7 +65,7 @@ const benefits = [
     icon: Coffee,
   },
   {
-    title: "Stop losing money to unrecorded labor",
+    title: "Stop losing money to unrecorded labour",
     description:
       "Plucker attendance, plucking rates, and daily wages logged by block. At the end of the month, your cost per kg isn't a guess.",
     icon: Users,
@@ -71,7 +73,7 @@ const benefits = [
   {
     title: "Your season's P&L, always current",
     description:
-      "Revenue, labor, expenses, and production connected automatically. Your gross margin and cost per kg update the moment you log a sale — no spreadsheet assembly at the end of the season.",
+      "Revenue, labour, expenses, and production connected automatically. Your gross margin and cost per kg update the moment you log a sale — no spreadsheet assembly at the end of the season.",
     icon: Wallet,
   },
 ]
@@ -81,7 +83,7 @@ const advisorCards = [
     eyebrow: "Every Monday morning",
     title: "Your weekly digest, written by AI",
     detail:
-      "Last week's cherry yield, labor efficiency, field conditions, and three specific actions for this week — grounded in your actual estate data, not generic advice.",
+      "Last week's cherry yield, labour efficiency, field conditions, and three specific actions for this week — grounded in your actual estate data, not generic advice.",
     icon: Mail,
     accent: "border-violet-400/20 bg-violet-400/[0.06]",
     iconAccent: "border-violet-300/15 bg-violet-300/[0.08] text-violet-200",
@@ -108,7 +110,7 @@ const advisorCards = [
     eyebrow: "Automatic exception detection",
     title: "Catches what you'd miss",
     detail:
-      "Labor costs running 40% above last season? Processing yield below your historical average? Flagged in your weekly brief before it becomes a costly pattern.",
+      "Labour costs running 40% above last season? Processing yield below your historical average? Flagged in your weekly brief before it becomes a costly pattern.",
     icon: AlertCircle,
     accent: "border-amber-400/20 bg-amber-400/[0.06]",
     iconAccent: "border-amber-300/15 bg-amber-300/[0.08] text-amber-200",
@@ -120,7 +122,7 @@ const howItWorks = [
     step: "01",
     title: "Set up your estate in one morning",
     detail:
-      "Add your blocks, pulping sections, and team. Staff can start logging cherry intake and labor the same day — no training needed.",
+      "Add your blocks, pulping sections, and team. Staff can start logging cherry intake and labour the same day — no training needed.",
   },
   {
     step: "02",
@@ -145,7 +147,7 @@ const outcomeCards = [
     icon: Coffee,
   },
   {
-    eyebrow: "Labor & costs",
+    eyebrow: "Labour & costs",
     title: "Know your cost per kg",
     detail:
       "Plucker wages, fertiliser, and consumables logged against the block they were spent on. Cost per kg of parchment becomes a real number.",
@@ -173,7 +175,7 @@ const coreSurfacePills = [
   "Drying & parchment",
   "Dispatch",
   "Sales",
-  "Labor & wages",
+  "Labour & wages",
   "Accounts",
   "Season P&L",
   "Weekly digest",
@@ -183,9 +185,15 @@ const coreSurfacePills = [
 ]
 
 const planBadges: Record<string, string> = {
-  basic: "Foundation",
-  core: "Recommended",
+  basic: "Digital field book",
+  core: "Most popular",
   enterprise: "Full stack",
+}
+
+const planPrices: Record<string, { price: string; note: string }> = {
+  basic: { price: "₹1,299", note: "/month" },
+  core: { price: "₹3,499", note: "/month" },
+  enterprise: { price: "Custom", note: "" },
 }
 
 const moduleLabelById = new Map(MODULES.map((m) => [m.id, m.label]))
@@ -197,10 +205,33 @@ const heroBeanSpecs = [
   { left: "88%", top: "18%", size: 13, duration: "7.8s", delay: "-6.2s", opacity: 0.2 },
 ]
 
+function capture(event: string, props?: Record<string, unknown>) {
+  try { posthog.capture(event, props) } catch { /* posthog not ready */ }
+}
+
 export default function LandingPage() {
   const { t } = useLocale()
   const MotionDiv = motion.div as any
   const MotionSection = motion.section as any
+  const scrollMilestonesRef = useRef(new Set<number>())
+
+  useEffect(() => {
+    const milestones = [25, 50, 75]
+    const onScroll = () => {
+      const scrolled = window.scrollY
+      const total = document.documentElement.scrollHeight - window.innerHeight
+      if (total <= 0) return
+      const pct = Math.round((scrolled / total) * 100)
+      for (const m of milestones) {
+        if (pct >= m && !scrollMilestonesRef.current.has(m)) {
+          scrollMilestonesRef.current.add(m)
+          capture("homepage_scrolled", { depth_pct: m })
+        }
+      }
+    }
+    window.addEventListener("scroll", onScroll, { passive: true })
+    return () => window.removeEventListener("scroll", onScroll)
+  }, [])
 
   const reveal = (delay = 0) => ({
     initial: { opacity: 0, y: 24 },
@@ -236,36 +267,49 @@ export default function LandingPage() {
             ))}
           </div>
           <div className="relative z-10">
-            <Badge className="mb-6 border-emerald-300/20 bg-emerald-300/[0.08] text-emerald-200">
-              {t("public.landing.badge")}
-            </Badge>
-            <h1 className="mx-auto max-w-4xl font-display text-5xl font-semibold leading-[1.05] tracking-tight text-stone-50 sm:text-6xl lg:text-[5rem]">
+            <div className="mb-6 inline-flex items-center justify-center">
+              <span className="pulse-glow-emerald relative rounded-full border border-emerald-400/25 bg-emerald-400/[0.09] px-4 py-1.5 text-sm font-medium text-emerald-200 backdrop-blur-sm">
+                {t("public.landing.badge")}
+              </span>
+            </div>
+            <h1 className="mx-auto max-w-4xl font-display text-5xl font-black leading-[1.02] tracking-[-0.03em] text-stone-50 sm:text-6xl lg:text-[5.25rem]">
               {t("public.landing.title")}
             </h1>
-            <p className="mx-auto mt-6 max-w-xl text-lg leading-8 text-stone-400">
+            <p className="mx-auto mt-6 max-w-xl text-lg leading-8 text-stone-400/90">
               {t("public.landing.description")}
             </p>
-            <div className="mt-8 flex flex-wrap items-center justify-center gap-3">
-              <Button
-                size="lg"
-                className="bg-emerald-300 text-[#06110f] shadow-[0_0_40px_-8px_rgba(110,231,183,0.5)] hover:bg-emerald-200"
-                asChild
-              >
-                <Link href="/signup">
-                  {t("public.landing.ctaPrimary")}
-                  <ArrowRight className="ml-1 h-4 w-4" />
-                </Link>
-              </Button>
+            <div className="mt-10 flex flex-wrap items-center justify-center gap-3">
+              {/* CTA with expanding ring animation */}
+              <div className="relative">
+                <span className="ring-expand pointer-events-none absolute inset-0 rounded-full border border-emerald-300/30" />
+                <span className="ring-expand-delayed pointer-events-none absolute inset-0 rounded-full border border-emerald-300/20" />
+                <Button
+                  size="lg"
+                  className={[
+                    "relative bg-emerald-300 text-[#06110f] font-bold",
+                    "shadow-[0_0_0_1px_rgba(52,211,153,0.4),0_8px_32px_-4px_rgba(52,211,153,0.55),0_0_80px_-16px_rgba(52,211,153,0.3)]",
+                    "hover:bg-emerald-200 hover:shadow-[0_0_0_1px_rgba(52,211,153,0.5),0_12px_40px_-4px_rgba(52,211,153,0.65),0_0_100px_-12px_rgba(52,211,153,0.4)]",
+                  ].join(" ")}
+                  asChild
+                  onClick={() => capture("cta_clicked", { cta_location: "homepage_hero", cta_text: "signup" })}
+                >
+                  <Link href="/signup">
+                    {t("public.landing.ctaPrimary")}
+                    <ArrowRight className="ml-1.5 h-4 w-4" />
+                  </Link>
+                </Button>
+              </div>
               <Button
                 size="lg"
                 variant="ghost"
-                className="text-stone-300 hover:bg-white/[0.06] hover:text-white"
+                className="border border-white/10 text-stone-300 backdrop-blur-sm hover:border-white/20 hover:bg-white/[0.07] hover:text-white"
                 asChild
+                onClick={() => capture("cta_clicked", { cta_location: "homepage_hero", cta_text: "see_plans" })}
               >
                 <Link href="/plans">See plans</Link>
               </Button>
             </div>
-            <p className="mt-4 text-sm text-stone-500">
+            <p className="mt-5 text-sm text-stone-600">
               30-day free trial · No credit card required · Cancel any time
             </p>
           </div>
@@ -324,17 +368,17 @@ export default function LandingPage() {
               const Icon = step.icon
               return (
                 <div key={step.label} className="relative">
-                  <div className="flex h-full flex-col rounded-2xl border border-white/[0.08] bg-white/[0.03] p-5 text-center">
+                  <div className="grain-dark shimmer-hover flex h-full flex-col rounded-2xl border border-white/[0.10] bg-gradient-to-br from-white/[0.07] to-white/[0.02] p-5 text-center transition-all duration-300 hover:border-white/[0.16] hover:from-white/[0.10] hover:to-white/[0.04] hover:shadow-[0_8px_32px_-8px_rgba(255,255,255,0.06)]">
                     <div
-                      className={`mx-auto flex h-12 w-12 items-center justify-center rounded-2xl border ${step.accentClassName} mb-4`}
+                      className={`mx-auto flex h-12 w-12 items-center justify-center rounded-2xl border shadow-[0_0_20px_-4px_currentColor/30] ${step.accentClassName} mb-4`}
                     >
                       <Icon className="h-5 w-5" />
                     </div>
-                    <p className="text-[11px] uppercase tracking-[0.22em] text-stone-500">
+                    <p className="text-[10px] font-semibold uppercase tracking-[0.26em] text-stone-500">
                       {step.label}
                     </p>
-                    <p className="mt-2 text-2xl font-semibold text-stone-50">{step.value}</p>
-                    <p className="mt-1 text-xs text-stone-600">{step.detail}</p>
+                    <p className="mt-2 font-display text-2xl font-black text-stone-50">{step.value}</p>
+                    <p className="mt-1 text-xs leading-relaxed text-stone-600">{step.detail}</p>
                   </div>
                   {index < representativeEstateFlow.length - 1 && (
                     <div className="absolute -right-1.5 top-1/2 z-10 hidden -translate-y-1/2 lg:block">
@@ -379,12 +423,12 @@ export default function LandingPage() {
               const Icon = card.icon
               return (
                 <MotionDiv key={card.title} {...reveal(i * 0.07)} {...lift}>
-                  <div className="flex h-full flex-col gap-5 rounded-3xl border border-white/[0.08] bg-white/[0.03] p-8">
-                    <div className="flex h-12 w-12 items-center justify-center rounded-2xl border border-emerald-300/15 bg-emerald-300/[0.08]">
+                  <div className="grain-dark shimmer-hover flex h-full flex-col gap-5 rounded-3xl border border-white/[0.09] bg-gradient-to-br from-white/[0.06] via-white/[0.03] to-transparent p-8 transition-all duration-300 hover:border-white/[0.15] hover:shadow-[0_12px_48px_-12px_rgba(52,211,153,0.12)]">
+                    <div className="flex h-12 w-12 items-center justify-center rounded-2xl border border-emerald-300/20 bg-gradient-to-br from-emerald-300/[0.14] to-emerald-400/[0.06] shadow-[0_0_20px_-4px_rgba(52,211,153,0.3)]">
                       <Icon className="h-5 w-5 text-emerald-200" />
                     </div>
                     <div>
-                      <h3 className="text-xl font-semibold text-stone-50">{card.title}</h3>
+                      <h3 className="text-xl font-bold text-stone-50">{card.title}</h3>
                       <p className="mt-2 text-sm leading-7 text-stone-400">{card.description}</p>
                     </div>
                   </div>
@@ -410,15 +454,15 @@ export default function LandingPage() {
               const Icon = card.icon
               return (
                 <MotionDiv key={card.eyebrow} {...reveal(0.05 + i * 0.07)} {...lift}>
-                  <div className={`flex h-full flex-col gap-5 rounded-3xl border p-8 ${card.accent}`}>
-                    <div className={`flex h-11 w-11 items-center justify-center rounded-2xl border ${card.iconAccent}`}>
+                  <div className={`grain-dark shimmer-hover flex h-full flex-col gap-5 rounded-3xl border p-8 transition-all duration-300 hover:brightness-110 ${card.accent}`}>
+                    <div className={`flex h-11 w-11 items-center justify-center rounded-2xl border shadow-[0_0_16px_-3px_currentColor/25] ${card.iconAccent}`}>
                       <Icon className="h-5 w-5" />
                     </div>
                     <div>
-                      <p className="text-[11px] font-medium uppercase tracking-[0.2em] text-stone-500">
+                      <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-stone-500">
                         {card.eyebrow}
                       </p>
-                      <h3 className="mt-2 text-xl font-semibold text-stone-50">{card.title}</h3>
+                      <h3 className="mt-2 text-xl font-bold text-stone-50">{card.title}</h3>
                       <p className="mt-2 text-sm leading-7 text-stone-400">{card.detail}</p>
                     </div>
                   </div>
@@ -442,16 +486,16 @@ export default function LandingPage() {
           <div className="grid gap-4 lg:grid-cols-3">
             {howItWorks.map((item, i) => (
               <MotionDiv key={item.step} {...reveal(0.06 + i * 0.07)}>
-                <div className="relative flex h-full flex-col gap-5 rounded-3xl border border-white/[0.08] bg-white/[0.02] p-8">
-                  <span className="font-display text-7xl font-bold leading-none text-white/[0.05]">
+                <div className="grain-dark shimmer-hover relative flex h-full flex-col gap-4 rounded-3xl border border-white/[0.09] bg-gradient-to-b from-white/[0.05] to-transparent p-8 transition-all duration-300 hover:border-white/[0.14] hover:from-white/[0.08]">
+                  <span className="font-display text-6xl font-black leading-none text-gradient-light opacity-60 select-none">
                     {item.step}
                   </span>
                   <div>
-                    <h3 className="text-lg font-semibold text-stone-50">{item.title}</h3>
+                    <h3 className="text-lg font-bold text-stone-50">{item.title}</h3>
                     <p className="mt-2 text-sm leading-7 text-stone-400">{item.detail}</p>
                   </div>
                   {i < howItWorks.length - 1 && (
-                    <ArrowRight className="absolute -right-2 top-10 hidden h-4 w-4 text-white/10 lg:block" />
+                    <ArrowRight className="absolute -right-2 top-10 hidden h-4 w-4 text-white/20 lg:block" />
                   )}
                 </div>
               </MotionDiv>
@@ -472,15 +516,15 @@ export default function LandingPage() {
               const Icon = item.icon
               return (
                 <MotionDiv key={item.eyebrow} {...reveal(i * 0.07)} {...lift}>
-                  <div className="flex h-full flex-col gap-4 rounded-3xl border border-white/[0.08] bg-white/[0.03] p-8">
-                    <div className="flex h-10 w-10 items-center justify-center rounded-xl border border-emerald-300/15 bg-emerald-300/[0.08]">
+                  <div className="grain-dark shimmer-hover flex h-full flex-col gap-4 rounded-3xl border border-white/[0.09] bg-gradient-to-br from-white/[0.06] via-white/[0.03] to-transparent p-8 transition-all duration-300 hover:border-emerald-400/20 hover:shadow-[0_12px_40px_-12px_rgba(52,211,153,0.14)]">
+                    <div className="flex h-10 w-10 items-center justify-center rounded-xl border border-emerald-300/20 bg-gradient-to-br from-emerald-300/[0.14] to-emerald-400/[0.06] shadow-[0_0_16px_-3px_rgba(52,211,153,0.3)]">
                       <Icon className="h-4 w-4 text-emerald-200" />
                     </div>
                     <div>
-                      <p className="text-[11px] font-medium uppercase tracking-[0.2em] text-emerald-500">
+                      <p className="text-[10px] font-bold uppercase tracking-[0.24em] text-emerald-500">
                         {item.eyebrow}
                       </p>
-                      <h3 className="mt-2 text-xl font-semibold text-stone-50">{item.title}</h3>
+                      <h3 className="mt-2 text-xl font-bold text-stone-50">{item.title}</h3>
                       <p className="mt-2 text-sm leading-7 text-stone-400">{item.detail}</p>
                     </div>
                   </div>
@@ -492,7 +536,7 @@ export default function LandingPage() {
             {coreSurfacePills.map((pill) => (
               <span
                 key={pill}
-                className="rounded-full border border-white/[0.08] bg-white/[0.03] px-4 py-1.5 text-xs font-medium text-stone-400"
+                className="rounded-full border border-white/[0.10] bg-gradient-to-br from-white/[0.06] to-white/[0.02] px-4 py-1.5 text-xs font-medium text-stone-400 transition-all duration-200 hover:border-white/[0.18] hover:text-stone-200"
               >
                 {pill}
               </span>
@@ -515,6 +559,7 @@ export default function LandingPage() {
               size="sm"
               className="text-stone-400 hover:text-stone-200"
               asChild
+              onClick={() => capture("cta_clicked", { cta_location: "homepage_plans_section", cta_text: "view_full_comparison" })}
             >
               <Link href="/plans">
                 View full comparison
@@ -526,17 +571,17 @@ export default function LandingPage() {
             {MODULE_BUNDLES.map((bundle, i) => {
               const isCore = bundle.id === "core"
               return (
-                <MotionDiv key={bundle.id} {...reveal(i * 0.07)} {...lift}>
+                <MotionDiv key={bundle.id} {...reveal(i * 0.07)} {...lift} className="reveal-scroll">
                   <div
-                    className={`relative flex h-full flex-col rounded-3xl border p-8 ${
+                    className={`grain-dark relative flex h-full flex-col rounded-3xl border p-8 transition-all duration-300 ${
                       isCore
-                        ? "border-emerald-400/30 bg-[#0d1f1a] shadow-[0_0_60px_-20px_rgba(52,211,153,0.25)]"
-                        : "border-white/[0.08] bg-white/[0.02]"
+                        ? "border-emerald-400/35 bg-gradient-to-br from-[#0d2018] to-[#091510] shadow-[0_0_80px_-20px_rgba(52,211,153,0.35),inset_0_1px_0_rgba(52,211,153,0.08)]"
+                        : "border-white/[0.08] bg-gradient-to-br from-white/[0.04] to-transparent hover:border-white/[0.13]"
                     }`}
                   >
                     {isCore && (
-                      <div className="absolute -top-3 left-1/2 -translate-x-1/2">
-                        <span className="rounded-full border border-emerald-400/30 bg-emerald-400/10 px-3 py-1 text-[11px] font-medium uppercase tracking-wider text-emerald-300">
+                      <div className="absolute -top-3.5 left-1/2 -translate-x-1/2">
+                        <span className="pulse-glow-emerald rounded-full border border-emerald-400/35 bg-emerald-400/[0.12] px-3.5 py-1 text-[11px] font-bold uppercase tracking-wider text-emerald-300 backdrop-blur-sm">
                           Most popular
                         </span>
                       </div>
@@ -553,7 +598,13 @@ export default function LandingPage() {
                         {planBadges[bundle.id] || "Plan"}
                       </Badge>
                     </div>
-                    <p className="mt-3 text-sm leading-7 text-stone-400">{bundle.description}</p>
+                    {planPrices[bundle.id] && (
+                      <div className="mt-2 flex items-baseline gap-1">
+                        <span className="text-2xl font-black tabular-nums text-stone-50">{planPrices[bundle.id].price}</span>
+                        {planPrices[bundle.id].note && <span className="text-sm text-stone-500">{planPrices[bundle.id].note}</span>}
+                      </div>
+                    )}
+                    <p className="mt-2 text-sm leading-7 text-stone-400">{bundle.description}</p>
                     {(() => {
                       const prevBundle = MODULE_BUNDLES[i - 1]
                       const prevModuleSet = new Set(prevBundle?.modules || [])
@@ -597,6 +648,7 @@ export default function LandingPage() {
                             : "w-full border-white/10 bg-white/[0.04] text-stone-200 hover:bg-white/[0.08]"
                         }
                         variant={isCore ? "default" : "ghost"}
+                        onClick={() => capture("cta_clicked", { cta_location: "homepage_plan_card", plan_id: bundle.id, cta_text: "try_free" })}
                       >
                         <Link href="/signup">Try free for 30 days</Link>
                       </Button>
@@ -665,6 +717,7 @@ export default function LandingPage() {
                   size="lg"
                   className="bg-emerald-300 text-[#06110f] shadow-[0_0_40px_-8px_rgba(110,231,183,0.4)] hover:bg-emerald-200"
                   asChild
+                  onClick={() => capture("cta_clicked", { cta_location: "homepage_final_cta", cta_text: "signup" })}
                 >
                   <Link href="/signup">
                     {t("public.landing.ctaPrimary")}
@@ -676,6 +729,7 @@ export default function LandingPage() {
                   variant="ghost"
                   className="text-stone-400 hover:bg-white/[0.06] hover:text-stone-200"
                   asChild
+                  onClick={() => capture("cta_clicked", { cta_location: "homepage_final_cta", cta_text: "see_plans" })}
                 >
                   <Link href="/plans">See plans</Link>
                 </Button>

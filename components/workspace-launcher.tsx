@@ -137,7 +137,7 @@ export default function WorkspaceLauncher({
               )}
             >
               <span className="text-xl mb-2 leading-none">👷</span>
-              <p className={cn("font-black leading-tight", isMobile ? "text-[15px]" : "text-sm")}>Labor</p>
+              <p className={cn("font-black leading-tight", isMobile ? "text-[15px]" : "text-sm")}>Labour</p>
               <p className="text-[10px] text-emerald-300/70 mt-0.5">Workers & wages</p>
             </button>
 

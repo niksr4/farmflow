@@ -13,6 +13,7 @@ import FeedbackWidget from "@/components/feedback-widget"
 import { Toaster } from "@/components/ui/toaster"
 import PwaRegister from "@/components/pwa-register"
 import PostHogAuthSync from "@/components/posthog-auth-sync"
+import WebVitals from "@/components/web-vitals"
 import { LocaleProvider } from "@/components/locale-provider"
 import { LOCALE_COOKIE_KEY, normalizeAppLocale } from "@/lib/i18n"
 
@@ -90,6 +91,11 @@ export default async function RootLayout({
     <html lang={initialLocale} suppressHydrationWarning>
       <head>
         <meta name="apple-mobile-web-app-capable" content="yes" />
+        {/* Warm up connections to third-party origins used on every page */}
+        <link rel="preconnect" href="https://www.googletagmanager.com" />
+        <link rel="dns-prefetch" href="https://www.googletagmanager.com" />
+        <link rel="dns-prefetch" href="https://ingest.sentry.io" />
+        <link rel="dns-prefetch" href="https://cdn.weatherapi.com" />
       </head>
       <body className={`${bodyFont.variable} ${displayFont.variable} font-body`} suppressHydrationWarning>
         <ThemeProvider attribute="class" defaultTheme="light" disableTransitionOnChange>
@@ -98,8 +104,12 @@ export default async function RootLayout({
               <Suspense fallback={null}>
                 <PostHogAuthSync />
               </Suspense>
-              <Script async src="https://www.googletagmanager.com/gtag/js?id=G-X0RB06WXE9" />
-              <Script id="ga4-google-tag">
+              {/* GA4 — lazyOnload runs in the browser's idle time, after hydration and paint */}
+              <Script
+                src="https://www.googletagmanager.com/gtag/js?id=G-X0RB06WXE9"
+                strategy="lazyOnload"
+              />
+              <Script id="ga4-google-tag" strategy="lazyOnload">
                 {`window.dataLayer = window.dataLayer || [];
 function gtag(){dataLayer.push(arguments);}
 gtag('js', new Date());
@@ -115,6 +125,9 @@ gtag('config', 'G-X0RB06WXE9');`}
               <BrandWatermark />
               <Toaster />
               <PwaRegister />
+              <Suspense fallback={null}>
+                <WebVitals />
+              </Suspense>
               <Analytics />
             </LocaleProvider>
           </AuthProvider>

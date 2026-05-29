@@ -3,15 +3,12 @@
 import { useRef } from "react"
 import Link from "next/link"
 import Image from "next/image"
-import { Fraunces, Manrope } from "next/font/google"
 import { ArrowLeft, CheckCircle2 } from "lucide-react"
 import { motion, useReducedMotion, useScroll, useTransform } from "framer-motion"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 
-const display = Fraunces({ subsets: ["latin"], weight: ["600", "700", "800"] })
-const body = Manrope({ subsets: ["latin"], weight: ["400", "500", "600", "700"] })
 
 const JOURNEY_STEPS = [
   {
@@ -87,7 +84,7 @@ export default function JourneyPage() {
 
   return (
     <div
-      className={`${body.className} relative min-h-[100svh] overflow-x-hidden bg-[#07110f] text-stone-100`}
+      className="relative min-h-[100svh] overflow-x-hidden bg-[#07110f] text-stone-100"
       style={{
         ["--copper" as any]: "#0f6f66",
         ["--sage" as any]: "#1f6b5d",
@@ -128,7 +125,7 @@ export default function JourneyPage() {
         <main className="px-4 pb-16 sm:px-6 sm:pb-20">
           <section className="mx-auto mt-8 w-full max-w-6xl rounded-3xl border border-white/10 bg-gradient-to-br from-[#11433b] via-[#0d2a24] to-[#081613] p-5 shadow-[0_40px_100px_-40px_rgba(0,0,0,0.72)] sm:mt-16 sm:p-12">
             <Badge className="border-white/30 bg-white/20 text-white backdrop-blur-md">From cherry to buyer</Badge>
-            <h1 className={`${display.className} mt-4 text-3xl font-bold leading-tight text-white md:text-5xl`}>
+            <h1 className={`font-display mt-4 text-3xl font-bold leading-tight text-white md:text-5xl`}>
               The coffee workflow, mapped end to end
             </h1>
             <p className="mt-4 max-w-3xl text-stone-200">
@@ -138,7 +135,7 @@ export default function JourneyPage() {
 
           <section className="mx-auto mt-16 w-full max-w-6xl space-y-6">
             <div className="text-center space-y-3">
-              <h2 className={`${display.className} text-3xl font-semibold text-stone-50`}>Estate journey, from cherry to buyer</h2>
+              <h2 className={`font-display text-3xl font-semibold text-stone-50`}>Estate journey, from cherry to buyer</h2>
               <p className="mx-auto max-w-2xl text-stone-300">
                 Document each stage so quality and accountability stay visible to managers, farmers, and buyers.
               </p>
@@ -185,12 +182,13 @@ export default function JourneyPage() {
                               fill
                               sizes="(min-width: 768px) 480px, 100vw"
                               className="object-cover"
+                              priority={index === 0}
                             />
                             <div className="absolute inset-0 bg-gradient-to-t from-[#091613] via-[#091613]/15 to-transparent" />
                           </div>
                           <CardHeader className="space-y-2">
                             <p className="text-xs uppercase tracking-[0.35em] text-emerald-200">Step {index + 1}</p>
-                            <CardTitle className={`${display.className} text-xl text-stone-50`}>{step.title}</CardTitle>
+                            <CardTitle className={`font-display text-xl text-stone-50`}>{step.title}</CardTitle>
                             <CardDescription className="text-stone-300">{step.description}</CardDescription>
                           </CardHeader>
                         </Card>
@@ -205,7 +203,7 @@ export default function JourneyPage() {
           <section className="mx-auto mt-16 w-full max-w-6xl grid gap-6 lg:grid-cols-[1.1fr_0.9fr]">
             <Card className="border border-emerald-300/15 bg-emerald-300/10">
               <CardHeader>
-                <CardTitle className={`${display.className} text-xl text-stone-50`}>Buyer trust pack</CardTitle>
+                <CardTitle className={`font-display text-xl text-stone-50`}>Buyer trust pack</CardTitle>
                 <CardDescription className="text-stone-300">Export-ready evidence for audits, buyers, and internal reviews.</CardDescription>
               </CardHeader>
               <CardContent className="space-y-4 text-sm text-stone-200">
@@ -223,7 +221,7 @@ export default function JourneyPage() {
 
             <Card className="border border-white/10 bg-[#0a1714]/90 backdrop-blur-md">
               <CardHeader>
-                <CardTitle className={`${display.className} text-xl text-stone-50`}>Who should run which modules?</CardTitle>
+                <CardTitle className={`font-display text-xl text-stone-50`}>Who should run which modules?</CardTitle>
                 <CardDescription className="text-stone-300">Select the stack that matches your estate operating model.</CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
@@ -247,7 +245,7 @@ export default function JourneyPage() {
           <section className="mx-auto mt-16 w-full max-w-6xl">
             <Card className="border border-white/10 bg-[#0a1714]/92 backdrop-blur-md">
               <CardHeader>
-                <CardTitle className={`${display.className} text-2xl text-stone-50`}>Choose your starting path</CardTitle>
+                <CardTitle className={`font-display text-2xl text-stone-50`}>Choose your starting path</CardTitle>
                 <CardDescription className="text-stone-300">
                   Start with essentials and expand into curing, quality, and full sales traceability as your team grows.
                 </CardDescription>

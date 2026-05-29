@@ -23,6 +23,7 @@ import PickingLogTab from "./picking-log-tab"
 import WorkerLedgerTab from "./worker-ledger-tab"
 import PayrollSummaryTab from "./payroll-summary-tab"
 import TaskGuideCard from "@/components/task-guide-card"
+import AccountsSummaryCard from "@/components/accounts-summary-card"
 import WorkspacePageShell from "@/components/workspace-page-shell"
 import { toast } from "sonner"
 import { getCurrentFiscalYear, getAvailableFiscalYears, type FiscalYear } from "@/lib/fiscal-year-utils"
@@ -94,7 +95,7 @@ interface AccountsIntelligence {
   highlights: string[]
 }
 
-type AccountsTabValue = "labor" | "expenses" | "attendance" | "activities" | "workers" | "picking" | "ledger" | "payroll"
+type AccountsTabValue = "labour" | "expenses" | "attendance" | "activities" | "workers" | "picking" | "ledger" | "payroll"
 
 const LABOR_MANAGEMENT_TAB_VALUES = new Set<AccountsTabValue>(["workers", "ledger", "payroll"])
 const PEOPLE_WORKFLOW_TAB_VALUES = new Set<AccountsTabValue>(["attendance", "workers", "picking", "ledger", "payroll"])
@@ -105,13 +106,13 @@ const normalizeAccountsTab = (
   showPickingLog: boolean,
 ): AccountsTabValue => {
   if (!initialTab) {
-    return "labor"
+    return "labour"
   }
   if (!showLaborManagement && LABOR_MANAGEMENT_TAB_VALUES.has(initialTab)) {
-    return "labor"
+    return "labour"
   }
   if (!showPickingLog && !showLaborManagement && initialTab === "picking") {
-    return "labor"
+    return "labour"
   }
   return initialTab
 }
@@ -221,9 +222,9 @@ export default function AccountsPage({
       eyebrow: "Accounts guide",
       title: "Keep cost coding simple",
       description:
-        "Most estates only need a few stable cost habits here: record labor, record expenses, keep attendance clean when needed, and use codes consistently.",
+        "Most estates only need a few stable cost habits here: record labour, record expenses, keep attendance clean when needed, and use codes consistently.",
       bullets: [
-        "Use labor and expenses for real spend only, not estimates you may change later.",
+        "Use labour and expenses for real spend only, not estimates you may change later.",
         "If you do not have a full chart of accounts yet, start with a short estate code and plain category name.",
         "Use the Codes tab when you want autocomplete, cleaner exports, and shared labels across the estate.",
       ],
@@ -521,7 +522,7 @@ export default function AccountsPage({
   }
 
   type CombinedDeployment =
-    | (LaborDeployment & { entryType: "Labor"; totalCost: number })
+    | (LaborDeployment & { entryType: "Labour"; totalCost: number })
     | (ConsumableDeployment & { entryType: "Other Expense"; totalCost: number })
 
   const fetchAllDeploymentsForExport = async (): Promise<CombinedDeployment[] | null> => {
@@ -533,8 +534,8 @@ export default function AccountsPage({
 
       if (!laborResponse.ok) {
         const errorText = await laborResponse.text()
-        console.error("Failed to load labor deployments for export:", errorText)
-        toast.error("Failed to load labor deployments for export")
+        console.error("Failed to load labour deployments for export:", errorText)
+        toast.error("Failed to load labour deployments for export")
         return null
       }
 
@@ -555,7 +556,7 @@ export default function AccountsPage({
 
       const typedLaborDeployments = (laborData.deployments || []).map((d: LaborDeployment) => ({
         ...d,
-        entryType: "Labor" as const,
+        entryType: "Labour" as const,
       }))
       const typedConsumableDeployments = (expenseData.deployments || []).map((d: ConsumableDeployment) => ({
         ...d,
@@ -617,8 +618,8 @@ export default function AccountsPage({
       "Entry Type",
       "Code",
       "Reference",
-      "Estate Labor Details",
-      "Outside Labor Details",
+      "Estate Labour Details",
+      "Outside Labour Details",
       "Total Expenditure (₹)",
       "Notes",
       "Recorded By",
@@ -627,7 +628,7 @@ export default function AccountsPage({
     const rows = sortedDeployments.map((d) => {
       let hfLaborDetails = ""
       let outsideLaborDetails = ""
-      if (d.entryType === "Labor" && d.laborEntries && d.laborEntries.length > 0) {
+      if (d.entryType === "Labour" && d.laborEntries && d.laborEntries.length > 0) {
         const hfEntry = d.laborEntries[0]
         hfLaborDetails = `${hfEntry.laborCount} @ ${hfEntry.costPerLabor.toFixed(2)}`
         if (d.laborEntries.length > 1) {
@@ -637,7 +638,7 @@ export default function AccountsPage({
             .join("; ")
         }
       }
-      const expenditureAmount = d.entryType === "Labor" ? d.totalCost : (d as ConsumableDeployment).amount
+      const expenditureAmount = d.entryType === "Labour" ? d.totalCost : (d as ConsumableDeployment).amount
       return [
         escapeCsvField(formatDateOnly(d.date)),
         escapeCsvField(d.entryType),
@@ -662,10 +663,10 @@ export default function AccountsPage({
     const totalsByCode: { [code: string]: number } = {}
 
     sortedDeployments.forEach((d) => {
-      const expenditureAmount = d.entryType === "Labor" ? d.totalCost : (d as ConsumableDeployment).amount
+      const expenditureAmount = d.entryType === "Labour" ? d.totalCost : (d as ConsumableDeployment).amount
       totalsByCode[d.code] = (totalsByCode[d.code] || 0) + expenditureAmount
 
-      if (d.entryType === "Labor") {
+      if (d.entryType === "Labour") {
         if (d.laborEntries && d.laborEntries.length > 0) {
           const hfEntry = d.laborEntries[0]
           const hfCount =
@@ -697,7 +698,7 @@ export default function AccountsPage({
       "",
       "",
       "",
-      "Total Estate Labor",
+      "Total Estate Labour",
       `Estate: ${totalHfLaborCount.toFixed(1)} laborers`,
       "",
       totalHfLaborCost.toFixed(2),
@@ -709,7 +710,7 @@ export default function AccountsPage({
       "",
       "",
       "",
-      "Total Outside Labor",
+      "Total Outside Labour",
       `Outside: ${totalOutsideLaborCount.toFixed(1)} laborers`,
       "",
       totalOutsideLaborCost.toFixed(2),
@@ -861,13 +862,13 @@ export default function AccountsPage({
         .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
         .forEach((d) => {
           const formattedDate = formatDateForQIF(d.date)
-          const amount = d.entryType === "Labor" ? d.totalCost : (d as ConsumableDeployment).amount
+          const amount = d.entryType === "Labour" ? d.totalCost : (d as ConsumableDeployment).amount
 
           let payee = ""
           let category = ""
           let memo = ""
 
-          if (d.entryType === "Labor") {
+          if (d.entryType === "Labour") {
             payee = d.notes || ""
             category = `${d.code} ${d.reference}`
 
@@ -932,7 +933,7 @@ export default function AccountsPage({
   const exportDisabledReason = useMemo(() => {
     if (exportDateRangeError) return exportDateRangeError
     if (summaryLoading || laborLoading || consumablesLoading) return "Loading latest accounts data..."
-    if (!hasAnyData) return "No labor or expense records yet. Add one entry to enable export."
+    if (!hasAnyData) return "No labour or expense records yet. Add one entry to enable export."
     return null
   }, [consumablesLoading, exportDateRangeError, hasAnyData, laborLoading, summaryLoading])
   const filteredLaborTotal = summaryTotals.laborTotal
@@ -950,7 +951,7 @@ export default function AccountsPage({
 
   const mobileTabItems = useMemo(() => {
     const items: Array<{ value: AccountsTabValue; label: string; icon: React.ComponentType<{ className?: string }> }> = [
-      { value: "labor", label: "Labor", icon: Users },
+      { value: "labour", label: "Labour", icon: Users },
       { value: "attendance", label: "Attend", icon: Check },
       { value: "expenses", label: "Expenses", icon: Receipt },
       { value: "activities", label: "Codes", icon: Settings },
@@ -971,22 +972,22 @@ export default function AccountsPage({
       tooltip: "All figures below are filtered to this fiscal year. Switch the year using the selector in the header.",
     },
     {
-      label: "Labor Tracked",
+      label: "Labour Tracked",
       value: summaryLoading ? "Loading..." : formatCurrency(filteredLaborTotal),
-      detail: `${formatNumber(laborCount || laborDeployments.length, 0)} labor records in range`,
-      tooltip: "Total wages, advances, and labor costs recorded for the selected fiscal year and active filters.",
+      detail: `${formatNumber(laborCount || laborDeployments.length, 0)} labour records in range`,
+      tooltip: "Total wages, advances, and labour costs recorded for the selected fiscal year and active filters.",
     },
     {
       label: "Expenses",
       value: summaryLoading ? "Loading..." : formatCurrency(filteredOtherExpensesTotal),
       detail: `${formatNumber(consumablesCount || consumableDeployments.length, 0)} expense records in range`,
-      tooltip: "Non-labor operational expenses: consumables, equipment, repairs, and other coded activities.",
+      tooltip: "Non-labour operational expenses: consumables, equipment, repairs, and other coded activities.",
     },
     {
       label: "Account Codes",
       value: formatNumber(accountActivities.length || activities.length, 0),
       detail: topCostCode ? `Top cost code: ${topCostCode.code}` : "Add estate codes for exports and summaries",
-      tooltip: "Estate-defined activity codes used to categorize labor and expenses. Used for cost reporting and export formats.",
+      tooltip: "Estate-defined activity codes used to categorize labour and expenses. Used for cost reporting and export formats.",
     },
   ]
 
@@ -1081,7 +1082,7 @@ export default function AccountsPage({
         </div>
 
         <div className="pt-2">
-          {activeTab === "labor" && (
+          {activeTab === "labour" && (
             <LaborDeploymentTab startDate={fiscalYearStartDate} endDate={fiscalYearEndDate} />
           )}
           {activeTab === "expenses" && (
@@ -1183,7 +1184,7 @@ export default function AccountsPage({
       className="container mx-auto px-4 py-6 sm:p-6"
       badge="Finance workspace"
       title="Accounts Management"
-      description="Track labor, expenses, attendance, and estate activity codes."
+      description="Track labour, expenses, attendance, and estate activity codes."
       accent="amber"
       stats={accountsShellStats}
       supportingContent={
@@ -1242,7 +1243,7 @@ export default function AccountsPage({
       <Card>
         <CardHeader>
           <CardTitle>Smart Cost Patterns</CardTitle>
-          <CardDescription>Frequency and highest-cost intelligence for labor and other expenses.</CardDescription>
+          <CardDescription>Frequency and highest-cost intelligence for labour and other expenses.</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           {accountsIntelligenceLoading ? (
@@ -1264,7 +1265,7 @@ export default function AccountsPage({
                   <p className="mt-1 text-xs text-muted-foreground">
                     {topCostCode
                       ? `${formatCurrency(topCostCode.totalAmount, 0)} across ${topCostCode.entryCount} entries`
-                      : "Add labor/expense entries"}
+                      : "Add labour/expense entries"}
                   </p>
                 </div>
                 <div className="rounded-xl border bg-card p-3">
@@ -1279,12 +1280,12 @@ export default function AccountsPage({
                   </p>
                 </div>
                 <div className="rounded-xl border bg-card p-3">
-                  <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">Peak Labor Day</p>
+                  <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">Peak Labour Day</p>
                   <p className="mt-1 text-sm font-semibold">{highestLaborDay ? formatDateOnly(highestLaborDay.date) : "No data"}</p>
                   <p className="mt-1 text-xs text-muted-foreground">
                     {highestLaborDay
                       ? `${formatCurrency(highestLaborDay.totalAmount, 0)} across ${highestLaborDay.entryCount} entries`
-                      : "No labor entries in range"}
+                      : "No labour entries in range"}
                   </p>
                 </div>
                 <div className="rounded-xl border bg-card p-3">
@@ -1304,7 +1305,7 @@ export default function AccountsPage({
                 <div className="rounded-xl border bg-card p-3">
                   <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">Spend Mix</p>
                   <p className="mt-1 text-sm text-foreground">
-                    Labor {formatNumber(patterns.laborSharePct, 0)}% · Other expenses {formatNumber(patterns.expenseSharePct, 0)}%
+                    Labour {formatNumber(patterns.laborSharePct, 0)}% · Other expenses {formatNumber(patterns.expenseSharePct, 0)}%
                   </p>
                   <p className="mt-1 text-xs text-muted-foreground">
                     Total spend: {formatCurrency(patterns.totalSpend, 0)}
@@ -1313,7 +1314,7 @@ export default function AccountsPage({
                 <div className="rounded-xl border bg-card p-3">
                   <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">Recent Cost Trend (30d vs prior 30d)</p>
                   <p className="mt-1 text-sm text-foreground">
-                    Labor:{" "}
+                    Labour:{" "}
                     {patterns.laborTrendPct === null
                       ? "Not enough baseline"
                       : `${patterns.laborTrendPct >= 0 ? "+" : ""}${formatNumber(patterns.laborTrendPct, 1)}%`}
@@ -1397,7 +1398,7 @@ export default function AccountsPage({
               <div>
                 <CardTitle>Accounts Export</CardTitle>
                 <CardDescription className="mt-1">
-                  Export labor and other expenses using the same fiscal year already selected above.
+                  Export labour and other expenses using the same fiscal year already selected above.
                 </CardDescription>
               </div>
               <div className="text-right flex-shrink-0 pl-4">
@@ -1408,7 +1409,7 @@ export default function AccountsPage({
                   <div className="space-y-1">
                     <p className="text-2xl font-bold">{formatCurrency(filteredGrandTotal)}</p>
                     <div className="text-xs text-muted-foreground space-y-0.5">
-                      <div>Labor: {formatCurrency(filteredLaborTotal)}</div>
+                      <div>Labour: {formatCurrency(filteredLaborTotal)}</div>
                       <div>Other: {formatCurrency(filteredOtherExpensesTotal)}</div>
                     </div>
                   </div>
@@ -1502,9 +1503,9 @@ export default function AccountsPage({
 
       <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as AccountsTabValue)} className="w-full space-y-4">
         <TabsList className="h-auto w-full flex-wrap justify-start gap-2 sm:justify-center">
-          <TabsTrigger value="labor" className="flex items-center gap-2">
+          <TabsTrigger value="labour" className="flex items-center gap-2">
             <Users className="h-4 w-4" />
-            Labor
+            Labour
           </TabsTrigger>
           <TabsTrigger value="expenses" className="flex items-center gap-2">
             <Receipt className="h-4 w-4" />
@@ -1542,7 +1543,7 @@ export default function AccountsPage({
           )}
         </TabsList>
 
-        <TabsContent value="labor" className="mt-6">
+        <TabsContent value="labour" className="mt-6">
             <LaborDeploymentTab startDate={fiscalYearStartDate} endDate={fiscalYearEndDate} />
           </TabsContent>
 
@@ -1722,7 +1723,7 @@ export default function AccountsPage({
                               </TableCell>
                               <TableCell className="text-xs text-muted-foreground">
                                 {usageCount > 0
-                                  ? `${usageCount} records (${activity.labor_count || 0} labor, ${activity.expense_count || 0} expense)`
+                                  ? `${usageCount} records (${activity.labor_count || 0} labour, ${activity.expense_count || 0} expense)`
                                   : "Unused"}
                               </TableCell>
                               <TableCell>
@@ -1815,7 +1816,7 @@ export default function AccountsPage({
                             </div>
                             <p className="text-xs text-muted-foreground">
                               {usageCount > 0
-                                ? `${usageCount} linked records (${activity.labor_count || 0} labor, ${activity.expense_count || 0} expense)`
+                                ? `${usageCount} linked records (${activity.labor_count || 0} labour, ${activity.expense_count || 0} expense)`
                                 : "No linked records"}
                             </p>
                             <div className="flex gap-2">
@@ -1870,7 +1871,7 @@ export default function AccountsPage({
               ) : (
                 <EmptyStateTable
                   title="No account activities yet"
-                  description="Add labor or expense codes to start tracking estate spend."
+                  description="Add labour or expense codes to start tracking estate spend."
                   size="md"
                 />
               )}
@@ -1899,6 +1900,8 @@ export default function AccountsPage({
           </>
         )}
       </Tabs>
+
+      <AccountsSummaryCard />
     </WorkspacePageShell>
   )
 }

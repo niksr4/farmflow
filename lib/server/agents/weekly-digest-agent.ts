@@ -13,6 +13,7 @@ import { upsertWeeklyMetrics, fetchHistoricalMetrics, buildHistoricalBaselineCon
 import { summarizeForecastWindow, deriveIrrigationAdvice, deriveWeatherAnomalySignal, WEATHER_FORECAST_DAYS } from "@/lib/weather-guidance"
 import { DEFAULT_WEATHER_QUERY } from "@/lib/weather-config"
 import { getCoffeePriceAnalysis, estimateSellableStock, buildMarketTimingSection } from "@/lib/server/coffee-prices"
+import { getCurrentFiscalYear } from "@/lib/fiscal-year-utils"
 
 type TenantDigestRow = {
   tenantId: string
@@ -286,16 +287,110 @@ function buildWeatherContext(params: {
   return lines.join("\n")
 }
 
+type SeasonCostBasis = {
+  fyLabel: string
+  totalCosts: number          // labour + expenses season-to-date
+  outputKg: number            // dry_parch + dry_cherry produced
+  costPerKgOutput: number     // totalCosts / outputKg (null when no output yet)
+  maintenanceCostToDate: number // same as totalCosts — named for off-season context
+  recentAvgSellPricePerKg: number | null  // weighted avg from last 6 months of sales
+  lastSaleDate: string | null
+  soldKg: number
+}
+
+async function fetchSeasonCostBasis(tenantId: string): Promise<SeasonCostBasis | null> {
+  if (!sql) return null
+  try {
+    const fy = getCurrentFiscalYear()
+    const start = fy.startDate
+    const end = fy.endDate
+    const fyLabel = fy.label
+
+    const rows = await sql.query(`
+      WITH fy AS (SELECT $2::date AS s, $3::date AS e)
+      SELECT
+        (SELECT COALESCE(SUM(total_cost),0) FROM labor_transactions
+           WHERE tenant_id=$1 AND deployment_date BETWEEN (SELECT s FROM fy) AND (SELECT e FROM fy)) AS labour,
+        (SELECT COALESCE(SUM(total_amount),0) FROM expense_transactions
+           WHERE tenant_id=$1 AND entry_date BETWEEN (SELECT s FROM fy) AND (SELECT e FROM fy)) AS expenses,
+        (SELECT COALESCE(SUM(dry_parch+dry_cherry),0) FROM processing_records
+           WHERE tenant_id=$1 AND process_date BETWEEN (SELECT s FROM fy) AND (SELECT e FROM fy)) AS output_kg,
+        (SELECT COALESCE(SUM(COALESCE(NULLIF(kgs,0),NULLIF(weight_kgs,0),bags_sold*50)),0)
+           FROM sales_records WHERE tenant_id=$1 AND sale_date BETWEEN (SELECT s FROM fy) AND (SELECT e FROM fy)) AS sold_kg,
+        (SELECT COALESCE(
+           SUM(revenue) / NULLIF(SUM(COALESCE(NULLIF(kgs,0),NULLIF(weight_kgs,0),bags_sold*50)), 0)
+         , NULL)
+           FROM sales_records
+           WHERE tenant_id=$1 AND sale_date >= NOW() - INTERVAL '6 months' AND revenue > 0) AS avg_sell_price,
+        (SELECT MAX(sale_date)::text FROM sales_records WHERE tenant_id=$1) AS last_sale
+    `, [tenantId, start, end])
+
+    const toRows = (r: unknown): any[] => Array.isArray(r) ? r : (r as any)?.rows ?? []
+    const row = toRows(rows)[0]
+    if (!row) return null
+
+    const totalCosts = Number(row.labour ?? 0) + Number(row.expenses ?? 0)
+    const outputKg = Number(row.output_kg ?? 0)
+
+    return {
+      fyLabel,
+      totalCosts,
+      outputKg,
+      costPerKgOutput: outputKg > 0 ? totalCosts / outputKg : 0,
+      maintenanceCostToDate: totalCosts,
+      recentAvgSellPricePerKg: row.avg_sell_price != null ? Number(row.avg_sell_price) : null,
+      lastSaleDate: row.last_sale ?? null,
+      soldKg: Number(row.sold_kg ?? 0),
+    }
+  } catch {
+    return null
+  }
+}
+
+function buildSeasonCostBasisSection(basis: SeasonCostBasis): string {
+  const fmt = (n: number) => `₹${Math.round(n).toLocaleString("en-IN")}`
+  const lines: string[] = ["## Season Cost Basis"]
+
+  lines.push(`- Fiscal year: ${basis.fyLabel}`)
+  lines.push(`- Total costs logged so far (labour + expenses): ${fmt(basis.totalCosts)}`)
+
+  if (basis.outputKg > 0) {
+    lines.push(`- Dry output produced: ${Math.round(basis.outputKg).toLocaleString("en-IN")} kg`)
+    lines.push(`- Cost per kg of output: ${fmt(basis.costPerKgOutput)}`)
+    if (basis.recentAvgSellPricePerKg !== null) {
+      const margin = basis.recentAvgSellPricePerKg - basis.costPerKgOutput
+      lines.push(`- Recent average selling price (last 6 months): ${fmt(basis.recentAvgSellPricePerKg)}/kg`)
+      lines.push(`- Implied margin per kg: ${fmt(margin)} (${margin >= 0 ? "profitable" : "BELOW COST — selling at a loss"})`)
+      if (margin < 0) {
+        lines.push(`- ⚠️ Recent sales are below the cost of production. Estate should not sell below ${fmt(basis.costPerKgOutput)}/kg.`)
+      }
+    } else {
+      lines.push(`- No recent sales data to compare against production cost.`)
+    }
+  } else {
+    // Off-season: no processing yet this fiscal year
+    lines.push(`- No processing output recorded yet this fiscal year (off-season/maintenance phase).`)
+    lines.push(`- These costs will form the base cost of this season's crop. Track them carefully.`)
+    if (basis.recentAvgSellPricePerKg !== null) {
+      lines.push(`- Last season's average selling price: ${fmt(basis.recentAvgSellPricePerKg)}/kg`)
+      lines.push(`- Break-even context: if you repeat last season's output volume, you need to sell above ${fmt(basis.recentAvgSellPricePerKg)}/kg to cover costs already incurred.`)
+    }
+  }
+
+  return lines.join("\n")
+}
+
 async function generateWeeklyDigestText(tenant: TenantDigestRow): Promise<{ text: string; error?: undefined } | { text: null; error: string }> {
   try {
     const locationQuery = tenant.weatherLocationQuery ?? DEFAULT_WEATHER_QUERY
-    const [{ dataSummary, fiscalYearLabel }, lastWeek, rainfall, forecastJson, coffeePrices, sellableStock] = await Promise.all([
+    const [{ dataSummary, fiscalYearLabel }, lastWeek, rainfall, forecastJson, coffeePrices, sellableStock, seasonCostBasis] = await Promise.all([
       buildTenantAiDataSummary({ tenantId: tenant.tenantId, role: "owner" }),
       fetchLastWeekActivity(tenant.tenantId),
       fetchRecentRainfallSummary(tenant.tenantId),
       fetchWeatherForecast(locationQuery),
       getCoffeePriceAnalysis(),
       estimateSellableStock(tenant.tenantId),
+      fetchSeasonCostBasis(tenant.tenantId),
     ])
 
     // Persist this week's metrics, then load historical baselines in parallel
@@ -341,6 +436,9 @@ async function generateWeeklyDigestText(tenant: TenantDigestRow): Promise<{ text
     const marketTimingSection = coffeePrices
       ? buildMarketTimingSection(coffeePrices, sellableStock)
       : null
+    const costBasisSection = seasonCostBasis
+      ? buildSeasonCostBasisSection(seasonCostBasis)
+      : null
 
     const client = getClaudeClient()
     const digestSystemPrompt = `You are FarmFlow Weekly Digest, an expert agronomist and estate operations analyst for ${cropContext} estates in Karnataka/Kerala, India. You combine deep South Indian coffee cultivation knowledge with sharp financial judgement — your analysis is what a seasoned Coorg estate manager and their accountant would both respect.
@@ -376,6 +474,7 @@ ${historySection}
 ## Season-to-Date Context (FY ${fiscalYearLabel})
 ${dataSummary}
 
+${costBasisSection ? `\n${costBasisSection}\n` : ""}
 ${weatherContext}
 ${marketTimingSection ? `\n${marketTimingSection}` : ""}
 
@@ -384,8 +483,8 @@ Structure your digest in exactly ${marketTimingSection ? "five" : "four"} sectio
 1. Last Week at a Glance — 2-3 sentences summarising what actually happened last week using exact figures from the data above.
 
 2. Business Snapshot — three specific financial signals the owner needs to see:
-   (a) Labor cost as a percentage of total spend this week. Flag if it is above 70% (typical healthy range is 50-65% for harvest season, lower off-season).
-   (b) Cost per kg of cherry processed, if processing happened. Benchmark: ₹8-14/kg for Arabica in Coorg; flag if outside this range.
+   (a) Labour cost as a percentage of total spend this week. Flag if it is above 70% (typical healthy range is 50-65% for harvest season, lower off-season).
+   (b) Season cost basis from the Season Cost Basis section above: state the cost per kg of output if production has started, OR the total maintenance cost accumulated so far if it is off-season. If cost per kg is above the recent selling price, flag this clearly — the estate is selling below cost.
    (c) Revenue-to-cost trend: is the estate earning more than it is spending YTD, or is there a deficit building? Be direct — if margins look thin or costs are running ahead of revenue, say so clearly.
    If data is insufficient for any signal, say "Insufficient data this week" rather than guessing.
 

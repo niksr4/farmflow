@@ -131,8 +131,9 @@ const statToneStyles: Record<
 }
 
 const textureStyle: CSSProperties = {
-  backgroundImage: "radial-gradient(circle at 1px 1px, rgba(15, 23, 42, 0.08) 1px, transparent 0)",
-  backgroundSize: "20px 20px",
+  backgroundImage: "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='200' viewBox='0 0 200 200'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.65' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='200' height='200' filter='url(%23n)' opacity='1'/%3E%3C/svg%3E\")",
+  opacity: 0.12,
+  mixBlendMode: "overlay" as const,
 }
 
 export default function WorkspacePageShell({
@@ -170,13 +171,17 @@ export default function WorkspacePageShell({
       <MotionSection
         {...headerAnimation}
         className={cn(
-          "relative overflow-hidden rounded-[32px] border shadow-[0_20px_48px_-32px_rgba(15,23,42,0.34)]",
+          "relative overflow-hidden rounded-[32px] border",
+          "shadow-[0_24px_60px_-28px_rgba(120,80,30,0.18),0_0_0_1px_rgba(200,160,80,0.05),inset_0_1px_0_rgba(255,255,255,0.55)]",
           accentStyle.shell,
           accentStyle.darkShell,
         )}
       >
         <div className={cn("absolute inset-0", accentStyle.glow)} />
-        <div className="absolute inset-0 opacity-35" style={textureStyle} />
+        {/* SVG grain noise — finer and blended */}
+        <div className="absolute inset-0 pointer-events-none" style={textureStyle} />
+        {/* Top-edge shimmer line */}
+        <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-white/50 to-transparent pointer-events-none" />
         <div className="relative flex flex-col gap-5 p-5 sm:p-6 lg:p-7">
           <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
             <div className="max-w-3xl space-y-3">
@@ -202,7 +207,12 @@ export default function WorkspacePageShell({
               {stats.map((stat) => (
                 <div
                   key={`${stat.label}-${stat.value}`}
-                  className={cn("rounded-2xl border p-4 shadow-[0_10px_20px_-18px_rgba(15,23,42,0.4)]", statToneStyles[stat.tone || "default"].card, accentStyle.statCard)}
+                  className={cn(
+                    "rounded-2xl border p-4",
+                    "shadow-[0_4px_16px_-6px_rgba(120,80,30,0.14),0_0_0_1px_rgba(200,160,80,0.04)]",
+                    "hover:shadow-[0_8px_24px_-6px_rgba(120,80,30,0.2)] transition-shadow duration-200",
+                    statToneStyles[stat.tone || "default"].card, accentStyle.statCard
+                  )}
                 >
                   <div className={cn("h-1.5 w-12 rounded-full", statToneStyles[stat.tone || "default"].accent)} />
                   <div className="mt-3 flex items-center gap-1.5">

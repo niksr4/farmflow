@@ -154,7 +154,7 @@ export function WeeklySummarySection({
               delta={weeklyDeltas?.salesRevenue}
             />
             <SummaryMetricCard
-              label={`Labor spend (${weeklyPeriodLabel})`}
+              label={`Labour spend (${weeklyPeriodLabel})`}
               value={formatCurrency(weeklySummary.laborSpend)}
               delta={weeklyDeltas?.laborSpend}
             />

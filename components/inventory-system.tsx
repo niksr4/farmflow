@@ -70,7 +70,7 @@ import { useAuth } from "@/hooks/use-auth"
 import { useTenantExperience } from "@/hooks/use-tenant-experience"
 import { useRouter, useSearchParams } from "next/navigation"
 import OnboardingChecklist, { type OnboardingStep } from "@/components/onboarding-checklist"
-import WorkspaceHints from "@/components/workspace-hints"
+import HomeTab from "@/components/home-tab"
 import UniversalSearch from "@/components/universal-search"
 import Link from "next/link"
 import Image from "next/image"
@@ -114,12 +114,14 @@ import {
   UNASSIGNED_LABEL,
 } from "@/components/inventory-system/constants"
 import type {
+  DrilldownOptions,
   ExceptionSummaryAlert,
   HeroChip,
   HeroContent,
   HeroStat,
   IntelligenceBrief,
   LocationOption,
+  SmartNextStep,
   WorkspaceBootstrapPayload,
 } from "@/components/inventory-system/types"
 import {
@@ -281,21 +283,10 @@ type TransactionWriteFailureSnapshot = {
   transaction: Transaction
 }
 
-type AccountsWorkspaceTab = "labor" | "expenses" | "attendance" | "activities" | "workers" | "picking" | "ledger" | "payroll"
-type SmartNextStepTone = "progress" | "attention" | "help"
-type SmartNextStep = {
-  id: string
-  tone: SmartNextStepTone
-  title: string
-  description: string
-  reason: string
-  actionLabel: string
-  actionTab: string
-  askPrompt?: string
-}
+type AccountsWorkspaceTab = "labour" | "expenses" | "attendance" | "activities" | "workers" | "picking" | "ledger" | "payroll"
 
 const ACCOUNTS_WORKSPACE_TABS: AccountsWorkspaceTab[] = [
-  "labor",
+  "labour",
   "expenses",
   "attendance",
   "activities",
@@ -525,6 +516,7 @@ export default function InventorySystem() {
   const [isLoadingItemDrilldown, setIsLoadingItemDrilldown] = useState(false)
   const [drilldownShowAll, setDrilldownShowAll] = useState(false)
   const [inventorySortOrder, setInventorySortOrder] = useState<"asc" | "desc" | null>(null)
+  const [inventoryBannerDismissed, setInventoryBannerDismissed] = useState(false)
   const [transactionSortOrder, setTransactionSortOrder] = useState<"asc" | "desc">("desc")
   const [isAnalyzing, setIsAnalyzing] = useState(false)
   const [analysisError, setAnalysisError] = useState("")
@@ -691,7 +683,7 @@ export default function InventorySystem() {
   const canShowSeason = isModuleEnabled("season")
   const canShowYieldForecast = canShowSeason
   const canShowActivityLog = (isAdmin || isOwner) && isFeatureEnabled("showActivityLogTab")
-  const canShowLaborManagement = isModuleEnabled("labor")
+  const canShowLaborManagement = isModuleEnabled("labour")
   const canShowPickingLog = isModuleEnabled("picking")
   const canShowReceivables = isModuleEnabled("receivables")
   const canShowBilling = isModuleEnabled("billing")
@@ -1212,7 +1204,7 @@ export default function InventorySystem() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [lastSync])
 
-  // Refresh checklist when labor, expense, or picking tabs save a record
+  // Refresh checklist when labour, expense, or picking tabs save a record
   useEffect(() => {
     const handler = () => {
       if (!hasLoadedOnboardingOnce.current) return
@@ -1864,7 +1856,7 @@ export default function InventorySystem() {
             />
           </div>
           <Select value={filterType} onValueChange={setFilterType}>
-            <SelectTrigger className="w-full sm:w-40 h-10 border-border/70 bg-white/80">
+            <SelectTrigger className="w-full sm:w-40 h-10 border-stone-200 bg-white">
               <SelectValue placeholder="All Types" />
             </SelectTrigger>
             <SelectContent className="max-h-[40vh] overflow-y-auto">
@@ -1877,7 +1869,7 @@ export default function InventorySystem() {
             </SelectContent>
           </Select>
           <Select value={selectedLocationId} onValueChange={setSelectedLocationId}>
-            <SelectTrigger className="w-full sm:w-48 h-10 border-border/70 bg-white/80">
+            <SelectTrigger className="w-full sm:w-48 h-10 border-stone-200 bg-white">
               <SelectValue placeholder="All locations" />
             </SelectTrigger>
             <SelectContent className="max-h-[40vh] overflow-y-auto">
@@ -1949,7 +1941,7 @@ export default function InventorySystem() {
             />
           )}
           {noFilteredTransactions && (
-            <div className="rounded-lg border border-border/60 bg-white/80 py-10 text-center text-muted-foreground">
+            <div className="rounded-lg border border-stone-200 bg-stone-50 py-10 text-center text-stone-400 dark:border-white/[0.06] dark:bg-white/[0.02]">
               No transactions found matching your current filters.
             </div>
           )}
@@ -1972,11 +1964,10 @@ export default function InventorySystem() {
               : isRestocking
                 ? "bg-green-100 text-green-700 border-green-200"
                 : "bg-blue-100 text-blue-700 border-blue-200"
-            const rowTone = index % 2 === 0 ? "bg-white/90" : "bg-muted/10"
             return (
               <div
                 key={transaction.id ?? `${transaction.item_type}-${transaction.transaction_date}`}
-                className={`rounded-xl border border-border/60 p-3 shadow-sm ${rowTone}`}
+                className="rounded-xl border border-stone-200 bg-white p-3 shadow-sm dark:border-white/[0.06] dark:bg-card"
               >
                 <div className="flex items-start justify-between gap-2">
                   <div>
@@ -2043,10 +2034,11 @@ export default function InventorySystem() {
           })}
         </div>
       ) : (
-        <div className="border border-border/60 rounded-lg overflow-x-auto bg-white/80">
+        <div className="overflow-hidden rounded-xl border border-stone-200 bg-white shadow-sm dark:border-white/[0.06] dark:bg-card">
+          <div className="overflow-x-auto">
           <table className="min-w-full">
             <thead>
-              <tr className="bg-muted/60 text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground/80 border-b sticky top-0 backdrop-blur">
+              <tr className="border-b border-stone-200 bg-emerald-700 text-xs font-bold uppercase tracking-[0.16em] text-emerald-300 dark:border-white/[0.05]">
                 <th className="py-4 px-4 text-left">Date</th>
                 <th className="py-4 px-4 text-left">Location</th>
                 <th className="py-4 px-4 text-left">Item Type</th>
@@ -2082,7 +2074,7 @@ export default function InventorySystem() {
                 return (
                   <tr
                     key={transaction.id ?? `${transaction.item_type}-${transaction.transaction_date}`}
-                    className={`border-b last:border-0 hover:bg-muted/30 ${index % 2 === 0 ? "bg-white/90" : "bg-muted/10"}`}
+                    className={`border-b border-stone-100 last:border-0 hover:bg-stone-50 dark:border-white/[0.04] dark:hover:bg-white/[0.02] ${index % 2 === 0 ? "bg-white dark:bg-transparent" : "bg-stone-50/50 dark:bg-white/[0.01]"}`}
                   >
                     <td className="py-4 px-4">{formatDate(transaction.transaction_date)}</td>
                     <td className="py-4 px-4">
@@ -2152,6 +2144,7 @@ export default function InventorySystem() {
               })}
             </tbody>
           </table>
+          </div>
           {noTransactionsRecorded && (
             <div className="p-4">
               <WorkflowEmptyState
@@ -2900,7 +2893,7 @@ export default function InventorySystem() {
               value: "accounts",
               label: "Accounts",
               icon: Users,
-              subtabs: ["Daily Labor", "Expenses", "Attendance", "Cost Codes"],
+              subtabs: ["Daily Labour", "Expenses", "Attendance", "Cost Codes"],
             }
           : null,
         canShowBalanceSheet ? { value: "balance-sheet", label: "Live Balance", icon: Scale } : null,
@@ -3246,7 +3239,7 @@ export default function InventorySystem() {
         sales: { label: "Sales", icon: TrendingUp },
         pepper: { label: "Pepper", icon: Leaf },
         rubber: { label: "Rubber", icon: Leaf },
-        accounts: { label: "Labor & Costs", icon: Users },
+        accounts: { label: "Labour & Costs", icon: Users },
         "balance-sheet": { label: "Financial Summary", icon: Scale },
         "season-pl": { label: "Profit & Loss", icon: TrendingUp },
         receivables: { label: "Money Owed", icon: Receipt },
@@ -3314,7 +3307,7 @@ export default function InventorySystem() {
     if (showTransactionHistory) datasets.add("transactions")
     if (canShowInventory) datasets.add("inventory")
     if (canShowAccounts) {
-      datasets.add("labor")
+      datasets.add("labour")
       datasets.add("expenses")
     }
     if (canShowDispatch || canShowSales || canShowSeason) datasets.add("reconciliation")
@@ -3337,16 +3330,19 @@ export default function InventorySystem() {
     const pct = (value: number, total: number) => (total > 0 ? Math.round((value / total) * 100) : null)
     const pickActionTab = (preferredTabs: string[]) =>
       preferredTabs.find((tab) => visibleTabs.includes(tab)) || "home"
+    const multiLocation = locations.length > 1
     const hasTaggedLocation = (tx: Transaction) => {
       const locationId = String(tx.location_id || "").trim()
       return Boolean(locationId && locationId !== LOCATION_UNASSIGNED)
     }
     const hasNotes = (tx: Transaction) => String(tx.notes || "").trim().length > 0
+    // Location tagging is only a required field when the estate has multiple locations.
+    // Single-location estates have nothing to distinguish so we don't penalise them.
     const hasRequiredFields = (tx: Transaction) =>
       String(tx.item_type || "").trim().length > 0 &&
       Number(tx.quantity) > 0 &&
       String(tx.transaction_type || "").trim().length > 0 &&
-      hasTaggedLocation(tx)
+      (!multiLocation || hasTaggedLocation(tx))
 
     const structuredTaskCount = recentThirtyDayTransactions.filter(hasRequiredFields).length
     const structuredTaskPct = pct(structuredTaskCount, recentThirtyDayTransactions.length)
@@ -3373,11 +3369,13 @@ export default function InventorySystem() {
         ? "blocked"
         : depleteTransactions.length === 0
           ? "attention"
-          : (inputTrackingPct || 0) >= 90
+          : !multiLocation
             ? "good"
-            : (inputTrackingPct || 0) >= 70
-              ? "attention"
-              : "blocked"
+            : (inputTrackingPct || 0) >= 90
+              ? "good"
+              : (inputTrackingPct || 0) >= 70
+                ? "attention"
+                : "blocked"
 
     const laborSharePct =
       accountsTotals.grandTotal > 0 ? Math.round((accountsTotals.laborTotal / accountsTotals.grandTotal) * 100) : null
@@ -3449,14 +3447,14 @@ export default function InventorySystem() {
         actionTab: pickActionTab(["inventory", "transactions"]),
       },
       {
-        id: "labor-visibility",
-        title: "Labor Visibility",
-        goal: "Keep labor spend visible for day-to-day decisions.",
+        id: "labour-visibility",
+        title: "Labour Visibility",
+        goal: "Keep labour spend visible for day-to-day decisions.",
         metric: !canShowAccounts
           ? "Accounts module is disabled."
           : accountsTotalsLoading
-            ? "Loading labor totals..."
-            : `${formatCurrency(accountsTotals.laborTotal, 0)} labor tracked${laborSharePct !== null ? ` (${laborSharePct}% of spend)` : ""}`,
+            ? "Loading labour totals..."
+            : `${formatCurrency(accountsTotals.laborTotal, 0)} labour tracked${laborSharePct !== null ? ` (${laborSharePct}% of spend)` : ""}`,
         status: laborVisibilityStatus,
         actionLabel: "Open Accounts",
         actionTab: pickActionTab(["accounts", "balance-sheet"]),
@@ -3697,16 +3695,16 @@ export default function InventorySystem() {
           actionTab: nextTab,
           askPrompt: "I entered an expense. Should I also review inventory, account codes, or something else?",
         })
-      } else if (latestActivity.module === "labor" && canShowAccounts) {
+      } else if (latestActivity.module === "labour" && canShowAccounts) {
         addStep({
-          id: "after-labor",
+          id: "after-labour",
           tone: "progress",
-          title: "Review labor visibility",
-          description: "Keep labor entries tied back to activities and totals so cost visibility stays usable day to day.",
+          title: "Review labour visibility",
+          description: "Keep labour entries tied back to activities and totals so cost visibility stays usable day to day.",
           reason: latestReason,
           actionLabel: "Open Accounts",
           actionTab: "accounts",
-          askPrompt: "I logged labor already. What should I review next so labor costs stay accurate?",
+          askPrompt: "I logged labour already. What should I review next so labour costs stay accurate?",
         })
       }
     }
@@ -4458,7 +4456,7 @@ export default function InventorySystem() {
       if ((text.includes("receivable") || text.includes("outstanding") || text.includes("invoice")) && canShowReceivables) {
         return "receivables"
       }
-      if ((text.includes("labor") || text.includes("expense") || text.includes("cost")) && canShowAccounts) return "accounts"
+      if ((text.includes("labour") || text.includes("expense") || text.includes("cost")) && canShowAccounts) return "accounts"
       if ((text.includes("float") || text.includes("yield") || text.includes("process")) && canShowProcessing) return "processing"
       if ((text.includes("stock") || text.includes("inventory") || text.includes("transaction")) && showTransactionHistory) {
         return "transactions"
@@ -4485,16 +4483,6 @@ export default function InventorySystem() {
     },
     [canShowDispatch, canShowProcessing, canShowSalesWorkspace, canShowSeason],
   )
-
-  type DrilldownOptions = {
-    tab: string
-    locationId?: string | null
-    itemType?: string | null
-    panel?: string | null
-    transactionSearch?: string | null
-    seasonAlertId?: string | null
-    seasonMetric?: string | null
-  }
 
   const openDrilldown = useCallback(
     (options: DrilldownOptions) => {
@@ -5251,19 +5239,26 @@ export default function InventorySystem() {
                 <button
                   type="button"
                   onClick={() => setIsMobileSidebarOpen(true)}
-                  className="flex h-10 w-10 items-center justify-center rounded-xl border border-black/8 bg-white/80 text-neutral-700 shadow-sm transition-colors hover:bg-neutral-50 touch-manipulation"
+                  className="flex h-10 w-10 items-center justify-center rounded-xl border border-stone-200 bg-white/80 text-neutral-700 shadow-sm transition-colors hover:bg-stone-50 touch-manipulation"
                   aria-label="Open navigation"
                 >
                   <Menu className="h-5 w-5" />
                 </button>
                 <div className="flex items-center gap-2 min-w-0">
-                  <Image
-                    src="/brand-logo.svg"
-                    alt="FarmFlow"
-                    width={120}
-                    height={47}
-                    className="h-7 w-auto"
-                  />
+                  <button
+                    type="button"
+                    onClick={() => handleTabChange("home")}
+                    className="flex items-center focus:outline-none"
+                    aria-label="Go to home"
+                  >
+                    <Image
+                      src="/brand-logo.svg"
+                      alt="FarmFlow"
+                      width={120}
+                      height={47}
+                      className="h-7 w-auto"
+                    />
+                  </button>
                   {!isPreviewMode && tenantSettings.estateName && (
                     <span className="hidden text-sm font-semibold text-emerald-700 sm:block truncate max-w-[140px]">
                       {tenantSettings.estateName}
@@ -5281,6 +5276,52 @@ export default function InventorySystem() {
                 >
                   {theme === "dark" ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
                 </Button>
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <button
+                      type="button"
+                      aria-label="Profile"
+                      className="flex h-9 w-9 items-center justify-center rounded-xl border border-stone-200 bg-white/80 shadow-sm touch-manipulation"
+                    >
+                      <span className="flex h-6 w-6 items-center justify-center rounded-full bg-gradient-to-br from-emerald-100 to-emerald-50 text-[10px] font-bold text-emerald-700 ring-1 ring-emerald-200/90">
+                        {user.username.charAt(0).toUpperCase()}
+                      </span>
+                    </button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end" className="w-52">
+                    <div className="flex items-center gap-2.5 px-2 py-2">
+                      <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-emerald-100 text-sm font-bold text-emerald-700 ring-1 ring-emerald-200">
+                        {user.username.charAt(0).toUpperCase()}
+                      </span>
+                      <div className="min-w-0">
+                        <p className="truncate text-sm font-semibold text-foreground">{user.username}</p>
+                        {tenantSettings.estateName && (
+                          <p className="truncate text-xs text-muted-foreground">{tenantSettings.estateName}</p>
+                        )}
+                      </div>
+                    </div>
+                    <div className="px-2 pb-2">
+                      <Badge variant="outline" className="text-[11px] font-medium">{roleBadgeLabel}</Badge>
+                    </div>
+                    <DropdownMenuSeparator />
+                    {(isAdmin || isOwner) && (
+                      <DropdownMenuItem asChild>
+                        <Link href={buildWorkspaceHref("/settings")}>
+                          <Settings className="h-4 w-4 mr-2" />
+                          Settings
+                        </Link>
+                      </DropdownMenuItem>
+                    )}
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem
+                      onClick={handleLogout}
+                      className="text-rose-600 focus:text-rose-600 focus:bg-rose-50 dark:text-rose-400 dark:focus:bg-rose-500/10"
+                    >
+                      <LogOut className="h-4 w-4 mr-2" />
+                      Sign out
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
               </div>
             </div>
           ) : (
@@ -5388,6 +5429,51 @@ export default function InventorySystem() {
                     </DropdownMenuContent>
                   </DropdownMenu>
                 )}
+                {/* Profile avatar */}
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <button
+                      type="button"
+                      aria-label="Profile"
+                      className="ml-1 flex h-7 w-7 items-center justify-center rounded-full bg-gradient-to-br from-emerald-100 to-emerald-50 text-[11px] font-bold text-emerald-700 ring-1 ring-emerald-200/90 transition-shadow hover:shadow-[0_0_0_2px_rgba(52,211,153,0.35)] dark:from-emerald-500/20 dark:to-emerald-600/8 dark:text-emerald-300 dark:ring-emerald-500/30"
+                    >
+                      {user.username.charAt(0).toUpperCase()}
+                    </button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end" className="w-52">
+                    <div className="flex items-center gap-2.5 px-2 py-2">
+                      <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-emerald-100 text-sm font-bold text-emerald-700 ring-1 ring-emerald-200 dark:bg-emerald-500/15 dark:text-emerald-400 dark:ring-emerald-500/25">
+                        {user.username.charAt(0).toUpperCase()}
+                      </span>
+                      <div className="min-w-0">
+                        <p className="truncate text-sm font-semibold text-foreground">{user.username}</p>
+                        {tenantSettings.estateName && (
+                          <p className="truncate text-xs text-muted-foreground">{tenantSettings.estateName}</p>
+                        )}
+                      </div>
+                    </div>
+                    <div className="px-2 pb-2">
+                      <Badge variant="outline" className="text-[11px] font-medium">{roleBadgeLabel}</Badge>
+                    </div>
+                    <DropdownMenuSeparator />
+                    {(isAdmin || isOwner) && (
+                      <DropdownMenuItem asChild>
+                        <Link href={buildWorkspaceHref("/settings")}>
+                          <Settings className="h-4 w-4 mr-2" />
+                          Settings
+                        </Link>
+                      </DropdownMenuItem>
+                    )}
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem
+                      onClick={handleLogout}
+                      className="text-rose-600 focus:text-rose-600 focus:bg-rose-50 dark:text-rose-400 dark:focus:bg-rose-500/10"
+                    >
+                      <LogOut className="h-4 w-4 mr-2" />
+                      Sign out
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
               </div>
             </>
           )}
@@ -5412,20 +5498,20 @@ export default function InventorySystem() {
               )}
             >
               {/* Drawer header */}
-              <div className="flex items-center justify-between border-b border-black/8 px-4 py-3">
+              <div className="flex items-center justify-between border-b border-stone-200 px-4 py-3">
                 <div className="flex items-center gap-2.5">
                   <Image src="/icon.svg" alt="FarmFlow" width={28} height={28} className="rounded-lg" />
                   <div className="min-w-0">
                     <p className="text-sm font-bold text-neutral-900 dark:text-white truncate">
                       {tenantSettings.estateName || "FarmFlow"}
                     </p>
-                    <p className="text-[11px] text-neutral-500 dark:text-neutral-400">{user.username} · {roleBadgeLabel}</p>
+                    <p className="text-[11px] text-stone-500 dark:text-stone-400">{user.username} · {roleBadgeLabel}</p>
                   </div>
                 </div>
                 <button
                   type="button"
                   onClick={() => setIsMobileSidebarOpen(false)}
-                  className="flex h-8 w-8 items-center justify-center rounded-lg text-neutral-400 hover:bg-neutral-100 hover:text-neutral-600 transition-colors touch-manipulation"
+                  className="flex h-8 w-8 items-center justify-center rounded-lg text-stone-400 hover:bg-stone-100 hover:text-stone-600 transition-colors touch-manipulation"
                 >
                   <X className="h-4 w-4" />
                 </button>
@@ -5441,7 +5527,7 @@ export default function InventorySystem() {
                     "flex w-full items-center gap-3 px-4 py-2.5 text-left text-sm font-semibold transition-colors touch-manipulation",
                     (activeTab === DASHBOARD_LAUNCHER_TAB || activeTab === "home")
                       ? "bg-emerald-50 text-emerald-700"
-                      : "text-neutral-700 hover:bg-neutral-50",
+                      : "text-neutral-700 hover:bg-stone-50",
                   )}
                 >
                   <Home className="h-4.5 w-4.5 shrink-0" />
@@ -5453,7 +5539,7 @@ export default function InventorySystem() {
                   <div key={section.id} className="mt-3">
                     <div className="flex items-center gap-2 px-4 pb-1">
                       <section.icon className={cn("h-3 w-3 shrink-0", section.iconClassName)} />
-                      <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-neutral-400">
+                      <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-emerald-700">
                         {section.label}
                       </p>
                     </div>
@@ -5469,13 +5555,13 @@ export default function InventorySystem() {
                             "flex w-full items-center gap-3 px-4 py-2.5 text-left text-[13px] font-medium transition-colors touch-manipulation",
                             isActive
                               ? "bg-emerald-50 text-emerald-700 font-semibold"
-                              : "text-neutral-600 hover:bg-neutral-50 hover:text-neutral-900",
+                              : "text-neutral-600 hover:bg-stone-50 hover:text-neutral-900",
                           )}
                         >
                           {isActive && (
                             <span className="absolute left-0 h-6 w-[3px] rounded-r-full bg-emerald-500" />
                           )}
-                          <TabIcon className={cn("h-4 w-4 shrink-0", isActive ? "text-emerald-600" : "text-neutral-400")} />
+                          <TabIcon className={cn("h-4 w-4 shrink-0", isActive ? "text-emerald-600" : "text-stone-400")} />
                           {tab.label}
                         </button>
                       )
@@ -5485,22 +5571,22 @@ export default function InventorySystem() {
               </nav>
 
               {/* Drawer footer — settings, manuals, logout */}
-              <div className="border-t border-black/8 px-3 py-3 space-y-1">
+              <div className="border-t border-stone-200 px-3 py-3 space-y-1">
                 <Link
                   href={buildWorkspaceHref("/manuals")}
                   onClick={() => setIsMobileSidebarOpen(false)}
-                  className="flex items-center gap-3 rounded-lg px-3 py-2.5 text-[13px] font-medium text-neutral-600 transition-colors hover:bg-neutral-50 touch-manipulation"
+                  className="flex items-center gap-3 rounded-lg px-3 py-2.5 text-[13px] font-medium text-neutral-600 transition-colors hover:bg-stone-50 touch-manipulation"
                 >
-                  <BookOpen className="h-4 w-4 text-neutral-400" />
+                  <BookOpen className="h-4 w-4 text-stone-400" />
                   Training Manuals
                 </Link>
                 {isAdmin && (
                   <Link
                     href={buildWorkspaceHref("/settings")}
                     onClick={() => setIsMobileSidebarOpen(false)}
-                    className="flex items-center gap-3 rounded-lg px-3 py-2.5 text-[13px] font-medium text-neutral-600 transition-colors hover:bg-neutral-50 touch-manipulation"
+                    className="flex items-center gap-3 rounded-lg px-3 py-2.5 text-[13px] font-medium text-neutral-600 transition-colors hover:bg-stone-50 touch-manipulation"
                   >
-                    <Settings className="h-4 w-4 text-neutral-400" />
+                    <Settings className="h-4 w-4 text-stone-400" />
                     Settings
                   </Link>
                 )}
@@ -5583,212 +5669,23 @@ export default function InventorySystem() {
           </Card>
         )}
 
-        {activeTab === "home" && !isOwner && !showOnboarding && !isMobile && (
-          <WorkspaceHints onAction={handleWorkspaceHintAction} />
-        )}
-
         {activeTab === "home" && !isMobile && (
-          <div className="relative mb-6 overflow-hidden rounded-3xl border border-stone-200/60">
-            <div className="absolute inset-0 bg-gradient-to-br from-amber-50/80 via-stone-50 to-emerald-50/40" />
-            <div className="pointer-events-none absolute inset-0 opacity-[0.025]"
-              style={{ backgroundImage: "radial-gradient(ellipse at 70% 0%, #d97706 0%, transparent 50%), radial-gradient(ellipse at 20% 100%, #059669 0%, transparent 50%)" }}
-            />
-            <div className="relative px-7 py-6">
-              <div className="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between lg:gap-8">
-                <div className="space-y-2.5 max-w-xl">
-                  <span className="inline-flex items-center rounded-full border border-emerald-200/80 bg-emerald-100/80 px-2.5 py-0.5 text-[11px] font-bold text-emerald-700">
-                    {visibleHeroContent.badge}
-                  </span>
-                  <h2 className="text-xl font-black text-stone-900 leading-tight">
-                    {visibleHeroContent.title}
-                  </h2>
-                  <p className="text-sm text-stone-600/90 leading-relaxed max-w-lg">
-                    {visibleHeroContent.description}
-                  </p>
-                  {visibleHeroContent.chips.length > 0 && (
-                    <p className="text-xs text-stone-500">
-                      {visibleHeroContent.chips
-                        .slice(0, 3)
-                        .map((chip) => chip.label)
-                        .join(" · ")}
-                    </p>
-                  )}
-                </div>
-                <div className="grid w-full gap-3 sm:grid-cols-2 xl:grid-cols-3 lg:flex-1">
-                  {visibleHeroContent.stats.slice(0, 3).map((stat) => (
-                    <div
-                      key={stat.label}
-                      className="min-w-0 rounded-2xl border border-stone-200/60 bg-white/70 p-4 shadow-sm backdrop-blur-sm flex flex-col gap-1.5"
-                    >
-                      <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-stone-500">
-                        {stat.label}
-                      </p>
-                      <p className="text-2xl font-black leading-tight text-stone-900 tabular-nums">
-                        {stat.value}
-                      </p>
-                      {stat.subValue && (
-                        <p className="text-xs text-stone-500">{stat.subValue}</p>
-                      )}
-                    </div>
-                  ))}
-                </div>
-              </div>
-              {canShowAccounts && (
-                <div className="mt-4 flex flex-wrap gap-2 border-t border-stone-200/50 pt-4">
-                  <button
-                    type="button"
-                    onClick={() => { handleTabChange("accounts"); setTimeout(() => window.dispatchEvent(new CustomEvent("farmflow:open-quick-log", { detail: { type: "labor" } })), 100) }}
-                    className="flex items-center gap-2 rounded-full border border-emerald-200/80 bg-emerald-700 px-4 py-2 text-sm font-bold text-white shadow-sm hover:bg-emerald-800 transition-colors"
-                  >
-                    👷 Log labor
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => { handleTabChange("accounts"); setTimeout(() => window.dispatchEvent(new CustomEvent("farmflow:open-quick-log", { detail: { type: "expense" } })), 100) }}
-                    className="flex items-center gap-2 rounded-full border border-amber-200/80 bg-amber-700 px-4 py-2 text-sm font-bold text-white shadow-sm hover:bg-amber-800 transition-colors"
-                  >
-                    💸 Log expense
-                  </button>
-                  {canShowRainfallSection && (
-                    <button
-                      type="button"
-                      onClick={() => handleTabChange("rainfall")}
-                      className="flex items-center gap-2 rounded-full border border-sky-200/80 bg-sky-700 px-4 py-2 text-sm font-bold text-white shadow-sm hover:bg-sky-800 transition-colors"
-                    >
-                      🌧️ Log rainfall
-                    </button>
-                  )}
-                </div>
-              )}
-            </div>
-          </div>
+          <HomeTab
+            visibleHeroContent={visibleHeroContent}
+            canShowAccounts={canShowAccounts}
+            canShowRainfallSection={canShowRainfallSection}
+            isOwner={isOwner}
+            showOnboarding={showOnboarding}
+            smartNextSteps={smartNextSteps}
+            canLaunchAssistant={canLaunchAssistant}
+            buildWorkspaceHref={buildWorkspaceHref}
+            onTabChange={handleTabChange}
+            onDrilldown={openDrilldown}
+            onWorkspaceHintAction={handleWorkspaceHintAction}
+            onLaunchAssistantPrompt={launchAssistantPrompt}
+          />
         )}
 
-        {activeTab === "home" && smartNextSteps.length > 0 && !isMobile && (
-          <Card data-testid="home-smart-next-steps" className="mb-5 border-stone-200/60 bg-stone-50/40">
-            <CardHeader className="gap-4 pb-3">
-              <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-                <div className="space-y-2">
-                  <Badge variant="outline" className="w-fit border-emerald-200 bg-white text-emerald-700">
-                    Smart Next Steps
-                  </Badge>
-                  <div>
-                    <CardTitle>What to do next</CardTitle>
-                    <CardDescription>
-                      Based on setup progress, recent usage, and the current estate signals FarmFlow can see.
-                    </CardDescription>
-                  </div>
-                </div>
-                <div className="flex flex-wrap gap-2">
-                  {canLaunchAssistant && (
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant="outline"
-                      className="bg-white"
-                      onClick={() => launchAssistantPrompt("What should I do next in my estate today?")}
-                    >
-                      <Brain className="mr-2 h-4 w-4 text-emerald-700" />
-                      Ask FarmFlow
-                    </Button>
-                  )}
-                  <Button asChild size="sm" variant="ghost">
-                    <Link href={buildWorkspaceHref("/manuals")}>
-                      <BookOpen className="mr-2 h-4 w-4" />
-                      Open manuals
-                    </Link>
-                  </Button>
-                </div>
-              </div>
-            </CardHeader>
-            <CardContent className="grid gap-3 xl:grid-cols-3">
-              {smartNextSteps.map((step, index) => {
-                const toneClasses: Record<SmartNextStepTone, { badge: string; panel: string; icon: string; label: string }> = {
-                  progress: {
-                    badge: "border-emerald-200 bg-emerald-50 text-emerald-700",
-                    panel: "border-emerald-100 bg-emerald-50/55",
-                    icon: "bg-emerald-100 text-emerald-700",
-                    label: "Momentum",
-                  },
-                  attention: {
-                    badge: "border-amber-200 bg-amber-50 text-amber-700",
-                    panel: "border-amber-100 bg-amber-50/60",
-                    icon: "bg-amber-100 text-amber-700",
-                    label: "Attention",
-                  },
-                  help: {
-                    badge: "border-sky-200 bg-sky-50 text-sky-700",
-                    panel: "border-sky-100 bg-sky-50/55",
-                    icon: "bg-sky-100 text-sky-700",
-                    label: "Helpful",
-                  },
-                }
-                const tone = toneClasses[step.tone]
-                const ActionIcon = step.tone === "attention" ? AlertTriangle : step.tone === "help" ? Brain : CheckCircle2
-                return (
-                  <div
-                    key={step.id}
-                    data-testid={`smart-next-step-${index + 1}`}
-                    className={cn("rounded-2xl border p-4 shadow-sm", tone.panel)}
-                  >
-                    <div className="flex items-start justify-between gap-3">
-                      <div className={cn("flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl", tone.icon)}>
-                        <ActionIcon className="h-4 w-4" />
-                      </div>
-                      <Badge variant="outline" className={cn("w-fit", tone.badge)}>
-                        {tone.label}
-                      </Badge>
-                    </div>
-                    <p className="mt-4 text-sm font-semibold text-neutral-900">{step.title}</p>
-                    <p className="mt-2 text-sm leading-6 text-neutral-700">{step.description}</p>
-                    <p className="mt-3 text-xs leading-5 text-neutral-500">{step.reason}</p>
-                    <div className="mt-4 flex flex-wrap gap-2">
-                      <Button size="sm" className="bg-emerald-700 hover:bg-emerald-800" onClick={() => openDrilldown({ tab: step.actionTab })}>
-                        {step.actionLabel}
-                      </Button>
-                      {canLaunchAssistant && step.askPrompt ? (
-                        <Button
-                          type="button"
-                          size="sm"
-                          variant="ghost"
-                          className="text-emerald-800 hover:bg-white/80 hover:text-emerald-900"
-                          onClick={() => launchAssistantPrompt(step.askPrompt)}
-                        >
-                          Ask FarmFlow
-                        </Button>
-                      ) : null}
-                    </div>
-                  </div>
-                )
-              })}
-            </CardContent>
-          </Card>
-        )}
-
-        {activeTab === "home" && visibleCommandStripItems.length > 0 && (
-          <div className="mb-5 grid grid-cols-1 gap-3 lg:grid-cols-3">
-            {visibleCommandStripItems.map((item) => {
-              const isActive = activeTab === item.tab
-              return (
-                <button
-                  key={item.id}
-                  type="button"
-                  onClick={() => handleTabChange(item.tab)}
-                  className={cn(
-                    "rounded-2xl border p-4 text-left transition",
-                    isActive
-                      ? "border-emerald-200 bg-emerald-50/60 shadow-sm ring-2 ring-emerald-100"
-                      : "border-stone-200/70 bg-amber-50/20 hover:border-amber-200 hover:bg-amber-50/40 hover:shadow-sm",
-                  )}
-                >
-                  <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-stone-500">{item.label}</p>
-                  <p className="mt-2 text-xl font-black text-stone-900 tabular-nums">{item.value}</p>
-                  <p className="mt-1 text-xs text-stone-500">{item.subValue}</p>
-                </button>
-              )
-            })}
-          </div>
-        )}
 
         {!isMobile && <div className="mb-5 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
           <div className="inline-flex items-center gap-2 rounded-full border border-stone-200/70 bg-stone-50/80 px-3 py-1.5 text-xs text-stone-600">
@@ -5810,18 +5707,7 @@ export default function InventorySystem() {
             )}
           </div>
           <div className="flex items-center gap-2">
-            {isAdmin && canShowSeason && (
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => handleTabChange("season")}
-                className="bg-white"
-              >
-                <BarChart3 className="h-3 w-3 mr-1" />
-                Season View
-              </Button>
-            )}
-            {canManageData && (
+            {activeTab === "home" && canManageData && (
               <Button
                 type="button"
                 variant="outline"
@@ -5949,54 +5835,90 @@ export default function InventorySystem() {
                     </Badge>
                   </div>
                 </CardHeader>
-                <CardContent className="space-y-3">
-                  <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-5">
-                    <Button onClick={() => void handleDataToolsExport("csv")} disabled={isExportingDataTools} className="justify-start">
-                      <Download className="mr-2 h-4 w-4" />
-                      {isExportingDataTools ? "Exporting Ops..." : "Ops CSV Export"}
-                    </Button>
-                    <Button
-                      variant="outline"
-                      className="justify-start bg-white"
-                      onClick={() => void handleDataToolsExport("xlsx")}
-                      disabled={isExportingDataTools}
-                    >
-                      <Download className="mr-2 h-4 w-4" />
-                      Ops XLSX Export
-                    </Button>
-                    {canShowAccounts ? (
-                      <>
-                        <Button
-                          variant="outline"
-                          className="justify-start bg-white"
-                          onClick={() => handleRequestAccountsExport("csv")}
+                <CardContent className="space-y-4">
+                  {/* Ops export — dataset + buttons together so nothing requires scrolling */}
+                  <div className="rounded-lg border border-stone-200 bg-white p-3 space-y-3">
+                    <Label className="text-xs uppercase tracking-[0.16em] text-stone-500">Operations export</Label>
+                    <div className="flex flex-col gap-2 sm:flex-row sm:items-end">
+                      <div className="flex-1 space-y-1.5">
+                        <Select
+                          value={dataToolsDataset}
+                          onValueChange={(value) => {
+                            if (isExportDatasetId(value)) {
+                              setDataToolsDataset(value)
+                            }
+                          }}
                         >
-                          <FileText className="mr-2 h-4 w-4" />
-                          Accounts CSV
+                          <SelectTrigger className="h-10 bg-white">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent className="max-h-[40vh] overflow-y-auto">
+                            {EXPORT_DATASETS.map((datasetOption) => (
+                              <SelectItem key={datasetOption.id} value={datasetOption.id}>
+                                {datasetOption.label}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        <p className="text-xs text-muted-foreground">{selectedDataToolsConfig.description}</p>
+                      </div>
+                      <div className="flex gap-2 shrink-0">
+                        <Button onClick={() => void handleDataToolsExport("csv")} disabled={isExportingDataTools}>
+                          <Download className="mr-2 h-4 w-4" />
+                          {isExportingDataTools ? "Exporting…" : "CSV"}
                         </Button>
-                        <Button
-                          variant="outline"
-                          className="justify-start bg-white"
-                          onClick={() => handleRequestAccountsExport("xlsx")}
-                        >
-                          <FileText className="mr-2 h-4 w-4" />
-                          Accounts XLSX
+                        <Button variant="outline" className="bg-white" onClick={() => void handleDataToolsExport("xlsx")} disabled={isExportingDataTools}>
+                          <Download className="mr-2 h-4 w-4" />
+                          XLSX
                         </Button>
-                        <Button
-                          variant="outline"
-                          className="justify-start bg-white"
-                          onClick={() => handleRequestAccountsExport("qif")}
-                        >
-                          <Coins className="mr-2 h-4 w-4" />
-                          Accounts QIF
-                        </Button>
-                      </>
-                    ) : (
-                      <p className="rounded-lg border border-dashed border-neutral-300 bg-white px-3 py-2 text-xs text-muted-foreground sm:col-span-2 xl:col-span-3">
-                        Accounts module is disabled for this tenant.
+                      </div>
+                    </div>
+                    {selectedDataToolsTemplateConfig && (
+                      <p className="text-xs text-muted-foreground">
+                        Columns: {selectedDataToolsTemplateConfig.template.join(", ")}
                       </p>
                     )}
                   </div>
+
+                  {/* Accounts export */}
+                  {canShowAccounts ? (
+                    <div className="rounded-lg border border-stone-200 bg-white p-3 space-y-2">
+                      <Label className="text-xs uppercase tracking-[0.16em] text-stone-500">Accounts export</Label>
+                      <div className="flex flex-wrap gap-2">
+                        <Button variant="outline" className="bg-white" onClick={() => handleRequestAccountsExport("csv")}>
+                          <FileText className="mr-2 h-4 w-4" />
+                          CSV
+                        </Button>
+                        <Button variant="outline" className="bg-white" onClick={() => handleRequestAccountsExport("xlsx")}>
+                          <FileText className="mr-2 h-4 w-4" />
+                          XLSX
+                        </Button>
+                        <Button variant="outline" className="bg-white" onClick={() => handleRequestAccountsExport("qif")}>
+                          <Coins className="mr-2 h-4 w-4" />
+                          QIF
+                        </Button>
+                      </div>
+                    </div>
+                  ) : (
+                    <p className="rounded-lg border border-dashed border-neutral-300 bg-white px-3 py-2 text-xs text-muted-foreground">
+                      Accounts module is disabled for this tenant.
+                    </p>
+                  )}
+
+                  {/* Template + Import */}
+                  <div className="flex flex-wrap gap-2">
+                    <Button variant="outline" onClick={handleDownloadDataTemplate} disabled={!selectedDataToolsTemplateConfig} className="bg-white" size="sm">
+                      <FileText className="mr-2 h-4 w-4" />
+                      Download template
+                    </Button>
+                    <Button asChild variant="outline" className="bg-white" size="sm">
+                      <Link href={dataToolsImportHref}>
+                        <Upload className="mr-2 h-4 w-4" />
+                        Import CSV
+                      </Link>
+                    </Button>
+                  </div>
+
                   {lastOpsExportFailure && (
                     <div data-testid="ops-export-failure-banner" className="rounded-lg border border-amber-200 bg-amber-50/90 p-3 text-sm">
                       <p className="font-medium text-amber-900">Ops export failed</p>
@@ -6015,57 +5937,6 @@ export default function InventorySystem() {
                         </Button>
                       </div>
                     </div>
-                  )}
-                  <div className="grid grid-cols-1 gap-3 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-end">
-                    <div className="space-y-2">
-                      <Label className="text-xs uppercase tracking-[0.16em] text-neutral-500">Dataset</Label>
-                      <Select
-                        value={dataToolsDataset}
-                        onValueChange={(value) => {
-                          if (isExportDatasetId(value)) {
-                            setDataToolsDataset(value)
-                          }
-                        }}
-                      >
-                        <SelectTrigger className="h-10 bg-white">
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent className="max-h-[45vh] overflow-y-auto">
-                          {EXPORT_DATASETS.map((datasetOption) => (
-                            <SelectItem key={datasetOption.id} value={datasetOption.id}>
-                              {datasetOption.label}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                      <p className="text-xs text-muted-foreground">{selectedDataToolsConfig.description}</p>
-                    </div>
-                    <div className="flex flex-wrap gap-2 lg:justify-end">
-                      <Button
-                        variant="outline"
-                        onClick={handleDownloadDataTemplate}
-                        disabled={!selectedDataToolsTemplateConfig}
-                        className="bg-white"
-                      >
-                        <FileText className="mr-2 h-4 w-4" />
-                        Template
-                      </Button>
-                      <Button asChild variant="outline" className="bg-white">
-                        <Link href={dataToolsImportHref}>
-                          <Upload className="mr-2 h-4 w-4" />
-                          Import CSV
-                        </Link>
-                      </Button>
-                    </div>
-                  </div>
-                  {selectedDataToolsTemplateConfig ? (
-                    <p className="text-xs text-muted-foreground">
-                      Template columns: {selectedDataToolsTemplateConfig.template.join(", ")}
-                    </p>
-                  ) : (
-                    <p className="text-xs text-muted-foreground">
-                      No direct template for this export dataset. Use the import page to choose a supported dataset.
-                    </p>
                   )}
                 </CardContent>
               </Card>
@@ -6112,28 +5983,43 @@ export default function InventorySystem() {
           </Card>
         )}
         {!isOwner && !trialBannerDismissed && trialDaysRemaining !== null && (
-          <div className={`mb-4 flex items-center justify-between gap-3 rounded-xl border px-4 py-3 text-sm ${
+          <div className={`mb-4 flex items-center justify-between gap-3 rounded-2xl border px-4 py-3 text-sm shadow-sm ${
             trialDaysRemaining <= 5
-              ? "border-amber-300 bg-amber-50 text-amber-900"
-              : "border-sky-200 bg-sky-50 text-sky-900"
+              ? "border-amber-300/70 bg-gradient-to-r from-amber-50 to-orange-50/60 text-amber-900"
+              : "border-emerald-200/70 bg-gradient-to-r from-emerald-50/80 to-sky-50/60 text-emerald-900"
           }`}>
-            <p>
-              <span className="font-semibold">
-                {trialDaysRemaining === 0
-                  ? "Your free trial ends today."
-                  : trialDaysRemaining === 1
-                    ? "1 day left on your free trial."
-                    : `${trialDaysRemaining} days left on your free trial.`}
+            <div className="flex items-center gap-3 min-w-0">
+              <span className={`shrink-0 text-base ${trialDaysRemaining <= 5 ? "text-amber-500" : "text-emerald-600"}`}>
+                {trialDaysRemaining <= 5 ? "⏳" : "✨"}
               </span>
-              {" "}Keep recording to build your season picture — your data is saved either way.
-            </p>
-            <button
-              type="button"
-              className="shrink-0 text-xs underline opacity-60 hover:opacity-100"
-              onClick={() => setTrialBannerDismissed(true)}
-            >
-              Dismiss
-            </button>
+              <p className="min-w-0">
+                <span className="font-semibold">
+                  {trialDaysRemaining === 1
+                    ? "1 day left on your free trial."
+                    : `${trialDaysRemaining} days left on your trial.`}
+                </span>
+                {" "}Your data is saved either way.
+              </p>
+            </div>
+            <div className="flex shrink-0 items-center gap-2">
+              <Link
+                href="/plans"
+                className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition-colors ${
+                  trialDaysRemaining <= 5
+                    ? "bg-amber-600 text-white hover:bg-amber-700"
+                    : "bg-emerald-700 text-white hover:bg-emerald-800"
+                }`}
+              >
+                Upgrade →
+              </Link>
+              <button
+                type="button"
+                className="text-xs opacity-50 hover:opacity-80"
+                onClick={() => setTrialBannerDismissed(true)}
+              >
+                ✕
+              </button>
+            </div>
           </div>
         )}
         {showOnboarding && (
@@ -6220,7 +6106,7 @@ export default function InventorySystem() {
               </span>
               <div>
                 {gs.groupLabel && (
-                  <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-stone-400 leading-none mb-0.5">{gs.groupLabel}</p>
+                  <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-emerald-700 leading-none mb-0.5">{gs.groupLabel}</p>
                 )}
                 <h1 className="text-lg font-black text-stone-900 leading-tight">{meta.label}</h1>
               </div>
@@ -6258,14 +6144,14 @@ export default function InventorySystem() {
                 </div>
               ) : (
                 /* Desktop: wrapping pill tabs with shadow card */
-                <TabsList className="h-auto flex-wrap items-center gap-2 rounded-2xl border border-black/10 bg-gradient-to-br from-white/95 via-white to-neutral-100/80 p-2 shadow-[0_8px_24px_-16px_rgba(15,23,42,0.6)] backdrop-blur dark:border-white/[0.08] dark:from-card dark:via-card dark:to-card/90">
+                <TabsList className="h-auto flex-wrap items-center gap-1.5 rounded-2xl border border-stone-200 bg-white p-1.5 shadow-sm dark:border-white/[0.08] dark:bg-card">
                   {activeSectionTabs.map((tab) => {
                     const TabIcon = tab.icon
                     return (
                       <TabsTrigger
                         key={tab.value}
                         value={tab.value}
-                        className="min-h-10 rounded-lg border border-black/10 bg-white/90 px-4 text-[13px] font-semibold data-[state=active]:border-emerald-600 data-[state=active]:bg-emerald-600 data-[state=active]:text-white data-[state=active]:shadow-[0_10px_20px_-14px_rgba(5,150,105,0.9)] dark:border-white/[0.08] dark:bg-white/[0.04] dark:text-foreground dark:data-[state=active]:border-emerald-500 dark:data-[state=active]:bg-emerald-600"
+                        className="min-h-9 rounded-xl px-4 text-[13px] font-medium text-stone-500 data-[state=active]:bg-emerald-700 data-[state=active]:font-semibold data-[state=active]:text-white dark:text-stone-400 dark:data-[state=active]:bg-emerald-700 dark:data-[state=active]:text-white"
                       >
                         <TabIcon className="mr-2 h-4 w-4" />
                         {tab.label}
@@ -6290,7 +6176,7 @@ export default function InventorySystem() {
               isMobile={isMobile}
               onTabChange={handleTabChange}
               onAccountsExpense={() => { setAccountsInitialTab("expenses"); handleTabChange("accounts") }}
-              onAccountsLabor={() => { setAccountsInitialTab("labor"); handleTabChange("accounts") }}
+              onAccountsLabor={() => { setAccountsInitialTab("labour"); handleTabChange("accounts") }}
               buildWorkspaceHref={buildWorkspaceHref}
               estateName={tenantSettings.estateName}
             />
@@ -6315,7 +6201,7 @@ export default function InventorySystem() {
                     style={{ backgroundImage: "radial-gradient(ellipse at 80% 20%, #d4a574 0%, transparent 60%), radial-gradient(ellipse at 10% 80%, #4ade80 0%, transparent 50%)" }}
                   />
                   <div className="relative">
-                    <p className="text-stone-400/80 text-[10px] font-bold uppercase tracking-[0.2em] mb-0.5">Home</p>
+                    <p className="text-emerald-700/80 text-[10px] font-bold uppercase tracking-[0.2em] mb-0.5">Home</p>
                     <h1 className="text-2xl font-black text-white leading-tight">
                       {tenantSettings.estateName || "FarmFlow"}
                     </h1>
@@ -6327,19 +6213,19 @@ export default function InventorySystem() {
                   <div className="grid grid-cols-3 gap-2">
                     <button
                       type="button"
-                      onClick={() => handleTabChange("accounts")}
+                      onClick={() => openDrilldown({ tab: "accounts", panel: "labour" })}
                       className="flex flex-col items-center justify-center gap-1.5 rounded-2xl bg-emerald-700 py-4 px-2 shadow-sm active:scale-[0.97] touch-manipulation"
                     >
                       <span className="text-xl leading-none">👷</span>
-                      <span className="text-[11px] font-bold text-white leading-tight text-center">Log Labor</span>
+                      <span className="text-[11px] font-bold text-white leading-tight text-center">Log Labour</span>
                     </button>
                     <button
                       type="button"
-                      onClick={() => handleTabChange("accounts")}
+                      onClick={() => openDrilldown({ tab: "accounts", panel: "expenses" })}
                       className="flex flex-col items-center justify-center gap-1.5 rounded-2xl bg-amber-700 py-4 px-2 shadow-sm active:scale-[0.97] touch-manipulation"
                     >
-                      <span className="text-xl leading-none">💸</span>
-                      <span className="text-[11px] font-bold text-white leading-tight text-center">Log Expense</span>
+                      <span className="text-xl leading-none">🧾</span>
+                      <span className="text-[11px] font-bold text-white leading-tight text-center">Other Expense</span>
                     </button>
                     {canShowRainfallSection ? (
                       <button
@@ -6439,12 +6325,12 @@ export default function InventorySystem() {
 
             {/* Recent Activity Feed — desktop only */}
             {!isMobile && (recentActivityLoading || (recentActivity && recentActivity.length > 0)) && (
-              <Card className="border-black/5 bg-white/90">
-                <CardHeader className="pb-3">
-                  <CardTitle className="text-base">Recent Activity</CardTitle>
-                  <CardDescription>Last entries logged across all modules.</CardDescription>
-                </CardHeader>
-                <CardContent className="p-0">
+              <div className="overflow-hidden rounded-xl border border-stone-200 bg-white shadow-sm dark:border-white/[0.06] dark:bg-card">
+                <div className="border-b border-stone-100 px-5 py-4 dark:border-white/[0.05]">
+                  <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-emerald-700 dark:text-emerald-500">Latest</p>
+                  <p className="text-sm font-bold text-stone-900 dark:text-white">Recent Activity</p>
+                </div>
+                <div className="p-0">
                   {recentActivityLoading ? (
                     <div className="divide-y divide-stone-50">
                       {[1, 2, 3, 4].map((i) => (
@@ -6489,7 +6375,7 @@ export default function InventorySystem() {
                               </svg>
                             ),
                           },
-                          labor: {
+                          labour: {
                             bg: "bg-violet-50",
                             text: "text-violet-700",
                             icon: (
@@ -6515,26 +6401,26 @@ export default function InventorySystem() {
                               {cfg.icon}
                             </div>
                             <div className="min-w-0 flex-1">
-                              <p className="text-sm font-medium text-neutral-800 truncate">{entry.label}</p>
-                              <p className="text-xs text-neutral-400 truncate">{entry.detail}</p>
+                              <p className="text-sm font-medium text-stone-800 truncate">{entry.label}</p>
+                              <p className="text-xs text-stone-400 truncate">{entry.detail}</p>
                             </div>
-                            <span className="shrink-0 text-xs text-neutral-400 tabular-nums">{entry.date}</span>
+                            <span className="shrink-0 text-xs text-stone-400 tabular-nums">{entry.date}</span>
                           </div>
                         )
                       })}
                     </div>
                   )}
-                </CardContent>
-              </Card>
+                </div>
+              </div>
             )}
 
             {mobileHomeQuickActions.length > 0 && (
-              <Card className="border-black/5 bg-white/90">
-                <CardHeader className="pb-3">
-                  <CardTitle className={isMobile ? "text-lg" : "text-base"}>Jump to a section</CardTitle>
-                  <CardDescription>Your most-used areas — tap to go straight there.</CardDescription>
-                </CardHeader>
-                <CardContent>
+              <div className="overflow-hidden rounded-xl border border-stone-200 bg-white shadow-sm dark:border-white/[0.06] dark:bg-card">
+                <div className="border-b border-stone-100 px-5 py-4 dark:border-white/[0.05]">
+                  <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-emerald-700 dark:text-emerald-500">Navigation</p>
+                  <p className={cn("font-bold text-stone-900 dark:text-white", isMobile ? "text-base" : "text-sm")}>Jump to a section</p>
+                </div>
+                <div className="p-5">
                   <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3">
                     {mobileHomeQuickActions.map((action) => {
                       const ActionIcon = action.icon
@@ -6544,34 +6430,33 @@ export default function InventorySystem() {
                           type="button"
                           onClick={() => handleTabChange(action.tab)}
                           className={cn(
-                            "flex items-center gap-3 rounded-xl border border-black/8 bg-white px-3.5 text-left shadow-sm transition-colors hover:bg-slate-50 touch-manipulation",
+                            "flex items-center gap-3 rounded-xl border border-stone-200 bg-white px-3.5 text-left shadow-sm transition-colors hover:bg-stone-50 touch-manipulation",
                             isMobile ? "min-h-[60px] py-3.5" : "min-h-[52px] py-2.5",
                           )}
                         >
                           <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-emerald-50">
                             <ActionIcon className="h-4 w-4 text-emerald-700" />
                           </span>
-                          <span className={cn("font-semibold text-slate-800", isMobile ? "text-[15px]" : "text-sm")}>
+                          <span className={cn("font-semibold text-stone-800", isMobile ? "text-[15px]" : "text-sm")}>
                             {action.label}
                           </span>
                         </button>
                       )
                     })}
                   </div>
-                </CardContent>
-              </Card>
+                </div>
+              </div>
             )}
 
-            <Card className="border-black/5 bg-white/90">
-              <CardHeader className="pb-3">
-                <CardTitle>Execution Scorecard</CardTitle>
-                <CardDescription>
-                  Daily guardrails to reduce missed tasks, improve harvest tracking, and keep reports decision-ready.
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-3">
+            <div className="overflow-hidden rounded-xl border border-stone-200 bg-white shadow-sm dark:border-white/[0.06] dark:bg-card">
+              <div className="border-b border-stone-100 px-5 py-4 dark:border-white/[0.05]">
+                <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-emerald-700 dark:text-emerald-500">Performance</p>
+                <p className="text-sm font-bold text-stone-900 dark:text-white">Execution Scorecard</p>
+                <p className="mt-0.5 text-xs text-stone-400 dark:text-stone-500">Daily guardrails to reduce missed tasks, improve harvest tracking, and keep reports decision-ready.</p>
+              </div>
+              <div className="space-y-3 p-5">
                 {executionOutcomeChecks.map((check) => (
-                  <div key={check.id} className="rounded-xl border border-black/5 bg-white p-3">
+                  <div key={check.id} className="rounded-xl border border-stone-200 bg-stone-50 p-3 dark:border-white/[0.05] dark:bg-white/[0.02]">
                     <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
                       <div className="space-y-1">
                         <p className="text-sm font-semibold text-neutral-900">{check.title}</p>
@@ -6594,173 +6479,49 @@ export default function InventorySystem() {
                     </div>
                   </div>
                 ))}
-              </CardContent>
-            </Card>
+              </div>
+            </div>
 
-            <div className={cn("grid grid-cols-1 gap-4", canShowSales && "xl:grid-cols-2")}>
-              <Card className="border-black/5 bg-white/90">
-                <CardHeader>
-                  <CardTitle>Estate Overview</CardTitle>
-                  <CardDescription>Quick numbers for your estate right now.</CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
-                    <div className="rounded-xl border border-black/5 bg-white p-3">
-                      <div className="flex items-center gap-1">
-                        <p className="text-xs uppercase tracking-[0.18em] text-neutral-500">Estate Blocks</p>
-                        <TooltipProvider>
-                          <Tooltip>
-                            <TooltipTrigger asChild>
-                              <button
-                                type="button"
-                                aria-label="Active locations help"
-                                className="inline-flex h-4 w-4 items-center justify-center rounded-full border border-black/10 text-neutral-500 hover:text-neutral-700"
-                              >
-                                <Info className="h-2.5 w-2.5" />
-                              </button>
-                            </TooltipTrigger>
-                            <TooltipContent>
-                              Count of configured estate locations available for records.
-                            </TooltipContent>
-                          </Tooltip>
-                        </TooltipProvider>
-                      </div>
-                      <p className="mt-1 text-lg font-semibold tabular-nums text-neutral-900">{formatCount(estateMetrics.locationCount)}</p>
+            <div className="overflow-hidden rounded-xl border border-stone-200 bg-white shadow-sm dark:border-white/[0.06] dark:bg-card">
+                <div className="border-b border-stone-100 px-5 py-4 dark:border-white/[0.05]">
+                  <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-emerald-700 dark:text-emerald-500">At a glance</p>
+                  <p className="text-sm font-bold text-stone-900 dark:text-white">Estate Overview</p>
+                </div>
+                <div className="space-y-4 p-5">
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="rounded-xl border border-stone-200 bg-stone-50 p-3 dark:border-white/[0.05] dark:bg-white/[0.02]">
+                      <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-emerald-700 dark:text-emerald-500">Estate Blocks</p>
+                      <p className="mt-1 text-2xl font-black tabular-nums text-neutral-900 dark:text-white">{formatCount(estateMetrics.locationCount)}</p>
+                      <p className="mt-0.5 text-xs text-stone-400">configured locations</p>
                       {canShowProcessing && (
                         <Button
                           size="sm"
                           variant="ghost"
-                          className="mt-2 h-7 px-2 text-xs"
+                          className="mt-2 h-7 px-0 text-xs"
                           onClick={() => openDrilldown({ tab: "processing", locationId: selectedLocationId })}
                         >
-                          Open location records
+                          Open records →
                         </Button>
                       )}
                     </div>
-                    <div className="rounded-xl border border-black/5 bg-white p-3">
-                      <div className="flex items-center gap-1">
-                        <p className="text-xs uppercase tracking-[0.18em] text-neutral-500">Entries Today</p>
-                        <TooltipProvider>
-                          <Tooltip>
-                            <TooltipTrigger asChild>
-                              <button
-                                type="button"
-                                aria-label="24h activity help"
-                                className="inline-flex h-4 w-4 items-center justify-center rounded-full border border-black/10 text-neutral-500 hover:text-neutral-700"
-                              >
-                                <Info className="h-2.5 w-2.5" />
-                              </button>
-                            </TooltipTrigger>
-                            <TooltipContent>
-                              Inventory transactions recorded in the last 24 hours.
-                            </TooltipContent>
-                          </Tooltip>
-                        </TooltipProvider>
-                      </div>
-                      <p className="mt-1 text-lg font-semibold tabular-nums text-neutral-900">{formatCount(estateMetrics.recentActivity)}</p>
+                    <div className="rounded-xl border border-stone-200 bg-stone-50 p-3 dark:border-white/[0.05] dark:bg-white/[0.02]">
+                      <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-emerald-700 dark:text-emerald-500">Entries Today</p>
+                      <p className="mt-1 text-2xl font-black tabular-nums text-neutral-900 dark:text-white">{formatCount(estateMetrics.recentActivity)}</p>
+                      <p className="mt-0.5 text-xs text-stone-400">logged in last 24h</p>
                       {showTransactionHistory && (
                         <Button
                           size="sm"
                           variant="ghost"
-                          className="mt-2 h-7 px-2 text-xs"
+                          className="mt-2 h-7 px-0 text-xs"
                           onClick={() => openDrilldown({ tab: "transactions" })}
                         >
-                          Open transactions
-                        </Button>
-                      )}
-                    </div>
-                    <div className="rounded-xl border border-black/5 bg-white p-3">
-                      <div className="flex items-center gap-1">
-                        <p className="text-xs uppercase tracking-[0.18em] text-neutral-500">Issues to Fix</p>
-                        <TooltipProvider>
-                          <Tooltip>
-                            <TooltipTrigger asChild>
-                              <button
-                                type="button"
-                                aria-label="Open alerts help"
-                                className="inline-flex h-4 w-4 items-center justify-center rounded-full border border-black/10 text-neutral-500 hover:text-neutral-700"
-                              >
-                                <Info className="h-2.5 w-2.5" />
-                              </button>
-                            </TooltipTrigger>
-                            <TooltipContent>
-                              Active season exceptions requiring review or action.
-                            </TooltipContent>
-                          </Tooltip>
-                        </TooltipProvider>
-                      </div>
-                      <p className="mt-1 text-lg font-semibold tabular-nums text-neutral-900">{formatCount(exceptionsSummary.count)}</p>
-                      {canShowSeason && (
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          className="mt-2 h-7 px-2 text-xs"
-                          onClick={() => openDrilldown({ tab: "season" })}
-                        >
-                          Open exceptions
+                          View log →
                         </Button>
                       )}
                     </div>
                   </div>
-                </CardContent>
-              </Card>
-
-              {canShowSales && (
-                <Card className="border-black/5 bg-gradient-to-br from-emerald-50/60 to-white">
-                  <CardHeader>
-                    <CardTitle>Coffee Stock Check</CardTitle>
-                    <CardDescription>How much coffee is ready to sell, based on what the buyer confirmed receiving.</CardDescription>
-                  </CardHeader>
-                  <CardContent className="space-y-3">
-                    <div className={cn("inline-flex items-center rounded-full border px-3 py-1 text-xs font-medium", reconciliationStatusTone)}>
-                      Stock balance: {reconciliationStatusLabel}
-                    </div>
-                    <div className="rounded-xl border border-black/5 bg-white/90 p-3">
-                      <p className="text-xs uppercase tracking-[0.18em] text-neutral-500">How it&apos;s calculated</p>
-                      <p className="mt-1 text-sm text-neutral-700">
-                        Ready to Sell = Bags at Buyer − Coffee Already Sold
-                      </p>
-                      <p className="mt-2 text-sm text-neutral-700">
-                        {formatNumber(dispatchReceivedKgsTotal, 0)} kg − {formatNumber(salesSoldKgsTotal, 0)} kg ={" "}
-                        <span className={cn("font-semibold", overdrawnCoffeeKgs > 0 ? "text-rose-700" : "text-emerald-700")}>
-                          {overdrawnCoffeeKgs > 0 ? `-${formatNumber(overdrawnCoffeeKgs, 0)}` : formatNumber(saleableCoffeeKgs, 0)} kg
-                        </span>
-                      </p>
-                    </div>
-                    <p className="text-xs text-muted-foreground">
-                      FarmFlow checks coffee type and bag type before allowing a sale, so your records stay accurate.
-                    </p>
-                    <div className="flex flex-wrap gap-2">
-                      {canShowDispatch && (
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={() => openDrilldown({ tab: "dispatch", locationId: selectedLocationId })}
-                          className="bg-white"
-                        >
-                          Open Dispatch
-                        </Button>
-                      )}
-                      {canShowSales && (
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={() => openDrilldown({ tab: "sales", locationId: selectedLocationId })}
-                          className="bg-white"
-                        >
-                          Open Sales
-                        </Button>
-                      )}
-                      {canShowActivityLog && (
-                        <Button size="sm" variant="outline" onClick={() => openDrilldown({ tab: "activity-log" })} className="bg-white">
-                          Activity Log
-                        </Button>
-                      )}
-                    </div>
-                  </CardContent>
-                </Card>
-              )}
-            </div>
+                </div>
+              </div>
 
             {/* Today's Brief — moved lower, kept for spacing; actual render is at top of home */}
 
@@ -6786,7 +6547,7 @@ export default function InventorySystem() {
                 </CardHeader>
                 <CardContent>
                   {proactiveInsightsLoading ? (
-                    <div className="flex items-center gap-2 text-sm text-neutral-500">
+                    <div className="flex items-center gap-2 text-sm text-stone-500">
                       <Loader2 className="h-4 w-4 animate-spin" />
                       Reading your data...
                     </div>
@@ -6816,16 +6577,16 @@ export default function InventorySystem() {
                                 ? "bg-amber-500"
                                 : insight.severity === "good"
                                   ? "bg-emerald-500"
-                                  : "bg-neutral-400",
+                                  : "bg-stone-400",
                             )}
                           />
-                          <p className="text-sm text-neutral-800">{insight.text}</p>
+                          <p className="text-sm text-stone-800">{insight.text}</p>
                         </div>
                       ))}
                     </div>
                   ) : (
                     <p className="text-sm text-muted-foreground">
-                      No signals yet. Add more operations data to activate smart insights.
+                      All quiet — no anomalies or urgent signals detected right now.
                     </p>
                   )}
                 </CardContent>
@@ -6848,7 +6609,7 @@ export default function InventorySystem() {
 
           {canShowInventoryWorkspace && (
             <TabsContent value="inventory" className="space-y-6" forceMount={isTabLoaded("inventory") ? true : undefined}>
-              {resolvedInventoryWorkspaceView !== "transactions" && (
+              {resolvedInventoryWorkspaceView !== "transactions" && !inventoryBannerDismissed && (
                 <div className="flex flex-col gap-3 rounded-2xl border border-amber-200 bg-amber-50/80 px-4 py-3.5 sm:flex-row sm:items-center sm:justify-between">
                   <div className="flex items-start gap-3">
                     <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" />
@@ -6862,7 +6623,7 @@ export default function InventorySystem() {
                       </p>
                     </div>
                   </div>
-                  <div className="flex shrink-0 flex-wrap gap-2">
+                  <div className="flex shrink-0 flex-wrap items-center gap-2">
                     <button
                       type="button"
                       onClick={() => openMovementDrawer("deplete")}
@@ -6879,166 +6640,188 @@ export default function InventorySystem() {
                         Open Accounts expense
                       </button>
                     )}
+                    <button
+                      type="button"
+                      aria-label="Dismiss"
+                      onClick={() => setInventoryBannerDismissed(true)}
+                      className="ml-1 flex h-7 w-7 items-center justify-center rounded-full text-amber-600 hover:bg-amber-100 transition-colors touch-manipulation"
+                    >
+                      ✕
+                    </button>
                   </div>
                 </div>
               )}
-              <Card className="border-border/70 bg-white/90">
-                <CardHeader className="pb-3">
-                  <CardTitle className="text-xs uppercase tracking-[0.2em] text-muted-foreground">Inventory overview</CardTitle>
-                  <CardDescription>
-                    {resolvedInventoryWorkspaceView === "transactions"
-                      ? "Review and correct stock history without leaving Inventory."
-                      : canShowAccounts
-                        ? "Track restocks, stock usage, and corrections here. Use Accounts only when the same usage should also hit P&L."
-                        : "Track restocks, stock usage, and corrections here."}
-                  </CardDescription>
-                </CardHeader>
-                <CardContent className="grid gap-4 lg:grid-cols-[1.6fr_1fr]">
-                  <div className="space-y-2">
-                    <div>
-                      <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">Current mode</p>
-                      <p className="text-2xl font-semibold text-foreground">
-                        {resolvedInventoryWorkspaceView === "transactions" ? "Transaction History" : "Inventory"}
-                      </p>
-                    </div>
-                    <div>
-                      <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">Selected location</p>
-                      <p className="text-sm font-semibold text-foreground">{selectedLocationLabel}</p>
-                    </div>
-                    <div className="border-t border-border/60 pt-2">
-                      <p className="text-xs text-muted-foreground">
-                        {formatNumber(filteredInventoryTotals.itemCount)} items · {formatNumber(filteredInventoryTotals.totalQuantity)} {filteredInventoryTotals.unitLabel}
-                      </p>
-                      <p className="text-xs text-muted-foreground">
-                        Inventory value {formatCurrency(filteredInventoryTotals.totalValue)} · Transactions in view {formatCount(filteredTransactions.length)}
-                      </p>
-                    </div>
-                  </div>
-                  {showTransactionHistory ? (
-                    <div className="rounded-xl border border-border/60 bg-muted/20 p-3">
-                      <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">Next step</p>
-                      <div className="mt-3 space-y-2">
-                        {resolvedInventoryWorkspaceView === "transactions" ? (
-                          canShowInventory ? (
-                            <Button
-                              type="button"
-                              variant="outline"
-                              className="w-full bg-white"
-                              onClick={() => setInventoryWorkspaceView("inventory")}
-                            >
-                              Back to inventory
-                            </Button>
-                          ) : (
-                            <p className="text-sm text-muted-foreground">History view only for this module set.</p>
-                          )
-                        ) : (
-                          <Button
-                            type="button"
-                            className="w-full bg-emerald-700 hover:bg-emerald-800"
-                            onClick={() => setInventoryWorkspaceView("transactions")}
-                          >
-                            Open transaction history
-                          </Button>
-                        )}
+              <div className="overflow-hidden rounded-xl border border-stone-200 bg-white shadow-sm dark:border-white/[0.06] dark:bg-card">
+                <div className="grid lg:grid-cols-[1fr_auto]">
+                  <div className="border-b border-stone-100 p-5 lg:border-b-0 lg:border-r dark:border-white/[0.05]">
+                    <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-emerald-700 dark:text-emerald-500">Inventory overview</p>
+                    <p className="mt-1 text-2xl font-black text-stone-900 dark:text-white">
+                      {resolvedInventoryWorkspaceView === "transactions" ? "Transaction History" : "Stock levels"}
+                    </p>
+                    <p className="mt-1 text-xs text-stone-400 dark:text-stone-500">
+                      {resolvedInventoryWorkspaceView === "transactions"
+                        ? "Review and correct stock history without leaving Inventory."
+                        : canShowAccounts
+                          ? "Track restocks, stock usage, and corrections here. Use Accounts only when the same usage should also hit P&L."
+                          : "Track restocks, stock usage, and corrections here."}
+                    </p>
+                    <div className="mt-4 flex flex-wrap gap-4 border-t border-stone-100 pt-4 dark:border-white/[0.05]">
+                      <div>
+                        <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-emerald-700 dark:text-emerald-500">Location</p>
+                        <p className="mt-0.5 text-sm font-semibold text-stone-800 dark:text-stone-200">{selectedLocationLabel}</p>
+                      </div>
+                      <div>
+                        <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-emerald-700 dark:text-emerald-500">Items</p>
+                        <p className="mt-0.5 text-sm font-black tabular-nums text-stone-800 dark:text-stone-200">{formatNumber(filteredInventoryTotals.itemCount)}</p>
+                      </div>
+                      <div>
+                        <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-emerald-700 dark:text-emerald-500">Total qty</p>
+                        <p className="mt-0.5 text-sm font-black tabular-nums text-stone-800 dark:text-stone-200">{formatNumber(filteredInventoryTotals.totalQuantity)} {filteredInventoryTotals.unitLabel}</p>
+                      </div>
+                      <div>
+                        <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-emerald-700 dark:text-emerald-500">Value</p>
+                        <p className="mt-0.5 text-sm font-black tabular-nums text-amber-700 dark:text-amber-400">{formatCurrency(filteredInventoryTotals.totalValue)}</p>
                       </div>
                     </div>
-                  ) : null}
-                </CardContent>
-              </Card>
+                  </div>
+                  {showTransactionHistory && (
+                    <div className="flex flex-col justify-center gap-2 p-5">
+                      {resolvedInventoryWorkspaceView === "transactions" ? (
+                        canShowInventory ? (
+                          <Button
+                            type="button"
+                            variant="outline"
+                            className="h-10 rounded-lg border-stone-200"
+                            onClick={() => setInventoryWorkspaceView("inventory")}
+                          >
+                            ← Back to inventory
+                          </Button>
+                        ) : (
+                          <p className="text-xs text-stone-400">History view only for this module set.</p>
+                        )
+                      ) : (
+                        <Button
+                          type="button"
+                          className="h-10 rounded-lg bg-emerald-700 font-semibold text-white hover:bg-emerald-600 dark:bg-emerald-700"
+                          onClick={() => setInventoryWorkspaceView("transactions")}
+                        >
+                          Transaction history
+                        </Button>
+                      )}
+                    </div>
+                  )}
+                </div>
+              </div>
               {resolvedInventoryWorkspaceView === "transactions" && showTransactionHistory ? (
                 renderTransactionHistoryPanel()
               ) : (
               <div className="grid grid-cols-1 gap-6 lg:grid-cols-12 lg:items-start">
-                <div className="order-2 space-y-6 lg:order-1 lg:col-span-8">
-                  <div className="rounded-2xl border border-black/5 bg-white p-6 shadow-sm">
-                    <div className="mb-6 flex flex-col gap-4">
-                      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                        <div className="space-y-1">
-                          <h2 className="text-base font-semibold text-neutral-900 flex items-center">
-                            <List className="mr-2 h-5 w-5 text-emerald-600" /> Inventory Levels
-                          </h2>
-                          <p className="text-xs text-neutral-500">Totals for {selectedLocationLabel}. Restock when goods arrive. Deplete when stock is issued, consumed, lost, or corrected.</p>
+                <div className="order-2 space-y-4 lg:order-1 lg:col-span-8">
+                  <div className="overflow-hidden rounded-xl border border-stone-200 bg-white shadow-sm dark:border-white/[0.06] dark:bg-card">
+                    <div className="flex items-center justify-between border-b border-stone-100 px-5 py-4 dark:border-white/[0.05]">
+                      <div className="flex items-center gap-3">
+                        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-emerald-800 dark:bg-emerald-900/40">
+                          <List className="h-4 w-4 text-emerald-400" />
                         </div>
-                        <div className="flex flex-wrap gap-2">
-                          {showDataToolsControls && (
-                            <Button size="sm" variant="outline" onClick={exportInventoryToCSV} className="h-10 bg-transparent">
-                              <Download className="mr-2 h-4 w-4" /> Export
-                            </Button>
-                          )}
-                          <Button
-                            size="sm"
-                            onClick={openNewItemDialog}
-                            className="bg-emerald-700 hover:bg-emerald-800 h-10 text-white shadow-sm"
-                          >
-                            <Plus className="mr-2 h-4 w-4" /> Add item
-                          </Button>
+                        <div>
+                          <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-emerald-700 dark:text-emerald-500">Stock</p>
+                          <p className="text-sm font-bold text-stone-900 dark:text-white">
+                            Inventory Levels
+                            {selectedLocationId !== LOCATION_ALL && (
+                              <span className="ml-2 text-xs font-semibold text-emerald-700 dark:text-emerald-500">· {selectedLocationLabel}</span>
+                            )}
+                          </p>
                         </div>
                       </div>
-                      <div className="text-xs text-neutral-500">
-                        <span className="font-medium text-neutral-700 tabular-nums">
-                          {formatNumber(filteredInventoryTotals.itemCount)}
-                        </span>{" "}
-                        items ·{" "}
-                        <span className="font-medium text-neutral-700 tabular-nums">
-                          {formatNumber(filteredInventoryTotals.totalQuantity)} {filteredInventoryTotals.unitLabel}
-                        </span>{" "}
-                        total ·{" "}
-                        <span className="font-medium text-amber-700 tabular-nums">
-                          {formatCurrency(filteredInventoryTotals.totalValue)}
-                        </span>{" "}
-                        value
+                      <div className="flex shrink-0 flex-wrap gap-2">
+                        {showDataToolsControls && (
+                          <Button size="sm" variant="outline" onClick={exportInventoryToCSV} className="h-9 rounded-lg bg-transparent">
+                            <Download className="mr-2 h-4 w-4" /> Export
+                          </Button>
+                        )}
+                        <Button
+                          size="sm"
+                          onClick={openNewItemDialog}
+                          className="h-9 rounded-lg bg-emerald-700 font-semibold text-white shadow-sm hover:bg-emerald-600 dark:bg-emerald-700"
+                        >
+                          <Plus className="mr-2 h-4 w-4" /> Add item
+                        </Button>
                       </div>
                     </div>
 
-                    <div className="flex flex-col sm:flex-row gap-3 mb-5">
+                    {locations.length > 0 && (
+                      <div className="flex items-center gap-2 overflow-x-auto border-b border-stone-100 px-5 py-3 dark:border-white/[0.05]">
+                        <button
+                          type="button"
+                          onClick={() => setSelectedLocationId(LOCATION_ALL)}
+                          className={cn(
+                            "shrink-0 rounded-full px-3.5 py-1.5 text-xs font-semibold transition-colors touch-manipulation",
+                            selectedLocationId === LOCATION_ALL
+                              ? "bg-emerald-700 text-white shadow-sm"
+                              : "border border-stone-200 bg-white text-stone-600 hover:bg-stone-50 dark:border-white/[0.1] dark:bg-white/[0.04] dark:text-stone-300",
+                          )}
+                        >
+                          All
+                        </button>
+                        {locations.map((loc) => (
+                          <button
+                            key={loc.id}
+                            type="button"
+                            onClick={() => setSelectedLocationId(loc.id)}
+                            className={cn(
+                              "shrink-0 rounded-full px-3.5 py-1.5 text-xs font-semibold transition-colors touch-manipulation",
+                              selectedLocationId === loc.id
+                                ? "bg-emerald-700 text-white shadow-sm"
+                                : "border border-stone-200 bg-white text-stone-600 hover:bg-stone-50 dark:border-white/[0.1] dark:bg-white/[0.04] dark:text-stone-300",
+                            )}
+                          >
+                            {loc.name || loc.code || "Unnamed"}
+                          </button>
+                        ))}
+                        {(hasLegacyUnassignedTransactions || selectedLocationId === LOCATION_UNASSIGNED) && (
+                          <button
+                            type="button"
+                            onClick={() => setSelectedLocationId(LOCATION_UNASSIGNED)}
+                            className={cn(
+                              "shrink-0 rounded-full px-3.5 py-1.5 text-xs font-semibold transition-colors touch-manipulation",
+                              selectedLocationId === LOCATION_UNASSIGNED
+                                ? "bg-emerald-700 text-white shadow-sm"
+                                : "border border-stone-200 bg-white text-stone-500 hover:bg-stone-50 dark:border-white/[0.1] dark:bg-white/[0.04] dark:text-stone-400",
+                            )}
+                          >
+                            {UNASSIGNED_LABEL}
+                          </button>
+                        )}
+                      </div>
+                    )}
+
+                    <div className="flex flex-col gap-3 border-b border-stone-100 px-5 py-3 sm:flex-row dark:border-white/[0.05]">
                       <div className="relative flex-grow">
-                        <Search className="absolute left-3 top-3 h-4 w-4 text-neutral-400" />
+                        <Search className="absolute left-3 top-2.5 h-4 w-4 text-stone-400" />
                         <Input
-                          placeholder="Search inventory..."
+                          placeholder="Search items…"
                           value={inventorySearchTerm}
                           onChange={(e) => setInventorySearchTerm(e.target.value)}
-                          className="pl-10 h-11 rounded-xl border-black/5 bg-white focus-visible:ring-2 focus-visible:ring-emerald-200"
+                          className="h-9 rounded-lg border-stone-200 bg-white pl-10"
                         />
                       </div>
-                      <Select value={selectedLocationId} onValueChange={setSelectedLocationId}>
-                        <SelectTrigger className="w-full sm:w-52 h-11 rounded-xl border-black/5 bg-white focus-visible:ring-2 focus-visible:ring-emerald-200">
-                          <SelectValue placeholder="All locations" />
-                        </SelectTrigger>
-                        <SelectContent className="max-h-[40vh] overflow-y-auto">
-                          <SelectItem value={LOCATION_ALL}>All locations</SelectItem>
-                          {(hasLegacyUnassignedTransactions || selectedLocationId === LOCATION_UNASSIGNED) && (
-                            <SelectItem value={LOCATION_UNASSIGNED}>{UNASSIGNED_LABEL}</SelectItem>
-                          )}
-                          {locations.map((loc) => (
-                            <SelectItem key={loc.id} value={loc.id}>
-                              {loc.name || loc.code || "Unnamed location"}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
                       <Button
                         variant="outline"
                         size="sm"
                         onClick={toggleInventorySort}
-                        className="flex items-center gap-1 h-11 whitespace-nowrap bg-white"
+                        className="flex h-9 items-center gap-1 whitespace-nowrap rounded-lg border-stone-200 bg-white"
                       >
                         {inventorySortOrder === "asc" ? (
-                          <>
-                            <SortAsc className="h-4 w-4 mr-1" /> Sort A-Z
-                          </>
+                          <><SortAsc className="mr-1 h-4 w-4" /> A–Z</>
                         ) : inventorySortOrder === "desc" ? (
-                          <>
-                            <SortDesc className="h-4 w-4 mr-1" /> Sort Z-A
-                          </>
+                          <><SortDesc className="mr-1 h-4 w-4" /> Z–A</>
                         ) : (
-                          <>
-                            <SortAsc className="h-4 w-4 mr-1" /> Sort
-                          </>
+                          <><SortAsc className="mr-1 h-4 w-4" /> Sort</>
                         )}
                       </Button>
                     </div>
 
-                    <div className="grid grid-cols-1 gap-4">
+                    <div className="divide-y divide-stone-100 dark:divide-white/[0.04]">
                       {filteredAndSortedInventory.map((item, index) => {
                         const valueInfo = resolveItemValue(item)
                         const itemValue = valueInfo.totalValue || 0
@@ -7058,25 +6841,24 @@ export default function InventorySystem() {
                               }
                             }}
                             className={cn(
-                              "group rounded-2xl border border-black/5 bg-white p-4 shadow-sm transition-colors hover:bg-emerald-50/40",
-                              "cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-200",
-                              isSelectedForDrilldown && "border-emerald-200 bg-emerald-50/60",
+                              "group cursor-pointer px-5 py-4 transition-colors hover:bg-stone-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-emerald-300 dark:hover:bg-white/[0.02]",
+                              isSelectedForDrilldown && "bg-emerald-50/60 dark:bg-emerald-900/10",
                             )}
                             aria-label={`Open drill-down for ${item.name}`}
                           >
-                            <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                               <div className="flex items-center gap-3">
-                                <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-emerald-50 text-emerald-700 text-sm font-semibold">
+                                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-stone-900 text-sm font-black text-white dark:bg-stone-700">
                                   {itemInitial}
                                 </div>
                                 <div>
-                                  <div className="text-base font-semibold text-neutral-900">{item.name}</div>
-                                  <div className="text-xs text-neutral-500">
+                                  <div className="text-sm font-bold text-stone-900 dark:text-white">{item.name}</div>
+                                  <div className="text-xs text-stone-400 dark:text-stone-500">
                                     {avgPrice > 0 ? (
                                       <TooltipProvider>
                                         <Tooltip>
                                           <TooltipTrigger asChild>
-                                            <span className="cursor-default underline decoration-dotted decoration-neutral-400">
+                                            <span className="cursor-default underline decoration-dotted decoration-stone-300">
                                               Avg cost {formatCurrency(avgPrice)}/{item.unit || "unit"}
                                             </span>
                                           </TooltipTrigger>
@@ -7091,16 +6873,16 @@ export default function InventorySystem() {
                                   </div>
                                 </div>
                               </div>
-                              <div className="flex flex-wrap items-center gap-4 sm:justify-end">
+                              <div className="flex flex-wrap items-center gap-5 sm:justify-end">
                                 <div className="text-left sm:text-right">
-                                  <p className="text-xs uppercase tracking-[0.18em] text-neutral-400">Qty</p>
-                                  <p className="text-sm font-semibold text-neutral-800 tabular-nums">
+                                  <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-emerald-700 dark:text-emerald-500">Qty</p>
+                                  <p className="text-sm font-black tabular-nums text-stone-900 dark:text-white">
                                     {formatNumber(Number(item.quantity) || 0)} {item.unit}
                                   </p>
                                 </div>
                                 <div className="text-left sm:text-right">
-                                  <p className="text-xs uppercase tracking-[0.18em] text-neutral-400">Value</p>
-                                  <p className="text-sm font-semibold text-amber-700 tabular-nums">
+                                  <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-emerald-700 dark:text-emerald-500">Value</p>
+                                  <p className="text-sm font-black tabular-nums text-amber-700 dark:text-amber-400">
                                     {formatCurrency(itemValue)}
                                   </p>
                                 </div>
@@ -7153,22 +6935,24 @@ export default function InventorySystem() {
 
                     {filteredAndSortedInventory.length === 0 &&
                       (inventorySearchTerm ? (
-                        <div className="text-center py-8 text-muted-foreground">No items match your search.</div>
+                        <div className="py-10 text-center text-sm text-stone-400 dark:text-stone-500">No items match your search.</div>
                       ) : inventory.length === 0 ? (
-                        <WorkflowEmptyState
-                          title="No inventory items yet"
-                          description="Start with the few items your team actually buys or consumes often. You do not need a perfect master list before starting."
-                          steps={[
-                            "Add the real item name and unit your team uses on the estate.",
-                            "Set the opening quantity only if you know it well enough today.",
-                            "Use later restocks and depletions to keep the running balance honest.",
-                          ]}
-                          tip="A short, clean list is better than importing every possible item too early. Start with fertilizers, chemicals, fuel, bags, or anything used weekly."
-                          askPrompt="How do I set up my first inventory item?"
-                          primaryAction={{ label: "Add first item", onClick: openNewItemDialog }}
-                        />
+                        <div className="p-5">
+                          <WorkflowEmptyState
+                            title="No inventory items yet"
+                            description="Start with the few items your team actually buys or consumes often. You do not need a perfect master list before starting."
+                            steps={[
+                              "Add the real item name and unit your team uses on the estate.",
+                              "Set the opening quantity only if you know it well enough today.",
+                              "Use later restocks and depletions to keep the running balance honest.",
+                            ]}
+                            tip="A short, clean list is better than importing every possible item too early. Start with fertilizers, chemicals, fuel, bags, or anything used weekly."
+                            askPrompt="How do I set up my first inventory item?"
+                            primaryAction={{ label: "Add first item", onClick: openNewItemDialog }}
+                          />
+                        </div>
                       ) : (
-                        <div className="text-center py-8 text-muted-foreground">
+                        <div className="py-10 text-center text-sm text-stone-400 dark:text-stone-500">
                           {selectedLocationId !== LOCATION_ALL
                             ? "No inventory items in this location yet. Change the location filter or add stock here."
                             : "Inventory is empty or not yet loaded."}
@@ -7179,33 +6963,34 @@ export default function InventorySystem() {
 
                 <div className="order-1 flex flex-col gap-6 lg:order-2 lg:col-span-4 lg:self-start">
                   {canShowSeason && (
-                    <Card className="order-2 rounded-xl border border-black/5 bg-white shadow-sm lg:order-1">
-                      <CardHeader className="flex flex-col gap-2 pb-3">
-                        <div className="space-y-1">
-                          <CardTitle className="flex items-center gap-2 text-sm font-semibold text-neutral-900">
-                            <AlertTriangle className="h-4 w-4 text-emerald-600" />
+                    <div className="order-2 overflow-hidden rounded-xl border border-stone-200 bg-white shadow-sm dark:border-white/[0.06] dark:bg-card lg:order-1">
+                      <div className="flex items-start justify-between border-b border-stone-100 px-5 py-4 dark:border-white/[0.05]">
+                        <div>
+                          <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-emerald-700 dark:text-emerald-500">Alerts</p>
+                          <p className="flex items-center gap-1.5 text-sm font-bold text-stone-900 dark:text-white">
+                            <AlertTriangle className="h-3.5 w-3.5 text-amber-500" />
                             System status
-                          </CardTitle>
+                          </p>
                           {!exceptionsLoading && !exceptionsError && (
-                            <CardDescription className="text-xs text-neutral-500">
+                            <p className="mt-0.5 text-xs text-stone-400 dark:text-stone-500">
                               {exceptionsSummary.count === 0
                                 ? "No active anomalies in the last 7 days."
                                 : `${exceptionsSummary.count} active alert${exceptionsSummary.count === 1 ? "" : "s"}`}
-                            </CardDescription>
+                            </p>
                           )}
                         </div>
                         <Button
                           variant="outline"
                           size="sm"
-                          className="h-8 self-start"
+                          className="h-8 shrink-0 rounded-lg border-stone-200 text-xs"
                           onClick={() => openDrilldown({ tab: "season" })}
                         >
-                          Open Season View
+                          Season view
                         </Button>
-                      </CardHeader>
-                      <CardContent className="space-y-2 pt-0">
+                      </div>
+                      <div className="space-y-2 p-5">
                         {exceptionsLoading ? (
-                          <div className="flex items-center gap-2 text-xs text-neutral-500">
+                          <div className="flex items-center gap-2 text-xs text-stone-500">
                             <Loader2 className="h-3.5 w-3.5 animate-spin" />
                             Loading system status...
                           </div>
@@ -7253,36 +7038,34 @@ export default function InventorySystem() {
                               ))}
                           </div>
                         )}
-                      </CardContent>
-                    </Card>
+                      </div>
+                    </div>
                   )}
 
-                    <Card data-testid="inventory-quick-actions" className="order-1 rounded-2xl border border-black/5 bg-white shadow-sm lg:order-2">
-                    <CardHeader className="space-y-1">
-                      <CardTitle className="text-base font-semibold text-neutral-900">Quick actions</CardTitle>
-                      <CardDescription className="text-xs text-neutral-500">
-                        Choose the most common inventory task from here.
-                      </CardDescription>
-                    </CardHeader>
-                    <CardContent className="space-y-2">
+                    <div data-testid="inventory-quick-actions" className="order-1 overflow-hidden rounded-xl border border-stone-200 bg-white shadow-sm dark:border-white/[0.06] dark:bg-card lg:order-2">
+                    <div className="border-b border-stone-100 px-5 py-4 dark:border-white/[0.05]">
+                      <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-emerald-700 dark:text-emerald-500">Actions</p>
+                      <p className="text-sm font-bold text-stone-900 dark:text-white">Quick actions</p>
+                    </div>
+                    <div className="space-y-2 p-5">
                       <button
                         data-testid="inventory-action-record-movement"
                         type="button"
                         onClick={() => openMovementDrawer()}
-                        className="flex w-full items-center justify-between rounded-xl border border-black/5 bg-white px-4 py-3.5 text-sm text-neutral-800 transition-colors hover:bg-neutral-50 touch-manipulation active:scale-[0.99]"
+                        className="flex w-full items-center justify-between rounded-lg border border-stone-200 bg-white px-4 py-3.5 text-sm font-medium text-stone-800 transition-colors hover:bg-stone-50 touch-manipulation active:scale-[0.99] dark:border-white/[0.08] dark:bg-white/[0.03] dark:text-stone-200 dark:hover:bg-white/[0.05]"
                       >
                         <span className="flex items-center gap-2">
                           <Plus className="h-4 w-4 text-emerald-600" />
-                          Record stock movement
+                          Record stock change
                         </span>
-                        <span className="text-xs text-neutral-400">Primary</span>
+                        <span className="text-xs text-stone-400">Primary</span>
                       </button>
                       <div className="grid grid-cols-2 gap-2">
                         <button
                           data-testid="inventory-action-restocking"
                           type="button"
                           onClick={() => openMovementDrawer("restock")}
-                          className="flex h-14 items-center justify-center rounded-xl border border-emerald-200 bg-emerald-50/80 px-3 text-sm font-semibold text-emerald-800 transition-colors hover:bg-emerald-100 touch-manipulation active:scale-[0.98]"
+                          className="flex h-12 items-center justify-center rounded-lg border border-emerald-200 bg-emerald-50 px-3 text-sm font-semibold text-emerald-800 transition-colors hover:bg-emerald-100 touch-manipulation active:scale-[0.98] dark:border-emerald-700/40 dark:bg-emerald-900/20 dark:text-emerald-300"
                         >
                           Restock
                         </button>
@@ -7290,81 +7073,61 @@ export default function InventorySystem() {
                           data-testid="inventory-action-depleting"
                           type="button"
                           onClick={() => openMovementDrawer("deplete")}
-                          className="flex h-14 items-center justify-center rounded-xl border border-amber-200 bg-amber-50/80 px-3 text-sm font-semibold text-amber-800 transition-colors hover:bg-amber-100 touch-manipulation active:scale-[0.98]"
+                          className="flex h-12 items-center justify-center rounded-lg border border-amber-200 bg-amber-50 px-3 text-sm font-semibold text-amber-800 transition-colors hover:bg-amber-100 touch-manipulation active:scale-[0.98] dark:border-amber-700/40 dark:bg-amber-900/20 dark:text-amber-300"
                         >
                           Record usage
                         </button>
                       </div>
-                      <button
-                        data-testid="inventory-action-add-item"
-                        type="button"
-                        onClick={openNewItemDialog}
-                        className="flex w-full items-center justify-between rounded-xl border border-black/5 bg-white px-4 py-3 text-sm text-neutral-800 transition-colors hover:bg-neutral-50"
-                      >
-                        <span className="flex items-center gap-2">
-                          <Plus className="h-4 w-4 text-emerald-600" />
-                          Add inventory item
-                        </span>
-                        <span className="text-xs text-neutral-400">Inventory</span>
-                      </button>
                       {showDataToolsControls && (
                         <button
                           type="button"
                           onClick={exportInventoryToCSV}
-                        className="flex w-full items-center justify-between rounded-xl border border-black/5 bg-white px-4 py-3 text-sm text-neutral-800 transition-colors hover:bg-neutral-50"
-                      >
-                        <span className="flex items-center gap-2">
-                          <Download className="h-4 w-4 text-emerald-600" />
-                          Export inventory
+                          className="flex w-full items-center justify-between rounded-lg border border-stone-200 bg-white px-4 py-3 text-sm text-stone-800 transition-colors hover:bg-stone-50 dark:border-white/[0.08] dark:bg-white/[0.03] dark:text-stone-200"
+                        >
+                          <span className="flex items-center gap-2">
+                            <Download className="h-4 w-4 text-emerald-600" />
+                            Export inventory
                           </span>
-                          <span className="text-xs text-neutral-400">CSV</span>
+                          <span className="text-xs text-stone-400">CSV</span>
                         </button>
                       )}
                       {showTransactionHistory && (
                         <button
                           type="button"
                           onClick={() => setInventoryWorkspaceView("transactions")}
-                          className="flex w-full items-center justify-between rounded-xl border border-black/5 bg-white px-4 py-3 text-sm text-neutral-800 transition-colors hover:bg-neutral-50"
+                          className="flex w-full items-center justify-between rounded-lg border border-stone-200 bg-white px-4 py-3 text-sm text-stone-800 transition-colors hover:bg-stone-50 dark:border-white/[0.08] dark:bg-white/[0.03] dark:text-stone-200"
                         >
                           <span className="flex items-center gap-2">
                             <History className="h-4 w-4 text-emerald-600" />
                             View transactions
                           </span>
-                          <span className="text-xs text-neutral-400">History</span>
+                          <span className="text-xs text-stone-400">History</span>
                         </button>
                       )}
                       {inventoryDrilldownItemName && (
                         <button
                           type="button"
                           onClick={() => setIsInventoryDrilldownOpen(true)}
-                          className="flex w-full items-center justify-between rounded-xl border border-emerald-200 bg-emerald-50/70 px-4 py-3 text-sm text-emerald-900 transition-colors hover:bg-emerald-100/70"
+                          className="flex w-full items-center justify-between rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-900 transition-colors hover:bg-emerald-100 dark:border-emerald-700/40 dark:bg-emerald-900/20 dark:text-emerald-300"
                         >
                           <span className="flex items-center gap-2">
-                            <List className="h-4 w-4 text-emerald-700" />
-                            Open item timeline
+                            <List className="h-4 w-4 text-emerald-700 dark:text-emerald-400" />
+                            View item history
                           </span>
-                          <span className="max-w-[9rem] truncate text-xs text-emerald-700">{inventoryDrilldownItemName}</span>
+                          <span className="max-w-[9rem] truncate text-xs text-emerald-700 dark:text-emerald-400">{inventoryDrilldownItemName}</span>
                         </button>
                       )}
-                      <div className="rounded-xl border border-black/5 bg-neutral-50/70 px-4 py-3 text-xs text-neutral-600 space-y-2">
+                      <div className="rounded-lg border border-stone-200 bg-stone-50 px-4 py-3 text-xs text-stone-500 dark:border-white/[0.05] dark:bg-white/[0.02]">
                         <div className="flex items-center justify-between">
-                          <span>Selected location</span>
-                          <span className="text-neutral-900">{selectedLocationLabel}</span>
+                          <span>Default unit</span>
+                          <span className="font-medium text-stone-800 dark:text-stone-200">{selectedMovementUnit}</span>
                         </div>
-                        <div className="flex items-center justify-between">
-                          <span>Movement type</span>
-                          <span className="text-neutral-900">Restock / Deplete</span>
-                        </div>
-                        <div className="flex items-center justify-between">
-                          <span>Units</span>
-                          <span className="text-neutral-900">{selectedMovementUnit}</span>
-                        </div>
-                        <div className="border-t border-black/5 pt-2 text-[11px] leading-relaxed text-neutral-500">
-                          Open an item card to inspect recent movements and value without leaving Inventory.
-                        </div>
+                        <p className="mt-2 text-[11px] leading-relaxed text-stone-400 dark:text-stone-500">
+                          Tap any item to inspect recent movements and value.
+                        </p>
                       </div>
-                    </CardContent>
-                  </Card>
+                    </div>
+                  </div>
                 </div>
               </div>
               )}

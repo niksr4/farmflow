@@ -87,16 +87,11 @@ export default function TodayGapsCard({ onNavigate, className }: Props) {
       setStats({ laborCost, expenseCost, rainfallInches, rainfallDays })
 
       const todayStr = format(new Date(), "yyyy-MM-dd")
-      const gapDays: GapDay[] = days
-        .filter((day) => {
-          const str = format(day, "yyyy-MM-dd")
-          return day.getDay() !== 0 && str <= todayStr && !datesWithLabor.has(str)
-        })
-        .map((day) => ({
-          date: format(day, "yyyy-MM-dd"),
-          label: isToday(day) ? "Today" : format(day, "EEEE d"),
-          isToday: isToday(day),
-        }))
+      // Only flag today — past days without a labour entry are not necessarily "missing"
+      // (rest days, off-season lulls, and days with no work are all normal on a farm).
+      const gapDays: GapDay[] = !datesWithLabor.has(todayStr)
+        ? [{ date: todayStr, label: "Today", isToday: true }]
+        : []
 
       setGaps(gapDays)
     } catch {
@@ -158,53 +153,35 @@ export default function TodayGapsCard({ onNavigate, className }: Props) {
             </div>
             <div>
               <p className="text-xl font-black text-amber-950 leading-tight">
-                Labor not logged
+                Log today's work
               </p>
               <p className="text-sm font-semibold text-amber-800 mt-0.5">
-                {gaps.length} day{gaps.length > 1 ? "s" : ""} missing this week
+                No labour entry for today yet
               </p>
             </div>
           </div>
 
           {/* Gap day rows */}
           <div className="mx-3 mb-3 rounded-2xl bg-white/95 overflow-hidden divide-y divide-amber-50/50">
-            {gaps.map((gap) => {
-              const [dayName, dayNum] = gap.label.split(" ")
-              return (
-                <button
-                  key={gap.date}
-                  type="button"
-                  onClick={() => onNavigate("accounts")}
-                  className="w-full flex items-center justify-between px-4 py-3.5 text-left active:bg-amber-50 transition-colors touch-manipulation"
-                >
-                  <div className="flex items-center gap-3">
-                    <div className={cn(
-                      "flex items-center justify-center rounded-xl px-2.5 py-1.5 min-w-[52px]",
-                      gap.isToday ? "bg-amber-400" : "bg-stone-100",
-                    )}>
-                      <div className="text-center">
-                        <p className={cn("text-[10px] font-bold uppercase tracking-wide leading-none",
-                          gap.isToday ? "text-amber-950" : "text-stone-500"
-                        )}>{gap.isToday ? "TODAY" : dayName}</p>
-                        {dayNum && <p className={cn("text-base font-black leading-tight",
-                          gap.isToday ? "text-amber-950" : "text-stone-700"
-                        )}>{dayNum}</p>}
-                      </div>
-                    </div>
-                    <span className={cn(
-                      "text-sm font-bold",
-                      gap.isToday ? "text-amber-900" : "text-stone-600",
-                    )}>
-                      {gap.isToday ? "Log today now" : "Missing"}
-                    </span>
+            <button
+              type="button"
+              onClick={() => onNavigate("accounts")}
+              className="w-full flex items-center justify-between px-4 py-3.5 text-left active:bg-amber-50 transition-colors touch-manipulation"
+            >
+              <div className="flex items-center gap-3">
+                <div className="flex items-center justify-center rounded-xl bg-amber-400 px-2.5 py-1.5 min-w-[52px]">
+                  <div className="text-center">
+                    <p className="text-[10px] font-bold uppercase tracking-wide leading-none text-amber-950">TODAY</p>
+                    <p className="text-base font-black leading-tight text-amber-950">{format(new Date(), "d")}</p>
                   </div>
-                  <div className="flex items-center gap-1.5 rounded-xl bg-amber-500 px-4 py-2.5">
-                    <span className="text-sm font-black text-white">Log</span>
-                    <ArrowRight className="h-3.5 w-3.5 text-white stroke-[2.5]" />
-                  </div>
-                </button>
-              )
-            })}
+                </div>
+                <span className="text-sm font-bold text-amber-900">Log today now</span>
+              </div>
+              <div className="flex items-center gap-1.5 rounded-xl bg-amber-500 px-4 py-2.5">
+                <span className="text-sm font-black text-white">Log</span>
+                <ArrowRight className="h-3.5 w-3.5 text-white stroke-[2.5]" />
+              </div>
+            </button>
           </div>
         </div>
       ) : allCaughtUp ? (
@@ -215,7 +192,7 @@ export default function TodayGapsCard({ onNavigate, className }: Props) {
             </div>
             <div>
               <p className="text-xl font-black text-white leading-tight">All logged ✓</p>
-              <p className="text-sm font-semibold text-emerald-100 mt-0.5">Every work day this week has labor entered</p>
+              <p className="text-sm font-semibold text-emerald-100 mt-0.5">Every work day this week has labour entered</p>
             </div>
           </div>
         </div>
@@ -227,7 +204,7 @@ export default function TodayGapsCard({ onNavigate, className }: Props) {
           className="w-full rounded-3xl bg-stone-900 px-5 py-5 shadow-sm flex items-center justify-between touch-manipulation active:scale-[0.98] transition-transform"
         >
           <div>
-            <p className="text-lg font-black text-white">Start logging labor</p>
+            <p className="text-lg font-black text-white">Start logging labour</p>
             <p className="text-sm text-stone-400 mt-0.5">No entries this week yet</p>
           </div>
           <ArrowRight className="h-5 w-5 text-stone-400 stroke-[2.5]" />
@@ -244,7 +221,7 @@ export default function TodayGapsCard({ onNavigate, className }: Props) {
           >
             <div className="flex items-center gap-1.5 mb-2">
               <Users className="h-4 w-4 text-emerald-600 shrink-0" />
-              <p className="text-[10px] font-bold uppercase tracking-wide text-emerald-600">Labor</p>
+              <p className="text-[10px] font-bold uppercase tracking-wide text-emerald-600">Labour</p>
             </div>
             <p className="text-base font-black text-stone-900 tabular-nums leading-none">
               {formatCurrency(stats.laborCost)}

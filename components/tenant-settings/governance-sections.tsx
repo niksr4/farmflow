@@ -2,6 +2,7 @@
 
 import Link from "next/link"
 import { Button } from "@/components/ui/button"
+import { Switch } from "@/components/ui/switch"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -89,20 +90,19 @@ export function PrivacySection({
               </div>
             </div>
 
-            <div className="flex items-center justify-between border-t pt-3">
+            <div className="flex items-center justify-between gap-4 border-t pt-3">
               <div>
                 <p className="text-sm font-medium text-foreground">Optional product updates</p>
                 <p>Allow FarmFlow to send product updates and training materials.</p>
               </div>
-              <label className="flex items-center gap-2 text-sm">
-                <input
-                  type="checkbox"
+              <div className="flex shrink-0 items-center gap-2">
+                <span className="text-xs text-muted-foreground">{privacyStatus?.consentMarketing ? "Opted in" : "Opted out"}</span>
+                <Switch
                   checked={Boolean(privacyStatus?.consentMarketing)}
-                  onChange={(event) => onConsentToggle(event.target.checked)}
+                  onCheckedChange={onConsentToggle}
                   disabled={isUpdatingConsent || !tenantId || privacyToolsUnavailable}
                 />
-                {privacyStatus?.consentMarketing ? "Opted in" : "Opted out"}
-              </label>
+              </div>
             </div>
           </div>
         )}

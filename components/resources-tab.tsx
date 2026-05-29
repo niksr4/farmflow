@@ -691,7 +691,7 @@ export default function ResourcesTab() {
             Coffee nutrition and field-practice guide
           </CardTitle>
           <CardDescription>
-            Teaching table for deciding what to prioritize by stage before you schedule fertilizer or field labor.
+            Teaching table for deciding what to prioritize by stage before you schedule fertilizer or field labour.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-3">

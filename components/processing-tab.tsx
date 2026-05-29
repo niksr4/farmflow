@@ -585,6 +585,17 @@ export default function ProcessingTab({ showDataToolsControls = false }: Process
       })
       return
     }
+    const ripe = Number(record.ripe_today) || 0
+    const dryParch = Number(record.dry_parch) || 0
+    const dryCherry = Number(record.dry_cherry) || 0
+    if (ripe === 0 && dryParch === 0 && dryCherry === 0) {
+      toast({
+        title: "Nothing to save",
+        description: "Enter at least one value — ripe intake, dry parch, or dry cherry — before saving.",
+        variant: "destructive",
+      })
+      return
+    }
     setIsSaving(true)
     try {
       const response = await fetch("/api/processing-records", {
@@ -1210,6 +1221,7 @@ export default function ProcessingTab({ showDataToolsControls = false }: Process
                 </CardContent>
               </Card>
 
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
               <Card className="border-border/60 bg-white/80">
                 <CardHeader>
                   <CardTitle className="text-lg">Ripe selected</CardTitle>
@@ -1376,6 +1388,7 @@ export default function ProcessingTab({ showDataToolsControls = false }: Process
                   </div>
                 </CardContent>
               </Card>}
+              </div>
 
               <div>
                 <Label>Notes for the day</Label>

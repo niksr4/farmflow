@@ -77,7 +77,7 @@ export default function AiAnalysisCharts({ inventory, transactions }: AiAnalysis
   const [processingData, setProcessingData] = React.useState<Record<string, ProcessingRecord[]>>({})
   const [fallbackTransactions, setFallbackTransactions] = React.useState<ChartTransaction[]>([])
 
-  // Fetch labor and processing data from dedicated API
+  // Fetch labour and processing data from dedicated API
   React.useEffect(() => {
     const fetchData = async () => {
       if (!user?.tenantId) return
@@ -296,7 +296,7 @@ export default function AiAnalysisCharts({ inventory, transactions }: AiAnalysis
     return sortedData
   }, [chartTransactions])
 
-  // Labor cost data by month
+  // Labour cost data by month
   const laborCostData = React.useMemo(() => {
     const monthlyLabor: Record<
       string,
@@ -352,15 +352,15 @@ export default function AiAnalysisCharts({ inventory, transactions }: AiAnalysis
 
   const laborChartConfig: ChartConfig = {
     hfCost: {
-      label: "Estate Labor",
+      label: "Estate Labour",
       color: LABOR_COLORS[0],
     },
     outsideCost: {
-      label: "Outside Labor",
+      label: "Outside Labour",
       color: LABOR_COLORS[1],
     },
     totalCost: {
-      label: "Total Labor",
+      label: "Total Labour",
       color: LABOR_COLORS[3],
     },
   }
@@ -416,11 +416,11 @@ export default function AiAnalysisCharts({ inventory, transactions }: AiAnalysis
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-6 mb-6">
-      {/* Labor Cost Chart */}
+      {/* Labour Cost Chart */}
       <Card className="xl:col-span-1">
         <CardHeader>
-          <CardTitle>Monthly Labor Costs</CardTitle>
-          <CardDescription>Estate vs outside labor costs over time.</CardDescription>
+          <CardTitle>Monthly Labour Costs</CardTitle>
+          <CardDescription>Estate vs outside labour costs over time.</CardDescription>
         </CardHeader>
         <CardContent>
           {laborCostData.length > 0 ? (
@@ -430,14 +430,14 @@ export default function AiAnalysisCharts({ inventory, transactions }: AiAnalysis
                 <XAxis dataKey="month" tickLine={false} tickMargin={10} axisLine={false} />
                 <YAxis tickFormatter={(value) => `₹${value >= 1000 ? `${(value / 1000).toFixed(0)}k` : value}`} />
                 <ChartTooltip content={<ChartTooltipContent />} />
-                <Bar dataKey="hfCost" fill="var(--color-hfCost)" radius={[4, 4, 0, 0]} stackId="labor" />
-                <Bar dataKey="outsideCost" fill="var(--color-outsideCost)" radius={[4, 4, 0, 0]} stackId="labor" />
+                <Bar dataKey="hfCost" fill="var(--color-hfCost)" radius={[4, 4, 0, 0]} stackId="labour" />
+                <Bar dataKey="outsideCost" fill="var(--color-outsideCost)" radius={[4, 4, 0, 0]} stackId="labour" />
                 <Line type="monotone" dataKey="totalCost" stroke="var(--color-totalCost)" strokeWidth={2} dot={false} />
               </BarChart>
             </ChartContainer>
           ) : (
             <div className="flex items-center justify-center min-h-[250px]">
-              <p className="text-sm text-muted-foreground">No labor data available.</p>
+              <p className="text-sm text-muted-foreground">No labour data available.</p>
             </div>
           )}
         </CardContent>

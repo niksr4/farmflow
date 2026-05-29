@@ -2,6 +2,10 @@ import { withSentryConfig } from "@sentry/nextjs";
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   distDir: process.env.NEXT_DIST_DIR || ".next",
+  allowedDevOrigins: ["192.168.68.74"],
+  experimental: {
+    viewTransition: true,
+  },
   async rewrites() {
     return [
       {
@@ -43,6 +47,20 @@ const nextConfig = {
           },
         ],
       },
+      // Static images in /public — no content hash so use SWR rather than immutable
+      {
+        source: "/images/:path*",
+        headers: [{ key: "Cache-Control", value: "public, max-age=604800, stale-while-revalidate=86400" }],
+      },
+      {
+        source: "/resources/:path*",
+        headers: [{ key: "Cache-Control", value: "public, max-age=604800, stale-while-revalidate=86400" }],
+      },
+      // App icons — shorter TTL since they can update with releases
+      {
+        source: "/:file(.*\\.(?:png|svg))",
+        headers: [{ key: "Cache-Control", value: "public, max-age=86400, stale-while-revalidate=3600" }],
+      },
       {
         source: "/sw.js",
         headers: [
@@ -70,7 +88,10 @@ const nextConfig = {
         pathname: "/weather/64x64/**",
       },
     ],
-    unoptimized: true,
+    // Serve AVIF first (best compression), fall back to WebP, then original.
+    // Optimised versions are cached on Vercel's edge — first request converts, all subsequent are instant.
+    formats: ["image/avif", "image/webp"],
+    minimumCacheTTL: 60 * 60 * 24, // 24 h in edge cache
   },
   webpack: (config) => {
     config.externals.push({

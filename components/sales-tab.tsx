@@ -171,6 +171,7 @@ export default function SalesTab({
   const [salesPage, setSalesPage] = useState(0)
   const [salesHasMore, setSalesHasMore] = useState(false)
   const [isLoadingMore, setIsLoadingMore] = useState(false)
+  const [showAvailableStock, setShowAvailableStock] = useState(false)
   const [selectedSalesRecord, setSelectedSalesRecord] = useState<SalesRecord | null>(null)
   const [editingRecord, setEditingRecord] = useState<SalesRecord | null>(null)
   const [isLoading, setIsLoading] = useState(false)
@@ -1127,35 +1128,35 @@ export default function SalesTab({
         }
       />
 
-      <Card className="border-border/70 bg-white/90">
-        <CardHeader className="pb-3">
-          <CardTitle className="text-xs uppercase tracking-[0.2em] text-muted-foreground">Revenue summary</CardTitle>
-          <CardDescription>
-            {salesFilterLocationId !== LOCATION_ALL ? "Filtered to one location." : "Across all locations."}
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="grid gap-4 lg:grid-cols-[1.6fr_1fr]">
-          <div className="space-y-2">
+      <div className="overflow-hidden rounded-xl border border-stone-200 bg-white shadow-sm dark:border-white/[0.06] dark:bg-card">
+        <div className="flex items-center justify-between border-b border-stone-100 px-5 py-4 dark:border-white/[0.05]">
+          <div>
+            <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-emerald-700 dark:text-emerald-500">Revenue summary</p>
+            <p className="text-sm font-bold text-stone-900 dark:text-white">{salesFilterLocationId !== LOCATION_ALL ? "Filtered to one location." : "Across all locations."}</p>
+          </div>
+        </div>
+        <div className="grid gap-4 p-5 lg:grid-cols-[1.6fr_1fr]">
+          <div className="space-y-3">
             <div>
-              <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">Coffee Revenue</p>
-              <p className="text-2xl font-semibold text-emerald-700">{formatCurrency(coffeeRevenue, 0)}</p>
+              <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-emerald-700 dark:text-emerald-500">Coffee Revenue</p>
+              <p className="mt-1 text-2xl font-black tabular-nums text-emerald-700 dark:text-emerald-400">{formatCurrency(coffeeRevenue, 0)}</p>
             </div>
             <div>
-              <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">Other Revenue</p>
-              <p className="text-lg font-semibold text-amber-700">{formatCurrency(otherRevenue, 0)}</p>
+              <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-emerald-700 dark:text-emerald-500">Other Revenue</p>
+              <p className="mt-1 text-xl font-black tabular-nums text-amber-700 dark:text-amber-400">{formatCurrency(otherRevenue, 0)}</p>
             </div>
-            <div className="border-t border-border/60 pt-2">
-              <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">Total Revenue</p>
-              <p className="text-xl font-semibold text-foreground">{formatCurrency(combinedRevenue, 0)}</p>
-              <p className="mt-1 text-xs text-muted-foreground">
+            <div className="border-t border-stone-200 pt-3 dark:border-white/[0.06]">
+              <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-emerald-700 dark:text-emerald-500">Total Revenue</p>
+              <p className="mt-1 text-2xl font-black tabular-nums text-stone-900 dark:text-white">{formatCurrency(combinedRevenue, 0)}</p>
+              <p className="mt-1 text-xs text-stone-400 dark:text-stone-500">
                 Coffee entries: {resolvedSalesCount}
                 {otherSalesEnabled ? ` · Other sales: ${otherSalesTotals.totalCount}` : ""}
               </p>
             </div>
           </div>
           {otherSalesEnabled ? (
-            <div className="rounded-xl border border-border/60 bg-muted/20 p-3">
-              <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">Sales Workspace</p>
+            <div className="rounded-xl border border-stone-200 bg-stone-50 p-3 dark:border-white/[0.05] dark:bg-white/[0.02]">
+              <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-emerald-700 dark:text-emerald-500">Sales Workspace</p>
               <div className={cn("mt-3 grid gap-2", coffeeSalesEnabled ? "grid-cols-2" : "grid-cols-1")}>
                 {coffeeSalesEnabled ? (
                   <Button
@@ -1178,61 +1179,58 @@ export default function SalesTab({
               </div>
             </div>
           ) : null}
-        </CardContent>
-      </Card>
+        </div>
+      </div>
 
       {resolvedWorkspaceView === "coffee" ? (
         <>
-      <Card
-        className={cn(
-          "order-2 bg-white/90",
-          exceedsAvailability ? "border-rose-200/80" : "border-emerald-200/80",
+      <div className={cn(
+          "order-2 overflow-hidden rounded-xl border bg-white shadow-sm dark:bg-card",
+          exceedsAvailability ? "border-rose-200 dark:border-rose-800/40" : "border-stone-200 dark:border-white/[0.06]",
         )}
       >
-        <CardHeader className="pb-3">
-          <CardTitle className="text-xs uppercase tracking-[0.2em] text-muted-foreground">Before you save</CardTitle>
-          <CardDescription>
-            This checks the exact stock line you selected: coffee type plus bag type.
-          </CardDescription>
-          <p className="text-xs text-muted-foreground">
+        <div className={cn("border-b px-5 py-4 dark:border-white/[0.05]", exceedsAvailability ? "border-rose-100" : "border-stone-100")}>
+          <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-emerald-700 dark:text-emerald-500">Stock check</p>
+          <p className="text-sm font-bold text-stone-900 dark:text-white">Before you save</p>
+          <p className="mt-1 text-xs text-stone-500 dark:text-stone-400">
             Selection: {selectionScopeLabel} · {coffeeType} · {bagType}
           </p>
-          <p className="text-xs text-muted-foreground">
+          <p className="text-xs text-stone-400 dark:text-stone-500">
             Only confirmed received stock is sellable here. Unconfirmed dispatch does not count yet.
           </p>
           {isLegacyPooledAvailability && (
-            <p className="text-xs font-medium text-amber-700">
+            <p className="mt-1 text-xs font-medium text-amber-700">
               Legacy pooled stock mode is active, so availability is checked estate-wide to preserve old history.
             </p>
           )}
           {editAllowance.matchesSelection && (
-            <p className="text-xs text-muted-foreground">
+            <p className="mt-1 text-xs text-stone-400 dark:text-stone-500">
               Editing credit: {formatNumber(editAllowance.allowanceKgs)} KGs from this record.
             </p>
           )}
           {hasOtherTypeAvailability && (
-            <p className="text-xs font-medium text-amber-700">
+            <p className="mt-1 text-xs font-medium text-amber-700">
               No stock is available for this exact selection. Other coffee or bag types in this scope still have
               {" "}{formatNumber(selectionScopeAvailabilityTotals.totalAvailable)} KGs available.
             </p>
           )}
-        </CardHeader>
-        <CardContent className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-6">
-          <div className="rounded-lg border border-border/60 bg-white/80 p-3">
-            <p className="text-xs text-muted-foreground">Check scope</p>
-            <p className="mt-1 text-sm font-semibold text-foreground">{selectionScopeLabel}</p>
-            <p className="mt-1 text-xs text-muted-foreground">{coffeeType} · {bagType}</p>
+        </div>
+        <div className="grid grid-cols-1 gap-3 p-5 md:grid-cols-2 xl:grid-cols-6">
+          <div className="rounded-lg border border-stone-200 bg-stone-50 p-3 dark:border-white/[0.05] dark:bg-white/[0.02]">
+            <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-emerald-700 dark:text-emerald-500">Check scope</p>
+            <p className="mt-1 text-sm font-black tabular-nums text-stone-900 dark:text-white">{selectionScopeLabel}</p>
+            <p className="mt-1 text-xs text-stone-400 dark:text-stone-500">{coffeeType} · {bagType}</p>
           </div>
-          <div className="rounded-lg border border-border/60 bg-white/80 p-3">
-            <p className="text-xs text-muted-foreground">Available now</p>
-            <p className="mt-1 text-sm font-semibold text-foreground">
+          <div className="rounded-lg border border-stone-200 bg-stone-50 p-3 dark:border-white/[0.05] dark:bg-white/[0.02]">
+            <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-emerald-700 dark:text-emerald-500">Available now</p>
+            <p className="mt-1 text-sm font-black tabular-nums text-stone-900 dark:text-white">
               {formatNumber(selectionAvailability.availableKgs)} KGs
             </p>
-            <p className="mt-1 text-xs text-muted-foreground">{formatNumber(selectionAvailability.availableBags)} bags</p>
-            <p className="mt-1 text-xs text-muted-foreground">
+            <p className="mt-1 text-xs text-stone-400 dark:text-stone-500">{formatNumber(selectionAvailability.availableBags)} bags</p>
+            <p className="mt-1 text-xs text-stone-400 dark:text-stone-500">
               Received {formatNumber(baseSelectionAvailability.receivedKgs)} - Sold {formatNumber(baseSelectionAvailability.soldKgs)}
             </p>
-            <p className="mt-1 text-xs text-muted-foreground">
+            <p className="mt-1 text-xs text-stone-400 dark:text-stone-500">
               {formatNumber(selectionShareOfScopePct, 0)}% of all coffee currently available in this scope
             </p>
             {netSelectionOverdrawnKgs > 0 && (
@@ -1241,14 +1239,14 @@ export default function SalesTab({
               </p>
             )}
           </div>
-          <div className="rounded-lg border border-border/60 bg-white/80 p-3">
-            <p className="text-xs text-muted-foreground">This entry</p>
-            <p className={cn("mt-1 text-sm font-semibold", exceedsAvailability ? "text-rose-700" : "text-foreground")}>
+          <div className="rounded-lg border border-stone-200 bg-stone-50 p-3 dark:border-white/[0.05] dark:bg-white/[0.02]">
+            <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-emerald-700 dark:text-emerald-500">This entry</p>
+            <p className={cn("mt-1 text-sm font-black tabular-nums", exceedsAvailability ? "text-rose-700" : "text-stone-900 dark:text-white")}>
               {formatNumber(kgsSoldValue)} KGs
             </p>
-            <p className="mt-1 text-xs text-muted-foreground">{formatNumber(bagsSoldValue)} bags</p>
+            <p className="mt-1 text-xs text-stone-400 dark:text-stone-500">{formatNumber(bagsSoldValue)} bags</p>
             {selectionAvailability.availableKgs > 0 && (
-              <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-muted">
+              <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-stone-200 dark:bg-white/[0.08]">
                 <div
                   className={cn("h-full transition-all", exceedsAvailability ? "bg-rose-500" : "bg-emerald-600")}
                   style={{ width: `${Math.min(100, entryUsagePct)}%` }}
@@ -1256,204 +1254,204 @@ export default function SalesTab({
               </div>
             )}
           </div>
-          <div className="rounded-lg border border-border/60 bg-white/80 p-3">
-            <p className="text-xs text-muted-foreground">Left after this sale</p>
-            <p className="mt-1 text-sm font-semibold text-foreground">{formatNumber(projectedRemainingKgs)} KGs</p>
-            <p className="mt-1 text-xs text-muted-foreground">{formatNumber(projectedRemainingBags)} bags</p>
+          <div className="rounded-lg border border-stone-200 bg-stone-50 p-3 dark:border-white/[0.05] dark:bg-white/[0.02]">
+            <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-emerald-700 dark:text-emerald-500">Left after this</p>
+            <p className="mt-1 text-sm font-black tabular-nums text-stone-900 dark:text-white">{formatNumber(projectedRemainingKgs)} KGs</p>
+            <p className="mt-1 text-xs text-stone-400 dark:text-stone-500">{formatNumber(projectedRemainingBags)} bags</p>
           </div>
-          <div className="rounded-lg border border-border/60 bg-white/80 p-3">
-            <p className="text-xs text-muted-foreground">Estimated revenue</p>
-            <p className="mt-1 text-sm font-semibold text-emerald-700">{formatCurrency(calculatedRevenue)}</p>
-            <p className="mt-1 text-xs text-muted-foreground">Price: {formatCurrency(pricePerBagValue)}</p>
+          <div className="rounded-lg border border-stone-200 bg-stone-50 p-3 dark:border-white/[0.05] dark:bg-white/[0.02]">
+            <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-emerald-700 dark:text-emerald-500">Est. revenue</p>
+            <p className="mt-1 text-sm font-black tabular-nums text-emerald-700 dark:text-emerald-400">{formatCurrency(calculatedRevenue)}</p>
+            <p className="mt-1 text-xs text-stone-400 dark:text-stone-500">Price: {formatCurrency(pricePerBagValue)}</p>
           </div>
-          <div className="rounded-lg border border-border/60 bg-white/80 p-3">
-            <p className="text-xs text-muted-foreground">Other stock in this scope</p>
-            <p className="mt-1 text-sm font-semibold text-foreground">
+          <div className="rounded-lg border border-stone-200 bg-stone-50 p-3 dark:border-white/[0.05] dark:bg-white/[0.02]">
+            <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-emerald-700 dark:text-emerald-500">Other stock</p>
+            <p className="mt-1 text-sm font-black tabular-nums text-stone-900 dark:text-white">
               {formatNumber(selectionScopeAvailabilityTotals.totalAvailable)} KGs
             </p>
-            <p className="mt-1 text-xs text-muted-foreground">
+            <p className="mt-1 text-xs text-stone-400 dark:text-stone-500">
               {formatNumber(selectionScopeAvailabilityTotals.totalAvailableBags)} bags
             </p>
-            <p className="mt-1 text-xs text-muted-foreground">
-              Outside this exact selection: {formatNumber(contextGapKgs)} KGs ({formatNumber(contextGapBags)} bags)
+            <p className="mt-1 text-xs text-stone-400 dark:text-stone-500">
+              Outside this selection: {formatNumber(contextGapKgs)} KGs ({formatNumber(contextGapBags)} bags)
             </p>
           </div>
-        </CardContent>
-      </Card>
+        </div>
+      </div>
 
-      <Card className="order-3 border-border/70 bg-white/85">
-        <CardHeader className="pb-3">
-          <CardTitle className="text-xs uppercase tracking-[0.2em] text-muted-foreground">
-            Available stock
-          </CardTitle>
-          <CardDescription>
-            Scope: {overviewScopeLabel}. Based only on confirmed received KGs.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+      <div className="flex justify-center">
+        <button
+          type="button"
+          onClick={() => setShowAvailableStock(v => !v)}
+          className="inline-flex min-h-[44px] items-center gap-1.5 rounded-full border border-stone-200 bg-stone-50 px-5 py-2.5 text-sm font-semibold text-stone-600 hover:bg-stone-100 transition-colors touch-manipulation"
+        >
+          {showAvailableStock ? "Hide stock overview ▲" : "Show stock overview ▼"}
+        </button>
+      </div>
+
+      {showAvailableStock && <div className="order-3 overflow-hidden rounded-xl border border-stone-200 bg-white shadow-sm dark:border-white/[0.06] dark:bg-card">
+        <div className="border-b border-stone-100 px-5 py-4 dark:border-white/[0.05]">
+          <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-emerald-700 dark:text-emerald-500">Inventory</p>
+          <p className="text-sm font-bold text-stone-900 dark:text-white">Available stock</p>
+          <p className="mt-0.5 text-xs text-stone-400 dark:text-stone-500">Scope: {overviewScopeLabel}. Based only on confirmed received KGs.</p>
+        </div>
+        <div className="grid grid-cols-1 gap-4 p-5 lg:grid-cols-3">
           {COFFEE_TYPES.map((type) => {
             const totals = overviewAvailabilityTotals.availableTotals[type]
             return (
               <div key={type} className="space-y-3">
-                <div className="text-sm font-semibold text-foreground">{type}</div>
-                <div className="rounded-lg border border-border/60 bg-white/80 p-3 space-y-1">
-                  <div className="text-xs text-muted-foreground">Cherry</div>
-                  <div className="text-lg font-semibold">{formatNumber(totals.cherry.kgs)} KGs</div>
-                  <div className="text-xs text-muted-foreground">{formatNumber(totals.cherry.bags)} Bags</div>
+                <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-emerald-700 dark:text-emerald-500">{type}</p>
+                <div className="rounded-lg border border-stone-200 bg-stone-50 p-3 dark:border-white/[0.05] dark:bg-white/[0.02]">
+                  <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-emerald-700 dark:text-emerald-500">Cherry</p>
+                  <p className="mt-1 text-lg font-black tabular-nums text-stone-900 dark:text-white">{formatNumber(totals.cherry.kgs)} KGs</p>
+                  <p className="text-xs text-stone-400 dark:text-stone-500">{formatNumber(totals.cherry.bags)} bags</p>
                 </div>
-                <div className="rounded-lg border border-border/60 bg-white/80 p-3 space-y-1">
-                  <div className="text-xs text-muted-foreground">Parchment</div>
-                  <div className="text-lg font-semibold">{formatNumber(totals.parchment.kgs)} KGs</div>
-                  <div className="text-xs text-muted-foreground">{formatNumber(totals.parchment.bags)} Bags</div>
+                <div className="rounded-lg border border-stone-200 bg-stone-50 p-3 dark:border-white/[0.05] dark:bg-white/[0.02]">
+                  <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-emerald-700 dark:text-emerald-500">Parchment</p>
+                  <p className="mt-1 text-lg font-black tabular-nums text-stone-900 dark:text-white">{formatNumber(totals.parchment.kgs)} KGs</p>
+                  <p className="text-xs text-stone-400 dark:text-stone-500">{formatNumber(totals.parchment.bags)} bags</p>
                 </div>
-                <div className="rounded-lg border border-border/60 bg-white/80 p-3 space-y-1">
-                  <div className="text-xs text-muted-foreground">Total {type}</div>
-                  <div className="text-lg font-semibold">{formatNumber(totals.total.kgs)} KGs</div>
-                  <div className="text-xs text-muted-foreground">{formatNumber(totals.total.bags)} Bags</div>
+                <div className="rounded-lg border border-stone-200 bg-stone-50 p-3 dark:border-white/[0.05] dark:bg-white/[0.02]">
+                  <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-emerald-700 dark:text-emerald-500">Total {type}</p>
+                  <p className="mt-1 text-lg font-black tabular-nums text-stone-900 dark:text-white">{formatNumber(totals.total.kgs)} KGs</p>
+                  <p className="text-xs text-stone-400 dark:text-stone-500">{formatNumber(totals.total.bags)} bags</p>
                 </div>
               </div>
             )
           })}
-            <div className="space-y-3">
-            <div className="text-sm font-semibold text-foreground">Summary</div>
-            <div className="rounded-lg border border-border/60 bg-white/80 p-3 space-y-1">
-              <div className="text-xs text-muted-foreground">Total Received</div>
-              <div className="text-lg font-semibold">{formatNumber(overviewAvailabilityTotals.totalReceived)} KGs</div>
-              <div className="text-xs text-muted-foreground">{formatNumber(overviewAvailabilityTotals.totalReceivedBags)} Bags</div>
+          <div className="space-y-3">
+            <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-emerald-700 dark:text-emerald-500">Summary</p>
+            <div className="rounded-lg border border-stone-200 bg-stone-50 p-3 dark:border-white/[0.05] dark:bg-white/[0.02]">
+              <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-emerald-700 dark:text-emerald-500">Total Received</p>
+              <p className="mt-1 text-lg font-black tabular-nums text-stone-900 dark:text-white">{formatNumber(overviewAvailabilityTotals.totalReceived)} KGs</p>
+              <p className="text-xs text-stone-400 dark:text-stone-500">{formatNumber(overviewAvailabilityTotals.totalReceivedBags)} bags</p>
             </div>
-            <div className="rounded-lg border border-border/60 bg-white/80 p-3 space-y-1">
-              <div className="text-xs text-muted-foreground">Total Sold</div>
-              <div className="text-lg font-semibold">{formatNumber(overviewAvailabilityTotals.totalSold)} KGs</div>
-              <div className="text-xs text-muted-foreground">{formatNumber(overviewAvailabilityTotals.totalSoldBags)} Bags</div>
+            <div className="rounded-lg border border-stone-200 bg-stone-50 p-3 dark:border-white/[0.05] dark:bg-white/[0.02]">
+              <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-emerald-700 dark:text-emerald-500">Total Sold</p>
+              <p className="mt-1 text-lg font-black tabular-nums text-stone-900 dark:text-white">{formatNumber(overviewAvailabilityTotals.totalSold)} KGs</p>
+              <p className="text-xs text-stone-400 dark:text-stone-500">{formatNumber(overviewAvailabilityTotals.totalSoldBags)} bags</p>
             </div>
-            <div className="rounded-lg border border-border/60 bg-white/80 p-3 space-y-1">
-              <div className="text-xs text-muted-foreground">Total Available</div>
-              <div className="text-lg font-semibold">{formatNumber(overviewAvailabilityTotals.totalAvailable)} KGs</div>
-              <div className="text-xs text-muted-foreground">{formatNumber(overviewAvailabilityTotals.totalAvailableBags)} Bags</div>
+            <div className="rounded-lg border border-stone-200 bg-stone-50 p-3 dark:border-white/[0.05] dark:bg-white/[0.02]">
+              <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-emerald-700 dark:text-emerald-500">Available</p>
+              <p className="mt-1 text-lg font-black tabular-nums text-emerald-700 dark:text-emerald-400">{formatNumber(overviewAvailabilityTotals.totalAvailable)} KGs</p>
+              <p className="text-xs text-stone-400 dark:text-stone-500">{formatNumber(overviewAvailabilityTotals.totalAvailableBags)} bags</p>
             </div>
             {overviewAvailabilityTotals.totalOverdrawn > 0 && (
-              <div className="rounded-lg border border-rose-200 bg-rose-50/70 p-3 space-y-1">
-                <div className="text-xs text-rose-700">Historical Overdrawn</div>
-                <div className="text-lg font-semibold text-rose-700">
+              <div className="rounded-lg border border-rose-200 bg-rose-50/70 p-3 dark:border-rose-800/40 dark:bg-rose-900/20">
+                <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-rose-700 dark:text-rose-400">Overdrawn</p>
+                <p className="mt-1 text-lg font-black tabular-nums text-rose-700 dark:text-rose-400">
                   {formatNumber(overviewAvailabilityTotals.totalOverdrawn)} KGs
-                </div>
-                <div className="text-xs text-rose-700">{formatNumber(overviewAvailabilityTotals.totalOverdrawnBags)} Bags</div>
+                </p>
+                <p className="text-xs text-rose-600 dark:text-rose-500">{formatNumber(overviewAvailabilityTotals.totalOverdrawnBags)} bags</p>
               </div>
             )}
           </div>
-        </CardContent>
-      </Card>
+        </div>
+      </div>}
 
       {/* Summary Cards */}
       <div className="order-4 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         {/* Coffee Revenue */}
-        <Card className="border-border/60 bg-white/85">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-xs uppercase tracking-[0.2em] text-muted-foreground">Coffee Revenue</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-semibold text-emerald-700">{formatCurrency(coffeeRevenue, 0)}</div>
-            <div className="text-sm text-muted-foreground mt-1">
-              {resolvedSalesCount} sales recorded
-            </div>
-            <div className="text-sm text-muted-foreground mt-1">
-              Combined total is shown above with other sales
-            </div>
-          </CardContent>
-        </Card>
+        <div className="overflow-hidden rounded-xl border border-stone-200 bg-white shadow-sm dark:border-white/[0.06] dark:bg-card">
+          <div className="border-b border-stone-100 px-5 py-3 dark:border-white/[0.05]">
+            <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-emerald-700 dark:text-emerald-500">Coffee Revenue</p>
+          </div>
+          <div className="p-5">
+            <div className="text-2xl font-black tabular-nums text-emerald-700 dark:text-emerald-400">{formatCurrency(coffeeRevenue, 0)}</div>
+            <div className="mt-1 text-xs text-stone-500 dark:text-stone-400">{resolvedSalesCount} sales recorded</div>
+            <div className="mt-0.5 text-xs text-stone-400 dark:text-stone-500">Combined total shown above with other sales</div>
+          </div>
+        </div>
 
         {/* Total Bags Sold */}
-        <Card className="border-border/60 bg-white/85">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-xs uppercase tracking-[0.2em] text-muted-foreground">Bags Sold (Logistics)</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-semibold text-foreground">{formatNumber(totals.totalBagsSold)}</div>
-            <div className="text-sm text-muted-foreground mt-1">
-              KGs Sold: {formatNumber(totals.totalKgsSold)}
-            </div>
-            <div className="text-xs text-muted-foreground mt-1">Bags are shipment units, not moisture-adjusted weight.</div>
-          </CardContent>
-        </Card>
+        <div className="overflow-hidden rounded-xl border border-stone-200 bg-white shadow-sm dark:border-white/[0.06] dark:bg-card">
+          <div className="border-b border-stone-100 px-5 py-3 dark:border-white/[0.05]">
+            <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-emerald-700 dark:text-emerald-500">Bags Sold</p>
+          </div>
+          <div className="p-5">
+            <div className="text-2xl font-black tabular-nums text-stone-900 dark:text-white">{formatNumber(totals.totalBagsSold)}</div>
+            <div className="mt-1 text-xs text-stone-500 dark:text-stone-400">KGs Sold: {formatNumber(totals.totalKgsSold)}</div>
+            <div className="mt-0.5 text-xs text-stone-400 dark:text-stone-500">Bags are shipment units, not moisture-adjusted weight.</div>
+          </div>
+        </div>
 
         {/* Total KGs Sold */}
-        <Card className="border-border/60 bg-white/85">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-xs uppercase tracking-[0.2em] text-muted-foreground">KGs Sold (Sales Basis)</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-semibold text-foreground">{formatNumber(totals.totalKgsSold)}</div>
-            <div className="text-sm text-muted-foreground mt-1">
-              Bags Sold: {formatNumber(totals.totalBagsSold)}
-            </div>
-            <div className="text-xs text-muted-foreground mt-1">Validated against dispatch received KGs.</div>
-          </CardContent>
-        </Card>
+        <div className="overflow-hidden rounded-xl border border-stone-200 bg-white shadow-sm dark:border-white/[0.06] dark:bg-card">
+          <div className="border-b border-stone-100 px-5 py-3 dark:border-white/[0.05]">
+            <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-emerald-700 dark:text-emerald-500">KGs Sold (Sales Basis)</p>
+          </div>
+          <div className="p-5">
+            <div className="text-2xl font-black tabular-nums text-stone-900 dark:text-white">{formatNumber(totals.totalKgsSold)}</div>
+            <div className="mt-1 text-xs text-stone-500 dark:text-stone-400">Bags Sold: {formatNumber(totals.totalBagsSold)}</div>
+            <div className="mt-0.5 text-xs text-stone-400 dark:text-stone-500">Validated against dispatch received KGs.</div>
+          </div>
+        </div>
 
         {/* Price per bag by coffee + form */}
-        <Card className="border-border/60 bg-white/85">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-xs uppercase tracking-[0.2em] text-muted-foreground">
-              Average Price Per Bag
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
+        <div className="overflow-hidden rounded-xl border border-stone-200 bg-white shadow-sm dark:border-white/[0.06] dark:bg-card">
+          <div className="border-b border-stone-100 px-5 py-3 dark:border-white/[0.05]">
+            <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-emerald-700 dark:text-emerald-500">Average Price Per Bag</p>
+          </div>
+          <div className="p-5">
             <div className="grid grid-cols-2 gap-3 text-sm">
-              <div className="rounded-lg border border-border/60 bg-white/80 p-2">
-                <div className="text-xs text-muted-foreground">Arabica · Parchment</div>
-                <div className="text-lg font-semibold">{formatCurrency(pricePerBagByType.arabicaParchment)}</div>
+              <div className="rounded-lg border border-stone-200 bg-stone-50 p-2 dark:border-white/[0.05] dark:bg-white/[0.02]">
+                <div className="text-xs text-stone-400">Arabica · Parchment</div>
+                <div className="text-lg font-black tabular-nums">{formatCurrency(pricePerBagByType.arabicaParchment)}</div>
               </div>
-              <div className="rounded-lg border border-border/60 bg-white/80 p-2">
-                <div className="text-xs text-muted-foreground">Arabica · Cherry</div>
-                <div className="text-lg font-semibold">{formatCurrency(pricePerBagByType.arabicaCherry)}</div>
+              <div className="rounded-lg border border-stone-200 bg-stone-50 p-2 dark:border-white/[0.05] dark:bg-white/[0.02]">
+                <div className="text-xs text-stone-400">Arabica · Cherry</div>
+                <div className="text-lg font-black tabular-nums">{formatCurrency(pricePerBagByType.arabicaCherry)}</div>
               </div>
-              <div className="rounded-lg border border-border/60 bg-white/80 p-2">
-                <div className="text-xs text-muted-foreground">Robusta · Parchment</div>
-                <div className="text-lg font-semibold">{formatCurrency(pricePerBagByType.robustaParchment)}</div>
+              <div className="rounded-lg border border-stone-200 bg-stone-50 p-2 dark:border-white/[0.05] dark:bg-white/[0.02]">
+                <div className="text-xs text-stone-400">Robusta · Parchment</div>
+                <div className="text-lg font-black tabular-nums">{formatCurrency(pricePerBagByType.robustaParchment)}</div>
               </div>
-              <div className="rounded-lg border border-border/60 bg-white/80 p-2">
-                <div className="text-xs text-muted-foreground">Robusta · Cherry</div>
-                <div className="text-lg font-semibold">{formatCurrency(pricePerBagByType.robustaCherry)}</div>
+              <div className="rounded-lg border border-stone-200 bg-stone-50 p-2 dark:border-white/[0.05] dark:bg-white/[0.02]">
+                <div className="text-xs text-stone-400">Robusta · Cherry</div>
+                <div className="text-lg font-black tabular-nums">{formatCurrency(pricePerBagByType.robustaCherry)}</div>
               </div>
             </div>
-            <div className="text-xs text-muted-foreground mt-2">Weighted by bags sold across recorded sales.</div>
-          </CardContent>
-        </Card>
+            <div className="mt-2 text-xs text-stone-400">Weighted by bags sold across recorded sales.</div>
+          </div>
+        </div>
       </div>
 
       {/* Add/Edit Sale Form */}
-      <Card className="order-1 border-border/70 bg-white/85">
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <IndianRupee className="h-5 w-5" />
-            {editingRecord ? "Edit sale entry" : "Sale entry"}
-          </CardTitle>
-          <CardDescription>
-            {editingRecord
-              ? "Update the buyer, quantity, or price for this sale."
-              : "Record one confirmed sale with the buyer, quantity, and agreed price."}
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="mb-4 rounded-2xl border border-amber-100 bg-amber-50/60 p-4">
+      <div className="order-1 overflow-hidden rounded-xl border border-stone-200 bg-white shadow-sm dark:border-white/[0.06] dark:bg-card">
+        <div className="flex items-center gap-3 border-b border-stone-100 px-5 py-4 dark:border-white/[0.05]">
+          <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-emerald-800 dark:bg-emerald-900/40">
+            <IndianRupee className="h-4 w-4 text-emerald-400" />
+          </div>
+          <div>
+            <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-emerald-700 dark:text-emerald-500">Sales Entry</p>
+            <p className="text-sm font-bold text-stone-900 dark:text-white">{editingRecord ? "Edit sale entry" : "Sale entry"}</p>
+            <p className="text-xs text-stone-400 dark:text-stone-500">
+              {editingRecord
+                ? "Update the buyer, quantity, or price for this sale."
+                : "Record one confirmed sale with the buyer, quantity, and agreed price."}
+            </p>
+          </div>
+        </div>
+        <div className="p-5">
+          <div className="mb-4 rounded-xl border border-stone-200 bg-stone-50 p-4 dark:border-white/[0.05] dark:bg-white/[0.02]">
             <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-              <div className="rounded-xl border border-white/70 bg-white/85 p-3">
-                <p className="text-[11px] uppercase tracking-[0.18em] text-amber-700">Location</p>
-                <p className="mt-1 text-sm font-semibold text-foreground">
+              <div className="rounded-lg border border-stone-200 bg-white p-3 dark:border-white/[0.07] dark:bg-white/[0.04]">
+                <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-emerald-700 dark:text-emerald-500">Location</p>
+                <p className="mt-1 text-sm font-semibold text-stone-900 dark:text-white">
                   {selectedLocation?.name || selectedLocation?.code || "Select a location"}
                 </p>
               </div>
-              <div className="rounded-xl border border-white/70 bg-white/85 p-3">
-                <p className="text-[11px] uppercase tracking-[0.18em] text-amber-700">Coffee</p>
-                <p className="mt-1 text-sm font-semibold text-foreground">{coffeeType}</p>
+              <div className="rounded-lg border border-stone-200 bg-white p-3 dark:border-white/[0.07] dark:bg-white/[0.04]">
+                <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-emerald-700 dark:text-emerald-500">Coffee</p>
+                <p className="mt-1 text-sm font-semibold text-stone-900 dark:text-white">{coffeeType}</p>
               </div>
-              <div className="rounded-xl border border-white/70 bg-white/85 p-3">
-                <p className="text-[11px] uppercase tracking-[0.18em] text-amber-700">Bag type</p>
-                <p className="mt-1 text-sm font-semibold text-foreground">{formatBagTypeLabel(bagType)}</p>
+              <div className="rounded-lg border border-stone-200 bg-white p-3 dark:border-white/[0.07] dark:bg-white/[0.04]">
+                <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-emerald-700 dark:text-emerald-500">Bag type</p>
+                <p className="mt-1 text-sm font-semibold text-stone-900 dark:text-white">{formatBagTypeLabel(bagType)}</p>
               </div>
-              <div className="rounded-xl border border-white/70 bg-white/85 p-3">
-                <p className="text-[11px] uppercase tracking-[0.18em] text-amber-700">Save rule</p>
-                <p className="mt-1 text-sm font-semibold text-foreground">One buyer, one stock line, one agreed price</p>
+              <div className="rounded-lg border border-stone-200 bg-white p-3 dark:border-white/[0.07] dark:bg-white/[0.04]">
+                <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-emerald-700 dark:text-emerald-500">Save rule</p>
+                <p className="mt-1 text-sm font-semibold text-stone-900 dark:text-white">One buyer, one stock line, one agreed price</p>
               </div>
             </div>
           </div>
@@ -1760,19 +1758,20 @@ export default function SalesTab({
               {saveFeedback.message}
             </p>
           )}
-        </CardContent>
-      </Card>
+        </div>
+      </div>
 
       {/* Sales Records Table */}
-      <Card className="order-5 border-border/70 bg-white/85">
-        <CardHeader>
-          <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+      <div className="order-5 overflow-hidden rounded-xl border border-stone-200 bg-white shadow-sm dark:border-white/[0.06] dark:bg-card">
+        <div className="border-b border-stone-100 dark:border-white/[0.05]">
+          <div className="flex flex-col gap-3 px-5 py-4 md:flex-row md:items-center md:justify-between">
             <div>
-              <CardTitle className="flex items-center gap-2">
-                <TrendingUp className="h-5 w-5" />
+              <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-emerald-700 dark:text-emerald-500">Records</p>
+              <p className="flex items-center gap-2 text-sm font-bold text-stone-900 dark:text-white">
+                <TrendingUp className="h-4 w-4" />
                 Sales history
-              </CardTitle>
-              <CardDescription>Review and reopen previous coffee sales · {resolvedSalesCountLabel}</CardDescription>
+              </p>
+              <p className="mt-0.5 text-xs text-stone-400 dark:text-stone-500">Review and reopen previous coffee sales · {resolvedSalesCountLabel}</p>
             </div>
             <div className="flex flex-wrap items-center gap-2">
               <Select value={salesFilterLocationId} onValueChange={(value) => {
@@ -1799,8 +1798,8 @@ export default function SalesTab({
               )}
             </div>
           </div>
-        </CardHeader>
-        <CardContent>
+        </div>
+        <div className="p-5">
           {selectedSalesRecord && (
                 <div className="mb-4 rounded-xl border border-emerald-100 bg-emerald-50/50 p-3 text-sm">
                   <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
@@ -1935,19 +1934,19 @@ export default function SalesTab({
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead className="sticky top-0 bg-muted/70 backdrop-blur">Date</TableHead>
-                      <TableHead className="sticky top-0 bg-muted/70 backdrop-blur">Batch Reference</TableHead>
-                      <TableHead className="sticky top-0 bg-muted/70 backdrop-blur">Location</TableHead>
-                      <TableHead className="sticky top-0 bg-muted/70 backdrop-blur">Coffee Type</TableHead>
-                      <TableHead className="sticky top-0 bg-muted/70 backdrop-blur">Bag Type</TableHead>
-                      <TableHead className="sticky top-0 bg-muted/70 backdrop-blur">Buyer</TableHead>
-                      <TableHead className="text-right sticky top-0 bg-muted/70 backdrop-blur">Bags Sold</TableHead>
-                      <TableHead className="text-right sticky top-0 bg-muted/70 backdrop-blur">KGs Sold</TableHead>
-                      <TableHead className="text-right sticky top-0 bg-muted/70 backdrop-blur">Price/Bag</TableHead>
-                      <TableHead className="text-right sticky top-0 bg-muted/70 backdrop-blur">Revenue</TableHead>
-                      <TableHead className="sticky top-0 bg-muted/70 backdrop-blur">Bank Account</TableHead>
-                      <TableHead className="sticky top-0 bg-muted/70 backdrop-blur">Notes</TableHead>
-                      <TableHead className="text-right sticky top-0 bg-muted/70 backdrop-blur">Actions</TableHead>
+                      <TableHead className="sticky top-0 bg-emerald-900 text-emerald-300 font-bold text-[11px] uppercase tracking-[0.16em]">Date</TableHead>
+                      <TableHead className="sticky top-0 bg-emerald-900 text-emerald-300 font-bold text-[11px] uppercase tracking-[0.16em]">Batch Reference</TableHead>
+                      <TableHead className="sticky top-0 bg-emerald-900 text-emerald-300 font-bold text-[11px] uppercase tracking-[0.16em]">Location</TableHead>
+                      <TableHead className="sticky top-0 bg-emerald-900 text-emerald-300 font-bold text-[11px] uppercase tracking-[0.16em]">Coffee Type</TableHead>
+                      <TableHead className="sticky top-0 bg-emerald-900 text-emerald-300 font-bold text-[11px] uppercase tracking-[0.16em]">Bag Type</TableHead>
+                      <TableHead className="sticky top-0 bg-emerald-900 text-emerald-300 font-bold text-[11px] uppercase tracking-[0.16em]">Buyer</TableHead>
+                      <TableHead className="text-right sticky top-0 bg-emerald-900 text-emerald-300 font-bold text-[11px] uppercase tracking-[0.16em]">Bags Sold</TableHead>
+                      <TableHead className="text-right sticky top-0 bg-emerald-900 text-emerald-300 font-bold text-[11px] uppercase tracking-[0.16em]">KGs Sold</TableHead>
+                      <TableHead className="text-right sticky top-0 bg-emerald-900 text-emerald-300 font-bold text-[11px] uppercase tracking-[0.16em]">Price/Bag</TableHead>
+                      <TableHead className="text-right sticky top-0 bg-emerald-900 text-emerald-300 font-bold text-[11px] uppercase tracking-[0.16em]">Revenue</TableHead>
+                      <TableHead className="sticky top-0 bg-emerald-900 text-emerald-300 font-bold text-[11px] uppercase tracking-[0.16em]">Bank Account</TableHead>
+                      <TableHead className="sticky top-0 bg-emerald-900 text-emerald-300 font-bold text-[11px] uppercase tracking-[0.16em]">Notes</TableHead>
+                      <TableHead className="text-right sticky top-0 bg-emerald-900 text-emerald-300 font-bold text-[11px] uppercase tracking-[0.16em]">Actions</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -2036,8 +2035,8 @@ export default function SalesTab({
               )}
             </div>
           )}
-        </CardContent>
-      </Card>
+        </div>
+      </div>
         </>
       ) : (
         <OtherSalesTab

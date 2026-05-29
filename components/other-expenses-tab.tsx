@@ -25,6 +25,9 @@ import { useMediaQuery } from "@/hooks/use-media-query"
 interface ActivityCode {
   code: string
   reference: string
+  module_hint?: string | null
+  labor_count?: number
+  expense_count?: number
 }
 
 interface InventoryItem {
@@ -70,6 +73,7 @@ export default function OtherExpensesTab({
   const [editingId, setEditingId] = useState<number | null>(null)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [activities, setActivities] = useState<ActivityCode[]>([])
+  const [showAllCodes, setShowAllCodes] = useState(false)
   const [inventoryItems, setInventoryItems] = useState<InventoryItem[]>([])
   const [supportsMultiInventoryItems, setSupportsMultiInventoryItems] = useState(false)
   const [expandedRows, setExpandedRows] = useState<Set<number>>(new Set())
@@ -121,14 +125,22 @@ export default function OtherExpensesTab({
   // Autofill reference when code changes
   const handleCodeChange = (code: string) => {
     setFormData((prev) => ({ ...prev, code }))
-
-    // Find matching activity and autofill reference
     const matchingActivity = activities.find((activity) => activity.code.toLowerCase() === code.toLowerCase())
-
     if (matchingActivity) {
       setFormData((prev) => ({ ...prev, reference: matchingActivity.reference }))
     }
   }
+
+  const selectedActivityHint = activities.find(
+    (a) => a.code.toLowerCase() === formData.code.toLowerCase()
+  )?.module_hint ?? null
+
+  const sortedActivities = [...activities].sort((a, b) =>
+    ((b.expense_count ?? 0) + (b.labor_count ?? 0)) - ((a.expense_count ?? 0) + (a.labor_count ?? 0))
+  )
+  const usedActivities = sortedActivities.filter((a) => (a.expense_count ?? 0) + (a.labor_count ?? 0) > 0)
+  const unusedActivities = sortedActivities.filter((a) => (a.expense_count ?? 0) + (a.labor_count ?? 0) === 0)
+  const visibleActivities = showAllCodes ? sortedActivities : usedActivities
 
   const resetForm = () => {
     setFormData({
@@ -230,24 +242,15 @@ export default function OtherExpensesTab({
 
   return (
     <div className="space-y-4">
-      {/* Mobile quick-nav strip */}
-      {isMobile && (
-        <div className="flex gap-2 overflow-x-auto pb-0.5 -mx-3 px-3">
-          <button
-            type="button"
-            onClick={() => formSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })}
-            className="flex items-center gap-1.5 shrink-0 px-4 py-2.5 rounded-full bg-emerald-50 border border-emerald-200 text-emerald-800 text-[13px] font-bold touch-manipulation active:scale-95"
-          >
-            💸 Log expense
-          </button>
-          <button
-            type="button"
-            onClick={() => historySectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })}
-            className="flex items-center gap-1.5 shrink-0 px-4 py-2.5 rounded-full bg-stone-100 text-stone-700 text-[13px] font-bold touch-manipulation active:scale-95"
-          >
-            📋 History
-          </button>
-        </div>
+      {/* Add entry button — always at top */}
+      {!isAdding && (
+        <button
+          type="button"
+          onClick={() => setIsAdding(true)}
+          className="flex h-14 w-full items-center justify-center gap-2 rounded-2xl bg-emerald-700 text-base font-bold text-white shadow-md shadow-emerald-100 active:scale-[0.98] transition-transform touch-manipulation hover:bg-emerald-600"
+        >
+          <PlusCircle className="h-5 w-5" /> Log expense
+        </button>
       )}
 
       <Card ref={formSectionRef}>
@@ -269,7 +272,7 @@ export default function OtherExpensesTab({
           </div>
         </CardHeader>
         <CardContent>
-          {activities.length === 0 && (
+          {activities.length === 0 && !isAdding && (
             <div className="mb-4 rounded-xl border border-amber-200 bg-amber-50/60 p-4">
               <p className="text-sm font-semibold text-amber-900">No saved codes yet</p>
               <p className="mt-1 text-xs text-amber-800">
@@ -277,15 +280,7 @@ export default function OtherExpensesTab({
               </p>
             </div>
           )}
-          {!isAdding ? (
-            <button
-              type="button"
-              onClick={() => setIsAdding(true)}
-              className="w-full h-14 rounded-2xl bg-emerald-700 text-white text-base font-bold flex items-center justify-center gap-2 shadow-md shadow-emerald-100 active:scale-[0.98] transition-transform touch-manipulation"
-            >
-              <PlusCircle className="h-5 w-5" /> Add expense
-            </button>
-          ) : (
+          {isAdding ? (
             <form onSubmit={handleSubmit} className="space-y-4 border rounded-lg p-3 sm:p-4 bg-muted/50">
               <div className="rounded-lg border border-border/60 bg-background/80 p-3">
                 <p className="text-sm font-medium text-foreground">Expense details</p>
@@ -332,19 +327,39 @@ export default function OtherExpensesTab({
                     Activity code
                   </Label>
                   {isMobile && activities.length > 0 ? (
-                    <select
-                      value={formData.code}
-                      onChange={(e) => handleCodeChange(e.target.value)}
-                      required
-                      className="w-full h-12 rounded-xl border border-input bg-background px-3 text-base font-medium focus:outline-none focus:ring-2 focus:ring-emerald-500"
-                    >
-                      <option value="">Select activity code…</option>
-                      {activities.map((activity) => (
-                        <option key={activity.code} value={activity.code}>
-                          {activity.code} — {activity.reference}
-                        </option>
-                      ))}
-                    </select>
+                    <>
+                      <select
+                        value={formData.code}
+                        onChange={(e) => handleCodeChange(e.target.value)}
+                        required
+                        className="w-full h-12 rounded-xl border border-input bg-background px-3 text-base font-medium focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                      >
+                        <option value="">Select activity code…</option>
+                        {usedActivities.length > 0 && (
+                          <optgroup label="Used codes">
+                            {usedActivities.map((a) => (
+                              <option key={a.code} value={a.code}>{a.code} — {a.reference}</option>
+                            ))}
+                          </optgroup>
+                        )}
+                        {showAllCodes && unusedActivities.length > 0 && (
+                          <optgroup label="Unused codes">
+                            {unusedActivities.map((a) => (
+                              <option key={a.code} value={a.code}>{a.code} — {a.reference}</option>
+                            ))}
+                          </optgroup>
+                        )}
+                      </select>
+                      {unusedActivities.length > 0 && (
+                        <button
+                          type="button"
+                          onClick={() => setShowAllCodes((v) => !v)}
+                          className="text-xs text-emerald-700 underline underline-offset-2 hover:text-emerald-800"
+                        >
+                          {showAllCodes ? "Show fewer codes" : `Show ${unusedActivities.length} unused codes`}
+                        </button>
+                      )}
+                    </>
                   ) : (
                     <>
                       <Input
@@ -356,17 +371,36 @@ export default function OtherExpensesTab({
                         list="expense-activity-codes"
                         className="h-11"
                       />
-                      <p className="text-xs text-muted-foreground">Saved codes appear here, but you can type a short estate cost code yourself.</p>
+                      <div className="flex items-center justify-between">
+                        <p className="text-xs text-muted-foreground">Most-used codes appear first. Type a code or name to filter.</p>
+                        {unusedActivities.length > 0 && (
+                          <button
+                            type="button"
+                            onClick={() => setShowAllCodes((v) => !v)}
+                            className="text-xs text-emerald-700 underline underline-offset-2 hover:text-emerald-800"
+                          >
+                            {showAllCodes ? "Fewer" : `+${unusedActivities.length} unused`}
+                          </button>
+                        )}
+                      </div>
                       <datalist id="expense-activity-codes">
-                        {activities.map((activity) => (
-                          <option key={activity.code} value={activity.code}>
-                            {activity.reference}
-                          </option>
+                        {visibleActivities.map((a) => (
+                          <option key={a.code} value={a.code}>{a.reference}</option>
                         ))}
                       </datalist>
                     </>
                   )}
                 </div>
+
+                {selectedActivityHint === "labour" && (
+                  <div className="flex items-start gap-2 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2.5 text-sm text-amber-800">
+                    <span className="mt-0.5 shrink-0 text-base leading-none">⚠️</span>
+                    <span>
+                      <strong>{formData.code} — {formData.reference}</strong> is a labour cost code.
+                      If this is a wages or bonus payment, log it in the <strong>Labour tab</strong> instead so it counts toward your cost-per-kg.
+                    </span>
+                  </div>
+                )}
 
                 <div className="space-y-2">
                   <Label htmlFor="expense-reference" className="text-base">
@@ -512,7 +546,7 @@ export default function OtherExpensesTab({
                 </button>
               </div>
             </form>
-          )}
+          ) : null}
         </CardContent>
       </Card>
 

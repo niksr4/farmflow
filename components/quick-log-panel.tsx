@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState, useCallback } from "react"
+import { useEffect, useState, useCallback, useRef } from "react"
 import { ArrowRight, Check, Loader2, Minus, Plus, Search, X } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { Input } from "@/components/ui/input"
@@ -58,6 +58,7 @@ export default function QuickLogPanel({ onNavigateToFull, locationId, className 
   const [entryDate, setEntryDate] = useState(todayStr())
   const [saving, setSaving] = useState(false)
   const [savedCode, setSavedCode] = useState<string | null>(null)
+  const formRef = useRef<HTMLDivElement>(null)
 
   const { settings } = useTenantSettings()
   const wage = settings.laborWages?.defaultInHouseWage ?? 0
@@ -115,6 +116,12 @@ export default function QuickLogPanel({ onNavigateToFull, locationId, className 
 
   useEffect(() => { fetchData() }, [fetchData])
 
+  useEffect(() => {
+    if (activeCode && formRef.current) {
+      setTimeout(() => formRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" }), 50)
+    }
+  }, [activeCode])
+
   const openEntry = (code: ActivityCode) => {
     const rc: RecentCode = "useCount" in code
       ? (code as RecentCode)
@@ -171,7 +178,7 @@ export default function QuickLogPanel({ onNavigateToFull, locationId, className 
       {/* Section header */}
       <div className="flex items-center justify-between px-1">
         <p className="text-[11px] font-bold uppercase tracking-[0.15em] text-stone-400">
-          Quick log labor
+          Quick log labour
         </p>
         <button
           type="button"
@@ -271,7 +278,7 @@ export default function QuickLogPanel({ onNavigateToFull, locationId, className 
 
           {/* Inline entry form — shown below the grid */}
           {activeCode && (
-            <div className="rounded-2xl bg-white shadow-md border border-emerald-100 overflow-hidden">
+            <div ref={formRef} className="rounded-2xl bg-white shadow-md border border-emerald-100 overflow-hidden">
               {/* Activity label */}
               <div className="flex items-center gap-3 px-4 pt-4 pb-3 border-b border-stone-100">
                 <span className="text-2xl">{activityEmoji(activeCode.reference)}</span>
@@ -402,7 +409,7 @@ export default function QuickLogPanel({ onNavigateToFull, locationId, className 
           onClick={onNavigateToFull}
           className="w-full flex items-center justify-center gap-1.5 py-2 text-xs font-medium text-stone-400 hover:text-stone-600 transition-colors touch-manipulation"
         >
-          Full labor log & history
+          Full labour log & history
           <ArrowRight className="h-3 w-3" />
         </button>
       )}

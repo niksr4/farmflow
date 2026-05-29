@@ -36,6 +36,16 @@ export type SeasonPLResponse = {
     cherryToDryParchPct: number
     processingDays: number
   }
+  // Reconciliation: dispatch received vs sold, and unsold inventory position
+  reconciliation: {
+    dispatchKgReceived: number
+    salesKgSold: number
+    unsoldKg: number
+    unsoldPct: number
+    // If negative: more kg sold than received from dispatch — data integrity issue
+    balanceOk: boolean
+    closingInventoryValue: number // current_inventory total_cost at time of query
+  }
   error?: string
 }
 
@@ -113,7 +123,7 @@ export async function GET(request: NextRequest) {
         [tenantId, start, end],
       ),
 
-      // Processing summary (cherry → dry parchment) — separate try/catch since table may not exist
+      // Processing summary (cherry → dry parchment)
       sql.query(
         `SELECT
            COALESCE(SUM(crop_today), 0) AS total_cherry_kg,
@@ -178,6 +188,27 @@ export async function GET(request: NextRequest) {
     const totalDryCherryKg = Number(procData.total_dry_cherry_kg ?? 0)
     const processingDays = Number(procData.processing_days ?? 0)
 
+    // Reconciliation — run separately with fallback to avoid TS type conflicts
+    const [dispatchRows, inventoryValueRows] = await Promise.all([
+      sql.query(
+        `SELECT COALESCE(SUM(NULLIF(kgs_received, 0)), 0) AS total_kg_received
+         FROM dispatch_records
+         WHERE tenant_id = $1 AND dispatch_date >= $2::date AND dispatch_date <= $3::date`,
+        [tenantId, start, end],
+      ).catch(() => [{ total_kg_received: 0 }]),
+      sql.query(
+        `SELECT COALESCE(SUM(total_cost), 0) AS total_inventory_value
+         FROM current_inventory WHERE tenant_id = $1`,
+        [tenantId],
+      ).catch(() => [{ total_inventory_value: 0 }]),
+    ])
+    const dispatchData = toRows(dispatchRows)[0] ?? {}
+    const inventoryValueData = toRows(inventoryValueRows)[0] ?? {}
+    const dispatchKgReceived = Number(dispatchData.total_kg_received ?? 0)
+    const closingInventoryValue = Number(inventoryValueData.total_inventory_value ?? 0)
+    const unsoldKg = dispatchKgReceived - totalKgSold
+    const unsoldPct = dispatchKgReceived > 0 ? (unsoldKg / dispatchKgReceived) * 100 : 0
+
     // Profitability
     const grossProfitInr = totalSalesInr - totalCostsInr
     const grossMarginPct = totalSalesInr > 0 ? (grossProfitInr / totalSalesInr) * 100 : 0
@@ -212,6 +243,14 @@ export async function GET(request: NextRequest) {
         totalDryCherryKg,
         cherryToDryParchPct: totalCherryKg > 0 ? (totalDryParchKg / totalCherryKg) * 100 : 0,
         processingDays,
+      },
+      reconciliation: {
+        dispatchKgReceived,
+        salesKgSold: totalKgSold,
+        unsoldKg,
+        unsoldPct,
+        balanceOk: unsoldKg >= 0,
+        closingInventoryValue,
       },
     }
 

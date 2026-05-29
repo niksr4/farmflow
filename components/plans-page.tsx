@@ -8,21 +8,27 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { MODULES, MODULE_BUNDLES } from "@/lib/modules"
 
-const planNotes: Record<string, { eyebrow: string; audience: string; highlight: string }> = {
+const planNotes: Record<string, { eyebrow: string; audience: string; highlight: string; price: string; priceNote: string }> = {
   basic: {
-    eyebrow: "Start lean",
-    audience: "Best for estates that want stock and finance discipline first.",
-    highlight: "Inventory, transactions, accounts, and a live balance sheet.",
+    eyebrow: "Digital field book",
+    audience: "For estates that want to replace notebooks and Excel. Daily labour, expenses, inventory, and rainfall — without the harvest workflow.",
+    highlight: "Labour, expenses, inventory, live balance sheet, and rainfall tracker. Everything you log every day.",
+    price: "₹1,299",
+    priceNote: "per month",
   },
   core: {
-    eyebrow: "Recommended",
-    audience: "Best for coffee estates running daily processing, dispatch, and sales in one flow.",
-    highlight: "The full coffee chain without the extra specialized modules.",
+    eyebrow: "Most popular",
+    audience: "For estates that process, dispatch, and sell their own coffee — the full harvest-to-payment cycle in one place.",
+    highlight: "Everything in Starter, plus processing, dispatch, sales, season P&L, and AI-powered weekly insights.",
+    price: "₹3,499",
+    priceNote: "per month",
   },
   enterprise: {
-    eyebrow: "Scale deep",
-    audience: "Best for larger estates or groups that need every module and richer oversight.",
-    highlight: "All modules, including quality, documents, AI, climate, and finance extensions.",
+    eyebrow: "Full stack",
+    audience: "For larger estates and groups that need quality grading, compliance, receivables, and multi-estate oversight.",
+    highlight: "Everything in Operations, plus quality, curing, documents, compliance, and finance extensions.",
+    price: "Custom",
+    priceNote: "contact us",
   },
 }
 
@@ -67,6 +73,12 @@ export default function PlansPage() {
                     {isRecommended ? <Sparkles className="h-4 w-4 text-emerald-300" /> : null}
                   </div>
                   <CardTitle className="text-2xl text-stone-50">{bundle.label}</CardTitle>
+                  {note?.price && (
+                    <div className="flex items-baseline gap-1.5">
+                      <span className="text-3xl font-black tabular-nums text-stone-50">{note.price}</span>
+                      {note.priceNote && <span className="text-sm text-stone-400">{note.priceNote}</span>}
+                    </div>
+                  )}
                   <CardDescription className="text-stone-300">{note?.audience || bundle.description}</CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-4">
@@ -115,9 +127,10 @@ export default function PlansPage() {
               <CardDescription className="text-stone-300">Pick the smallest bundle that still matches how the estate actually runs.</CardDescription>
             </CardHeader>
             <CardContent className="space-y-3 text-sm text-stone-300">
-              <p><strong>Basic</strong> is for estates that want inventory truth and cost visibility first.</p>
-              <p><strong>Core</strong> is for estates that process, dispatch, and sell coffee inside one operating rhythm.</p>
-              <p><strong>Enterprise</strong> is for teams that also need quality, documents, climate, analytics, and broader operational coverage.</p>
+              <p><strong>Starter</strong> is for estates in the maintenance and off-season phase — or those replacing Excel with something more reliable before harvest hits.</p>
+              <p><strong>Operations</strong> is for estates running their own pulping, dispatching to curing works, and selling directly. The full cycle in one place.</p>
+              <p><strong>Enterprise</strong> is for large planters or estate groups that need quality records, compliance, receivables management, and consolidated oversight across multiple properties.</p>
+              <p className="text-stone-400 text-xs mt-2">All plans start at Starter and can be upgraded at any time — no data migration needed.</p>
             </CardContent>
           </Card>
 
