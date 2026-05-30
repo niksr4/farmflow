@@ -1543,7 +1543,8 @@ export default function AccountsPage({
           )}
         </TabsList>
 
-        <TabsContent value="labour" className="mt-6">
+        <TabsContent value="labour" className="mt-6 space-y-4">
+            <AccountsSummaryCard />
             <LaborDeploymentTab startDate={fiscalYearStartDate} endDate={fiscalYearEndDate} />
           </TabsContent>
 
@@ -1901,7 +1902,6 @@ export default function AccountsPage({
         )}
       </Tabs>
 
-      <AccountsSummaryCard />
     </WorkspacePageShell>
   )
 }
