@@ -836,6 +836,9 @@ export default function LaborDeploymentTab({
                               </div>
                             ) : null
                           )}
+                          {(deployment.laborEntries || []).filter((e: any) => Number(e.laborCount) > 0).length === 0 && deployment.taskDescription && (
+                            <span className="text-xs text-muted-foreground italic">{deployment.taskDescription}</span>
+                          )}
                         </div>
                       </TableCell>
                       <TableCell className="text-right font-semibold">{formatCurrency(deployment.totalCost)}</TableCell>
