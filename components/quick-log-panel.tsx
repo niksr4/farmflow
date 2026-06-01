@@ -58,6 +58,7 @@ export default function QuickLogPanel({ onNavigateToFull, locationId, className 
   const [entryDate, setEntryDate] = useState(todayStr())
   const [saving, setSaving] = useState(false)
   const [savedCode, setSavedCode] = useState<string | null>(null)
+  const [savedSummary, setSavedSummary] = useState<{ reference: string; workers: number; total: number } | null>(null)
   const formRef = useRef<HTMLDivElement>(null)
 
   const { settings } = useTenantSettings()
@@ -152,9 +153,10 @@ export default function QuickLogPanel({ onNavigateToFull, locationId, className 
       const data = await res.json()
       if (!res.ok || !data.success) throw new Error(data.error || "Save failed")
       setSavedCode(activeCode.code)
+      setSavedSummary({ reference: activeCode.reference, workers, total: workers * wage })
       setActiveCode(null)
       window.dispatchEvent(new CustomEvent("farmflow:record-saved"))
-      setTimeout(() => { setSavedCode(null); fetchData() }, 2500)
+      setTimeout(() => { setSavedCode(null); setSavedSummary(null); fetchData() }, 2000)
     } catch (err: unknown) {
       toast.error(err instanceof Error ? err.message : "Couldn't save — try again")
     } finally {
@@ -174,6 +176,25 @@ export default function QuickLogPanel({ onNavigateToFull, locationId, className 
   const yesterday = yesterdayStr()
 
   return (
+    <>
+    {/* Full-screen save confirmation — covers the whole screen for 2 seconds */}
+    {savedSummary && (
+      <div
+        className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-emerald-700 touch-manipulation"
+        onClick={() => setSavedSummary(null)}
+      >
+        <div className="flex h-24 w-24 items-center justify-center rounded-full bg-white/20 mb-6">
+          <Check className="h-14 w-14 text-white stroke-[3]" />
+        </div>
+        <p className="text-4xl font-black text-white mb-2">Saved!</p>
+        <p className="text-lg font-semibold text-white/90 mb-1">{savedSummary.reference}</p>
+        <p className="text-base text-white/70">
+          {savedSummary.workers} {savedSummary.workers === 1 ? "person" : "people"}
+          {savedSummary.total > 0 ? ` · ${formatCurrency(savedSummary.total)}` : ""}
+        </p>
+        <p className="mt-8 text-xs text-white/40">Tap anywhere to continue</p>
+      </div>
+    )}
     <div className={cn("space-y-2", className)}>
       {/* Section header */}
       <div className="flex items-center justify-between px-1">
@@ -409,10 +430,11 @@ export default function QuickLogPanel({ onNavigateToFull, locationId, className 
           onClick={onNavigateToFull}
           className="w-full flex items-center justify-center gap-1.5 py-2 text-xs font-medium text-stone-400 hover:text-stone-600 transition-colors touch-manipulation"
         >
-          Full labour log & history
+          Log with more detail
           <ArrowRight className="h-3 w-3" />
         </button>
       )}
     </div>
+    </>
   )
 }

@@ -11,7 +11,7 @@ import { Label } from "@/components/ui/label"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
-import { PlusCircle, Trash2, Edit2, Save, X, ChevronDown, ChevronUp, Plus } from "lucide-react"
+import { Check, PlusCircle, Trash2, Edit2, Save, X, ChevronDown, ChevronUp, Plus } from "lucide-react"
 import { Textarea } from "@/components/ui/textarea"
 import { Badge } from "@/components/ui/badge"
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
@@ -72,6 +72,7 @@ export default function OtherExpensesTab({
   const [isAdding, setIsAdding] = useState(false)
   const [editingId, setEditingId] = useState<number | null>(null)
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [savedConfirm, setSavedConfirm] = useState<{ reference: string; total: number } | null>(null)
   const [activities, setActivities] = useState<ActivityCode[]>([])
   const [showAllCodes, setShowAllCodes] = useState(false)
   const [inventoryItems, setInventoryItems] = useState<InventoryItem[]>([])
@@ -183,6 +184,7 @@ export default function OtherExpensesTab({
     try {
       const result = editingId ? await updateDeployment(editingId, deployment) : await addDeployment(deployment)
       if (result.ok) {
+        if (isMobile && !editingId) setSavedConfirm({ reference: formData.reference, total: formData.amount })
         resetForm()
         window.dispatchEvent(new CustomEvent(FARMFLOW_RECORD_SAVED_EVENT))
       } else {
@@ -240,7 +242,30 @@ export default function OtherExpensesTab({
   const formSectionRef = useRef<HTMLDivElement>(null)
   const historySectionRef = useRef<HTMLDivElement>(null)
 
+  useEffect(() => {
+    if (!savedConfirm) return
+    const t = setTimeout(() => setSavedConfirm(null), 2000)
+    return () => clearTimeout(t)
+  }, [savedConfirm])
+
   return (
+    <>
+    {savedConfirm && (
+      <div
+        className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-emerald-700 touch-manipulation"
+        onClick={() => setSavedConfirm(null)}
+      >
+        <div className="flex h-24 w-24 items-center justify-center rounded-full bg-white/20 mb-6">
+          <Check className="h-14 w-14 text-white stroke-[3]" />
+        </div>
+        <p className="text-4xl font-black text-white mb-2">Saved!</p>
+        <p className="text-lg font-semibold text-white/90 mb-1">{savedConfirm.reference}</p>
+        {savedConfirm.total > 0 && (
+          <p className="text-base text-white/70">{formatCurrency(savedConfirm.total)}</p>
+        )}
+        <p className="mt-8 text-xs text-white/40">Tap anywhere to continue</p>
+      </div>
+    )}
     <div className="space-y-4">
       {/* Add entry button — always at top */}
       {!isAdding && (
@@ -722,5 +747,6 @@ export default function OtherExpensesTab({
         />
       )}
     </div>
+    </>
   )
 }

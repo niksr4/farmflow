@@ -24,6 +24,7 @@ import WorkflowEmptyState from "@/components/workflow-empty-state"
 import { useToast } from "@/hooks/use-toast"
 import { FARMFLOW_RECORD_SAVED_EVENT } from "@/components/inventory-system/constants"
 import { useMediaQuery } from "@/hooks/use-media-query"
+import QuickLogPanel from "@/components/quick-log-panel"
 
 
 interface ActivityCode {
@@ -72,7 +73,6 @@ export default function LaborDeploymentTab({
     deployments,
     loading,
     loadingMore,
-    error: deployError,
     totalCost,
     totalCount,
     hasMore,
@@ -80,6 +80,7 @@ export default function LaborDeploymentTab({
     addDeployment,
     updateDeployment,
     deleteDeployment,
+    refetch,
   } = useLaborData(locationId, { startDate, endDate })
   const { settings } = useTenantSettings()
   const isMobile = useMediaQuery("(max-width: 768px)")
@@ -92,6 +93,7 @@ export default function LaborDeploymentTab({
   const [prefilled, setPrefilled] = useState(false)
   const [editingId, setEditingId] = useState<string | null>(null)
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [savedConfirm, setSavedConfirm] = useState<{ reference: string; total: number } | null>(null)
   const [activities, setActivities] = useState<ActivityCode[]>([])
   const [showAllCodes, setShowAllCodes] = useState(false)
   const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set())
@@ -123,6 +125,20 @@ export default function LaborDeploymentTab({
   useEffect(() => {
     fetchActivities()
   }, [fetchActivities])
+
+  // Refresh history when QuickLogPanel (or anything else) saves a record
+  useEffect(() => {
+    const handler = () => refetch()
+    window.addEventListener(FARMFLOW_RECORD_SAVED_EVENT, handler)
+    return () => window.removeEventListener(FARMFLOW_RECORD_SAVED_EVENT, handler)
+  }, [refetch])
+
+  // Auto-dismiss the full-form save confirmation after 2s
+  useEffect(() => {
+    if (!savedConfirm) return
+    const t = setTimeout(() => setSavedConfirm(null), 2000)
+    return () => clearTimeout(t)
+  }, [savedConfirm])
 
   const handleCodeChange = (code: string) => {
     setFormData((prev) => ({ ...prev, code }))
@@ -256,6 +272,7 @@ export default function LaborDeploymentTab({
     try {
       const result = editingId ? await updateDeployment(editingId, deployment) : await addDeployment(deployment)
       if (result.ok) {
+        if (isMobile && !editingId) setSavedConfirm({ reference: formData.reference, total: calculateTotal() })
         resetForm()
         window.dispatchEvent(new CustomEvent(FARMFLOW_RECORD_SAVED_EVENT))
       } else {
@@ -311,9 +328,34 @@ export default function LaborDeploymentTab({
   const historySectionRef = useRef<HTMLDivElement>(null)
 
   return (
+    <>
+    {savedConfirm && (
+      <div
+        className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-emerald-700 touch-manipulation"
+        onClick={() => setSavedConfirm(null)}
+      >
+        <div className="flex h-24 w-24 items-center justify-center rounded-full bg-white/20 mb-6">
+          <Save className="h-12 w-12 text-white" />
+        </div>
+        <p className="text-4xl font-black text-white mb-2">Saved!</p>
+        <p className="text-lg font-semibold text-white/90 mb-1">{savedConfirm.reference}</p>
+        {savedConfirm.total > 0 && (
+          <p className="text-base text-white/70">{formatCurrency(savedConfirm.total)}</p>
+        )}
+        <p className="mt-8 text-xs text-white/40">Tap anywhere to continue</p>
+      </div>
+    )}
     <div className="space-y-4">
-      {/* Add entry button — always at the top, opens form inline */}
-      {!isAdding && (
+      {/* Mobile: QuickLogPanel tiles as default entry — full form opens via "More details" */}
+      {isMobile && !isAdding && (
+        <QuickLogPanel
+          locationId={locationId}
+          onNavigateToFull={openNewForm}
+        />
+      )}
+
+      {/* Desktop: traditional add button */}
+      {!isMobile && !isAdding && (
         <button
           type="button"
           onClick={openNewForm}
@@ -337,7 +379,8 @@ export default function LaborDeploymentTab({
           tip="A simple code like HARVEST, WEEDING, or PRUNING is better than waiting for a perfect accounting structure."
         />
       )}
-      <Card ref={formSectionRef} className="border-stone-200 bg-white shadow-sm dark:border-white/[0.06] dark:bg-card">
+      {/* On mobile hide the form card unless we're in detailed-entry mode */}
+      <Card ref={formSectionRef} className={cn("border-stone-200 bg-white shadow-sm dark:border-white/[0.06] dark:bg-card", isMobile && !isAdding && "hidden")}>
         <CardHeader className="border-b border-stone-100 dark:border-white/[0.05]">
           <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
             <div>
@@ -714,7 +757,7 @@ export default function LaborDeploymentTab({
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-stone-400">History</p>
-                <CardTitle className="mt-0.5 text-lg">Labour records</CardTitle>
+                <CardTitle className="mt-0.5 text-lg">Labour entries</CardTitle>
               </div>
             </div>
           </CardHeader>
@@ -813,7 +856,7 @@ export default function LaborDeploymentTab({
                     <TableHead className="text-stone-300 font-bold text-[11px] uppercase tracking-[0.16em] dark:text-stone-400">Date</TableHead>
                     <TableHead className="text-stone-300 font-bold text-[11px] uppercase tracking-[0.16em] dark:text-stone-400">Code</TableHead>
                     <TableHead className="text-stone-300 font-bold text-[11px] uppercase tracking-[0.16em] dark:text-stone-400">Category</TableHead>
-                    <TableHead className="text-stone-300 font-bold text-[11px] uppercase tracking-[0.16em] dark:text-stone-400">Labour groups</TableHead>
+                    <TableHead className="text-stone-300 font-bold text-[11px] uppercase tracking-[0.16em] dark:text-stone-400">Workers</TableHead>
                     <TableHead className="text-right text-stone-300 font-bold text-[11px] uppercase tracking-[0.16em] dark:text-stone-400">Total Cost</TableHead>
                     <TableHead className="w-[100px] text-stone-300 font-bold text-[11px] uppercase tracking-[0.16em] dark:text-stone-400">Actions</TableHead>
                   </TableRow>
@@ -851,7 +894,7 @@ export default function LaborDeploymentTab({
                                   <Edit2 className="h-4 w-4" />
                                 </Button>
                               </TooltipTrigger>
-                              <TooltipContent>Edit deployment</TooltipContent>
+                              <TooltipContent>Edit entry</TooltipContent>
                             </Tooltip>
                             <Tooltip>
                               <TooltipTrigger asChild>
@@ -859,7 +902,7 @@ export default function LaborDeploymentTab({
                                   variant="ghost"
                                   size="icon"
                                   onClick={async () => {
-                                    if (confirm("Are you sure you want to delete this deployment?")) {
+                                    if (confirm("Delete this labour entry? This cannot be undone.")) {
                                       const result = await deleteDeployment(deployment.id)
                                       if (!result.ok) {
                                         toast({ title: "Couldn't delete record", description: result.error, variant: "destructive" })
@@ -870,7 +913,7 @@ export default function LaborDeploymentTab({
                                   <Trash2 className="h-4 w-4" />
                                 </Button>
                               </TooltipTrigger>
-                              <TooltipContent>Delete deployment</TooltipContent>
+                              <TooltipContent>Delete entry</TooltipContent>
                             </Tooltip>
                           </div>
                         </TooltipProvider>
@@ -905,5 +948,6 @@ export default function LaborDeploymentTab({
         />
       )}
     </div>
+    </>
   )
 }
