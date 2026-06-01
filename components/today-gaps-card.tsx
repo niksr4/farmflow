@@ -153,7 +153,7 @@ export default function TodayGapsCard({ onNavigate, className }: Props) {
             </div>
             <div>
               <p className="text-xl font-black text-amber-950 leading-tight">
-                Log today's work
+                Log today&apos;s work
               </p>
               <p className="text-sm font-semibold text-amber-800 mt-0.5">
                 No labour entry for today yet

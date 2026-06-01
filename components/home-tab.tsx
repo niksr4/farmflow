@@ -148,7 +148,7 @@ export default function HomeTab({
               </p>
               <p className="mt-1 text-lg font-black text-stone-900 dark:text-white">What to do next</p>
               <p className="mt-0.5 text-sm text-stone-500 dark:text-stone-400">
-                Based on what's been logged and what's still pending on your estate.
+                Based on what&apos;s been logged and what&apos;s still pending on your estate.
               </p>
             </div>
             <div className="flex shrink-0 flex-wrap gap-2">
