@@ -634,7 +634,7 @@ export default function RainfallTab({ username, showDataToolsControls = false }:
             className="w-full h-14 rounded-2xl bg-sky-600 text-white text-base font-bold flex items-center justify-center gap-2 shadow-md shadow-sky-100 active:scale-[0.98] transition-all touch-manipulation disabled:opacity-70"
           >
             <CloudRain className="h-5 w-5" />
-            {loading ? "Saving…" : "Save rainfall"}
+            {loading ? "Saving…" : "Save record"}
           </button>
         </div>
 

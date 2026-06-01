@@ -319,9 +319,10 @@ export default function QuickLogPanel({ onNavigateToFull, locationId, className 
               <div className="px-4 py-4 space-y-4">
                 {/* Workers stepper */}
                 <div>
-                  <p className="text-xs font-bold uppercase tracking-[0.12em] text-stone-400 mb-3">
-                    Workers today
-                  </p>
+                  <div className="flex items-baseline justify-between mb-3">
+                    <p className="text-xs font-bold uppercase tracking-[0.12em] text-stone-400">Workers today</p>
+                    <p className="text-[10px] text-stone-400">use + / − or tap number to type</p>
+                  </div>
                   <div className="flex items-center justify-between">
                     <button
                       type="button"

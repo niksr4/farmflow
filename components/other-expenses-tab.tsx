@@ -3,6 +3,7 @@
 import type React from "react"
 
 import { useState, useEffect, useCallback, useRef } from "react"
+import { cn } from "@/lib/utils"
 import { FARMFLOW_RECORD_SAVED_EVENT } from "@/components/inventory-system/constants"
 import { useConsumablesData } from "@/hooks/use-consumables-data"
 import { Button } from "@/components/ui/button"
@@ -549,7 +550,10 @@ export default function OtherExpensesTab({
                 </div>
               )}
 
-              <div className="flex flex-col sm:flex-row gap-2">
+              <div className={cn(
+                "flex flex-col sm:flex-row gap-2",
+                isMobile && "sticky bottom-0 -mx-5 px-5 pb-4 pt-3 bg-white/95 backdrop-blur-sm border-t border-stone-100",
+              )}>
                 <button
                   type="submit"
                   disabled={isSubmitting}
@@ -565,7 +569,7 @@ export default function OtherExpensesTab({
                   type="button"
                   onClick={resetForm}
                   disabled={isSubmitting}
-                  className="h-12 rounded-2xl border border-stone-200 bg-white text-base font-semibold text-stone-500 px-6 touch-manipulation"
+                  className="h-14 rounded-2xl border border-stone-200 bg-white text-base font-semibold text-stone-500 px-6 touch-manipulation"
                 >
                   Cancel
                 </button>

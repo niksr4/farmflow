@@ -1061,7 +1061,11 @@ export default function ProcessingTab({ showDataToolsControls = false }: Process
           </div>
         </CardHeader>
         <CardContent className="space-y-6">
-          <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+          {/* Sticky context bar on mobile — location/coffee/date scroll away without this */}
+          <div className={cn(
+            "grid gap-4 sm:grid-cols-2 xl:grid-cols-4",
+            isMobile && "sticky top-0 z-10 -mx-5 px-5 pt-1 pb-3 bg-white/95 backdrop-blur-sm border-b border-stone-100",
+          )}>
             <div className="space-y-2">
               <Label>Location</Label>
               {isMobile ? (

@@ -12,7 +12,7 @@
  */
 
 import { cn } from "@/lib/utils"
-import { MoreHorizontal } from "lucide-react"
+import { Lock, MoreHorizontal } from "lucide-react"
 import { getMobileBottomNavTabs, isTabOffSeason } from "@/lib/season-utils"
 
 type MobileBottomNavProps = {
@@ -73,31 +73,27 @@ export default function MobileBottomNav({
               className={cn(
                 "flex-1 flex flex-col items-center justify-center gap-1 min-w-0 px-1",
                 "touch-manipulation active:scale-95 transition-transform",
+                offSeason && "opacity-40",
               )}
             >
               {/* Icon container — solid filled pill when active */}
               <div className={cn(
-                "flex h-9 w-14 items-center justify-center rounded-full transition-all",
+                "relative flex h-9 w-14 items-center justify-center rounded-full transition-all",
                 isActive
                   ? "bg-emerald-700 shadow-[0_2px_8px_rgba(5,120,70,0.35)]"
                   : "",
               )}>
                 <Icon className={cn(
                   "h-[22px] w-[22px] transition-all stroke-[2.5]",
-                  isActive
-                    ? "text-white"
-                    : offSeason
-                      ? "text-stone-500"
-                      : "text-stone-800",
+                  isActive ? "text-white" : "text-stone-800",
                 )} />
+                {offSeason && (
+                  <Lock className="absolute -top-1 -right-1 h-3.5 w-3.5 text-stone-500 bg-white rounded-full p-0.5" />
+                )}
               </div>
               <span className={cn(
                 "text-[11px] font-black tracking-wide truncate max-w-full px-1 leading-none",
-                isActive
-                  ? "text-emerald-700"
-                  : offSeason
-                    ? "text-stone-500"
-                    : "text-stone-800",
+                isActive ? "text-emerald-700" : "text-stone-800",
               )}>
                 {label}
               </span>
