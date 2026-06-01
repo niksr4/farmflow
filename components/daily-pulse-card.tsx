@@ -192,7 +192,7 @@ export default function DailyPulseCard({ onNavigate, className }: DailyPulseCard
                 <p className="text-sm font-bold text-stone-900 tabular-nums leading-tight">
                   {formatCurrency(summary.laborCost)}
                 </p>
-                <p className="text-[10px] text-stone-400 mt-0.5">{summary.laborEntries} entr{summary.laborEntries === 1 ? "y" : "ies"}</p>
+                <p className="text-[10px] text-stone-400 mt-0.5">{summary.laborEntries} {summary.laborEntries === 1 ? "entry" : "entries"}</p>
               </>
             )}
           </button>
@@ -227,7 +227,7 @@ export default function DailyPulseCard({ onNavigate, className }: DailyPulseCard
                 <p className="text-sm font-bold text-stone-900 tabular-nums leading-tight">
                   {formatCurrency(summary.expenseCost)}
                 </p>
-                <p className="text-[10px] text-stone-400 mt-0.5">{summary.expenseEntries} entr{summary.expenseEntries === 1 ? "y" : "ies"}</p>
+                <p className="text-[10px] text-stone-400 mt-0.5">{summary.expenseEntries} {summary.expenseEntries === 1 ? "entry" : "entries"}</p>
               </>
             )}
           </button>

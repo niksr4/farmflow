@@ -552,7 +552,7 @@ export default function RainfallTab({ username, showDataToolsControls = false }:
 
           {/* Inches stepper */}
           <div className="mb-4">
-            <p className="text-sm font-bold text-stone-700 mb-2">💧 Inches (whole number)</p>
+            <p className="text-sm font-bold text-stone-700 mb-2">💧 Full inches</p>
             <div className="flex items-center gap-4">
               <button
                 type="button"
@@ -582,7 +582,8 @@ export default function RainfallTab({ username, showDataToolsControls = false }:
 
           {/* Cents stepper */}
           <div className="mb-4">
-            <p className="text-sm font-bold text-stone-700 mb-2">💧 Decimal points (0–99, e.g. 50 = half inch)</p>
+            <p className="text-sm font-bold text-stone-700 mb-2">💧 Decimal part (0–99)</p>
+            <p className="text-xs text-stone-400 mb-2">25 = quarter inch · 50 = half inch · 75 = three-quarter inch</p>
             <div className="flex items-center gap-4">
               <button
                 type="button"
@@ -761,14 +762,20 @@ export default function RainfallTab({ username, showDataToolsControls = false }:
           </div>
           <div className="grid gap-4 md:grid-cols-2">
             <div>
-              <FieldLabel label="Inches" htmlFor="rainfall-inches-top" className="mb-2" labelClassName="text-sm font-medium" tooltip="Whole inches of rainfall (integer only)." />
+              <FieldLabel label="Full inches" htmlFor="rainfall-inches-top" className="mb-2" labelClassName="text-sm font-medium" tooltip="Whole inches of rainfall. Enter 0 if less than 1 inch." />
               <Input id="rainfall-inches-top" type="text" inputMode="numeric" pattern="[0-9]*" placeholder="0" value={inches} onChange={handleWholeNumberChange(setInches)} />
             </div>
             <div>
-              <FieldLabel label="Cents / Points (0-99)" htmlFor="rainfall-cents-top" className="mb-2" labelClassName="text-sm font-medium" tooltip="1 point = 0.01 inch." />
+              <FieldLabel label="Decimal part (0–99)" htmlFor="rainfall-cents-top" className="mb-2" labelClassName="text-sm font-medium" tooltip="The decimal portion. 25 = quarter inch, 50 = half inch, 75 = three-quarter inch." />
               <Input id="rainfall-cents-top" type="text" inputMode="numeric" pattern="[0-9]*" placeholder="0" value={cents} onChange={handleWholeNumberChange(setCents)} />
             </div>
           </div>
+          {(Number(inches) > 0 || Number(cents) > 0) && (
+            <div className="flex items-center gap-2 rounded-lg border border-sky-200 bg-sky-50 px-3 py-2 text-sm font-semibold text-sky-800">
+              <CloudRain className="h-4 w-4 shrink-0" />
+              Total: {Number(inches || 0)}.{String(Number(cents || 0)).padStart(2, "0")} inches
+            </div>
+          )}
           <Button onClick={handleSaveRecord} disabled={loading} className="h-11 w-full rounded-lg bg-emerald-700 font-semibold text-white hover:bg-emerald-600">
             {loading ? "Saving..." : "Save Record"}
           </Button>

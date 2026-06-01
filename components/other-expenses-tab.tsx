@@ -349,7 +349,7 @@ export default function OtherExpensesTab({
 
                 <div className="space-y-2">
                   <Label htmlFor="expense-code" className="text-base">
-                    Activity code
+                    Type of cost
                   </Label>
                   {isMobile && activities.length > 0 ? (
                     <>
@@ -359,7 +359,7 @@ export default function OtherExpensesTab({
                         required
                         className="w-full h-12 rounded-xl border border-input bg-background px-3 text-base font-medium focus:outline-none focus:ring-2 focus:ring-emerald-500"
                       >
-                        <option value="">Select activity code…</option>
+                        <option value="">Choose a cost type…</option>
                         {usedActivities.length > 0 && (
                           <optgroup label="Used codes">
                             {usedActivities.map((a) => (
@@ -391,13 +391,13 @@ export default function OtherExpensesTab({
                         id="expense-code"
                         value={formData.code}
                         onChange={(e) => handleCodeChange(e.target.value)}
-                        placeholder="e.g. 555"
+                        placeholder="e.g. Fertiliser, Fuel"
                         required
                         list="expense-activity-codes"
                         className="h-11"
                       />
                       <div className="flex items-center justify-between">
-                        <p className="text-xs text-muted-foreground">Most-used codes appear first. Type a code or name to filter.</p>
+                        <p className="text-xs text-muted-foreground">Your most-used cost types appear first. Type to search.</p>
                         {unusedActivities.length > 0 && (
                           <button
                             type="button"
@@ -429,7 +429,7 @@ export default function OtherExpensesTab({
 
                 <div className="space-y-2">
                   <Label htmlFor="expense-reference" className="text-base">
-                    Category name
+                    Cost name
                   </Label>
                   <Input
                     id="expense-reference"
@@ -462,7 +462,7 @@ export default function OtherExpensesTab({
                   <div className="flex items-center justify-between">
                     <p className="text-sm font-medium text-muted-foreground">
                       Inventory link{" "}
-                      <span className="font-normal">(optional — only if this expense also used stock)</span>
+                      <span className="font-normal">(optional — only if you used estate supplies for this cost)</span>
                     </p>
                     {supportsMultiInventoryItems && (
                       <Button

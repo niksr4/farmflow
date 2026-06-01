@@ -175,7 +175,7 @@ export default function TodayGapsCard({ onNavigate, className }: Props) {
                     <p className="text-base font-black leading-tight text-amber-950">{format(new Date(), "d")}</p>
                   </div>
                 </div>
-                <span className="text-sm font-bold text-amber-900">Log today now</span>
+                <span className="text-sm font-bold text-amber-900">Log today&apos;s labour</span>
               </div>
               <div className="flex items-center gap-1.5 rounded-xl bg-amber-500 px-4 py-2.5">
                 <span className="text-sm font-black text-white">Log</span>
