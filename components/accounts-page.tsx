@@ -118,7 +118,7 @@ const normalizeAccountsTab = (
 }
 
 type AccountsPageProps = {
-  showDataToolsControls?: boolean
+  showDataToolsControls?: boolean // kept for API compatibility
   requestedExport?: { requestId: number; format: LegacyAccountsExportFormat } | null
   onRequestedExportHandled?: (requestId: number) => void
   initialTab?: AccountsTabValue
@@ -127,7 +127,7 @@ type AccountsPageProps = {
 }
 
 export default function AccountsPage({
-  showDataToolsControls = false,
+  showDataToolsControls: _showDataToolsControls = false,
   requestedExport = null,
   onRequestedExportHandled,
   initialTab,
@@ -1391,116 +1391,6 @@ export default function AccountsPage({
       </Card>
       )}
 
-      {showDataToolsControls && (isAdmin || isOwner) && (
-        <Card>
-          <CardHeader>
-            <div className="flex justify-between items-start">
-              <div>
-                <CardTitle>Accounts Export</CardTitle>
-                <CardDescription className="mt-1">
-                  Export labour and other expenses using the same fiscal year already selected above.
-                </CardDescription>
-              </div>
-              <div className="text-right flex-shrink-0 pl-4">
-                <p className="text-sm font-medium text-muted-foreground">Grand Total</p>
-                {summaryLoading ? (
-                  <Skeleton className="h-8 w-32 mt-1" />
-                ) : (
-                  <div className="space-y-1">
-                    <p className="text-2xl font-bold">{formatCurrency(filteredGrandTotal)}</p>
-                    <div className="text-xs text-muted-foreground space-y-0.5">
-                      <div>Labour: {formatCurrency(filteredLaborTotal)}</div>
-                      <div>Other: {formatCurrency(filteredOtherExpensesTotal)}</div>
-                    </div>
-                  </div>
-                )}
-              </div>
-            </div>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="flex flex-col gap-3 rounded-xl border border-border/60 bg-muted/20 p-3 sm:flex-row sm:items-center sm:justify-between">
-              <div>
-                <p className="text-sm font-medium text-foreground">
-                  {useCustomExportRange ? "Custom export range" : `Using ${selectedFiscalYear.label}`}
-                </p>
-                <p className="text-xs text-muted-foreground">
-                  {useCustomExportRange
-                    ? "Exports use the custom dates below until you switch back to the fiscal year."
-                    : `Exports currently cover ${fiscalYearStartDate} to ${fiscalYearEndDate}.`}
-                </p>
-              </div>
-              <Button type="button" variant="outline" size="sm" onClick={handleCustomExportRangeToggle} className="bg-white">
-                {useCustomExportRange ? "Use Fiscal Year" : "Use Custom Range"}
-              </Button>
-            </div>
-
-            {useCustomExportRange && (
-              <div className="grid gap-3 sm:grid-cols-2">
-                <div className="space-y-2">
-                  <Label htmlFor="exportStartDateCombined" className="text-sm font-medium">
-                    From
-                  </Label>
-                  <Input
-                    type="date"
-                    id="exportStartDateCombined"
-                    value={customExportStartDate}
-                    onChange={(e) => setCustomExportStartDate(e.target.value)}
-                    className="h-9 text-sm"
-                    aria-label="Combined export start date"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="exportEndDateCombined" className="text-sm font-medium">
-                    To
-                  </Label>
-                  <Input
-                    type="date"
-                    id="exportEndDateCombined"
-                    value={customExportEndDate}
-                    onChange={(e) => setCustomExportEndDate(e.target.value)}
-                    className="h-9 text-sm"
-                    aria-label="Combined export end date"
-                  />
-                </div>
-              </div>
-            )}
-
-            <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
-            <Button
-              onClick={exportCombinedCSV}
-              variant="outline"
-              size="sm"
-              disabled={!canExport}
-              className="w-full sm:w-auto bg-transparent"
-            >
-              <FileText className="mr-2 h-4 w-4" /> Export CSV
-            </Button>
-            <Button
-              onClick={exportCombinedXlsx}
-              variant="outline"
-              size="sm"
-              disabled={!canExport}
-              className="w-full sm:w-auto bg-transparent"
-            >
-              <FileSpreadsheet className="mr-2 h-4 w-4" /> Export XLSX
-            </Button>
-            <Button
-              onClick={() => void exportInterchange("qif")}
-              variant="outline"
-              size="sm"
-              disabled={!canExport}
-              className="w-full sm:w-auto bg-transparent"
-            >
-              <Coins className="mr-2 h-4 w-4" /> Export QIF
-            </Button>
-            <p className={cn("w-full text-xs", exportDateRangeError ? "text-rose-600" : "text-muted-foreground")}>
-              {exportDisabledReason || "CSV, XLSX, and QIF exports use the range shown above."}
-            </p>
-            </div>
-          </CardContent>
-        </Card>
-      )}
-
       <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as AccountsTabValue)} className="w-full space-y-4">
         <TabsList className="h-auto w-full flex-wrap justify-start gap-2 sm:justify-center">
           <TabsTrigger value="labour" className="flex items-center gap-2">
@@ -1901,6 +1791,92 @@ export default function AccountsPage({
           </>
         )}
       </Tabs>
+
+      {(isAdmin || isOwner) && (
+        <Card>
+          <CardHeader>
+            <div className="flex justify-between items-start">
+              <div>
+                <CardTitle>Accounts Export</CardTitle>
+                <CardDescription className="mt-1">
+                  Export labour and other expenses. Uses the fiscal year selected above, or set a custom date range.
+                </CardDescription>
+              </div>
+              <div className="text-right flex-shrink-0 pl-4">
+                <p className="text-sm font-medium text-muted-foreground">Grand Total</p>
+                {summaryLoading ? (
+                  <Skeleton className="h-8 w-32 mt-1" />
+                ) : (
+                  <div className="space-y-1">
+                    <p className="text-2xl font-bold">{formatCurrency(filteredGrandTotal)}</p>
+                    <div className="text-xs text-muted-foreground space-y-0.5">
+                      <div>Labour: {formatCurrency(filteredLaborTotal)}</div>
+                      <div>Other: {formatCurrency(filteredOtherExpensesTotal)}</div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="flex flex-col gap-3 rounded-xl border border-border/60 bg-muted/20 p-3 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <p className="text-sm font-medium text-foreground">
+                  {useCustomExportRange ? "Custom export range" : `Using ${selectedFiscalYear.label}`}
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  {useCustomExportRange
+                    ? "Exports use the custom dates below until you switch back to the fiscal year."
+                    : `Exports cover ${fiscalYearStartDate} to ${fiscalYearEndDate}.`}
+                </p>
+              </div>
+              <Button type="button" variant="outline" size="sm" onClick={handleCustomExportRangeToggle} className="bg-white">
+                {useCustomExportRange ? "Use Fiscal Year" : "Use Custom Range"}
+              </Button>
+            </div>
+
+            {useCustomExportRange && (
+              <div className="grid gap-3 sm:grid-cols-2">
+                <div className="space-y-2">
+                  <Label htmlFor="exportStartDateCombined" className="text-sm font-medium">From</Label>
+                  <Input
+                    type="date"
+                    id="exportStartDateCombined"
+                    value={customExportStartDate}
+                    onChange={(e) => setCustomExportStartDate(e.target.value)}
+                    className="h-9 text-sm"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="exportEndDateCombined" className="text-sm font-medium">To</Label>
+                  <Input
+                    type="date"
+                    id="exportEndDateCombined"
+                    value={customExportEndDate}
+                    onChange={(e) => setCustomExportEndDate(e.target.value)}
+                    className="h-9 text-sm"
+                  />
+                </div>
+              </div>
+            )}
+
+            <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
+              <Button onClick={exportCombinedCSV} variant="outline" size="sm" disabled={!canExport} className="w-full sm:w-auto bg-transparent">
+                <FileText className="mr-2 h-4 w-4" /> Export CSV
+              </Button>
+              <Button onClick={exportCombinedXlsx} variant="outline" size="sm" disabled={!canExport} className="w-full sm:w-auto bg-transparent">
+                <FileSpreadsheet className="mr-2 h-4 w-4" /> Export XLSX
+              </Button>
+              <Button onClick={() => void exportInterchange("qif")} variant="outline" size="sm" disabled={!canExport} className="w-full sm:w-auto bg-transparent">
+                <Coins className="mr-2 h-4 w-4" /> Export QIF
+              </Button>
+              <p className={cn("w-full text-xs", exportDateRangeError ? "text-rose-600" : "text-muted-foreground")}>
+                {exportDisabledReason || "CSV, XLSX, and QIF exports use the range shown above."}
+              </p>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
     </WorkspacePageShell>
   )
