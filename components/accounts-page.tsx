@@ -659,6 +659,7 @@ export default function AccountsPage({
       totalHfLaborCost = 0
     let totalOutsideLaborCount = 0,
       totalOutsideLaborCost = 0
+    let totalContractLaborCost = 0 // lump-sum entries with no per-worker breakdown
     let totalConsumablesCost = 0
     const totalsByCode: { [code: string]: number } = {}
 
@@ -667,7 +668,10 @@ export default function AccountsPage({
       totalsByCode[d.code] = (totalsByCode[d.code] || 0) + expenditureAmount
 
       if (d.entryType === "Labour") {
-        if (d.laborEntries && d.laborEntries.length > 0) {
+        const hasWorkerBreakdown = d.laborEntries && d.laborEntries.length > 0 &&
+          d.laborEntries.some((e: LaborEntry) => Number(e.laborCount) > 0)
+
+        if (hasWorkerBreakdown) {
           const hfEntry = d.laborEntries[0]
           const hfCount =
             typeof hfEntry.laborCount === "number"
@@ -675,20 +679,23 @@ export default function AccountsPage({
               : Number.parseFloat(String(hfEntry.laborCount)) || 0
           totalHfLaborCount += hfCount
           totalHfLaborCost += hfCount * hfEntry.costPerLabor
-        }
-        if (d.laborEntries && d.laborEntries.length > 1) {
-          d.laborEntries.slice(1).forEach((le: LaborEntry) => {
-            const outsideCount =
-              typeof le.laborCount === "number" ? le.laborCount : Number.parseFloat(String(le.laborCount)) || 0
-            totalOutsideLaborCount += outsideCount
-            totalOutsideLaborCost += outsideCount * le.costPerLabor
-          })
+          if (d.laborEntries.length > 1) {
+            d.laborEntries.slice(1).forEach((le: LaborEntry) => {
+              const outsideCount =
+                typeof le.laborCount === "number" ? le.laborCount : Number.parseFloat(String(le.laborCount)) || 0
+              totalOutsideLaborCount += outsideCount
+              totalOutsideLaborCost += outsideCount * le.costPerLabor
+            })
+          }
+        } else {
+          // Contract / lump-sum entry — use total_cost directly
+          totalContractLaborCost += d.totalCost
         }
       } else {
         totalConsumablesCost += (d as ConsumableDeployment).amount
       }
     })
-    const grandTotalForExport = totalHfLaborCost + totalOutsideLaborCost + totalConsumablesCost
+    const grandTotalForExport = totalHfLaborCost + totalOutsideLaborCost + totalContractLaborCost + totalConsumablesCost
 
     csvContent += "\n"
     const summaryHeaders = ["", "", "", "Summary Category", "Count/Details", "", "Total (₹)", "", ""]
@@ -719,6 +726,10 @@ export default function AccountsPage({
     ]
     csvContent += "\n" + outsideSummaryRow.map(escapeCsvField).join(",")
 
+    if (totalContractLaborCost > 0) {
+      const contractSummaryRow = ["", "", "", "Total Contract Labour", "Lump-sum (no per-worker breakdown)", "", totalContractLaborCost.toFixed(2), "", ""]
+      csvContent += "\n" + contractSummaryRow.map(escapeCsvField).join(",")
+    }
     const consumablesSummaryRow = ["", "", "", "Total Other Expenses", "", "", totalConsumablesCost.toFixed(2), "", ""]
     csvContent += "\n" + consumablesSummaryRow.map(escapeCsvField).join(",")
     const totalRow = ["", "", "", "GRAND TOTAL", "", "", grandTotalForExport.toFixed(2), "", ""]
