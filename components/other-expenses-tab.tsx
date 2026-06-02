@@ -27,6 +27,7 @@ interface ActivityCode {
   code: string
   reference: string
   module_hint?: string | null
+  tracks_inventory?: boolean
   labor_count?: number
   expense_count?: number
 }
@@ -124,18 +125,24 @@ export default function OtherExpensesTab({
     fetchInventoryItems()
   }, [fetchActivities, fetchInventoryItems])
 
-  // Autofill reference when code changes
+  // Autofill reference when code changes; auto-seed inventory line for supply codes
   const handleCodeChange = (code: string) => {
     setFormData((prev) => ({ ...prev, code }))
     const matchingActivity = activities.find((activity) => activity.code.toLowerCase() === code.toLowerCase())
     if (matchingActivity) {
       setFormData((prev) => ({ ...prev, reference: matchingActivity.reference }))
+      // Auto-add an empty inventory line so the stock section opens immediately
+      if (matchingActivity.tracks_inventory && invLines.length === 0 && inventoryItems.length > 0) {
+        setInvLines([{ itemType: "", quantity: "" }])
+      }
     }
   }
 
-  const selectedActivityHint = activities.find(
+  const selectedActivity = activities.find(
     (a) => a.code.toLowerCase() === formData.code.toLowerCase()
-  )?.module_hint ?? null
+  ) ?? null
+  const selectedActivityHint = selectedActivity?.module_hint ?? null
+  const selectedTracksInventory = selectedActivity?.tracks_inventory ?? false
 
   const sortedActivities = [...activities].sort((a, b) =>
     ((b.expense_count ?? 0) + (b.labor_count ?? 0)) - ((a.expense_count ?? 0) + (a.labor_count ?? 0))
@@ -459,11 +466,23 @@ export default function OtherExpensesTab({
               </div>
 
               {inventoryItems.length > 0 && (
-                <div className="space-y-3 border rounded-md p-3 bg-background">
+                <div className={cn(
+                  "space-y-3 border rounded-md p-3",
+                  selectedTracksInventory && invLines.length === 0
+                    ? "bg-amber-50 border-amber-200"
+                    : "bg-background",
+                )}>
                   <div className="flex items-center justify-between">
-                    <p className="text-sm font-medium text-muted-foreground">
-                      Inventory link{" "}
-                      <span className="font-normal">(optional — only if you used estate supplies for this cost)</span>
+                    <p className={cn(
+                      "text-sm font-medium",
+                      selectedTracksInventory && invLines.length === 0
+                        ? "text-amber-800"
+                        : "text-muted-foreground",
+                    )}>
+                      {selectedTracksInventory && invLines.length === 0
+                        ? "📦 This looks like a supply purchase — did it add to your stock?"
+                        : <>Inventory link{" "}<span className="font-normal">(optional — only if you used estate supplies for this cost)</span></>
+                      }
                     </p>
                     {supportsMultiInventoryItems && (
                       <Button

@@ -32,6 +32,7 @@ export async function GET(_request: Request) {
             aa.code,
             aa.activity as reference,
             aa.module_hint,
+            aa.tracks_inventory,
             COALESCE(lt.usage_count, 0)::int AS labor_count,
             COALESCE(et.usage_count, 0)::int AS expense_count
           FROM account_activities aa
@@ -63,6 +64,7 @@ export async function GET(_request: Request) {
             code,
             activity as reference,
             module_hint,
+            tracks_inventory,
             0::int AS labor_count,
             0::int AS expense_count
           FROM account_activities
