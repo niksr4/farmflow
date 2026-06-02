@@ -31,11 +31,14 @@ describe("tenant guidance", () => {
       locationCount: 1,
     })
 
+    // The specific panel varies by season (labour in harvest, rainfall in off-season, etc.)
+    // so we only assert the stable structural properties here.
     expect(hints[0]).toMatchObject({
       id: "welcome-get-started",
       type: "tip",
-      action: { tab: "accounts", panel: "expenses" },
     })
+    expect(hints[0].action).toHaveProperty("tab", "accounts")
+    expect(hints[0].action).toHaveProperty("panel")
   })
 
   it("keeps owner-facing status flags aligned with the shared guidance", () => {
