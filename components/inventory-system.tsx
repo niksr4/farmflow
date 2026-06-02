@@ -7095,13 +7095,13 @@ export default function InventorySystem() {
                         <button
                           type="button"
                           onClick={() => setInventoryWorkspaceView("transactions")}
-                          className="flex w-full items-center justify-between rounded-lg border border-stone-200 bg-white px-4 py-3 text-sm text-stone-800 transition-colors hover:bg-stone-50 dark:border-white/[0.08] dark:bg-white/[0.03] dark:text-stone-200"
+                          className="flex w-full items-center justify-between rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-semibold text-amber-900 transition-colors hover:bg-amber-100 dark:border-amber-700/40 dark:bg-amber-900/20 dark:text-amber-300"
                         >
                           <span className="flex items-center gap-2">
-                            <History className="h-4 w-4 text-emerald-600" />
-                            View transactions
+                            <Edit className="h-4 w-4 text-amber-700" />
+                            Fix or edit a logged entry
                           </span>
-                          <span className="text-xs text-stone-400">History</span>
+                          <span className="text-xs font-normal text-amber-600">→</span>
                         </button>
                       )}
                       {inventoryDrilldownItemName && (
