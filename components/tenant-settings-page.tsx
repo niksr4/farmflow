@@ -1035,14 +1035,18 @@ export default function TenantSettingsPage() {
   const isSelectedUserRoleScoped = selectedUser?.role === "user"
   const roleDisplay = roleLabel(user?.role || "user")
   const sectionLinks: SectionLink[] = [
-    { id: "estate-identity", label: "Estate" },
-    { id: "estate-profile", label: "Footprint" },
+    // Profile sections — visible to everyone
     { id: "account-language", label: "Language" },
     { id: "account-security", label: "Security" },
-    { id: "display-preferences", label: "Display" },
-    { id: "data-import", label: "Import" },
-    { id: "thresholds", label: "Thresholds" },
-    { id: "locations", label: "Locations" },
+    // Admin-only sections
+    ...(isAdminOrOwner ? [
+      { id: "estate-identity", label: "Estate" },
+      { id: "estate-profile", label: "Footprint" },
+      { id: "display-preferences", label: "Display" },
+      { id: "thresholds", label: "Thresholds" },
+      { id: "data-import", label: "Import" },
+      { id: "locations", label: "Locations" },
+    ] : []),
   ]
   if (canManageTenantExperience) {
     sectionLinks.push({ id: "tenant-experience", label: "Experience" })
@@ -1060,7 +1064,7 @@ export default function TenantSettingsPage() {
   if (privacyFeatureEnabled) {
     sectionLinks.push({ id: "privacy-dpdp", label: "Privacy" })
   }
-  const settingsShellStats = [
+  const settingsShellStats = isAdminOrOwner ? [
     {
       label: "Your Role",
       value: roleDisplay,
@@ -1080,6 +1084,12 @@ export default function TenantSettingsPage() {
       label: "Enabled Modules",
       value: String(enabledTenantModuleCount),
       detail: isOwner ? "Plan and module controls available" : "Owner-managed access bundle",
+    },
+  ] : [
+    {
+      label: "Your Role",
+      value: roleDisplay,
+      detail: "Personal settings — email, language, password",
     },
   ]
   const profileSectionCount = 3
@@ -1174,6 +1184,7 @@ export default function TenantSettingsPage() {
           </Card>
         </SettingsGroup>
 
+        {isAdminOrOwner && (
         <SettingsGroup
           groupId="estate"
           title="Estate"
@@ -1198,15 +1209,13 @@ export default function TenantSettingsPage() {
             onEstateProfileChange={handleEstateProfileChange}
             onSaveEstateProfile={handleSaveEstateProfile}
           />
-          {isAdminOrOwner && (
-            <DisplayPreferencesSection
-              uiPreferencesDraft={uiPreferencesDraft}
-              isSavingUiPreferences={isSavingUiPreferences}
-              settingsLoading={settingsLoading}
-              onHideEmptyMetricsChange={handleHideEmptyMetricsChange}
-              onSaveUiPreferences={handleSaveUiPreferences}
-            />
-          )}
+          <DisplayPreferencesSection
+            uiPreferencesDraft={uiPreferencesDraft}
+            isSavingUiPreferences={isSavingUiPreferences}
+            settingsLoading={settingsLoading}
+            onHideEmptyMetricsChange={handleHideEmptyMetricsChange}
+            onSaveUiPreferences={handleSaveUiPreferences}
+          />
           <ThresholdsSection
             thresholdDraft={thresholdDraft}
             isSavingThresholds={isSavingThresholds}
@@ -1216,7 +1225,9 @@ export default function TenantSettingsPage() {
             onSaveThresholds={handleSaveThresholds}
           />
         </SettingsGroup>
+        )}
 
+        {isAdminOrOwner && (
         <SettingsGroup
           groupId="operations"
           title="Operations"
@@ -1254,7 +1265,9 @@ export default function TenantSettingsPage() {
           />
           <DataImportSection />
         </SettingsGroup>
+        )}
 
+        {isAdminOrOwner && (
         <SettingsGroup
           groupId="user-access"
           title="User Access"
@@ -1310,6 +1323,7 @@ export default function TenantSettingsPage() {
             />
           )}
         </SettingsGroup>
+        )}
 
         {privacyFeatureEnabled && (
           <SettingsGroup
