@@ -125,16 +125,12 @@ export default function OtherExpensesTab({
     fetchInventoryItems()
   }, [fetchActivities, fetchInventoryItems])
 
-  // Autofill reference when code changes; auto-seed inventory line for supply codes
+  // Autofill reference when code changes
   const handleCodeChange = (code: string) => {
     setFormData((prev) => ({ ...prev, code }))
     const matchingActivity = activities.find((activity) => activity.code.toLowerCase() === code.toLowerCase())
     if (matchingActivity) {
       setFormData((prev) => ({ ...prev, reference: matchingActivity.reference }))
-      // Auto-add an empty inventory line so the stock section opens immediately
-      if (matchingActivity.tracks_inventory && invLines.length === 0 && inventoryItems.length > 0) {
-        setInvLines([{ itemType: "", quantity: "" }])
-      }
     }
   }
 
@@ -465,24 +461,20 @@ export default function OtherExpensesTab({
                 />
               </div>
 
+              {selectedTracksInventory && (
+                <div className="flex items-start gap-2 rounded-xl border border-sky-200 bg-sky-50 px-3 py-2.5 text-sm text-sky-800">
+                  <span className="mt-0.5 shrink-0">📦</span>
+                  <span>
+                    If you <strong>bought</strong> this supply, go to <strong>Stock → Restock</strong> to add it to your inventory. The expense records the cost; the restock records the stock arriving.
+                  </span>
+                </div>
+              )}
+
               {inventoryItems.length > 0 && (
-                <div className={cn(
-                  "space-y-3 border rounded-md p-3",
-                  selectedTracksInventory && invLines.length === 0
-                    ? "bg-amber-50 border-amber-200"
-                    : "bg-background",
-                )}>
+                <div className="space-y-3 border rounded-md p-3 bg-background">
                   <div className="flex items-center justify-between">
-                    <p className={cn(
-                      "text-sm font-medium",
-                      selectedTracksInventory && invLines.length === 0
-                        ? "text-amber-800"
-                        : "text-muted-foreground",
-                    )}>
-                      {selectedTracksInventory && invLines.length === 0
-                        ? "📦 This looks like a supply purchase — did it add to your stock?"
-                        : <>Inventory link{" "}<span className="font-normal">(optional — only if you used estate supplies for this cost)</span></>
-                      }
+                    <p className="text-sm font-medium text-muted-foreground">
+                      Deduct from stock{" "}<span className="font-normal">(optional — only if this cost used supplies already in your inventory)</span>
                     </p>
                     {supportsMultiInventoryItems && (
                       <Button
