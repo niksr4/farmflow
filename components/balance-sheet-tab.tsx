@@ -1,7 +1,7 @@
 "use client"
 
 import { useCallback, useEffect, useMemo, useState } from "react"
-import { ArrowDownCircle, ArrowUpCircle, CircleDashed, RefreshCw, TrendingUp, Wallet, CheckCircle2, AlertTriangle, XCircle, ShieldCheck } from "lucide-react"
+import { ArrowDownCircle, ArrowUpCircle, ChevronDown, CircleDashed, RefreshCw, TrendingUp, Wallet, CheckCircle2, AlertTriangle, XCircle, ShieldCheck } from "lucide-react"
 import type { ReconciliationResponse, ReconciliationCheck } from "@/app/api/reconciliation/route"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -70,6 +70,8 @@ export default function BalanceSheetTab() {
   const [isLoading, setIsLoading] = useState(false)
   const [reconciliation, setReconciliation] = useState<ReconciliationResponse | null>(null)
   const [reconLoading, setReconLoading] = useState(false)
+  const [reconExpanded, setReconExpanded] = useState(false)
+  const [ledgerExpanded, setLedgerExpanded] = useState(false)
   const selectedRange = useMemo(() => getFiscalYearDateRange(selectedFiscalYear), [selectedFiscalYear])
 
   const loadSummary = useCallback(async () => {
@@ -261,12 +263,19 @@ export default function BalanceSheetTab() {
       </Card>
 
       <Card className="rounded-2xl border border-black/5 bg-white shadow-sm">
-        <CardHeader>
-          <CardTitle className="text-lg">Money Ledger Breakdown</CardTitle>
-          <CardDescription>Cross-tab contribution line by line for the current book year.</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="rounded-xl border border-border/60 overflow-hidden">
+        <button
+          type="button"
+          className="flex w-full items-center justify-between px-6 py-4 text-left hover:bg-stone-50/60 transition-colors"
+          onClick={() => setLedgerExpanded(v => !v)}
+        >
+          <div>
+            <p className="text-lg font-semibold text-foreground">Money Ledger Breakdown</p>
+            <p className="text-sm text-muted-foreground">Cross-tab contribution line by line for the current book year.</p>
+          </div>
+          <ChevronDown className={cn("h-4 w-4 text-stone-400 shrink-0 ml-3 transition-transform", ledgerExpanded && "rotate-180")} />
+        </button>
+        {ledgerExpanded && <CardContent className="border-t border-stone-100">
+          <div className="rounded-xl border border-border/60 overflow-hidden mt-4">
             <Table>
               <TableHeader>
                 <TableRow className="bg-muted/40">
@@ -326,28 +335,40 @@ export default function BalanceSheetTab() {
               </TableBody>
             </Table>
           </div>
-        </CardContent>
+        </CardContent>}
       </Card>
 
-      {/* Reconciliation checks */}
+      {/* Reconciliation checks — collapsed when all ok, auto-expands on errors/warnings */}
+      {(() => {
+        const hasIssues = reconciliation ? (reconciliation.hasErrors || reconciliation.hasWarnings) : false
+        const isOpen = reconExpanded || hasIssues
+        return (
       <Card className="border-stone-200 bg-white">
-        <CardHeader className="border-b border-stone-100 pb-3">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <ShieldCheck className="h-4 w-4 text-emerald-700" />
-              <CardTitle className="text-base">Data Reconciliation</CardTitle>
+        <button
+          type="button"
+          className="flex w-full items-center justify-between px-5 py-4 text-left hover:bg-stone-50/60 transition-colors"
+          onClick={() => setReconExpanded(v => !v)}
+        >
+          <div className="flex items-center gap-2">
+            <ShieldCheck className="h-4 w-4 text-emerald-700 shrink-0" />
+            <div>
+              <p className="text-base font-semibold text-stone-900">Data Reconciliation</p>
+              <p className="text-xs text-muted-foreground">Cross-module consistency checks</p>
             </div>
+          </div>
+          <div className="flex items-center gap-2 shrink-0 ml-3">
             {reconciliation && (
-              <div className="flex items-center gap-1.5">
+              <>
                 {reconciliation.hasErrors && <span className="rounded-full bg-rose-100 px-2.5 py-0.5 text-xs font-semibold text-rose-700">{reconciliation.checks.filter(c => c.status === "error").length} error{reconciliation.checks.filter(c => c.status === "error").length > 1 ? "s" : ""}</span>}
                 {reconciliation.hasWarnings && <span className="rounded-full bg-amber-100 px-2.5 py-0.5 text-xs font-semibold text-amber-700">{reconciliation.checks.filter(c => c.status === "warning").length} warning{reconciliation.checks.filter(c => c.status === "warning").length > 1 ? "s" : ""}</span>}
                 {!reconciliation.hasErrors && !reconciliation.hasWarnings && <span className="rounded-full bg-emerald-100 px-2.5 py-0.5 text-xs font-semibold text-emerald-700">All clear</span>}
-              </div>
+              </>
             )}
+            <ChevronDown className={cn("h-4 w-4 text-stone-400 transition-transform", isOpen && "rotate-180")} />
           </div>
-          <CardDescription>Cross-module consistency checks — dispatch vs sales, inventory ledger, and data gaps</CardDescription>
-        </CardHeader>
-        <CardContent className="pt-4">
+        </button>
+        {isOpen && (
+        <CardContent className="border-t border-stone-100 pt-4">
           {reconLoading ? (
             <div className="space-y-2">
               {[1,2,3,4,5].map(i => <Skeleton key={i} className="h-12 w-full" />)}
@@ -386,7 +407,10 @@ export default function BalanceSheetTab() {
             <p className="text-sm text-stone-400">Reconciliation data unavailable.</p>
           )}
         </CardContent>
+        )}
       </Card>
+        )
+      })()}
     </div>
   )
 }

@@ -5,7 +5,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
-import { TrendingUp, TrendingDown, IndianRupee, Package, Users, BarChart2, Printer, CheckCircle2, AlertTriangle, XCircle } from "lucide-react"
+import { TrendingUp, TrendingDown, IndianRupee, ChevronDown, Package, Users, BarChart2, Printer, CheckCircle2, AlertTriangle, XCircle } from "lucide-react"
 import { cn } from "@/lib/utils"
 import type { SeasonPLResponse } from "@/app/api/season-pl/route"
 
@@ -97,6 +97,8 @@ export default function SeasonPlTab() {
   const [data, setData] = useState<SeasonPLResponse | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [showProduction, setShowProduction] = useState(false)
+  const [showBuyers, setShowBuyers] = useState(false)
 
   const fetchPl = useCallback(async (r: DateRange) => {
     setLoading(true)
@@ -221,99 +223,91 @@ export default function SeasonPlTab() {
             />
           </div>
 
-          {/* Production + Cost Breakdown side-by-side */}
-          <div className="grid gap-4 lg:grid-cols-2">
-            {/* Production */}
-            <Card className="border-border/60 bg-white/80">
-              <CardHeader className="pb-2">
-                <CardTitle className="text-base">Production Summary</CardTitle>
-                <CardDescription>{data.production.processingDays} processing days</CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-3">
-                <div className="grid grid-cols-2 gap-3 text-sm">
-                  <div>
-                    <p className="text-muted-foreground">Cherry received</p>
-                    <p className="font-semibold">{fmtKg(data.production.totalCherryKg)}</p>
-                  </div>
-                  <div>
-                    <p className="text-muted-foreground">Dry parchment</p>
-                    <p className="font-semibold">{fmtKg(data.production.totalDryParchKg)}</p>
-                  </div>
-                  <div>
-                    <p className="text-muted-foreground">Dry cherry</p>
-                    <p className="font-semibold">{fmtKg(data.production.totalDryCherryKg)}</p>
-                  </div>
-                  <div>
-                    <p className="text-muted-foreground">Cherry → Dry Parch</p>
-                    <p className="font-semibold">{fmtPct(data.production.cherryToDryParchPct)}</p>
+          {/* Production + Cost Breakdown — collapsed by default */}
+          <Card className="border-border/60 bg-white/80">
+            <button
+              type="button"
+              className="flex w-full items-center justify-between px-5 py-4 text-left hover:bg-stone-50/60 transition-colors"
+              onClick={() => setShowProduction(v => !v)}
+            >
+              <div>
+                <p className="text-base font-semibold text-stone-900">Production &amp; Cost Breakdown</p>
+                <p className="text-xs text-muted-foreground">
+                  {data.production.processingDays} processing days · {fmt(data.costs.totalCostsInr)} total costs
+                </p>
+              </div>
+              <ChevronDown className={cn("h-4 w-4 text-stone-400 shrink-0 ml-3 transition-transform", showProduction && "rotate-180")} />
+            </button>
+            {showProduction && (
+              <div className="grid gap-4 border-t border-stone-100 p-5 lg:grid-cols-2">
+                <div className="space-y-3">
+                  <p className="text-xs font-bold uppercase tracking-[0.16em] text-stone-400">Production</p>
+                  <div className="grid grid-cols-2 gap-3 text-sm">
+                    <div><p className="text-muted-foreground">Cherry received</p><p className="font-semibold">{fmtKg(data.production.totalCherryKg)}</p></div>
+                    <div><p className="text-muted-foreground">Dry parchment</p><p className="font-semibold">{fmtKg(data.production.totalDryParchKg)}</p></div>
+                    <div><p className="text-muted-foreground">Dry cherry</p><p className="font-semibold">{fmtKg(data.production.totalDryCherryKg)}</p></div>
+                    <div><p className="text-muted-foreground">Cherry → Dry Parch</p><p className="font-semibold">{fmtPct(data.production.cherryToDryParchPct)}</p></div>
                   </div>
                 </div>
-              </CardContent>
-            </Card>
+                <div className="space-y-3">
+                  <p className="text-xs font-bold uppercase tracking-[0.16em] text-stone-400">Cost Breakdown</p>
+                  {data.costs.byCategory.slice(0, 8).map((c) => (
+                    <CostBar key={c.category} label={c.category} amount={c.amountInr} pct={c.pct} />
+                  ))}
+                  {data.costs.byCategory.length === 0 && <p className="text-sm text-muted-foreground">No cost records.</p>}
+                </div>
+              </div>
+            )}
+          </Card>
 
-            {/* Cost Breakdown */}
-            <Card className="border-border/60 bg-white/80">
-              <CardHeader className="pb-2">
-                <CardTitle className="text-base">Cost Breakdown</CardTitle>
-                <CardDescription>Total: {fmt(data.costs.totalCostsInr)}</CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-2.5">
-                {data.costs.byCategory.slice(0, 8).map((c) => (
-                  <CostBar key={c.category} label={c.category} amount={c.amountInr} pct={c.pct} />
-                ))}
-                {data.costs.byCategory.length === 0 && (
-                  <p className="text-sm text-muted-foreground">No cost records for this period.</p>
-                )}
-              </CardContent>
-            </Card>
-          </div>
-
-          {/* Revenue by Buyer */}
+          {/* Revenue by Buyer — collapsed by default */}
           {data.revenue.byBuyer.length > 0 && (
             <Card className="border-border/60 bg-white/80">
-              <CardHeader className="pb-2">
-                <CardTitle className="text-base">Revenue by Buyer</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="overflow-x-auto">
-                  <table className="w-full text-sm">
-                    <thead>
-                      <tr className="border-b text-left text-muted-foreground">
-                        <th className="pb-2 font-medium">Buyer</th>
-                        <th className="pb-2 font-medium text-right">Kg Sold</th>
-                        <th className="pb-2 font-medium text-right">Avg ₹/kg</th>
-                        <th className="pb-2 font-medium text-right">Revenue</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-border/40">
-                      {data.revenue.byBuyer.map((b) => (
-                        <tr key={b.buyer}>
-                          <td className="py-2 font-medium">{b.buyer}</td>
-                          <td className="py-2 text-right text-muted-foreground">{fmtKg(b.kgSold)}</td>
-                          <td className="py-2 text-right">
-                            <Badge variant="outline" className="font-mono">
-                              ₹{b.avgPricePerKg.toFixed(0)}
-                            </Badge>
-                          </td>
-                          <td className="py-2 text-right font-semibold">{fmt(b.amountInr)}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                    <tfoot>
-                      <tr className="border-t font-semibold">
-                        <td className="pt-2">Total</td>
-                        <td className="pt-2 text-right text-muted-foreground">{fmtKg(data.revenue.totalKgSold)}</td>
-                        <td className="pt-2 text-right">
-                          <Badge variant="outline" className="font-mono">
-                            ₹{data.revenue.avgPricePerKg.toFixed(0)}
-                          </Badge>
-                        </td>
-                        <td className="pt-2 text-right text-emerald-700">{fmt(data.revenue.totalSalesInr)}</td>
-                      </tr>
-                    </tfoot>
-                  </table>
+              <button
+                type="button"
+                className="flex w-full items-center justify-between px-5 py-4 text-left hover:bg-stone-50/60 transition-colors"
+                onClick={() => setShowBuyers(v => !v)}
+              >
+                <div>
+                  <p className="text-base font-semibold text-stone-900">Revenue by Buyer</p>
+                  <p className="text-xs text-muted-foreground">{data.revenue.byBuyer.length} buyer{data.revenue.byBuyer.length > 1 ? "s" : ""} · {fmt(data.revenue.totalSalesInr)} total</p>
                 </div>
-              </CardContent>
+                <ChevronDown className={cn("h-4 w-4 text-stone-400 shrink-0 ml-3 transition-transform", showBuyers && "rotate-180")} />
+              </button>
+              {showBuyers && (
+                <div className="border-t border-stone-100 p-5">
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className="border-b text-left text-muted-foreground">
+                          <th className="pb-2 font-medium">Buyer</th>
+                          <th className="pb-2 font-medium text-right">Kg Sold</th>
+                          <th className="pb-2 font-medium text-right">Avg ₹/kg</th>
+                          <th className="pb-2 font-medium text-right">Revenue</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-border/40">
+                        {data.revenue.byBuyer.map((b) => (
+                          <tr key={b.buyer}>
+                            <td className="py-2 font-medium">{b.buyer}</td>
+                            <td className="py-2 text-right text-muted-foreground">{fmtKg(b.kgSold)}</td>
+                            <td className="py-2 text-right"><Badge variant="outline" className="font-mono">₹{b.avgPricePerKg.toFixed(0)}</Badge></td>
+                            <td className="py-2 text-right font-semibold">{fmt(b.amountInr)}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                      <tfoot>
+                        <tr className="border-t font-semibold">
+                          <td className="pt-2">Total</td>
+                          <td className="pt-2 text-right text-muted-foreground">{fmtKg(data.revenue.totalKgSold)}</td>
+                          <td className="pt-2 text-right"><Badge variant="outline" className="font-mono">₹{data.revenue.avgPricePerKg.toFixed(0)}</Badge></td>
+                          <td className="pt-2 text-right text-emerald-700">{fmt(data.revenue.totalSalesInr)}</td>
+                        </tr>
+                      </tfoot>
+                    </table>
+                  </div>
+                </div>
+              )}
             </Card>
           )}
 

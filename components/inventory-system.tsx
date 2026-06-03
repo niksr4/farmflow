@@ -5,6 +5,7 @@ import dynamic from "next/dynamic"
 import { useTheme } from "next-themes"
 import {
   Check,
+  ChevronDown,
   Download,
   Upload,
   List,
@@ -568,6 +569,7 @@ export default function InventorySystem() {
   const [trialBannerDismissed, setTrialBannerDismissed] = useState(false)
   const [activityStreak, setActivityStreak] = useState<number>(0)
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false)
+  const [scorecardExpanded, setScorecardExpanded] = useState(false)
 
   // auth + router
   const { user, logout, status } = useAuth()
@@ -6448,39 +6450,64 @@ export default function InventorySystem() {
               </div>
             )}
 
+            {(() => {
+              const needsAttention = executionOutcomeChecks.filter(c => c.status === "attention").length
+              const blocked = executionOutcomeChecks.filter(c => c.status === "blocked").length
+              const passing = executionOutcomeChecks.filter(c => c.status === "good").length
+              const total = executionOutcomeChecks.length
+              const autoOpen = needsAttention > 0
+              const isOpen = scorecardExpanded || autoOpen
+              return (
             <div className="overflow-hidden rounded-xl border border-stone-200 bg-white shadow-sm dark:border-white/[0.06] dark:bg-card">
-              <div className="border-b border-stone-100 px-5 py-4 dark:border-white/[0.05]">
-                <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-emerald-700 dark:text-emerald-500">Performance</p>
-                <p className="text-sm font-bold text-stone-900 dark:text-white">Execution Scorecard</p>
-                <p className="mt-0.5 text-xs text-stone-400 dark:text-stone-500">Daily guardrails to reduce missed tasks, improve harvest tracking, and keep reports decision-ready.</p>
-              </div>
-              <div className="space-y-3 p-5">
-                {executionOutcomeChecks.map((check) => (
-                  <div key={check.id} className="rounded-xl border border-stone-200 bg-stone-50 p-3 dark:border-white/[0.05] dark:bg-white/[0.02]">
-                    <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
-                      <div className="space-y-1">
-                        <p className="text-sm font-semibold text-neutral-900">{check.title}</p>
-                        <p className="text-xs text-muted-foreground">{check.goal}</p>
-                      </div>
-                      <Badge variant="outline" className={cn("w-fit", executionOutcomeTone[check.status])}>
-                        {executionOutcomeLabel[check.status]}
-                      </Badge>
-                    </div>
-                    <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                      <p className="text-sm text-neutral-700">{check.metric}</p>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        className="w-full bg-white sm:w-auto"
-                        onClick={() => handleExecutionOutcomeAction(check)}
-                      >
-                        {check.actionLabel}
-                      </Button>
-                    </div>
+              <button
+                type="button"
+                className="flex w-full items-center justify-between px-5 py-4 text-left hover:bg-stone-50/60 transition-colors dark:hover:bg-white/[0.02]"
+                onClick={() => setScorecardExpanded(v => !v)}
+              >
+                <div>
+                  <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-emerald-700 dark:text-emerald-500">Performance</p>
+                  <div className="flex items-center gap-2 mt-0.5">
+                    <p className="text-sm font-bold text-stone-900 dark:text-white">Execution Scorecard</p>
+                    {needsAttention > 0 ? (
+                      <span className="rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[10px] font-bold text-amber-700">{needsAttention} action needed</span>
+                    ) : (
+                      <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[10px] font-bold text-emerald-700">{passing}/{total} on track</span>
+                    )}
                   </div>
-                ))}
-              </div>
+                </div>
+                <ChevronDown className={cn("h-4 w-4 text-stone-400 transition-transform shrink-0 ml-3", isOpen && "rotate-180")} />
+              </button>
+              {isOpen && (
+                <div className="space-y-3 border-t border-stone-100 p-5 dark:border-white/[0.05]">
+                  {executionOutcomeChecks.map((check) => (
+                    <div key={check.id} className="rounded-xl border border-stone-200 bg-stone-50 p-3 dark:border-white/[0.05] dark:bg-white/[0.02]">
+                      <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                        <div className="space-y-1">
+                          <p className="text-sm font-semibold text-neutral-900">{check.title}</p>
+                          <p className="text-xs text-muted-foreground">{check.goal}</p>
+                        </div>
+                        <Badge variant="outline" className={cn("w-fit", executionOutcomeTone[check.status])}>
+                          {executionOutcomeLabel[check.status]}
+                        </Badge>
+                      </div>
+                      <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                        <p className="text-sm text-neutral-700">{check.metric}</p>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="w-full bg-white sm:w-auto"
+                          onClick={() => handleExecutionOutcomeAction(check)}
+                        >
+                          {check.actionLabel}
+                        </Button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
+              )
+            })()}
 
             <div className="overflow-hidden rounded-xl border border-stone-200 bg-white shadow-sm dark:border-white/[0.06] dark:bg-card">
                 <div className="border-b border-stone-100 px-5 py-4 dark:border-white/[0.05]">

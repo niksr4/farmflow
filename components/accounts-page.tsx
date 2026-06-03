@@ -1530,7 +1530,7 @@ export default function AccountsPage({
                 </p>
               )}
 
-              {activitySuggestions.length > 0 && (
+              {activitySuggestions.length > 0 && accountActivities.length === 0 && (
                 <div className="space-y-3 rounded-lg border border-emerald-200/70 bg-emerald-50/60 p-4">
                   <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                     <div>
