@@ -6452,7 +6452,6 @@ export default function InventorySystem() {
 
             {(() => {
               const needsAttention = executionOutcomeChecks.filter(c => c.status === "attention").length
-              const blocked = executionOutcomeChecks.filter(c => c.status === "blocked").length
               const passing = executionOutcomeChecks.filter(c => c.status === "good").length
               const total = executionOutcomeChecks.length
               const autoOpen = needsAttention > 0
