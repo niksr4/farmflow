@@ -332,9 +332,18 @@ export default function QuickLogPanel({ onNavigateToFull, locationId, className 
                       <Minus className="h-5 w-5 stroke-[2.5]" />
                     </button>
                     <div className="flex flex-col items-center w-20">
-                      <span className="text-5xl font-black text-stone-900 tabular-nums text-center leading-none">
-                        {workers}
-                      </span>
+                      <input
+                        type="text"
+                        inputMode="numeric"
+                        pattern="[0-9]*"
+                        value={workers === 0 ? "" : String(workers)}
+                        onChange={(e) => {
+                          const v = e.target.value.replace(/\D/g, "")
+                          setWorkers(v === "" ? 0 : Math.max(0, Number(v)))
+                        }}
+                        placeholder="0"
+                        className="text-5xl font-black text-stone-900 tabular-nums text-center leading-none w-full bg-transparent border-none outline-none focus:ring-0"
+                      />
                       <span className="text-xs font-semibold text-stone-400 mt-1.5 uppercase tracking-wide">
                         {workers === 1 ? "person" : "people"}
                       </span>

@@ -332,7 +332,10 @@ export async function POST(request: Request) {
     const outsideLaborers = Number(outsideEntry?.laborCount) || 0
     const outsideCostPer = Number(outsideEntry?.costPerLabor) || 0
     const computedTotalCost = laborEntries.reduce(
-      (sum: number, e: any) => sum + (Number(e.laborCount) || 0) * (Number(e.costPerLabor) || 0),
+      (sum: number, e: any) =>
+        sum +
+        (Number(e.laborCount) || 0) * (Number(e.costPerLabor) || 0) +
+        (Number(e.contractTotal) || 0), // contract/lump-sum entries carry contractTotal, not laborCount×rate
       0,
     )
 
@@ -538,7 +541,10 @@ export async function PUT(request: Request) {
     const outsideLaborers = Number(outsideEntry?.laborCount) || 0
     const outsideCostPer = Number(outsideEntry?.costPerLabor) || 0
     const computedTotalCost = laborEntries.reduce(
-      (sum: number, e: any) => sum + (Number(e.laborCount) || 0) * (Number(e.costPerLabor) || 0),
+      (sum: number, e: any) =>
+        sum +
+        (Number(e.laborCount) || 0) * (Number(e.costPerLabor) || 0) +
+        (Number(e.contractTotal) || 0),
       0,
     )
 

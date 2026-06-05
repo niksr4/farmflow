@@ -624,9 +624,19 @@ export default function LaborDeploymentTab({
                               >
                                 <Minus className="h-6 w-6 text-stone-600" />
                               </button>
-                              <span className="text-5xl font-black text-stone-900 w-14 text-center tabular-nums leading-none">
-                                {set.laborers}
-                              </span>
+                              <input
+                                type="text"
+                                inputMode="numeric"
+                                pattern="[0-9]*"
+                                value={set.laborers === 0 ? "" : String(set.laborers)}
+                                onChange={(e) => {
+                                  const raw = e.target.value.replace(/[^\d.]/g, "")
+                                  const n = raw === "" ? 0 : (Number(raw) || 0)
+                                  updateSet(i, "laborers", n)
+                                }}
+                                placeholder="0"
+                                className="text-5xl font-black text-stone-900 w-14 text-center tabular-nums leading-none bg-transparent border-none outline-none focus:ring-0"
+                              />
                               <button
                                 type="button"
                                 onClick={() => updateSet(i, "laborers", set.laborers + 1)}
