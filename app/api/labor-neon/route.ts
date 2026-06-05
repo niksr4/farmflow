@@ -6,6 +6,7 @@ import { canDeleteModule, canWriteModule } from "@/lib/permissions"
 import { logAuditEvent } from "@/lib/server/audit-log"
 import { logRouteMutationFailure } from "@/lib/server/route-error-events"
 import { sanitizeRouteError } from "@/lib/server/sanitize-route-error"
+import { computeLaborTotalCost } from "@/lib/labour-cost"
 
 export const dynamic = "force-dynamic"
 export const revalidate = 0
@@ -331,13 +332,7 @@ export async function POST(request: Request) {
     const hfCostPer = Number(hfEntry?.costPerLabor) || 0
     const outsideLaborers = Number(outsideEntry?.laborCount) || 0
     const outsideCostPer = Number(outsideEntry?.costPerLabor) || 0
-    const computedTotalCost = laborEntries.reduce(
-      (sum: number, e: any) =>
-        sum +
-        (Number(e.laborCount) || 0) * (Number(e.costPerLabor) || 0) +
-        (Number(e.contractTotal) || 0), // contract/lump-sum entries carry contractTotal, not laborCount×rate
-      0,
-    )
+    const computedTotalCost = computeLaborTotalCost(laborEntries)
 
     // De-dupe accidental rapid double-submit from UI (same payload within the last 90 seconds).
     if (supportsTaskDescription || !requestedTaskDescription) {
@@ -540,13 +535,7 @@ export async function PUT(request: Request) {
     const hfCostPer = Number(hfEntry?.costPerLabor) || 0
     const outsideLaborers = Number(outsideEntry?.laborCount) || 0
     const outsideCostPer = Number(outsideEntry?.costPerLabor) || 0
-    const computedTotalCost = laborEntries.reduce(
-      (sum: number, e: any) =>
-        sum +
-        (Number(e.laborCount) || 0) * (Number(e.costPerLabor) || 0) +
-        (Number(e.contractTotal) || 0),
-      0,
-    )
+    const computedTotalCost = computeLaborTotalCost(laborEntries)
 
     const existing = await runTenantQuery(
       accountsSql,

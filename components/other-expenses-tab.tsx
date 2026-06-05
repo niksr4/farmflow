@@ -567,6 +567,7 @@ export default function OtherExpensesTab({
               )}>
                 <button
                   type="submit"
+                  data-testid="expense-save-button"
                   disabled={isSubmitting}
                   className="flex-1 h-14 rounded-2xl bg-emerald-700 text-white text-base font-bold flex items-center justify-center gap-2 shadow-md shadow-emerald-100 active:scale-[0.98] transition-all touch-manipulation disabled:opacity-70"
                 >

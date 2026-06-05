@@ -691,6 +691,7 @@ export default function LaborDeploymentTab({
                   </Button>
                   <Button
                     type="button"
+                    data-testid="add-contract-labour-button"
                     variant="outline"
                     size="sm"
                     onClick={() => setFormData((prev) => ({
@@ -736,6 +737,7 @@ export default function LaborDeploymentTab({
               <div className="flex flex-col gap-2 sm:flex-row">
                 <button
                   type="submit"
+                  data-testid="labour-save-button"
                   disabled={isSubmitting}
                   className="flex flex-1 h-11 items-center justify-center gap-2 rounded-lg bg-emerald-700 text-sm font-semibold text-white transition-colors hover:bg-emerald-600 active:scale-[0.98] touch-manipulation disabled:opacity-60 dark:bg-emerald-800 dark:hover:bg-emerald-700"
                 >

@@ -1406,6 +1406,7 @@ export default function ProcessingTab({ showDataToolsControls = false }: Process
 
               <div className={cn("flex flex-wrap gap-3", isMobile && "flex-col")}>
                 <Button
+                  data-testid="processing-save-button"
                   onClick={handleSave}
                   disabled={isSaving}
                   className={cn(isMobile && "h-14 rounded-2xl text-base bg-emerald-700 hover:bg-emerald-800 text-white w-full")}
