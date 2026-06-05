@@ -808,6 +808,7 @@ export default function InventorySystem() {
       setIsModulesLoading(false)
       setHasResolvedModules(resolved)
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- router is a stable Next.js singleton; adding it would recreate the callback needlessly
   }, [isOwner, isPreviewMode, tenantId])
 
   const loadTenantModules = useCallback(async () => {
@@ -1689,6 +1690,7 @@ export default function InventorySystem() {
     rubberHeroTotals,
     rainfallHeroTotals,
     receivablesHeroTotals,
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- intentional: deps list individual object properties (e.g. accountsTotals.grandTotal) not whole objects, to avoid recomputing hero content when unrelated fields change
   } satisfies BuildHeroContentParams), [
     activeTab,
     accountsTotals.grandTotal,
@@ -3210,6 +3212,7 @@ export default function InventorySystem() {
     canShowYieldForecast,
     canShowMarketPricing,
     canShowCompliance,
+    canShowSeasonPl,
   ])
   const markTabAsLoaded = useCallback((tab: string) => {
     setLoadedTabs((previousTabs) => (previousTabs.includes(tab) ? previousTabs : [...previousTabs, tab]))
@@ -3503,6 +3506,7 @@ export default function InventorySystem() {
     recentThirtyDayTransactions,
     showTransactionHistory,
     visibleTabs,
+    locations.length,
   ])
 
   useEffect(() => {
@@ -3778,6 +3782,8 @@ export default function InventorySystem() {
     visibleTabs,
     isOwner,
     LIVE_TENANT_SKIP_TENANTS,
+    isAdmin,
+    user?.requiresGuidedSetup,
   ])
 
   const getPreferredDefaultTab = useCallback(
@@ -4961,7 +4967,7 @@ export default function InventorySystem() {
     if (visibleTabs.includes(requestedTab) && requestedTab !== activeTab) {
       setActiveTab(requestedTab)
     }
-  }, [activeTab, canShowInventory, canShowProcessing, canShowSales, tabParam, visibleTabs])
+  }, [activeTab, canShowInventory, canShowProcessing, canShowSales, isMobile, tabParam, visibleTabs])
 
   useEffect(() => {
     if (!locationFilterParam) return
