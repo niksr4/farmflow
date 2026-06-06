@@ -63,7 +63,7 @@ const NAV_GROUPS: Array<{ id: string; label?: string; items: string[] }> = [
   {
     id: "operations",
     label: "Operations",
-    items: ["processing", "curing", "quality", "dispatch", "sales", "inventory", "picking", "pepper", "rubber", "rainfall"],
+    items: ["rainfall", "inventory", "processing", "curing", "quality", "dispatch", "sales", "picking", "pepper", "rubber"],
   },
   {
     id: "finance",
