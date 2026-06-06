@@ -182,12 +182,13 @@ export default function SalesTab({
   const saleFormRef = useRef<HTMLDivElement | null>(null)
   const stockAvailableRef = useRef<HTMLDivElement | null>(null)
   const salesRecordsRef = useRef<HTMLDivElement | null>(null)
-  const [activeSection, setActiveSection] = useState<"new-sale" | "stock-available" | "records">("new-sale")
+  const [activeSection, setActiveSection] = useState<"overview" | "new-sale" | "stock-available" | "records">("overview")
 
   useEffect(() => {
     const handler = (e: Event) => {
       const section = (e as CustomEvent<string>).detail
-      if (section === "new-sale") setActiveSection("new-sale")
+      if (section === "overview") setActiveSection("overview")
+      else if (section === "new-sale") setActiveSection("new-sale")
       else if (section === "stock-available") setActiveSection("stock-available")
       else if (section === "records") setActiveSection("records")
     }
@@ -1144,6 +1145,7 @@ export default function SalesTab({
         }
       />
       <InPageNav items={[
+        { label: "Overview", active: activeSection === "overview", onClick: () => setActiveSection("overview") },
         { label: "New Sale", active: activeSection === "new-sale", onClick: () => setActiveSection("new-sale") },
         { label: "Stock Available", active: activeSection === "stock-available", onClick: () => setActiveSection("stock-available") },
         { label: "Records", active: activeSection === "records", onClick: () => setActiveSection("records") },
@@ -1360,8 +1362,8 @@ export default function SalesTab({
         </div>
       </div>}
 
-      {/* Summary Cards */}
-      {activeSection === "new-sale" && <div className="order-4 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+      {/* Summary Cards — Overview landing */}
+      {activeSection === "overview" && <div className="order-4 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         {/* Coffee Revenue */}
         <div className="overflow-hidden rounded-xl border border-stone-200 bg-white shadow-sm dark:border-white/[0.06] dark:bg-card">
           <div className="border-b border-stone-100 px-5 py-3 dark:border-white/[0.05]">

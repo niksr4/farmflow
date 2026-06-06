@@ -138,7 +138,7 @@ export default function DispatchTab({ showDataToolsControls = false }: DispatchT
   const kgsReceivedInputRef = useRef<HTMLInputElement | null>(null)
   const stockSummaryRef = useRef<HTMLDivElement | null>(null)
   const recordsRef = useRef<HTMLDivElement | null>(null)
-  const [activeSection, setActiveSection] = useState<"stock-flow" | "new-dispatch" | "records">("new-dispatch")
+  const [activeSection, setActiveSection] = useState<"stock-flow" | "new-dispatch" | "records">("stock-flow")
 
   useEffect(() => {
     const handler = (e: Event) => {

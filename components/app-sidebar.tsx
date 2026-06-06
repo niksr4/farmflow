@@ -35,6 +35,7 @@ const TAB_SUB_SECTIONS: Record<string, SubItem[]> = {
     { emoji: "📋", label: "Records", section: "records" },
   ],
   sales: [
+    { emoji: "📊", label: "Overview", section: "overview" },
     { emoji: "💰", label: "New Sale", section: "new-sale" },
     { emoji: "📦", label: "Stock Available", section: "stock-available" },
     { emoji: "📋", label: "Records", section: "records" },

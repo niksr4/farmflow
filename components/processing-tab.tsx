@@ -900,7 +900,7 @@ export default function ProcessingTab({ showDataToolsControls = false }: Process
   const seasonTotalsRef = useRef<HTMLDivElement>(null)
   const entryFormRef = useRef<HTMLDivElement>(null)
   const recentEntriesRef = useRef<HTMLDivElement>(null)
-  const [activeSection, setActiveSection] = useState<"season-totals" | "entry-form" | "recent-entries">("entry-form")
+  const [activeSection, setActiveSection] = useState<"season-totals" | "entry-form" | "recent-entries">("season-totals")
 
   useEffect(() => {
     const handler = (e: Event) => {
