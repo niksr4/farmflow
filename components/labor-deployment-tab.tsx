@@ -327,14 +327,7 @@ export default function LaborDeploymentTab({
 
   const formSectionRef = useRef<HTMLDivElement>(null)
   const historySectionRef = useRef<HTMLDivElement>(null)
-  const [showHistory, setShowHistory] = useState(false)
-
-  const toggleHistory = () => {
-    setShowHistory((v) => {
-      if (!v) setTimeout(() => historySectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }), 50)
-      return !v
-    })
-  }
+  const [activeSection, setActiveSection] = useState<"form" | "history">("form")
 
   return (
     <>
@@ -356,11 +349,11 @@ export default function LaborDeploymentTab({
     )}
     <div className="space-y-4">
       <InPageNav items={[
-        { label: "Log Entry", ref: formSectionRef },
-        { label: "History", active: showHistory, onClick: toggleHistory },
+        { label: "Log Entry", active: activeSection === "form", onClick: () => setActiveSection("form") },
+        { label: "History", active: activeSection === "history", onClick: () => setActiveSection("history") },
       ]} />
       {/* Mobile: QuickLogPanel tiles as default entry — full form opens via "More details" */}
-      {isMobile && !isAdding && (
+      {activeSection === "form" && isMobile && !isAdding && (
         <QuickLogPanel
           locationId={locationId}
           onNavigateToFull={openNewForm}
@@ -368,7 +361,7 @@ export default function LaborDeploymentTab({
       )}
 
       {/* Desktop: traditional add button */}
-      {!isMobile && !isAdding && (
+      {activeSection === "form" && !isMobile && !isAdding && (
         <button
           type="button"
           onClick={openNewForm}
@@ -378,7 +371,7 @@ export default function LaborDeploymentTab({
         </button>
       )}
 
-      {!loading && activities.length === 0 && (
+      {activeSection === "form" && !loading && activities.length === 0 && (
         <TaskGuideCard
           tone="finance"
           eyebrow="Simple start"
@@ -392,8 +385,7 @@ export default function LaborDeploymentTab({
           tip="A simple code like HARVEST, WEEDING, or PRUNING is better than waiting for a perfect accounting structure."
         />
       )}
-      {/* On mobile hide the form card unless we're in detailed-entry mode */}
-      <Card ref={formSectionRef} className={cn("border-stone-200 bg-white shadow-sm dark:border-white/[0.06] dark:bg-card", isMobile && !isAdding && "hidden")}>
+      {activeSection === "form" && <Card ref={formSectionRef} className="border-stone-200 bg-white shadow-sm dark:border-white/[0.06] dark:bg-card">
         <CardHeader className="border-b border-stone-100 dark:border-white/[0.05]">
           <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
             <div>
@@ -772,9 +764,9 @@ export default function LaborDeploymentTab({
             </form>
           ) : null}
         </CardContent>
-      </Card>
+      </Card>}
 
-      {showHistory && (loading ? (
+      {activeSection === "history" && (loading ? (
         <Card><CardContent className="p-0"><SkeletonTable rows={4} cols={5} /></CardContent></Card>
       ) : deployments.length > 0 ? (
         <Card ref={historySectionRef} className="border-stone-200 bg-white shadow-sm dark:border-white/[0.06] dark:bg-card">

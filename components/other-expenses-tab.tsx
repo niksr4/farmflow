@@ -246,14 +246,7 @@ export default function OtherExpensesTab({
 
   const formSectionRef = useRef<HTMLDivElement>(null)
   const historySectionRef = useRef<HTMLDivElement>(null)
-  const [showHistory, setShowHistory] = useState(false)
-
-  const toggleHistory = () => {
-    setShowHistory((v) => {
-      if (!v) setTimeout(() => historySectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }), 50)
-      return !v
-    })
-  }
+  const [activeSection, setActiveSection] = useState<"form" | "history">("form")
 
   useEffect(() => {
     if (!savedConfirm) return
@@ -281,11 +274,11 @@ export default function OtherExpensesTab({
     )}
     <div className="space-y-4">
       <InPageNav items={[
-        { label: "Log Expense", ref: formSectionRef },
-        { label: "History", active: showHistory, onClick: toggleHistory },
+        { label: "Log Expense", active: activeSection === "form", onClick: () => setActiveSection("form") },
+        { label: "History", active: activeSection === "history", onClick: () => setActiveSection("history") },
       ]} />
-      {/* Add entry button — always at top */}
-      {!isAdding && (
+      {/* Add entry button */}
+      {activeSection === "form" && !isAdding && (
         <button
           type="button"
           onClick={() => setIsAdding(true)}
@@ -295,7 +288,7 @@ export default function OtherExpensesTab({
         </button>
       )}
 
-      <Card ref={formSectionRef}>
+      {activeSection === "form" && <Card ref={formSectionRef}>
         <CardHeader>
           <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
             <div>
@@ -602,9 +595,9 @@ export default function OtherExpensesTab({
             </form>
           ) : null}
         </CardContent>
-      </Card>
+      </Card>}
 
-      {showHistory && (loading ? (
+      {activeSection === "history" && (loading ? (
         <Card><CardContent className="p-0"><SkeletonTable rows={4} cols={5} /></CardContent></Card>
       ) : deployments.length > 0 ? (
         <Card ref={historySectionRef}>

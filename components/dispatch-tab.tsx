@@ -138,23 +138,14 @@ export default function DispatchTab({ showDataToolsControls = false }: DispatchT
   const kgsReceivedInputRef = useRef<HTMLInputElement | null>(null)
   const stockSummaryRef = useRef<HTMLDivElement | null>(null)
   const recordsRef = useRef<HTMLDivElement | null>(null)
-  const [showRecords, setShowRecords] = useState(false)
-  const toggleRecords = () => {
-    setShowRecords((v) => {
-      if (!v) setTimeout(() => recordsRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }), 50)
-      return !v
-    })
-  }
+  const [activeSection, setActiveSection] = useState<"stock-flow" | "new-dispatch" | "records">("new-dispatch")
 
   useEffect(() => {
     const handler = (e: Event) => {
       const section = (e as CustomEvent<string>).detail
-      if (section === "stock-flow") stockSummaryRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })
-      else if (section === "new-dispatch") dispatchFormRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })
-      else if (section === "records") {
-        setShowRecords(true)
-        setTimeout(() => recordsRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }), 50)
-      }
+      if (section === "stock-flow") setActiveSection("stock-flow")
+      else if (section === "new-dispatch") setActiveSection("new-dispatch")
+      else if (section === "records") setActiveSection("records")
     }
     window.addEventListener("farmflow:scroll-to-section", handler)
     return () => window.removeEventListener("farmflow:scroll-to-section", handler)
@@ -905,9 +896,9 @@ export default function DispatchTab({ showDataToolsControls = false }: DispatchT
         }
       />
       <InPageNav items={[
-        { label: "Stock Flow", ref: stockSummaryRef },
-        { label: "New Dispatch", ref: dispatchFormRef },
-        { label: "Records", active: showRecords, onClick: toggleRecords },
+        { label: "Stock Flow", active: activeSection === "stock-flow", onClick: () => setActiveSection("stock-flow") },
+        { label: "New Dispatch", active: activeSection === "new-dispatch", onClick: () => setActiveSection("new-dispatch") },
+        { label: "Records", active: activeSection === "records", onClick: () => setActiveSection("records") },
       ]} />
 
       {bagTotalsScope === "legacy_pool" && (
@@ -919,6 +910,7 @@ export default function DispatchTab({ showDataToolsControls = false }: DispatchT
         Bags are logistics units; received KGs feed downstream sales availability.
       </p>
 
+      {activeSection === "stock-flow" && <>
       <div ref={stockSummaryRef} className="order-4 overflow-hidden rounded-xl border border-stone-200 bg-white shadow-sm dark:border-white/[0.06] dark:bg-card">
         <div className="border-b border-stone-100 px-5 py-4 dark:border-white/[0.05]">
           <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-stone-400">Stock flow</p>
@@ -1027,9 +1019,10 @@ export default function DispatchTab({ showDataToolsControls = false }: DispatchT
           </div>
         </div>
       </div>}
+      </>}
 
       {/* Add Dispatch Form */}
-      <div ref={dispatchFormRef} className="order-1 overflow-hidden rounded-xl border border-stone-200 bg-white shadow-sm dark:border-white/[0.06] dark:bg-card">
+      {activeSection === "new-dispatch" && <div ref={dispatchFormRef} className="order-1 overflow-hidden rounded-xl border border-stone-200 bg-white shadow-sm dark:border-white/[0.06] dark:bg-card">
         <div className="border-b border-stone-100 px-5 py-4 dark:border-white/[0.05]">
           <div className="flex items-center gap-3">
             <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-emerald-800 dark:bg-emerald-900/40">
@@ -1301,10 +1294,10 @@ export default function DispatchTab({ showDataToolsControls = false }: DispatchT
             </p>
           )}
         </div>
-      </div>
+      </div>}
 
       {/* Dispatch Records Table */}
-      {showRecords && <div ref={recordsRef} className="order-6 overflow-hidden rounded-xl border border-stone-200 bg-white shadow-sm dark:border-white/[0.06] dark:bg-card">
+      {activeSection === "records" && <div ref={recordsRef} className="order-6 overflow-hidden rounded-xl border border-stone-200 bg-white shadow-sm dark:border-white/[0.06] dark:bg-card">
         <div className="border-b border-stone-100 px-5 py-4 dark:border-white/[0.05]">
           <div className="flex items-center justify-between">
             <div>

@@ -172,7 +172,6 @@ export default function SalesTab({
   const [salesPage, setSalesPage] = useState(0)
   const [salesHasMore, setSalesHasMore] = useState(false)
   const [isLoadingMore, setIsLoadingMore] = useState(false)
-  const [showAvailableStock, setShowAvailableStock] = useState(false)
   const [selectedSalesRecord, setSelectedSalesRecord] = useState<SalesRecord | null>(null)
   const [editingRecord, setEditingRecord] = useState<SalesRecord | null>(null)
   const [isLoading, setIsLoading] = useState(false)
@@ -183,23 +182,14 @@ export default function SalesTab({
   const saleFormRef = useRef<HTMLDivElement | null>(null)
   const stockAvailableRef = useRef<HTMLDivElement | null>(null)
   const salesRecordsRef = useRef<HTMLDivElement | null>(null)
-  const [showSalesRecords, setShowSalesRecords] = useState(false)
-  const toggleSalesRecords = () => {
-    setShowSalesRecords((v) => {
-      if (!v) setTimeout(() => salesRecordsRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }), 50)
-      return !v
-    })
-  }
+  const [activeSection, setActiveSection] = useState<"new-sale" | "stock-available" | "records">("new-sale")
 
   useEffect(() => {
     const handler = (e: Event) => {
       const section = (e as CustomEvent<string>).detail
-      if (section === "new-sale") saleFormRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })
-      else if (section === "stock-available") stockAvailableRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })
-      else if (section === "records") {
-        setShowSalesRecords(true)
-        setTimeout(() => salesRecordsRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }), 50)
-      }
+      if (section === "new-sale") setActiveSection("new-sale")
+      else if (section === "stock-available") setActiveSection("stock-available")
+      else if (section === "records") setActiveSection("records")
     }
     window.addEventListener("farmflow:scroll-to-section", handler)
     return () => window.removeEventListener("farmflow:scroll-to-section", handler)
@@ -1154,9 +1144,9 @@ export default function SalesTab({
         }
       />
       <InPageNav items={[
-        { label: "New Sale", ref: saleFormRef },
-        { label: "Stock Available", ref: stockAvailableRef },
-        { label: "Records", active: showSalesRecords, onClick: toggleSalesRecords },
+        { label: "New Sale", active: activeSection === "new-sale", onClick: () => setActiveSection("new-sale") },
+        { label: "Stock Available", active: activeSection === "stock-available", onClick: () => setActiveSection("stock-available") },
+        { label: "Records", active: activeSection === "records", onClick: () => setActiveSection("records") },
       ]} />
 
       <div className="overflow-hidden rounded-xl border border-stone-200 bg-white shadow-sm dark:border-white/[0.06] dark:bg-card">
@@ -1215,7 +1205,7 @@ export default function SalesTab({
 
       {resolvedWorkspaceView === "coffee" ? (
         <>
-      <div className={cn(
+      {activeSection === "new-sale" && <div className={cn(
           "order-2 overflow-hidden rounded-xl border bg-white shadow-sm dark:bg-card",
           exceedsAvailability ? "border-rose-200 dark:border-rose-800/40" : "border-stone-200 dark:border-white/[0.06]",
         )}
@@ -1308,19 +1298,9 @@ export default function SalesTab({
             </p>
           </div>
         </div>
-      </div>
+      </div>}
 
-      <div className="flex justify-center">
-        <button
-          type="button"
-          onClick={() => setShowAvailableStock(v => !v)}
-          className="inline-flex min-h-[44px] items-center gap-1.5 rounded-full border border-stone-200 bg-stone-50 px-5 py-2.5 text-sm font-semibold text-stone-600 hover:bg-stone-100 transition-colors touch-manipulation"
-        >
-          {showAvailableStock ? "Hide stock overview ▲" : "Show stock overview ▼"}
-        </button>
-      </div>
-
-      {showAvailableStock && <div ref={stockAvailableRef} className="order-3 overflow-hidden rounded-xl border border-stone-200 bg-white shadow-sm dark:border-white/[0.06] dark:bg-card">
+      {activeSection === "stock-available" && <div ref={stockAvailableRef} className="order-3 overflow-hidden rounded-xl border border-stone-200 bg-white shadow-sm dark:border-white/[0.06] dark:bg-card">
         <div className="border-b border-stone-100 px-5 py-4 dark:border-white/[0.05]">
           <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-emerald-700 dark:text-emerald-500">Inventory</p>
           <p className="text-sm font-bold text-stone-900 dark:text-white">Available stock</p>
@@ -1381,7 +1361,7 @@ export default function SalesTab({
       </div>}
 
       {/* Summary Cards */}
-      <div className="order-4 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+      {activeSection === "new-sale" && <div className="order-4 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         {/* Coffee Revenue */}
         <div className="overflow-hidden rounded-xl border border-stone-200 bg-white shadow-sm dark:border-white/[0.06] dark:bg-card">
           <div className="border-b border-stone-100 px-5 py-3 dark:border-white/[0.05]">
@@ -1445,10 +1425,10 @@ export default function SalesTab({
             <div className="mt-2 text-xs text-stone-400">Weighted by bags sold across recorded sales.</div>
           </div>
         </div>
-      </div>
+      </div>}
 
       {/* Add/Edit Sale Form */}
-      <div ref={saleFormRef} className="order-1 overflow-hidden rounded-xl border border-stone-200 bg-white shadow-sm dark:border-white/[0.06] dark:bg-card">
+      {activeSection === "new-sale" && <div ref={saleFormRef} className="order-1 overflow-hidden rounded-xl border border-stone-200 bg-white shadow-sm dark:border-white/[0.06] dark:bg-card">
         <div className="flex items-center gap-3 border-b border-stone-100 px-5 py-4 dark:border-white/[0.05]">
           <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-emerald-800 dark:bg-emerald-900/40">
             <IndianRupee className="h-4 w-4 text-emerald-400" />
@@ -1790,10 +1770,10 @@ export default function SalesTab({
             </p>
           )}
         </div>
-      </div>
+      </div>}
 
       {/* Sales Records Table */}
-      {showSalesRecords && <div ref={salesRecordsRef} className="order-5 overflow-hidden rounded-xl border border-stone-200 bg-white shadow-sm dark:border-white/[0.06] dark:bg-card">
+      {activeSection === "records" && <div ref={salesRecordsRef} className="order-5 overflow-hidden rounded-xl border border-stone-200 bg-white shadow-sm dark:border-white/[0.06] dark:bg-card">
         <div className="border-b border-stone-100 dark:border-white/[0.05]">
           <div className="flex flex-col gap-3 px-5 py-4 md:flex-row md:items-center md:justify-between">
             <div>

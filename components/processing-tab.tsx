@@ -900,23 +900,14 @@ export default function ProcessingTab({ showDataToolsControls = false }: Process
   const seasonTotalsRef = useRef<HTMLDivElement>(null)
   const entryFormRef = useRef<HTMLDivElement>(null)
   const recentEntriesRef = useRef<HTMLDivElement>(null)
-  const [showRecentEntries, setShowRecentEntries] = useState(false)
-  const toggleRecentEntries = () => {
-    setShowRecentEntries((v) => {
-      if (!v) setTimeout(() => recentEntriesRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }), 50)
-      return !v
-    })
-  }
+  const [activeSection, setActiveSection] = useState<"season-totals" | "entry-form" | "recent-entries">("entry-form")
 
   useEffect(() => {
     const handler = (e: Event) => {
       const section = (e as CustomEvent<string>).detail
-      if (section === "season-totals") seasonTotalsRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })
-      else if (section === "entry-form") entryFormRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })
-      else if (section === "recent-entries") {
-        setShowRecentEntries(true)
-        setTimeout(() => recentEntriesRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }), 50)
-      }
+      if (section === "season-totals") setActiveSection("season-totals")
+      else if (section === "entry-form") setActiveSection("entry-form")
+      else if (section === "recent-entries") setActiveSection("recent-entries")
     }
     window.addEventListener("farmflow:scroll-to-section", handler)
     return () => window.removeEventListener("farmflow:scroll-to-section", handler)
@@ -925,9 +916,9 @@ export default function ProcessingTab({ showDataToolsControls = false }: Process
   return (
     <div className="container mx-auto space-y-8 px-4 pb-10 pt-6 sm:px-6 lg:px-8">
       <InPageNav items={[
-        { label: "Season Totals", ref: seasonTotalsRef },
-        { label: "Entry Form", ref: entryFormRef },
-        { label: "Recent Entries", active: showRecentEntries, onClick: toggleRecentEntries },
+        { label: "Season Totals", active: activeSection === "season-totals", onClick: () => setActiveSection("season-totals") },
+        { label: "Entry Form", active: activeSection === "entry-form", onClick: () => setActiveSection("entry-form") },
+        { label: "Recent Entries", active: activeSection === "recent-entries", onClick: () => setActiveSection("recent-entries") },
       ]} />
       <TaskGuideCard
         eyebrow="Pulping guide"
@@ -953,7 +944,7 @@ export default function ProcessingTab({ showDataToolsControls = false }: Process
       />
 
       {/* Coffee Pulping Dashboard */}
-      <Card ref={seasonTotalsRef} className="border-border/70 bg-white/80">
+      {activeSection === "season-totals" && <Card ref={seasonTotalsRef} className="border-border/70 bg-white/80">
         <CardHeader>
           <div className="flex items-center justify-between gap-4">
             <div>
@@ -1064,10 +1055,10 @@ export default function ProcessingTab({ showDataToolsControls = false }: Process
             </>
           )}
         </CardContent>}
-      </Card>
+      </Card>}
 
       {/* Coffee Pulping Records */}
-      <Card ref={entryFormRef} className="border-border/70 bg-white/80">
+      {activeSection === "entry-form" && <Card ref={entryFormRef} className="border-border/70 bg-white/80">
         <CardHeader>
           <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
             <div>
@@ -1486,10 +1477,10 @@ export default function ProcessingTab({ showDataToolsControls = false }: Process
             </>
           )}
         </CardContent>
-      </Card>
+      </Card>}
 
       {/* Recent Records */}
-      {showRecentEntries && <Card ref={recentEntriesRef} className="border-border/70 bg-white/80">
+      {activeSection === "recent-entries" && <Card ref={recentEntriesRef} className="border-border/70 bg-white/80">
         <CardHeader>
           <CardTitle>Recent entries</CardTitle>
           <CardDescription>

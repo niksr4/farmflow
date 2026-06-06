@@ -98,8 +98,7 @@ export default function SeasonPlTab() {
   const [data, setData] = useState<SeasonPLResponse | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [showProduction, setShowProduction] = useState(false)
-  const [showBuyers, setShowBuyers] = useState(false)
+  const [activeSection, setActiveSection] = useState<"kpis" | "breakdown" | "by-buyer">("kpis")
   const kpisRef = useRef<HTMLDivElement>(null)
   const breakdownRef = useRef<HTMLDivElement>(null)
   const buyersRef = useRef<HTMLDivElement>(null)
@@ -195,14 +194,15 @@ export default function SeasonPlTab() {
       )}
 
       <InPageNav items={[
-        { label: "KPIs", ref: kpisRef },
-        { label: "Breakdown", active: showProduction, onClick: () => { setShowProduction(true); setTimeout(() => breakdownRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }), 50) } },
-        { label: "By Buyer", active: showBuyers, onClick: () => { setShowBuyers(true); setTimeout(() => buyersRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }), 50) } },
+        { label: "KPIs", active: activeSection === "kpis", onClick: () => setActiveSection("kpis") },
+        { label: "Breakdown", active: activeSection === "breakdown", onClick: () => setActiveSection("breakdown") },
+        { label: "By Buyer", active: activeSection === "by-buyer", onClick: () => setActiveSection("by-buyer") },
       ]} />
 
       {data && !loading && (
         <>
           {/* Top KPIs */}
+          {activeSection === "kpis" && (
           <div ref={kpisRef} className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
             <KpiCard
               label="Total Revenue"
@@ -232,24 +232,17 @@ export default function SeasonPlTab() {
               icon={Package}
             />
           </div>
+          )}
 
-          {/* Production + Cost Breakdown — collapsed by default */}
+          {/* Production + Cost Breakdown */}
+          {activeSection === "breakdown" && (
           <Card ref={breakdownRef} className="border-border/60 bg-white/80">
-            <button
-              type="button"
-              className="flex w-full items-center justify-between px-5 py-4 text-left hover:bg-stone-50/60 transition-colors"
-              onClick={() => setShowProduction(v => !v)}
-            >
-              <div>
-                <p className="text-base font-semibold text-stone-900">Production &amp; Cost Breakdown</p>
-                <p className="text-xs text-muted-foreground">
-                  {data.production.processingDays} processing days · {fmt(data.costs.totalCostsInr)} total costs
-                </p>
-              </div>
-              <ChevronDown className={cn("h-4 w-4 text-stone-400 shrink-0 ml-3 transition-transform", showProduction && "rotate-180")} />
-            </button>
-            {showProduction && (
-              <div className="grid gap-4 border-t border-stone-100 p-5 lg:grid-cols-2">
+            <CardHeader>
+              <CardTitle>Production &amp; Cost Breakdown</CardTitle>
+              <CardDescription>{data.production.processingDays} processing days · {fmt(data.costs.totalCostsInr)} total costs</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="grid gap-4 lg:grid-cols-2">
                 <div className="space-y-3">
                   <p className="text-xs font-bold uppercase tracking-[0.16em] text-stone-400">Production</p>
                   <div className="grid grid-cols-2 gap-3 text-sm">
@@ -267,24 +260,21 @@ export default function SeasonPlTab() {
                   {data.costs.byCategory.length === 0 && <p className="text-sm text-muted-foreground">No cost records.</p>}
                 </div>
               </div>
-            )}
+            </CardContent>
           </Card>
+          )}
 
-          {/* Revenue by Buyer — collapsed by default */}
-          {data.revenue.byBuyer.length > 0 && (
+          {/* Revenue by Buyer */}
+          {activeSection === "by-buyer" && (
             <Card ref={buyersRef} className="border-border/60 bg-white/80">
-              <button
-                type="button"
-                className="flex w-full items-center justify-between px-5 py-4 text-left hover:bg-stone-50/60 transition-colors"
-                onClick={() => setShowBuyers(v => !v)}
-              >
-                <div>
-                  <p className="text-base font-semibold text-stone-900">Revenue by Buyer</p>
-                  <p className="text-xs text-muted-foreground">{data.revenue.byBuyer.length} buyer{data.revenue.byBuyer.length > 1 ? "s" : ""} · {fmt(data.revenue.totalSalesInr)} total</p>
-                </div>
-                <ChevronDown className={cn("h-4 w-4 text-stone-400 shrink-0 ml-3 transition-transform", showBuyers && "rotate-180")} />
-              </button>
-              {showBuyers && (
+              <CardHeader>
+                <CardTitle>Revenue by Buyer</CardTitle>
+                <CardDescription>{data.revenue.byBuyer.length} buyer{data.revenue.byBuyer.length > 1 ? "s" : ""} · {fmt(data.revenue.totalSalesInr)} total</CardDescription>
+              </CardHeader>
+              <CardContent>
+              {data.revenue.byBuyer.length === 0 ? (
+                <p className="text-sm text-muted-foreground">No buyer data for this period.</p>
+              ) : (
                 <div className="border-t border-stone-100 p-5">
                   <div className="overflow-x-auto">
                     <table className="w-full text-sm">
@@ -318,6 +308,7 @@ export default function SeasonPlTab() {
                   </div>
                 </div>
               )}
+              </CardContent>
             </Card>
           )}
 
