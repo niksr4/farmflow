@@ -1308,7 +1308,6 @@ export default function AccountsPage({
       {/* ── Dashboard ── */}
       {activeTab === "dashboard" && (
         <div className="space-y-6">
-          <AccountsSummaryCard />
           {accountsIntelligenceLoading ? (
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
               {[1, 2, 3, 4].map((i) => <SkeletonCard key={i} />)}
@@ -1454,6 +1453,7 @@ export default function AccountsPage({
               </CardContent>
             </Card>
           ) : null}
+          <AccountsSummaryCard />
         </div>
       )}
 
