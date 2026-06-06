@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useEffect, useCallback, useMemo, useRef, type ChangeEvent, type KeyboardEvent as ReactKeyboardEvent } from "react"
+import InPageNav from "@/components/in-page-nav"
 import Link from "next/link"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -135,6 +136,30 @@ export default function DispatchTab({ showDataToolsControls = false }: DispatchT
   const dispatchSaveHandlerRef = useRef<(() => Promise<void> | void) | null>(null)
   const dispatchFormRef = useRef<HTMLDivElement | null>(null)
   const kgsReceivedInputRef = useRef<HTMLInputElement | null>(null)
+  const stockSummaryRef = useRef<HTMLDivElement | null>(null)
+  const recordsRef = useRef<HTMLDivElement | null>(null)
+  const [showRecords, setShowRecords] = useState(false)
+  const toggleRecords = () => {
+    setShowRecords((v) => {
+      if (!v) setTimeout(() => recordsRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }), 50)
+      return !v
+    })
+  }
+
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const section = (e as CustomEvent<string>).detail
+      if (section === "stock-flow") stockSummaryRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })
+      else if (section === "new-dispatch") dispatchFormRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })
+      else if (section === "records") {
+        setShowRecords(true)
+        setTimeout(() => recordsRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }), 50)
+      }
+    }
+    window.addEventListener("farmflow:scroll-to-section", handler)
+    return () => window.removeEventListener("farmflow:scroll-to-section", handler)
+  }, [])
+
   const { toast } = useToast()
   const dispatchPageSize = 25
   const asOfDate = useMemo(() => format(date, "yyyy-MM-dd"), [date])
@@ -879,6 +904,11 @@ export default function DispatchTab({ showDataToolsControls = false }: DispatchT
           </>
         }
       />
+      <InPageNav items={[
+        { label: "Stock Flow", ref: stockSummaryRef },
+        { label: "New Dispatch", ref: dispatchFormRef },
+        { label: "Records", active: showRecords, onClick: toggleRecords },
+      ]} />
 
       {bagTotalsScope === "legacy_pool" && (
         <p className="order-2 text-xs text-amber-700">
@@ -889,7 +919,7 @@ export default function DispatchTab({ showDataToolsControls = false }: DispatchT
         Bags are logistics units; received KGs feed downstream sales availability.
       </p>
 
-      <div className="order-4 overflow-hidden rounded-xl border border-stone-200 bg-white shadow-sm dark:border-white/[0.06] dark:bg-card">
+      <div ref={stockSummaryRef} className="order-4 overflow-hidden rounded-xl border border-stone-200 bg-white shadow-sm dark:border-white/[0.06] dark:bg-card">
         <div className="border-b border-stone-100 px-5 py-4 dark:border-white/[0.05]">
           <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-stone-400">Stock flow</p>
           <p className="mt-0.5 text-sm font-semibold text-stone-800 dark:text-stone-200">Bags are logistics units · received KGs are commercial stock</p>
@@ -1274,7 +1304,7 @@ export default function DispatchTab({ showDataToolsControls = false }: DispatchT
       </div>
 
       {/* Dispatch Records Table */}
-      <div className="order-6 overflow-hidden rounded-xl border border-stone-200 bg-white shadow-sm dark:border-white/[0.06] dark:bg-card">
+      {showRecords && <div ref={recordsRef} className="order-6 overflow-hidden rounded-xl border border-stone-200 bg-white shadow-sm dark:border-white/[0.06] dark:bg-card">
         <div className="border-b border-stone-100 px-5 py-4 dark:border-white/[0.05]">
           <div className="flex items-center justify-between">
             <div>
@@ -1507,7 +1537,7 @@ export default function DispatchTab({ showDataToolsControls = false }: DispatchT
             </div>
           )}
         </div>
-      </div>
+      </div>}
     </WorkspacePageShell>
   )
 }

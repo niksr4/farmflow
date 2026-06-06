@@ -1,6 +1,7 @@
 "use client"
 
-import { useCallback, useEffect, useState } from "react"
+import { useCallback, useEffect, useRef, useState } from "react"
+import InPageNav from "@/components/in-page-nav"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -99,6 +100,9 @@ export default function SeasonPlTab() {
   const [error, setError] = useState<string | null>(null)
   const [showProduction, setShowProduction] = useState(false)
   const [showBuyers, setShowBuyers] = useState(false)
+  const kpisRef = useRef<HTMLDivElement>(null)
+  const breakdownRef = useRef<HTMLDivElement>(null)
+  const buyersRef = useRef<HTMLDivElement>(null)
 
   const fetchPl = useCallback(async (r: DateRange) => {
     setLoading(true)
@@ -190,10 +194,16 @@ export default function SeasonPlTab() {
         </Card>
       )}
 
+      <InPageNav items={[
+        { label: "KPIs", ref: kpisRef },
+        { label: "Breakdown", active: showProduction, onClick: () => { setShowProduction(true); setTimeout(() => breakdownRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }), 50) } },
+        { label: "By Buyer", active: showBuyers, onClick: () => { setShowBuyers(true); setTimeout(() => buyersRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }), 50) } },
+      ]} />
+
       {data && !loading && (
         <>
           {/* Top KPIs */}
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          <div ref={kpisRef} className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
             <KpiCard
               label="Total Revenue"
               value={fmt(data.revenue.totalSalesInr)}
@@ -224,7 +234,7 @@ export default function SeasonPlTab() {
           </div>
 
           {/* Production + Cost Breakdown — collapsed by default */}
-          <Card className="border-border/60 bg-white/80">
+          <Card ref={breakdownRef} className="border-border/60 bg-white/80">
             <button
               type="button"
               className="flex w-full items-center justify-between px-5 py-4 text-left hover:bg-stone-50/60 transition-colors"
@@ -262,7 +272,7 @@ export default function SeasonPlTab() {
 
           {/* Revenue by Buyer — collapsed by default */}
           {data.revenue.byBuyer.length > 0 && (
-            <Card className="border-border/60 bg-white/80">
+            <Card ref={buyersRef} className="border-border/60 bg-white/80">
               <button
                 type="button"
                 className="flex w-full items-center justify-between px-5 py-4 text-left hover:bg-stone-50/60 transition-colors"

@@ -13,9 +13,11 @@ type SubItem = { emoji: string; label: string; accountsPanel?: string; section?:
 
 const TAB_SUB_SECTIONS: Record<string, SubItem[]> = {
   accounts: [
+    { emoji: "📊", label: "Dashboard", accountsPanel: "labour" },
     { emoji: "👷", label: "Labour", accountsPanel: "labour" },
     { emoji: "💸", label: "Expenses", accountsPanel: "expenses" },
-    { emoji: "📒", label: "Ledger", accountsPanel: "ledger" },
+    { emoji: "🏷️", label: "Codes", accountsPanel: "activities" },
+    { emoji: "📤", label: "Export", accountsPanel: "expenses" },
   ],
   rainfall: [
     { emoji: "🌧️", label: "Log", section: "log" },
@@ -23,16 +25,19 @@ const TAB_SUB_SECTIONS: Record<string, SubItem[]> = {
     { emoji: "📊", label: "Stats", section: "stats" },
   ],
   processing: [
-    { emoji: "✏️", label: "Log batch" },
-    { emoji: "📋", label: "History" },
+    { emoji: "📊", label: "Season Totals", section: "season-totals" },
+    { emoji: "✏️", label: "Entry Form", section: "entry-form" },
+    { emoji: "📋", label: "Recent Entries", section: "recent-entries" },
   ],
   dispatch: [
-    { emoji: "🚚", label: "Log" },
-    { emoji: "📋", label: "History" },
+    { emoji: "📦", label: "Stock Flow", section: "stock-flow" },
+    { emoji: "🚚", label: "New Dispatch", section: "new-dispatch" },
+    { emoji: "📋", label: "Records", section: "records" },
   ],
   sales: [
-    { emoji: "💰", label: "Log sale" },
-    { emoji: "📋", label: "History" },
+    { emoji: "💰", label: "New Sale", section: "new-sale" },
+    { emoji: "📦", label: "Stock Available", section: "stock-available" },
+    { emoji: "📋", label: "Records", section: "records" },
   ],
 }
 

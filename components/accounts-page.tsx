@@ -10,9 +10,9 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { FileSpreadsheet, FileText, Coins, PlusCircle, Settings, Users, Receipt, Loader2, Pencil, Trash2, Check, X, BarChart2, ChevronDown, ChevronUp, Wheat, BookOpen, DollarSign, UserCheck } from "lucide-react"
+import { FileSpreadsheet, FileText, Coins, PlusCircle, Settings, Users, Receipt, Loader2, Pencil, Trash2, Check, X, BarChart2, Wheat, BookOpen, DollarSign, UserCheck } from "lucide-react"
 import { Skeleton, SkeletonTable, SkeletonCard } from "@/components/ui/skeleton"
 import { EmptyStateTable } from "@/components/ui/empty-state"
 import AttendanceTab from "./attendance-tab"
@@ -22,7 +22,7 @@ import WorkerProfilesTab from "./worker-profiles-tab"
 import PickingLogTab from "./picking-log-tab"
 import WorkerLedgerTab from "./worker-ledger-tab"
 import PayrollSummaryTab from "./payroll-summary-tab"
-import TaskGuideCard from "@/components/task-guide-card"
+
 import AccountsSummaryCard from "@/components/accounts-summary-card"
 import WorkspacePageShell from "@/components/workspace-page-shell"
 import { toast } from "sonner"
@@ -96,23 +96,23 @@ interface AccountsIntelligence {
 }
 
 type AccountsTabValue = "labour" | "expenses" | "attendance" | "activities" | "workers" | "picking" | "ledger" | "payroll"
+type AccountsView = AccountsTabValue | "dashboard" | "export"
 
 const LABOR_MANAGEMENT_TAB_VALUES = new Set<AccountsTabValue>(["workers", "ledger", "payroll"])
-const PEOPLE_WORKFLOW_TAB_VALUES = new Set<AccountsTabValue>(["attendance", "workers", "picking", "ledger", "payroll"])
 
 const normalizeAccountsTab = (
   initialTab: AccountsTabValue | undefined,
   showLaborManagement: boolean,
   showPickingLog: boolean,
-): AccountsTabValue => {
+): AccountsView => {
   if (!initialTab) {
-    return "labour"
+    return "dashboard"
   }
   if (!showLaborManagement && LABOR_MANAGEMENT_TAB_VALUES.has(initialTab)) {
-    return "labour"
+    return "dashboard"
   }
   if (!showPickingLog && !showLaborManagement && initialTab === "picking") {
-    return "labour"
+    return "dashboard"
   }
   return initialTab
 }
@@ -160,7 +160,7 @@ export default function AccountsPage({
   const [loadingActivities, setLoadingActivities] = useState(false)
   const [isAddingActivity, setIsAddingActivity] = useState(false)
   const [showAllActivitySuggestions, setShowAllActivitySuggestions] = useState(false)
-  const [showCostPatterns, setShowCostPatterns] = useState(false)
+
   const [newActivityCode, setNewActivityCode] = useState("")
   const [newActivityReference, setNewActivityReference] = useState("")
   const [isSubmitting, setIsSubmitting] = useState(false)
@@ -178,7 +178,7 @@ export default function AccountsPage({
   const [accountsIntelligence, setAccountsIntelligence] = useState<AccountsIntelligence | null>(null)
   const [accountsIntelligenceLoading, setAccountsIntelligenceLoading] = useState(false)
   const [accountsIntelligenceError, setAccountsIntelligenceError] = useState<string | null>(null)
-  const [activeTab, setActiveTab] = useState<AccountsTabValue>(() => normalizeAccountsTab(initialTab, showLaborManagement, showPickingLog))
+  const [activeTab, setActiveTab] = useState<AccountsView>(() => normalizeAccountsTab(initialTab, showLaborManagement, showPickingLog))
   const handledExportRequestRef = useRef<number | null>(null)
   const exportCombinedCSVRef = useRef<() => Promise<void>>(async () => undefined)
   const exportCombinedXlsxRef = useRef<() => Promise<void>>(async () => undefined)
@@ -201,38 +201,6 @@ export default function AccountsPage({
     }
     return null
   }, [customExportEndDate, customExportStartDate, useCustomExportRange])
-  const accountsGuide = useMemo(() => {
-    if (PEOPLE_WORKFLOW_TAB_VALUES.has(activeTab)) {
-      return {
-        eyebrow: "People guide",
-        title: "One worker roster, optional people tools",
-        description:
-          "Workers is the shared roster for Attendance, Picking, Ledger, and Payroll. Use only the parts your estate actually needs.",
-        bullets: [
-          "Use Attendance alone if you only want daily muster.",
-          "Add daily rates in Workers only when you want attendance wages in Payroll.",
-          "Use Picking for piece-rate harvest and Ledger only for advances, deductions, or corrections.",
-        ],
-        tip: "Payroll combines whichever people records exist. It does not require every people tab to be used.",
-        tone: "operations" as const,
-      }
-    }
-
-    return {
-      eyebrow: "Accounts guide",
-      title: "Keep cost coding simple",
-      description:
-        "Most estates only need a few stable cost habits here: record labour, record expenses, keep attendance clean when needed, and use codes consistently.",
-      bullets: [
-        "Use labour and expenses for real spend only, not estimates you may change later.",
-        "If you do not have a full chart of accounts yet, start with a short estate code and plain category name.",
-        "Use the Codes tab when you want autocomplete, cleaner exports, and shared labels across the estate.",
-      ],
-      tip: "A small, stable code list is easier to run than a complex chart nobody remembers in the field.",
-      tone: "finance" as const,
-    }
-  }, [activeTab])
-
   useEffect(() => {
     fetchAllActivities()
     fetchAccountActivities()
@@ -961,7 +929,8 @@ export default function AccountsPage({
   const visibleActivitySuggestions = showAllActivitySuggestions ? activitySuggestions : activitySuggestions.slice(0, 12)
 
   const mobileTabItems = useMemo(() => {
-    const items: Array<{ value: AccountsTabValue; label: string; icon: React.ComponentType<{ className?: string }> }> = [
+    const items: Array<{ value: AccountsView; label: string; icon: React.ComponentType<{ className?: string }> }> = [
+      { value: "dashboard", label: "Summary", icon: BarChart2 },
       { value: "labour", label: "Labour", icon: Users },
       { value: "attendance", label: "Attend", icon: Check },
       { value: "expenses", label: "Expenses", icon: Receipt },
@@ -973,8 +942,9 @@ export default function AccountsPage({
       items.push({ value: "ledger", label: "Ledger", icon: BookOpen })
       items.push({ value: "payroll", label: "Payroll", icon: DollarSign })
     }
+    if (isAdmin || isOwner) items.push({ value: "export", label: "Export", icon: FileSpreadsheet })
     return items
-  }, [showLaborManagement, showPickingLog])
+  }, [showLaborManagement, showPickingLog, isAdmin, isOwner])
   const accountsShellStats = [
     {
       label: "Fiscal Year",
@@ -1023,6 +993,36 @@ export default function AccountsPage({
     }
     void run()
   }, [onRequestedExportHandled, requestedExport])
+
+  const SECTION_COLORS: Record<string, { active: string }> = {
+    dashboard: { active: "bg-emerald-700 border-emerald-700 text-white" },
+    labour: { active: "bg-sky-600 border-sky-600 text-white" },
+    expenses: { active: "bg-amber-600 border-amber-600 text-white" },
+    activities: { active: "bg-violet-600 border-violet-600 text-white" },
+    export: { active: "bg-slate-700 border-slate-700 text-white" },
+    attendance: { active: "bg-teal-600 border-teal-600 text-white" },
+    picking: { active: "bg-lime-700 border-lime-700 text-white" },
+    workers: { active: "bg-cyan-600 border-cyan-600 text-white" },
+    ledger: { active: "bg-indigo-600 border-indigo-600 text-white" },
+    payroll: { active: "bg-purple-600 border-purple-600 text-white" },
+  }
+  type NavItem = { value: AccountsView; label: string; icon: React.ComponentType<{ className?: string }> }
+  const primaryNavItems: NavItem[] = [
+    { value: "dashboard", label: "Dashboard", icon: BarChart2 },
+    { value: "labour", label: "Labour", icon: Users },
+    { value: "expenses", label: "Expenses", icon: Receipt },
+    { value: "activities", label: "Activity Codes", icon: Settings },
+    ...(isAdmin || isOwner ? [{ value: "export" as AccountsView, label: "Export", icon: FileSpreadsheet }] : []),
+  ]
+  const secondaryNavItems: NavItem[] = [
+    { value: "attendance", label: "Attendance", icon: Check },
+    ...(showPickingLog || showLaborManagement ? [{ value: "picking" as AccountsView, label: "Picking", icon: Wheat }] : []),
+    ...(showLaborManagement ? [
+      { value: "workers" as AccountsView, label: "Workers", icon: UserCheck },
+      { value: "ledger" as AccountsView, label: "Ledger", icon: BookOpen },
+      { value: "payroll" as AccountsView, label: "Payroll", icon: DollarSign },
+    ] : []),
+  ]
 
   if (isMobile) {
     return (
@@ -1093,6 +1093,11 @@ export default function AccountsPage({
         </div>
 
         <div className="pt-2">
+          {activeTab === "dashboard" && (
+            <div className="px-3 space-y-4 pt-1">
+              <AccountsSummaryCard />
+            </div>
+          )}
           {activeTab === "labour" && (
             <LaborDeploymentTab startDate={fiscalYearStartDate} endDate={fiscalYearEndDate} />
           )}
@@ -1185,6 +1190,27 @@ export default function AccountsPage({
           {showLaborManagement && activeTab === "workers" && <WorkerProfilesTab />}
           {showLaborManagement && activeTab === "ledger" && <WorkerLedgerTab />}
           {showLaborManagement && activeTab === "payroll" && <PayrollSummaryTab />}
+          {(isAdmin || isOwner) && activeTab === "export" && (
+            <div className="px-3 pt-2 pb-4 space-y-4">
+              <div className="flex flex-col gap-3 rounded-2xl border border-stone-200 bg-white p-4 shadow-sm">
+                <div>
+                  <p className="text-sm font-bold text-stone-800">Accounts Export</p>
+                  <p className="text-xs text-stone-500 mt-0.5">Export labour and expenses for the selected fiscal year.</p>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  <Button onClick={exportCombinedCSV} variant="outline" size="sm" disabled={!canExport} className="flex-1">
+                    <FileText className="mr-2 h-4 w-4" /> CSV
+                  </Button>
+                  <Button onClick={exportCombinedXlsx} variant="outline" size="sm" disabled={!canExport} className="flex-1">
+                    <FileSpreadsheet className="mr-2 h-4 w-4" /> XLSX
+                  </Button>
+                </div>
+                {exportDisabledReason && (
+                  <p className="text-xs text-stone-400">{exportDisabledReason}</p>
+                )}
+              </div>
+            </div>
+          )}
         </div>
       </div>
     )
@@ -1227,45 +1253,73 @@ export default function AccountsPage({
         </div>
       }
     >
-      <TaskGuideCard
-        eyebrow={accountsGuide.eyebrow}
-        title={accountsGuide.title}
-        description={accountsGuide.description}
-        bullets={accountsGuide.bullets}
-        tip={accountsGuide.tip}
-        tone={accountsGuide.tone}
-      />
-
-      <div className="flex justify-end">
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          onClick={() => setShowCostPatterns((prev) => !prev)}
-          className="bg-white text-xs"
-        >
-          <BarChart2 className="mr-1.5 h-3.5 w-3.5" />
-          {showCostPatterns ? "Hide Cost Patterns" : "Show Cost Patterns"}
-          {showCostPatterns ? <ChevronUp className="ml-1.5 h-3.5 w-3.5" /> : <ChevronDown className="ml-1.5 h-3.5 w-3.5" />}
-        </Button>
+      {/* ── Section Navigation ── */}
+      <div className="space-y-2">
+        <div className="flex flex-wrap gap-2">
+          {primaryNavItems.map((item) => {
+            const Icon = item.icon
+            const colors = SECTION_COLORS[item.value]
+            const isActive = activeTab === item.value
+            return (
+              <button
+                key={item.value}
+                type="button"
+                onClick={() => setActiveTab(item.value)}
+                className={cn(
+                  "flex items-center gap-2 rounded-xl border px-4 py-2.5 text-sm font-semibold transition-colors",
+                  isActive
+                    ? colors.active
+                    : "border-stone-200 bg-white text-stone-600 hover:border-stone-300 hover:bg-stone-50"
+                )}
+              >
+                <Icon className="h-4 w-4 shrink-0" />
+                {item.label}
+              </button>
+            )
+          })}
+        </div>
+        {secondaryNavItems.length > 0 && (
+          <div className="flex flex-wrap gap-1.5">
+            {secondaryNavItems.map((item) => {
+              const Icon = item.icon
+              const colors = SECTION_COLORS[item.value]
+              const isActive = activeTab === item.value
+              return (
+                <button
+                  key={item.value}
+                  type="button"
+                  onClick={() => setActiveTab(item.value)}
+                  className={cn(
+                    "flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-semibold transition-colors",
+                    isActive
+                      ? colors.active
+                      : "border-stone-200 bg-white text-stone-500 hover:bg-stone-50"
+                  )}
+                >
+                  <Icon className="h-3.5 w-3.5 shrink-0" />
+                  {item.label}
+                </button>
+              )
+            })}
+          </div>
+        )}
       </div>
 
-      {showCostPatterns && (
-      <Card>
-        <CardHeader>
-          <CardTitle>Smart Cost Patterns</CardTitle>
-          <CardDescription>Frequency and highest-cost intelligence for labour and other expenses.</CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
+      {/* ── Dashboard ── */}
+      {activeTab === "dashboard" && (
+        <div className="space-y-6">
+          <AccountsSummaryCard />
           {accountsIntelligenceLoading ? (
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
               {[1, 2, 3, 4].map((i) => <SkeletonCard key={i} />)}
             </div>
-          ) : accountsIntelligenceError ? (
-            <p className="text-sm text-rose-600">{accountsIntelligenceError}</p>
-          ) : !patterns ? (
-            <p className="text-sm text-muted-foreground">No pattern data yet for this fiscal year.</p>
-          ) : (
+          ) : patterns ? (
+            <Card>
+              <CardHeader>
+                <CardTitle>Smart Cost Patterns</CardTitle>
+                <CardDescription>Frequency and highest-cost intelligence for labour and other expenses.</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
             <>
               <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
                 <div className="rounded-xl border bg-card p-3">
@@ -1397,67 +1451,27 @@ export default function AccountsPage({
                 </div>
               </div>
             </>
-          )}
-        </CardContent>
-      </Card>
+              </CardContent>
+            </Card>
+          ) : null}
+        </div>
       )}
 
-      <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as AccountsTabValue)} className="w-full space-y-4">
-        <TabsList className="h-auto w-full flex-wrap justify-start gap-2 sm:justify-center">
-          <TabsTrigger value="labour" className="flex items-center gap-2">
-            <Users className="h-4 w-4" />
-            Labour
-          </TabsTrigger>
-          <TabsTrigger value="expenses" className="flex items-center gap-2">
-            <Receipt className="h-4 w-4" />
-            Expenses
-          </TabsTrigger>
-          <TabsTrigger value="attendance" className="flex items-center gap-2">
-            <Check className="h-4 w-4" />
-            Attendance
-          </TabsTrigger>
-          <TabsTrigger value="activities" className="flex items-center gap-2">
-            <Settings className="h-4 w-4" />
-            Codes
-          </TabsTrigger>
-          {(showPickingLog || showLaborManagement) && (
-            <TabsTrigger value="picking" className="flex items-center gap-2">
-              <Wheat className="h-4 w-4" />
-              Picking
-            </TabsTrigger>
-          )}
-          {showLaborManagement && (
-            <>
-              <TabsTrigger value="workers" className="flex items-center gap-2">
-                <UserCheck className="h-4 w-4" />
-                Workers
-              </TabsTrigger>
-              <TabsTrigger value="ledger" className="flex items-center gap-2">
-                <BookOpen className="h-4 w-4" />
-                Ledger
-              </TabsTrigger>
-              <TabsTrigger value="payroll" className="flex items-center gap-2">
-                <DollarSign className="h-4 w-4" />
-                Payroll
-              </TabsTrigger>
-            </>
-          )}
-        </TabsList>
+      {/* ── Labour ── */}
+      {activeTab === "labour" && (
+        <LaborDeploymentTab startDate={fiscalYearStartDate} endDate={fiscalYearEndDate} />
+      )}
 
-        <TabsContent value="labour" className="mt-6 space-y-4">
-            <AccountsSummaryCard />
-            <LaborDeploymentTab startDate={fiscalYearStartDate} endDate={fiscalYearEndDate} />
-          </TabsContent>
+      {/* ── Expenses ── */}
+      {activeTab === "expenses" && (
+        <OtherExpensesTab startDate={fiscalYearStartDate} endDate={fiscalYearEndDate} />
+      )}
 
-        <TabsContent value="expenses" className="mt-6">
-            <OtherExpensesTab startDate={fiscalYearStartDate} endDate={fiscalYearEndDate} />
-          </TabsContent>
+      {/* ── Attendance ── */}
+      {activeTab === "attendance" && <AttendanceTab />}
 
-        <TabsContent value="attendance" className="mt-6">
-            <AttendanceTab />
-          </TabsContent>
-
-        <TabsContent value="activities">
+      {/* ── Activity Codes ── */}
+      {activeTab === "activities" && (
           <Card>
             <CardHeader>
               <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
@@ -1779,31 +1793,22 @@ export default function AccountsPage({
               )}
             </CardContent>
           </Card>
-        </TabsContent>
+      )}
 
-        {(showPickingLog || showLaborManagement) && (
-          <TabsContent value="picking" className="mt-6">
-            <PickingLogTab />
-          </TabsContent>
-        )}
-        {showLaborManagement && (
-          <>
-            <TabsContent value="workers" className="mt-6">
-              <WorkerProfilesTab />
-            </TabsContent>
+      {/* ── Picking ── */}
+      {(showPickingLog || showLaborManagement) && activeTab === "picking" && <PickingLogTab />}
 
-            <TabsContent value="ledger" className="mt-6">
-              <WorkerLedgerTab />
-            </TabsContent>
+      {/* ── Workers ── */}
+      {showLaborManagement && activeTab === "workers" && <WorkerProfilesTab />}
 
-            <TabsContent value="payroll" className="mt-6">
-              <PayrollSummaryTab />
-            </TabsContent>
-          </>
-        )}
-      </Tabs>
+      {/* ── Ledger ── */}
+      {showLaborManagement && activeTab === "ledger" && <WorkerLedgerTab />}
 
-      {(isAdmin || isOwner) && (
+      {/* ── Payroll ── */}
+      {showLaborManagement && activeTab === "payroll" && <PayrollSummaryTab />}
+
+      {/* ── Export ── */}
+      {(isAdmin || isOwner) && activeTab === "export" && (
         <Card>
           <CardHeader>
             <div className="flex justify-between items-start">

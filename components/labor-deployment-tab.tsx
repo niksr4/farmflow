@@ -3,6 +3,7 @@
 import type React from "react"
 
 import { useState, useEffect, useRef, useCallback } from "react"
+import InPageNav from "@/components/in-page-nav"
 import { useLaborData } from "@/hooks/use-labor-data"
 import { useTenantSettings } from "@/hooks/use-tenant-settings"
 import { Button } from "@/components/ui/button"
@@ -326,6 +327,14 @@ export default function LaborDeploymentTab({
 
   const formSectionRef = useRef<HTMLDivElement>(null)
   const historySectionRef = useRef<HTMLDivElement>(null)
+  const [showHistory, setShowHistory] = useState(false)
+
+  const toggleHistory = () => {
+    setShowHistory((v) => {
+      if (!v) setTimeout(() => historySectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }), 50)
+      return !v
+    })
+  }
 
   return (
     <>
@@ -346,6 +355,10 @@ export default function LaborDeploymentTab({
       </div>
     )}
     <div className="space-y-4">
+      <InPageNav items={[
+        { label: "Log Entry", ref: formSectionRef },
+        { label: "History", active: showHistory, onClick: toggleHistory },
+      ]} />
       {/* Mobile: QuickLogPanel tiles as default entry — full form opens via "More details" */}
       {isMobile && !isAdding && (
         <QuickLogPanel
@@ -761,7 +774,7 @@ export default function LaborDeploymentTab({
         </CardContent>
       </Card>
 
-      {loading ? (
+      {showHistory && (loading ? (
         <Card><CardContent className="p-0"><SkeletonTable rows={4} cols={5} /></CardContent></Card>
       ) : deployments.length > 0 ? (
         <Card ref={historySectionRef} className="border-stone-200 bg-white shadow-sm dark:border-white/[0.06] dark:bg-card">
@@ -958,7 +971,7 @@ export default function LaborDeploymentTab({
           primaryAction={{ label: isAdding ? "Continue entry" : "Add labour entry", onClick: openNewForm }}
           className="mt-2"
         />
-      )}
+      ))}
     </div>
     </>
   )

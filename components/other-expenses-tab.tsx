@@ -3,6 +3,7 @@
 import type React from "react"
 
 import { useState, useEffect, useCallback, useRef } from "react"
+import InPageNav from "@/components/in-page-nav"
 import { cn } from "@/lib/utils"
 import { FARMFLOW_RECORD_SAVED_EVENT } from "@/components/inventory-system/constants"
 import { useConsumablesData } from "@/hooks/use-consumables-data"
@@ -245,6 +246,14 @@ export default function OtherExpensesTab({
 
   const formSectionRef = useRef<HTMLDivElement>(null)
   const historySectionRef = useRef<HTMLDivElement>(null)
+  const [showHistory, setShowHistory] = useState(false)
+
+  const toggleHistory = () => {
+    setShowHistory((v) => {
+      if (!v) setTimeout(() => historySectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }), 50)
+      return !v
+    })
+  }
 
   useEffect(() => {
     if (!savedConfirm) return
@@ -271,6 +280,10 @@ export default function OtherExpensesTab({
       </div>
     )}
     <div className="space-y-4">
+      <InPageNav items={[
+        { label: "Log Expense", ref: formSectionRef },
+        { label: "History", active: showHistory, onClick: toggleHistory },
+      ]} />
       {/* Add entry button — always at top */}
       {!isAdding && (
         <button
@@ -591,7 +604,7 @@ export default function OtherExpensesTab({
         </CardContent>
       </Card>
 
-      {loading ? (
+      {showHistory && (loading ? (
         <Card><CardContent className="p-0"><SkeletonTable rows={4} cols={5} /></CardContent></Card>
       ) : deployments.length > 0 ? (
         <Card ref={historySectionRef}>
@@ -761,7 +774,7 @@ export default function OtherExpensesTab({
           primaryAction={{ label: isAdding ? "Continue entry" : "Add expense", onClick: () => setIsAdding(true) }}
           className="mt-2"
         />
-      )}
+      ))}
     </div>
     </>
   )

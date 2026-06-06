@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useEffect, useCallback, useMemo, useRef, type ChangeEvent, type KeyboardEvent as ReactKeyboardEvent } from "react"
+import InPageNav from "@/components/in-page-nav"
 import Link from "next/link"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -179,6 +180,31 @@ export default function SalesTab({
   const [internalWorkspaceView, setInternalWorkspaceView] = useState<SalesWorkspaceView>("coffee")
   const salesSaveStateRef = useRef({ canSubmitSale: false, isSaving: false })
   const salesSaveHandlerRef = useRef<(() => Promise<void> | void) | null>(null)
+  const saleFormRef = useRef<HTMLDivElement | null>(null)
+  const stockAvailableRef = useRef<HTMLDivElement | null>(null)
+  const salesRecordsRef = useRef<HTMLDivElement | null>(null)
+  const [showSalesRecords, setShowSalesRecords] = useState(false)
+  const toggleSalesRecords = () => {
+    setShowSalesRecords((v) => {
+      if (!v) setTimeout(() => salesRecordsRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }), 50)
+      return !v
+    })
+  }
+
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const section = (e as CustomEvent<string>).detail
+      if (section === "new-sale") saleFormRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })
+      else if (section === "stock-available") stockAvailableRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })
+      else if (section === "records") {
+        setShowSalesRecords(true)
+        setTimeout(() => salesRecordsRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }), 50)
+      }
+    }
+    window.addEventListener("farmflow:scroll-to-section", handler)
+    return () => window.removeEventListener("farmflow:scroll-to-section", handler)
+  }, [])
+
   const [saveFeedback, setSaveFeedback] = useState<{ type: "success" | "error"; message: string } | null>(null)
   const { toast } = useToast()
   const salesPageSize = 25
@@ -1127,6 +1153,11 @@ export default function SalesTab({
           </>
         }
       />
+      <InPageNav items={[
+        { label: "New Sale", ref: saleFormRef },
+        { label: "Stock Available", ref: stockAvailableRef },
+        { label: "Records", active: showSalesRecords, onClick: toggleSalesRecords },
+      ]} />
 
       <div className="overflow-hidden rounded-xl border border-stone-200 bg-white shadow-sm dark:border-white/[0.06] dark:bg-card">
         <div className="flex items-center justify-between border-b border-stone-100 px-5 py-4 dark:border-white/[0.05]">
@@ -1289,7 +1320,7 @@ export default function SalesTab({
         </button>
       </div>
 
-      {showAvailableStock && <div className="order-3 overflow-hidden rounded-xl border border-stone-200 bg-white shadow-sm dark:border-white/[0.06] dark:bg-card">
+      {showAvailableStock && <div ref={stockAvailableRef} className="order-3 overflow-hidden rounded-xl border border-stone-200 bg-white shadow-sm dark:border-white/[0.06] dark:bg-card">
         <div className="border-b border-stone-100 px-5 py-4 dark:border-white/[0.05]">
           <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-emerald-700 dark:text-emerald-500">Inventory</p>
           <p className="text-sm font-bold text-stone-900 dark:text-white">Available stock</p>
@@ -1417,7 +1448,7 @@ export default function SalesTab({
       </div>
 
       {/* Add/Edit Sale Form */}
-      <div className="order-1 overflow-hidden rounded-xl border border-stone-200 bg-white shadow-sm dark:border-white/[0.06] dark:bg-card">
+      <div ref={saleFormRef} className="order-1 overflow-hidden rounded-xl border border-stone-200 bg-white shadow-sm dark:border-white/[0.06] dark:bg-card">
         <div className="flex items-center gap-3 border-b border-stone-100 px-5 py-4 dark:border-white/[0.05]">
           <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-emerald-800 dark:bg-emerald-900/40">
             <IndianRupee className="h-4 w-4 text-emerald-400" />
@@ -1762,7 +1793,7 @@ export default function SalesTab({
       </div>
 
       {/* Sales Records Table */}
-      <div className="order-5 overflow-hidden rounded-xl border border-stone-200 bg-white shadow-sm dark:border-white/[0.06] dark:bg-card">
+      {showSalesRecords && <div ref={salesRecordsRef} className="order-5 overflow-hidden rounded-xl border border-stone-200 bg-white shadow-sm dark:border-white/[0.06] dark:bg-card">
         <div className="border-b border-stone-100 dark:border-white/[0.05]">
           <div className="flex flex-col gap-3 px-5 py-4 md:flex-row md:items-center md:justify-between">
             <div>
@@ -2036,7 +2067,7 @@ export default function SalesTab({
             </div>
           )}
         </div>
-      </div>
+      </div>}
         </>
       ) : (
         <OtherSalesTab

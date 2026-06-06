@@ -1,6 +1,7 @@
 "use client"
 
-import { useCallback, useEffect, useState, type ChangeEvent, type KeyboardEvent } from "react"
+import { useCallback, useEffect, useState, useRef, type ChangeEvent, type KeyboardEvent } from "react"
+import InPageNav from "@/components/in-page-nav"
 import Link from "next/link"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -896,8 +897,38 @@ export default function ProcessingTab({ showDataToolsControls = false }: Process
     }
   }, [])
 
+  const seasonTotalsRef = useRef<HTMLDivElement>(null)
+  const entryFormRef = useRef<HTMLDivElement>(null)
+  const recentEntriesRef = useRef<HTMLDivElement>(null)
+  const [showRecentEntries, setShowRecentEntries] = useState(false)
+  const toggleRecentEntries = () => {
+    setShowRecentEntries((v) => {
+      if (!v) setTimeout(() => recentEntriesRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }), 50)
+      return !v
+    })
+  }
+
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const section = (e as CustomEvent<string>).detail
+      if (section === "season-totals") seasonTotalsRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })
+      else if (section === "entry-form") entryFormRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })
+      else if (section === "recent-entries") {
+        setShowRecentEntries(true)
+        setTimeout(() => recentEntriesRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }), 50)
+      }
+    }
+    window.addEventListener("farmflow:scroll-to-section", handler)
+    return () => window.removeEventListener("farmflow:scroll-to-section", handler)
+  }, [])
+
   return (
     <div className="container mx-auto space-y-8 px-4 pb-10 pt-6 sm:px-6 lg:px-8">
+      <InPageNav items={[
+        { label: "Season Totals", ref: seasonTotalsRef },
+        { label: "Entry Form", ref: entryFormRef },
+        { label: "Recent Entries", active: showRecentEntries, onClick: toggleRecentEntries },
+      ]} />
       <TaskGuideCard
         eyebrow="Pulping guide"
         title="Record coffee pulping and output here"
@@ -922,7 +953,7 @@ export default function ProcessingTab({ showDataToolsControls = false }: Process
       />
 
       {/* Coffee Pulping Dashboard */}
-      <Card className="border-border/70 bg-white/80">
+      <Card ref={seasonTotalsRef} className="border-border/70 bg-white/80">
         <CardHeader>
           <div className="flex items-center justify-between gap-4">
             <div>
@@ -1036,7 +1067,7 @@ export default function ProcessingTab({ showDataToolsControls = false }: Process
       </Card>
 
       {/* Coffee Pulping Records */}
-      <Card className="border-border/70 bg-white/80">
+      <Card ref={entryFormRef} className="border-border/70 bg-white/80">
         <CardHeader>
           <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
             <div>
@@ -1458,7 +1489,7 @@ export default function ProcessingTab({ showDataToolsControls = false }: Process
       </Card>
 
       {/* Recent Records */}
-      <Card className="border-border/70 bg-white/80">
+      {showRecentEntries && <Card ref={recentEntriesRef} className="border-border/70 bg-white/80">
         <CardHeader>
           <CardTitle>Recent entries</CardTitle>
           <CardDescription>
@@ -1585,7 +1616,7 @@ export default function ProcessingTab({ showDataToolsControls = false }: Process
             </div>
           )}
         </CardContent>
-      </Card>
+      </Card>}
     </div>
   )
 }
