@@ -12,7 +12,7 @@ import { Textarea } from "@/components/ui/textarea"
 import { Calendar } from "@/components/ui/calendar"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { CalendarIcon, Loader2, Save, Trash2, Download } from "lucide-react"
+import { CalendarIcon, Loader2, Save, Trash2, Download, ChevronDown } from "lucide-react"
 import { format } from "date-fns"
 import { cn } from "@/lib/utils"
 import { useToast } from "@/hooks/use-toast"
@@ -901,6 +901,7 @@ export default function ProcessingTab({ showDataToolsControls = false }: Process
   const entryFormRef = useRef<HTMLDivElement>(null)
   const recentEntriesRef = useRef<HTMLDivElement>(null)
   const [activeSection, setActiveSection] = useState<"season-totals" | "entry-form" | "recent-entries">("season-totals")
+  const [showSeasonContent, setShowSeasonContent] = useState(false)
 
   useEffect(() => {
     const handler = (e: Event) => {
@@ -944,7 +945,20 @@ export default function ProcessingTab({ showDataToolsControls = false }: Process
       />
 
       {/* Coffee Pulping Dashboard */}
-      {activeSection === "season-totals" && <Card ref={seasonTotalsRef} className="border-border/70 bg-white/80">
+      {activeSection === "season-totals" && (
+        <div>
+          <button
+            type="button"
+            onClick={() => setShowSeasonContent(v => !v)}
+            className="flex w-full items-center justify-between rounded-xl border border-stone-200 bg-white px-4 py-3.5 text-left shadow-sm hover:bg-stone-50 transition-colors dark:border-white/[0.06] dark:bg-card"
+          >
+            <div>
+              <p className="text-sm font-semibold text-stone-800 dark:text-stone-100">Season Totals</p>
+              <p className="text-xs text-stone-400 mt-0.5">Processed quantities across all locations</p>
+            </div>
+            <ChevronDown className={cn("h-4 w-4 text-stone-400 shrink-0 transition-transform duration-200", showSeasonContent && "rotate-180")} />
+          </button>
+          {showSeasonContent && <Card ref={seasonTotalsRef} className="border-border/70 bg-white/80">
         <CardHeader>
           <div className="flex items-center justify-between gap-4">
             <div>
@@ -1056,6 +1070,8 @@ export default function ProcessingTab({ showDataToolsControls = false }: Process
           )}
         </CardContent>}
       </Card>}
+        </div>
+      )}
 
       {/* Coffee Pulping Records */}
       {activeSection === "entry-form" && <Card ref={entryFormRef} className="border-border/70 bg-white/80">

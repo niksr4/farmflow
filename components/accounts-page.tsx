@@ -12,7 +12,7 @@ import { Label } from "@/components/ui/label"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { FileSpreadsheet, FileText, Coins, PlusCircle, Settings, Users, Receipt, Loader2, Pencil, Trash2, Check, X, BarChart2, Wheat, BookOpen, DollarSign, UserCheck } from "lucide-react"
+import { FileSpreadsheet, FileText, Coins, PlusCircle, Settings, Users, Receipt, Loader2, Pencil, Trash2, Check, X, BarChart2, Wheat, BookOpen, DollarSign, UserCheck, ChevronDown } from "lucide-react"
 import { Skeleton, SkeletonTable, SkeletonCard } from "@/components/ui/skeleton"
 import { EmptyStateTable } from "@/components/ui/empty-state"
 import AttendanceTab from "./attendance-tab"
@@ -179,6 +179,8 @@ export default function AccountsPage({
   const [accountsIntelligenceLoading, setAccountsIntelligenceLoading] = useState(false)
   const [accountsIntelligenceError, setAccountsIntelligenceError] = useState<string | null>(null)
   const [activeTab, setActiveTab] = useState<AccountsView>(() => normalizeAccountsTab(initialTab, showLaborManagement, showPickingLog))
+  const [showCostPatterns, setShowCostPatterns] = useState(false)
+  const [showExpenditureSummary, setShowExpenditureSummary] = useState(false)
   const handledExportRequestRef = useRef<number | null>(null)
   const exportCombinedCSVRef = useRef<() => Promise<void>>(async () => undefined)
   const exportCombinedXlsxRef = useRef<() => Promise<void>>(async () => undefined)
@@ -1307,18 +1309,27 @@ export default function AccountsPage({
 
       {/* ── Dashboard ── */}
       {activeTab === "dashboard" && (
-        <div className="space-y-6">
-          {accountsIntelligenceLoading ? (
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
-              {[1, 2, 3, 4].map((i) => <SkeletonCard key={i} />)}
-            </div>
-          ) : patterns ? (
-            <Card>
-              <CardHeader>
-                <CardTitle>Smart Cost Patterns</CardTitle>
-                <CardDescription>Frequency and highest-cost intelligence for labour and other expenses.</CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
+        <div className="space-y-2">
+          {/* Smart Cost Patterns accordion */}
+          <div className="overflow-hidden rounded-xl border border-stone-200 bg-white shadow-sm dark:border-white/[0.06] dark:bg-card">
+            <button
+              type="button"
+              onClick={() => setShowCostPatterns(v => !v)}
+              className="flex w-full items-center justify-between px-4 py-3.5 text-left hover:bg-stone-50 transition-colors dark:hover:bg-white/[0.03]"
+            >
+              <div>
+                <p className="text-sm font-semibold text-stone-800 dark:text-stone-100">Smart Cost Patterns</p>
+                <p className="text-xs text-stone-400 mt-0.5">Spend mix, peak days and top codes</p>
+              </div>
+              <ChevronDown className={cn("h-4 w-4 text-stone-400 shrink-0 transition-transform duration-200", showCostPatterns && "rotate-180")} />
+            </button>
+            {showCostPatterns && (accountsIntelligenceLoading ? (
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4 border-t border-stone-100 p-4">
+                {[1, 2, 3, 4].map((i) => <SkeletonCard key={i} />)}
+              </div>
+            ) : patterns ? (
+              <div className="border-t border-stone-100 dark:border-white/[0.05]">
+              <CardContent className="space-y-4 pt-4">
             <>
               <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
                 <div className="rounded-xl border bg-card p-3">
@@ -1451,9 +1462,25 @@ export default function AccountsPage({
               </div>
             </>
               </CardContent>
-            </Card>
-          ) : null}
-          <AccountsSummaryCard />
+              </div>
+            ) : null)}
+          </div>
+
+          {/* Expenditure Summary accordion */}
+          <div className="overflow-hidden rounded-xl border border-stone-200 bg-white shadow-sm dark:border-white/[0.06] dark:bg-card">
+            <button
+              type="button"
+              onClick={() => setShowExpenditureSummary(v => !v)}
+              className="flex w-full items-center justify-between px-4 py-3.5 text-left hover:bg-stone-50 transition-colors dark:hover:bg-white/[0.03]"
+            >
+              <div>
+                <p className="text-sm font-semibold text-stone-800 dark:text-stone-100">Expenditure Summary</p>
+                <p className="text-xs text-stone-400 mt-0.5">Labour and expenses by activity code</p>
+              </div>
+              <ChevronDown className={cn("h-4 w-4 text-stone-400 shrink-0 transition-transform duration-200", showExpenditureSummary && "rotate-180")} />
+            </button>
+            {showExpenditureSummary && <AccountsSummaryCard />}
+          </div>
         </div>
       )}
 

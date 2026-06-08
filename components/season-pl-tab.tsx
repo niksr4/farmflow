@@ -99,6 +99,7 @@ export default function SeasonPlTab() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [activeSection, setActiveSection] = useState<"kpis" | "breakdown" | "by-buyer">("kpis")
+  const [showKpisContent, setShowKpisContent] = useState(false)
   const kpisRef = useRef<HTMLDivElement>(null)
   const breakdownRef = useRef<HTMLDivElement>(null)
   const buyersRef = useRef<HTMLDivElement>(null)
@@ -203,7 +204,19 @@ export default function SeasonPlTab() {
         <>
           {/* Top KPIs */}
           {activeSection === "kpis" && (
-          <div ref={kpisRef} className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          <div>
+            <button
+              type="button"
+              onClick={() => setShowKpisContent(v => !v)}
+              className="flex w-full items-center justify-between rounded-xl border border-stone-200 bg-white px-4 py-3.5 text-left shadow-sm hover:bg-stone-50 transition-colors dark:border-white/[0.06] dark:bg-card"
+            >
+              <div>
+                <p className="text-sm font-semibold text-stone-800 dark:text-stone-100">Key Performance Indicators</p>
+                <p className="text-xs text-stone-400 mt-0.5">Revenue, costs, profit and average realization</p>
+              </div>
+              <ChevronDown className={cn("h-4 w-4 text-stone-400 shrink-0 transition-transform duration-200", showKpisContent && "rotate-180")} />
+            </button>
+            {showKpisContent && <div ref={kpisRef} className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
             <KpiCard
               label="Total Revenue"
               value={fmt(data.revenue.totalSalesInr)}
@@ -231,6 +244,7 @@ export default function SeasonPlTab() {
               sub={`Cost: ₹${data.profitability.costPerKgProduced.toFixed(0)}/kg`}
               icon={Package}
             />
+          </div>}
           </div>
           )}
 

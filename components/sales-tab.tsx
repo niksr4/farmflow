@@ -12,7 +12,7 @@ import { Calendar } from "@/components/ui/calendar"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
-import { CalendarIcon, Loader2, Save, Trash2, Download, IndianRupee, TrendingUp, Pencil } from "lucide-react"
+import { CalendarIcon, Loader2, Save, Trash2, Download, IndianRupee, TrendingUp, Pencil, ChevronDown } from "lucide-react"
 import { format } from "date-fns"
 import { cn } from "@/lib/utils"
 import { useToast } from "@/hooks/use-toast"
@@ -183,6 +183,7 @@ export default function SalesTab({
   const stockAvailableRef = useRef<HTMLDivElement | null>(null)
   const salesRecordsRef = useRef<HTMLDivElement | null>(null)
   const [activeSection, setActiveSection] = useState<"overview" | "new-sale" | "stock-available" | "records">("overview")
+  const [showOverviewContent, setShowOverviewContent] = useState(false)
 
   useEffect(() => {
     const handler = (e: Event) => {
@@ -1363,7 +1364,20 @@ export default function SalesTab({
       </div>}
 
       {/* Summary Cards — Overview landing */}
-      {activeSection === "overview" && <div className="order-4 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+      {activeSection === "overview" && (
+        <div>
+          <button
+            type="button"
+            onClick={() => setShowOverviewContent(v => !v)}
+            className="flex w-full items-center justify-between rounded-xl border border-stone-200 bg-white px-4 py-3.5 text-left shadow-sm hover:bg-stone-50 transition-colors dark:border-white/[0.06] dark:bg-card"
+          >
+            <div>
+              <p className="text-sm font-semibold text-stone-800 dark:text-stone-100">Sales Overview</p>
+              <p className="text-xs text-stone-400 mt-0.5">Revenue, bags sold and average price breakdown</p>
+            </div>
+            <ChevronDown className={cn("h-4 w-4 text-stone-400 shrink-0 transition-transform duration-200", showOverviewContent && "rotate-180")} />
+          </button>
+          {showOverviewContent && <div className="order-4 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         {/* Coffee Revenue */}
         <div className="overflow-hidden rounded-xl border border-stone-200 bg-white shadow-sm dark:border-white/[0.06] dark:bg-card">
           <div className="border-b border-stone-100 px-5 py-3 dark:border-white/[0.05]">
@@ -1428,6 +1442,8 @@ export default function SalesTab({
           </div>
         </div>
       </div>}
+        </div>
+      )}
 
       {/* Add/Edit Sale Form */}
       {activeSection === "new-sale" && <div ref={saleFormRef} className="order-1 overflow-hidden rounded-xl border border-stone-200 bg-white shadow-sm dark:border-white/[0.06] dark:bg-card">

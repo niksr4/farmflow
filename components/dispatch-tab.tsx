@@ -13,7 +13,7 @@ import { Calendar } from "@/components/ui/calendar"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
-import { CalendarIcon, Loader2, Save, Trash2, Download, Package, Truck, Pencil } from "lucide-react"
+import { CalendarIcon, Loader2, Save, Trash2, Download, Package, Truck, Pencil, ChevronDown } from "lucide-react"
 import { format } from "date-fns"
 import { cn } from "@/lib/utils"
 import { useToast } from "@/hooks/use-toast"
@@ -139,6 +139,7 @@ export default function DispatchTab({ showDataToolsControls = false }: DispatchT
   const stockSummaryRef = useRef<HTMLDivElement | null>(null)
   const recordsRef = useRef<HTMLDivElement | null>(null)
   const [activeSection, setActiveSection] = useState<"stock-flow" | "new-dispatch" | "records">("stock-flow")
+  const [showStockContent, setShowStockContent] = useState(false)
 
   useEffect(() => {
     const handler = (e: Event) => {
@@ -910,7 +911,20 @@ export default function DispatchTab({ showDataToolsControls = false }: DispatchT
         Bags are logistics units; received KGs feed downstream sales availability.
       </p>
 
-      {activeSection === "stock-flow" && <>
+      {activeSection === "stock-flow" && (
+        <div>
+          <button
+            type="button"
+            onClick={() => setShowStockContent(v => !v)}
+            className="flex w-full items-center justify-between rounded-xl border border-stone-200 bg-white px-4 py-3.5 text-left shadow-sm hover:bg-stone-50 transition-colors dark:border-white/[0.06] dark:bg-card"
+          >
+            <div>
+              <p className="text-sm font-semibold text-stone-800 dark:text-stone-100">Stock Flow</p>
+              <p className="text-xs text-stone-400 mt-0.5">Processed, dispatched, received and on-hand</p>
+            </div>
+            <ChevronDown className={cn("h-4 w-4 text-stone-400 shrink-0 transition-transform duration-200", showStockContent && "rotate-180")} />
+          </button>
+          {showStockContent && <>
       <div ref={stockSummaryRef} className="order-4 overflow-hidden rounded-xl border border-stone-200 bg-white shadow-sm dark:border-white/[0.06] dark:bg-card">
         <div className="border-b border-stone-100 px-5 py-4 dark:border-white/[0.05]">
           <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-stone-400">Stock flow</p>
@@ -1020,6 +1034,8 @@ export default function DispatchTab({ showDataToolsControls = false }: DispatchT
         </div>
       </div>}
       </>}
+        </div>
+      )}
 
       {/* Add Dispatch Form */}
       {activeSection === "new-dispatch" && <div ref={dispatchFormRef} className="order-1 overflow-hidden rounded-xl border border-stone-200 bg-white shadow-sm dark:border-white/[0.06] dark:bg-card">

@@ -385,7 +385,7 @@ export default function LaborDeploymentTab({
           tip="A simple code like HARVEST, WEEDING, or PRUNING is better than waiting for a perfect accounting structure."
         />
       )}
-      {activeSection === "form" && <Card ref={formSectionRef} className="border-stone-200 bg-white shadow-sm dark:border-white/[0.06] dark:bg-card">
+      {activeSection === "form" && <Card ref={formSectionRef} className={cn("border-stone-200 bg-white shadow-sm dark:border-white/[0.06] dark:bg-card", isMobile && !isAdding && "hidden")}>
         <CardHeader className="border-b border-stone-100 dark:border-white/[0.05]">
           <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
             <div>
