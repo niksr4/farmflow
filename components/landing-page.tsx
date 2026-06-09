@@ -2,7 +2,7 @@
 
 import { useEffect, useRef } from "react"
 import Link from "next/link"
-import { motion } from "framer-motion"
+import { motion, useMotionValue, useSpring, useInView, useTransform } from "framer-motion"
 import posthog from "posthog-js"
 import {
   ArrowRight,
@@ -26,31 +26,91 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { MODULE_BUNDLES, MODULES } from "@/lib/modules"
 
+/* ── Animated count-up number ── */
+function CountUpNumber({
+  target,
+  prefix = "",
+  suffix = "",
+  decimals = 0,
+  duration = 1.8,
+}: {
+  target: number
+  prefix?: string
+  suffix?: string
+  decimals?: number
+  duration?: number
+}) {
+  const ref = useRef<HTMLSpanElement>(null) as React.RefObject<Element>
+  const isInView = useInView(ref, { once: true, margin: "-60px" })
+  const motionVal = useMotionValue(0)
+  const spring = useSpring(motionVal, { duration: duration * 1000, bounce: 0 })
+  const display = useTransform(spring, (v) => {
+    const formatted = decimals > 0
+      ? v.toFixed(decimals)
+      : Math.round(v).toLocaleString("en-IN")
+    return `${prefix}${formatted}${suffix}`
+  })
+
+  useEffect(() => {
+    if (isInView) motionVal.set(target)
+  }, [isInView, motionVal, target])
+
+  return <motion.span ref={ref}>{display}</motion.span>
+}
+
+/* ── Infinite marquee strip ── */
+const marqueeItems = [
+  "Cherry intake", "Pulping records", "Parchment out", "Dispatch", "Sales",
+  "Labour & wages", "Season P&L", "Cost per KG", "Weekly digest",
+  "Market timing", "AI assistant", "Rainfall tracker", "Inventory",
+  "Buyer receipts", "Accounts", "Exception alerts", "Yield forecast",
+]
+
+function MarqueeStrip() {
+  const doubled = [...marqueeItems, ...marqueeItems]
+  return (
+    <div className="relative overflow-hidden py-3" aria-hidden>
+      <div className="pointer-events-none absolute inset-y-0 left-0 z-10 w-20 bg-gradient-to-r from-[#080f0d] to-transparent" />
+      <div className="pointer-events-none absolute inset-y-0 right-0 z-10 w-20 bg-gradient-to-l from-[#080f0d] to-transparent" />
+      <div className="marquee-track gap-3 flex">
+        {doubled.map((item, i) => (
+          <span
+            key={i}
+            className="shrink-0 rounded-full border border-white/[0.09] bg-white/[0.03] px-4 py-1.5 text-xs font-medium text-stone-500 whitespace-nowrap"
+          >
+            {item}
+          </span>
+        ))}
+      </div>
+    </div>
+  )
+}
+
 const representativeEstateFlow = [
   {
     label: "Cherry intake",
-    value: "183,766 KG",
+    countTarget: 183766, countSuffix: " KG",
     detail: "88 pulping entries across the season",
     icon: Coffee,
     accentClassName: "bg-amber-400/15 text-amber-200 border-amber-300/20",
   },
   {
     label: "Parchment out",
-    value: "50,229 KG",
+    countTarget: 50229, countSuffix: " KG",
     detail: "27.3% cherry-to-parchment ratio",
     icon: PackageCheck,
     accentClassName: "bg-emerald-400/15 text-emerald-200 border-emerald-300/20",
   },
   {
     label: "Dispatched & received",
-    value: "19,347 KG",
+    countTarget: 19347, countSuffix: " KG",
     detail: "Buyer-confirmed before it counts as sold",
     icon: Truck,
     accentClassName: "bg-sky-400/15 text-sky-200 border-sky-300/20",
   },
   {
     label: "Revenue booked",
-    value: "₹55.6L",
+    countTarget: 55.6, countPrefix: "₹", countSuffix: "L", countDecimals: 1,
     detail: "11,910 KG at final sale",
     icon: Wallet,
     accentClassName: "bg-violet-400/15 text-violet-200 border-violet-300/20",
@@ -248,6 +308,12 @@ export default function LandingPage() {
 
         {/* ── Hero ── */}
         <MotionDiv {...reveal(0)} className="relative overflow-hidden pt-12 text-center sm:pt-20">
+          {/* Animated gradient orbs */}
+          <div aria-hidden className="pointer-events-none absolute inset-0 overflow-hidden">
+            <div className="orb-a absolute left-[15%] top-[10%] h-[420px] w-[420px] rounded-full bg-[radial-gradient(circle,rgba(52,211,153,0.13)_0%,transparent_65%)] blur-[80px]" />
+            <div className="orb-b absolute right-[12%] top-[5%] h-[320px] w-[320px] rounded-full bg-[radial-gradient(circle,rgba(251,191,36,0.08)_0%,transparent_65%)] blur-[80px]" />
+            <div className="absolute bottom-0 left-1/2 h-[200px] w-[600px] -translate-x-1/2 rounded-full bg-[radial-gradient(ellipse,rgba(52,211,153,0.07)_0%,transparent_70%)] blur-[60px]" />
+          </div>
           <div aria-hidden className="pointer-events-none absolute inset-0 hidden lg:block">
             {heroBeanSpecs.map((bean, index) => (
               <span
@@ -377,7 +443,14 @@ export default function LandingPage() {
                     <p className="text-[10px] font-semibold uppercase tracking-[0.26em] text-stone-500">
                       {step.label}
                     </p>
-                    <p className="mt-2 font-display text-2xl font-black text-stone-50">{step.value}</p>
+                    <p className="mt-2 font-display text-2xl font-black text-stone-50 tabular-nums">
+                      <CountUpNumber
+                        target={step.countTarget}
+                        prefix={step.countPrefix}
+                        suffix={step.countSuffix}
+                        decimals={step.countDecimals ?? 0}
+                      />
+                    </p>
                     <p className="mt-1 text-xs leading-relaxed text-stone-600">{step.detail}</p>
                   </div>
                   {index < representativeEstateFlow.length - 1 && (
@@ -406,6 +479,9 @@ export default function LandingPage() {
             )
           })}
         </MotionDiv>
+
+        {/* ── Marquee ── */}
+        <MarqueeStrip />
 
         {/* ── Benefits ── */}
         <MotionSection {...reveal(0)} className="space-y-4">

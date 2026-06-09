@@ -626,6 +626,38 @@ aside a[href]:active {
   }
 }
 
+/* ── Marquee — infinite horizontal scroll ────────────────────────────────── */
+@keyframes marquee {
+  0%   { transform: translateX(0); }
+  100% { transform: translateX(-50%); }
+}
+.marquee-track {
+  display: flex;
+  width: max-content;
+  animation: marquee 32s linear infinite;
+  will-change: transform;
+}
+.marquee-track:hover {
+  animation-play-state: paused;
+}
+@media (prefers-reduced-motion: reduce) {
+  .marquee-track { animation: none; }
+}
+
+/* ── Hero orbs — slow drifting radial glows ─────────────────────────────── */
+@keyframes orb-drift-a {
+  0%, 100% { transform: translate(0, 0) scale(1); }
+  33%       { transform: translate(40px, -30px) scale(1.08); }
+  66%       { transform: translate(-20px, 20px) scale(0.96); }
+}
+@keyframes orb-drift-b {
+  0%, 100% { transform: translate(0, 0) scale(1); }
+  40%       { transform: translate(-50px, 25px) scale(1.06); }
+  75%       { transform: translate(30px, -15px) scale(0.97); }
+}
+.orb-a { animation: orb-drift-a 18s ease-in-out infinite; }
+.orb-b { animation: orb-drift-b 22s ease-in-out infinite; }
+
 @keyframes reveal-up {
   from {
     opacity: 0;
