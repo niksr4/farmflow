@@ -5,6 +5,8 @@ import { ArrowRight, CheckCircle2, Sparkles } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
+import LottieAnimation from "@/components/ui/lottie-animation"
+import emptyStateAnimation from "@/public/animations/empty-state.json"
 
 type WorkflowAction = {
   label: string
@@ -70,14 +72,21 @@ export default function WorkflowEmptyState({
       )}
     >
       <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-        <div className="max-w-2xl space-y-2">
-          <div className="inline-flex items-center gap-2 rounded-full border border-emerald-200 bg-white px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-emerald-700">
-            <Sparkles className="h-3.5 w-3.5" />
-            First record guide
-          </div>
-          <div>
-            <p className="text-base font-semibold text-slate-900">{title}</p>
-            <p className="mt-1 text-sm leading-6 text-slate-600">{description}</p>
+        <div className="flex items-start gap-4">
+          <LottieAnimation
+            animationData={emptyStateAnimation}
+            className="hidden sm:block shrink-0"
+            style={{ width: 72, height: 72 }}
+          />
+          <div className="max-w-2xl space-y-2">
+            <div className="inline-flex items-center gap-2 rounded-full border border-emerald-200 bg-white px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-emerald-700">
+              <Sparkles className="h-3.5 w-3.5" />
+              First record guide
+            </div>
+            <div>
+              <p className="text-base font-semibold text-slate-900">{title}</p>
+              <p className="mt-1 text-sm leading-6 text-slate-600">{description}</p>
+            </div>
           </div>
         </div>
         {(primaryAction || secondaryAction) && (

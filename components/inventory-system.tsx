@@ -5,7 +5,6 @@ import dynamic from "next/dynamic"
 import { useTheme } from "next-themes"
 import {
   Check,
-  ChevronDown,
   Download,
   Upload,
   List,
@@ -137,6 +136,27 @@ import {
 } from "@/components/inventory-system/utils"
 import { downloadDataToolsTemplate, exportOpsCsv, getDataToolsSelection } from "@/components/inventory-system/data-tools-export"
 import RecordMovementPanel from "@/components/inventory-system/record-movement-panel"
+import MobileSidebarDrawer from "@/components/inventory-system/mobile-sidebar-drawer"
+import PreviewModeBanner from "@/components/inventory-system/preview-mode-banner"
+import WelcomeCard from "@/components/inventory-system/welcome-card"
+import DataToolsPanel from "@/components/inventory-system/data-tools-panel"
+import WriteQueueCard from "@/components/inventory-system/write-queue-card"
+import PlatformConsoleCard from "@/components/inventory-system/platform-console-card"
+import TrialBanner from "@/components/inventory-system/trial-banner"
+import SetupCompleteCard from "@/components/inventory-system/setup-complete-card"
+import RecentActivityFeed from "@/components/inventory-system/recent-activity-feed"
+import MobileHomeSection from "@/components/inventory-system/mobile-home-section"
+import ExecutionScorecardCard from "@/components/inventory-system/execution-scorecard-card"
+import EstateOverviewCard from "@/components/inventory-system/estate-overview-card"
+import SmartInsightsCard from "@/components/inventory-system/smart-insights-card"
+import InventoryWorkspaceBanner from "@/components/inventory-system/inventory-workspace-banner"
+import WorkspaceHeader from "@/components/inventory-system/workspace-header"
+import InventoryQuickActionsSidebar from "@/components/inventory-system/inventory-quick-actions-sidebar"
+import InventorySystemAlerts from "@/components/inventory-system/inventory-system-alerts"
+import ProcessingWorkspace from "@/components/inventory-system/processing-workspace"
+import AiAnalysisCard from "@/components/inventory-system/ai-analysis-card"
+import HomeNavCard from "@/components/inventory-system/home-nav-card"
+import { useHeroTotals } from "@/hooks/use-hero-totals"
 import SimpleMarkdown from "@/components/ui/simple-markdown"
 import InventoryDrilldownPanel from "@/components/inventory-system/inventory-drilldown-panel"
 import SeasonProgressStrip from "@/components/inventory-system/season-progress-strip"
@@ -330,87 +350,7 @@ export default function InventorySystem() {
   const [summary, setSummary] = useState({ total_inventory_value: 0, total_items: 0, total_quantity: 0 })
   const [accountsTotals, setAccountsTotals] = useState({ laborTotal: 0, otherTotal: 0, grandTotal: 0 })
   const [accountsTotalsLoading, setAccountsTotalsLoading] = useState(false)
-  const [processingTotals, setProcessingTotals] = useState({
-    arabicaKg: 0,
-    arabicaBags: 0,
-    robustaKg: 0,
-    robustaBags: 0,
-    loading: false,
-    error: null as string | null,
-  })
-  const [dispatchHeroTotals, setDispatchHeroTotals] = useState({
-    arabicaBags: 0,
-    arabicaKgs: 0,
-    robustaBags: 0,
-    robustaKgs: 0,
-    totalDispatches: 0,
-    loading: false,
-    error: null as string | null,
-  })
-  const [salesHeroTotals, setSalesHeroTotals] = useState({
-    arabicaBags: 0,
-    arabicaKgs: 0,
-    robustaBags: 0,
-    robustaKgs: 0,
-    totalSales: 0,
-    totalRevenue: 0,
-    loading: false,
-    error: null as string | null,
-  })
-  const [otherSalesHeroTotals, setOtherSalesHeroTotals] = useState({
-    totalRevenue: 0,
-    totalCount: 0,
-    loading: false,
-    error: null as string | null,
-  })
-  const [curingHeroTotals, setCuringHeroTotals] = useState({
-    totalRecords: 0,
-    totalOutputKg: 0,
-    avgDryingDays: 0,
-    avgMoistureDrop: 0,
-    loading: false,
-    error: null as string | null,
-  })
-  const [qualityHeroTotals, setQualityHeroTotals] = useState({
-    totalRecords: 0,
-    avgCupScore: 0,
-    avgOutturnPct: 0,
-    avgDefects: 0,
-    loading: false,
-    error: null as string | null,
-  })
-  const [pepperHeroTotals, setPepperHeroTotals] = useState({
-    totalRecords: 0,
-    totalPickedKg: 0,
-    totalDryKg: 0,
-    avgDryPercent: 0,
-    loading: false,
-    error: null as string | null,
-  })
-  const [rubberHeroTotals, setRubberHeroTotals] = useState({
-    totalRecords: 0,
-    totalLatexKg: 0,
-    totalSheetsKg: 0,
-    avgDrcPct: 0,
-    loading: false,
-    error: null as string | null,
-  })
-  const [rainfallHeroTotals, setRainfallHeroTotals] = useState({
-    totalRecords: 0,
-    totalInches: 0,
-    latestDate: null as string | null,
-    loading: false,
-    error: null as string | null,
-  })
-  const [receivablesHeroTotals, setReceivablesHeroTotals] = useState({
-    totalInvoiced: 0,
-    totalOutstanding: 0,
-    totalOverdue: 0,
-    totalPaid: 0,
-    totalCount: 0,
-    loading: false,
-    error: null as string | null,
-  })
+  // hero totals state lives in useHeroTotals — wired below)
   const [costPerKgData, setCostPerKgData] = useState<{
     laborCost: number
     expenseCost: number
@@ -529,17 +469,6 @@ export default function InventorySystem() {
     [],
   )
   const [isOnboardingExpanded, setIsOnboardingExpanded] = useState(false)
-  const [exceptionsSummary, setExceptionsSummary] = useState<{
-    count: number
-    highlights: string[]
-    alerts: ExceptionSummaryAlert[]
-  }>({
-    count: 0,
-    highlights: [],
-    alerts: [],
-  })
-  const [exceptionsLoading, setExceptionsLoading] = useState(false)
-  const [exceptionsError, setExceptionsError] = useState<string | null>(null)
   const [intelligenceBrief, setIntelligenceBrief] = useState<IntelligenceBrief | null>(null)
   const [intelligenceLoading, setIntelligenceLoading] = useState(false)
   const [intelligenceError, setIntelligenceError] = useState<string | null>(null)
@@ -570,7 +499,6 @@ export default function InventorySystem() {
   const [trialBannerDismissed, setTrialBannerDismissed] = useState(false)
   const [activityStreak, setActivityStreak] = useState<number>(0)
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false)
-  const [scorecardExpanded, setScorecardExpanded] = useState(false)
 
   // auth + router
   const { user, logout, status } = useAuth()
@@ -702,6 +630,41 @@ export default function InventorySystem() {
   const processingWorkspaceIcon = canShowProcessing ? Factory : Leaf
   const shouldLoadHomeMetrics = activeTab === "home"
   const shouldLoadExceptionSummary = activeTab === "home" || activeTab === "season"
+
+  const {
+    processingTotals,
+    dispatchHeroTotals,
+    salesHeroTotals,
+    otherSalesHeroTotals,
+    curingHeroTotals,
+    qualityHeroTotals,
+    pepperHeroTotals,
+    rubberHeroTotals,
+    rainfallHeroTotals,
+    receivablesHeroTotals,
+    exceptionsSummary,
+    exceptionsLoading,
+    exceptionsError,
+  } = useHeroTotals({
+    tenantId,
+    shouldLoadHomeMetrics,
+    shouldLoadExceptionSummary,
+    isPreviewMode,
+    previewTenantId,
+    currentFiscalYear,
+    canShowProcessing,
+    canShowDispatch,
+    canShowSales,
+    canShowOtherSales,
+    canShowReceivables,
+    canShowCuring,
+    canShowQuality,
+    canShowPepper,
+    canShowRubber,
+    canShowRainfall,
+    canShowSeason,
+  })
+
   const resolvedProcessingWorkspaceView: ProcessingWorkspaceView =
     processingWorkspaceView === "pepper" && canShowPepper
       ? "pepper"
@@ -3285,16 +3248,7 @@ export default function InventorySystem() {
     actionLabel: string
     actionTab: string
   }
-  const executionOutcomeTone: Record<ExecutionOutcomeStatus, string> = {
-    good: "border-emerald-200 bg-emerald-50 text-emerald-700",
-    attention: "border-amber-200 bg-amber-50 text-amber-700",
-    blocked: "border-rose-200 bg-rose-50 text-rose-700",
-  }
-  const executionOutcomeLabel: Record<ExecutionOutcomeStatus, string> = {
-    good: "Strong",
-    attention: "Needs Attention",
-    blocked: "Blocked",
-  }
+
   const recentThirtyDayTransactions = useMemo(() => {
     const cutoff = Date.now() - 30 * 24 * 60 * 60 * 1000
     return transactions.filter((tx) => {
@@ -3796,665 +3750,6 @@ export default function InventorySystem() {
     hasTrackedInsightViewRef.current = false
   }, [effectiveRole, tenantId])
 
-  useEffect(() => {
-    if (!tenantId || !canShowProcessing) return
-    if (!shouldLoadHomeMetrics) return
-    let ignore = false
-
-    const loadProcessingTotals = async () => {
-      setProcessingTotals((prev) => ({ ...prev, loading: true, error: null }))
-      try {
-        const res = await fetch("/api/processing-records?summary=dashboard")
-        const json = await res.json().catch(() => ({}))
-        if (!res.ok || !json?.success) {
-          throw new Error(json?.error || "Failed to load processing totals")
-        }
-        const records = Array.isArray(json.records) ? json.records : []
-        const totals = records.reduce(
-          (acc: { arabicaKg: number; arabicaBags: number; robustaKg: number; robustaBags: number }, record: any) => {
-            const type = String(record?.coffee_type || "").toLowerCase()
-            const kg =
-              (Number(record?.dry_parch_total) || 0) +
-              (Number(record?.dry_cherry_total) || 0)
-            const bags =
-              (Number(record?.dry_p_bags_total) || 0) +
-              (Number(record?.dry_cherry_bags_total) || 0)
-            if (type.includes("arab")) {
-              acc.arabicaKg += kg
-              acc.arabicaBags += bags
-            } else if (type.includes("rob")) {
-              acc.robustaKg += kg
-              acc.robustaBags += bags
-            }
-            return acc
-          },
-          { arabicaKg: 0, arabicaBags: 0, robustaKg: 0, robustaBags: 0 },
-        )
-        if (!ignore) {
-          setProcessingTotals({
-            ...totals,
-            loading: false,
-            error: null,
-          })
-        }
-      } catch (error: any) {
-        if (!ignore) {
-          setProcessingTotals((prev) => ({
-            ...prev,
-            loading: false,
-            error: error?.message || "Failed to load processing totals",
-          }))
-        }
-      }
-    }
-
-    loadProcessingTotals()
-    return () => {
-      ignore = true
-    }
-  }, [tenantId, canShowProcessing, shouldLoadHomeMetrics])
-
-  useEffect(() => {
-    if (!tenantId || !canShowDispatch) return
-    if (!shouldLoadHomeMetrics) return
-    let ignore = false
-
-    const loadDispatchHeroTotals = async () => {
-      setDispatchHeroTotals((prev) => ({ ...prev, loading: true, error: null }))
-      try {
-        const res = await fetch("/api/dispatch?summaryOnly=true")
-        const json = await res.json().catch(() => ({}))
-        if (!res.ok || !json?.success) {
-          throw new Error(json?.error || "Failed to load dispatch totals")
-        }
-        const totalsByType = Array.isArray(json?.totalsByType) ? json.totalsByType : []
-        const totals = totalsByType.reduce(
-          (acc: { arabicaBags: number; arabicaKgs: number; robustaBags: number; robustaKgs: number }, row: any) => {
-            const type = String(row?.coffee_type || "").toLowerCase()
-            const bags = Number(row?.bags_dispatched) || 0
-            const kgs = Number(row?.kgs_received) || 0
-            if (type.includes("arab")) {
-              acc.arabicaBags += bags
-              acc.arabicaKgs += kgs
-            } else if (type.includes("rob")) {
-              acc.robustaBags += bags
-              acc.robustaKgs += kgs
-            }
-            return acc
-          },
-          { arabicaBags: 0, arabicaKgs: 0, robustaBags: 0, robustaKgs: 0 },
-        )
-        if (!ignore) {
-          setDispatchHeroTotals({
-            ...totals,
-            totalDispatches: Number(json?.totalCount) || 0,
-            loading: false,
-            error: null,
-          })
-        }
-      } catch (error: any) {
-        if (!ignore) {
-          setDispatchHeroTotals((prev) => ({
-            ...prev,
-            loading: false,
-            error: error?.message || "Failed to load dispatch totals",
-          }))
-        }
-      }
-    }
-
-    loadDispatchHeroTotals()
-    return () => {
-      ignore = true
-    }
-  }, [tenantId, canShowDispatch, shouldLoadHomeMetrics])
-
-  useEffect(() => {
-    if (!tenantId || !canShowSales) return
-    if (!shouldLoadHomeMetrics) return
-    let ignore = false
-
-    const loadSalesHeroTotals = async () => {
-      setSalesHeroTotals((prev) => ({ ...prev, loading: true, error: null }))
-      try {
-        const res = await fetch("/api/sales?summaryOnly=true")
-        const json = await res.json().catch(() => ({}))
-        if (!res.ok || !json?.success) {
-          throw new Error(json?.error || "Failed to load sales totals")
-        }
-        const totalsByType = Array.isArray(json?.totalsByType) ? json.totalsByType : []
-        const totals = totalsByType.reduce(
-          (acc: { arabicaBags: number; arabicaKgs: number; robustaBags: number; robustaKgs: number }, row: any) => {
-            const type = String(row?.coffee_type || "").toLowerCase()
-            const bags = Number(row?.bags_sold) || 0
-            const kgs = Number(row?.kgs_sold) || 0
-            if (type.includes("arab")) {
-              acc.arabicaBags += bags
-              acc.arabicaKgs += kgs
-            } else if (type.includes("rob")) {
-              acc.robustaBags += bags
-              acc.robustaKgs += kgs
-            }
-            return acc
-          },
-          { arabicaBags: 0, arabicaKgs: 0, robustaBags: 0, robustaKgs: 0 },
-        )
-        if (!ignore) {
-          setSalesHeroTotals({
-            ...totals,
-            totalSales: Number(json?.totalCount) || 0,
-            totalRevenue: Number(json?.totalRevenue) || 0,
-            loading: false,
-            error: null,
-          })
-        }
-      } catch (error: any) {
-        if (!ignore) {
-          setSalesHeroTotals((prev) => ({
-            ...prev,
-            loading: false,
-            error: error?.message || "Failed to load sales totals",
-          }))
-        }
-      }
-    }
-
-    loadSalesHeroTotals()
-    return () => {
-      ignore = true
-    }
-  }, [tenantId, canShowSales, shouldLoadHomeMetrics])
-
-  useEffect(() => {
-    if (!tenantId || !canShowOtherSales) {
-      setOtherSalesHeroTotals({
-        totalRevenue: 0,
-        totalCount: 0,
-        loading: false,
-        error: null,
-      })
-      return
-    }
-    if (!shouldLoadHomeMetrics) return
-
-    let ignore = false
-
-    const loadOtherSalesHeroTotals = async () => {
-      setOtherSalesHeroTotals((prev) => ({ ...prev, loading: true, error: null }))
-      try {
-        const res = await fetch("/api/other-sales?all=true", { cache: "no-store" })
-        const json = await res.json().catch(() => ({}))
-        if (!res.ok || !json?.success) {
-          throw new Error(json?.error || "Failed to load other sales totals")
-        }
-        if (!ignore) {
-          setOtherSalesHeroTotals({
-            totalRevenue: Number(json?.totals?.totalRevenue) || 0,
-            totalCount: Number(json?.totalCount) || 0,
-            loading: false,
-            error: null,
-          })
-        }
-      } catch (error: any) {
-        if (!ignore) {
-          setOtherSalesHeroTotals((prev) => ({
-            ...prev,
-            loading: false,
-            error: error?.message || "Failed to load other sales totals",
-          }))
-        }
-      }
-    }
-
-    loadOtherSalesHeroTotals()
-    return () => {
-      ignore = true
-    }
-  }, [tenantId, canShowOtherSales, shouldLoadHomeMetrics])
-
-  useEffect(() => {
-    if (!tenantId || !canShowReceivables) return
-    if (!shouldLoadHomeMetrics) return
-    let ignore = false
-
-    const loadReceivablesHeroTotals = async () => {
-      setReceivablesHeroTotals((prev) => ({ ...prev, loading: true, error: null }))
-      try {
-        const params = new URLSearchParams()
-        if (isPreviewMode && previewTenantId) {
-          params.set("tenantId", previewTenantId)
-        }
-        const endpoint = params.toString() ? `/api/receivables?${params.toString()}` : "/api/receivables"
-        const res = await fetch(endpoint, { cache: "no-store" })
-        const json = await res.json().catch(() => ({}))
-        if (!res.ok || !json?.success) {
-          throw new Error(json?.error || "Failed to load receivables totals")
-        }
-        const payload = json?.summary || {}
-        if (!ignore) {
-          setReceivablesHeroTotals({
-            totalInvoiced: Number(payload.totalInvoiced) || 0,
-            totalOutstanding: Number(payload.totalOutstanding) || 0,
-            totalOverdue: Number(payload.totalOverdue) || 0,
-            totalPaid: Number(payload.totalPaid) || 0,
-            totalCount: Number(payload.totalCount) || 0,
-            loading: false,
-            error: null,
-          })
-        }
-      } catch (error: any) {
-        if (!ignore) {
-          setReceivablesHeroTotals((prev) => ({
-            ...prev,
-            loading: false,
-            error: error?.message || "Failed to load receivables totals",
-          }))
-        }
-      }
-    }
-
-    loadReceivablesHeroTotals()
-    return () => {
-      ignore = true
-    }
-  }, [canShowReceivables, isPreviewMode, previewTenantId, shouldLoadHomeMetrics, tenantId])
-
-  useEffect(() => {
-    if (!tenantId || !canShowCuring) return
-    if (!shouldLoadHomeMetrics) return
-    let ignore = false
-
-    const loadCuringHeroTotals = async () => {
-      setCuringHeroTotals((prev) => ({ ...prev, loading: true, error: null }))
-      try {
-        const params = new URLSearchParams({
-          fiscalYearStart: currentFiscalYear.startDate,
-          fiscalYearEnd: currentFiscalYear.endDate,
-          all: "true",
-        })
-        const res = await fetch(`/api/curing-records?${params.toString()}`)
-        const json = await res.json().catch(() => ({}))
-        if (!res.ok || !json?.success) {
-          throw new Error(json?.error || "Failed to load curing totals")
-        }
-        const records = Array.isArray(json.records) ? json.records : []
-        const totals = records.reduce(
-          (
-            acc: {
-              outputKg: number
-              dryingDaysTotal: number
-              dryingDaysCount: number
-              moistureDropTotal: number
-              moistureDropCount: number
-            },
-            record: any,
-          ) => {
-            const outputKg = Number(record?.output_kg)
-            if (Number.isFinite(outputKg)) {
-              acc.outputKg += outputKg
-            }
-            const dryingDays = Number(record?.drying_days)
-            if (Number.isFinite(dryingDays)) {
-              acc.dryingDaysTotal += dryingDays
-              acc.dryingDaysCount += 1
-            }
-            const moistureStart = Number(record?.moisture_start_pct)
-            const moistureEnd = Number(record?.moisture_end_pct)
-            if (Number.isFinite(moistureStart) && Number.isFinite(moistureEnd)) {
-              acc.moistureDropTotal += moistureStart - moistureEnd
-              acc.moistureDropCount += 1
-            }
-            return acc
-          },
-          {
-            outputKg: 0,
-            dryingDaysTotal: 0,
-            dryingDaysCount: 0,
-            moistureDropTotal: 0,
-            moistureDropCount: 0,
-          },
-        )
-        if (!ignore) {
-          setCuringHeroTotals({
-            totalRecords: records.length,
-            totalOutputKg: totals.outputKg,
-            avgDryingDays: totals.dryingDaysCount ? totals.dryingDaysTotal / totals.dryingDaysCount : 0,
-            avgMoistureDrop: totals.moistureDropCount ? totals.moistureDropTotal / totals.moistureDropCount : 0,
-            loading: false,
-            error: null,
-          })
-        }
-      } catch (error: any) {
-        if (!ignore) {
-          setCuringHeroTotals((prev) => ({
-            ...prev,
-            loading: false,
-            error: error?.message || "Failed to load curing totals",
-          }))
-        }
-      }
-    }
-
-    loadCuringHeroTotals()
-    return () => {
-      ignore = true
-    }
-  }, [tenantId, canShowCuring, currentFiscalYear.endDate, currentFiscalYear.startDate, shouldLoadHomeMetrics])
-
-  useEffect(() => {
-    if (!tenantId || !canShowQuality) return
-    if (!shouldLoadHomeMetrics) return
-    let ignore = false
-
-    const loadQualityHeroTotals = async () => {
-      setQualityHeroTotals((prev) => ({ ...prev, loading: true, error: null }))
-      try {
-        const params = new URLSearchParams({
-          fiscalYearStart: currentFiscalYear.startDate,
-          fiscalYearEnd: currentFiscalYear.endDate,
-          all: "true",
-        })
-        const res = await fetch(`/api/quality-grading-records?${params.toString()}`)
-        const json = await res.json().catch(() => ({}))
-        if (!res.ok || !json?.success) {
-          throw new Error(json?.error || "Failed to load quality totals")
-        }
-        const records = Array.isArray(json.records) ? json.records : []
-        const totals = records.reduce(
-          (
-            acc: {
-              cupScoreTotal: number
-              cupScoreCount: number
-              outturnTotal: number
-              outturnCount: number
-              defectsTotal: number
-              defectsCount: number
-            },
-            record: any,
-          ) => {
-            const cupScore = Number(record?.cup_score)
-            if (Number.isFinite(cupScore)) {
-              acc.cupScoreTotal += cupScore
-              acc.cupScoreCount += 1
-            }
-            const outturnPct = Number(record?.outturn_pct)
-            if (Number.isFinite(outturnPct)) {
-              acc.outturnTotal += outturnPct
-              acc.outturnCount += 1
-            }
-            const defectsCount = Number(record?.defects_count)
-            if (Number.isFinite(defectsCount)) {
-              acc.defectsTotal += defectsCount
-              acc.defectsCount += 1
-            }
-            return acc
-          },
-          {
-            cupScoreTotal: 0,
-            cupScoreCount: 0,
-            outturnTotal: 0,
-            outturnCount: 0,
-            defectsTotal: 0,
-            defectsCount: 0,
-          },
-        )
-        if (!ignore) {
-          setQualityHeroTotals({
-            totalRecords: records.length,
-            avgCupScore: totals.cupScoreCount ? totals.cupScoreTotal / totals.cupScoreCount : 0,
-            avgOutturnPct: totals.outturnCount ? totals.outturnTotal / totals.outturnCount : 0,
-            avgDefects: totals.defectsCount ? totals.defectsTotal / totals.defectsCount : 0,
-            loading: false,
-            error: null,
-          })
-        }
-      } catch (error: any) {
-        if (!ignore) {
-          setQualityHeroTotals((prev) => ({
-            ...prev,
-            loading: false,
-            error: error?.message || "Failed to load quality totals",
-          }))
-        }
-      }
-    }
-
-    loadQualityHeroTotals()
-    return () => {
-      ignore = true
-    }
-  }, [tenantId, canShowQuality, currentFiscalYear.endDate, currentFiscalYear.startDate, shouldLoadHomeMetrics])
-
-  useEffect(() => {
-    if (!tenantId || !canShowPepper) return
-    if (!shouldLoadHomeMetrics) return
-    let ignore = false
-
-    const loadPepperHeroTotals = async () => {
-      setPepperHeroTotals((prev) => ({ ...prev, loading: true, error: null }))
-      try {
-        const params = new URLSearchParams({
-          fiscalYearStart: currentFiscalYear.startDate,
-          fiscalYearEnd: currentFiscalYear.endDate,
-        })
-        const res = await fetch(`/api/pepper-records?${params.toString()}`)
-        const json = await res.json().catch(() => ({}))
-        if (!res.ok || !json?.success) {
-          throw new Error(json?.error || "Failed to load pepper totals")
-        }
-        const records = Array.isArray(json.records) ? json.records : []
-        const totals = records.reduce(
-          (acc: { picked: number; dry: number; dryPctTotal: number; dryPctCount: number }, record: any) => {
-            const pickedKg = Number(record?.kg_picked)
-            if (Number.isFinite(pickedKg)) {
-              acc.picked += pickedKg
-            }
-            const dryKg = Number(record?.dry_pepper)
-            if (Number.isFinite(dryKg)) {
-              acc.dry += dryKg
-            }
-            const dryPct = Number(record?.dry_pepper_percent)
-            if (Number.isFinite(dryPct)) {
-              acc.dryPctTotal += dryPct
-              acc.dryPctCount += 1
-            }
-            return acc
-          },
-          { picked: 0, dry: 0, dryPctTotal: 0, dryPctCount: 0 },
-        )
-        if (!ignore) {
-          setPepperHeroTotals({
-            totalRecords: records.length,
-            totalPickedKg: totals.picked,
-            totalDryKg: totals.dry,
-            avgDryPercent: totals.dryPctCount ? totals.dryPctTotal / totals.dryPctCount : 0,
-            loading: false,
-            error: null,
-          })
-        }
-      } catch (error: any) {
-        if (!ignore) {
-          setPepperHeroTotals((prev) => ({
-            ...prev,
-            loading: false,
-            error: error?.message || "Failed to load pepper totals",
-          }))
-        }
-      }
-    }
-
-    loadPepperHeroTotals()
-    return () => {
-      ignore = true
-    }
-  }, [tenantId, canShowPepper, currentFiscalYear.endDate, currentFiscalYear.startDate, shouldLoadHomeMetrics])
-
-  useEffect(() => {
-    if (!tenantId || !canShowRubber) return
-    if (!shouldLoadHomeMetrics) return
-    let ignore = false
-
-    const loadRubberHeroTotals = async () => {
-      setRubberHeroTotals((prev) => ({ ...prev, loading: true, error: null }))
-      try {
-        const params = new URLSearchParams({
-          fiscalYearStart: currentFiscalYear.startDate,
-          fiscalYearEnd: currentFiscalYear.endDate,
-        })
-        const res = await fetch(`/api/rubber-records?${params.toString()}`)
-        const json = await res.json().catch(() => ({}))
-        if (!res.ok || !json?.success) {
-          throw new Error(json?.error || "Failed to load rubber totals")
-        }
-        const records = Array.isArray(json.records) ? json.records : []
-        const totals = records.reduce(
-          (acc: { latex: number; sheets: number; drcTotal: number; drcCount: number }, record: any) => {
-            const latexKg = Number(record?.latex_kg)
-            if (Number.isFinite(latexKg)) acc.latex += latexKg
-            const sheetsKg = Number(record?.sheets_kg)
-            if (Number.isFinite(sheetsKg)) acc.sheets += sheetsKg
-            const drcPct = Number(record?.drc_pct)
-            if (Number.isFinite(drcPct) && drcPct > 0) {
-              acc.drcTotal += drcPct
-              acc.drcCount += 1
-            }
-            return acc
-          },
-          { latex: 0, sheets: 0, drcTotal: 0, drcCount: 0 },
-        )
-        if (!ignore) {
-          setRubberHeroTotals({
-            totalRecords: records.length,
-            totalLatexKg: totals.latex,
-            totalSheetsKg: totals.sheets,
-            avgDrcPct: totals.drcCount ? totals.drcTotal / totals.drcCount : 0,
-            loading: false,
-            error: null,
-          })
-        }
-      } catch (error: any) {
-        if (!ignore) {
-          setRubberHeroTotals((prev) => ({
-            ...prev,
-            loading: false,
-            error: error?.message || "Failed to load rubber totals",
-          }))
-        }
-      }
-    }
-
-    loadRubberHeroTotals()
-    return () => {
-      ignore = true
-    }
-  }, [tenantId, canShowRubber, currentFiscalYear.endDate, currentFiscalYear.startDate, shouldLoadHomeMetrics])
-
-  useEffect(() => {
-    if (!tenantId || !canShowRainfall) return
-    if (!shouldLoadHomeMetrics) return
-    let ignore = false
-
-    const loadRainfallHeroTotals = async () => {
-      setRainfallHeroTotals((prev) => ({ ...prev, loading: true, error: null }))
-      try {
-        const res = await fetch("/api/rainfall")
-        const json = await res.json().catch(() => ({}))
-        if (!res.ok || !json?.success) {
-          throw new Error(json?.error || "Failed to load rainfall totals")
-        }
-        const records = Array.isArray(json.records) ? json.records : []
-        const fyStart = currentFiscalYear.startDate
-        const fyEnd = currentFiscalYear.endDate
-        let totalInches = 0
-        let totalRecords = 0
-        let latestDate: string | null = null
-        for (const record of records) {
-          const recordDateStr = String(record?.record_date || "").slice(0, 10)
-          if (!recordDateStr) continue
-          if (recordDateStr < fyStart || recordDateStr > fyEnd) continue
-          const inches = Number(record?.inches) || 0
-          const cents = Number(record?.cents) || 0
-          totalInches += inches + cents / 100
-          totalRecords += 1
-          if (!latestDate || recordDateStr > String(latestDate).slice(0, 10)) {
-            latestDate = String(record?.record_date || "")
-          }
-        }
-        if (!ignore) {
-          setRainfallHeroTotals({
-            totalRecords,
-            totalInches,
-            latestDate,
-            loading: false,
-            error: null,
-          })
-        }
-      } catch (error: any) {
-        if (!ignore) {
-          setRainfallHeroTotals((prev) => ({
-            ...prev,
-            loading: false,
-            error: error?.message || "Failed to load rainfall totals",
-          }))
-        }
-      }
-    }
-
-    loadRainfallHeroTotals()
-    return () => {
-      ignore = true
-    }
-  }, [tenantId, canShowRainfall, currentFiscalYear.endDate, currentFiscalYear.startDate, shouldLoadHomeMetrics])
-
-  useEffect(() => {
-    if (!canShowSeason || !shouldLoadExceptionSummary) return
-    let isActive = true
-    const loadExceptions = async () => {
-      setExceptionsLoading(true)
-      setExceptionsError(null)
-      try {
-        const response = await fetch("/api/exception-alerts")
-        const data = await response.json()
-        if (!response.ok || !data.success) {
-          throw new Error(data.error || "Failed to load exceptions")
-        }
-        const alerts = Array.isArray(data.alerts) ? data.alerts : []
-        const severityRank: Record<string, number> = { high: 3, medium: 2, low: 1 }
-        const sortedAlerts = [...alerts].sort((a: any, b: any) => (severityRank[b.severity] || 0) - (severityRank[a.severity] || 0))
-        const topAlerts = sortedAlerts.slice(0, 3)
-        const highlights = topAlerts.map((alert: any) => {
-            const context = [alert.location, alert.coffeeType].filter(Boolean).join(" • ")
-            return context ? `${context}: ${alert.title}` : alert.title
-          })
-        if (!isActive) return
-        setExceptionsSummary({
-          count: alerts.length,
-          highlights,
-          alerts: topAlerts.map((alert: any) => ({
-            id: String(alert.id || `${alert.metric || "alert"}-${alert.title || "item"}`),
-            title: String(alert.title || "Alert"),
-            severity: (String(alert.severity || "medium") as ExceptionSummaryAlert["severity"]) || "medium",
-            location: alert.location ? String(alert.location) : undefined,
-            coffeeType: alert.coffeeType ? String(alert.coffeeType) : undefined,
-            metric: alert.metric ? String(alert.metric) : undefined,
-          })),
-        })
-      } catch (error: any) {
-        if (!isActive) return
-        setExceptionsSummary({ count: 0, highlights: [], alerts: [] })
-        setExceptionsError(error.message || "Failed to load exceptions")
-      } finally {
-        if (isActive) {
-          setExceptionsLoading(false)
-        }
-      }
-    }
-
-    loadExceptions()
-    return () => {
-      isActive = false
-    }
-  }, [canShowSeason, shouldLoadExceptionSummary])
 
   const inferBriefTabFromText = useCallback(
     (input: string) => {
@@ -5231,451 +4526,58 @@ export default function InventorySystem() {
         <div className="pointer-events-none absolute -top-20 left-[-6%] h-[220px] w-[220px] rounded-full bg-[radial-gradient(circle_at_center,rgba(120,82,46,0.25),transparent_70%)] blur-[110px]" />
         <div className="pointer-events-none absolute -top-16 right-[5%] h-[200px] w-[200px] rounded-full bg-[radial-gradient(circle_at_center,rgba(69,111,96,0.25),transparent_70%)] blur-[110px]" />
 
-        <header className={cn(
-          "relative mb-4 overflow-hidden",
-          isMobile
-            ? "rounded-2xl border border-black/[0.06] bg-white/70 backdrop-blur-xl backdrop-saturate-150 p-4 shadow-[0_4px_24px_-4px_rgba(0,0,0,0.08),0_1px_2px_rgba(0,0,0,0.04)] dark:border-white/[0.07] dark:bg-card/80"
-            : "flex items-center justify-between rounded-xl border border-black/[0.06] bg-white/70 backdrop-blur-xl backdrop-saturate-150 px-4 py-2.5 shadow-[0_2px_12px_-2px_rgba(0,0,0,0.06),0_1px_2px_rgba(0,0,0,0.04)] dark:border-white/[0.07] dark:bg-card/70",
-        )}>
-          {/* Prismatic shimmer line */}
-          <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-emerald-400/50 via-amber-300/40 to-sky-400/40" />
-          {/* Inner glass highlight */}
-          <div className="pointer-events-none absolute inset-x-0 top-0 h-1/2 bg-gradient-to-b from-white/30 to-transparent rounded-t-2xl" />
-          {isMobile ? (
-            /* Mobile header: lean bar — hamburger + estate name + theme toggle */
-            <div className="flex items-center justify-between gap-2">
-              <div className="flex items-center gap-2.5">
-                <button
-                  type="button"
-                  onClick={() => setIsMobileSidebarOpen(true)}
-                  className="flex h-10 w-10 items-center justify-center rounded-xl border border-stone-200 bg-white/80 text-neutral-700 shadow-sm transition-colors hover:bg-stone-50 touch-manipulation"
-                  aria-label="Open navigation"
-                >
-                  <Menu className="h-5 w-5" />
-                </button>
-                <div className="flex items-center gap-2 min-w-0">
-                  <button
-                    type="button"
-                    onClick={() => handleTabChange("home")}
-                    className="flex items-center focus:outline-none"
-                    aria-label="Go to home"
-                  >
-                    <Image
-                      src="/brand-logo.svg"
-                      alt="FarmFlow"
-                      width={120}
-                      height={47}
-                      className="h-7 w-auto"
-                    />
-                  </button>
-                  {!isPreviewMode && tenantSettings.estateName && (
-                    <span className="hidden text-sm font-semibold text-emerald-700 sm:block truncate max-w-[140px]">
-                      {tenantSettings.estateName}
-                    </span>
-                  )}
-                </div>
-              </div>
-              <div className="flex items-center gap-1">
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
-                  className="h-9 w-9 px-0"
-                  aria-label="Toggle theme"
-                >
-                  {theme === "dark" ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
-                </Button>
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <button
-                      type="button"
-                      aria-label="Profile"
-                      className="flex h-9 w-9 items-center justify-center rounded-xl border border-stone-200 bg-white/80 shadow-sm touch-manipulation"
-                    >
-                      <span className="flex h-6 w-6 items-center justify-center rounded-full bg-gradient-to-br from-emerald-100 to-emerald-50 text-[10px] font-bold text-emerald-700 ring-1 ring-emerald-200/90">
-                        {user.username.charAt(0).toUpperCase()}
-                      </span>
-                    </button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent align="end" className="w-52">
-                    <div className="flex items-center gap-2.5 px-2 py-2">
-                      <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-emerald-100 text-sm font-bold text-emerald-700 ring-1 ring-emerald-200">
-                        {user.username.charAt(0).toUpperCase()}
-                      </span>
-                      <div className="min-w-0">
-                        <p className="truncate text-sm font-semibold text-foreground">{user.username}</p>
-                        {tenantSettings.estateName && (
-                          <p className="truncate text-xs text-muted-foreground">{tenantSettings.estateName}</p>
-                        )}
-                      </div>
-                    </div>
-                    <div className="px-2 pb-2">
-                      <Badge variant="outline" className="text-[11px] font-medium">{roleBadgeLabel}</Badge>
-                    </div>
-                    <DropdownMenuSeparator />
-                    {(isAdmin || isOwner) && (
-                      <DropdownMenuItem asChild>
-                        <Link href={buildWorkspaceHref("/settings")}>
-                          <Settings className="h-4 w-4 mr-2" />
-                          Settings
-                        </Link>
-                      </DropdownMenuItem>
-                    )}
-                    <DropdownMenuSeparator />
-                    <DropdownMenuItem
-                      onClick={handleLogout}
-                      className="text-rose-600 focus:text-rose-600 focus:bg-rose-50 dark:text-rose-400 dark:focus:bg-rose-500/10"
-                    >
-                      <LogOut className="h-4 w-4 mr-2" />
-                      Sign out
-                    </DropdownMenuItem>
-                  </DropdownMenuContent>
-                </DropdownMenu>
-              </div>
-            </div>
-          ) : (
-            /* Desktop slim topbar: estate name + breadcrumb + actions */
-            <>
-              <div className="flex items-center gap-2.5 min-w-0">
-                {!isPreviewMode && tenantSettings.estateName ? (
-                  <div className="flex items-center gap-2">
-                    <Leaf className="h-3.5 w-3.5 shrink-0 text-emerald-600 dark:text-emerald-400" />
-                    <span className="font-semibold text-sm text-foreground truncate">{tenantSettings.estateName}</span>
-                  </div>
-                ) : (
-                  <span className="font-semibold text-sm text-foreground">FarmFlow</span>
-                )}
-                {activeTab !== DASHBOARD_LAUNCHER_TAB && activeTab !== "home" && tabMeta[activeTab] && (
-                  <>
-                    <span className="text-muted-foreground/30 text-sm select-none">/</span>
-                    <span className="text-sm text-muted-foreground truncate">{tabMeta[activeTab]?.label}</span>
-                  </>
-                )}
-                {isPreviewMode && (
-                  <Badge variant="outline" className="border-amber-300 bg-amber-50 text-amber-700 text-xs ml-1">
-                    Preview
-                  </Badge>
-                )}
-              </div>
-              <div className="flex items-center gap-1 shrink-0">
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => setSearchOpen(true)}
-                  className="text-muted-foreground hover:text-foreground h-8 px-3 hidden sm:flex"
-                >
-                  <Search className="h-3.5 w-3.5 mr-1.5" />
-                  Search
-                  <kbd className="ml-2 hidden lg:inline-flex h-4 select-none items-center gap-0.5 rounded border bg-muted px-1 text-[10px] font-medium text-muted-foreground">
-                    ⌘K
-                  </kbd>
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
-                  className="text-muted-foreground hover:text-foreground h-8 w-8 px-0"
-                  aria-label="Toggle theme"
-                >
-                  {theme === "dark" ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
-                </Button>
-                <Button variant="ghost" size="sm" asChild className="text-muted-foreground hover:text-foreground h-8 px-3">
-                  <Link href={buildWorkspaceHref("/manuals")}>
-                    <BookOpen className="h-3.5 w-3.5 mr-1.5" />
-                    Help
-                  </Link>
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="text-muted-foreground hover:text-foreground h-8 px-3"
-                  onClick={() => window.dispatchEvent(new CustomEvent("farmflow:open-feedback"))}
-                >
-                  <LifeBuoy className="h-3.5 w-3.5 mr-1.5" />
-                  Support
-                </Button>
-                {isOwner && (
-                  <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                      <Button variant="ghost" size="sm" className="text-muted-foreground hover:text-foreground h-8 px-3">
-                        <Settings className="h-3.5 w-3.5 mr-1.5" />
-                        Console
-                      </Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end" className="w-56">
-                      <DropdownMenuLabel>Platform Console</DropdownMenuLabel>
-                      <DropdownMenuSeparator />
-                      <DropdownMenuItem asChild>
-                        <Link href="/settings">
-                          <Settings className="h-4 w-4 mr-2" />
-                          Platform Settings
-                        </Link>
-                      </DropdownMenuItem>
-                      <DropdownMenuItem asChild>
-                        <Link href="/admin/init-pepper-tables">
-                          <Leaf className="h-4 w-4 mr-2" />
-                          Initialize Pepper Tables
-                        </Link>
-                      </DropdownMenuItem>
-                      <DropdownMenuItem asChild>
-                        <Link href="/admin/init-processing-table">
-                          <Factory className="h-4 w-4 mr-2" />
-                          Initialize Processing Tables
-                        </Link>
-                      </DropdownMenuItem>
-                      <DropdownMenuItem asChild>
-                        <Link href="/admin/tenants">
-                          <Users className="h-4 w-4 mr-2" />
-                          Manage Tenants
-                        </Link>
-                      </DropdownMenuItem>
-                      <DropdownMenuItem asChild>
-                        <Link href="/admin/inspect-databases">
-                          <Settings className="h-4 w-4 mr-2" />
-                          Inspect Databases
-                        </Link>
-                      </DropdownMenuItem>
-                    </DropdownMenuContent>
-                  </DropdownMenu>
-                )}
-                {/* Profile avatar */}
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <button
-                      type="button"
-                      aria-label="Profile"
-                      className="ml-1 flex h-7 w-7 items-center justify-center rounded-full bg-gradient-to-br from-emerald-100 to-emerald-50 text-[11px] font-bold text-emerald-700 ring-1 ring-emerald-200/90 transition-shadow hover:shadow-[0_0_0_2px_rgba(52,211,153,0.35)] dark:from-emerald-500/20 dark:to-emerald-600/8 dark:text-emerald-300 dark:ring-emerald-500/30"
-                    >
-                      {user.username.charAt(0).toUpperCase()}
-                    </button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent align="end" className="w-52">
-                    <div className="flex items-center gap-2.5 px-2 py-2">
-                      <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-emerald-100 text-sm font-bold text-emerald-700 ring-1 ring-emerald-200 dark:bg-emerald-500/15 dark:text-emerald-400 dark:ring-emerald-500/25">
-                        {user.username.charAt(0).toUpperCase()}
-                      </span>
-                      <div className="min-w-0">
-                        <p className="truncate text-sm font-semibold text-foreground">{user.username}</p>
-                        {tenantSettings.estateName && (
-                          <p className="truncate text-xs text-muted-foreground">{tenantSettings.estateName}</p>
-                        )}
-                      </div>
-                    </div>
-                    <div className="px-2 pb-2">
-                      <Badge variant="outline" className="text-[11px] font-medium">{roleBadgeLabel}</Badge>
-                    </div>
-                    <DropdownMenuSeparator />
-                    {(isAdmin || isOwner) && (
-                      <DropdownMenuItem asChild>
-                        <Link href={buildWorkspaceHref("/settings")}>
-                          <Settings className="h-4 w-4 mr-2" />
-                          Settings
-                        </Link>
-                      </DropdownMenuItem>
-                    )}
-                    <DropdownMenuSeparator />
-                    <DropdownMenuItem
-                      onClick={handleLogout}
-                      className="text-rose-600 focus:text-rose-600 focus:bg-rose-50 dark:text-rose-400 dark:focus:bg-rose-500/10"
-                    >
-                      <LogOut className="h-4 w-4 mr-2" />
-                      Sign out
-                    </DropdownMenuItem>
-                  </DropdownMenuContent>
-                </DropdownMenu>
-              </div>
-            </>
-          )}
-        </header>
-
+        <WorkspaceHeader
+          isMobile={isMobile}
+          username={user.username}
+          estateName={tenantSettings.estateName || ""}
+          isAdmin={isAdmin}
+          isOwner={isOwner}
+          isPreviewMode={isPreviewMode}
+          roleBadgeLabel={roleBadgeLabel}
+          activeTab={activeTab}
+          theme={theme}
+          tabMeta={tabMeta}
+          buildWorkspaceHref={buildWorkspaceHref}
+          onTabChange={handleTabChange}
+          onLogout={handleLogout}
+          onToggleTheme={() => setTheme(theme === "dark" ? "light" : "dark")}
+          onOpenSearch={() => setSearchOpen(true)}
+          onOpenSidebar={() => setIsMobileSidebarOpen(true)}
+        />
         {/* ── Mobile sidebar drawer ── */}
         {isMobile && (
-          <>
-            {/* Backdrop */}
-            {isMobileSidebarOpen && (
-              <div
-                className="fixed inset-0 z-50 bg-black/40 backdrop-blur-[2px]"
-                onClick={() => setIsMobileSidebarOpen(false)}
-              />
-            )}
-
-            {/* Drawer panel */}
-            <div
-              className={cn(
-                "fixed inset-y-0 left-0 z-50 flex w-[280px] flex-col bg-white shadow-2xl transition-transform duration-300 ease-in-out dark:bg-neutral-900",
-                isMobileSidebarOpen ? "translate-x-0" : "-translate-x-full",
-              )}
-            >
-              {/* Drawer header */}
-              <div className="flex items-center justify-between border-b border-stone-200 px-4 py-3">
-                <div className="flex items-center gap-2.5">
-                  <Image src="/icon.svg" alt="FarmFlow" width={28} height={28} className="rounded-lg" />
-                  <div className="min-w-0">
-                    <p className="text-sm font-bold text-neutral-900 dark:text-white truncate">
-                      {tenantSettings.estateName || "FarmFlow"}
-                    </p>
-                    <p className="text-[11px] text-stone-500 dark:text-stone-400">{user.username} · {roleBadgeLabel}</p>
-                  </div>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => setIsMobileSidebarOpen(false)}
-                  className="flex h-8 w-8 items-center justify-center rounded-lg text-stone-400 hover:bg-stone-100 hover:text-stone-600 transition-colors touch-manipulation"
-                >
-                  <X className="h-4 w-4" />
-                </button>
-              </div>
-
-              {/* Navigation list — scrollable */}
-              <nav className="flex-1 overflow-y-auto py-3">
-                {/* Home */}
-                <button
-                  type="button"
-                  onClick={() => { goToWorkspaceNavigator(); setIsMobileSidebarOpen(false) }}
-                  className={cn(
-                    "flex w-full items-center gap-3 px-4 py-2.5 text-left text-sm font-semibold transition-colors touch-manipulation",
-                    (activeTab === DASHBOARD_LAUNCHER_TAB || activeTab === "home")
-                      ? "bg-emerald-50 text-emerald-700"
-                      : "text-neutral-700 hover:bg-stone-50",
-                  )}
-                >
-                  <Home className="h-4.5 w-4.5 shrink-0" />
-                  Dashboard
-                </button>
-
-                {/* Sections */}
-                {launcherSections.map((section) => (
-                  <div key={section.id} className="mt-3">
-                    <div className="flex items-center gap-2 px-4 pb-1">
-                      <section.icon className={cn("h-3 w-3 shrink-0", section.iconClassName)} />
-                      <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-emerald-700">
-                        {section.label}
-                      </p>
-                    </div>
-                    {section.tabs.map((tab) => {
-                      const TabIcon = tab.icon
-                      const isActive = activeTab === tab.value
-                      return (
-                        <button
-                          key={tab.value}
-                          type="button"
-                          onClick={() => { handleTabChange(tab.value); setIsMobileSidebarOpen(false) }}
-                          className={cn(
-                            "flex w-full items-center gap-3 px-4 py-2.5 text-left text-[13px] font-medium transition-colors touch-manipulation",
-                            isActive
-                              ? "bg-emerald-50 text-emerald-700 font-semibold"
-                              : "text-neutral-600 hover:bg-stone-50 hover:text-neutral-900",
-                          )}
-                        >
-                          {isActive && (
-                            <span className="absolute left-0 h-6 w-[3px] rounded-r-full bg-emerald-500" />
-                          )}
-                          <TabIcon className={cn("h-4 w-4 shrink-0", isActive ? "text-emerald-600" : "text-stone-400")} />
-                          {tab.label}
-                        </button>
-                      )
-                    })}
-                  </div>
-                ))}
-              </nav>
-
-              {/* Drawer footer — settings, manuals, logout */}
-              <div className="border-t border-stone-200 px-3 py-3 space-y-1">
-                <Link
-                  href={buildWorkspaceHref("/manuals")}
-                  onClick={() => setIsMobileSidebarOpen(false)}
-                  className="flex items-center gap-3 rounded-lg px-3 py-2.5 text-[13px] font-medium text-neutral-600 transition-colors hover:bg-stone-50 touch-manipulation"
-                >
-                  <BookOpen className="h-4 w-4 text-stone-400" />
-                  Training Manuals
-                </Link>
-                {isAdmin && (
-                  <Link
-                    href={buildWorkspaceHref("/settings")}
-                    onClick={() => setIsMobileSidebarOpen(false)}
-                    className="flex items-center gap-3 rounded-lg px-3 py-2.5 text-[13px] font-medium text-neutral-600 transition-colors hover:bg-stone-50 touch-manipulation"
-                  >
-                    <Settings className="h-4 w-4 text-stone-400" />
-                    Settings
-                  </Link>
-                )}
-                <button
-                  type="button"
-                  onClick={() => { setIsMobileSidebarOpen(false); handleLogout() }}
-                  className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-[13px] font-medium text-rose-600 transition-colors hover:bg-rose-50 touch-manipulation"
-                >
-                  <LogOut className="h-4 w-4" />
-                  Sign out
-                </button>
-              </div>
-            </div>
-          </>
+          <MobileSidebarDrawer
+            isOpen={isMobileSidebarOpen}
+            onClose={() => setIsMobileSidebarOpen(false)}
+            estateName={tenantSettings.estateName || ""}
+            username={user.username}
+            roleBadgeLabel={roleBadgeLabel}
+            activeTab={activeTab}
+            sections={launcherSections.filter(Boolean) as any}
+            onTabChange={handleTabChange}
+            buildWorkspaceHref={buildWorkspaceHref}
+            isAdmin={isAdmin}
+            onNavigateDashboard={goToWorkspaceNavigator}
+            onLogout={handleLogout}
+          />
         )}
 
         {isPreviewMode && (
-          <Card className="mb-6 border-amber-200 bg-amber-50/70">
-            <CardHeader className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-              <div>
-                <CardTitle className="text-base">Tenant Preview Mode</CardTitle>
-                <CardDescription>
-                  Showing tab access for {tenantLabel} as {roleLabel(effectiveRole)}. This is for UI/module preview without re-login.
-                </CardDescription>
-              </div>
-              <Badge variant="outline" className="border-amber-300 bg-white text-amber-700">
-                Preview
-              </Badge>
-            </CardHeader>
-            <CardContent className="flex flex-wrap items-center gap-2 text-sm text-amber-900">
-              <span>Use this to validate what new tenants will see in navigation and module visibility.</span>
-              <Button size="sm" variant="outline" className="bg-white" onClick={exitPreviewMode}>
-                Exit preview
-              </Button>
-              <Button size="sm" variant="ghost" asChild>
-                <Link href="/admin/tenants">Back to Owner Console</Link>
-              </Button>
-            </CardContent>
-          </Card>
+          <PreviewModeBanner
+            tenantLabel={tenantLabel}
+            effectiveRole={effectiveRole}
+            onExit={exitPreviewMode}
+          />
         )}
 
         {showWelcome && (
-          <Card className="mb-6 border-emerald-100 bg-emerald-50/70">
-            <CardHeader className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-              <div>
-                <CardTitle>Welcome to your estate workspace</CardTitle>
-                <CardDescription>
-                  Start by adding locations and logging your first pulping output. Everything else builds on those
-                  records.
-                </CardDescription>
-              </div>
-              <Badge variant="outline" className="bg-white text-emerald-700 border-emerald-200">
-                First login
-              </Badge>
-            </CardHeader>
-            <CardContent className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-              <div className="text-sm text-muted-foreground">
-                Use the checklist below to get to a live, traceable setup in under 10 minutes.
-              </div>
-              <div className="flex flex-wrap gap-2">
-                <Button onClick={() => handleTabChange("inventory")}>Start setup</Button>
-                <Button asChild variant="outline" className="bg-transparent">
-                  <Link href={buildWorkspaceHref("/manuals")}>Open training manuals</Link>
-                </Button>
-                {isAdmin && (
-                  <Button asChild variant="outline" className="bg-transparent">
-                    <Link href={buildWorkspaceHref("/settings")}>Manage users</Link>
-                  </Button>
-                )}
-                {canShowResources && (
-                  <Button variant="outline" className="bg-transparent" onClick={() => handleTabChange("resources")}>
-                    Open resources
-                  </Button>
-                )}
-                <Button variant="ghost" onClick={dismissWelcome}>
-                  Dismiss
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
+          <WelcomeCard
+            buildWorkspaceHref={buildWorkspaceHref}
+            isAdmin={isAdmin}
+            canShowResources={canShowResources}
+            onTabChange={handleTabChange}
+            onDismiss={dismissWelcome}
+          />
         )}
 
         {activeTab === "home" && !isMobile && (
@@ -5742,294 +4644,41 @@ export default function InventorySystem() {
         </div>}
 
         {writeQueueStatus.pendingCount > 0 && (
-          <Card className="mb-4 border-amber-200 bg-amber-50/70">
-            <CardHeader className="pb-2">
-              <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
-                <div>
-                  <CardTitle className="text-base">Offline Sync Queue</CardTitle>
-                  <CardDescription>
-                    {writeQueueStatus.pendingCount} queued update{writeQueueStatus.pendingCount === 1 ? "" : "s"} pending.
-                    {writeQueueStatus.blockedAuthCount > 0
-                      ? ` ${writeQueueStatus.blockedAuthCount} need sign-in.`
-                      : writeQueueStatus.blockedReviewCount > 0
-                        ? ` ${writeQueueStatus.blockedReviewCount} need manual review.`
-                        : " Waiting for retry."}
-                  </CardDescription>
-                </div>
-                <div className="flex items-center gap-2">
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant="outline"
-                    className="bg-white"
-                    disabled={isRequestingQueueRetry}
-                    onClick={handleRetryWriteQueue}
-                  >
-                    <RefreshCw className={cn("mr-2 h-4 w-4", isRequestingQueueRetry && "animate-spin")} />
-                    {isRequestingQueueRetry ? "Retrying..." : "Retry Sync"}
-                  </Button>
-                </div>
-              </div>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              {writeQueueStatus.blockedAuthEntries.length > 0 && (
-                <div className="space-y-2">
-                  <p className="text-xs font-semibold uppercase tracking-[0.14em] text-rose-700">Sign-in required</p>
-                  {writeQueueStatus.blockedAuthEntries.slice(0, 3).map((entry) => (
-                    <div key={`auth-${entry.id}`} className="rounded-lg border border-rose-200 bg-white p-3">
-                      <p className="text-sm font-medium text-rose-800">
-                        #{entry.id} {entry.method} {entry.pathname || entry.url}
-                      </p>
-                      <p className="mt-1 text-xs text-rose-700">
-                        {entry.lastStatus ? `HTTP ${entry.lastStatus}` : "Authentication required"} · Attempts {entry.attempts}
-                      </p>
-                      <div className="mt-2 flex flex-wrap gap-2">
-                        <Button size="sm" variant="outline" className="bg-white" onClick={() => handleOpenWriteQueueFix(entry)}>
-                          Open Fix
-                        </Button>
-                        <Button size="sm" variant="ghost" className="text-rose-700" onClick={() => void handleLogout()}>
-                          Sign In Again
-                        </Button>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-
-              {writeQueueStatus.blockedReviewEntries.length > 0 && (
-                <div className="space-y-2">
-                  <p className="text-xs font-semibold uppercase tracking-[0.14em] text-amber-800">Review required</p>
-                  {writeQueueStatus.blockedReviewEntries.slice(0, 5).map((entry) => (
-                    <div key={`review-${entry.id}`} className="rounded-lg border border-amber-200 bg-white p-3">
-                      <p className="text-sm font-medium text-amber-900">
-                        #{entry.id} {entry.method} {entry.pathname || entry.url}
-                      </p>
-                      <p className="mt-1 text-xs text-amber-800">
-                        {entry.lastStatus ? `HTTP ${entry.lastStatus}` : "Server rejected the request"} · Attempts {entry.attempts}
-                        {entry.queuedAt > 0 ? ` · Queued ${new Date(entry.queuedAt).toLocaleString()}` : ""}
-                      </p>
-                      <p className="mt-1 text-xs text-muted-foreground">
-                        {entry.lastError || "Re-open the matching module, correct the value, then retry sync."}
-                      </p>
-                      <div className="mt-2 flex flex-wrap gap-2">
-                        <Button size="sm" variant="outline" className="bg-white" onClick={() => handleOpenWriteQueueFix(entry)}>
-                          Open Fix
-                        </Button>
-                        <Button size="sm" variant="ghost" className="text-rose-700" onClick={() => handleRemoveQueuedEntry(entry.id)}>
-                          Remove
-                        </Button>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </CardContent>
-          </Card>
+          <WriteQueueCard
+            status={writeQueueStatus}
+            isRetrying={isRequestingQueueRetry}
+            onRetry={handleRetryWriteQueue}
+            onOpenFix={handleOpenWriteQueueFix}
+            onRemoveEntry={handleRemoveQueuedEntry}
+            onLogout={handleLogout}
+          />
         )}
 
-        {canManageData && (
-          <>
-            {showDataToolsControls && (
-              <Card className="mb-6 border border-emerald-200/70 bg-gradient-to-br from-emerald-50/70 to-white/95">
-                <CardHeader className="pb-3">
-                  <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                    <div>
-                      <CardTitle className="text-base">Exports & Import</CardTitle>
-                      <CardDescription>
-                        One clear export hub: CSV and XLSX for operations, plus CSV, XLSX, and QIF for accounts.
-                      </CardDescription>
-                    </div>
-                    <Badge variant="outline" className="w-fit border-emerald-200 bg-white text-emerald-700">
-                      Mobile-first export hub
-                    </Badge>
-                  </div>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  {/* Ops export — dataset + buttons together so nothing requires scrolling */}
-                  <div className="rounded-lg border border-stone-200 bg-white p-3 space-y-3">
-                    <Label className="text-xs uppercase tracking-[0.16em] text-stone-500">Operations export</Label>
-                    <div className="flex flex-col gap-2 sm:flex-row sm:items-end">
-                      <div className="flex-1 space-y-1.5">
-                        <Select
-                          value={dataToolsDataset}
-                          onValueChange={(value) => {
-                            if (isExportDatasetId(value)) {
-                              setDataToolsDataset(value)
-                            }
-                          }}
-                        >
-                          <SelectTrigger className="h-10 bg-white">
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent className="max-h-[40vh] overflow-y-auto">
-                            {EXPORT_DATASETS.map((datasetOption) => (
-                              <SelectItem key={datasetOption.id} value={datasetOption.id}>
-                                {datasetOption.label}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                        <p className="text-xs text-muted-foreground">{selectedDataToolsConfig.description}</p>
-                      </div>
-                      <div className="flex gap-2 shrink-0">
-                        <Button onClick={() => void handleDataToolsExport("csv")} disabled={isExportingDataTools}>
-                          <Download className="mr-2 h-4 w-4" />
-                          {isExportingDataTools ? "Exporting…" : "CSV"}
-                        </Button>
-                        <Button variant="outline" className="bg-white" onClick={() => void handleDataToolsExport("xlsx")} disabled={isExportingDataTools}>
-                          <Download className="mr-2 h-4 w-4" />
-                          XLSX
-                        </Button>
-                      </div>
-                    </div>
-                    {selectedDataToolsTemplateConfig && (
-                      <p className="text-xs text-muted-foreground">
-                        Columns: {selectedDataToolsTemplateConfig.template.join(", ")}
-                      </p>
-                    )}
-                  </div>
-
-                  {/* Accounts export */}
-                  {canShowAccounts ? (
-                    <div className="rounded-lg border border-stone-200 bg-white p-3 space-y-2">
-                      <Label className="text-xs uppercase tracking-[0.16em] text-stone-500">Accounts export</Label>
-                      <div className="flex flex-wrap gap-2">
-                        <Button variant="outline" className="bg-white" onClick={() => handleRequestAccountsExport("csv")}>
-                          <FileText className="mr-2 h-4 w-4" />
-                          CSV
-                        </Button>
-                        <Button variant="outline" className="bg-white" onClick={() => handleRequestAccountsExport("xlsx")}>
-                          <FileText className="mr-2 h-4 w-4" />
-                          XLSX
-                        </Button>
-                        <Button variant="outline" className="bg-white" onClick={() => handleRequestAccountsExport("qif")}>
-                          <Coins className="mr-2 h-4 w-4" />
-                          QIF
-                        </Button>
-                      </div>
-                    </div>
-                  ) : (
-                    <p className="rounded-lg border border-dashed border-neutral-300 bg-white px-3 py-2 text-xs text-muted-foreground">
-                      Accounts module is disabled for this tenant.
-                    </p>
-                  )}
-
-                  {/* Template + Import */}
-                  <div className="flex flex-wrap gap-2">
-                    <Button variant="outline" onClick={handleDownloadDataTemplate} disabled={!selectedDataToolsTemplateConfig} className="bg-white" size="sm">
-                      <FileText className="mr-2 h-4 w-4" />
-                      Download template
-                    </Button>
-                    <Button asChild variant="outline" className="bg-white" size="sm">
-                      <Link href={dataToolsImportHref}>
-                        <Upload className="mr-2 h-4 w-4" />
-                        Import CSV
-                      </Link>
-                    </Button>
-                  </div>
-
-                  {lastOpsExportFailure && (
-                    <div data-testid="ops-export-failure-banner" className="rounded-lg border border-amber-200 bg-amber-50/90 p-3 text-sm">
-                      <p className="font-medium text-amber-900">Ops export failed</p>
-                      <p className="mt-1 text-xs text-amber-800">
-                        {lastOpsExportFailureLabel || "Selected dataset"}: {lastOpsExportFailure.message}
-                        {lastOpsExportFailure.occurredAt > 0
-                          ? ` (at ${new Date(lastOpsExportFailure.occurredAt).toLocaleTimeString()})`
-                          : ""}
-                      </p>
-                      <div className="mt-2 flex flex-wrap gap-2">
-                        <Button size="sm" variant="outline" className="bg-white" onClick={handleRetryLastOpsExport}>
-                          Retry export
-                        </Button>
-                        <Button size="sm" variant="ghost" className="text-amber-700" onClick={() => setLastOpsExportFailure(null)}>
-                          Dismiss
-                        </Button>
-                      </div>
-                    </div>
-                  )}
-                </CardContent>
-              </Card>
-            )}
-          </>
+        {canManageData && showDataToolsControls && (
+          <DataToolsPanel
+            dataToolsDataset={dataToolsDataset}
+            onDatasetChange={setDataToolsDataset}
+            isExporting={isExportingDataTools}
+            exportConfig={selectedDataToolsConfig}
+            templateConfig={selectedDataToolsTemplateConfig}
+            importHref={dataToolsImportHref}
+            canShowAccounts={canShowAccounts}
+            onExport={handleDataToolsExport}
+            onAccountsExport={handleRequestAccountsExport}
+            onDownloadTemplate={handleDownloadDataTemplate}
+            exportFailure={lastOpsExportFailure}
+            exportFailureLabel={lastOpsExportFailureLabel}
+            onDismissFailure={() => setLastOpsExportFailure(null)}
+            onRetryExport={handleRetryLastOpsExport}
+          />
         )}
 
-        {isOwner && (
-          <Card className="border-2 border-muted bg-white/90">
-            <CardHeader>
-              <div className="flex items-center gap-2">
-                <CardTitle>Platform Console</CardTitle>
-                <Badge variant="outline" className="bg-amber-50 text-amber-700 border-amber-200">
-                  Platform Owner
-                </Badge>
-              </div>
-              <CardDescription>Company-wide controls for tenants, access, and data health.</CardDescription>
-            </CardHeader>
-            <CardContent className="flex flex-col lg:flex-row gap-6 lg:items-start">
-              <div className="space-y-2 text-sm text-muted-foreground">
-                <p className="text-sm">Use this console to keep tenant access clean and onboarding smooth.</p>
-                <ul className="list-disc ml-4 space-y-1">
-                  <li>Create tenants and users for new estates.</li>
-                  <li>Enable/disable modules per tenant.</li>
-                  <li>Seed demo data for trials and onboarding.</li>
-                  <li>Inspect database health and table sizes.</li>
-                </ul>
-              </div>
-              <div className="flex flex-col sm:flex-row gap-2">
-                <Button asChild variant="outline" className="bg-transparent">
-                  <Link href="/admin/tenants">
-                    <Users className="h-4 w-4 mr-2" />
-                    Manage Tenants
-                  </Link>
-                </Button>
-                <Button asChild variant="outline" className="bg-transparent">
-                  <Link href="/admin/inspect-databases">
-                    <Settings className="h-4 w-4 mr-2" />
-                    Inspect Databases
-                  </Link>
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
-        )}
+        {isOwner && <PlatformConsoleCard />}
         {!isOwner && !trialBannerDismissed && trialDaysRemaining !== null && (
-          <div className={`mb-4 flex items-center justify-between gap-3 rounded-2xl border px-4 py-3 text-sm shadow-sm ${
-            trialDaysRemaining <= 5
-              ? "border-amber-300/70 bg-gradient-to-r from-amber-50 to-orange-50/60 text-amber-900"
-              : "border-emerald-200/70 bg-gradient-to-r from-emerald-50/80 to-sky-50/60 text-emerald-900"
-          }`}>
-            <div className="flex items-center gap-3 min-w-0">
-              <span className={`shrink-0 text-base ${trialDaysRemaining <= 5 ? "text-amber-500" : "text-emerald-600"}`}>
-                {trialDaysRemaining <= 5 ? "⏳" : "✨"}
-              </span>
-              <p className="min-w-0">
-                <span className="font-semibold">
-                  {trialDaysRemaining === 1
-                    ? "1 day left on your free trial."
-                    : `${trialDaysRemaining} days left on your trial.`}
-                </span>
-                {" "}Your data is saved either way.
-              </p>
-            </div>
-            <div className="flex shrink-0 items-center gap-2">
-              <Link
-                href="/plans"
-                className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition-colors ${
-                  trialDaysRemaining <= 5
-                    ? "bg-amber-600 text-white hover:bg-amber-700"
-                    : "bg-emerald-700 text-white hover:bg-emerald-800"
-                }`}
-              >
-                Upgrade →
-              </Link>
-              <button
-                type="button"
-                className="text-xs opacity-50 hover:opacity-80"
-                onClick={() => setTrialBannerDismissed(true)}
-              >
-                ✕
-              </button>
-            </div>
-          </div>
+          <TrialBanner
+            daysRemaining={trialDaysRemaining}
+            onDismiss={() => setTrialBannerDismissed(true)}
+          />
         )}
         {showOnboarding && (
           <div className="mb-6">
@@ -6062,42 +4711,9 @@ export default function InventorySystem() {
             />
           </div>
         )}
-        {showSetupComplete && (() => {
-          const phase = getCurrentEstatePhase()
-          const phaseActions: Record<string, { label: string; description: string; tab: string }> = {
-            "harvest-peak": { label: "Log today's picking", description: "Record cherry weight by plot for each picking team.", tab: "accounts" },
-            "pre-harvest": { label: "Record a harvest expense", description: "Log picker wages, nets, or equipment costs before harvest begins.", tab: "accounts" },
-            "post-harvest-pruning": { label: "Track pruning labour", description: "Log wages and activity codes for post-harvest pruning work.", tab: "accounts" },
-            "blossom": { label: "Record the blossom date", description: "Note the blossom shower date — it sets your harvest window.", tab: "inventory" },
-            "berry-formation": { label: "Log an estate expense", description: "Record weed management, fertiliser, or maintenance costs for this period.", tab: "accounts" },
-            "monsoon": { label: "Record rainfall", description: "Log daily rainfall — monsoon tracking feeds your season report.", tab: "rainfall" },
-          }
-          const action = phaseActions[phase.season] ?? phaseActions["berry-formation"]
-          return (
-            <div className="mb-6 rounded-2xl border border-emerald-200 bg-gradient-to-br from-emerald-50 to-white px-5 py-4">
-              <div className="flex items-start justify-between gap-4">
-                <div>
-                  <div className="flex items-center gap-2">
-                    <CheckCircle2 className="h-4 w-4 text-emerald-600" />
-                    <p className="text-sm font-semibold text-emerald-900">Estate setup complete</p>
-                  </div>
-                  <p className="mt-1 text-xs text-muted-foreground">
-                    {phase.label} — {action.description}
-                  </p>
-                </div>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  className="shrink-0 border-emerald-300 bg-white text-emerald-800 hover:bg-emerald-50"
-                  onClick={() => handleTabChange(action.tab)}
-                >
-                  {action.label}
-                </Button>
-              </div>
-            </div>
-          )
-        })()}
-        {/* ── Earthy tab page header — non-home desktop ─────── */}
+        {showSetupComplete && (
+          <SetupCompleteCard onTabChange={handleTabChange} />
+        )}
         {activeTab !== DASHBOARD_LAUNCHER_TAB && activeTab !== "home" && !isMobile && tabMeta[activeTab] && (() => {
           const meta = tabMeta[activeTab]
           const Icon = meta.icon
@@ -6203,89 +4819,16 @@ export default function InventorySystem() {
 
             {/* ── Mobile home: estate header + gaps + quick log ── */}
             {isMobile && (
-              <div className="space-y-4 pb-24">
-                {/* Estate morning header */}
-                <div className="relative overflow-hidden rounded-3xl border border-stone-200/80 bg-gradient-to-br from-stone-900 via-stone-800 to-emerald-900 px-5 py-5">
-                  <div className="pointer-events-none absolute inset-0 opacity-[0.04]"
-                    style={{ backgroundImage: "radial-gradient(ellipse at 80% 20%, #d4a574 0%, transparent 60%), radial-gradient(ellipse at 10% 80%, #4ade80 0%, transparent 50%)" }}
-                  />
-                  <div className="relative">
-                    <p className="text-emerald-700/80 text-[10px] font-bold uppercase tracking-[0.2em] mb-0.5">Home</p>
-                    <h1 className="text-2xl font-black text-white leading-tight">
-                      {tenantSettings.estateName || "FarmFlow"}
-                    </h1>
-                  </div>
-                </div>
-
-                {/* Quick action tiles */}
-                {canShowAccounts && (
-                  <div className="grid grid-cols-3 gap-2">
-                    <button
-                      type="button"
-                      onClick={() => openDrilldown({ tab: "accounts", panel: "labour" })}
-                      className="flex flex-col items-center justify-center gap-1.5 rounded-2xl bg-emerald-700 py-4 px-2 shadow-sm active:scale-[0.97] touch-manipulation"
-                    >
-                      <span className="text-xl leading-none">👷</span>
-                      <span className="text-[11px] font-bold text-white leading-tight text-center">Log Labour</span>
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => openDrilldown({ tab: "accounts", panel: "expenses" })}
-                      className="flex flex-col items-center justify-center gap-1.5 rounded-2xl bg-amber-700 py-4 px-2 shadow-sm active:scale-[0.97] touch-manipulation"
-                    >
-                      <span className="text-xl leading-none">🧾</span>
-                      <span className="text-[11px] font-bold text-white leading-tight text-center">Other Expense</span>
-                    </button>
-                    {canShowRainfallSection ? (
-                      <button
-                        type="button"
-                        onClick={() => handleTabChange("rainfall")}
-                        className="flex flex-col items-center justify-center gap-1.5 rounded-2xl bg-sky-700 py-4 px-2 shadow-sm active:scale-[0.97] touch-manipulation"
-                      >
-                        <span className="text-xl leading-none">🌧️</span>
-                        <span className="text-[11px] font-bold text-white leading-tight text-center">Rainfall</span>
-                      </button>
-                    ) : (
-                      <button
-                        type="button"
-                        onClick={() => handleTabChange("inventory")}
-                        className="flex flex-col items-center justify-center gap-1.5 rounded-2xl bg-violet-700 py-4 px-2 shadow-sm active:scale-[0.97] touch-manipulation"
-                      >
-                        <span className="text-xl leading-none">📦</span>
-                        <span className="text-[11px] font-bold text-white leading-tight text-center">Inventory</span>
-                      </button>
-                    )}
-                  </div>
-                )}
-
-                <TodayGapsCard onNavigate={handleTabChange} />
-
-                {canShowAccounts && (
-                  <QuickLogPanel
-                    locationId={selectedLocationId || undefined}
-                    onNavigateToFull={() => handleTabChange("accounts")}
-                  />
-                )}
-                {canShowAccounts && (
-                  <WeekBatchEntry
-                    locationId={selectedLocationId || undefined}
-                    defaultWage={tenantSettings.laborWages?.defaultInHouseWage}
-                    onSuccess={() => {
-                      window.dispatchEvent(new CustomEvent("farmflow:record-saved"))
-                    }}
-                  />
-                )}
-
-                {/* Explore all modules link */}
-                <button
-                  type="button"
-                  onClick={() => setIsMobileSidebarOpen(true)}
-                  className="w-full flex items-center justify-between rounded-2xl border border-stone-200 bg-stone-50 px-4 py-3.5 text-left touch-manipulation active:bg-stone-100 transition-colors"
-                >
-                  <span className="text-sm font-semibold text-stone-700">Explore all modules</span>
-                  <span className="text-stone-400 text-lg leading-none">›</span>
-                </button>
-              </div>
+              <MobileHomeSection
+                estateName={tenantSettings.estateName || ""}
+                canShowAccounts={canShowAccounts}
+                canShowRainfallSection={canShowRainfallSection}
+                selectedLocationId={selectedLocationId}
+                defaultWage={tenantSettings.laborWages?.defaultInHouseWage}
+                onDrilldown={openDrilldown}
+                onTabChange={handleTabChange}
+                onOpenSidebar={() => setIsMobileSidebarOpen(true)}
+              />
             )}
 
             {/* ── Morning Brief — desktop only ── */}
@@ -6334,227 +4877,27 @@ export default function InventorySystem() {
 
             {/* Recent Activity Feed — desktop only */}
             {!isMobile && (recentActivityLoading || (recentActivity && recentActivity.length > 0)) && (
-              <div className="overflow-hidden rounded-xl border border-stone-200 bg-white shadow-sm dark:border-white/[0.06] dark:bg-card">
-                <div className="border-b border-stone-100 px-5 py-4 dark:border-white/[0.05]">
-                  <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-emerald-700 dark:text-emerald-500">Latest</p>
-                  <p className="text-sm font-bold text-stone-900 dark:text-white">Recent Activity</p>
-                </div>
-                <div className="p-0">
-                  {recentActivityLoading ? (
-                    <div className="divide-y divide-stone-50">
-                      {[1, 2, 3, 4].map((i) => (
-                        <div key={i} className="flex items-center gap-3 px-6 py-3">
-                          <div className="h-7 w-7 shrink-0 rounded-lg bg-stone-100 animate-pulse" />
-                          <div className="flex-1 space-y-1.5">
-                            <div className="h-2.5 w-32 rounded bg-stone-100 animate-pulse" />
-                            <div className="h-2 w-48 rounded bg-stone-50 animate-pulse" />
-                          </div>
-                          <div className="h-2 w-12 rounded bg-stone-100 animate-pulse" />
-                        </div>
-                      ))}
-                    </div>
-                  ) : (
-                    <div className="divide-y divide-stone-50">
-                      {(recentActivity ?? []).map((entry, i) => {
-                        const moduleConfig: Record<string, { bg: string; text: string; icon: React.ReactNode }> = {
-                          processing: {
-                            bg: "bg-emerald-50",
-                            text: "text-emerald-700",
-                            icon: (
-                              <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 3v2.25m6.364.386l-1.591 1.591M21 12h-2.25m-.386 6.364l-1.591-1.591M12 18.75V21m-4.773-4.227l-1.591 1.591M5.25 12H3m4.227-4.773L5.636 5.636M15.75 12a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0z" />
-                              </svg>
-                            ),
-                          },
-                          dispatch: {
-                            bg: "bg-sky-50",
-                            text: "text-sky-700",
-                            icon: (
-                              <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M8.25 18.75a1.5 1.5 0 01-3 0m3 0a1.5 1.5 0 00-3 0m3 0h6m-9 0H3.375a1.125 1.125 0 01-1.125-1.125V14.25m17.25 4.5a1.5 1.5 0 01-3 0m3 0a1.5 1.5 0 00-3 0m3 0h1.125c.621 0 1.129-.504 1.09-1.124a17.902 17.902 0 00-3.213-9.193 2.056 2.056 0 00-1.58-.86H14.25M16.5 18.75h-2.25m0-11.177v-.958c0-.568-.422-1.048-.987-1.106a48.554 48.554 0 00-10.026 0 1.106 1.106 0 00-.987 1.106v7.635m12-6.677v6.677m0 4.5v-4.5m0 0h-12" />
-                              </svg>
-                            ),
-                          },
-                          sales: {
-                            bg: "bg-amber-50",
-                            text: "text-amber-700",
-                            icon: (
-                              <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M2.25 18.75a60.07 60.07 0 0115.797 2.101c.727.198 1.453-.342 1.453-1.096V18.75M3.75 4.5v.75A.75.75 0 013 6h-.75m0 0v-.375c0-.621.504-1.125 1.125-1.125H20.25M2.25 6v9m18-10.5v.75c0 .414.336.75.75.75h.75m-1.5-1.5h.375c.621 0 1.125.504 1.125 1.125v9.75c0 .621-.504 1.125-1.125 1.125h-.375m1.5-1.5H21a.75.75 0 00-.75.75v.75m0 0H3.75m0 0h-.375a1.125 1.125 0 01-1.125-1.125V15m1.5 1.5v-.75A.75.75 0 003 15h-.75M15 10.5a3 3 0 11-6 0 3 3 0 016 0zm3 0h.008v.008H18V10.5zm-12 0h.008v.008H6V10.5z" />
-                              </svg>
-                            ),
-                          },
-                          labour: {
-                            bg: "bg-violet-50",
-                            text: "text-violet-700",
-                            icon: (
-                              <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M15 19.128a9.38 9.38 0 002.625.372 9.337 9.337 0 004.121-.952 4.125 4.125 0 00-7.533-2.493M15 19.128v-.003c0-1.113-.285-2.16-.786-3.07M15 19.128v.106A12.318 12.318 0 018.624 21c-2.331 0-4.512-.645-6.374-1.766l-.001-.109a6.375 6.375 0 0111.964-3.07M12 6.375a3.375 3.375 0 11-6.75 0 3.375 3.375 0 016.75 0zm8.25 2.25a2.625 2.625 0 11-5.25 0 2.625 2.625 0 015.25 0z" />
-                              </svg>
-                            ),
-                          },
-                          expenses: {
-                            bg: "bg-rose-50",
-                            text: "text-rose-700",
-                            icon: (
-                              <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 14.25l6-6m4.5-3.493V21.75l-3.75-1.5-3.75 1.5-3.75-1.5-3.75 1.5V4.757c0-1.108.806-2.057 1.907-2.185a48.507 48.507 0 0111.186 0c1.1.128 1.907 1.077 1.907 2.185z" />
-                              </svg>
-                            ),
-                          },
-                        }
-                        const cfg = moduleConfig[entry.module] ?? { bg: "bg-stone-50", text: "text-stone-500", icon: null }
-                        return (
-                          <div key={i} className="flex items-center gap-3 px-6 py-3">
-                            <div className={cn("flex h-7 w-7 shrink-0 items-center justify-center rounded-lg", cfg.bg, cfg.text)}>
-                              {cfg.icon}
-                            </div>
-                            <div className="min-w-0 flex-1">
-                              <p className="text-sm font-medium text-stone-800 truncate">{entry.label}</p>
-                              <p className="text-xs text-stone-400 truncate">{entry.detail}</p>
-                            </div>
-                            <span className="shrink-0 text-xs text-stone-400 tabular-nums">{entry.date}</span>
-                          </div>
-                        )
-                      })}
-                    </div>
-                  )}
-                </div>
-              </div>
+              <RecentActivityFeed loading={recentActivityLoading} activity={recentActivity} />
             )}
 
-            {mobileHomeQuickActions.length > 0 && (
-              <div className="overflow-hidden rounded-xl border border-stone-200 bg-white shadow-sm dark:border-white/[0.06] dark:bg-card">
-                <div className="border-b border-stone-100 px-5 py-4 dark:border-white/[0.05]">
-                  <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-emerald-700 dark:text-emerald-500">Navigation</p>
-                  <p className={cn("font-bold text-stone-900 dark:text-white", isMobile ? "text-base" : "text-sm")}>Jump to a section</p>
-                </div>
-                <div className="p-5">
-                  <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3">
-                    {mobileHomeQuickActions.map((action) => {
-                      const ActionIcon = action.icon
-                      return (
-                        <button
-                          key={action.tab}
-                          type="button"
-                          onClick={() => handleTabChange(action.tab)}
-                          className={cn(
-                            "flex items-center gap-3 rounded-xl border border-stone-200 bg-white px-3.5 text-left shadow-sm transition-colors hover:bg-stone-50 touch-manipulation",
-                            isMobile ? "min-h-[60px] py-3.5" : "min-h-[52px] py-2.5",
-                          )}
-                        >
-                          <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-emerald-50">
-                            <ActionIcon className="h-4 w-4 text-emerald-700" />
-                          </span>
-                          <span className={cn("font-semibold text-stone-800", isMobile ? "text-[15px]" : "text-sm")}>
-                            {action.label}
-                          </span>
-                        </button>
-                      )
-                    })}
-                  </div>
-                </div>
-              </div>
-            )}
+            <HomeNavCard
+              actions={mobileHomeQuickActions}
+              isMobile={isMobile}
+              onTabChange={handleTabChange}
+            />
 
-            {(() => {
-              const needsAttention = executionOutcomeChecks.filter(c => c.status === "attention").length
-              const passing = executionOutcomeChecks.filter(c => c.status === "good").length
-              const total = executionOutcomeChecks.length
-              const autoOpen = needsAttention > 0
-              const isOpen = scorecardExpanded || autoOpen
-              return (
-            <div className="overflow-hidden rounded-xl border border-stone-200 bg-white shadow-sm dark:border-white/[0.06] dark:bg-card">
-              <button
-                type="button"
-                className="flex w-full items-center justify-between px-5 py-4 text-left hover:bg-stone-50/60 transition-colors dark:hover:bg-white/[0.02]"
-                onClick={() => setScorecardExpanded(v => !v)}
-              >
-                <div>
-                  <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-emerald-700 dark:text-emerald-500">Performance</p>
-                  <div className="flex items-center gap-2 mt-0.5">
-                    <p className="text-sm font-bold text-stone-900 dark:text-white">Execution Scorecard</p>
-                    {needsAttention > 0 ? (
-                      <span className="rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[10px] font-bold text-amber-700">{needsAttention} action needed</span>
-                    ) : (
-                      <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[10px] font-bold text-emerald-700">{passing}/{total} on track</span>
-                    )}
-                  </div>
-                </div>
-                <ChevronDown className={cn("h-4 w-4 text-stone-400 transition-transform shrink-0 ml-3", isOpen && "rotate-180")} />
-              </button>
-              {isOpen && (
-                <div className="space-y-3 border-t border-stone-100 p-5 dark:border-white/[0.05]">
-                  {executionOutcomeChecks.map((check) => (
-                    <div key={check.id} className="rounded-xl border border-stone-200 bg-stone-50 p-3 dark:border-white/[0.05] dark:bg-white/[0.02]">
-                      <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
-                        <div className="space-y-1">
-                          <p className="text-sm font-semibold text-neutral-900">{check.title}</p>
-                          <p className="text-xs text-muted-foreground">{check.goal}</p>
-                        </div>
-                        <Badge variant="outline" className={cn("w-fit", executionOutcomeTone[check.status])}>
-                          {executionOutcomeLabel[check.status]}
-                        </Badge>
-                      </div>
-                      <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                        <p className="text-sm text-neutral-700">{check.metric}</p>
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          className="w-full bg-white sm:w-auto"
-                          onClick={() => handleExecutionOutcomeAction(check)}
-                        >
-                          {check.actionLabel}
-                        </Button>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-              )
-            })()}
-
-            <div className="overflow-hidden rounded-xl border border-stone-200 bg-white shadow-sm dark:border-white/[0.06] dark:bg-card">
-                <div className="border-b border-stone-100 px-5 py-4 dark:border-white/[0.05]">
-                  <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-emerald-700 dark:text-emerald-500">At a glance</p>
-                  <p className="text-sm font-bold text-stone-900 dark:text-white">Estate Overview</p>
-                </div>
-                <div className="space-y-4 p-5">
-                  <div className="grid grid-cols-2 gap-3">
-                    <div className="rounded-xl border border-stone-200 bg-stone-50 p-3 dark:border-white/[0.05] dark:bg-white/[0.02]">
-                      <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-emerald-700 dark:text-emerald-500">Estate Blocks</p>
-                      <p className="mt-1 text-2xl font-black tabular-nums text-neutral-900 dark:text-white">{formatCount(estateMetrics.locationCount)}</p>
-                      <p className="mt-0.5 text-xs text-stone-400">configured locations</p>
-                      {canShowProcessing && (
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          className="mt-2 h-7 px-0 text-xs"
-                          onClick={() => openDrilldown({ tab: "processing", locationId: selectedLocationId })}
-                        >
-                          Open records →
-                        </Button>
-                      )}
-                    </div>
-                    <div className="rounded-xl border border-stone-200 bg-stone-50 p-3 dark:border-white/[0.05] dark:bg-white/[0.02]">
-                      <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-emerald-700 dark:text-emerald-500">Entries Today</p>
-                      <p className="mt-1 text-2xl font-black tabular-nums text-neutral-900 dark:text-white">{formatCount(estateMetrics.recentActivity)}</p>
-                      <p className="mt-0.5 text-xs text-stone-400">logged in last 24h</p>
-                      {showTransactionHistory && (
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          className="mt-2 h-7 px-0 text-xs"
-                          onClick={() => openDrilldown({ tab: "transactions" })}
-                        >
-                          View log →
-                        </Button>
-                      )}
-                    </div>
-                  </div>
-                </div>
-              </div>
+            <ExecutionScorecardCard
+              checks={executionOutcomeChecks}
+              onAction={handleExecutionOutcomeAction}
+            />
+            <EstateOverviewCard
+              locationCount={estateMetrics.locationCount}
+              recentActivity={estateMetrics.recentActivity}
+              canShowProcessing={canShowProcessing}
+              showTransactionHistory={showTransactionHistory}
+              selectedLocationId={selectedLocationId}
+              onDrilldown={openDrilldown}
+            />
 
             {/* Today's Brief — moved lower, kept for spacing; actual render is at top of home */}
 
@@ -6568,62 +4911,11 @@ export default function InventorySystem() {
             )}
 
             {canShowAiAnalysis && !isScopedUser && (
-              <Card className="border-black/5 bg-white/90">
-                <CardHeader className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                  <div>
-                    <CardTitle>Smart Insights</CardTitle>
-                    <CardDescription>What the data is telling you right now — without you having to ask.</CardDescription>
-                  </div>
-                  <Badge variant="outline" className="w-fit border-violet-200 bg-violet-50 text-violet-700">
-                    AI
-                  </Badge>
-                </CardHeader>
-                <CardContent>
-                  {proactiveInsightsLoading ? (
-                    <div className="flex items-center gap-2 text-sm text-stone-500">
-                      <Loader2 className="h-4 w-4 animate-spin" />
-                      Reading your data...
-                    </div>
-                  ) : proactiveInsightsError ? (
-                    <div className="rounded-xl border border-amber-200 bg-amber-50/70 p-3 text-sm text-amber-900">
-                      <p className="font-medium">Insights temporarily unavailable.</p>
-                      <p className="mt-1 text-muted-foreground">{proactiveInsightsError}</p>
-                    </div>
-                  ) : proactiveInsights && proactiveInsights.length > 0 ? (
-                    <div className="space-y-2">
-                      {proactiveInsights.map((insight, i) => (
-                        <div
-                          key={i}
-                          className={cn(
-                            "flex items-start gap-3 rounded-xl border p-3",
-                            insight.severity === "warning"
-                              ? "border-amber-200 bg-amber-50/60"
-                              : insight.severity === "good"
-                                ? "border-emerald-200 bg-emerald-50/60"
-                                : "border-black/5 bg-white",
-                          )}
-                        >
-                          <span
-                            className={cn(
-                              "mt-0.5 h-2 w-2 shrink-0 rounded-full",
-                              insight.severity === "warning"
-                                ? "bg-amber-500"
-                                : insight.severity === "good"
-                                  ? "bg-emerald-500"
-                                  : "bg-stone-400",
-                            )}
-                          />
-                          <SimpleMarkdown content={insight.text} className="text-stone-800" />
-                        </div>
-                      ))}
-                    </div>
-                  ) : (
-                    <p className="text-sm text-muted-foreground">
-                      All quiet — no anomalies or urgent signals detected right now.
-                    </p>
-                  )}
-                </CardContent>
-              </Card>
+              <SmartInsightsCard
+                loading={proactiveInsightsLoading}
+                error={proactiveInsightsError}
+                insights={proactiveInsights}
+              />
             )}
 
             <PriorityAlertsCard
@@ -6643,46 +4935,12 @@ export default function InventorySystem() {
           {canShowInventoryWorkspace && (
             <TabsContent value="inventory" className="space-y-6" forceMount={isTabLoaded("inventory") ? true : undefined}>
               {resolvedInventoryWorkspaceView !== "transactions" && !inventoryBannerDismissed && (
-                <div className="flex flex-col gap-3 rounded-2xl border border-amber-200 bg-amber-50/80 px-4 py-3.5 sm:flex-row sm:items-center sm:justify-between">
-                  <div className="flex items-start gap-3">
-                    <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" />
-                    <div className="space-y-0.5">
-                      <p className="text-sm font-semibold text-amber-900">Inventory handles stock usage directly</p>
-                      <p className="text-xs text-amber-800">
-                        Use <strong>Deplete</strong> here when you only need stock tracking for fertiliser, chemicals, fuel, or other consumables.{" "}
-                        {canShowAccounts
-                          ? "Use Accounts → Other Expenses only when the same usage should also land in Accounts and P&L."
-                          : "This works even if you do not use Accounts."}
-                      </p>
-                    </div>
-                  </div>
-                  <div className="flex shrink-0 flex-wrap items-center gap-2">
-                    <button
-                      type="button"
-                      onClick={() => openMovementDrawer("deplete")}
-                      className="rounded-lg border border-amber-300 bg-white px-3 py-2 text-xs font-semibold text-amber-800 transition-colors hover:bg-amber-100 touch-manipulation"
-                    >
-                      Record stock usage
-                    </button>
-                    {canShowAccounts && (
-                      <button
-                        type="button"
-                        onClick={() => { setAccountsInitialTab("expenses"); handleTabChange("accounts") }}
-                        className="rounded-lg border border-amber-300 bg-white px-3 py-2 text-xs font-semibold text-amber-800 transition-colors hover:bg-amber-100 touch-manipulation"
-                      >
-                        Open Accounts expense
-                      </button>
-                    )}
-                    <button
-                      type="button"
-                      aria-label="Dismiss"
-                      onClick={() => setInventoryBannerDismissed(true)}
-                      className="ml-1 flex h-7 w-7 items-center justify-center rounded-full text-amber-600 hover:bg-amber-100 transition-colors touch-manipulation"
-                    >
-                      ✕
-                    </button>
-                  </div>
-                </div>
+                <InventoryWorkspaceBanner
+                  canShowAccounts={canShowAccounts}
+                  onRecordUsage={() => openMovementDrawer("deplete")}
+                  onOpenExpenses={() => { setAccountsInitialTab("expenses"); handleTabChange("accounts") }}
+                  onDismiss={() => setInventoryBannerDismissed(true)}
+                />
               )}
               <div className="overflow-hidden rounded-xl border border-stone-200 bg-white shadow-sm dark:border-white/[0.06] dark:bg-card">
                 <div className="grid lg:grid-cols-[1fr_auto]">
@@ -6996,171 +5254,28 @@ export default function InventorySystem() {
 
                 <div className="order-1 flex flex-col gap-6 lg:order-2 lg:col-span-4 lg:self-start">
                   {canShowSeason && (
-                    <div className="order-2 overflow-hidden rounded-xl border border-stone-200 bg-white shadow-sm dark:border-white/[0.06] dark:bg-card lg:order-1">
-                      <div className="flex items-start justify-between border-b border-stone-100 px-5 py-4 dark:border-white/[0.05]">
-                        <div>
-                          <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-emerald-700 dark:text-emerald-500">Alerts</p>
-                          <p className="flex items-center gap-1.5 text-sm font-bold text-stone-900 dark:text-white">
-                            <AlertTriangle className="h-3.5 w-3.5 text-amber-500" />
-                            System status
-                          </p>
-                          {!exceptionsLoading && !exceptionsError && (
-                            <p className="mt-0.5 text-xs text-stone-400 dark:text-stone-500">
-                              {exceptionsSummary.count === 0
-                                ? "No active anomalies in the last 7 days."
-                                : `${exceptionsSummary.count} active alert${exceptionsSummary.count === 1 ? "" : "s"}`}
-                            </p>
-                          )}
-                        </div>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          className="h-8 shrink-0 rounded-lg border-stone-200 text-xs"
-                          onClick={() => openDrilldown({ tab: "season" })}
-                        >
-                          Season view
-                        </Button>
-                      </div>
-                      <div className="space-y-2 p-5">
-                        {exceptionsLoading ? (
-                          <div className="flex items-center gap-2 text-xs text-stone-500">
-                            <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                            Loading system status...
-                          </div>
-                        ) : exceptionsError ? (
-                          <div className="text-xs text-rose-600">{exceptionsError}</div>
-                        ) : exceptionsSummary.count === 0 ? (
-                          <div className="inline-flex items-center gap-2 rounded-lg border border-emerald-100 bg-emerald-50/70 px-3 py-2 text-xs font-medium text-emerald-700">
-                            <CheckCircle2 className="h-3.5 w-3.5" />
-                            All clear
-                          </div>
-                        ) : (
-                          <div className="grid gap-2">
-                            {(exceptionsSummary.alerts || []).slice(0, 3).map((alert, index) => {
-                              const summaryLine = [alert.location, alert.coffeeType].filter(Boolean).join(" • ")
-                              const tone =
-                                alert.severity === "high" || alert.severity === "critical"
-                                  ? "border-rose-100 bg-rose-50/70 text-rose-900"
-                                  : "border-amber-100 bg-amber-50/70 text-amber-900"
-                              return (
-                                <button
-                                  key={`${alert.id}-${index}`}
-                                  type="button"
-                                  data-testid={`inventory-system-alert-${index + 1}`}
-                                  className={cn("rounded-xl border px-3 py-2 text-left transition-colors hover:bg-white", tone)}
-                                  onClick={() =>
-                                    openDrilldown({
-                                      tab: resolveExceptionDrilldownTab(alert.metric),
-                                      seasonAlertId: alert.id,
-                                      seasonMetric: alert.metric || null,
-                                    })
-                                  }
-                                >
-                                  <p className="text-[10px] uppercase tracking-[0.15em] text-amber-700">Alert {index + 1}</p>
-                                  <p className="mt-1 line-clamp-2 text-xs font-medium leading-snug">{alert.title}</p>
-                                  {summaryLine ? <p className="mt-1 text-[11px] text-muted-foreground">{summaryLine}</p> : null}
-                                </button>
-                              )
-                            })}
-                            {exceptionsSummary.alerts.length === 0 &&
-                              (exceptionsSummary.highlights || []).slice(0, 3).map((item, index) => (
-                                <div key={`${item}-${index}`} className="rounded-xl border border-amber-100 bg-amber-50/70 px-3 py-2">
-                                  <p className="text-[10px] uppercase tracking-[0.15em] text-amber-700">Alert {index + 1}</p>
-                                  <p className="mt-1 text-xs font-medium leading-snug text-amber-900">{item}</p>
-                                </div>
-                              ))}
-                          </div>
-                        )}
-                      </div>
-                    </div>
+                    <InventorySystemAlerts
+                      loading={exceptionsLoading}
+                      error={exceptionsError}
+                      summary={exceptionsSummary}
+                      onOpenSeason={() => openDrilldown({ tab: "season" })}
+                      onOpenAlert={(alert) => openDrilldown({
+                        tab: resolveExceptionDrilldownTab(alert.metric),
+                        seasonAlertId: alert.id,
+                        seasonMetric: alert.metric || null,
+                      })}
+                    />
                   )}
-
-                    <div data-testid="inventory-quick-actions" className="order-1 overflow-hidden rounded-xl border border-stone-200 bg-white shadow-sm dark:border-white/[0.06] dark:bg-card lg:order-2">
-                    <div className="border-b border-stone-100 px-5 py-4 dark:border-white/[0.05]">
-                      <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-emerald-700 dark:text-emerald-500">Actions</p>
-                      <p className="text-sm font-bold text-stone-900 dark:text-white">Quick actions</p>
-                    </div>
-                    <div className="space-y-2 p-5">
-                      <button
-                        data-testid="inventory-action-record-movement"
-                        type="button"
-                        onClick={() => openMovementDrawer()}
-                        className="flex w-full items-center justify-between rounded-lg border border-stone-200 bg-white px-4 py-3.5 text-sm font-medium text-stone-800 transition-colors hover:bg-stone-50 touch-manipulation active:scale-[0.99] dark:border-white/[0.08] dark:bg-white/[0.03] dark:text-stone-200 dark:hover:bg-white/[0.05]"
-                      >
-                        <span className="flex items-center gap-2">
-                          <Plus className="h-4 w-4 text-emerald-600" />
-                          Record stock change
-                        </span>
-                        <span className="text-xs text-stone-400">Primary</span>
-                      </button>
-                      <div className="grid grid-cols-2 gap-2">
-                        <button
-                          data-testid="inventory-action-restocking"
-                          type="button"
-                          onClick={() => openMovementDrawer("restock")}
-                          className="flex h-12 items-center justify-center rounded-lg border border-emerald-200 bg-emerald-50 px-3 text-sm font-semibold text-emerald-800 transition-colors hover:bg-emerald-100 touch-manipulation active:scale-[0.98] dark:border-emerald-700/40 dark:bg-emerald-900/20 dark:text-emerald-300"
-                        >
-                          Restock
-                        </button>
-                        <button
-                          data-testid="inventory-action-depleting"
-                          type="button"
-                          onClick={() => openMovementDrawer("deplete")}
-                          className="flex h-12 items-center justify-center rounded-lg border border-amber-200 bg-amber-50 px-3 text-sm font-semibold text-amber-800 transition-colors hover:bg-amber-100 touch-manipulation active:scale-[0.98] dark:border-amber-700/40 dark:bg-amber-900/20 dark:text-amber-300"
-                        >
-                          Record usage
-                        </button>
-                      </div>
-                      {showDataToolsControls && (
-                        <button
-                          type="button"
-                          onClick={exportInventoryToCSV}
-                          className="flex w-full items-center justify-between rounded-lg border border-stone-200 bg-white px-4 py-3 text-sm text-stone-800 transition-colors hover:bg-stone-50 dark:border-white/[0.08] dark:bg-white/[0.03] dark:text-stone-200"
-                        >
-                          <span className="flex items-center gap-2">
-                            <Download className="h-4 w-4 text-emerald-600" />
-                            Export inventory
-                          </span>
-                          <span className="text-xs text-stone-400">CSV</span>
-                        </button>
-                      )}
-                      {showTransactionHistory && (
-                        <button
-                          type="button"
-                          onClick={() => setInventoryWorkspaceView("transactions")}
-                          className="flex w-full items-center justify-between rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-semibold text-amber-900 transition-colors hover:bg-amber-100 dark:border-amber-700/40 dark:bg-amber-900/20 dark:text-amber-300"
-                        >
-                          <span className="flex items-center gap-2">
-                            <Edit className="h-4 w-4 text-amber-700" />
-                            Fix or edit a logged entry
-                          </span>
-                          <span className="text-xs font-normal text-amber-600">→</span>
-                        </button>
-                      )}
-                      {inventoryDrilldownItemName && (
-                        <button
-                          type="button"
-                          onClick={() => setIsInventoryDrilldownOpen(true)}
-                          className="flex w-full items-center justify-between rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-900 transition-colors hover:bg-emerald-100 dark:border-emerald-700/40 dark:bg-emerald-900/20 dark:text-emerald-300"
-                        >
-                          <span className="flex items-center gap-2">
-                            <List className="h-4 w-4 text-emerald-700 dark:text-emerald-400" />
-                            View item history
-                          </span>
-                          <span className="max-w-[9rem] truncate text-xs text-emerald-700 dark:text-emerald-400">{inventoryDrilldownItemName}</span>
-                        </button>
-                      )}
-                      <div className="rounded-lg border border-stone-200 bg-stone-50 px-4 py-3 text-xs text-stone-500 dark:border-white/[0.05] dark:bg-white/[0.02]">
-                        <div className="flex items-center justify-between">
-                          <span>Default unit</span>
-                          <span className="font-medium text-stone-800 dark:text-stone-200">{selectedMovementUnit}</span>
-                        </div>
-                        <p className="mt-2 text-[11px] leading-relaxed text-stone-400 dark:text-stone-500">
-                          Tap any item to inspect recent movements and value.
-                        </p>
-                      </div>
-                    </div>
-                  </div>
+                  <InventoryQuickActionsSidebar
+                    showDataToolsControls={showDataToolsControls}
+                    showTransactionHistory={showTransactionHistory}
+                    selectedMovementUnit={selectedMovementUnit}
+                    drilledItemName={inventoryDrilldownItemName}
+                    onRecordMovement={openMovementDrawer}
+                    onExportInventory={exportInventoryToCSV}
+                    onViewTransactions={() => setInventoryWorkspaceView("transactions")}
+                    onViewItemHistory={() => setIsInventoryDrilldownOpen(true)}
+                  />
                 </div>
               </div>
               )}
@@ -7200,104 +5315,17 @@ export default function InventorySystem() {
 
           {canShowProcessingWorkspace && (
             <TabsContent value="processing" className="space-y-6" forceMount={isTabLoaded("processing") ? true : undefined}>
-              {(() => {
-                const activeCropTabs = [
-                  canShowProcessing && "coffee",
-                  canShowPepper && "pepper",
-                  canShowRubber && "rubber",
-                ].filter(Boolean) as ProcessingWorkspaceView[]
-
-                if (activeCropTabs.length === 1) {
-                  if (activeCropTabs[0] === "pepper") return <PepperTab />
-                  if (activeCropTabs[0] === "rubber") return <RubberTab />
-                  return <ProcessingTab showDataToolsControls={showDataToolsControls} />
-                }
-
-                const viewLabel: Record<ProcessingWorkspaceView, string> = {
-                  coffee: "Coffee Pulping",
-                  pepper: "Pepper Processing",
-                  rubber: "Rubber Tapping",
-                }
-                const viewDescription: Record<ProcessingWorkspaceView, string> = {
-                  coffee: "Cherry intake, pulping, parchment, dry cherry, and daily output.",
-                  pepper: "Pepper picking, green-to-dry conversion, and location-wise pepper yield.",
-                  rubber: "Daily latex collection, coagulation, sheet production, and RSS grading.",
-                }
-
-                return (
-                  <Tabs
-                    value={resolvedProcessingWorkspaceView}
-                    onValueChange={(value) => setProcessingWorkspaceView(value as ProcessingWorkspaceView)}
-                    className="space-y-6"
-                  >
-                    <Card className="border-border/70 bg-white/90">
-                      <CardHeader className="pb-3">
-                        <CardTitle className="text-xs uppercase tracking-[0.2em] text-muted-foreground">Post-Harvest Workspace</CardTitle>
-                        <CardDescription>
-                          Switch between crops in one workspace to keep records clean.
-                        </CardDescription>
-                      </CardHeader>
-                      <CardContent className="grid gap-4 lg:grid-cols-[1.6fr_1fr]">
-                        <div className="space-y-2">
-                          <div>
-                            <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">Current View</p>
-                            <p className="text-2xl font-semibold text-foreground">
-                              {viewLabel[resolvedProcessingWorkspaceView]}
-                            </p>
-                          </div>
-                          <div>
-                            <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">Use This For</p>
-                            <p className="text-sm font-semibold text-foreground">
-                              {viewDescription[resolvedProcessingWorkspaceView]}
-                            </p>
-                          </div>
-                        </div>
-                        <div className="rounded-xl border border-border/60 bg-muted/20 p-3">
-                          <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">Crop Flow</p>
-                          <TabsList
-                            className={`mt-3 grid w-full rounded-xl border border-border/60 bg-white p-1 shadow-none grid-cols-${activeCropTabs.length}`}
-                          >
-                            {activeCropTabs.includes("coffee") && (
-                              <TabsTrigger value="coffee" className="min-h-10 rounded-lg">
-                                Coffee
-                              </TabsTrigger>
-                            )}
-                            {activeCropTabs.includes("pepper") && (
-                              <TabsTrigger value="pepper" className="min-h-10 rounded-lg">
-                                Pepper
-                              </TabsTrigger>
-                            )}
-                            {activeCropTabs.includes("rubber") && (
-                              <TabsTrigger value="rubber" className="min-h-10 rounded-lg">
-                                Rubber
-                              </TabsTrigger>
-                            )}
-                          </TabsList>
-                          <p className="mt-3 text-xs text-muted-foreground">
-                            Switch between crops here when needed.
-                          </p>
-                        </div>
-                      </CardContent>
-                    </Card>
-
-                    {activeCropTabs.includes("coffee") && (
-                      <TabsContent value="coffee" className="space-y-6">
-                        <ProcessingTab showDataToolsControls={showDataToolsControls} />
-                      </TabsContent>
-                    )}
-                    {activeCropTabs.includes("pepper") && (
-                      <TabsContent value="pepper" className="space-y-6">
-                        <PepperTab />
-                      </TabsContent>
-                    )}
-                    {activeCropTabs.includes("rubber") && (
-                      <TabsContent value="rubber" className="space-y-6">
-                        <RubberTab />
-                      </TabsContent>
-                    )}
-                  </Tabs>
-                )
-              })()}
+              <ProcessingWorkspace
+                canShowProcessing={canShowProcessing}
+                canShowPepper={canShowPepper}
+                canShowRubber={canShowRubber}
+                resolvedView={resolvedProcessingWorkspaceView}
+                showDataToolsControls={showDataToolsControls}
+                onViewChange={setProcessingWorkspaceView}
+                ProcessingTab={ProcessingTab as any}
+                PepperTab={PepperTab as any}
+                RubberTab={RubberTab as any}
+              />
             </TabsContent>
           )}
           {canShowDispatch && (
@@ -7375,34 +5403,12 @@ export default function InventorySystem() {
             <TabsContent value="ai-analysis" className="space-y-6" forceMount={isTabLoaded("ai-analysis") ? true : undefined}>
               <AiAnalysisCharts inventory={inventory} transactions={transactions} />
 
-              <Card className="border-border/70 bg-white/85">
-                <CardHeader className="gap-3">
-                  <div>
-                    <CardTitle className="flex items-center gap-2">
-                      <Brain className="h-5 w-5 text-emerald-700" />
-                      AI Inventory Analysis
-                    </CardTitle>
-                    <CardDescription>
-                      Run a broader one-shot review when you want a longer narrative on inventory, processing, costs, and season patterns.
-                    </CardDescription>
-                  </div>
-                  <Button onClick={generateAIAnalysis} disabled={isAnalyzing} className="bg-emerald-700 hover:bg-emerald-800">
-                    {isAnalyzing ? "Analyzing..." : "Generate Analysis"}
-                  </Button>
-                </CardHeader>
-                <CardContent className="space-y-3">
-                  {analysisError ? <div className="text-sm text-red-600">{analysisError}</div> : null}
-                  {aiAnalysis ? (
-                    <div className="max-h-[28rem] overflow-y-auto">
-                      <SimpleMarkdown content={aiAnalysis} className="text-foreground" />
-                    </div>
-                  ) : (
-                    <div className="text-sm text-muted-foreground">
-                      Run the AI analysis to see a longer recommendation set grounded in the current fiscal year data.
-                    </div>
-                  )}
-                </CardContent>
-              </Card>
+              <AiAnalysisCard
+                isAnalyzing={isAnalyzing}
+                error={analysisError}
+                analysis={aiAnalysis}
+                onGenerate={generateAIAnalysis}
+              />
             </TabsContent>
           )}
           {canShowNews && (
