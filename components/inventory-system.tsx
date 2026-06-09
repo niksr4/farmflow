@@ -137,6 +137,7 @@ import {
 } from "@/components/inventory-system/utils"
 import { downloadDataToolsTemplate, exportOpsCsv, getDataToolsSelection } from "@/components/inventory-system/data-tools-export"
 import RecordMovementPanel from "@/components/inventory-system/record-movement-panel"
+import SimpleMarkdown from "@/components/ui/simple-markdown"
 import InventoryDrilldownPanel from "@/components/inventory-system/inventory-drilldown-panel"
 import SeasonProgressStrip from "@/components/inventory-system/season-progress-strip"
 import SeasonCompareCard from "@/components/inventory-system/season-compare-card"
@@ -6612,7 +6613,7 @@ export default function InventorySystem() {
                                   : "bg-stone-400",
                             )}
                           />
-                          <p className="text-sm text-stone-800">{insight.text}</p>
+                          <SimpleMarkdown content={insight.text} className="text-stone-800" />
                         </div>
                       ))}
                     </div>
@@ -7392,8 +7393,8 @@ export default function InventorySystem() {
                 <CardContent className="space-y-3">
                   {analysisError ? <div className="text-sm text-red-600">{analysisError}</div> : null}
                   {aiAnalysis ? (
-                    <div className="max-h-[28rem] overflow-y-auto whitespace-pre-line text-sm text-foreground">
-                      {aiAnalysis}
+                    <div className="max-h-[28rem] overflow-y-auto">
+                      <SimpleMarkdown content={aiAnalysis} className="text-foreground" />
                     </div>
                   ) : (
                     <div className="text-sm text-muted-foreground">

@@ -6,6 +6,7 @@ import { ArrowRight, Brain, Loader2, Minimize2, SendHorizontal, Sparkles, X } fr
 
 import AssistantResponseCards from "@/components/assistant-response-cards"
 import { Button } from "@/components/ui/button"
+import SimpleMarkdown from "@/components/ui/simple-markdown"
 import { Textarea } from "@/components/ui/textarea"
 import { parseJsonResponse } from "@/components/inventory-system/utils"
 import { useAuth } from "@/hooks/use-auth"
@@ -337,7 +338,10 @@ export default function FloatingAiAssistant() {
                   <div className="mb-1 text-[11px] font-semibold uppercase tracking-[0.2em] opacity-70">
                     {message.role === "user" ? "You" : "Assistant"}
                   </div>
-                  <div className="whitespace-pre-line leading-6">{message.content}</div>
+                  {message.role === "assistant"
+                    ? <SimpleMarkdown content={message.content} className="leading-6 text-slate-800" />
+                    : <div className="leading-6">{message.content}</div>
+                  }
                   {message.role === "assistant" ? (
                     <AssistantResponseCards
                       actions={message.actions}

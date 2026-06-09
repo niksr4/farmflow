@@ -3,6 +3,7 @@
 import { Loader2 } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import SimpleMarkdown from "@/components/ui/simple-markdown"
 
 type SeasonCompareCardProps = {
   loading: boolean
@@ -37,7 +38,7 @@ export default function SeasonCompareCard({ loading, narrative, error, fyLabels 
             <p className="mt-1 text-muted-foreground">{error}</p>
           </div>
         ) : narrative ? (
-          <p className="text-sm leading-relaxed text-neutral-700">{narrative}</p>
+          <SimpleMarkdown content={narrative} className="text-neutral-700" />
         ) : null}
       </CardContent>
     </Card>

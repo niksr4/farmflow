@@ -5,6 +5,7 @@ import { ArrowRight, Brain, Loader2, SendHorizontal, Sparkles } from "lucide-rea
 
 import AssistantResponseCards from "@/components/assistant-response-cards"
 import { Badge } from "@/components/ui/badge"
+import SimpleMarkdown from "@/components/ui/simple-markdown"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Textarea } from "@/components/ui/textarea"
@@ -182,7 +183,10 @@ export default function AiAssistantPanel({
                 <div className="mb-1 text-[11px] font-semibold uppercase tracking-[0.2em] opacity-70">
                   {message.role === "user" ? "You" : "Assistant"}
                 </div>
-                <div className="whitespace-pre-line leading-6">{message.content}</div>
+                {message.role === "assistant"
+                  ? <SimpleMarkdown content={message.content} className="leading-6" />
+                  : <div className="leading-6">{message.content}</div>
+                }
                 {message.role === "assistant" ? (
                   <AssistantResponseCards actions={message.actions} results={message.results} className="mt-3" />
                 ) : null}
