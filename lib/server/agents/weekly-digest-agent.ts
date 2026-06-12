@@ -14,6 +14,7 @@ import { summarizeForecastWindow, deriveIrrigationAdvice, deriveWeatherAnomalySi
 import { DEFAULT_WEATHER_QUERY } from "@/lib/weather-config"
 import { getCoffeePriceAnalysis, estimateSellableStock, buildMarketTimingSection } from "@/lib/server/coffee-prices"
 import { getCurrentFiscalYear } from "@/lib/fiscal-year-utils"
+import { createDigestFeedbackLinks, type DigestFeedbackLinks } from "@/lib/server/digest-feedback"
 
 type TenantDigestRow = {
   tenantId: string
@@ -380,7 +381,9 @@ function buildSeasonCostBasisSection(basis: SeasonCostBasis): string {
   return lines.join("\n")
 }
 
-async function generateWeeklyDigestText(tenant: TenantDigestRow): Promise<{ text: string; error?: undefined } | { text: null; error: string }> {
+async function generateWeeklyDigestText(
+  tenant: TenantDigestRow,
+): Promise<{ text: string; weekStart: string; error?: undefined } | { text: null; weekStart?: undefined; error: string }> {
   try {
     const locationQuery = tenant.weatherLocationQuery ?? DEFAULT_WEATHER_QUERY
     const [{ dataSummary, fiscalYearLabel }, lastWeek, rainfall, forecastJson, coffeePrices, sellableStock, seasonCostBasis] = await Promise.all([
@@ -506,7 +509,7 @@ End with: "Powered by FarmFlow — your estate, always in view."`,
       logServerError(`Weekly digest generation empty for tenant ${tenant.tenantId}`, { detail })
       return { text: null, error: `Claude returned empty (${detail})` }
     }
-    return { text: digestText }
+    return { text: digestText, weekStart: lastWeek.weekStart }
   } catch (error: any) {
     const msg = String(error?.message || error || "unknown error")
     // Anthropic billing errors (402 / 400 with credit balance message) are config issues,
@@ -523,7 +526,18 @@ End with: "Powered by FarmFlow — your estate, always in view."`,
   }
 }
 
-function buildDigestHtml(ownerName: string, tenantName: string, digestText: string): string {
+function buildFeedbackHtml(feedbackLinks: DigestFeedbackLinks | null): string {
+  if (!feedbackLinks) return ""
+  return `
+        <!-- Feedback -->
+        <tr><td style="background:#ffffff;border-left:1px solid #e5e7eb;border-right:1px solid #e5e7eb;border-top:1px solid #f3f4f6;padding:16px 32px;text-align:center;">
+          <p style="margin:0 0 10px;font-size:13px;color:#6b7280;">Was this digest useful?</p>
+          <a href="${feedbackLinks.up}" style="display:inline-block;margin:0 6px;padding:8px 18px;border-radius:8px;background:#ecfdf5;color:#047857;font-size:14px;font-weight:600;text-decoration:none;border:1px solid #a7f3d0;">👍 Yes</a>
+          <a href="${feedbackLinks.down}" style="display:inline-block;margin:0 6px;padding:8px 18px;border-radius:8px;background:#fef2f2;color:#b91c1c;font-size:14px;font-weight:600;text-decoration:none;border:1px solid #fecaca;">👎 Not really</a>
+        </td></tr>`
+}
+
+function buildDigestHtml(ownerName: string, tenantName: string, digestText: string, feedbackLinks: DigestFeedbackLinks | null): string {
   // Convert plain-text numbered sections to simple HTML paragraphs
   const lines = digestText.split("\n").filter((l) => l.trim().length > 0)
   const bodyHtml = lines
@@ -564,6 +578,7 @@ function buildDigestHtml(ownerName: string, tenantName: string, digestText: stri
           <p style="margin:0 0 20px;font-size:14px;color:#6b7280;">Hi ${ownerName}, here is your weekly estate operations digest.</p>
           ${bodyHtml}
         </td></tr>
+${buildFeedbackHtml(feedbackLinks)}
 
         <!-- Footer -->
         <tr><td style="background:#f3f4f6;border-radius:0 0 12px 12px;border:1px solid #e5e7eb;border-top:none;padding:16px 32px;">
@@ -577,7 +592,7 @@ function buildDigestHtml(ownerName: string, tenantName: string, digestText: stri
 </html>`
 }
 
-async function sendDigestEmail(tenant: TenantDigestRow, digestText: string): Promise<boolean> {
+async function sendDigestEmail(tenant: TenantDigestRow, digestText: string, feedbackLinks: DigestFeedbackLinks | null): Promise<boolean> {
   const resendKey = String(process.env.RESEND_API_KEY || "").trim()
   const from = String(process.env.DIGEST_EMAIL_FROM || process.env.ALERT_EMAIL_FROM || DEFAULT_DIGEST_EMAIL_FROM || DEFAULT_ALERT_EMAIL_FROM).trim()
 
@@ -585,8 +600,11 @@ async function sendDigestEmail(tenant: TenantDigestRow, digestText: string): Pro
 
   const subject = `Your FarmFlow Weekly Digest — ${tenant.tenantName}`
   const greeting = `Hi ${tenant.ownerName},\n\nHere is your weekly estate operations digest.\n\n`
-  const text = greeting + digestText
-  const html = buildDigestHtml(tenant.ownerName, tenant.tenantName, digestText)
+  const feedbackText = feedbackLinks
+    ? `\n\nWas this digest useful?\nYes: ${feedbackLinks.up}\nNot really: ${feedbackLinks.down}`
+    : ""
+  const text = greeting + digestText + feedbackText
+  const html = buildDigestHtml(tenant.ownerName, tenant.tenantName, digestText, feedbackLinks)
 
   try {
     const response = await fetchWithTimeout("https://api.resend.com/emails", {
@@ -687,7 +705,8 @@ export async function runWeeklyDigestAgent(input?: {
           }
         }
 
-        const sent = await sendDigestEmail(tenant, generated.text)
+        const feedbackLinks = await createDigestFeedbackLinks(tenant.tenantId, generated.weekStart)
+        const sent = await sendDigestEmail(tenant, generated.text, feedbackLinks)
         return {
           tenantId: tenant.tenantId,
           tenantName: tenant.tenantName,
