@@ -154,7 +154,7 @@ export async function GET(request: NextRequest) {
         sql.query(
           `
             SELECT
-              process_date::date AS record_date,
+              process_date::date::text AS record_date,
               coffee_type,
               COALESCE(SUM(ripe_today), 0) AS ripe_kgs,
               COALESCE(SUM(dry_parch), 0) + COALESCE(SUM(dry_cherry), 0) AS dry_kgs
@@ -170,7 +170,7 @@ export async function GET(request: NextRequest) {
         sql.query(
           `
             SELECT
-              record_date::date AS record_date,
+              record_date::date::text AS record_date,
               COALESCE(SUM(COALESCE(inches, 0) + (COALESCE(cents, 0) / 100.0)), 0) AS rainfall_inches
             FROM rainfall_records
             WHERE tenant_id = $1

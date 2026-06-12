@@ -23,7 +23,7 @@ export async function GET() {
       sql
         ? sql.query(
             `
-            SELECT DISTINCT (recorded_at AT TIME ZONE $2)::date AS day
+            SELECT DISTINCT (recorded_at AT TIME ZONE $2)::date::text AS day
             FROM (
               SELECT created_at AS recorded_at FROM processing_records WHERE tenant_id = $1
               UNION ALL
@@ -43,11 +43,11 @@ export async function GET() {
       accountsSql
         ? accountsSql.query(
             `
-            SELECT DISTINCT (recorded_at AT TIME ZONE $2)::date AS day
+            SELECT DISTINCT (recorded_at AT TIME ZONE $2)::date::text AS day
             FROM (
-              SELECT created_at AS recorded_at FROM labor_transactions WHERE tenant_id = $1
+              SELECT deployment_date AS recorded_at FROM labor_transactions WHERE tenant_id = $1
               UNION ALL
-              SELECT created_at FROM expense_transactions WHERE tenant_id = $1
+              SELECT entry_date FROM expense_transactions WHERE tenant_id = $1
             ) t
             WHERE recorded_at >= NOW() - INTERVAL '90 days'
             `,
@@ -63,27 +63,25 @@ export async function GET() {
       if (d) daySet.add(d)
     }
 
-    // Compute streak: starting from today (IST), count consecutive days backwards
-    const todayIST = new Date(
-      new Date().toLocaleString("en-US", { timeZone: tz }),
-    )
-    todayIST.setHours(0, 0, 0, 0)
+    // Compute streak: starting from today (IST), count consecutive days backwards.
+    // Anchor the cursor in UTC so toISOString() round-trips the IST calendar day
+    // regardless of the server's local timezone.
+    const todayStr = new Date().toLocaleDateString("en-CA", { timeZone: tz })
+    const cursor = new Date(`${todayStr}T00:00:00Z`)
 
     let streak = 0
-    let cursor = new Date(todayIST)
 
     // If today has no records, start from yesterday so the streak doesn't break
     // on a day where the manager hasn't logged yet.
-    const todayStr = cursor.toISOString().slice(0, 10)
     if (!daySet.has(todayStr)) {
-      cursor.setDate(cursor.getDate() - 1)
+      cursor.setUTCDate(cursor.getUTCDate() - 1)
     }
 
     for (let i = 0; i < 90; i++) {
       const dateStr = cursor.toISOString().slice(0, 10)
       if (!daySet.has(dateStr)) break
       streak++
-      cursor.setDate(cursor.getDate() - 1)
+      cursor.setUTCDate(cursor.getUTCDate() - 1)
     }
 
     const totalDaysLogged = daySet.size

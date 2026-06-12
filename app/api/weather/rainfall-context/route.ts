@@ -95,7 +95,7 @@ export async function GET(request: NextRequest) {
       tenantContext,
       sql`
         SELECT
-          record_date,
+          record_date::text AS record_date,
           COALESCE(inches, 0)::numeric + (COALESCE(cents, 0)::numeric / 100.0) AS rainfall_inches
         FROM rainfall_records
         WHERE tenant_id = ${sessionUser.tenantId}

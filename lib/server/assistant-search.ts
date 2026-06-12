@@ -23,7 +23,12 @@ const normalizeQuery = (value: string) =>
 
 const normalizeRole = (value: string) => String(value || "").trim().toLowerCase()
 
-const formatDateLabel = (value: unknown) => String(value || "").slice(0, 10)
+// Neon returns Postgres date columns as JS Date objects, whose default
+// String() form is not ISO — format those via the IST calendar day instead.
+const formatDateLabel = (value: unknown) =>
+  value instanceof Date
+    ? value.toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" })
+    : String(value || "").slice(0, 10)
 
 const formatAmount = (value: unknown) => `₹${(Number(value) || 0).toLocaleString("en-IN")}`
 

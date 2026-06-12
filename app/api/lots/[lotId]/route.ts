@@ -36,7 +36,7 @@ export async function GET(
     const processingRows = await sql`
       SELECT
         pr.lot_id,
-        pr.process_date,
+        pr.process_date::text AS process_date,
         pr.coffee_type,
         pr.crop_today,
         pr.ripe_today,
@@ -74,7 +74,7 @@ export async function GET(
 
     // Fetch compliance certifications for this estate (public-safe subset)
     const certRows = await sql`
-      SELECT certification_name, status, valid_until
+      SELECT certification_name, status, valid_until::text AS valid_until
       FROM compliance_records
       WHERE tenant_id = (
         SELECT tenant_id FROM processing_records WHERE lot_id = ${normalized} LIMIT 1

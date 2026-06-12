@@ -26,35 +26,35 @@ export async function GET() {
 
     const [processing, dispatch, sales, labor, expenses] = await Promise.all([
       runTenantQuery(sql, tenantContext, sql`
-        SELECT process_date AS date, coffee_type, crop_today, dry_parch
+        SELECT process_date::text AS date, coffee_type, crop_today, dry_parch
         FROM processing_records
         WHERE tenant_id = ${tenantId}
         ORDER BY process_date DESC, id DESC
         LIMIT 3
       `).catch(() => []),
       runTenantQuery(sql, tenantContext, sql`
-        SELECT dispatch_date AS date, coffee_type, bags_dispatched
+        SELECT dispatch_date::text AS date, coffee_type, bags_dispatched
         FROM dispatch_records
         WHERE tenant_id = ${tenantId}
         ORDER BY dispatch_date DESC, id DESC
         LIMIT 3
       `).catch(() => []),
       runTenantQuery(sql, tenantContext, sql`
-        SELECT sale_date AS date, coffee_type, kgs, revenue
+        SELECT sale_date::text AS date, coffee_type, kgs, revenue
         FROM sales_records
         WHERE tenant_id = ${tenantId}
         ORDER BY sale_date DESC, id DESC
         LIMIT 3
       `).catch(() => []),
       runTenantQuery(sql, tenantContext, sql`
-        SELECT deployment_date AS date, code, total_cost
+        SELECT (deployment_date AT TIME ZONE 'Asia/Kolkata')::date::text AS date, code, total_cost
         FROM labor_transactions
         WHERE tenant_id = ${tenantId}
         ORDER BY deployment_date DESC, id DESC
         LIMIT 2
       `).catch(() => []),
       runTenantQuery(sql, tenantContext, sql`
-        SELECT entry_date AS date, code, total_amount
+        SELECT (entry_date AT TIME ZONE 'Asia/Kolkata')::date::text AS date, code, total_amount
         FROM expense_transactions
         WHERE tenant_id = ${tenantId}
         ORDER BY entry_date DESC, id DESC

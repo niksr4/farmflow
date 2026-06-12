@@ -87,7 +87,7 @@ export async function GET(request: Request) {
       sql,
       tenantContext,
       sql`
-        SELECT amount, status, due_date
+        SELECT amount, status, due_date::text AS due_date
         FROM receivables
         WHERE tenant_id = ${tenantId}
       `,
@@ -100,8 +100,8 @@ export async function GET(request: Request) {
         SELECT r.id,
                r.buyer_name,
                r.invoice_no,
-               r.invoice_date,
-               r.due_date,
+               r.invoice_date::text AS invoice_date,
+               r.due_date::text AS due_date,
                r.amount,
                r.status,
                r.notes,

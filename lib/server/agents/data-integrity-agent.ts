@@ -219,7 +219,7 @@ async function collectTenantFindings(input: { tenantId: string; tenantName: stri
         `
           SELECT
             dr.id::text AS dispatch_id,
-            dr.dispatch_date,
+            dr.dispatch_date::text AS dispatch_date,
             dr.coffee_type,
             dr.bag_type,
             dr.bags_dispatched,

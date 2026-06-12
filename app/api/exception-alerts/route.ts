@@ -317,7 +317,7 @@ export async function GET() {
             COALESCE(l.code, '') AS location_code,
             dr.coffee_type,
             dr.bag_type,
-            dr.dispatch_date,
+            dr.dispatch_date::text AS dispatch_date,
             dr.bags_dispatched
           FROM dispatch_records dr
           LEFT JOIN locations l ON l.id = dr.location_id
@@ -347,7 +347,7 @@ export async function GET() {
       sql.query(
         `
           SELECT
-            process_date,
+            process_date::text AS process_date,
             COALESCE(SUM(ripe_today), 0) AS ripe_kgs,
             COALESCE(SUM(dry_parch), 0) AS dry_parch_kgs,
             COALESCE(SUM(dry_cherry), 0) AS dry_cherry_kgs,
@@ -365,7 +365,7 @@ export async function GET() {
       sql.query(
         `
           SELECT
-            dispatch_date,
+            dispatch_date::text AS dispatch_date,
             COALESCE(SUM(bags_dispatched), 0) AS bags_dispatched,
             COALESCE(SUM(NULLIF(kgs_received, 0)), 0) AS kgs_received
           FROM dispatch_records
@@ -380,7 +380,7 @@ export async function GET() {
       sql.query(
         `
           SELECT
-            sale_date,
+            sale_date::text AS sale_date,
             COALESCE(SUM(bags_sold), 0) AS bags_sold,
             COALESCE(
               SUM(COALESCE(NULLIF(kgs_received, 0), NULLIF(kgs, 0), NULLIF(weight_kgs, 0), NULLIF(kgs_sent, 0), bags_sold * ${bagWeightKg})),
