@@ -145,6 +145,7 @@ import PlatformConsoleCard from "@/components/inventory-system/platform-console-
 import TrialBanner from "@/components/inventory-system/trial-banner"
 import SetupCompleteCard from "@/components/inventory-system/setup-complete-card"
 import RecentActivityFeed from "@/components/inventory-system/recent-activity-feed"
+import EstatePulseSection, { type EstatePulseData } from "@/components/inventory-system/estate-pulse-section"
 import MobileHomeSection from "@/components/inventory-system/mobile-home-section"
 import ExecutionScorecardCard from "@/components/inventory-system/execution-scorecard-card"
 import EstateOverviewCard from "@/components/inventory-system/estate-overview-card"
@@ -397,6 +398,13 @@ export default function InventorySystem() {
     projectedSeasonTotal: null,
     projectedEndDate: null,
     hasData: false,
+    loading: false,
+  })
+  const [estatePulseData, setEstatePulseData] = useState<{
+    data: EstatePulseData | null
+    loading: boolean
+  }>({
+    data: null,
     loading: false,
   })
   const [locations, setLocations] = useState<LocationOption[]>([])
@@ -932,10 +940,12 @@ export default function InventorySystem() {
     const fetchIntelligence = async () => {
       setCostPerKgData((p) => ({ ...p, loading: true }))
       setSeasonProjection((p) => ({ ...p, loading: true }))
+      setEstatePulseData((p) => ({ ...p, loading: true }))
 
-      const [cpkRes, projRes] = await Promise.allSettled([
+      const [cpkRes, projRes, pulseRes] = await Promise.allSettled([
         fetch("/api/dashboard/cost-per-kg").then((r) => r.json()),
         fetch("/api/dashboard/season-projection").then((r) => r.json()),
+        fetch("/api/dashboard/estate-pulse").then((r) => r.json()),
       ])
 
       if (!active) return
@@ -975,6 +985,12 @@ export default function InventorySystem() {
         })
       } else {
         setSeasonProjection((p) => ({ ...p, loading: false }))
+      }
+
+      if (pulseRes.status === "fulfilled" && pulseRes.value?.success) {
+        setEstatePulseData({ data: pulseRes.value as EstatePulseData, loading: false })
+      } else {
+        setEstatePulseData((p) => ({ ...p, loading: false }))
       }
     }
 
@@ -4874,6 +4890,14 @@ export default function InventorySystem() {
               selectedLocationId={selectedLocationId}
               onDrilldown={openDrilldown}
             />}
+
+            {!isMobile && (
+              <EstatePulseSection
+                data={estatePulseData.data}
+                loading={estatePulseData.loading}
+                costPerKgData={costPerKgData}
+              />
+            )}
 
             {/* Recent Activity Feed — desktop only */}
             {!isMobile && (recentActivityLoading || (recentActivity && recentActivity.length > 0)) && (
