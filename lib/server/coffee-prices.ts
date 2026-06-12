@@ -31,6 +31,7 @@ export type CoffeePriceAnalysis = {
   pctFromHigh3m: number   // 0 = AT the high, negative = below it
   signal: CoffeePriceSignal
   signalSummary: string   // human-readable one-liner for the digest
+  series: CoffeePricePoint[]   // last 6 monthly points, oldest first — for trend sparklines
 }
 
 async function fetchRawPrices(): Promise<CoffeePricePoint[]> {
@@ -48,7 +49,9 @@ async function fetchRawPrices(): Promise<CoffeePricePoint[]> {
   if (!Array.isArray(json?.data)) return []
 
   return (json.data as Array<{ date: string; value: string }>)
-    .map((p) => ({ date: String(p.date || ""), usdPerLb: Number(p.value) || 0 }))
+    // Alpha Vantage returns coffee prices in US cents per pound (standard
+    // soft-commodity convention) — convert to USD/lb here.
+    .map((p) => ({ date: String(p.date || ""), usdPerLb: (Number(p.value) || 0) / 100 }))
     .filter((p) => p.usdPerLb > 0 && p.date)
     .slice(0, 12) // keep last 12 months
 }
@@ -94,7 +97,9 @@ export async function getCoffeePriceAnalysis(): Promise<CoffeePriceAnalysis | nu
           ? `Coffee near a 3-month low ($${usdPerKg.toFixed(2)}/kg, ${trendWord}) — holding may be worth it.`
           : `Coffee mid-range at $${usdPerKg.toFixed(2)}/kg (${trendWord}, ${Math.abs(pctFromHigh3m).toFixed(1)}% below 3-month high).`
 
-    return { latest, usdPerKg, high3m, low3m, high9m, low9m, trend, pctFromHigh3m, signal, signalSummary }
+    const series = prices.slice(0, 6).slice().reverse() // oldest first, for trend sparklines
+
+    return { latest, usdPerKg, high3m, low3m, high9m, low9m, trend, pctFromHigh3m, signal, signalSummary, series }
   } catch {
     return null
   }
