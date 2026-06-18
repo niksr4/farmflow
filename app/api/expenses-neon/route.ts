@@ -792,7 +792,7 @@ function buildInsertExpenseInventoryTransactionsStatement(options: {
       const tenantParam = params.push(options.tenantId)
       const locationParam = params.push(transaction.locationId)
       const unitParam = params.push(transaction.unit)
-      return `($${itemTypeParam}, $${quantityParam}, 'deplete', $${noteParam}, $${dateParam}::timestamp, $${userParam}, $${userUuidParam}, 0, 0, $${tenantParam}, $${locationParam}::uuid, $${unitParam})`
+      return `($${itemTypeParam}, $${quantityParam}::numeric, 'deplete', $${noteParam}, $${dateParam}::timestamp, $${userParam}, $${userUuidParam}, 0, 0, $${tenantParam}, $${locationParam}::uuid, $${unitParam})`
     })
     .join(", ")
 

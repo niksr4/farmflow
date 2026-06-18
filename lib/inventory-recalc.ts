@@ -54,7 +54,12 @@ async function recalculateInventoryForLocation(
     runningCost = Math.max(0, runningCost - depletionCost)
   }
 
-  const avgPrice = runningQty > 0 ? runningCost / runningQty : 0
+  // Clamp IEEE-754 floating-point residuals that should be exactly zero
+  const clampFloat = (n: number) => (Math.abs(n) < 1e-6 ? 0 : Math.round(n * 10000) / 10000)
+  runningQty = clampFloat(runningQty)
+  runningCost = clampFloat(runningCost)
+
+  const avgPrice = runningQty > 0 ? clampFloat(runningCost / runningQty) : 0
   const unitRow = await runTenantQuery(
     sql,
     tenantContext,
