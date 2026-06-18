@@ -92,7 +92,9 @@ export async function getCoffeePriceAnalysis(): Promise<CoffeePriceAnalysis | nu
     const trendWord = trend === "rising" ? "↑ rising" : trend === "falling" ? "↓ falling" : "→ stable"
     const signalSummary =
       signal === "near-high"
-        ? `Coffee at a 3-month high ($${usdPerKg.toFixed(2)}/kg, ${trendWord}) — consider timing a sale.`
+        ? trend === "falling"
+          ? `Coffee easing from a 3-month high ($${usdPerKg.toFixed(2)}/kg, ${trendWord}) — consider selling before it slips further.`
+          : `Coffee at a 3-month high ($${usdPerKg.toFixed(2)}/kg, ${trendWord}) — consider timing a sale.`
         : signal === "near-low"
           ? `Coffee near a 3-month low ($${usdPerKg.toFixed(2)}/kg, ${trendWord}) — holding may be worth it.`
           : `Coffee mid-range at $${usdPerKg.toFixed(2)}/kg (${trendWord}, ${Math.abs(pctFromHigh3m).toFixed(1)}% below 3-month high).`
