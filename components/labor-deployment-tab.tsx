@@ -259,9 +259,20 @@ export default function LaborDeploymentTab({
       return
     }
 
+    const matchingActivity = activities.find((a) => a.code.toLowerCase() === formData.code.trim().toLowerCase())
+    if (!matchingActivity) {
+      toast({
+        title: "Unknown activity code",
+        description: `"${formData.code}" isn't one of your activity codes. Pick one from the list, or add it under Codes settings first.`,
+        variant: "destructive",
+      })
+      setIsSubmitting(false)
+      return
+    }
+
     const deployment = {
       date: formData.date,
-      code: formData.code,
+      code: matchingActivity.code,
       reference: formData.reference,
       laborEntries,
       totalCost: calculateTotal(),

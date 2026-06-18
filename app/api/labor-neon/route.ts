@@ -49,6 +49,24 @@ async function tableHasTaskDescriptionColumn(tableName: string) {
   return Array.isArray(rows) && rows.length > 0
 }
 
+async function validateActivityCodeForTenant(
+  tenantContext: { tenantId: string; role: string },
+  code: string,
+) {
+  const rows = await runTenantQuery(
+    accountsSql,
+    tenantContext,
+    accountsSql`
+      SELECT code
+      FROM account_activities
+      WHERE code = ${code}
+        AND tenant_id = ${tenantContext.tenantId}
+      LIMIT 1
+    `,
+  )
+  return Boolean(rows?.length)
+}
+
 async function validateLocationForTenant(
   tenantContext: { tenantId: string; role: string },
   locationId: string | null,
@@ -294,6 +312,12 @@ export async function POST(request: Request) {
     const tenantContext = normalizeTenantContext(sessionUser.tenantId, sessionUser.role)
     const body = await request.json()
     const { date, code, laborEntries, notes } = body
+    if (!(await validateActivityCodeForTenant(tenantContext, String(code || "")))) {
+      return NextResponse.json(
+        { success: false, error: `Activity code "${code}" doesn't exist for this tenant. Pick one from the list or add it under Codes settings first.` },
+        { status: 400 },
+      )
+    }
     const normalizedNotes = String(notes || "")
     const supportsTaskDescription = await tableHasTaskDescriptionColumn("labor_transactions")
     const taskDescription = supportsTaskDescription
@@ -508,6 +532,12 @@ export async function PUT(request: Request) {
     const tenantContext = normalizeTenantContext(sessionUser.tenantId, sessionUser.role)
     const body = await request.json()
     const { id, date, code, laborEntries, notes } = body
+    if (!(await validateActivityCodeForTenant(tenantContext, String(code || "")))) {
+      return NextResponse.json(
+        { success: false, error: `Activity code "${code}" doesn't exist for this tenant. Pick one from the list or add it under Codes settings first.` },
+        { status: 400 },
+      )
+    }
     const supportsTaskDescription = await tableHasTaskDescriptionColumn("labor_transactions")
     const taskDescription = supportsTaskDescription
       ? String(body?.taskDescription || "").trim().slice(0, 500) || null
