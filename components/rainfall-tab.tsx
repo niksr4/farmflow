@@ -507,6 +507,13 @@ export default function RainfallTab({ username, showDataToolsControls = false }:
         <div className="flex gap-2 overflow-x-auto pb-2 -mx-3 px-3 pt-3">
           <button
             type="button"
+            onClick={() => statsSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })}
+            className="flex items-center gap-1.5 shrink-0 px-4 py-2.5 rounded-full bg-stone-100 text-stone-700 text-[13px] font-bold touch-manipulation active:scale-95 transition-transform"
+          >
+            📊 Stats
+          </button>
+          <button
+            type="button"
             onClick={() => logSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })}
             className="flex items-center gap-1.5 shrink-0 px-4 py-2.5 rounded-full bg-sky-50 border border-sky-200 text-sky-800 text-[13px] font-bold touch-manipulation active:scale-95 transition-transform"
           >
@@ -519,13 +526,39 @@ export default function RainfallTab({ username, showDataToolsControls = false }:
           >
             📋 Records
           </button>
-          <button
-            type="button"
-            onClick={() => statsSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })}
-            className="flex items-center gap-1.5 shrink-0 px-4 py-2.5 rounded-full bg-stone-100 text-stone-700 text-[13px] font-bold touch-manipulation active:scale-95 transition-transform"
-          >
-            📊 Stats
-          </button>
+        </div>
+
+        {/* Stats summary */}
+        <div ref={statsSectionRef} className="px-3 pt-4">
+          <p className="text-sm font-black text-stone-700 mb-3">📊 This year stats</p>
+          <div className="grid grid-cols-2 gap-2">
+            <div className="rounded-2xl bg-sky-50 border border-sky-100 p-3.5">
+              <div className="flex items-center gap-1.5 mb-2">
+                <CloudRain className="h-4 w-4 text-sky-500 shrink-0" />
+                <p className="text-[10px] font-bold uppercase tracking-wide text-sky-600">Annual total</p>
+              </div>
+              <p className="text-xl font-black text-stone-900 tabular-nums">{formatNumber(annualTotal, 2)}&quot;</p>
+              <p className="text-[10px] text-stone-400 mt-1">this year</p>
+            </div>
+            <div className="rounded-2xl bg-sky-50 border border-sky-100 p-3.5">
+              <div className="flex items-center gap-1.5 mb-2">
+                <CloudRain className="h-4 w-4 text-sky-400 shrink-0" />
+                <p className="text-[10px] font-bold uppercase tracking-wide text-sky-600">Last 30 days</p>
+              </div>
+              <p className="text-xl font-black text-stone-900 tabular-nums">{formatNumber(insights.last30Total, 2)}&quot;</p>
+              <p className="text-[10px] text-stone-400 mt-1">rainfall</p>
+            </div>
+            <div className="rounded-2xl bg-stone-50 border border-stone-100 p-3.5">
+              <p className="text-[10px] font-bold uppercase tracking-wide text-stone-500 mb-2">💦 Wet days</p>
+              <p className="text-xl font-black text-stone-900 tabular-nums">{insights.wetDaysLast30}</p>
+              <p className="text-[10px] text-stone-400 mt-1">last 30 days</p>
+            </div>
+            <div className="rounded-2xl bg-amber-50 border border-amber-100 p-3.5">
+              <p className="text-[10px] font-bold uppercase tracking-wide text-amber-600 mb-2">☀️ Dry streak</p>
+              <p className="text-xl font-black text-stone-900 tabular-nums">{insights.longestDryStreak}d</p>
+              <p className="text-[10px] text-stone-400 mt-1">longest recent</p>
+            </div>
+          </div>
         </div>
 
         {/* Entry form */}
@@ -673,115 +706,12 @@ export default function RainfallTab({ username, showDataToolsControls = false }:
             </div>
           )}
         </div>
-
-        {/* Stats summary */}
-        <div ref={statsSectionRef} className="px-3 pt-4">
-          <p className="text-sm font-black text-stone-700 mb-3">📊 This year stats</p>
-          <div className="grid grid-cols-2 gap-2">
-            <div className="rounded-2xl bg-sky-50 border border-sky-100 p-3.5">
-              <div className="flex items-center gap-1.5 mb-2">
-                <CloudRain className="h-4 w-4 text-sky-500 shrink-0" />
-                <p className="text-[10px] font-bold uppercase tracking-wide text-sky-600">Annual total</p>
-              </div>
-              <p className="text-xl font-black text-stone-900 tabular-nums">{formatNumber(annualTotal, 2)}&quot;</p>
-              <p className="text-[10px] text-stone-400 mt-1">this year</p>
-            </div>
-            <div className="rounded-2xl bg-sky-50 border border-sky-100 p-3.5">
-              <div className="flex items-center gap-1.5 mb-2">
-                <CloudRain className="h-4 w-4 text-sky-400 shrink-0" />
-                <p className="text-[10px] font-bold uppercase tracking-wide text-sky-600">Last 30 days</p>
-              </div>
-              <p className="text-xl font-black text-stone-900 tabular-nums">{formatNumber(insights.last30Total, 2)}&quot;</p>
-              <p className="text-[10px] text-stone-400 mt-1">rainfall</p>
-            </div>
-            <div className="rounded-2xl bg-stone-50 border border-stone-100 p-3.5">
-              <p className="text-[10px] font-bold uppercase tracking-wide text-stone-500 mb-2">💦 Wet days</p>
-              <p className="text-xl font-black text-stone-900 tabular-nums">{insights.wetDaysLast30}</p>
-              <p className="text-[10px] text-stone-400 mt-1">last 30 days</p>
-            </div>
-            <div className="rounded-2xl bg-amber-50 border border-amber-100 p-3.5">
-              <p className="text-[10px] font-bold uppercase tracking-wide text-amber-600 mb-2">☀️ Dry streak</p>
-              <p className="text-xl font-black text-stone-900 tabular-nums">{insights.longestDryStreak}d</p>
-              <p className="text-[10px] text-stone-400 mt-1">longest recent</p>
-            </div>
-          </div>
-        </div>
       </div>
     )
   }
 
   return (
     <div className="space-y-5">
-      {/* Entry form — at the top so it's immediately reachable */}
-      <div className="overflow-hidden rounded-xl border border-stone-200 bg-white shadow-sm dark:border-white/[0.06] dark:bg-card">
-        <div className="flex items-center gap-3 border-b border-stone-100 px-5 py-4 dark:border-white/[0.05]">
-          <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-emerald-800 dark:bg-emerald-900/40">
-            <svg className="h-4 w-4 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m-4-4l4 4 4-4M4 8h.01M8 8h.01M12 8h.01M16 8h.01M20 8h.01" />
-            </svg>
-          </div>
-          <div>
-            <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-emerald-700 dark:text-emerald-500">Rainfall Entry</p>
-            <p className="text-sm font-bold text-stone-900 dark:text-white">Log Rainfall Record</p>
-          </div>
-        </div>
-        <div className="space-y-4 p-5">
-          <div className="grid gap-4 md:grid-cols-2">
-            <div>
-              <div className="mb-2 text-sm font-medium">Date</div>
-              <Popover>
-                <PopoverTrigger asChild>
-                  <Button variant="outline" className="w-full justify-start text-left font-normal bg-transparent">
-                    <CalendarIcon className="mr-2 h-4 w-4" />
-                    {formatDateOnly(selectedDate)}
-                  </Button>
-                </PopoverTrigger>
-                <PopoverContent className="w-auto p-0">
-                  <div className="flex items-center justify-between border-b px-3 py-2">
-                    <span className="text-xs text-muted-foreground">Year</span>
-                    <div className="flex items-center gap-1">
-                      <Button type="button" variant="ghost" size="icon" className="h-9 w-9" onClick={() => setCalendarMonth((m) => subYears(m, 1))} disabled={calendarMonth.getFullYear() <= 2015}>
-                        <ChevronLeft className="h-4 w-4" />
-                      </Button>
-                      <span className="w-10 text-center text-sm font-semibold tabular-nums">{calendarMonth.getFullYear()}</span>
-                      <Button type="button" variant="ghost" size="icon" className="h-9 w-9" onClick={() => setCalendarMonth((m) => addYears(m, 1))} disabled={calendarMonth.getFullYear() >= currentYear}>
-                        <ChevronRight className="h-4 w-4" />
-                      </Button>
-                    </div>
-                  </div>
-                  <Calendar mode="single" selected={selectedDate} month={calendarMonth} onMonthChange={setCalendarMonth}
-                    onSelect={(date) => { if (date) { setSelectedDate(date); setCalendarMonth(date) } }}
-                    disabled={{ after: new Date() }} />
-                </PopoverContent>
-              </Popover>
-            </div>
-            <div>
-              <label className="mb-2 block text-sm font-medium">Notes (optional)</label>
-              <Input placeholder="e.g., Heavy rain in afternoon" value={notes} onChange={(e) => setNotes(e.target.value)} />
-            </div>
-          </div>
-          <div className="grid gap-4 md:grid-cols-2">
-            <div>
-              <FieldLabel label="Full inches" htmlFor="rainfall-inches-top" className="mb-2" labelClassName="text-sm font-medium" tooltip="Whole inches of rainfall. Enter 0 if less than 1 inch." />
-              <Input id="rainfall-inches-top" type="text" inputMode="numeric" pattern="[0-9]*" placeholder="0" value={inches} onChange={handleWholeNumberChange(setInches)} />
-            </div>
-            <div>
-              <FieldLabel label="Decimal part (0–99)" htmlFor="rainfall-cents-top" className="mb-2" labelClassName="text-sm font-medium" tooltip="The decimal portion. 25 = quarter inch, 50 = half inch, 75 = three-quarter inch." />
-              <Input id="rainfall-cents-top" type="text" inputMode="numeric" pattern="[0-9]*" placeholder="0" value={cents} onChange={handleWholeNumberChange(setCents)} />
-            </div>
-          </div>
-          {(Number(inches) > 0 || Number(cents) > 0) && (
-            <div className="flex items-center gap-2 rounded-lg border border-sky-200 bg-sky-50 px-3 py-2 text-sm font-semibold text-sky-800">
-              <CloudRain className="h-4 w-4 shrink-0" />
-              Total: {Number(inches || 0)}.{String(Number(cents || 0)).padStart(2, "0")} inches
-            </div>
-          )}
-          <Button onClick={handleSaveRecord} disabled={loading} className="h-11 w-full rounded-lg bg-emerald-700 font-semibold text-white hover:bg-emerald-600">
-            {loading ? "Saving..." : "Save Record"}
-          </Button>
-        </div>
-      </div>
-
       <div className="overflow-hidden rounded-xl border border-stone-200 bg-white shadow-sm dark:border-white/[0.06] dark:bg-card">
         <div className="border-b border-stone-100 px-5 py-4 dark:border-white/[0.05]">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -948,6 +878,75 @@ export default function RainfallTab({ username, showDataToolsControls = false }:
               </div>
             </div>
           </div>
+        </div>
+      </div>
+
+      <div className="overflow-hidden rounded-xl border border-stone-200 bg-white shadow-sm dark:border-white/[0.06] dark:bg-card">
+        <div className="flex items-center gap-3 border-b border-stone-100 px-5 py-4 dark:border-white/[0.05]">
+          <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-emerald-800 dark:bg-emerald-900/40">
+            <svg className="h-4 w-4 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m-4-4l4 4 4-4M4 8h.01M8 8h.01M12 8h.01M16 8h.01M20 8h.01" />
+            </svg>
+          </div>
+          <div>
+            <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-emerald-700 dark:text-emerald-500">Rainfall Entry</p>
+            <p className="text-sm font-bold text-stone-900 dark:text-white">Log Rainfall Record</p>
+          </div>
+        </div>
+        <div className="space-y-4 p-5">
+          <div className="grid gap-4 md:grid-cols-2">
+            <div>
+              <div className="mb-2 text-sm font-medium">Date</div>
+              <Popover>
+                <PopoverTrigger asChild>
+                  <Button variant="outline" className="w-full justify-start text-left font-normal bg-transparent">
+                    <CalendarIcon className="mr-2 h-4 w-4" />
+                    {formatDateOnly(selectedDate)}
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-auto p-0">
+                  <div className="flex items-center justify-between border-b px-3 py-2">
+                    <span className="text-xs text-muted-foreground">Year</span>
+                    <div className="flex items-center gap-1">
+                      <Button type="button" variant="ghost" size="icon" className="h-9 w-9" onClick={() => setCalendarMonth((m) => subYears(m, 1))} disabled={calendarMonth.getFullYear() <= 2015}>
+                        <ChevronLeft className="h-4 w-4" />
+                      </Button>
+                      <span className="w-10 text-center text-sm font-semibold tabular-nums">{calendarMonth.getFullYear()}</span>
+                      <Button type="button" variant="ghost" size="icon" className="h-9 w-9" onClick={() => setCalendarMonth((m) => addYears(m, 1))} disabled={calendarMonth.getFullYear() >= currentYear}>
+                        <ChevronRight className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  </div>
+                  <Calendar mode="single" selected={selectedDate} month={calendarMonth} onMonthChange={setCalendarMonth}
+                    onSelect={(date) => { if (date) { setSelectedDate(date); setCalendarMonth(date) } }}
+                    disabled={{ after: new Date() }} />
+                </PopoverContent>
+              </Popover>
+            </div>
+            <div>
+              <label className="mb-2 block text-sm font-medium">Notes (optional)</label>
+              <Input placeholder="e.g., Heavy rain in afternoon" value={notes} onChange={(e) => setNotes(e.target.value)} />
+            </div>
+          </div>
+          <div className="grid gap-4 md:grid-cols-2">
+            <div>
+              <FieldLabel label="Full inches" htmlFor="rainfall-inches-top" className="mb-2" labelClassName="text-sm font-medium" tooltip="Whole inches of rainfall. Enter 0 if less than 1 inch." />
+              <Input id="rainfall-inches-top" type="text" inputMode="numeric" pattern="[0-9]*" placeholder="0" value={inches} onChange={handleWholeNumberChange(setInches)} />
+            </div>
+            <div>
+              <FieldLabel label="Decimal part (0–99)" htmlFor="rainfall-cents-top" className="mb-2" labelClassName="text-sm font-medium" tooltip="The decimal portion. 25 = quarter inch, 50 = half inch, 75 = three-quarter inch." />
+              <Input id="rainfall-cents-top" type="text" inputMode="numeric" pattern="[0-9]*" placeholder="0" value={cents} onChange={handleWholeNumberChange(setCents)} />
+            </div>
+          </div>
+          {(Number(inches) > 0 || Number(cents) > 0) && (
+            <div className="flex items-center gap-2 rounded-lg border border-sky-200 bg-sky-50 px-3 py-2 text-sm font-semibold text-sky-800">
+              <CloudRain className="h-4 w-4 shrink-0" />
+              Total: {Number(inches || 0)}.{String(Number(cents || 0)).padStart(2, "0")} inches
+            </div>
+          )}
+          <Button onClick={handleSaveRecord} disabled={loading} className="h-11 w-full rounded-lg bg-emerald-700 font-semibold text-white hover:bg-emerald-600">
+            {loading ? "Saving..." : "Save Record"}
+          </Button>
         </div>
       </div>
 

@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react"
 import Link from "next/link"
-import { BookOpen } from "lucide-react"
+import { BookOpen, Users, Coins, CloudRain, Leaf } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { getSeasonBadge, getSeasonContextLine } from "@/lib/season-utils"
 import { format } from "date-fns"
@@ -87,13 +87,19 @@ export default function WorkspaceLauncher({
 
       {/* ── Estate hero header ───────────────────────────────── */}
       <div className={cn(
-        "relative overflow-hidden rounded-3xl border border-stone-200/80",
+        "relative overflow-hidden rounded-3xl border border-stone-200/80 shadow-lg shadow-stone-900/10 ring-1 ring-inset ring-white/[0.04]",
         "bg-gradient-to-br from-stone-900 via-stone-800 to-emerald-900",
         isMobile ? "px-5 py-5" : "px-7 py-6",
       )}>
-        {/* subtle coffee-leaf texture hint */}
-        <div className="pointer-events-none absolute inset-0 opacity-[0.04]"
-          style={{ backgroundImage: "radial-gradient(ellipse at 80% 20%, #d4a574 0%, transparent 60%), radial-gradient(ellipse at 10% 80%, #4ade80 0%, transparent 50%)" }}
+        {/* ambient warm/green glow texture */}
+        <div className="pointer-events-none absolute inset-0 opacity-[0.09]"
+          style={{ backgroundImage: "radial-gradient(ellipse at 85% 15%, #d4a574 0%, transparent 55%), radial-gradient(ellipse at 8% 90%, #4ade80 0%, transparent 50%)" }}
+        />
+        {/* coffee-leaf watermark */}
+        <Leaf
+          aria-hidden="true"
+          strokeWidth={1}
+          className="pointer-events-none absolute -right-6 -bottom-8 h-36 w-36 rotate-12 text-emerald-400/[0.08]"
         />
         <div className="relative flex items-start justify-between gap-3">
           <div className="min-w-0">
@@ -132,26 +138,38 @@ export default function WorkspaceLauncher({
               type="button"
               onClick={onAccountsLabor}
               className={cn(
-                "flex flex-col rounded-2xl bg-emerald-800 text-white text-left px-4 shadow-[0_8px_20px_-8px_rgba(20,83,45,0.5)] touch-manipulation active:scale-[0.97] transition-transform",
+                "group relative flex flex-col overflow-hidden rounded-2xl bg-gradient-to-br from-emerald-600 to-emerald-900 text-white text-left px-4 shadow-[0_8px_20px_-8px_rgba(20,83,45,0.5)] touch-manipulation active:scale-[0.97] transition-all hover:shadow-[0_10px_24px_-8px_rgba(20,83,45,0.6)]",
                 isMobile ? "py-4" : "py-3.5",
               )}
             >
-              <span className="text-xl mb-2 leading-none">👷</span>
-              <p className={cn("font-black leading-tight", isMobile ? "text-[15px]" : "text-sm")}>Labour</p>
-              <p className="text-[10px] text-emerald-300/70 mt-0.5">Workers & wages</p>
+              <span className="pointer-events-none absolute -right-3 -top-3 h-14 w-14 rounded-full bg-white/10 blur-xl" />
+              <span className={cn(
+                "relative flex items-center justify-center rounded-full bg-white/15 mb-2 transition-transform group-hover:scale-110",
+                isMobile ? "h-9 w-9" : "h-8 w-8",
+              )}>
+                <Users className={cn(isMobile ? "h-5 w-5" : "h-4 w-4", "text-white")} />
+              </span>
+              <p className={cn("relative font-black leading-tight", isMobile ? "text-[15px]" : "text-sm")}>Labour</p>
+              <p className="relative text-[10px] text-emerald-200/70 mt-0.5">Workers & wages</p>
             </button>
 
             <button
               type="button"
               onClick={onAccountsExpense}
               className={cn(
-                "flex flex-col rounded-2xl bg-amber-700 text-white text-left px-4 shadow-[0_8px_20px_-8px_rgba(180,83,9,0.45)] touch-manipulation active:scale-[0.97] transition-transform",
+                "group relative flex flex-col overflow-hidden rounded-2xl bg-gradient-to-br from-amber-500 to-amber-800 text-white text-left px-4 shadow-[0_8px_20px_-8px_rgba(180,83,9,0.45)] touch-manipulation active:scale-[0.97] transition-all hover:shadow-[0_10px_24px_-8px_rgba(180,83,9,0.55)]",
                 isMobile ? "py-4" : "py-3.5",
               )}
             >
-              <span className="text-xl mb-2 leading-none">💸</span>
-              <p className={cn("font-black leading-tight", isMobile ? "text-[15px]" : "text-sm")}>Expense</p>
-              <p className="text-[10px] text-amber-200/70 mt-0.5">Costs & inputs</p>
+              <span className="pointer-events-none absolute -right-3 -top-3 h-14 w-14 rounded-full bg-white/10 blur-xl" />
+              <span className={cn(
+                "relative flex items-center justify-center rounded-full bg-white/15 mb-2 transition-transform group-hover:scale-110",
+                isMobile ? "h-9 w-9" : "h-8 w-8",
+              )}>
+                <Coins className={cn(isMobile ? "h-5 w-5" : "h-4 w-4", "text-white")} />
+              </span>
+              <p className={cn("relative font-black leading-tight", isMobile ? "text-[15px]" : "text-sm")}>Expense</p>
+              <p className="relative text-[10px] text-amber-100/70 mt-0.5">Costs & inputs</p>
             </button>
 
             {canShowRainfall && (
@@ -159,13 +177,19 @@ export default function WorkspaceLauncher({
                 type="button"
                 onClick={() => onTabChange("rainfall")}
                 className={cn(
-                  "flex flex-col rounded-2xl bg-sky-700 text-white text-left px-4 shadow-[0_8px_20px_-8px_rgba(3,105,161,0.4)] touch-manipulation active:scale-[0.97] transition-transform",
+                  "group relative flex flex-col overflow-hidden rounded-2xl bg-gradient-to-br from-sky-500 to-blue-900 text-white text-left px-4 shadow-[0_8px_20px_-8px_rgba(3,105,161,0.4)] touch-manipulation active:scale-[0.97] transition-all hover:shadow-[0_10px_24px_-8px_rgba(3,105,161,0.5)]",
                   isMobile ? "py-4" : "py-3.5",
                 )}
               >
-                <span className="text-xl mb-2 leading-none">🌧️</span>
-                <p className={cn("font-black leading-tight", isMobile ? "text-[15px]" : "text-sm")}>Rainfall</p>
-                <p className="text-[10px] text-sky-200/70 mt-0.5">Daily measurement</p>
+                <span className="pointer-events-none absolute -right-3 -top-3 h-14 w-14 rounded-full bg-white/10 blur-xl" />
+                <span className={cn(
+                  "relative flex items-center justify-center rounded-full bg-white/15 mb-2 transition-transform group-hover:scale-110",
+                  isMobile ? "h-9 w-9" : "h-8 w-8",
+                )}>
+                  <CloudRain className={cn(isMobile ? "h-5 w-5" : "h-4 w-4", "text-white")} />
+                </span>
+                <p className={cn("relative font-black leading-tight", isMobile ? "text-[15px]" : "text-sm")}>Rainfall</p>
+                <p className="relative text-[10px] text-sky-100/70 mt-0.5">Daily measurement</p>
               </button>
             )}
           </div>
