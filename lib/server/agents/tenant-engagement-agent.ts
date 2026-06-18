@@ -46,12 +46,13 @@ async function fetchYesterdayActivity(): Promise<Map<string, YesterdayActivity>>
         t.id AS tenant_id,
         (SELECT COUNT(*) FROM security_events
           WHERE tenant_id = t.id AND event_type = 'auth_login_success'
+            AND actor_username NOT LIKE 'tenantsmoke_%'
             AND created_at >= (CURRENT_DATE - INTERVAL '1 day') AT TIME ZONE 'Asia/Kolkata'
             AND created_at <  CURRENT_DATE AT TIME ZONE 'Asia/Kolkata')  AS logins_yesterday,
         (SELECT COUNT(*) FROM labor_transactions
           WHERE tenant_id = t.id
-            AND created_at >= (CURRENT_DATE - INTERVAL '1 day') AT TIME ZONE 'Asia/Kolkata'
-            AND created_at <  CURRENT_DATE AT TIME ZONE 'Asia/Kolkata') AS labor_yesterday,
+            AND deployment_date >= (CURRENT_DATE - INTERVAL '1 day') AT TIME ZONE 'Asia/Kolkata'
+            AND deployment_date <  CURRENT_DATE AT TIME ZONE 'Asia/Kolkata') AS labor_yesterday,
         (SELECT COUNT(*) FROM processing_records
           WHERE tenant_id = t.id
             AND created_at >= (CURRENT_DATE - INTERVAL '1 day') AT TIME ZONE 'Asia/Kolkata'
@@ -66,8 +67,8 @@ async function fetchYesterdayActivity(): Promise<Map<string, YesterdayActivity>>
             AND created_at <  CURRENT_DATE AT TIME ZONE 'Asia/Kolkata') AS sales_yesterday,
         (SELECT COUNT(*) FROM expense_transactions
           WHERE tenant_id = t.id
-            AND created_at >= (CURRENT_DATE - INTERVAL '1 day') AT TIME ZONE 'Asia/Kolkata'
-            AND created_at <  CURRENT_DATE AT TIME ZONE 'Asia/Kolkata') AS expenses_yesterday,
+            AND entry_date >= (CURRENT_DATE - INTERVAL '1 day') AT TIME ZONE 'Asia/Kolkata'
+            AND entry_date <  CURRENT_DATE AT TIME ZONE 'Asia/Kolkata') AS expenses_yesterday,
         (SELECT COUNT(*) FROM picking_records
           WHERE tenant_id = t.id
             AND created_at >= (CURRENT_DATE - INTERVAL '1 day') AT TIME ZONE 'Asia/Kolkata'
@@ -109,14 +110,19 @@ async function fetchTenantEngagementData(): Promise<TenantEngagementRow[]> {
       t.created_at,
       EXTRACT(EPOCH FROM (NOW() - t.created_at)) / 86400           AS days_since_created,
 
-      COUNT(DISTINCT CASE WHEN se.event_type = 'auth_login_success' THEN se.id END)
-                                                                    AS total_logins,
       COUNT(DISTINCT CASE
         WHEN se.event_type = 'auth_login_success'
+          AND se.actor_username NOT LIKE 'tenantsmoke_%'
+        THEN se.id END)                                             AS total_logins,
+      COUNT(DISTINCT CASE
+        WHEN se.event_type = 'auth_login_success'
+          AND se.actor_username NOT LIKE 'tenantsmoke_%'
           AND se.created_at > NOW() - INTERVAL '7 days'
         THEN se.id END)                                             AS logins_last_7d,
-      MAX(CASE WHEN se.event_type = 'auth_login_success' THEN se.created_at END)
-                                                                    AS last_login_at,
+      MAX(CASE
+        WHEN se.event_type = 'auth_login_success'
+          AND se.actor_username NOT LIKE 'tenantsmoke_%'
+        THEN se.created_at END)                                     AS last_login_at,
 
       (
         SELECT COUNT(*)
