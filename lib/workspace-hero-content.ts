@@ -225,12 +225,14 @@ export function buildHeroContent(p: BuildHeroContentParams): HeroContent {
   ]
 
   // ── Rainfall stats ────────────────────────────────────────────────────────
+  // Rainfall is tracked by calendar year (logbook convention), not fiscal year.
+  const currentCalendarYear = String(new Date().getFullYear())
   const showRainfallMetrics = enabledModuleIds.has("rainfall")
   const latestRainLabel = rainfallHeroTotals.latestDate ? formatDate(rainfallHeroTotals.latestDate) : "No logs"
   const rainErr = rainfallHeroTotals.loading || rainfallHeroTotals.error
   const rainfallStats: HeroStat[] = showRainfallMetrics
     ? [
-        { label: `Rainfall (${currentFiscalYearLabel})`, value: rainErr ? (rainfallHeroTotals.loading ? "Loading..." : "Unavailable") : `${fmt(rainfallHeroTotals.totalInches, 2)} in`, metricValue: rainErr ? null : rainfallHeroTotals.totalInches },
+        { label: `Rainfall (${currentCalendarYear})`, value: rainErr ? (rainfallHeroTotals.loading ? "Loading..." : "Unavailable") : `${fmt(rainfallHeroTotals.totalInches, 2)} in`, metricValue: rainErr ? null : rainfallHeroTotals.totalInches },
         { label: "Rain logs", value: rainErr ? (rainfallHeroTotals.loading ? "Loading..." : "Unavailable") : fmtCount(rainfallHeroTotals.totalRecords), metricValue: rainErr ? null : rainfallHeroTotals.totalRecords },
         { label: "Latest rain log", value: rainfallHeroTotals.loading ? "Loading..." : rainfallHeroTotals.error ? "Unavailable" : latestRainLabel, metricValue: rainErr ? null : rainfallHeroTotals.totalRecords },
       ]
@@ -241,7 +243,7 @@ export function buildHeroContent(p: BuildHeroContentParams): HeroContent {
       ]
   const weatherStats: HeroStat[] = [
     { label: "Forecast horizon", value: "8 days", metricValue: 8 },
-    { label: "Rain logs (FY)", value: showRainfallMetrics ? fmtCount(rainfallHeroTotals.totalRecords) : "Unavailable", metricValue: showRainfallMetrics ? rainfallHeroTotals.totalRecords : null },
+    { label: `Rain logs (${currentCalendarYear})`, value: showRainfallMetrics ? fmtCount(rainfallHeroTotals.totalRecords) : "Unavailable", metricValue: showRainfallMetrics ? rainfallHeroTotals.totalRecords : null },
     activeLocationsStat,
   ]
 
@@ -388,7 +390,7 @@ export function buildHeroContent(p: BuildHeroContentParams): HeroContent {
   switch (activeTab) {
     case "home": {
       const homeThirdStat: HeroStat = enabledModuleIds.has("rainfall") && !rainErr
-        ? { label: `Rainfall (${currentFiscalYearLabel})`, value: `${fmt(rainfallHeroTotals.totalInches, 2)} in`, metricValue: rainfallHeroTotals.totalInches }
+        ? { label: `Rainfall (${currentCalendarYear})`, value: `${fmt(rainfallHeroTotals.totalInches, 2)} in`, metricValue: rainfallHeroTotals.totalInches }
         : recentActivityStat
       return {
         badge: "Home Screen",
@@ -425,7 +427,7 @@ export function buildHeroContent(p: BuildHeroContentParams): HeroContent {
         badge: "Yield Forecast", title: "Season forecast from trend + rainfall", description: "Blend recent processing momentum with rainfall signals to project season-end dry output.",
         chips: [
           { icon: TrendingUp, label: processingTotals.loading ? "Pulping trend loading..." : `Pulping to date: ${fmt(processingTotals.arabicaKg + processingTotals.robustaKg, 0)} kg`, metricValue: processingTotals.loading ? null : processingTotals.arabicaKg + processingTotals.robustaKg },
-          { icon: CloudRain, label: rainErr ? (rainfallHeroTotals.loading ? "Rainfall signal loading..." : "Rainfall signal unavailable") : `Rainfall logs this FY: ${fmtCount(rainfallHeroTotals.totalRecords)}`, metricValue: rainErr ? null : rainfallHeroTotals.totalRecords },
+          { icon: CloudRain, label: rainErr ? (rainfallHeroTotals.loading ? "Rainfall signal loading..." : "Rainfall signal unavailable") : `Rainfall logs in ${currentCalendarYear}: ${fmtCount(rainfallHeroTotals.totalRecords)}`, metricValue: rainErr ? null : rainfallHeroTotals.totalRecords },
         ],
         stats: [
           { label: "Arabica processed", value: processingTotals.loading ? "Loading..." : `${fmt(processingTotals.arabicaKg, 0)} kg`, metricValue: processingTotals.loading ? null : processingTotals.arabicaKg },

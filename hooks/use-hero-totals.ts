@@ -422,13 +422,14 @@ export function useHeroTotals({
         const json = await res.json().catch(() => ({}))
         if (!res.ok || !json?.success) throw new Error(json?.error || "Failed to load rainfall totals")
         const records = Array.isArray(json.records) ? json.records : []
-        const fyStart = currentFiscalYear.startDate
-        const fyEnd = currentFiscalYear.endDate
+        // Rainfall is tracked by calendar year (logbook convention), not fiscal year,
+        // to match the Rain & Weather tab's "Annual total" figure.
+        const currentYear = String(new Date().getFullYear())
         let totalInches = 0, totalRecords = 0
         let latestDate: string | null = null
         for (const record of records) {
           const recordDateStr = String(record?.record_date || "").slice(0, 10)
-          if (!recordDateStr || recordDateStr < fyStart || recordDateStr > fyEnd) continue
+          if (!recordDateStr || !recordDateStr.startsWith(currentYear)) continue
           totalInches += (Number(record?.inches) || 0) + (Number(record?.cents) || 0) / 100
           totalRecords += 1
           if (!latestDate || recordDateStr > String(latestDate).slice(0, 10)) latestDate = String(record?.record_date || "")
@@ -440,7 +441,7 @@ export function useHeroTotals({
     }
     load()
     return () => { ignore = true }
-  }, [tenantId, canShowRainfall, currentFiscalYear.endDate, currentFiscalYear.startDate, shouldLoadHomeMetrics])
+  }, [tenantId, canShowRainfall, shouldLoadHomeMetrics])
 
   useEffect(() => {
     if (!canShowSeason || !shouldLoadExceptionSummary) return
