@@ -462,6 +462,10 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   let tenantId: string | null = null
+  let underflowItemType: string | null = null
+  let underflowAvailable: number | null = null
+  let underflowRequested: number | null = null
+  let underflowUnit: string | null = null
   try {
     const sessionUser = await requireAnyModuleAccess(["transactions", "inventory"])
     if (!canWriteModule(sessionUser.role, "transactions")) {
@@ -601,6 +605,13 @@ export async function POST(request: NextRequest) {
     const priceValue = Number(price) || 0
     const total_cost = quantityValue * priceValue
 
+    if (normalizedType === "deplete") {
+      underflowItemType = canonicalItemType
+      underflowAvailable = effectiveSlotMatch?.quantity ?? 0
+      underflowRequested = quantityValue
+      underflowUnit = unitValue
+    }
+
     const insertTransaction = async () =>
       runTenantQuery(
         inventorySql,
@@ -682,6 +693,19 @@ export async function POST(request: NextRequest) {
     if (isModuleAccessError(error)) {
       return NextResponse.json({ success: false, message: "Module access disabled" }, { status: 403 })
     }
+    if (isInventoryUnderflowError(error)) {
+      const detail =
+        underflowItemType && underflowAvailable !== null && underflowRequested !== null
+          ? `Insufficient stock for ${underflowItemType}. Available ${underflowAvailable} ${underflowUnit || "kg"}, requested ${underflowRequested} ${underflowUnit || "kg"}. Choose the stocked location (or Unassigned for legacy stock) or restock first.`
+          : "Insufficient stock in the selected location. Choose the stocked location (or Unassigned for legacy stock) or restock first."
+      return NextResponse.json(
+        {
+          success: false,
+          message: detail,
+        },
+        { status: 409 },
+      )
+    }
     await logRouteMutationFailure({
       tenantId,
       source: "api/transactions-neon",
@@ -689,16 +713,6 @@ export async function POST(request: NextRequest) {
       action: "create_transaction",
       error,
     })
-    if (isInventoryUnderflowError(error)) {
-      return NextResponse.json(
-        {
-          success: false,
-          message:
-            "Insufficient stock in the selected location. Choose the stocked location (or Unassigned for legacy stock) or restock first.",
-        },
-        { status: 409 },
-      )
-    }
     return NextResponse.json(
       {
         success: false,

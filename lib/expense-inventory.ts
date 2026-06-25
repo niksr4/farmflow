@@ -81,7 +81,11 @@ export function allocateInventoryQuantity(
 
   if (remainingQuantity > INVENTORY_EPSILON) {
     const sampleItemType = orderedSlots[0]?.itemType || "inventory item"
-    throw new Error(`Insufficient stock for ${sampleItemType}`)
+    const sampleUnit = orderedSlots[0]?.unit || "kg"
+    const totalAvailable = toRoundedQuantity(orderedSlots.reduce((sum, slot) => sum + slot.quantity, 0))
+    throw new Error(
+      `Insufficient stock for ${sampleItemType}. Available ${totalAvailable} ${sampleUnit}, requested ${normalizedRequestedQuantity} ${sampleUnit}.`,
+    )
   }
 
   return allocations

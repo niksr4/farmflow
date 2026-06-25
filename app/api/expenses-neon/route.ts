@@ -1286,13 +1286,6 @@ export async function POST(request: Request) {
     if (isModuleAccessError(error)) {
       return NextResponse.json({ success: false, error: "Module access disabled" }, { status: 403 })
     }
-    await logRouteMutationFailure({
-      tenantId,
-      source: "api/expenses-neon",
-      endpoint: "/api/expenses-neon",
-      action: "create_expense",
-      error,
-    })
     if (isInventoryUnderflowError(error)) {
       return NextResponse.json(
         {
@@ -1302,6 +1295,13 @@ export async function POST(request: Request) {
         { status: 409 },
       )
     }
+    await logRouteMutationFailure({
+      tenantId,
+      source: "api/expenses-neon",
+      endpoint: "/api/expenses-neon",
+      action: "create_expense",
+      error,
+    })
     return NextResponse.json(
       {
         success: false,
@@ -1470,13 +1470,6 @@ export async function PUT(request: Request) {
     if (isModuleAccessError(error)) {
       return NextResponse.json({ success: false, error: "Module access disabled" }, { status: 403 })
     }
-    await logRouteMutationFailure({
-      tenantId,
-      source: "api/expenses-neon",
-      endpoint: "/api/expenses-neon",
-      action: "update_expense",
-      error,
-    })
     if (isInventoryUnderflowError(error)) {
       return NextResponse.json(
         {
@@ -1486,6 +1479,13 @@ export async function PUT(request: Request) {
         { status: 409 },
       )
     }
+    await logRouteMutationFailure({
+      tenantId,
+      source: "api/expenses-neon",
+      endpoint: "/api/expenses-neon",
+      action: "update_expense",
+      error,
+    })
     return NextResponse.json(
       {
         success: false,

@@ -507,52 +507,64 @@ export default function OtherExpensesTab({
                     </Button>
                   )}
 
-                  {(supportsMultiInventoryItems ? invLines : invLines.slice(0, 1)).map((line, idx) => (
-                    <div key={idx} className="grid grid-cols-[1fr_6rem_2rem] gap-2 items-end">
-                      <div className="space-y-1">
-                        {idx === 0 && <Label className="text-xs text-muted-foreground">Item</Label>}
-                        <select
-                          value={line.itemType}
-                          onChange={(e) => updateInvLine(idx, "itemType", e.target.value)}
-                          className="flex h-10 w-full rounded-md border border-input bg-background px-2 py-1 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                        >
-                          <option value="">— Select —</option>
-                          {inventoryItems.map((item) => (
-                            <option key={item.itemType} value={item.itemType}>
-                              {item.itemType} ({item.quantity.toFixed(1)} {item.unit})
-                            </option>
-                          ))}
-                        </select>
+                  {(supportsMultiInventoryItems ? invLines : invLines.slice(0, 1)).map((line, idx) => {
+                    const selectedStock = inventoryItems.find((item) => item.itemType === line.itemType)
+                    const requestedQty = Number(line.quantity) || 0
+                    const exceedsStock = Boolean(selectedStock) && requestedQty > selectedStock!.quantity + 0.0001
+                    return (
+                      <div key={idx} className="space-y-1">
+                        <div className="grid grid-cols-[1fr_6rem_2rem] gap-2 items-end">
+                          <div className="space-y-1">
+                            {idx === 0 && <Label className="text-xs text-muted-foreground">Item</Label>}
+                            <select
+                              value={line.itemType}
+                              onChange={(e) => updateInvLine(idx, "itemType", e.target.value)}
+                              className="flex h-10 w-full rounded-md border border-input bg-background px-2 py-1 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                            >
+                              <option value="">— Select —</option>
+                              {inventoryItems.map((item) => (
+                                <option key={item.itemType} value={item.itemType}>
+                                  {item.itemType} ({item.quantity.toFixed(1)} {item.unit})
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+                          <div className="space-y-1">
+                            {idx === 0 && <Label className="text-xs text-muted-foreground">Qty used</Label>}
+                            <Input
+                              type="number"
+                              min="0.001"
+                              step="0.001"
+                              value={line.quantity}
+                              onChange={(e) => updateInvLine(idx, "quantity", e.target.value)}
+                              placeholder="0"
+                              disabled={!line.itemType}
+                              className={cn("h-10", exceedsStock && "border-amber-500 focus-visible:ring-amber-500")}
+                            />
+                          </div>
+                          {supportsMultiInventoryItems ? (
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="icon"
+                              onClick={() => removeInvLine(idx)}
+                              className="h-10 w-8 text-muted-foreground hover:text-destructive"
+                              aria-label="Remove item"
+                            >
+                              <X className="h-4 w-4" />
+                            </Button>
+                          ) : (
+                            <div />
+                          )}
+                        </div>
+                        {exceedsStock && (
+                          <p className="text-xs text-amber-600">
+                            Only {selectedStock!.quantity.toFixed(1)} {selectedStock!.unit} of {selectedStock!.itemType} in stock. Saving will fail unless you restock first or lower the quantity.
+                          </p>
+                        )}
                       </div>
-                      <div className="space-y-1">
-                        {idx === 0 && <Label className="text-xs text-muted-foreground">Qty used</Label>}
-                        <Input
-                          type="number"
-                          min="0.001"
-                          step="0.001"
-                          value={line.quantity}
-                          onChange={(e) => updateInvLine(idx, "quantity", e.target.value)}
-                          placeholder="0"
-                          disabled={!line.itemType}
-                          className="h-10"
-                        />
-                      </div>
-                      {supportsMultiInventoryItems ? (
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="icon"
-                          onClick={() => removeInvLine(idx)}
-                          className="h-10 w-8 text-muted-foreground hover:text-destructive"
-                          aria-label="Remove item"
-                        >
-                          <X className="h-4 w-4" />
-                        </Button>
-                      ) : (
-                        <div />
-                      )}
-                    </div>
-                  ))}
+                    )
+                  })}
 
                   {invLines.some((l) => l.itemType) && (
                     <p className="text-xs text-muted-foreground">
