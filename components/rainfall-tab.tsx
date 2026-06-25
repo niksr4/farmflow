@@ -16,6 +16,7 @@ import { useAuth } from "@/hooks/use-auth"
 import { useMediaQuery } from "@/hooks/use-media-query"
 import { formatDateOnly } from "@/lib/date-utils"
 import { formatNumber } from "@/lib/format"
+import { getCurrentFiscalYear, isDateInFiscalYear } from "@/lib/fiscal-year-utils"
 import { Minus, Plus } from "lucide-react"
 
 type RainfallRecord = {
@@ -322,6 +323,20 @@ export default function RainfallTab({ username, showDataToolsControls = false }:
     [monthlyTotalsData],
   )
 
+  // The dashboard's "Rainfall (FY)" hero figure totals by fiscal year (Apr–Mar), not calendar
+  // year. Mirror that window here so the two headline numbers never disagree.
+  const currentFiscalYear = useMemo(() => getCurrentFiscalYear(), [])
+  const fiscalYearStats = useMemo(() => {
+    let totalInches = 0
+    let loggedDays = 0
+    for (const record of normalizedRecords) {
+      if (!isDateInFiscalYear(record.date, currentFiscalYear)) continue
+      totalInches += record.rainfallInches
+      loggedDays += 1
+    }
+    return { totalInches: round2(totalInches), loggedDays }
+  }, [normalizedRecords, currentFiscalYear])
+
   const topMonths = useMemo(
     () =>
       [...monthlyTotalsData]
@@ -537,8 +552,8 @@ export default function RainfallTab({ username, showDataToolsControls = false }:
                 <CloudRain className="h-4 w-4 text-sky-500 shrink-0" />
                 <p className="text-[10px] font-bold uppercase tracking-wide text-sky-600">Annual total</p>
               </div>
-              <p className="text-xl font-black text-stone-900 tabular-nums">{formatNumber(annualTotal, 2)}&quot;</p>
-              <p className="text-[10px] text-stone-400 mt-1">this year</p>
+              <p className="text-xl font-black text-stone-900 tabular-nums">{formatNumber(fiscalYearStats.totalInches, 2)}&quot;</p>
+              <p className="text-[10px] text-stone-400 mt-1">{currentFiscalYear.label}</p>
             </div>
             <div className="rounded-2xl bg-sky-50 border border-sky-100 p-3.5">
               <div className="flex items-center gap-1.5 mb-2">
@@ -734,9 +749,9 @@ export default function RainfallTab({ username, showDataToolsControls = false }:
         <div className="space-y-4 p-5">
           <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
             <div className="rounded-lg border border-stone-200 bg-stone-50 p-4 dark:border-white/[0.05] dark:bg-white/[0.02]">
-              <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-emerald-700">Annual rainfall</p>
-              <p className="mt-2 text-2xl font-black tabular-nums text-stone-900 dark:text-white">{formatNumber(annualTotal, 2)} in</p>
-              <p className="mt-1 text-xs text-stone-400">{normalizedRecords.length} logged days</p>
+              <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-emerald-700">Annual rainfall ({currentFiscalYear.label})</p>
+              <p className="mt-2 text-2xl font-black tabular-nums text-stone-900 dark:text-white">{formatNumber(fiscalYearStats.totalInches, 2)} in</p>
+              <p className="mt-1 text-xs text-stone-400">{fiscalYearStats.loggedDays} logged days</p>
             </div>
             <div className="rounded-lg border border-stone-200 bg-stone-50 p-4 dark:border-white/[0.05] dark:bg-white/[0.02]">
               <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-emerald-700">Last 30 days</p>
