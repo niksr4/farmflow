@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import type { ExceptionSummaryAlert } from "@/components/inventory-system/types"
 
 type FiscalYear = { startDate: string; endDate: string }
@@ -74,9 +74,24 @@ export function useHeroTotals({
   const [exceptionsLoading, setExceptionsLoading] = useState(false)
   const [exceptionsError, setExceptionsError] = useState<string | null>(null)
 
+  // Each ref remembers the tenant it last loaded successfully for, so revisiting the
+  // Home tab within the same session doesn't re-fire all ~10 hero fetches every time.
+  const processingLoadedRef = useRef<string | null>(null)
+  const dispatchLoadedRef = useRef<string | null>(null)
+  const salesLoadedRef = useRef<string | null>(null)
+  const otherSalesLoadedRef = useRef<string | null>(null)
+  const receivablesLoadedRef = useRef<string | null>(null)
+  const curingLoadedRef = useRef<string | null>(null)
+  const qualityLoadedRef = useRef<string | null>(null)
+  const pepperLoadedRef = useRef<string | null>(null)
+  const rubberLoadedRef = useRef<string | null>(null)
+  const rainfallLoadedRef = useRef<string | null>(null)
+  const exceptionsLoadedRef = useRef<string | null>(null)
+
   useEffect(() => {
     if (!tenantId || !canShowProcessing) return
     if (!shouldLoadHomeMetrics) return
+    if (processingLoadedRef.current === tenantId) return
     let ignore = false
     const load = async () => {
       setProcessingTotals((prev) => ({ ...prev, loading: true, error: null }))
@@ -96,7 +111,7 @@ export function useHeroTotals({
           },
           { arabicaKg: 0, arabicaBags: 0, robustaKg: 0, robustaBags: 0 },
         )
-        if (!ignore) setProcessingTotals({ ...totals, loading: false, error: null })
+        if (!ignore) { setProcessingTotals({ ...totals, loading: false, error: null }); processingLoadedRef.current = tenantId }
       } catch (error: any) {
         if (!ignore) setProcessingTotals((prev) => ({ ...prev, loading: false, error: error?.message || "Failed to load processing totals" }))
       }
@@ -108,6 +123,7 @@ export function useHeroTotals({
   useEffect(() => {
     if (!tenantId || !canShowDispatch) return
     if (!shouldLoadHomeMetrics) return
+    if (dispatchLoadedRef.current === tenantId) return
     let ignore = false
     const load = async () => {
       setDispatchHeroTotals((prev) => ({ ...prev, loading: true, error: null }))
@@ -127,7 +143,7 @@ export function useHeroTotals({
           },
           { arabicaBags: 0, arabicaKgs: 0, robustaBags: 0, robustaKgs: 0 },
         )
-        if (!ignore) setDispatchHeroTotals({ ...totals, totalDispatches: Number(json?.totalCount) || 0, loading: false, error: null })
+        if (!ignore) { setDispatchHeroTotals({ ...totals, totalDispatches: Number(json?.totalCount) || 0, loading: false, error: null }); dispatchLoadedRef.current = tenantId }
       } catch (error: any) {
         if (!ignore) setDispatchHeroTotals((prev) => ({ ...prev, loading: false, error: error?.message || "Failed to load dispatch totals" }))
       }
@@ -139,6 +155,7 @@ export function useHeroTotals({
   useEffect(() => {
     if (!tenantId || !canShowSales) return
     if (!shouldLoadHomeMetrics) return
+    if (salesLoadedRef.current === tenantId) return
     let ignore = false
     const load = async () => {
       setSalesHeroTotals((prev) => ({ ...prev, loading: true, error: null }))
@@ -158,7 +175,7 @@ export function useHeroTotals({
           },
           { arabicaBags: 0, arabicaKgs: 0, robustaBags: 0, robustaKgs: 0 },
         )
-        if (!ignore) setSalesHeroTotals({ ...totals, totalSales: Number(json?.totalCount) || 0, totalRevenue: Number(json?.totalRevenue) || 0, loading: false, error: null })
+        if (!ignore) { setSalesHeroTotals({ ...totals, totalSales: Number(json?.totalCount) || 0, totalRevenue: Number(json?.totalRevenue) || 0, loading: false, error: null }); salesLoadedRef.current = tenantId }
       } catch (error: any) {
         if (!ignore) setSalesHeroTotals((prev) => ({ ...prev, loading: false, error: error?.message || "Failed to load sales totals" }))
       }
@@ -173,6 +190,7 @@ export function useHeroTotals({
       return
     }
     if (!shouldLoadHomeMetrics) return
+    if (otherSalesLoadedRef.current === tenantId) return
     let ignore = false
     const load = async () => {
       setOtherSalesHeroTotals((prev) => ({ ...prev, loading: true, error: null }))
@@ -180,7 +198,7 @@ export function useHeroTotals({
         const res = await fetch("/api/other-sales?all=true", { cache: "no-store" })
         const json = await res.json().catch(() => ({}))
         if (!res.ok || !json?.success) throw new Error(json?.error || "Failed to load other sales totals")
-        if (!ignore) setOtherSalesHeroTotals({ totalRevenue: Number(json?.totals?.totalRevenue) || 0, totalCount: Number(json?.totalCount) || 0, loading: false, error: null })
+        if (!ignore) { setOtherSalesHeroTotals({ totalRevenue: Number(json?.totals?.totalRevenue) || 0, totalCount: Number(json?.totalCount) || 0, loading: false, error: null }); otherSalesLoadedRef.current = tenantId }
       } catch (error: any) {
         if (!ignore) setOtherSalesHeroTotals((prev) => ({ ...prev, loading: false, error: error?.message || "Failed to load other sales totals" }))
       }
@@ -192,6 +210,7 @@ export function useHeroTotals({
   useEffect(() => {
     if (!tenantId || !canShowReceivables) return
     if (!shouldLoadHomeMetrics) return
+    if (receivablesLoadedRef.current === tenantId) return
     let ignore = false
     const load = async () => {
       setReceivablesHeroTotals((prev) => ({ ...prev, loading: true, error: null }))
@@ -203,14 +222,17 @@ export function useHeroTotals({
         const json = await res.json().catch(() => ({}))
         if (!res.ok || !json?.success) throw new Error(json?.error || "Failed to load receivables totals")
         const payload = json?.summary || {}
-        if (!ignore) setReceivablesHeroTotals({
-          totalInvoiced: Number(payload.totalInvoiced) || 0,
-          totalOutstanding: Number(payload.totalOutstanding) || 0,
-          totalOverdue: Number(payload.totalOverdue) || 0,
-          totalPaid: Number(payload.totalPaid) || 0,
-          totalCount: Number(payload.totalCount) || 0,
-          loading: false, error: null,
-        })
+        if (!ignore) {
+          setReceivablesHeroTotals({
+            totalInvoiced: Number(payload.totalInvoiced) || 0,
+            totalOutstanding: Number(payload.totalOutstanding) || 0,
+            totalOverdue: Number(payload.totalOverdue) || 0,
+            totalPaid: Number(payload.totalPaid) || 0,
+            totalCount: Number(payload.totalCount) || 0,
+            loading: false, error: null,
+          })
+          receivablesLoadedRef.current = tenantId
+        }
       } catch (error: any) {
         if (!ignore) setReceivablesHeroTotals((prev) => ({ ...prev, loading: false, error: error?.message || "Failed to load receivables totals" }))
       }
@@ -222,6 +244,7 @@ export function useHeroTotals({
   useEffect(() => {
     if (!tenantId || !canShowCuring) return
     if (!shouldLoadHomeMetrics) return
+    if (curingLoadedRef.current === tenantId) return
     let ignore = false
     const load = async () => {
       setCuringHeroTotals((prev) => ({ ...prev, loading: true, error: null }))
@@ -244,13 +267,16 @@ export function useHeroTotals({
           },
           { outputKg: 0, dryingDaysTotal: 0, dryingDaysCount: 0, moistureDropTotal: 0, moistureDropCount: 0 },
         )
-        if (!ignore) setCuringHeroTotals({
-          totalRecords: records.length,
-          totalOutputKg: totals.outputKg,
-          avgDryingDays: totals.dryingDaysCount ? totals.dryingDaysTotal / totals.dryingDaysCount : 0,
-          avgMoistureDrop: totals.moistureDropCount ? totals.moistureDropTotal / totals.moistureDropCount : 0,
-          loading: false, error: null,
-        })
+        if (!ignore) {
+          setCuringHeroTotals({
+            totalRecords: records.length,
+            totalOutputKg: totals.outputKg,
+            avgDryingDays: totals.dryingDaysCount ? totals.dryingDaysTotal / totals.dryingDaysCount : 0,
+            avgMoistureDrop: totals.moistureDropCount ? totals.moistureDropTotal / totals.moistureDropCount : 0,
+            loading: false, error: null,
+          })
+          curingLoadedRef.current = tenantId
+        }
       } catch (error: any) {
         if (!ignore) setCuringHeroTotals((prev) => ({ ...prev, loading: false, error: error?.message || "Failed to load curing totals" }))
       }
@@ -262,6 +288,7 @@ export function useHeroTotals({
   useEffect(() => {
     if (!tenantId || !canShowQuality) return
     if (!shouldLoadHomeMetrics) return
+    if (qualityLoadedRef.current === tenantId) return
     let ignore = false
     const load = async () => {
       setQualityHeroTotals((prev) => ({ ...prev, loading: true, error: null }))
@@ -283,13 +310,16 @@ export function useHeroTotals({
           },
           { cupScoreTotal: 0, cupScoreCount: 0, outturnTotal: 0, outturnCount: 0, defectsTotal: 0, defectsCount: 0 },
         )
-        if (!ignore) setQualityHeroTotals({
-          totalRecords: records.length,
-          avgCupScore: totals.cupScoreCount ? totals.cupScoreTotal / totals.cupScoreCount : 0,
-          avgOutturnPct: totals.outturnCount ? totals.outturnTotal / totals.outturnCount : 0,
-          avgDefects: totals.defectsCount ? totals.defectsTotal / totals.defectsCount : 0,
-          loading: false, error: null,
-        })
+        if (!ignore) {
+          setQualityHeroTotals({
+            totalRecords: records.length,
+            avgCupScore: totals.cupScoreCount ? totals.cupScoreTotal / totals.cupScoreCount : 0,
+            avgOutturnPct: totals.outturnCount ? totals.outturnTotal / totals.outturnCount : 0,
+            avgDefects: totals.defectsCount ? totals.defectsTotal / totals.defectsCount : 0,
+            loading: false, error: null,
+          })
+          qualityLoadedRef.current = tenantId
+        }
       } catch (error: any) {
         if (!ignore) setQualityHeroTotals((prev) => ({ ...prev, loading: false, error: error?.message || "Failed to load quality totals" }))
       }
@@ -301,6 +331,7 @@ export function useHeroTotals({
   useEffect(() => {
     if (!tenantId || !canShowPepper) return
     if (!shouldLoadHomeMetrics) return
+    if (pepperLoadedRef.current === tenantId) return
     let ignore = false
     const load = async () => {
       setPepperHeroTotals((prev) => ({ ...prev, loading: true, error: null }))
@@ -322,11 +353,14 @@ export function useHeroTotals({
           },
           { picked: 0, dry: 0, dryPctTotal: 0, dryPctCount: 0 },
         )
-        if (!ignore) setPepperHeroTotals({
-          totalRecords: records.length, totalPickedKg: totals.picked, totalDryKg: totals.dry,
-          avgDryPercent: totals.dryPctCount ? totals.dryPctTotal / totals.dryPctCount : 0,
-          loading: false, error: null,
-        })
+        if (!ignore) {
+          setPepperHeroTotals({
+            totalRecords: records.length, totalPickedKg: totals.picked, totalDryKg: totals.dry,
+            avgDryPercent: totals.dryPctCount ? totals.dryPctTotal / totals.dryPctCount : 0,
+            loading: false, error: null,
+          })
+          pepperLoadedRef.current = tenantId
+        }
       } catch (error: any) {
         if (!ignore) setPepperHeroTotals((prev) => ({ ...prev, loading: false, error: error?.message || "Failed to load pepper totals" }))
       }
@@ -338,6 +372,7 @@ export function useHeroTotals({
   useEffect(() => {
     if (!tenantId || !canShowRubber) return
     if (!shouldLoadHomeMetrics) return
+    if (rubberLoadedRef.current === tenantId) return
     let ignore = false
     const load = async () => {
       setRubberHeroTotals((prev) => ({ ...prev, loading: true, error: null }))
@@ -359,11 +394,14 @@ export function useHeroTotals({
           },
           { latex: 0, sheets: 0, drcTotal: 0, drcCount: 0 },
         )
-        if (!ignore) setRubberHeroTotals({
-          totalRecords: records.length, totalLatexKg: totals.latex, totalSheetsKg: totals.sheets,
-          avgDrcPct: totals.drcCount ? totals.drcTotal / totals.drcCount : 0,
-          loading: false, error: null,
-        })
+        if (!ignore) {
+          setRubberHeroTotals({
+            totalRecords: records.length, totalLatexKg: totals.latex, totalSheetsKg: totals.sheets,
+            avgDrcPct: totals.drcCount ? totals.drcTotal / totals.drcCount : 0,
+            loading: false, error: null,
+          })
+          rubberLoadedRef.current = tenantId
+        }
       } catch (error: any) {
         if (!ignore) setRubberHeroTotals((prev) => ({ ...prev, loading: false, error: error?.message || "Failed to load rubber totals" }))
       }
@@ -375,6 +413,7 @@ export function useHeroTotals({
   useEffect(() => {
     if (!tenantId || !canShowRainfall) return
     if (!shouldLoadHomeMetrics) return
+    if (rainfallLoadedRef.current === tenantId) return
     let ignore = false
     const load = async () => {
       setRainfallHeroTotals((prev) => ({ ...prev, loading: true, error: null }))
@@ -394,7 +433,7 @@ export function useHeroTotals({
           totalRecords += 1
           if (!latestDate || recordDateStr > String(latestDate).slice(0, 10)) latestDate = String(record?.record_date || "")
         }
-        if (!ignore) setRainfallHeroTotals({ totalRecords, totalInches, latestDate, loading: false, error: null })
+        if (!ignore) { setRainfallHeroTotals({ totalRecords, totalInches, latestDate, loading: false, error: null }); rainfallLoadedRef.current = tenantId }
       } catch (error: any) {
         if (!ignore) setRainfallHeroTotals((prev) => ({ ...prev, loading: false, error: error?.message || "Failed to load rainfall totals" }))
       }
@@ -405,6 +444,7 @@ export function useHeroTotals({
 
   useEffect(() => {
     if (!canShowSeason || !shouldLoadExceptionSummary) return
+    if (exceptionsLoadedRef.current === tenantId) return
     let isActive = true
     const load = async () => {
       setExceptionsLoading(true)
@@ -439,12 +479,15 @@ export function useHeroTotals({
         setExceptionsSummary({ count: 0, highlights: [], alerts: [] })
         setExceptionsError(error.message || "Failed to load exceptions")
       } finally {
-        if (isActive) setExceptionsLoading(false)
+        if (isActive) {
+          setExceptionsLoading(false)
+          exceptionsLoadedRef.current = tenantId
+        }
       }
     }
     load()
     return () => { isActive = false }
-  }, [canShowSeason, shouldLoadExceptionSummary])
+  }, [canShowSeason, shouldLoadExceptionSummary, tenantId])
 
   return {
     processingTotals, dispatchHeroTotals, salesHeroTotals, otherSalesHeroTotals,

@@ -1,6 +1,7 @@
 "use client"
 
 import React, { useEffect, useState, useCallback, useMemo, useRef } from "react"
+import { createPortal } from "react-dom"
 import dynamic from "next/dynamic"
 import { useTheme } from "next-themes"
 import {
@@ -55,6 +56,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Badge } from "@/components/ui/badge"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { BrandLoading } from "@/components/ui/brand-loading"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -330,6 +332,8 @@ export default function InventorySystem() {
   const [currentPage, setCurrentPage] = useState(1)
   const itemsPerPage = 10
   const [activeTab, setActiveTab] = useState(DASHBOARD_LAUNCHER_TAB)
+  const [showTabSwitchLoader, setShowTabSwitchLoader] = useState(false)
+  const visitedTabsRef = useRef<Set<string>>(new Set([DASHBOARD_LAUNCHER_TAB]))
   const [inventoryWorkspaceView, setInventoryWorkspaceView] = useState<InventoryWorkspaceView>("inventory")
   const [salesWorkspaceView, setSalesWorkspaceView] = useState<SalesWorkspaceView>("coffee")
   const [processingWorkspaceView, setProcessingWorkspaceView] = useState<ProcessingWorkspaceView>("coffee")
@@ -491,6 +495,13 @@ export default function InventorySystem() {
   const [recentActivityLoading, setRecentActivityLoading] = useState(false)
   const hasTrackedInsightViewRef = useRef(false)
   const lastExecutionOutcomeSignatureRef = useRef("")
+  // Each ref remembers the tenant it last loaded successfully for, so revisiting the
+  // Home tab within the same session doesn't re-fire these fetches every time.
+  const intelligenceBriefLoadedRef = useRef<string | null>(null)
+  const activityStreakLoadedRef = useRef<string | null>(null)
+  const proactiveInsightsLoadedRef = useRef<string | null>(null)
+  const seasonCompareLoadedRef = useRef<string | null>(null)
+  const recentActivityLoadedRef = useRef<string | null>(null)
   const [onboardingStatus, setOnboardingStatus] = useState<OnboardingStatusSnapshot>(INITIAL_ONBOARDING_STATUS)
   const [isOnboardingLoading, setIsOnboardingLoading] = useState(false)
   const [hasLoadedOnboardingStatus, setHasLoadedOnboardingStatus] = useState(false)
@@ -2931,6 +2942,7 @@ export default function InventorySystem() {
       return
     }
     if (!shouldLoadHomeMetrics) return
+    if (intelligenceBriefLoadedRef.current === tenantId) return
     let ignore = false
 
     const loadIntelligenceBrief = async () => {
@@ -2974,6 +2986,7 @@ export default function InventorySystem() {
       } finally {
         if (!ignore) {
           setIntelligenceLoading(false)
+          intelligenceBriefLoadedRef.current = tenantId
         }
       }
     }
@@ -2986,6 +2999,8 @@ export default function InventorySystem() {
 
   useEffect(() => {
     if (!tenantId || !shouldLoadHomeMetrics) return
+    if (activityStreakLoadedRef.current === tenantId) return
+    activityStreakLoadedRef.current = tenantId
     fetch("/api/activity-streak", { cache: "no-store" })
       .then((r) => r.json())
       .then((d) => { if (d.success && d.streak > 0) setActivityStreak(d.streak) })
@@ -2994,6 +3009,7 @@ export default function InventorySystem() {
 
   useEffect(() => {
     if (!canShowAiAnalysis || !shouldLoadHomeMetrics) return
+    if (proactiveInsightsLoadedRef.current === tenantId) return
     let ignore = false
     const loadProactiveInsights = async () => {
       setProactiveInsightsLoading(true)
@@ -3006,15 +3022,19 @@ export default function InventorySystem() {
       } catch (error: any) {
         if (!ignore) setProactiveInsightsError(error?.message || "Failed to load insights")
       } finally {
-        if (!ignore) setProactiveInsightsLoading(false)
+        if (!ignore) {
+          setProactiveInsightsLoading(false)
+          proactiveInsightsLoadedRef.current = tenantId
+        }
       }
     }
     loadProactiveInsights()
     return () => { ignore = true }
-  }, [canShowAiAnalysis, shouldLoadHomeMetrics])
+  }, [canShowAiAnalysis, shouldLoadHomeMetrics, tenantId])
 
   useEffect(() => {
     if (!canShowAiAnalysis || !shouldLoadHomeMetrics) return
+    if (seasonCompareLoadedRef.current === tenantId) return
     let ignore = false
     const loadSeasonCompare = async () => {
       setSeasonCompareLoading(true)
@@ -3036,15 +3056,19 @@ export default function InventorySystem() {
           setSeasonCompareError(error?.message || "Season comparison is temporarily unavailable.")
         }
       } finally {
-        if (!ignore) setSeasonCompareLoading(false)
+        if (!ignore) {
+          setSeasonCompareLoading(false)
+          seasonCompareLoadedRef.current = tenantId
+        }
       }
     }
     loadSeasonCompare()
     return () => { ignore = true }
-  }, [canShowAiAnalysis, shouldLoadHomeMetrics])
+  }, [canShowAiAnalysis, shouldLoadHomeMetrics, tenantId])
 
   useEffect(() => {
     if (!shouldLoadHomeMetrics) return
+    if (recentActivityLoadedRef.current === tenantId) return
     let ignore = false
     const load = async () => {
       setRecentActivityLoading(true)
@@ -3057,12 +3081,15 @@ export default function InventorySystem() {
       } catch {
         // silent — feed just stays hidden
       } finally {
-        if (!ignore) setRecentActivityLoading(false)
+        if (!ignore) {
+          setRecentActivityLoading(false)
+          recentActivityLoadedRef.current = tenantId
+        }
       }
     }
     load()
     return () => { ignore = true }
-  }, [shouldLoadHomeMetrics])
+  }, [shouldLoadHomeMetrics, tenantId])
 
   const commandStripItems = useMemo(() => {
     const processingTotalKg = processingTotals.arabicaKg + processingTotals.robustaKg
@@ -3206,6 +3233,12 @@ export default function InventorySystem() {
   useEffect(() => {
     markTabAsLoaded(activeTab)
   }, [activeTab, markTabAsLoaded])
+  const showFirstVisitTabLoader = useCallback((tab: string) => {
+    if (visitedTabsRef.current.has(tab)) return
+    visitedTabsRef.current.add(tab)
+    setShowTabSwitchLoader(true)
+    setTimeout(() => setShowTabSwitchLoader(false), 400)
+  }, [])
   useEffect(() => {
     setLoadedTabs((previousTabs) => {
       const filteredTabs = previousTabs.filter(
@@ -3836,6 +3869,7 @@ export default function InventorySystem() {
       }
       setActiveTab(nextTab)
       markTabAsLoaded(nextTab)
+      showFirstVisitTabLoader(nextTab)
 
       if (options.locationId) {
         const locationId = String(options.locationId)
@@ -3897,7 +3931,7 @@ export default function InventorySystem() {
       const nextPath = nextQuery ? `/dashboard?${nextQuery}` : "/dashboard"
       router.replace(nextPath, { scroll: false })
     },
-    [allItemTypesForDropdown, canShowInventory, canShowProcessing, canShowSales, getPreferredDefaultTab, locations, markTabAsLoaded, router, searchParams, visibleTabs],
+    [allItemTypesForDropdown, canShowInventory, canShowProcessing, canShowSales, getPreferredDefaultTab, locations, markTabAsLoaded, router, searchParams, showFirstVisitTabLoader, visibleTabs],
   )
   const handleTabChange = useCallback(
     (value: string) => {
@@ -4391,10 +4425,7 @@ export default function InventorySystem() {
   if (isTenantLoading) {
     return (
       <div className="w-full h-screen flex items-center justify-center">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-emerald-600 mx-auto"></div>
-          <p className="mt-4 text-muted-foreground">Loading tenant context...</p>
-        </div>
+        <BrandLoading message="Loading tenant context…" />
       </div>
     )
   }
@@ -4406,12 +4437,7 @@ export default function InventorySystem() {
   if (loading && !inventory.length && !syncError) {
     return (
       <div className="w-full h-screen flex items-center justify-center">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-emerald-600 mx-auto"></div>
-          <p className="mt-4 text-muted-foreground">
-            {tenantSettings.estateName ? `Loading ${tenantSettings.estateName}…` : "Loading…"}
-          </p>
-        </div>
+        <BrandLoading message={tenantSettings.estateName ? `Loading ${tenantSettings.estateName}…` : "Loading…"} />
       </div>
     )
   }
@@ -4804,6 +4830,14 @@ export default function InventorySystem() {
             </div>
           )}
 
+          {showTabSwitchLoader &&
+            typeof document !== "undefined" &&
+            createPortal(
+              <div className="fixed inset-0 z-50 flex items-center justify-center bg-background/80 backdrop-blur-sm">
+                <BrandLoading compact />
+              </div>,
+              document.body,
+            )}
 
           <TabsContent
             value={DASHBOARD_LAUNCHER_TAB}
