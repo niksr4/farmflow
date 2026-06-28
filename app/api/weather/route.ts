@@ -3,7 +3,7 @@ import { sql } from "@/lib/server/db"
 import { requireModuleAccess, isModuleAccessError } from "@/lib/server/module-access"
 import { buildRateLimitHeaders, checkRateLimit } from "@/lib/rate-limit"
 import { fetchWithTimeout } from "@/lib/server/http"
-import { logServerError } from "@/lib/server/safe-logging"
+import { logServerError, logServerWarning } from "@/lib/server/safe-logging"
 import { parseJsonObject } from "@/lib/server/tenant-experience-db"
 import { normalizeTenantContext, runTenantQuery } from "@/lib/server/tenant-db"
 import { buildTenantWeatherQuery } from "@/lib/tenant-estate-profile"
@@ -60,11 +60,20 @@ export async function GET(request: NextRequest) {
     const cacheKey = `weather:${locationQuery.toLowerCase().replace(/\s+/g, "_")}`
 
     const { data, fromCache } = await withResponseCache(cacheKey, WEATHER_CACHE_TTL_SECONDS, async () => {
-      const response = await fetchWithTimeout(url, { timeoutMs: 8_000 })
+      let response = await fetchWithTimeout(url, { timeoutMs: 8_000 })
+      // WeatherAPI 5xx responses are usually a brief upstream blip — one quick retry
+      // resolves most of them without surfacing an error to the user.
+      if (!response.ok && response.status >= 500) {
+        response = await fetchWithTimeout(url, { timeoutMs: 8_000 })
+      }
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}))
-        logServerError("Error from WeatherAPI.com", errorData)
         const errorMessage = (errorData as any)?.error?.message || response.statusText
+        if (response.status >= 500) {
+          logServerWarning("WeatherAPI upstream unavailable after retry", errorData)
+        } else {
+          logServerError("Error from WeatherAPI.com", errorData)
+        }
         throw new Error(`Weather API error: ${errorMessage}`)
       }
       return response.json()
@@ -73,10 +82,10 @@ export async function GET(request: NextRequest) {
     const cacheHeaders = fromCache ? { "X-Cache": "HIT" } : { "X-Cache": "MISS" }
     return NextResponse.json(data, { headers: { ...rateHeaders, ...cacheHeaders } })
   } catch (error) {
-    logServerError("Error fetching weather data", error)
     if (isModuleAccessError(error)) {
       return NextResponse.json({ error: "Module access disabled" }, { status: 403 })
     }
+    logServerError("Error fetching weather data", error)
     return NextResponse.json({ error: "An internal error occurred while fetching weather data." }, { status: 500 })
   }
 }
