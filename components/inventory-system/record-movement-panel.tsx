@@ -326,7 +326,7 @@ export default function RecordMovementPanel({
         {newTransaction?.transaction_type === "restock" && (
           <div className="space-y-2">
             <div className="flex items-center gap-2">
-              <label className="text-sm font-medium text-neutral-700">Unit Price (Optional)</label>
+              <label className="text-sm font-medium text-neutral-700">Unit Price</label>
               <TooltipProvider>
                 <Tooltip>
                   <TooltipTrigger asChild>
@@ -335,7 +335,7 @@ export default function RecordMovementPanel({
                     </button>
                   </TooltipTrigger>
                   <TooltipContent className="max-w-[230px] text-xs leading-relaxed">
-                    Enter the price you paid per unit for this batch. FarmFlow uses weighted average costing — each restock recalculates the average as total spend ÷ total quantity. Depletions are then valued at that running average.
+                    Enter the price you paid per unit for this batch. FarmFlow uses weighted average costing — each restock recalculates the average as total spend ÷ total quantity. Depletions are then valued at that running average, so a missing price here corrupts the cost basis going forward.
                   </TooltipContent>
                 </Tooltip>
               </TooltipProvider>
@@ -356,7 +356,7 @@ export default function RecordMovementPanel({
               className="h-11 rounded-xl border-black/5 bg-white focus-visible:ring-2 focus-visible:ring-emerald-200"
             />
             <p className="text-xs text-neutral-500">
-              Leave blank if price is unknown — inventory quantity will still update correctly.
+              Required — restocking at ₹0 silently drags the average cost toward zero for every future depletion.
             </p>
           </div>
         )}
@@ -390,9 +390,9 @@ export default function RecordMovementPanel({
           />
         </div>
 
-        {newTransaction?.transaction_type === "restock" && !newTransaction?.price && (
+        {newTransaction?.transaction_type === "restock" && !(Number(newTransaction?.price) > 0) && (
           <p className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
-            No purchase price entered — cost tracking stays at ₹0. Add the unit price above if you have the rate.
+            Add the unit price above to save — restocks need a price greater than ₹0.
           </p>
         )}
 

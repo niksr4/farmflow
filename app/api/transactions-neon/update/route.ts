@@ -164,6 +164,16 @@ export async function PUT(request: NextRequest) {
       normalizedType = "deplete"
     }
 
+    if (normalizedType === "restock" && !(Number(price) > 0)) {
+      return NextResponse.json(
+        {
+          success: false,
+          message: "Unit price is required for restocks. A ₹0 price corrupts the weighted average cost for every future depletion.",
+        },
+        { status: 400 },
+      )
+    }
+
     const existingRow = existing[0]
     const existingStockLocationId = existingRow?.location_id ? String(existingRow.location_id) : null
     const existingUsageLocationId = extractUsageLocationId(existingRow?.notes ? String(existingRow.notes) : "")

@@ -439,7 +439,7 @@ export default function InventorySystem() {
   const [isNewItemDialogOpen, setIsNewItemDialogOpen] = useState(false)
   const [editingInventoryItem, setEditingInventoryItem] = useState<InventoryItem | null>(null)
   const [isInventoryEditDialogOpen, setIsInventoryEditDialogOpen] = useState(false)
-  const [inventoryEditForm, setInventoryEditForm] = useState({ name: "", unit: "kg", quantity: "" })
+  const [inventoryEditForm, setInventoryEditForm] = useState({ name: "", unit: "kg", quantity: "", avgPrice: "" })
   const [isSavingInventoryEdit, setIsSavingInventoryEdit] = useState(false)
   const [newItemForm, setNewItemForm] = useState({
     name: "",
@@ -2241,6 +2241,14 @@ export default function InventorySystem() {
       toast({ title: "Invalid quantity", description: "Quantity must be a positive number.", variant: "destructive" })
       return
     }
+    if (String(tx.transaction_type).toLowerCase().includes("restock") && !(Number(tx.price) > 0)) {
+      toast({
+        title: "Unit price required",
+        description: "Enter the price paid per unit — restocks at ₹0 corrupt the average cost for every future depletion.",
+        variant: "destructive",
+      })
+      return
+    }
     tx.quantity = normalizedQty
     const normalizedTransactionDate = buildTransactionDateFromInput(transactionDateToInputValue(tx.transaction_date))
     if (!normalizedTransactionDate) {
@@ -2332,6 +2340,14 @@ export default function InventorySystem() {
       toast({ title: "Invalid quantity", description: "Quantity must be a positive number.", variant: "destructive" })
       return
     }
+    if (String(tx.transaction_type).toLowerCase().includes("restock") && !(Number(tx.price) > 0)) {
+      toast({
+        title: "Unit price required",
+        description: "Enter the price paid per unit — restocks at ₹0 corrupt the average cost for every future depletion.",
+        variant: "destructive",
+      })
+      return
+    }
     tx.quantity = normalizedQty
     tx.total_cost = (Number(tx.price) || 0) * normalizedQty
 
@@ -2397,6 +2413,7 @@ export default function InventorySystem() {
       name: item.name || "",
       unit: item.unit || "kg",
       quantity: Number(item.quantity ?? 0).toString(),
+      avgPrice: Number(item.avg_price ?? 0).toString(),
     })
     const defaultLocation =
       selectedLocationId !== LOCATION_ALL
@@ -2416,6 +2433,8 @@ export default function InventorySystem() {
     const nextName = inventoryEditForm.name.trim()
     const nextUnit = inventoryEditForm.unit.trim() || originalUnit
     const nextQty = Number(inventoryEditForm.quantity)
+    const originalAvgPrice = Number(editingInventoryItem.avg_price) || 0
+    const nextAvgPrice = Number(inventoryEditForm.avgPrice)
 
     if (!nextName) {
       toast({ title: "Missing name", description: "Item name is required.", variant: "destructive" })
@@ -2423,6 +2442,10 @@ export default function InventorySystem() {
     }
     if (Number.isNaN(nextQty) || nextQty < 0) {
       toast({ title: "Invalid quantity", description: "Quantity must be 0 or more.", variant: "destructive" })
+      return
+    }
+    if (Number.isNaN(nextAvgPrice) || nextAvgPrice < 0) {
+      toast({ title: "Invalid price", description: "Avg price must be 0 or more.", variant: "destructive" })
       return
     }
 
@@ -2449,8 +2472,44 @@ export default function InventorySystem() {
           ? inventoryEditLocationId
           : null
 
+      const priceChanged = Math.abs(nextAvgPrice - originalAvgPrice) > 0.0001
+      if (priceChanged && originalQty > 0) {
+        // avg_price is recalculated from transaction history on every transaction, so a direct
+        // field write would just get overwritten by the next restock/deplete. Revaluing via a
+        // deplete-then-restock pair at the new price makes the correction permanent and auditable.
+        const revalueBody = {
+          item_type: originalName,
+          quantity: originalQty,
+          notes: `Price correction (${formatCurrency(originalAvgPrice)} -> ${formatCurrency(nextAvgPrice)} per ${originalUnit})`,
+          user_id: user?.username || "system",
+          location_id: adjustmentLocationId,
+        }
+        const depleteRes = await fetch(API_TRANSACTIONS, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ ...revalueBody, transaction_type: "deplete", price: originalAvgPrice }),
+        })
+        const depleteJson = await depleteRes.json()
+        if (!depleteRes.ok || !depleteJson.success) {
+          throw new Error(depleteJson.message || "Failed to revalue stock")
+        }
+        const restockRes = await fetch(API_TRANSACTIONS, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ ...revalueBody, transaction_type: "restock", price: nextAvgPrice }),
+        })
+        const restockJson = await restockRes.json()
+        if (!restockRes.ok || !restockJson.success) {
+          throw new Error(restockJson.message || "Failed to revalue stock")
+        }
+      }
+
       const delta = Number((nextQty - originalQty).toFixed(2))
       if (Math.abs(delta) > 0.0001) {
+        // Restocking a quantity correction at price 0 used to dilute the average cost toward
+        // zero on every correction. Use whatever the cost basis is at this point in the save
+        // (the just-set new price if it changed above, otherwise the existing one) instead.
+        const deltaPriceBasis = priceChanged ? nextAvgPrice : originalAvgPrice
         const res = await fetch(API_TRANSACTIONS, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -2460,7 +2519,7 @@ export default function InventorySystem() {
             transaction_type: delta > 0 ? "restock" : "deplete",
             notes: `Inventory adjustment (${originalQty} -> ${nextQty} ${nextUnit})`,
             user_id: user?.username || "system",
-            price: 0,
+            price: deltaPriceBasis,
             location_id: adjustmentLocationId,
           }),
         })
@@ -2568,6 +2627,14 @@ export default function InventorySystem() {
     }
     if (Number.isNaN(priceValue) || priceValue < 0) {
       toast({ title: "Invalid price", description: "Price must be 0 or more.", variant: "destructive" })
+      return
+    }
+    if (quantityValue > 0 && priceValue <= 0) {
+      toast({
+        title: "Unit price required",
+        description: "Enter the price paid per unit when adding starting stock, so cost tracking starts off accurate.",
+        variant: "destructive",
+      })
       return
     }
 

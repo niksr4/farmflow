@@ -498,6 +498,16 @@ export async function POST(request: NextRequest) {
       normalizedType = "deplete"
     }
 
+    if (normalizedType === "restock" && !(Number(price) > 0)) {
+      return NextResponse.json(
+        {
+          success: false,
+          message: "Unit price is required for restocks. A ₹0 price corrupts the weighted average cost for every future depletion.",
+        },
+        { status: 400 },
+      )
+    }
+
     const resolvedLocationId = typeof location_id === "string" ? location_id.trim() : ""
     const locationValue = resolvedLocationId && resolvedLocationId !== "unassigned" ? resolvedLocationId : null
     const requestedUsageLocationId = locationValue

@@ -29,7 +29,7 @@ type NewItemForm = {
   notes: string
 }
 
-type InventoryEditForm = { name: string; unit: string; quantity: string }
+type InventoryEditForm = { name: string; unit: string; quantity: string; avgPrice: string }
 
 type DialogProps = {
   isMobile: boolean
@@ -194,8 +194,11 @@ export default function InventoryDialogs(p: DialogProps) {
                 <Input id="new-item-qty" type="number" inputMode="decimal" min={0} step="0.01" value={p.newItemForm.quantity} onKeyDown={p.preventNegativeKey} onChange={(e) => p.setNewItemForm((prev) => ({ ...prev, quantity: e.target.value }))} />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="new-item-price">Unit Price (optional)</Label>
+                <Label htmlFor="new-item-price">Unit Price{Number(p.newItemForm.quantity) > 0 ? " (required)" : " (optional)"}</Label>
                 <Input id="new-item-price" type="number" inputMode="decimal" min={0} step="0.01" value={p.newItemForm.price} onKeyDown={p.preventNegativeKey} onChange={(e) => p.setNewItemForm((prev) => ({ ...prev, price: e.target.value }))} />
+                {Number(p.newItemForm.quantity) > 0 && (
+                  <p className="text-xs text-muted-foreground">Required when adding starting stock, so cost tracking starts off accurate.</p>
+                )}
               </div>
             </div>
             <div className="space-y-2">
@@ -327,6 +330,27 @@ export default function InventoryDialogs(p: DialogProps) {
                 }}
               />
               <p className="text-xs text-muted-foreground">Changing quantity adds a correction transaction to keep history consistent.</p>
+            </div>
+            <div className="space-y-2">
+              <FieldLabel
+                htmlFor="edit-item-avg-price"
+                label="Avg price per unit"
+                tooltip="Corrects the cost basis by depleting and restocking the current quantity at this price. Disabled when quantity is 0 — there's nothing to revalue."
+              />
+              <Input
+                id="edit-item-avg-price" type="number" inputMode="decimal" min={0} step="0.01"
+                value={p.inventoryEditForm.avgPrice}
+                disabled={!(Number(p.inventoryEditForm.quantity) > 0)}
+                onKeyDown={p.preventNegativeKey}
+                onWheel={p.preventNumberScrollChange}
+                onChange={(e) => {
+                  const next = e.target.value
+                  const numeric = p.coerceNonNegativeNumber(next)
+                  if (numeric === null && next !== "") return
+                  p.setInventoryEditForm((prev) => ({ ...prev, avgPrice: next }))
+                }}
+              />
+              <p className="text-xs text-muted-foreground">Changing this revalues the current stock — recorded as a deplete + restock pair so it survives future recalculations.</p>
             </div>
           </div>
           <div className={cn("mt-6 flex gap-2", isMobile ? "flex-col-reverse" : "justify-end")}>

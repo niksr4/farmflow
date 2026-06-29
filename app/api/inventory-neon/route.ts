@@ -283,6 +283,17 @@ export async function POST(request: NextRequest) {
 
     const quantityValue = Number(quantity) || 0
     const priceValue = Number(price) || 0
+
+    if (quantityValue > 0 && priceValue <= 0) {
+      return NextResponse.json(
+        {
+          success: false,
+          message: "Unit price is required when adding starting stock, so cost tracking starts off accurate.",
+        },
+        { status: 400 },
+      )
+    }
+
     const total_cost = quantityValue * priceValue
     const avg_price = quantityValue > 0 ? total_cost / quantityValue : 0
 
