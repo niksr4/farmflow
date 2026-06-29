@@ -108,6 +108,7 @@ export const normalizeImportMode = (value: unknown): ImportMode => {
 
 export const buildValidationErrors = (dataset: string, records: Array<Record<string, string>>) => {
   const errors: ImportValidationError[] = []
+  const warnings: ImportValidationError[] = []
   let skipped = 0
 
   for (let index = 0; index < records.length; index += 1) {
@@ -116,6 +117,9 @@ export const buildValidationErrors = (dataset: string, records: Array<Record<str
     const fail = (message: string) => {
       errors.push({ row: rowNumber, message })
       skipped += 1
+    }
+    const warn = (message: string) => {
+      warnings.push({ row: rowNumber, message })
     }
 
     if (dataset === "processing") {
@@ -182,13 +186,27 @@ export const buildValidationErrors = (dataset: string, records: Array<Record<str
       const quantity = parseNumber(getField(row, ["quantity", "qty"]))
       if (!transactionDate || !itemType || quantity === null || quantity === undefined) {
         fail("Missing transaction_date, item_type, or quantity")
+        continue
+      }
+      const transactionType = normalizeTransactionType(getField(row, ["transaction_type", "type"]))
+      const price = parseNumber(getField(row, ["price", "unit_price", "price_per_unit"])) || 0
+      if (transactionType === "restock" && price <= 0) {
+        warn(`Restock of "${itemType}" has no price — average cost will be skewed toward zero until corrected.`)
       }
       continue
     }
 
     if (dataset === "inventory") {
       const itemType = getField(row, ["item_type", "item", "item_name"]) || ""
-      if (!itemType) fail("Missing item_type")
+      if (!itemType) {
+        fail("Missing item_type")
+        continue
+      }
+      const quantity = parseNumber(getField(row, ["quantity", "qty"])) || 0
+      const price = parseNumber(getField(row, ["price", "unit_price", "price_per_unit"])) || 0
+      if (quantity > 0 && price <= 0) {
+        warn(`Opening balance for "${itemType}" has no price — average cost will be skewed toward zero until corrected.`)
+      }
       continue
     }
 
@@ -206,5 +224,5 @@ export const buildValidationErrors = (dataset: string, records: Array<Record<str
     }
   }
 
-  return { errors, skipped }
+  return { errors, warnings, skipped }
 }

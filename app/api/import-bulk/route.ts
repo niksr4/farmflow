@@ -472,6 +472,7 @@ export async function POST(request: Request) {
         imported: 0,
         skipped: validation.skipped,
         errors: validation.errors,
+        warnings: validation.warnings,
         validationToken: valid ? String(jobRow?.id || "") : null,
         expiresAt: jobRow?.validation_expires_at || null,
       })
@@ -494,6 +495,7 @@ export async function POST(request: Request) {
     }
 
     const errors: ImportValidationError[] = []
+    const warnings: ImportValidationError[] = []
     let imported = 0
     let skipped = 0
 
@@ -512,7 +514,7 @@ export async function POST(request: Request) {
         action: "create",
         entityType: `import_bulk_${dataset}`,
         entityId: commitJobId,
-        after: { dataset, imported, skipped, errors: errors.length },
+        after: { dataset, imported, skipped, errors: errors.length, warnings: warnings.length },
       })
       return NextResponse.json({
         success: true,
@@ -520,6 +522,7 @@ export async function POST(request: Request) {
         imported,
         skipped,
         errors,
+        warnings,
         validationToken: commitJobId,
       })
     }
@@ -1028,6 +1031,16 @@ export async function POST(request: Request) {
           continue
         }
 
+        if (transactionType === "restock" && price <= 0) {
+          // Not blocked — historical imports often genuinely don't have the original
+          // purchase price on record. But a price-0 restock still drags avg_price
+          // toward zero on recalculation, so flag it instead of importing silently.
+          warnings.push({
+            row: rowNumber,
+            message: `Restock of "${itemType}" has no price — average cost for this item will be skewed toward zero until corrected.`,
+          })
+        }
+
         const locationRaw = getField(row, ["location_id", "location", "location_code", "location_name", "estate"])
         const locationId = locationRaw ? await resolveOrCreateLocationId(locationRaw) : null
         const notes = getField(row, ["notes", "note"]) || ""
@@ -1142,6 +1155,14 @@ export async function POST(request: Request) {
           errors.push({ row: rowNumber, message: "Missing item_type" })
           skipped += 1
           continue
+        }
+
+        if (quantity > 0 && price <= 0) {
+          // Not blocked — see note in the transactions dataset import above.
+          warnings.push({
+            row: rowNumber,
+            message: `Opening balance for "${itemType}" has no price — average cost for this item will be skewed toward zero until corrected.`,
+          })
         }
 
         const locationRaw = getField(row, ["location_id", "location", "location_code", "location_name", "estate"])

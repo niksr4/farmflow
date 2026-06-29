@@ -28,6 +28,7 @@ interface ImportBulkResponse {
   imported: number
   skipped: number
   errors?: ImportIssue[]
+  warnings?: ImportIssue[]
   validationToken?: string | null
   expiresAt?: string | null
 }
@@ -365,6 +366,18 @@ export default function ImportPage() {
             ) : (
               <div className="text-sm text-muted-foreground">No validation issues found.</div>
             )}
+            {validationResult.warnings?.length ? (
+              <div className="space-y-2">
+                <div className="text-sm font-medium text-amber-700">Warnings (won&apos;t block import)</div>
+                <ul className="list-disc pl-5 text-sm text-amber-700">
+                  {validationResult.warnings.slice(0, 10).map((warn) => (
+                    <li key={`${warn.row}-${warn.message}`}>
+                      Row {warn.row}: {warn.message}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ) : null}
           </CardContent>
         </Card>
       ) : null}
@@ -392,6 +405,18 @@ export default function ImportPage() {
             ) : (
               <div className="text-sm text-muted-foreground">No errors reported.</div>
             )}
+            {commitResult.warnings?.length ? (
+              <div className="space-y-2">
+                <div className="text-sm font-medium text-amber-700">Warnings</div>
+                <ul className="list-disc pl-5 text-sm text-amber-700">
+                  {commitResult.warnings.slice(0, 10).map((warn) => (
+                    <li key={`${warn.row}-${warn.message}`}>
+                      Row {warn.row}: {warn.message}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ) : null}
           </CardContent>
         </Card>
       ) : null}
