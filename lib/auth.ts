@@ -258,6 +258,11 @@ export const authOptions: NextAuthOptions = {
         const headers = toRequestHeaders((req as { headers?: unknown } | undefined)?.headers)
         const ipAddress = getHeaderValue(headers, "x-forwarded-for") || getHeaderValue(headers, "x-real-ip") || null
         const userAgent = getHeaderValue(headers, "user-agent") || null
+        // The tenant-smoke agent signs in as the tenant's real admin account (there's no
+        // synthetic username to filter on for the login itself), so tag the security_event
+        // source instead — engagement/dormancy queries filter on this, not actor_username.
+        const isSmokeAgentRequest = getHeaderValue(headers, "x-farmflow-agent") === "tenant-smoke"
+        const eventSource = isSmokeAgentRequest ? "tenant-smoke-agent" : "next-auth"
 
         if (!identifier || !password) {
           throw new Error("Email or username and password are required")
@@ -271,7 +276,7 @@ export const authOptions: NextAuthOptions = {
             await logSecurityEvent({
               eventType: "auth_login_failure",
               severity: "warning",
-              source: "next-auth",
+              source: eventSource,
               ipAddress,
               userAgent,
               metadata: { identifier, reason: "rate_limited" },
@@ -319,7 +324,7 @@ export const authOptions: NextAuthOptions = {
           await logSecurityEvent({
             eventType: "auth_login_failure",
             severity: "warning",
-            source: "next-auth",
+            source: eventSource,
             ipAddress,
             userAgent,
             metadata: { identifier, reason: "user_not_found" },
@@ -343,7 +348,7 @@ export const authOptions: NextAuthOptions = {
           await logSecurityEvent({
             eventType: "auth_login_failure",
             severity: "warning",
-            source: "next-auth",
+            source: eventSource,
             ipAddress,
             userAgent,
             metadata: { identifier, reason: "invalid_password", candidates: users.length },
@@ -393,7 +398,7 @@ export const authOptions: NextAuthOptions = {
           actorRole: String(user.role),
           eventType: "auth_login_success",
           severity: "info",
-          source: "next-auth",
+          source: eventSource,
           ipAddress,
           userAgent,
         })

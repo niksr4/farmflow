@@ -12,8 +12,10 @@ import { logServerError, logServerWarning } from "@/lib/server/safe-logging"
 //
 // Sent once per "dormancy episode" — if the tenant logs in again and later
 // goes quiet a second time, that's a new episode and gets a new probe.
-// tenant_smoke's daily synthetic login (actor_username LIKE 'tenantsmoke_%')
-// is excluded so it never counts as tenant activity.
+// tenant_smoke signs in as the tenant's REAL admin account (there's no
+// tenantsmoke_* username on the login itself, only on the throwaway user it
+// creates/deletes), so its logins are excluded via security_events.source =
+// 'tenant-smoke-agent' (set in lib/auth.ts), not by username pattern alone.
 
 const APP_URL = process.env.NEXT_PUBLIC_APP_URL || "https://thefarmflow.in"
 const DORMANCY_THRESHOLD_DAYS = 4
@@ -54,6 +56,7 @@ async function fetchDormantCandidates(): Promise<DormantCandidate[]> {
       FROM security_events
       WHERE event_type = 'auth_login_success'
         AND actor_username NOT LIKE 'tenantsmoke_%'
+        AND source IS DISTINCT FROM 'tenant-smoke-agent'
       GROUP BY tenant_id
     ) login ON login.tenant_id = t.id
     LEFT JOIN tenant_dormancy_probes probe ON probe.tenant_id = t.id

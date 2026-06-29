@@ -97,6 +97,11 @@ class CookieJar {
     if (this.cookies.size > 0) {
       headers.set("cookie", buildCookieHeaderValue(this.cookies))
     }
+    // Lets the login flow tag the resulting security_event with a distinguishable
+    // source instead of "next-auth" — this agent signs in as the tenant's REAL
+    // admin account (not a tenantsmoke_* username), so engagement/dormancy queries
+    // that only filter actor_username by that prefix never catch this login.
+    headers.set("x-farmflow-agent", "tenant-smoke")
 
     const response = await fetchWithTimeout(new URL(path, this.baseUrl), {
       ...init,
