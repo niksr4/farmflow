@@ -607,6 +607,10 @@ export default function DispatchTab({ showDataToolsControls = false }: DispatchT
   }
 
   const handleEdit = (record: DispatchRecord) => {
+    // The form only renders under the "new-dispatch" section — editing from the
+    // Records list otherwise populates the form's state off-screen with nothing
+    // visible changing, since the section showing it is never switched to.
+    setActiveSection("new-dispatch")
     setEditingRecord(record)
     setSelectedDispatchRecord(record)
     setDate(new Date(record.dispatch_date))
