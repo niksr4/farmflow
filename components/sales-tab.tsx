@@ -189,8 +189,13 @@ export default function SalesTab({
     const handler = (e: Event) => {
       const section = (e as CustomEvent<string>).detail
       if (section === "overview") setActiveSection("overview")
-      else if (section === "new-sale") setActiveSection("new-sale")
-      else if (section === "stock-available") setActiveSection("stock-available")
+      else if (section === "new-sale") {
+        // Same reasoning as dispatch-tab.tsx: this component doesn't unmount on
+        // tab switch, so an abandoned edit could otherwise silently resurface
+        // here — "New Sale" should always mean a blank form.
+        resetForm()
+        setActiveSection("new-sale")
+      } else if (section === "stock-available") setActiveSection("stock-available")
       else if (section === "records") setActiveSection("records")
     }
     window.addEventListener("farmflow:scroll-to-section", handler)
@@ -877,6 +882,10 @@ export default function SalesTab({
   }
 
   const handleEdit = (record: SalesRecord) => {
+    // The form only renders under the "new-sale" section — editing from the
+    // Records list otherwise populates the form's state off-screen with nothing
+    // visible changing (same bug already fixed in dispatch-tab.tsx).
+    setActiveSection("new-sale")
     setEditingRecord(record)
     setDate(new Date(record.sale_date))
     setBatchNo(record.batch_no || "")

@@ -145,8 +145,14 @@ export default function DispatchTab({ showDataToolsControls = false }: DispatchT
     const handler = (e: Event) => {
       const section = (e as CustomEvent<string>).detail
       if (section === "stock-flow") setActiveSection("stock-flow")
-      else if (section === "new-dispatch") setActiveSection("new-dispatch")
-      else if (section === "records") setActiveSection("records")
+      else if (section === "new-dispatch") {
+        // This component never unmounts on tab switch (forceMount), so an
+        // abandoned edit (left without saving or canceling) can otherwise
+        // silently resurface here — "New Dispatch" should always mean a
+        // blank form, not whatever was last being edited.
+        resetForm()
+        setActiveSection("new-dispatch")
+      } else if (section === "records") setActiveSection("records")
     }
     window.addEventListener("farmflow:scroll-to-section", handler)
     return () => window.removeEventListener("farmflow:scroll-to-section", handler)

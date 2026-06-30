@@ -29,6 +29,7 @@ import WorkflowEmptyState from "@/components/workflow-empty-state"
 import { AiValidationHint } from "@/components/ui/ai-validation-hint"
 import { useAiValidate } from "@/hooks/use-ai-validate"
 import { useMediaQuery } from "@/hooks/use-media-query"
+import { getCurrentFiscalYear } from "@/lib/fiscal-year-utils"
 
 interface ProcessingRecord {
   id?: number
@@ -454,7 +455,16 @@ export default function ProcessingTab({ showDataToolsControls = false }: Process
   const loadDashboardData = useCallback(async () => {
     setIsLoadingDashboard(true)
     try {
-      const response = await fetch("/api/processing-records?summary=dashboard")
+      // Without fiscal-year bounds this silently sums every record ever entered —
+      // "Season Totals" was actually showing lifetime totals for any tenant with
+      // more than one season of data.
+      const currentFiscalYear = getCurrentFiscalYear()
+      const params = new URLSearchParams({
+        summary: "dashboard",
+        fiscalYearStart: currentFiscalYear.startDate,
+        fiscalYearEnd: currentFiscalYear.endDate,
+      })
+      const response = await fetch(`/api/processing-records?${params.toString()}`)
       const data = await response.json()
 
       if (!data.success || !Array.isArray(data.records)) {
@@ -1536,7 +1546,12 @@ export default function ProcessingTab({ showDataToolsControls = false }: Process
                     <Button
                       size="sm"
                       variant="outline"
-                      onClick={() => setDate(new Date(selectedRecentRecord.process_date))}
+                      onClick={() => {
+                        // The entry form only renders under "entry-form" — same bug
+                        // already fixed in dispatch-tab.tsx and sales-tab.tsx.
+                        setActiveSection("entry-form")
+                        setDate(new Date(selectedRecentRecord.process_date))
+                      }}
                       className="bg-white"
                     >
                       Use this date
@@ -1567,6 +1582,7 @@ export default function ProcessingTab({ showDataToolsControls = false }: Process
                         : "border-black/[0.06] bg-white hover:bg-stone-50",
                     )}
                     onClick={() => {
+                      setActiveSection("entry-form")
                       setSelectedRecentRecord(rec)
                       setDate(new Date(rec.process_date))
                     }}
