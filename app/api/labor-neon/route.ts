@@ -6,7 +6,7 @@ import { canDeleteModule, canWriteModule } from "@/lib/permissions"
 import { logAuditEvent } from "@/lib/server/audit-log"
 import { logRouteMutationFailure } from "@/lib/server/route-error-events"
 import { sanitizeRouteError } from "@/lib/server/sanitize-route-error"
-import { computeLaborTotalCost } from "@/lib/labour-cost"
+import { aggregateLaborEntries, computeLaborTotalCost } from "@/lib/labour-cost"
 
 export const dynamic = "force-dynamic"
 export const revalidate = 0
@@ -44,6 +44,18 @@ async function tableHasTaskDescriptionColumn(tableName: string) {
     WHERE table_schema = 'public'
       AND table_name = ${tableName}
       AND column_name = 'task_description'
+    LIMIT 1
+  `
+  return Array.isArray(rows) && rows.length > 0
+}
+
+async function tableHasLaborEntriesColumn(tableName: string) {
+  const rows = await accountsSql`
+    SELECT 1
+    FROM information_schema.columns
+    WHERE table_schema = 'public'
+      AND table_name = ${tableName}
+      AND column_name = 'labor_entries'
     LIMIT 1
   `
   return Array.isArray(rows) && rows.length > 0
@@ -106,6 +118,8 @@ export async function GET(request: Request) {
       supportsLocation && validLocationId ? accountsSql` AND location_id = ${validLocationId}::uuid` : accountsSql``
     const supportsTaskDescription = await tableHasTaskDescriptionColumn("labor_transactions")
     const taskDescriptionSelect = supportsTaskDescription ? accountsSql`, task_description` : accountsSql``
+    const supportsLaborEntries = await tableHasLaborEntriesColumn("labor_transactions")
+    const laborEntriesSelect = supportsLaborEntries ? accountsSql`, labor_entries` : accountsSql``
     const all = searchParams.get("all") === "true"
     const limitParam = searchParams.get("limit")
     const offsetParam = searchParams.get("offset")
@@ -130,7 +144,7 @@ export async function GET(request: Request) {
               outside_laborers,
               outside_cost_per_laborer,
               total_cost,
-              notes${taskDescriptionSelect},
+              notes${taskDescriptionSelect}${laborEntriesSelect},
               location_id
             FROM labor_transactions
             WHERE tenant_id = ${tenantContext.tenantId}
@@ -149,7 +163,7 @@ export async function GET(request: Request) {
               outside_laborers,
               outside_cost_per_laborer,
               total_cost,
-              notes${taskDescriptionSelect},
+              notes${taskDescriptionSelect}${laborEntriesSelect},
               location_id
             FROM labor_transactions
             WHERE tenant_id = ${tenantContext.tenantId}
@@ -168,7 +182,7 @@ export async function GET(request: Request) {
               outside_laborers,
               outside_cost_per_laborer,
               total_cost,
-              notes${taskDescriptionSelect}
+              notes${taskDescriptionSelect}${laborEntriesSelect}
             FROM labor_transactions
             WHERE tenant_id = ${tenantContext.tenantId}
               ${dateFilterClause}
@@ -185,7 +199,7 @@ export async function GET(request: Request) {
               outside_laborers,
               outside_cost_per_laborer,
               total_cost,
-              notes${taskDescriptionSelect}
+              notes${taskDescriptionSelect}${laborEntriesSelect}
             FROM labor_transactions
             WHERE tenant_id = ${tenantContext.tenantId}
               ${dateFilterClause}
@@ -217,29 +231,43 @@ export async function GET(request: Request) {
 
     // Transform the data to match the expected format
     const deployments = result.map((row: any) => {
-      const laborEntries = []
-
-      // Add estate labor entry
-      const hfLaborers = Number(row.hf_laborers) || 0
-      const outsideLaborers = Number(row.outside_laborers) || 0
-      const hfCostPerLaborer = Number.parseFloat(row.hf_cost_per_laborer || 0)
-      const outsideCostPerLaborer = Number.parseFloat(row.outside_cost_per_laborer || 0)
-
-      if (hfLaborers > 0) {
-        laborEntries.push({
-          name: "Estate Labor",
-          laborCount: hfLaborers,
-          costPerLabor: hfCostPerLaborer,
-        })
+      // Prefer the full original breakdown when it was stored (rows saved since
+      // the labor_entries column shipped) — this can have more than the two
+      // hf/outside buckets (custom groups, contract entries). Older rows fall
+      // back to synthesizing just the two summary buckets from hf/outside.
+      let storedLaborEntries: any[] | null = null
+      if (row.labor_entries) {
+        try {
+          const parsed = typeof row.labor_entries === "string" ? JSON.parse(row.labor_entries) : row.labor_entries
+          if (Array.isArray(parsed) && parsed.length > 0) storedLaborEntries = parsed
+        } catch {
+          storedLaborEntries = null
+        }
       }
 
-      // Add outside labor entry
-      if (outsideLaborers > 0) {
-        laborEntries.push({
-          name: "Outside Labor",
-          laborCount: outsideLaborers,
-          costPerLabor: outsideCostPerLaborer,
-        })
+      const laborEntries = storedLaborEntries ?? []
+
+      if (!storedLaborEntries) {
+        const hfLaborers = Number(row.hf_laborers) || 0
+        const outsideLaborers = Number(row.outside_laborers) || 0
+        const hfCostPerLaborer = Number.parseFloat(row.hf_cost_per_laborer || 0)
+        const outsideCostPerLaborer = Number.parseFloat(row.outside_cost_per_laborer || 0)
+
+        if (hfLaborers > 0) {
+          laborEntries.push({
+            name: "Estate Labor",
+            laborCount: hfLaborers,
+            costPerLabor: hfCostPerLaborer,
+          })
+        }
+
+        if (outsideLaborers > 0) {
+          laborEntries.push({
+            name: "Outside Labor",
+            laborCount: outsideLaborers,
+            costPerLabor: outsideCostPerLaborer,
+          })
+        }
       }
 
       // Get reference from account_activities
@@ -342,21 +370,17 @@ export async function POST(request: Request) {
       ? accountsSql` AND location_id IS NOT DISTINCT FROM ${validLocationId}::uuid`
       : accountsSql``
 
-    // Extract estate and outside labor details.
-    // Accept both legacy names ("Estate Labor", "Outside Labor") and current names
-    // ("In-house", "Outside") so old saved entries and new entries both work.
-    // Extra groups beyond the first two contribute to total_cost only.
-    // Do NOT fall back to laborEntries[0] — that would write outside-group data
-    // into the hf columns when in-house was intentionally removed.
-    const IN_HOUSE_NAMES = new Set(["Estate Labor", "In-house"])
-    const OUTSIDE_NAMES = new Set(["Outside Labor", "Outside"])
-    const hfEntry = laborEntries.find((e: any) => IN_HOUSE_NAMES.has(e.name)) ?? null
-    const outsideEntry = laborEntries.find((e: any) => OUTSIDE_NAMES.has(e.name)) ?? null
-    const hfLaborers = Number(hfEntry?.laborCount) || 0
-    const hfCostPer = Number(hfEntry?.costPerLabor) || 0
-    const outsideLaborers = Number(outsideEntry?.laborCount) || 0
-    const outsideCostPer = Number(outsideEntry?.costPerLabor) || 0
+    // Extract estate and outside labor details. Any group beyond the in-house
+    // bucket — "Outside", a custom "+Add group" label, or a lump-sum "Contract"
+    // entry — is folded into the outside bucket by aggregateLaborEntries so its
+    // cost is never silently dropped from the stored breakdown (it used to only
+    // count toward total_cost while vanishing from hf/outside entirely).
+    const { hfLaborers, hfCostPer, outsideLaborers, outsideCostPer } = aggregateLaborEntries(laborEntries)
     const computedTotalCost = computeLaborTotalCost(laborEntries)
+    const supportsLaborEntries = await tableHasLaborEntriesColumn("labor_transactions")
+    const laborEntriesJson = supportsLaborEntries ? JSON.stringify(laborEntries) : null
+    const laborEntriesInsertColumn = supportsLaborEntries ? accountsSql`, labor_entries` : accountsSql``
+    const laborEntriesInsertValue = supportsLaborEntries ? accountsSql`, ${laborEntriesJson}::jsonb` : accountsSql``
 
     // De-dupe accidental rapid double-submit from UI (same payload within the last 90 seconds).
     if (supportsTaskDescription || !requestedTaskDescription) {
@@ -430,18 +454,18 @@ export async function POST(request: Request) {
               outside_laborers,
               outside_cost_per_laborer,
               total_cost,
-              notes${taskDescriptionInsertColumn},
+              notes${taskDescriptionInsertColumn}${laborEntriesInsertColumn},
               location_id,
               tenant_id
             ) VALUES (
               ${date}::timestamp,
               ${code},
-              ${hfEntry?.laborCount || 0},
-              ${hfEntry?.costPerLabor || 0},
-              ${outsideEntry?.laborCount || 0},
-              ${outsideEntry?.costPerLabor || 0},
+              ${hfLaborers},
+              ${hfCostPer},
+              ${outsideLaborers},
+              ${outsideCostPer},
               ${computedTotalCost},
-              ${normalizedNotes}${taskDescriptionInsertValue},
+              ${normalizedNotes}${taskDescriptionInsertValue}${laborEntriesInsertValue},
               ${validLocationId}::uuid,
               ${tenantContext.tenantId}
             )
@@ -460,17 +484,17 @@ export async function POST(request: Request) {
               outside_laborers,
               outside_cost_per_laborer,
               total_cost,
-              notes${taskDescriptionInsertColumn},
+              notes${taskDescriptionInsertColumn}${laborEntriesInsertColumn},
               tenant_id
             ) VALUES (
               ${date}::timestamp,
               ${code},
-              ${hfEntry?.laborCount || 0},
-              ${hfEntry?.costPerLabor || 0},
-              ${outsideEntry?.laborCount || 0},
-              ${outsideEntry?.costPerLabor || 0},
+              ${hfLaborers},
+              ${hfCostPer},
+              ${outsideLaborers},
+              ${outsideCostPer},
               ${computedTotalCost},
-              ${normalizedNotes}${taskDescriptionInsertValue},
+              ${normalizedNotes}${taskDescriptionInsertValue}${laborEntriesInsertValue},
               ${tenantContext.tenantId}
             )
             RETURNING id
@@ -557,15 +581,10 @@ export async function PUT(request: Request) {
     }
 
     // Extract estate and outside labor details (same flexible matching as POST, no fallback).
-    const IN_HOUSE_NAMES = new Set(["Estate Labor", "In-house"])
-    const OUTSIDE_NAMES = new Set(["Outside Labor", "Outside"])
-    const hfEntry = laborEntries.find((e: any) => IN_HOUSE_NAMES.has(e.name)) ?? null
-    const outsideEntry = laborEntries.find((e: any) => OUTSIDE_NAMES.has(e.name)) ?? null
-    const hfLaborers = Number(hfEntry?.laborCount) || 0
-    const hfCostPer = Number(hfEntry?.costPerLabor) || 0
-    const outsideLaborers = Number(outsideEntry?.laborCount) || 0
-    const outsideCostPer = Number(outsideEntry?.costPerLabor) || 0
+    const { hfLaborers, hfCostPer, outsideLaborers, outsideCostPer } = aggregateLaborEntries(laborEntries)
     const computedTotalCost = computeLaborTotalCost(laborEntries)
+    const supportsLaborEntries = await tableHasLaborEntriesColumn("labor_transactions")
+    const laborEntriesJson = supportsLaborEntries ? JSON.stringify(laborEntries) : null
 
     const existing = await runTenantQuery(
       accountsSql,
@@ -588,14 +607,14 @@ export async function PUT(request: Request) {
           SET
             deployment_date = ${date}::timestamp,
             code = ${code},
-            hf_laborers = ${hfEntry?.laborCount || 0},
-            hf_cost_per_laborer = ${hfEntry?.costPerLabor || 0},
-            outside_laborers = ${outsideEntry?.laborCount || 0},
-            outside_cost_per_laborer = ${outsideEntry?.costPerLabor || 0},
+            hf_laborers = ${hfLaborers},
+            hf_cost_per_laborer = ${hfCostPer},
+            outside_laborers = ${outsideLaborers},
+            outside_cost_per_laborer = ${outsideCostPer},
             total_cost = ${computedTotalCost},
             notes = ${notes}${taskDescriptionUpdateSet},
             location_id = ${validLocationId}::uuid,
-            tenant_id = ${tenantContext.tenantId}
+            tenant_id = ${tenantContext.tenantId}${supportsLaborEntries ? accountsSql`, labor_entries = ${laborEntriesJson}::jsonb` : accountsSql``}
           WHERE id = ${id}
             AND tenant_id = ${tenantContext.tenantId}
         `,
@@ -609,13 +628,13 @@ export async function PUT(request: Request) {
           SET
             deployment_date = ${date}::timestamp,
             code = ${code},
-            hf_laborers = ${hfEntry?.laborCount || 0},
-            hf_cost_per_laborer = ${hfEntry?.costPerLabor || 0},
-            outside_laborers = ${outsideEntry?.laborCount || 0},
-            outside_cost_per_laborer = ${outsideEntry?.costPerLabor || 0},
+            hf_laborers = ${hfLaborers},
+            hf_cost_per_laborer = ${hfCostPer},
+            outside_laborers = ${outsideLaborers},
+            outside_cost_per_laborer = ${outsideCostPer},
             total_cost = ${computedTotalCost},
             notes = ${notes}${taskDescriptionUpdateSet},
-            tenant_id = ${tenantContext.tenantId}
+            tenant_id = ${tenantContext.tenantId}${supportsLaborEntries ? accountsSql`, labor_entries = ${laborEntriesJson}::jsonb` : accountsSql``}
           WHERE id = ${id}
             AND tenant_id = ${tenantContext.tenantId}
         `,

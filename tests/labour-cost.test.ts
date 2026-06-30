@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest"
-import { computeLaborTotalCost } from "../lib/labour-cost"
+import { aggregateLaborEntries, computeLaborTotalCost } from "../lib/labour-cost"
+
+const reconstructedTotal = (b: ReturnType<typeof aggregateLaborEntries>) =>
+  b.hfLaborers * b.hfCostPer + b.outsideLaborers * b.outsideCostPer
 
 describe("computeLaborTotalCost — regular entries", () => {
   it("multiplies laborCount × costPerLabor for regular entry", () => {
@@ -75,5 +78,64 @@ describe("computeLaborTotalCost — data integrity", () => {
 
   it("bonus/lump-sum payment via contractTotal", () => {
     expect(computeLaborTotalCost([{ laborCount: 0, costPerLabor: 0, contractTotal: 281000 }])).toBe(281000)
+  })
+})
+
+describe("aggregateLaborEntries — the HoneyFarm 'Robusta Weeding' bug", () => {
+  it("captures plain in-house + outside unchanged", () => {
+    const entries = [
+      { name: "In-house", laborCount: 7, costPerLabor: 475 },
+      { name: "Outside", laborCount: 2, costPerLabor: 450 },
+    ]
+    const result = aggregateLaborEntries(entries)
+    expect(result).toEqual({ hfLaborers: 7, hfCostPer: 475, outsideLaborers: 2, outsideCostPer: 450 })
+    expect(reconstructedTotal(result)).toBe(computeLaborTotalCost(entries))
+  })
+
+  it("folds a custom '+Add group' entry into outside instead of dropping it", () => {
+    // This is the exact bug KAB reported: total_cost included the extra group,
+    // but outside_laborers stayed 0 because "Group 3" didn't match the exact
+    // name the old code looked for.
+    const entries = [
+      { name: "In-house", laborCount: 7, costPerLabor: 475 },
+      { name: "Group 3", laborCount: 2, costPerLabor: 450 },
+    ]
+    const result = aggregateLaborEntries(entries)
+    expect(result.outsideLaborers).toBe(2)
+    expect(reconstructedTotal(result)).toBe(computeLaborTotalCost(entries))
+  })
+
+  it("blends two differently-rated outside-type groups into one bucket", () => {
+    const entries = [
+      { name: "In-house", laborCount: 7, costPerLabor: 475 },
+      { name: "Outside", laborCount: 2, costPerLabor: 450 },
+      { name: "Group 3", laborCount: 1, costPerLabor: 475 },
+    ]
+    const result = aggregateLaborEntries(entries)
+    expect(result.outsideLaborers).toBe(3)
+    expect(reconstructedTotal(result)).toBe(computeLaborTotalCost(entries))
+  })
+
+  it("a pure contract/lump-sum entry with zero headcount still reconciles", () => {
+    // Raju gang: laborCount 0, contractTotal only — no real "per worker" rate,
+    // but the dollar amount must still show up in hf + outside somewhere.
+    const entries = [
+      { name: "In-house", laborCount: 6, costPerLabor: 475 },
+      { name: "Raju gang", laborCount: 0, costPerLabor: 0, contractTotal: 19350 },
+    ]
+    const result = aggregateLaborEntries(entries)
+    expect(result.outsideLaborers).toBeGreaterThan(0)
+    expect(reconstructedTotal(result)).toBe(computeLaborTotalCost(entries))
+  })
+
+  it("no outside-type entries at all leaves outside at zero", () => {
+    const entries = [{ name: "In-house", laborCount: 4, costPerLabor: 475 }]
+    const result = aggregateLaborEntries(entries)
+    expect(result).toEqual({ hfLaborers: 4, hfCostPer: 475, outsideLaborers: 0, outsideCostPer: 0 })
+  })
+
+  it("recognizes legacy 'Estate Labor'/'Estate Labour' spellings as in-house", () => {
+    expect(aggregateLaborEntries([{ name: "Estate Labor", laborCount: 5, costPerLabor: 475 }]).hfLaborers).toBe(5)
+    expect(aggregateLaborEntries([{ name: "Estate Labour", laborCount: 5, costPerLabor: 475 }]).hfLaborers).toBe(5)
   })
 })
