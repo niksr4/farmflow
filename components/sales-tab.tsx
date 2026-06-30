@@ -30,6 +30,8 @@ import TaskGuideCard from "@/components/task-guide-card"
 import WorkflowEmptyState from "@/components/workflow-empty-state"
 import WorkspacePageShell from "@/components/workspace-page-shell"
 import { useMediaQuery } from "@/hooks/use-media-query"
+import { useFiscalYearSelection } from "@/hooks/use-fiscal-year-selection"
+import { FiscalYearSelect } from "@/components/ui/fiscal-year-select"
 import posthog from "posthog-js"
 
 interface SalesRecord {
@@ -139,6 +141,13 @@ export default function SalesTab({
   const bagWeightKg = Number(settings.bagWeightKg) || 50
   const canDelete = user?.role === "admin" || user?.role === "owner" || user?.role === "user"
   const isMobile = useMediaQuery("(max-width: 768px)")
+  const {
+    selectedFiscalYear,
+    setSelectedFiscalYear,
+    availableFiscalYears,
+    startDate: fyStartDate,
+    endDate: fyEndDate,
+  } = useFiscalYearSelection()
 
   const [locations, setLocations] = useState<LocationOption[]>([])
   const [date, setDate] = useState<Date>(new Date())
@@ -330,6 +339,8 @@ export default function SalesTab({
       const params = new URLSearchParams({
         limit: salesPageSize.toString(),
         offset: String(pageIndex * salesPageSize),
+        startDate: fyStartDate,
+        endDate: fyEndDate,
       })
       if (salesFilterLocationId && salesFilterLocationId !== LOCATION_ALL) {
         params.set("locationId", salesFilterLocationId)
@@ -362,7 +373,7 @@ export default function SalesTab({
         setIsLoading(false)
       }
     }
-  }, [coffeeSalesEnabled, salesFilterLocationId, salesPageSize])
+  }, [coffeeSalesEnabled, salesFilterLocationId, salesPageSize, fyStartDate, fyEndDate])
 
   const fetchDispatchSummary = useCallback(async () => {
     if (!coffeeSalesEnabled) {
@@ -1375,17 +1386,22 @@ export default function SalesTab({
       {/* Summary Cards — Overview landing */}
       {activeSection === "overview" && (
         <div>
-          <button
-            type="button"
-            onClick={() => setShowOverviewContent(v => !v)}
-            className="flex w-full items-center justify-between rounded-xl border border-stone-200 bg-white px-4 py-3.5 text-left shadow-sm hover:bg-stone-50 transition-colors dark:border-white/[0.06] dark:bg-card"
-          >
-            <div>
-              <p className="text-sm font-semibold text-stone-800 dark:text-stone-100">Sales Overview</p>
-              <p className="text-xs text-stone-400 mt-0.5">Revenue, bags sold and average price breakdown</p>
+          <div className="flex w-full items-center justify-between gap-3 rounded-xl border border-stone-200 bg-white px-4 py-3.5 shadow-sm dark:border-white/[0.06] dark:bg-card">
+            <button
+              type="button"
+              onClick={() => setShowOverviewContent(v => !v)}
+              className="flex flex-1 items-center justify-between gap-3 text-left hover:opacity-80 transition-opacity"
+            >
+              <div>
+                <p className="text-sm font-semibold text-stone-800 dark:text-stone-100">Sales Overview</p>
+                <p className="text-xs text-stone-400 mt-0.5">Revenue, bags sold and average price breakdown, {selectedFiscalYear.label}</p>
+              </div>
+              <ChevronDown className={cn("h-4 w-4 text-stone-400 shrink-0 transition-transform duration-200", showOverviewContent && "rotate-180")} />
+            </button>
+            <div onClick={(e) => e.stopPropagation()}>
+              <FiscalYearSelect value={selectedFiscalYear} options={availableFiscalYears} onChange={setSelectedFiscalYear} />
             </div>
-            <ChevronDown className={cn("h-4 w-4 text-stone-400 shrink-0 transition-transform duration-200", showOverviewContent && "rotate-180")} />
-          </button>
+          </div>
           {showOverviewContent && <div className="order-4 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         {/* Coffee Revenue */}
         <div className="overflow-hidden rounded-xl border border-stone-200 bg-white shadow-sm dark:border-white/[0.06] dark:bg-card">

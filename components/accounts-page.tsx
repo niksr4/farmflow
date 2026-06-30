@@ -26,7 +26,8 @@ import PayrollSummaryTab from "./payroll-summary-tab"
 import AccountsSummaryCard from "@/components/accounts-summary-card"
 import WorkspacePageShell from "@/components/workspace-page-shell"
 import { toast } from "sonner"
-import { getCurrentFiscalYear, getAvailableFiscalYears, type FiscalYear } from "@/lib/fiscal-year-utils"
+import { useFiscalYearSelection } from "@/hooks/use-fiscal-year-selection"
+import { FiscalYearSelect } from "@/components/ui/fiscal-year-select"
 import { formatDateForQIF, formatDateOnly } from "@/lib/date-utils"
 import { formatCurrency, formatNumber } from "@/lib/format"
 import { cn } from "@/lib/utils"
@@ -137,10 +138,13 @@ export default function AccountsPage({
   const isMobile = useMediaQuery("(max-width: 768px)")
   const { isAdmin, isOwner, user } = useAuth()
   const canManageActivities = isAdmin || isOwner || user?.role === "user"
-  const [selectedFiscalYear, setSelectedFiscalYear] = useState<FiscalYear>(getCurrentFiscalYear())
-  const availableFiscalYears = getAvailableFiscalYears()
-  const fiscalYearStartDate = selectedFiscalYear.startDate
-  const fiscalYearEndDate = selectedFiscalYear.endDate
+  const {
+    selectedFiscalYear,
+    setSelectedFiscalYear,
+    availableFiscalYears,
+    startDate: fiscalYearStartDate,
+    endDate: fiscalYearEndDate,
+  } = useFiscalYearSelection()
   const { deployments: laborDeployments, loading: laborLoading, totalCount: laborCount } = useLaborData(undefined, {
     startDate: fiscalYearStartDate,
     endDate: fiscalYearEndDate,
@@ -1040,22 +1044,12 @@ export default function AccountsPage({
               )}
               <p className="text-xs font-semibold text-stone-400 mt-0.5">{selectedFiscalYear.label}</p>
             </div>
-            <Select
-              value={selectedFiscalYear.label}
-              onValueChange={(value) => {
-                const fy = availableFiscalYears.find((f) => f.label === value)
-                if (fy) setSelectedFiscalYear(fy)
-              }}
-            >
-              <SelectTrigger className="h-9 rounded-xl border-stone-200 bg-stone-50 text-xs font-semibold w-auto max-w-[130px]">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {availableFiscalYears.map((fy) => (
-                  <SelectItem key={fy.label} value={fy.label}>{fy.label}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <FiscalYearSelect
+              value={selectedFiscalYear}
+              options={availableFiscalYears}
+              onChange={setSelectedFiscalYear}
+              className="max-w-[130px]"
+            />
           </div>
 
           {!summaryLoading && (
@@ -1233,25 +1227,12 @@ export default function AccountsPage({
       }
       actions={
         <div className="rounded-2xl border border-amber-100/90 bg-white/85 p-3 shadow-sm">
-          <Label className="text-[11px] uppercase tracking-[0.18em] text-slate-500">Fiscal Year</Label>
-          <Select
-            value={selectedFiscalYear.label}
-            onValueChange={(value) => {
-              const fy = availableFiscalYears.find((f) => f.label === value)
-              if (fy) setSelectedFiscalYear(fy)
-            }}
-          >
-            <SelectTrigger className="mt-2 w-full min-w-[220px] bg-white sm:min-w-[240px]">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {availableFiscalYears.map((fy) => (
-                <SelectItem key={fy.label} value={fy.label}>
-                  {fy.label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          <FiscalYearSelect
+            value={selectedFiscalYear}
+            options={availableFiscalYears}
+            onChange={setSelectedFiscalYear}
+            variant="full"
+          />
         </div>
       }
     >

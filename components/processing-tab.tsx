@@ -29,7 +29,8 @@ import WorkflowEmptyState from "@/components/workflow-empty-state"
 import { AiValidationHint } from "@/components/ui/ai-validation-hint"
 import { useAiValidate } from "@/hooks/use-ai-validate"
 import { useMediaQuery } from "@/hooks/use-media-query"
-import { getCurrentFiscalYear } from "@/lib/fiscal-year-utils"
+import { useFiscalYearSelection } from "@/hooks/use-fiscal-year-selection"
+import { FiscalYearSelect } from "@/components/ui/fiscal-year-select"
 
 interface ProcessingRecord {
   id?: number
@@ -132,6 +133,8 @@ export default function ProcessingTab({ showDataToolsControls = false }: Process
   const bagWeightKg = Number(settings.bagWeightKg) || 50
   const canDelete = user?.role === "admin" || user?.role === "owner" || user?.role === "user"
   const isMobile = useMediaQuery("(max-width: 768px)")
+  const { selectedFiscalYear, setSelectedFiscalYear, availableFiscalYears, startDate: fyStartDate, endDate: fyEndDate } =
+    useFiscalYearSelection()
   const [showSeasonTotals, setShowSeasonTotals] = useState(false)
   const [showAutoCalc, setShowAutoCalc] = useState(false)
   const [showAllRecords, setShowAllRecords] = useState(false)
@@ -458,11 +461,10 @@ export default function ProcessingTab({ showDataToolsControls = false }: Process
       // Without fiscal-year bounds this silently sums every record ever entered —
       // "Season Totals" was actually showing lifetime totals for any tenant with
       // more than one season of data.
-      const currentFiscalYear = getCurrentFiscalYear()
       const params = new URLSearchParams({
         summary: "dashboard",
-        fiscalYearStart: currentFiscalYear.startDate,
-        fiscalYearEnd: currentFiscalYear.endDate,
+        fiscalYearStart: fyStartDate,
+        fiscalYearEnd: fyEndDate,
       })
       const response = await fetch(`/api/processing-records?${params.toString()}`)
       const data = await response.json()
@@ -533,7 +535,7 @@ export default function ProcessingTab({ showDataToolsControls = false }: Process
     } finally {
       setIsLoadingDashboard(false)
     }
-  }, [toast])
+  }, [toast, fyStartDate, fyEndDate])
 
   useEffect(() => {
     loadLocations()
@@ -957,17 +959,22 @@ export default function ProcessingTab({ showDataToolsControls = false }: Process
       {/* Coffee Pulping Dashboard */}
       {activeSection === "season-totals" && (
         <div>
-          <button
-            type="button"
-            onClick={() => setShowSeasonContent(v => !v)}
-            className="flex w-full items-center justify-between rounded-xl border border-stone-200 bg-white px-4 py-3.5 text-left shadow-sm hover:bg-stone-50 transition-colors dark:border-white/[0.06] dark:bg-card"
-          >
-            <div>
-              <p className="text-sm font-semibold text-stone-800 dark:text-stone-100">Season Totals</p>
-              <p className="text-xs text-stone-400 mt-0.5">Processed quantities across all locations</p>
+          <div className="flex w-full items-center justify-between gap-3 rounded-xl border border-stone-200 bg-white px-4 py-3.5 shadow-sm dark:border-white/[0.06] dark:bg-card">
+            <button
+              type="button"
+              onClick={() => setShowSeasonContent(v => !v)}
+              className="flex flex-1 items-center justify-between gap-3 text-left hover:opacity-80 transition-opacity"
+            >
+              <div>
+                <p className="text-sm font-semibold text-stone-800 dark:text-stone-100">Season Totals</p>
+                <p className="text-xs text-stone-400 mt-0.5">Processed quantities across all locations, {selectedFiscalYear.label}</p>
+              </div>
+              <ChevronDown className={cn("h-4 w-4 text-stone-400 shrink-0 transition-transform duration-200", showSeasonContent && "rotate-180")} />
+            </button>
+            <div onClick={(e) => e.stopPropagation()}>
+              <FiscalYearSelect value={selectedFiscalYear} options={availableFiscalYears} onChange={setSelectedFiscalYear} />
             </div>
-            <ChevronDown className={cn("h-4 w-4 text-stone-400 shrink-0 transition-transform duration-200", showSeasonContent && "rotate-180")} />
-          </button>
+          </div>
           {showSeasonContent && <Card ref={seasonTotalsRef} className="border-border/70 bg-white/80">
         <CardHeader>
           <div className="flex items-center justify-between gap-4">

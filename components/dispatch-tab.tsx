@@ -30,6 +30,8 @@ import { EmptyStateTable } from "@/components/ui/empty-state"
 import WorkflowEmptyState from "@/components/workflow-empty-state"
 import WorkspacePageShell from "@/components/workspace-page-shell"
 import { useMediaQuery } from "@/hooks/use-media-query"
+import { useFiscalYearSelection } from "@/hooks/use-fiscal-year-selection"
+import { FiscalYearSelect } from "@/components/ui/fiscal-year-select"
 import posthog from "posthog-js"
 
 interface DispatchRecord {
@@ -105,6 +107,13 @@ export default function DispatchTab({ showDataToolsControls = false }: DispatchT
   const bagWeightKg = Number(settings.bagWeightKg) || 50
   const canDelete = user?.role === "admin" || user?.role === "owner" || user?.role === "user"
   const isMobile = useMediaQuery("(max-width: 768px)")
+  const {
+    selectedFiscalYear,
+    setSelectedFiscalYear,
+    availableFiscalYears,
+    startDate: fyStartDate,
+    endDate: fyEndDate,
+  } = useFiscalYearSelection()
 
   const [locations, setLocations] = useState<LocationOption[]>([])
   const [date, setDate] = useState<Date>(new Date())
@@ -330,7 +339,7 @@ export default function DispatchTab({ showDataToolsControls = false }: DispatchT
       locationId: string | null,
       setter: (totals: BagTotals) => void,
       scopeSetter?: (scope: LocationScope) => void,
-      options?: { asOfDate?: string },
+      options?: { asOfDate?: string; startDate?: string },
     ) => {
       const resolvedLocation = locationId ? locationId.trim() : ""
       const fallbackScope: LocationScope = resolvedLocation ? "location" : "all"
@@ -338,6 +347,9 @@ export default function DispatchTab({ showDataToolsControls = false }: DispatchT
         const params = new URLSearchParams({
           summary: "bagTotals",
         })
+        if (options?.startDate) {
+          params.set("fiscalYearStart", options.startDate)
+        }
         if (options?.asOfDate) {
           params.set("fiscalYearEnd", options.asOfDate)
         }
@@ -390,7 +402,7 @@ export default function DispatchTab({ showDataToolsControls = false }: DispatchT
       locationId: string | null,
       setter: (rows: DispatchSummaryRow[]) => void,
       scopeSetter?: (scope: LocationScope) => void,
-      options?: { asOfDate?: string },
+      options?: { asOfDate?: string; startDate?: string },
     ) => {
       const resolvedLocation = locationId ? locationId.trim() : ""
       const fallbackScope: LocationScope = resolvedLocation ? "location" : "all"
@@ -398,6 +410,9 @@ export default function DispatchTab({ showDataToolsControls = false }: DispatchT
         const params = new URLSearchParams({
           summaryOnly: "true",
         })
+        if (options?.startDate) {
+          params.set("startDate", options.startDate)
+        }
         if (options?.asOfDate) {
           params.set("endDate", options.asOfDate)
         }
@@ -433,6 +448,8 @@ export default function DispatchTab({ showDataToolsControls = false }: DispatchT
       const params = new URLSearchParams({
         limit: dispatchPageSize.toString(),
         offset: String(pageIndex * dispatchPageSize),
+        startDate: fyStartDate,
+        endDate: fyEndDate,
       })
       const response = await fetch(`/api/dispatch?${params.toString()}`)
       const data = await response.json()
@@ -457,7 +474,7 @@ export default function DispatchTab({ showDataToolsControls = false }: DispatchT
         setIsLoading(false)
       }
     }
-  }, [dispatchPageSize])
+  }, [dispatchPageSize, fyStartDate, fyEndDate])
 
   useEffect(() => {
     loadLocations()
@@ -476,9 +493,9 @@ export default function DispatchTab({ showDataToolsControls = false }: DispatchT
   }, [dispatchRecords])
 
   useEffect(() => {
-    fetchBagTotals(null, setBagTotals, setBagTotalsScope)
-    fetchDispatchSummary(null, setDispatchSummary)
-  }, [fetchBagTotals, fetchDispatchSummary])
+    fetchBagTotals(null, setBagTotals, setBagTotalsScope, { startDate: fyStartDate, asOfDate: fyEndDate })
+    fetchDispatchSummary(null, setDispatchSummary, undefined, { startDate: fyStartDate, asOfDate: fyEndDate })
+  }, [fetchBagTotals, fetchDispatchSummary, fyStartDate, fyEndDate])
 
   useEffect(() => {
     if (!selectedLocationId) {
@@ -581,8 +598,8 @@ export default function DispatchTab({ showDataToolsControls = false }: DispatchT
         resetForm()
         // Refresh records
         fetchDispatchRecords(0, false)
-        fetchDispatchSummary(null, setDispatchSummary)
-        fetchBagTotals(null, setBagTotals, setBagTotalsScope)
+        fetchDispatchSummary(null, setDispatchSummary, undefined, { startDate: fyStartDate, asOfDate: fyEndDate })
+        fetchBagTotals(null, setBagTotals, setBagTotalsScope, { startDate: fyStartDate, asOfDate: fyEndDate })
         if (selectedLocationId) {
           fetchDispatchSummary(selectedLocationId, setFormDispatchSummary, setFormDispatchScope, { asOfDate })
           fetchBagTotals(selectedLocationId, setFormBagTotals, setFormBagTotalsScope, { asOfDate })
@@ -647,8 +664,8 @@ export default function DispatchTab({ showDataToolsControls = false }: DispatchT
         })
         posthog.capture("dispatch_deleted", { dispatch_id: id })
         fetchDispatchRecords(0, false)
-        fetchDispatchSummary(null, setDispatchSummary)
-        fetchBagTotals(null, setBagTotals, setBagTotalsScope)
+        fetchDispatchSummary(null, setDispatchSummary, undefined, { startDate: fyStartDate, asOfDate: fyEndDate })
+        fetchBagTotals(null, setBagTotals, setBagTotalsScope, { startDate: fyStartDate, asOfDate: fyEndDate })
         if (selectedLocationId) {
           fetchDispatchSummary(selectedLocationId, setFormDispatchSummary, setFormDispatchScope, { asOfDate })
           fetchBagTotals(selectedLocationId, setFormBagTotals, setFormBagTotalsScope, { asOfDate })
@@ -923,17 +940,22 @@ export default function DispatchTab({ showDataToolsControls = false }: DispatchT
 
       {activeSection === "stock-flow" && (
         <div>
-          <button
-            type="button"
-            onClick={() => setShowStockContent(v => !v)}
-            className="flex w-full items-center justify-between rounded-xl border border-stone-200 bg-white px-4 py-3.5 text-left shadow-sm hover:bg-stone-50 transition-colors dark:border-white/[0.06] dark:bg-card"
-          >
-            <div>
-              <p className="text-sm font-semibold text-stone-800 dark:text-stone-100">Stock Flow</p>
-              <p className="text-xs text-stone-400 mt-0.5">Processed, dispatched, received and on-hand</p>
+          <div className="flex w-full items-center justify-between gap-3 rounded-xl border border-stone-200 bg-white px-4 py-3.5 shadow-sm dark:border-white/[0.06] dark:bg-card">
+            <button
+              type="button"
+              onClick={() => setShowStockContent(v => !v)}
+              className="flex flex-1 items-center justify-between gap-3 text-left hover:opacity-80 transition-opacity"
+            >
+              <div>
+                <p className="text-sm font-semibold text-stone-800 dark:text-stone-100">Stock Flow</p>
+                <p className="text-xs text-stone-400 mt-0.5">Processed, dispatched, received and on-hand, {selectedFiscalYear.label}</p>
+              </div>
+              <ChevronDown className={cn("h-4 w-4 text-stone-400 shrink-0 transition-transform duration-200", showStockContent && "rotate-180")} />
+            </button>
+            <div onClick={(e) => e.stopPropagation()}>
+              <FiscalYearSelect value={selectedFiscalYear} options={availableFiscalYears} onChange={setSelectedFiscalYear} />
             </div>
-            <ChevronDown className={cn("h-4 w-4 text-stone-400 shrink-0 transition-transform duration-200", showStockContent && "rotate-180")} />
-          </button>
+          </div>
           {showStockContent && <>
       <div ref={stockSummaryRef} className="order-4 overflow-hidden rounded-xl border border-stone-200 bg-white shadow-sm dark:border-white/[0.06] dark:bg-card">
         <div className="border-b border-stone-100 px-5 py-4 dark:border-white/[0.05]">
