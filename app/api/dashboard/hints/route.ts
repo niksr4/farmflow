@@ -47,6 +47,7 @@ export async function GET() {
             SELECT COUNT(*) FROM security_events
             WHERE tenant_id = ${tenantId} AND event_type = 'auth_login_success'
               AND actor_username NOT LIKE 'tenantsmoke_%'
+              AND source IS DISTINCT FROM 'tenant-smoke-agent'
           )::int AS total_logins
       `,
     )
