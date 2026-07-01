@@ -886,6 +886,7 @@ export default function LaborDeploymentTab({
                     <TableHead className="text-stone-300 font-bold text-[11px] uppercase tracking-[0.16em] dark:text-stone-400">Category</TableHead>
                     <TableHead className="text-stone-300 font-bold text-[11px] uppercase tracking-[0.16em] dark:text-stone-400">Workers</TableHead>
                     <TableHead className="text-right text-stone-300 font-bold text-[11px] uppercase tracking-[0.16em] dark:text-stone-400">Total Cost</TableHead>
+                    <TableHead className="text-stone-300 font-bold text-[11px] uppercase tracking-[0.16em] dark:text-stone-400">Notes</TableHead>
                     <TableHead className="w-[100px] text-stone-300 font-bold text-[11px] uppercase tracking-[0.16em] dark:text-stone-400">Actions</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -913,6 +914,7 @@ export default function LaborDeploymentTab({
                         </div>
                       </TableCell>
                       <TableCell className="text-right font-semibold">{formatCurrency(deployment.totalCost)}</TableCell>
+                      <TableCell className="max-w-[180px] truncate text-xs text-muted-foreground">{deployment.notes || "-"}</TableCell>
                       <TableCell>
                         <TooltipProvider>
                           <div className="flex gap-2">
