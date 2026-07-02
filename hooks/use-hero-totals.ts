@@ -96,7 +96,8 @@ export function useHeroTotals({
     const load = async () => {
       setProcessingTotals((prev) => ({ ...prev, loading: true, error: null }))
       try {
-        const res = await fetch("/api/processing-records?summary=dashboard")
+        const params = new URLSearchParams({ summary: "dashboard", fiscalYearStart: currentFiscalYear.startDate, fiscalYearEnd: currentFiscalYear.endDate })
+        const res = await fetch(`/api/processing-records?${params.toString()}`)
         const json = await res.json().catch(() => ({}))
         if (!res.ok || !json?.success) throw new Error(json?.error || "Failed to load processing totals")
         const records = Array.isArray(json.records) ? json.records : []
@@ -128,7 +129,8 @@ export function useHeroTotals({
     const load = async () => {
       setDispatchHeroTotals((prev) => ({ ...prev, loading: true, error: null }))
       try {
-        const res = await fetch("/api/dispatch?summaryOnly=true")
+        const params = new URLSearchParams({ summaryOnly: "true", startDate: currentFiscalYear.startDate, endDate: currentFiscalYear.endDate })
+        const res = await fetch(`/api/dispatch?${params.toString()}`)
         const json = await res.json().catch(() => ({}))
         if (!res.ok || !json?.success) throw new Error(json?.error || "Failed to load dispatch totals")
         const totalsByType = Array.isArray(json?.totalsByType) ? json.totalsByType : []
@@ -160,7 +162,8 @@ export function useHeroTotals({
     const load = async () => {
       setSalesHeroTotals((prev) => ({ ...prev, loading: true, error: null }))
       try {
-        const res = await fetch("/api/sales?summaryOnly=true")
+        const params = new URLSearchParams({ summaryOnly: "true", startDate: currentFiscalYear.startDate, endDate: currentFiscalYear.endDate })
+        const res = await fetch(`/api/sales?${params.toString()}`)
         const json = await res.json().catch(() => ({}))
         if (!res.ok || !json?.success) throw new Error(json?.error || "Failed to load sales totals")
         const totalsByType = Array.isArray(json?.totalsByType) ? json.totalsByType : []
@@ -195,7 +198,8 @@ export function useHeroTotals({
     const load = async () => {
       setOtherSalesHeroTotals((prev) => ({ ...prev, loading: true, error: null }))
       try {
-        const res = await fetch("/api/other-sales?all=true", { cache: "no-store" })
+        const params = new URLSearchParams({ all: "true", startDate: currentFiscalYear.startDate, endDate: currentFiscalYear.endDate })
+        const res = await fetch(`/api/other-sales?${params.toString()}`, { cache: "no-store" })
         const json = await res.json().catch(() => ({}))
         if (!res.ok || !json?.success) throw new Error(json?.error || "Failed to load other sales totals")
         if (!ignore) { setOtherSalesHeroTotals({ totalRevenue: Number(json?.totals?.totalRevenue) || 0, totalCount: Number(json?.totalCount) || 0, loading: false, error: null }); otherSalesLoadedRef.current = tenantId }
