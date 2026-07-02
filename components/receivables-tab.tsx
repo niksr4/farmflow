@@ -436,7 +436,7 @@ export default function ReceivablesTab() {
         <CardContent className="grid gap-4">
           <div className="grid gap-3 md:grid-cols-2">
             <div className="space-y-2">
-              <Label>Buyer</Label>
+              <Label>Buyer <span className="text-rose-500">*</span></Label>
               <Input value={form.buyer_name} onChange={handleChange("buyer_name")} placeholder="Buyer name" />
             </div>
             <div className="space-y-2">
@@ -444,7 +444,7 @@ export default function ReceivablesTab() {
               <Input value={form.invoice_no} onChange={handleChange("invoice_no")} placeholder="INV-2026-001" />
             </div>
             <div className="space-y-2">
-              <Label>Invoice Date</Label>
+              <Label>Invoice Date <span className="text-rose-500">*</span></Label>
               <Input type="date" value={form.invoice_date} onChange={handleChange("invoice_date")} />
             </div>
             <div className="space-y-2">

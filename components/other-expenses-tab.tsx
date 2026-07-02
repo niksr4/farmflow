@@ -317,13 +317,6 @@ export default function OtherExpensesTab({
           )}
           {isAdding ? (
             <form onSubmit={handleSubmit} className="space-y-4 border rounded-lg p-3 sm:p-4 bg-muted/50">
-              <div className="rounded-lg border border-border/60 bg-background/80 p-3">
-                <p className="text-sm font-medium text-foreground">Expense details</p>
-                <p className="mt-1 text-xs text-muted-foreground">
-                  Start with the date, amount, and cost code. If you do not have saved codes yet, type a simple code and category name.
-                </p>
-              </div>
-
               <div className="grid gap-4 sm:grid-cols-2">
                 <div className="space-y-2">
                   <Label htmlFor="expense-date" className="text-base">

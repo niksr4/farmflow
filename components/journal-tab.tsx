@@ -409,9 +409,11 @@ export default function JournalTab() {
                 Clear Search
               </Button>
             </div>
-            <p className="text-xs text-muted-foreground">
-              Showing {entries.length} of {totalCount} entries.
-            </p>
+            {entries.length < totalCount && (
+              <p className="text-xs text-muted-foreground">
+                Showing {entries.length} of {totalCount} entries.
+              </p>
+            )}
             {loading ? (
               <div className="text-sm text-muted-foreground">Loading entries...</div>
             ) : entries.length === 0 ? (

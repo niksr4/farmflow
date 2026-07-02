@@ -530,7 +530,7 @@ export default function RainfallTab({ username, showDataToolsControls = false }:
 
         {/* Stats summary */}
         <div ref={statsSectionRef} className="px-3 pt-4">
-          <p className="text-sm font-black text-stone-700 mb-3">📊 This year stats</p>
+          <p className="text-sm font-black text-stone-700 mb-3">{currentYear} rainfall</p>
           <div className="grid grid-cols-2 gap-2">
             <div className="rounded-2xl bg-sky-50 border border-sky-100 p-3.5">
               <div className="flex items-center gap-1.5 mb-2">

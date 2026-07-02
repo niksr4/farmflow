@@ -405,7 +405,7 @@ export default function LaborDeploymentTab({
               <CardDescription>One day · one activity code · in-house and outside workers separately.</CardDescription>
             </div>
             <div className="rounded-xl border border-stone-100 bg-stone-50 px-5 py-3 text-right dark:border-white/[0.05] dark:bg-white/[0.03]">
-              <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-stone-400">Season total</p>
+              <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-stone-400">FY total</p>
               <p className="mt-0.5 text-2xl font-black tabular-nums text-stone-900 dark:text-white">{formatCurrency(totalDeploymentCost)}</p>
               {resolvedTotalCount > deployments.length && (
                 <p className="text-[10px] text-stone-400 mt-0.5">

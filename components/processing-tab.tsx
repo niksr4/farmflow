@@ -135,7 +135,6 @@ export default function ProcessingTab({ showDataToolsControls = false }: Process
   const isMobile = useMediaQuery("(max-width: 768px)")
   const { selectedFiscalYear, setSelectedFiscalYear, availableFiscalYears, startDate: fyStartDate, endDate: fyEndDate } =
     useFiscalYearSelection()
-  const [showSeasonTotals, setShowSeasonTotals] = useState(false)
   const [showAutoCalc, setShowAutoCalc] = useState(false)
   const [showAllRecords, setShowAllRecords] = useState(false)
 
@@ -593,7 +592,7 @@ export default function ProcessingTab({ showDataToolsControls = false }: Process
     if (!selectedLocationId) {
       toast({
         title: "Estate not ready",
-        description: "Add a location in Neon before saving records.",
+        description: "Add an estate location first (Settings → Locations).",
         variant: "destructive",
       })
       return
@@ -721,7 +720,7 @@ export default function ProcessingTab({ showDataToolsControls = false }: Process
     if (!selectedLocationId) {
       toast({
         title: "Estate not ready",
-        description: "Add a location in Neon before exporting.",
+        description: "Add an estate location first (Settings → Locations).",
         variant: "destructive",
       })
       return
@@ -977,17 +976,12 @@ export default function ProcessingTab({ showDataToolsControls = false }: Process
           </div>
           {showSeasonContent && <Card ref={seasonTotalsRef} className="border-border/70 bg-white/80">
         <CardHeader>
-          <div className="flex items-center justify-between gap-4">
-            <div>
+          <div>
               <CardTitle>Season totals</CardTitle>
-              <CardDescription>Running intake and output totals across all recorded locations.</CardDescription>
-            </div>
-            <Button type="button" variant="outline" size="sm" className="shrink-0" onClick={() => setShowSeasonTotals(v => !v)}>
-              {showSeasonTotals ? "Hide ▲" : "Show ▼"}
-            </Button>
+              <CardDescription>Running intake and output totals across all recorded locations — {selectedFiscalYear.label}.</CardDescription>
           </div>
         </CardHeader>
-        {showSeasonTotals && <CardContent>
+        <CardContent>
           {isLoadingDashboard ? (
             <div className="flex items-center justify-center py-8">
               <Loader2 className="h-6 w-6 animate-spin mr-2" />
@@ -1085,7 +1079,7 @@ export default function ProcessingTab({ showDataToolsControls = false }: Process
               </div>
             </>
           )}
-        </CardContent>}
+        </CardContent>
       </Card>}
         </div>
       )}

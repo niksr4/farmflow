@@ -934,9 +934,6 @@ export default function DispatchTab({ showDataToolsControls = false }: DispatchT
           Summary totals include pooled pre-location records for this legacy estate.
         </p>
       )}
-      <p className="order-3 text-xs text-muted-foreground">
-        Bags are logistics units; received KGs feed downstream sales availability.
-      </p>
 
       {activeSection === "stock-flow" && (
         <div>

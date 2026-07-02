@@ -92,7 +92,8 @@ export default function TaskGuideCard({
   useEffect(() => {
     setMounted(true)
     try {
-      setCollapsed(localStorage.getItem(key) === "1")
+      // Default collapsed; only expand if user has explicitly opened it
+      setCollapsed(localStorage.getItem(key) !== "open")
     } catch {
       // localStorage unavailable
     }
@@ -102,9 +103,11 @@ export default function TaskGuideCard({
     const next = !collapsed
     setCollapsed(next)
     try {
-      if (next) {
-        localStorage.setItem(key, "1")
+      if (!next) {
+        // User is expanding — remember this preference
+        localStorage.setItem(key, "open")
       } else {
+        // User is collapsing — clear so default (collapsed) applies next time
         localStorage.removeItem(key)
       }
     } catch {

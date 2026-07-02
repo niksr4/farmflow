@@ -1040,7 +1040,10 @@ export default function AccountsPage({
               {summaryLoading ? (
                 <div className="h-7 w-28 rounded-xl bg-stone-100 animate-pulse" />
               ) : (
-                <p className="text-2xl font-black text-stone-900">{formatCurrency(summaryTotals.grandTotal)}</p>
+                <>
+                  <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-stone-400 mb-0.5">Total spend</p>
+                  <p className="text-2xl font-black text-stone-900">{formatCurrency(summaryTotals.grandTotal)}</p>
+                </>
               )}
               <p className="text-xs font-semibold text-stone-400 mt-0.5">{selectedFiscalYear.label}</p>
             </div>

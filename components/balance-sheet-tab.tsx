@@ -8,7 +8,8 @@ import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Skeleton } from "@/components/ui/skeleton"
-import { getCurrentFiscalYear, getFiscalYearDateRange } from "@/lib/fiscal-year-utils"
+import { useFiscalYearSelection } from "@/hooks/use-fiscal-year-selection"
+import { FiscalYearSelect } from "@/components/ui/fiscal-year-select"
 import { formatCurrency } from "@/lib/format"
 import { cn } from "@/lib/utils"
 import { useToast } from "@/hooks/use-toast"
@@ -65,21 +66,20 @@ const getDirectionBadge = (direction: ModuleLine["direction"]) => {
 
 export default function BalanceSheetTab() {
   const { toast } = useToast()
-  const selectedFiscalYear = useMemo(() => getCurrentFiscalYear(), [])
+  const { selectedFiscalYear, setSelectedFiscalYear, availableFiscalYears } = useFiscalYearSelection()
   const [summary, setSummary] = useState<SummaryPayload>(emptySummary)
   const [isLoading, setIsLoading] = useState(false)
   const [reconciliation, setReconciliation] = useState<ReconciliationResponse | null>(null)
   const [reconLoading, setReconLoading] = useState(false)
   const [reconExpanded, setReconExpanded] = useState(false)
   const [ledgerExpanded, setLedgerExpanded] = useState(false)
-  const selectedRange = useMemo(() => getFiscalYearDateRange(selectedFiscalYear), [selectedFiscalYear])
 
   const loadSummary = useCallback(async () => {
     setIsLoading(true)
     try {
       const params = new URLSearchParams({
-        startDate: selectedRange.startDate,
-        endDate: selectedRange.endDate,
+        startDate: selectedFiscalYear.startDate,
+        endDate: selectedFiscalYear.endDate,
       })
       const response = await fetch(`/api/finance-balance-sheet?${params.toString()}`, { cache: "no-store" })
       const data = await response.json()
@@ -111,19 +111,19 @@ export default function BalanceSheetTab() {
     } finally {
       setIsLoading(false)
     }
-  }, [selectedRange.endDate, selectedRange.startDate, toast])
+  }, [selectedFiscalYear.endDate, selectedFiscalYear.startDate, toast])
 
   const loadReconciliation = useCallback(async () => {
     setReconLoading(true)
     try {
-      const params = new URLSearchParams({ start: selectedRange.startDate, end: selectedRange.endDate })
+      const params = new URLSearchParams({ start: selectedFiscalYear.startDate, end: selectedFiscalYear.endDate })
       const res = await fetch(`/api/reconciliation?${params}`, { cache: "no-store" })
       const data = await res.json()
       if (data.success) setReconciliation(data)
     } catch { /* non-fatal */ } finally {
       setReconLoading(false)
     }
-  }, [selectedRange.startDate, selectedRange.endDate])
+  }, [selectedFiscalYear.startDate, selectedFiscalYear.endDate])
 
   useEffect(() => {
     loadSummary()
@@ -149,6 +149,7 @@ export default function BalanceSheetTab() {
             </CardDescription>
           </div>
           <div className="flex items-center gap-2">
+            <FiscalYearSelect value={selectedFiscalYear} options={availableFiscalYears} onChange={setSelectedFiscalYear} />
             <Button variant="outline" size="sm" onClick={loadSummary} disabled={isLoading}>
               <RefreshCw className={cn("mr-2 h-3.5 w-3.5", isLoading && "animate-spin")} />
               Refresh
@@ -168,7 +169,7 @@ export default function BalanceSheetTab() {
                 ) : (
                   <p className="mt-2 text-2xl font-semibold text-emerald-800">{formatCurrency(summary.totals.inflowBooked, 0)}</p>
                 )}
-                <p className="mt-1 text-xs text-emerald-700/80">Sales revenue in the current book year.</p>
+                <p className="mt-1 text-xs text-emerald-700/80">Sales revenue for {selectedFiscalYear.label}.</p>
               </CardContent>
             </Card>
             <Card className="border-rose-100 bg-rose-50/60">
@@ -270,7 +271,7 @@ export default function BalanceSheetTab() {
         >
           <div>
             <p className="text-lg font-semibold text-foreground">Money Ledger Breakdown</p>
-            <p className="text-sm text-muted-foreground">Cross-tab contribution line by line for the current book year.</p>
+            <p className="text-sm text-muted-foreground">Cross-tab contribution line by line for {selectedFiscalYear.label}.</p>
           </div>
           <ChevronDown className={cn("h-4 w-4 text-stone-400 shrink-0 ml-3 transition-transform", ledgerExpanded && "rotate-180")} />
         </button>
