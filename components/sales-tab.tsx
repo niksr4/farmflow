@@ -494,6 +494,8 @@ export default function SalesTab({
     if (salesFilterLocationId && salesFilterLocationId !== LOCATION_ALL) {
       params.set("locationId", salesFilterLocationId)
     }
+    if (fyStartDate) params.set("startDate", fyStartDate)
+    if (fyEndDate) params.set("endDate", fyEndDate)
 
     const loadOtherSalesTotals = async () => {
       try {
@@ -519,7 +521,7 @@ export default function SalesTab({
     return () => {
       ignore = true
     }
-  }, [otherSalesEnabled, salesFilterLocationId])
+  }, [otherSalesEnabled, salesFilterLocationId, fyStartDate, fyEndDate])
 
   useEffect(() => {
     fetchSalesRecords(0, false)
@@ -1177,6 +1179,9 @@ export default function SalesTab({
           <div>
             <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-emerald-700 dark:text-emerald-500">Revenue summary</p>
             <p className="text-sm font-bold text-stone-900 dark:text-white">{salesFilterLocationId !== LOCATION_ALL ? "Filtered to one location." : "Across all locations."}</p>
+          </div>
+          <div onClick={(e) => e.stopPropagation()}>
+            <FiscalYearSelect value={selectedFiscalYear} options={availableFiscalYears} onChange={setSelectedFiscalYear} />
           </div>
         </div>
         <div className="grid gap-4 p-5 lg:grid-cols-[1.6fr_1fr]">
