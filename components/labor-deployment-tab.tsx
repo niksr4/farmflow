@@ -300,6 +300,7 @@ export default function LaborDeploymentTab({
   }
 
   const startEdit = (deployment: any) => {
+    setActiveSection("form")
     const sets: LaborSet[] = (deployment.laborEntries || []).map((e: any) => ({
       label: e.name === "Estate Labour" ? "In-house" : e.name === "Outside Labour" ? "Outside" : e.name,
       laborers: Number(e.laborCount) || 0,

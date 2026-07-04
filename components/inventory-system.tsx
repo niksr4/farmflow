@@ -5500,7 +5500,7 @@ export default function InventorySystem() {
                 username={user?.username || "system"}
                 showRainfall={canShowRainfall}
                 showWeather={canShowWeather}
-                showDataToolsControls={showDataToolsControls}
+                showDataToolsControls={canManageData}
               />
             </TabsContent>
           )}
