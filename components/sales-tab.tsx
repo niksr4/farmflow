@@ -33,6 +33,7 @@ import { useMediaQuery } from "@/hooks/use-media-query"
 import { useFiscalYearSelection } from "@/hooks/use-fiscal-year-selection"
 import { FiscalYearSelect } from "@/components/ui/fiscal-year-select"
 import posthog from "posthog-js"
+import { trackClick, reportActionFailure, reportActionError } from "@/lib/track-action"
 
 interface SalesRecord {
   id?: number
@@ -721,6 +722,7 @@ export default function SalesTab({
   }, [bagType, bagWeightKg, coffeeType, editingRecord])
 
   const handleSave = async () => {
+    trackClick(editingRecord ? "sales_update" : "sales_save")
     const wasEditing = Boolean(editingRecord)
     const editingRecordId = editingRecord?.id
     const editingId = editingRecord?.id != null ? Number(editingRecord.id) : null
@@ -857,6 +859,7 @@ export default function SalesTab({
         fetchDispatchSummary()
         fetchSalesSummary()
       } else {
+        reportActionFailure(editingRecord ? "sales_update" : "sales_save", data.error || `HTTP ${response.status}`)
         setSaveFeedback({
           type: "error",
           message: data.error || `Failed to save sales record (HTTP ${response.status})`,
@@ -868,6 +871,7 @@ export default function SalesTab({
         })
       }
     } catch (error) {
+      reportActionError(editingRecord ? "sales_update" : "sales_save", error)
       setSaveFeedback({
         type: "error",
         message: "Failed to save sales record",
@@ -895,6 +899,7 @@ export default function SalesTab({
   }
 
   const handleEdit = (record: SalesRecord) => {
+    trackClick("sales_edit", { id: record.id })
     // The form only renders under the "new-sale" section — editing from the
     // Records list otherwise populates the form's state off-screen with nothing
     // visible changing (same bug already fixed in dispatch-tab.tsx).
@@ -918,6 +923,7 @@ export default function SalesTab({
   }
 
   const handleDelete = async (id: number) => {
+    trackClick("sales_delete", { id })
     if (!confirm("Are you sure you want to delete this record?")) return
 
     try {
@@ -935,6 +941,7 @@ export default function SalesTab({
         posthog.capture("sale_deleted", { sale_id: id })
         fetchSalesRecords(0, false)
       } else {
+        reportActionFailure("sales_delete", data.error || "non-ok response", { id })
         toast({
           title: "Error",
           description: data.error || "Failed to delete record",
@@ -942,7 +949,7 @@ export default function SalesTab({
         })
       }
     } catch (error) {
-      posthog.captureException(error)
+      reportActionError("sales_delete", error, { id })
       toast({
         title: "Error",
         description: "Failed to delete record",

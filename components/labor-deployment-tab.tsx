@@ -26,6 +26,7 @@ import { useToast } from "@/hooks/use-toast"
 import { FARMFLOW_RECORD_SAVED_EVENT } from "@/components/inventory-system/constants"
 import { useMediaQuery } from "@/hooks/use-media-query"
 import QuickLogPanel from "@/components/quick-log-panel"
+import { trackClick, reportActionFailure, reportActionError } from "@/lib/track-action"
 
 
 interface ActivityCode {
@@ -244,6 +245,7 @@ export default function LaborDeploymentTab({
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     if (isSubmitting) return
+    trackClick(editingId ? "labor_update" : "labor_save")
     setIsSubmitting(true)
 
     const laborEntries = formData.laborSets
@@ -288,18 +290,27 @@ export default function LaborDeploymentTab({
         resetForm()
         window.dispatchEvent(new CustomEvent(FARMFLOW_RECORD_SAVED_EVENT))
       } else {
+        reportActionFailure(editingId ? "labor_update" : "labor_save", result.error || "non-ok response")
         toast({
           title: "Couldn't save record",
           description: result.error || "Please check your entries and try again.",
           variant: "destructive",
         })
       }
+    } catch (error) {
+      reportActionError(editingId ? "labor_update" : "labor_save", error)
+      toast({
+        title: "Couldn't save record",
+        description: "An unexpected error occurred. Please try again.",
+        variant: "destructive",
+      })
     } finally {
       setIsSubmitting(false)
     }
   }
 
   const startEdit = (deployment: any) => {
+    trackClick("labor_edit", { id: deployment.id })
     setActiveSection("form")
     const sets: LaborSet[] = (deployment.laborEntries || []).map((e: any) => ({
       label: e.name === "Estate Labour" ? "In-house" : e.name === "Outside Labour" ? "Outside" : e.name,
@@ -858,9 +869,11 @@ export default function LaborDeploymentTab({
                           <button
                             type="button"
                             onClick={async () => {
+                              trackClick("labor_delete", { id: deployment.id })
                               if (confirm("Delete this labour entry?")) {
                                 const result = await deleteDeployment(deployment.id)
                                 if (!result.ok) {
+                                  reportActionFailure("labor_delete", result.error || "non-ok response", { id: deployment.id })
                                   toast({ title: "Couldn't delete record", description: result.error, variant: "destructive" })
                                 }
                               }
@@ -933,9 +946,11 @@ export default function LaborDeploymentTab({
                                   variant="ghost"
                                   size="icon"
                                   onClick={async () => {
+                                    trackClick("labor_delete", { id: deployment.id })
                                     if (confirm("Delete this labour entry? This cannot be undone.")) {
                                       const result = await deleteDeployment(deployment.id)
                                       if (!result.ok) {
+                                        reportActionFailure("labor_delete", result.error || "non-ok response", { id: deployment.id })
                                         toast({ title: "Couldn't delete record", description: result.error, variant: "destructive" })
                                       }
                                     }

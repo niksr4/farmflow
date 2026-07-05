@@ -22,6 +22,7 @@ import { formatCurrency } from "@/lib/format"
 import { SkeletonTable } from "@/components/ui/skeleton"
 import WorkflowEmptyState from "@/components/workflow-empty-state"
 import { toast } from "sonner"
+import { trackClick, reportActionFailure, reportActionError } from "@/lib/track-action"
 import { useMediaQuery } from "@/hooks/use-media-query"
 
 interface ActivityCode {
@@ -164,6 +165,7 @@ export default function OtherExpensesTab({
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     if (isSubmitting) return
+    trackClick(editingId ? "expense_update" : "expense_save")
     setIsSubmitting(true)
 
     const validInvItems = invLines
@@ -193,14 +195,19 @@ export default function OtherExpensesTab({
         resetForm()
         window.dispatchEvent(new CustomEvent(FARMFLOW_RECORD_SAVED_EVENT))
       } else {
+        reportActionFailure(editingId ? "expense_update" : "expense_save", result.error || "non-ok response")
         toast.error(result.error)
       }
+    } catch (error) {
+      reportActionError(editingId ? "expense_update" : "expense_save", error)
+      toast.error("An unexpected error occurred. Please try again.")
     } finally {
       setIsSubmitting(false)
     }
   }
 
   const startEdit = (deployment: any) => {
+    trackClick("expense_edit", { id: deployment.id })
     setFormData({
       date: deployment.date.split("T")[0],
       code: deployment.code,
@@ -665,9 +672,13 @@ export default function OtherExpensesTab({
                           <button
                             type="button"
                             onClick={async () => {
+                              trackClick("expense_delete", { id: deployment.id })
                               if (confirm("Delete this expense?")) {
                                 const result = await deleteDeployment(deployment.id)
-                                if (!result.ok) toast.error(result.error)
+                                if (!result.ok) {
+                                  reportActionFailure("expense_delete", result.error || "non-ok response", { id: deployment.id })
+                                  toast.error(result.error)
+                                }
                               }
                             }}
                             className="flex-1 flex items-center justify-center gap-1.5 h-10 rounded-xl border border-stone-200 bg-white text-sm font-semibold text-red-500 touch-manipulation"
@@ -732,7 +743,10 @@ export default function OtherExpensesTab({
                                   onClick={async () => {
                                     if (confirm("Are you sure you want to delete this expense?")) {
                                       const result = await deleteDeployment(deployment.id)
-                                      if (!result.ok) toast.error(result.error)
+                                      if (!result.ok) {
+                                        reportActionFailure("expense_delete", result.error || "non-ok response", { id: deployment.id })
+                                        toast.error(result.error)
+                                      }
                                     }
                                   }}
                                 >

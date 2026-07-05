@@ -31,6 +31,7 @@ import { useAiValidate } from "@/hooks/use-ai-validate"
 import { useMediaQuery } from "@/hooks/use-media-query"
 import { useFiscalYearSelection } from "@/hooks/use-fiscal-year-selection"
 import { FiscalYearSelect } from "@/components/ui/fiscal-year-select"
+import { trackClick, reportActionFailure, reportActionError } from "@/lib/track-action"
 
 interface ProcessingRecord {
   id?: number
@@ -589,6 +590,7 @@ export default function ProcessingTab({ showDataToolsControls = false }: Process
   ])
 
   const handleSave = async () => {
+    trackClick("processing_save")
     if (!selectedLocationId) {
       toast({
         title: "Estate not ready",
@@ -663,7 +665,7 @@ export default function ProcessingTab({ showDataToolsControls = false }: Process
         throw new Error(data.error)
       }
     } catch (error: any) {
-      console.error("Save error:", error)
+      reportActionError("processing_save", error)
       toast({
         title: "Error",
         description: error.message || "Failed to save coffee pulping record",
@@ -675,6 +677,7 @@ export default function ProcessingTab({ showDataToolsControls = false }: Process
   }
 
   const handleDelete = async () => {
+    trackClick("processing_delete")
     if (!confirm("Are you sure you want to delete this record?")) return
 
     try {
@@ -701,6 +704,7 @@ export default function ProcessingTab({ showDataToolsControls = false }: Process
         throw new Error(data.error)
       }
     } catch (error: any) {
+      reportActionError("processing_delete", error)
       toast({
         title: "Error",
         description: error.message || "Failed to delete record",

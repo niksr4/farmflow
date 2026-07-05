@@ -33,6 +33,7 @@ import { useMediaQuery } from "@/hooks/use-media-query"
 import { useFiscalYearSelection } from "@/hooks/use-fiscal-year-selection"
 import { FiscalYearSelect } from "@/components/ui/fiscal-year-select"
 import posthog from "posthog-js"
+import { trackClick, reportActionFailure, reportActionError } from "@/lib/track-action"
 
 interface DispatchRecord {
   id?: number
@@ -520,6 +521,7 @@ export default function DispatchTab({ showDataToolsControls = false }: DispatchT
   }, [editingRecord])
 
   const handleSave = async () => {
+    trackClick(editingRecord ? "dispatch_update" : "dispatch_save")
     if (!selectedLocationId) {
       toast({
         title: "Location required",
@@ -605,6 +607,7 @@ export default function DispatchTab({ showDataToolsControls = false }: DispatchT
           fetchBagTotals(selectedLocationId, setFormBagTotals, setFormBagTotalsScope, { asOfDate })
         }
       } else {
+        reportActionFailure(editingRecord ? "dispatch_update" : "dispatch_save", data.error || "non-ok response")
         toast({
           title: "Error",
           description: data.error || "Failed to save dispatch record",
@@ -612,6 +615,7 @@ export default function DispatchTab({ showDataToolsControls = false }: DispatchT
         })
       }
     } catch (error) {
+      reportActionError(editingRecord ? "dispatch_update" : "dispatch_save", error)
       toast({
         title: "Error",
         description: "Failed to save dispatch record",
@@ -630,6 +634,7 @@ export default function DispatchTab({ showDataToolsControls = false }: DispatchT
   }
 
   const handleEdit = (record: DispatchRecord) => {
+    trackClick("dispatch_edit", { id: record.id })
     // The form only renders under the "new-dispatch" section — editing from the
     // Records list otherwise populates the form's state off-screen with nothing
     // visible changing, since the section showing it is never switched to.
@@ -648,6 +653,7 @@ export default function DispatchTab({ showDataToolsControls = false }: DispatchT
   }
 
   const handleDelete = async (id: number) => {
+    trackClick("dispatch_delete", { id })
     if (!confirm("Are you sure you want to delete this record?")) return
 
     try {
@@ -671,6 +677,7 @@ export default function DispatchTab({ showDataToolsControls = false }: DispatchT
           fetchBagTotals(selectedLocationId, setFormBagTotals, setFormBagTotalsScope, { asOfDate })
         }
       } else {
+        reportActionFailure("dispatch_delete", data.error || "non-ok response", { id })
         toast({
           title: "Error",
           description: data.error || "Failed to delete record",
@@ -678,6 +685,7 @@ export default function DispatchTab({ showDataToolsControls = false }: DispatchT
         })
       }
     } catch (error) {
+      reportActionError("dispatch_delete", error, { id })
       toast({
         title: "Error",
         description: "Failed to delete record",
