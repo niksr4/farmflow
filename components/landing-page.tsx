@@ -308,11 +308,10 @@ export default function LandingPage() {
 
         {/* ── Hero ── */}
         <MotionDiv {...reveal(0)} className="relative overflow-hidden pt-12 text-center sm:pt-20">
-          {/* Animated gradient orbs */}
+          {/* Subtle ambient glow */}
           <div aria-hidden className="pointer-events-none absolute inset-0 overflow-hidden">
-            <div className="orb-a absolute left-[15%] top-[10%] h-[420px] w-[420px] rounded-full bg-[radial-gradient(circle,rgba(52,211,153,0.13)_0%,transparent_65%)] blur-[80px]" />
-            <div className="orb-b absolute right-[12%] top-[5%] h-[320px] w-[320px] rounded-full bg-[radial-gradient(circle,rgba(251,191,36,0.08)_0%,transparent_65%)] blur-[80px]" />
-            <div className="absolute bottom-0 left-1/2 h-[200px] w-[600px] -translate-x-1/2 rounded-full bg-[radial-gradient(ellipse,rgba(52,211,153,0.07)_0%,transparent_70%)] blur-[60px]" />
+            <div className="absolute left-[15%] top-[10%] h-[420px] w-[420px] rounded-full bg-[radial-gradient(circle,rgba(52,211,153,0.06)_0%,transparent_65%)] blur-[80px]" />
+            <div className="absolute bottom-0 left-1/2 h-[200px] w-[600px] -translate-x-1/2 rounded-full bg-[radial-gradient(ellipse,rgba(52,211,153,0.04)_0%,transparent_70%)] blur-[60px]" />
           </div>
           <div aria-hidden className="pointer-events-none absolute inset-0 hidden lg:block">
             {heroBeanSpecs.map((bean, index) => (
@@ -334,7 +333,7 @@ export default function LandingPage() {
           </div>
           <div className="relative z-10">
             <div className="mb-6 inline-flex items-center justify-center">
-              <span className="pulse-glow-emerald relative rounded-full border border-emerald-400/25 bg-emerald-400/[0.09] px-4 py-1.5 text-sm font-medium text-emerald-200 backdrop-blur-sm">
+              <span className="relative rounded-full border border-emerald-400/25 bg-emerald-400/[0.09] px-4 py-1.5 text-sm font-medium text-emerald-200 backdrop-blur-sm">
                 {t("public.landing.badge")}
               </span>
             </div>
@@ -345,17 +344,10 @@ export default function LandingPage() {
               {t("public.landing.description")}
             </p>
             <div className="mt-10 flex flex-wrap items-center justify-center gap-3">
-              {/* CTA with expanding ring animation */}
               <div className="relative">
-                <span className="ring-expand pointer-events-none absolute inset-0 rounded-full border border-emerald-300/30" />
-                <span className="ring-expand-delayed pointer-events-none absolute inset-0 rounded-full border border-emerald-300/20" />
                 <Button
                   size="lg"
-                  className={[
-                    "relative bg-emerald-300 text-[#06110f] font-bold",
-                    "shadow-[0_0_0_1px_rgba(52,211,153,0.4),0_8px_32px_-4px_rgba(52,211,153,0.55),0_0_80px_-16px_rgba(52,211,153,0.3)]",
-                    "hover:bg-emerald-200 hover:shadow-[0_0_0_1px_rgba(52,211,153,0.5),0_12px_40px_-4px_rgba(52,211,153,0.65),0_0_100px_-12px_rgba(52,211,153,0.4)]",
-                  ].join(" ")}
+                  className="relative bg-emerald-300 text-[#06110f] font-bold hover:bg-emerald-200"
                   asChild
                   onClick={() => capture("cta_clicked", { cta_location: "homepage_hero", cta_text: "signup" })}
                 >
@@ -436,7 +428,7 @@ export default function LandingPage() {
                 <div key={step.label} className="relative">
                   <div className="grain-dark shimmer-hover flex h-full flex-col rounded-2xl border border-white/[0.10] bg-gradient-to-br from-white/[0.07] to-white/[0.02] p-5 text-center transition-all duration-300 hover:border-white/[0.16] hover:from-white/[0.10] hover:to-white/[0.04] hover:shadow-[0_8px_32px_-8px_rgba(255,255,255,0.06)]">
                     <div
-                      className={`mx-auto flex h-12 w-12 items-center justify-center rounded-2xl border shadow-[0_0_20px_-4px_currentColor/30] ${step.accentClassName} mb-4`}
+                      className={`mx-auto flex h-12 w-12 items-center justify-center rounded-2xl border ${step.accentClassName} mb-4`}
                     >
                       <Icon className="h-5 w-5" />
                     </div>
@@ -500,7 +492,7 @@ export default function LandingPage() {
               return (
                 <MotionDiv key={card.title} {...reveal(i * 0.07)} {...lift}>
                   <div className="grain-dark shimmer-hover flex h-full flex-col gap-5 rounded-3xl border border-white/[0.09] bg-gradient-to-br from-white/[0.06] via-white/[0.03] to-transparent p-8 transition-all duration-300 hover:border-white/[0.15] hover:shadow-[0_12px_48px_-12px_rgba(52,211,153,0.12)]">
-                    <div className="flex h-12 w-12 items-center justify-center rounded-2xl border border-emerald-300/20 bg-gradient-to-br from-emerald-300/[0.14] to-emerald-400/[0.06] shadow-[0_0_20px_-4px_rgba(52,211,153,0.3)]">
+                    <div className="flex h-12 w-12 items-center justify-center rounded-2xl border border-emerald-300/20 bg-gradient-to-br from-emerald-300/[0.14] to-emerald-400/[0.06]">
                       <Icon className="h-5 w-5 text-emerald-200" />
                     </div>
                     <div>
@@ -651,13 +643,13 @@ export default function LandingPage() {
                   <div
                     className={`grain-dark relative flex h-full flex-col rounded-3xl border p-8 transition-all duration-300 ${
                       isCore
-                        ? "border-emerald-400/35 bg-gradient-to-br from-[#0d2018] to-[#091510] shadow-[0_0_80px_-20px_rgba(52,211,153,0.35),inset_0_1px_0_rgba(52,211,153,0.08)]"
+                        ? "border-emerald-400/35 bg-gradient-to-br from-[#0d2018] to-[#091510] shadow-[inset_0_1px_0_rgba(52,211,153,0.08)]"
                         : "border-white/[0.08] bg-gradient-to-br from-white/[0.04] to-transparent hover:border-white/[0.13]"
                     }`}
                   >
                     {isCore && (
                       <div className="absolute -top-3.5 left-1/2 -translate-x-1/2">
-                        <span className="pulse-glow-emerald rounded-full border border-emerald-400/35 bg-emerald-400/[0.12] px-3.5 py-1 text-[11px] font-bold uppercase tracking-wider text-emerald-300 backdrop-blur-sm">
+                        <span className="rounded-full border border-emerald-400/35 bg-emerald-400/[0.12] px-3.5 py-1 text-[11px] font-bold uppercase tracking-wider text-emerald-300 backdrop-blur-sm">
                           Most popular
                         </span>
                       </div>

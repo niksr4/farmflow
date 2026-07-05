@@ -109,14 +109,14 @@ export default function JourneyPage() {
               <Button variant="ghost" className="border-white/10 text-stone-200 hover:bg-white/10 hover:text-white" asChild>
                 <Link href="/">
                   <ArrowLeft className="mr-2 h-4 w-4" />
-                  Back to Landing
+                  Back
                 </Link>
               </Button>
               <Button variant="ghost" className="border-white/10 text-stone-200 hover:bg-white/10 hover:text-white" asChild>
                 <Link href="/login">Login</Link>
               </Button>
               <Button className="border-emerald-300/40 bg-emerald-300 text-[#06110f] shadow-[0_18px_36px_-18px_rgba(110,231,183,0.6)] hover:bg-emerald-200" asChild>
-                <Link href="/signup">Create Workspace</Link>
+                <Link href="/signup">Start free trial</Link>
               </Button>
             </div>
           </nav>
@@ -252,7 +252,7 @@ export default function JourneyPage() {
               </CardHeader>
               <CardContent className="flex flex-wrap gap-3">
                 <Button className="border-emerald-300/40 bg-emerald-300 text-[#06110f] shadow-[0_18px_36px_-18px_rgba(110,231,183,0.6)] hover:bg-emerald-200" asChild>
-                  <Link href="/signup">Create Your Workspace</Link>
+                  <Link href="/signup">Start free trial</Link>
                 </Button>
                 <Button variant="ghost" className="border-white/10 bg-white/[0.04] text-stone-100 hover:bg-white/[0.08] hover:text-white" asChild>
                   <Link href="/">Back to Landing</Link>

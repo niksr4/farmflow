@@ -66,10 +66,8 @@ export function PublicSiteShell({ children, theme = "light" }: PublicSiteShellPr
     >
       {isDark ? (
         <div className="pointer-events-none fixed inset-0 overflow-hidden">
-          <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(16,185,129,0.16),transparent_26%),radial-gradient(circle_at_80%_12%,rgba(245,158,11,0.14),transparent_20%),linear-gradient(180deg,#07110f_0%,#091916_38%,#081310_100%)]" />
+          <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(16,185,129,0.08),transparent_26%),linear-gradient(180deg,#07110f_0%,#091916_38%,#081310_100%)]" />
           <div className="absolute inset-0 opacity-[0.08]" style={{ backgroundImage: "linear-gradient(rgba(255,255,255,0.18) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.18) 1px, transparent 1px)", backgroundSize: "120px 120px" }} />
-          <div className="absolute -top-40 right-[-10%] h-[30rem] w-[30rem] rounded-full bg-[radial-gradient(circle,rgba(16,185,129,0.22),transparent_70%)] blur-3xl" />
-          <div className="absolute top-[24%] left-[-12%] h-[26rem] w-[26rem] rounded-full bg-[radial-gradient(circle,rgba(217,119,6,0.18),transparent_72%)] blur-3xl" />
         </div>
       ) : null}
       <header className="px-4 pt-4 sm:px-6 sm:pt-6">
