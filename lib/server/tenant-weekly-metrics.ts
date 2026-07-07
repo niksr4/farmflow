@@ -51,10 +51,10 @@ export async function upsertWeeklyMetrics(m: WeeklyMetrics): Promise<void> {
         computed_at       = now()
     `, [
       m.tenantId, m.weekStart,
-      m.cherryKg, m.processingDays, m.parchmentBags,
-      m.laborEntries, m.laborWorkerDays, m.laborCost,
-      m.expenseTotal, m.expenseEntries,
-      m.rainfallInches, m.dispatchBags, m.salesRevenue, m.pickingEntries,
+      m.cherryKg, Math.round(m.processingDays), m.parchmentBags,
+      Math.round(m.laborEntries), m.laborWorkerDays, m.laborCost,
+      m.expenseTotal, Math.round(m.expenseEntries),
+      m.rainfallInches, m.dispatchBags, m.salesRevenue, Math.round(m.pickingEntries),
     ])
   } catch (error) {
     logServerError("upsertWeeklyMetrics failed", error)
