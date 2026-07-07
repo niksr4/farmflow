@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useMemo, useRef, useState, type ChangeEvent } from "react"
+import { useEffect, useMemo, useState, type ChangeEvent } from "react"
 import { Bar, BarChart, CartesianGrid, Line, LineChart, XAxis, YAxis } from "recharts"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -86,20 +86,7 @@ export default function RainfallTab({ username, showDataToolsControls = false }:
   const [notes, setNotes] = useState("")
   const [loading, setLoading] = useState(false)
   const [drilldownMonthIndex, setDrilldownMonthIndex] = useState<number | null>(null)
-  const logSectionRef = useRef<HTMLDivElement>(null)
-  const recordsSectionRef = useRef<HTMLDivElement>(null)
-  const statsSectionRef = useRef<HTMLDivElement>(null)
-
-  useEffect(() => {
-    const handler = (e: Event) => {
-      const section = (e as CustomEvent<string>).detail
-      if (section === "log") logSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })
-      else if (section === "records") recordsSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })
-      else if (section === "stats") statsSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })
-    }
-    window.addEventListener("farmflow:scroll-to-section", handler)
-    return () => window.removeEventListener("farmflow:scroll-to-section", handler)
-  }, [])
+  const [mobileSection, setMobileSection] = useState<"stats" | "log" | "records">("stats")
 
   const handleWholeNumberChange = (setter: (value: string) => void) => (event: ChangeEvent<HTMLInputElement>) => {
     const nextValue = event.target.value
@@ -502,36 +489,34 @@ export default function RainfallTab({ username, showDataToolsControls = false }:
     const totalDisplay = `${inchesNum}.${String(centsNum).padStart(2, "0")}"`
 
     return (
-      <div className="pb-28">
+      <div className="pb-6">
         {/* Quick-nav strip */}
         <div className="flex gap-2 overflow-x-auto pb-2 -mx-3 px-3 pt-3">
-          <button
-            type="button"
-            onClick={() => statsSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })}
-            className="flex items-center gap-1.5 shrink-0 px-4 py-2.5 rounded-full bg-stone-100 text-stone-700 text-[13px] font-bold touch-manipulation active:scale-95 transition-transform"
-          >
-            📊 Stats
-          </button>
-          <button
-            type="button"
-            onClick={() => logSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })}
-            className="flex items-center gap-1.5 shrink-0 px-4 py-2.5 rounded-full bg-sky-50 border border-sky-200 text-sky-800 text-[13px] font-bold touch-manipulation active:scale-95 transition-transform"
-          >
-            🌧️ Log
-          </button>
-          <button
-            type="button"
-            onClick={() => recordsSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })}
-            className="flex items-center gap-1.5 shrink-0 px-4 py-2.5 rounded-full bg-stone-100 text-stone-700 text-[13px] font-bold touch-manipulation active:scale-95 transition-transform"
-          >
-            📋 Records
-          </button>
+          {(["stats", "log", "records"] as const).map((section) => {
+            const labels = { stats: "📊 Stats", log: "🌧️ Log", records: "📋 Records" }
+            return (
+              <button
+                key={section}
+                type="button"
+                onClick={() => setMobileSection(section)}
+                className={[
+                  "flex items-center gap-1.5 shrink-0 px-4 py-2 rounded-full text-sm font-semibold touch-manipulation active:scale-95 transition-all",
+                  mobileSection === section
+                    ? "bg-stone-800 text-white shadow-sm"
+                    : "border border-stone-200 bg-stone-100 text-stone-600",
+                ].join(" ")}
+              >
+                {labels[section]}
+              </button>
+            )
+          })}
         </div>
 
-        {/* Stats summary */}
-        <div ref={statsSectionRef} className="px-3 pt-4">
-          <p className="text-sm font-black text-stone-700 mb-3">{currentYear} rainfall</p>
-          <div className="grid grid-cols-2 gap-2">
+        {mobileSection === "stats" && (
+          <>
+            <div className="px-3 pt-4">
+              <p className="text-sm font-black text-stone-700 mb-3">{currentYear} rainfall</p>
+              <div className="grid grid-cols-2 gap-2">
             <div className="rounded-2xl bg-sky-50 border border-sky-100 p-3.5">
               <div className="flex items-center gap-1.5 mb-2">
                 <CloudRain className="h-4 w-4 text-sky-500 shrink-0" />
@@ -615,9 +600,11 @@ export default function RainfallTab({ username, showDataToolsControls = false }:
             </div>
           )}
         </div>
+          </>
+        )}
 
-        {/* Entry form */}
-        <div ref={logSectionRef} className="px-3 pt-4 pb-5 bg-white border-b border-stone-100">
+        {mobileSection === "log" && (
+        <div className="px-3 pt-4 pb-5 bg-white border-b border-stone-100">
           <p className="text-sm font-black text-stone-700 mb-4">🌧️ Log rainfall</p>
 
           {/* Date */}
@@ -725,9 +712,10 @@ export default function RainfallTab({ username, showDataToolsControls = false }:
             {loading ? "Saving…" : "Save record"}
           </button>
         </div>
+        )}
 
-        {/* Recent records */}
-        <div ref={recordsSectionRef} className="px-3 pt-4">
+        {mobileSection === "records" && (
+        <div className="px-3 pt-4">
           <p className="text-sm font-black text-stone-700 mb-3">📋 Recent records</p>
           {records.length === 0 ? (
             <div className="rounded-3xl bg-white shadow-sm px-5 py-8 text-center">
@@ -761,6 +749,7 @@ export default function RainfallTab({ username, showDataToolsControls = false }:
             </div>
           )}
         </div>
+        )}
       </div>
     )
   }

@@ -29,7 +29,7 @@ export default function InPageNav({
   }
 
   return (
-    <div className={cn("flex gap-1.5 overflow-x-auto pb-0.5 -mx-1 px-1", className)}>
+    <div className={cn("flex gap-2 overflow-x-auto pb-0.5 -mx-1 px-1", className)}>
       {items.map((item) => {
         const Icon = item.icon
         return (
@@ -38,10 +38,10 @@ export default function InPageNav({
             type="button"
             onClick={() => handleClick(item)}
             className={cn(
-              "flex shrink-0 items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-semibold whitespace-nowrap transition-all touch-manipulation active:scale-95",
+              "flex shrink-0 items-center gap-1.5 rounded-full px-4 py-2 text-sm font-semibold whitespace-nowrap transition-all touch-manipulation active:scale-95",
               item.active
-                ? "bg-stone-800 text-white dark:bg-stone-200 dark:text-stone-900"
-                : "bg-stone-100 text-stone-600 hover:bg-stone-200 dark:bg-white/[0.07] dark:text-stone-300 dark:hover:bg-white/[0.12]",
+                ? "bg-stone-800 text-white shadow-sm dark:bg-stone-200 dark:text-stone-900"
+                : "border border-stone-200 bg-stone-100 text-stone-600 hover:bg-stone-200 dark:border-white/[0.10] dark:bg-white/[0.07] dark:text-stone-300 dark:hover:bg-white/[0.12]",
             )}
           >
             {Icon && <Icon className="h-3 w-3 shrink-0" />}
