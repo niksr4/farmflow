@@ -561,6 +561,61 @@ export default function RainfallTab({ username, showDataToolsControls = false }:
           </div>
         </div>
 
+        {/* Monthly bar chart */}
+        <div className="px-3 pt-4">
+          <p className="text-sm font-black text-stone-700 mb-1">Monthly distribution</p>
+          <p className="text-[11px] text-sky-600 mb-3">Tap a bar to see daily breakdown</p>
+          <ChartContainer config={MONTHLY_RAIN_CHART_CONFIG} className="h-[200px] w-full">
+            <BarChart data={monthlyTotalsData} margin={{ left: 0, right: 0, top: 4, bottom: 4 }}>
+              <CartesianGrid vertical={false} />
+              <XAxis dataKey="month" tickLine={false} axisLine={false} tick={{ fontSize: 10 }} />
+              <YAxis tickLine={false} axisLine={false} tickFormatter={(v) => formatNumber(v, 1)} width={36} tick={{ fontSize: 10 }} />
+              <ChartTooltip
+                content={
+                  <ChartTooltipContent
+                    formatter={(value) => `${formatNumber(Number(value) || 0, 2)} in`}
+                    labelFormatter={(label) => `${label} ${currentYear}`}
+                  />
+                }
+              />
+              <Bar
+                dataKey="totalInches"
+                fill="var(--color-totalInches)"
+                radius={[4, 4, 0, 0]}
+                maxBarSize={20}
+                className="cursor-pointer"
+                onClick={(_data, index) => setDrilldownMonthIndex(drilldownMonthIndex === index ? null : index)}
+              />
+            </BarChart>
+          </ChartContainer>
+          {drilldownMonthIndex !== null && (
+            <div className="mt-3 rounded-xl border border-sky-200 bg-sky-50/40 p-3">
+              <p className="text-xs font-bold uppercase tracking-[0.18em] text-sky-800 mb-1">
+                {MONTHS[drilldownMonthIndex]} {currentYear} — daily breakdown
+              </p>
+              <p className="text-[11px] text-sky-600 mb-2">
+                <span className="font-bold text-sky-700">{drilldownDays.filter(d => d.rainfallInches !== null && d.rainfallInches > 0).length}</span> wet days ·{" "}
+                <span className="font-bold text-sky-700">{formatNumber(drilldownDays.reduce((s, d) => s + (d.rainfallInches ?? 0), 0), 2)} in</span> total
+              </p>
+              <ChartContainer config={MONTHLY_RAIN_CHART_CONFIG} className="h-[160px] w-full">
+                <BarChart data={drilldownDays} margin={{ left: 0, right: 0, top: 4, bottom: 4 }}>
+                  <CartesianGrid vertical={false} />
+                  <XAxis dataKey="day" tickLine={false} axisLine={false} tick={{ fontSize: 9 }} interval={4} />
+                  <YAxis tickLine={false} axisLine={false} tickFormatter={(v) => formatNumber(v, 1)} width={32} tick={{ fontSize: 9 }} />
+                  <ChartTooltip
+                    content={
+                      <ChartTooltipContent
+                        formatter={(value) => `${formatNumber(Number(value) || 0, 2)} in`}
+                      />
+                    }
+                  />
+                  <Bar dataKey="rainfallInches" fill="var(--color-totalInches)" radius={[3, 3, 0, 0]} maxBarSize={14} />
+                </BarChart>
+              </ChartContainer>
+            </div>
+          )}
+        </div>
+
         {/* Entry form */}
         <div ref={logSectionRef} className="px-3 pt-4 pb-5 bg-white border-b border-stone-100">
           <p className="text-sm font-black text-stone-700 mb-4">🌧️ Log rainfall</p>
