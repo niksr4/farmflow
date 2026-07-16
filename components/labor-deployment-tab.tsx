@@ -4,6 +4,8 @@ import type React from "react"
 
 import { useState, useEffect, useRef, useCallback } from "react"
 import InPageNav from "@/components/in-page-nav"
+import FilterBar from "@/components/filter-bar"
+import { useListControls } from "@/hooks/use-list-controls"
 import { useLaborData } from "@/hooks/use-labor-data"
 import { useTenantSettings } from "@/hooks/use-tenant-settings"
 import { Button } from "@/components/ui/button"
@@ -353,6 +355,15 @@ export default function LaborDeploymentTab({
   const formSectionRef = useRef<HTMLDivElement>(null)
   const historySectionRef = useRef<HTMLDivElement>(null)
   const [activeSection, setActiveSection] = useState<"form" | "history">("form")
+  const historyControls = useListControls(deployments, {
+    searchFields: (d) => [d.code, d.reference, d.notes, d.user],
+    sorters: {
+      date: (d) => String(d.date || "").slice(0, 10),
+      amount: (d) => Number(d.totalCost) || 0,
+      code: (d) => String(d.code || ""),
+    },
+    defaultSort: "date",
+  })
 
   return (
     <>
@@ -806,11 +817,29 @@ export default function LaborDeploymentTab({
                 <CardTitle className="mt-0.5 text-lg">Labour entries</CardTitle>
               </div>
             </div>
+            <FilterBar
+              className="mt-3"
+              search={historyControls.search}
+              onSearchChange={historyControls.setSearch}
+              searchPlaceholder="Search code, activity, notes…"
+              sortOptions={[
+                { value: "date", label: "Date" },
+                { value: "amount", label: "Amount" },
+                { value: "code", label: "Code" },
+              ]}
+              sortValue={historyControls.sortValue}
+              onSortChange={historyControls.setSortValue}
+              sortDirection={historyControls.sortDirection}
+              onSortDirectionChange={historyControls.setSortDirection}
+            />
           </CardHeader>
           <CardContent className="p-0">
+            {historyControls.isFiltering && historyControls.items.length === 0 && (
+              <p className="px-4 py-6 text-center text-sm text-stone-400">No entries match your search.</p>
+            )}
             {/* Mobile View */}
             <div className="block sm:hidden divide-y divide-stone-50">
-              {deployments.map((deployment) => {
+              {historyControls.items.map((deployment) => {
                 const isExpanded = expandedRows.has(deployment.id)
                 const totalWorkers = (deployment.laborEntries || []).reduce((sum: number, e: any) => sum + (Number(e.laborCount) || 0), 0)
                 return (
@@ -911,7 +940,7 @@ export default function LaborDeploymentTab({
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {deployments.map((deployment, index) => (
+                  {historyControls.items.map((deployment, index) => (
                     <TableRow key={deployment.id} className="border-stone-100 hover:bg-stone-50/60 dark:border-white/[0.04] dark:hover:bg-white/[0.02]">
                       <TableCell>{formatDateOnly(deployment.date)}</TableCell>
                       <TableCell className="font-medium">{deployment.code}</TableCell>

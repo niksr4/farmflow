@@ -4,6 +4,7 @@ import { useEffect, useState, useCallback, useRef } from "react"
 import { ArrowRight, Check, Loader2, Minus, Plus, Search, X } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { Input } from "@/components/ui/input"
+import { Button } from "@/components/ui/button"
 import { formatCurrency } from "@/lib/format"
 import { useTenantSettings } from "@/hooks/use-tenant-settings"
 import { format, subDays } from "date-fns"
@@ -446,14 +447,15 @@ export default function QuickLogPanel({ onNavigateToFull, locationId, className 
 
       {/* Link to full log */}
       {onNavigateToFull && (
-        <button
-          type="button"
+        <Button
+          size="xl"
+          variant="outline"
           onClick={onNavigateToFull}
-          className="w-full flex items-center justify-center gap-2 h-12 rounded-2xl border-2 border-emerald-200 bg-emerald-50 text-sm font-bold text-emerald-800 hover:bg-emerald-100 active:scale-[0.98] transition-all touch-manipulation"
+          className="w-full rounded-2xl border-2 border-emerald-200 bg-emerald-50 text-emerald-800 hover:bg-emerald-100"
         >
           Log with more detail
           <ArrowRight className="h-4 w-4" />
-        </button>
+        </Button>
       )}
     </div>
     </>

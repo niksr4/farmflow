@@ -2,6 +2,8 @@
 
 import { useCallback, useEffect, useState, useRef, type ChangeEvent, type KeyboardEvent } from "react"
 import InPageNav from "@/components/in-page-nav"
+import FilterBar from "@/components/filter-bar"
+import { useListControls } from "@/hooks/use-list-controls"
 import Link from "next/link"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -147,6 +149,15 @@ export default function ProcessingTab({ showDataToolsControls = false }: Process
   const [hasExistingRecord, setHasExistingRecord] = useState(false)
   const [previousRecord, setPreviousRecord] = useState<ProcessingRecord | null>(null)
   const [recentRecords, setRecentRecords] = useState<ProcessingRecord[]>([])
+  const recentControls = useListControls(recentRecords, {
+    searchFields: (r) => [r.lot_id, r.quality_grade, String(r.process_date || "").slice(0, 10)],
+    sorters: {
+      date: (r) => String(r.process_date || "").slice(0, 10),
+      crop: (r) => Number(r.crop_today) || 0,
+      bags: (r) => Number(r.dry_p_bags) || 0,
+    },
+    defaultSort: "date",
+  })
   const [selectedRecentRecord, setSelectedRecentRecord] = useState<ProcessingRecord | null>(null)
   const [isLoading, setIsLoading] = useState(false)
   const [isLoadingRecords, setIsLoadingRecords] = useState(false)
@@ -1521,6 +1532,21 @@ export default function ProcessingTab({ showDataToolsControls = false }: Process
                 ? `Showing ${recentRecords.length} of ${recordsTotalCount} record(s)`
                 : `${recentRecords.length} record(s) found`}
           </CardDescription>
+          <FilterBar
+            className="mt-3"
+            search={recentControls.search}
+            onSearchChange={recentControls.setSearch}
+            searchPlaceholder="Search date, lot, grade…"
+            sortOptions={[
+              { value: "date", label: "Date" },
+              { value: "crop", label: "Crop kg" },
+              { value: "bags", label: "DP bags" },
+            ]}
+            sortValue={recentControls.sortValue}
+            onSortChange={recentControls.setSortValue}
+            sortDirection={recentControls.sortDirection}
+            onSortDirectionChange={recentControls.setSortDirection}
+          />
         </CardHeader>
         <CardContent>
           {isLoadingRecords ? (
@@ -1576,7 +1602,10 @@ export default function ProcessingTab({ showDataToolsControls = false }: Process
                   </div>
                 </div>
               )}
-              {(showAllRecords ? recentRecords : recentRecords.slice(0, 5)).map((rec) => (
+              {recentControls.isFiltering && recentControls.items.length === 0 && (
+                <p className="py-4 text-center text-sm text-stone-400">No entries match your search.</p>
+              )}
+              {(showAllRecords || recentControls.isFiltering ? recentControls.items : recentControls.items.slice(0, 5)).map((rec) => (
                 <div key={rec.id} className="relative">
                   <button
                     type="button"

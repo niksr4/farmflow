@@ -2,6 +2,8 @@
 
 import { useState, useEffect, useCallback, useMemo, useRef, type ChangeEvent, type KeyboardEvent as ReactKeyboardEvent } from "react"
 import InPageNav from "@/components/in-page-nav"
+import FilterBar from "@/components/filter-bar"
+import { useListControls } from "@/hooks/use-list-controls"
 import Link from "next/link"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -128,6 +130,15 @@ export default function DispatchTab({ showDataToolsControls = false }: DispatchT
   const [bagTotals, setBagTotals] = useState<BagTotals>(emptyBagTotals)
   const [formBagTotals, setFormBagTotals] = useState<BagTotals>(emptyBagTotals)
   const [dispatchRecords, setDispatchRecords] = useState<DispatchRecord[]>([])
+  const recordControls = useListControls(dispatchRecords, {
+    searchFields: (r) => [r.location_name, r.location_code, r.estate, r.coffee_type, r.bag_type, r.buyer_name, r.notes, r.lot_id],
+    sorters: {
+      date: (r) => String(r.dispatch_date || "").slice(0, 10),
+      bags: (r) => Number(r.bags_dispatched) || 0,
+      location: (r) => String(r.location_name || r.estate || ""),
+    },
+    defaultSort: "date",
+  })
   const [dispatchSummary, setDispatchSummary] = useState<DispatchSummaryRow[]>([])
   const [formDispatchSummary, setFormDispatchSummary] = useState<DispatchSummaryRow[]>([])
   const [bagTotalsScope, setBagTotalsScope] = useState<LocationScope>("all")
@@ -1368,8 +1379,26 @@ export default function DispatchTab({ showDataToolsControls = false }: DispatchT
               </Button>
             )}
           </div>
+          <FilterBar
+            className="mt-3"
+            search={recordControls.search}
+            onSearchChange={recordControls.setSearch}
+            searchPlaceholder="Search location, coffee, buyer, notes…"
+            sortOptions={[
+              { value: "date", label: "Date" },
+              { value: "bags", label: "Bags" },
+              { value: "location", label: "Location" },
+            ]}
+            sortValue={recordControls.sortValue}
+            onSortChange={recordControls.setSortValue}
+            sortDirection={recordControls.sortDirection}
+            onSortDirectionChange={recordControls.setSortDirection}
+          />
         </div>
         <div className="p-5">
+          {recordControls.isFiltering && recordControls.items.length === 0 && !isLoading && dispatchRecords.length > 0 && (
+            <p className="py-6 text-center text-sm text-stone-400">No records match your search.</p>
+          )}
           {selectedDispatchRecord && (
                 <div className="mb-4 rounded-xl border border-emerald-100 bg-emerald-50/50 p-3 text-sm">
                   <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
@@ -1420,7 +1449,7 @@ export default function DispatchTab({ showDataToolsControls = false }: DispatchT
           ) : (
             <div className="space-y-4">
               <div className="space-y-3 md:hidden">
-                {dispatchRecords.map((record) => {
+                {recordControls.items.map((record) => {
                   const receivedKgs = resolveDispatchRecordReceivedKgs(record, bagWeightKg)
                   return (
                     <div
@@ -1507,7 +1536,7 @@ export default function DispatchTab({ showDataToolsControls = false }: DispatchT
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {dispatchRecords.map((record) => (
+                    {recordControls.items.map((record) => (
                       <TableRow
                         key={record.id}
                         className={cn(

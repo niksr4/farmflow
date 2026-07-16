@@ -5,6 +5,7 @@ import { Bar, BarChart, CartesianGrid, Line, LineChart, XAxis, YAxis } from "rec
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { StatTile } from "@/components/ui/stat-tile"
 import { ChartContainer, ChartTooltip, ChartTooltipContent, type ChartConfig } from "@/components/ui/chart"
 import { FieldLabel } from "@/components/ui/field-label"
 import { Calendar } from "@/components/ui/calendar"
@@ -548,34 +549,24 @@ export default function RainfallTab({ username, showDataToolsControls = false }:
             <div className="px-3 pt-4">
               <p className="text-sm font-black text-stone-700 mb-3">{currentYear} rainfall</p>
               <div className="grid grid-cols-2 gap-2">
-            <div className="rounded-2xl bg-sky-50 border border-sky-100 p-3.5">
-              <div className="flex items-center gap-1.5 mb-2">
-                <CloudRain className="h-4 w-4 text-sky-500 shrink-0" />
-                <p className="text-[10px] font-bold uppercase tracking-wide text-sky-600">Annual total</p>
+                <StatTile
+                  tone="sky"
+                  icon={<CloudRain className="h-4 w-4 shrink-0 text-sky-500" />}
+                  label="Annual total"
+                  value={<>{formatNumber(annualTotal, 2)}&quot;</>}
+                  hint="this year"
+                />
+                <StatTile
+                  tone="sky"
+                  icon={<CloudRain className="h-4 w-4 shrink-0 text-sky-400" />}
+                  label="Last 30 days"
+                  value={<>{formatNumber(insights.last30Total, 2)}&quot;</>}
+                  hint="rainfall"
+                />
+                <StatTile label="💦 Wet days" value={insights.wetDaysLast30} hint="last 30 days" />
+                <StatTile tone="amber" label="☀️ Dry streak" value={`${insights.longestDryStreak}d`} hint="longest recent" />
               </div>
-              <p className="text-xl font-black text-stone-900 tabular-nums">{formatNumber(annualTotal, 2)}&quot;</p>
-              <p className="text-[10px] text-stone-400 mt-1">this year</p>
             </div>
-            <div className="rounded-2xl bg-sky-50 border border-sky-100 p-3.5">
-              <div className="flex items-center gap-1.5 mb-2">
-                <CloudRain className="h-4 w-4 text-sky-400 shrink-0" />
-                <p className="text-[10px] font-bold uppercase tracking-wide text-sky-600">Last 30 days</p>
-              </div>
-              <p className="text-xl font-black text-stone-900 tabular-nums">{formatNumber(insights.last30Total, 2)}&quot;</p>
-              <p className="text-[10px] text-stone-400 mt-1">rainfall</p>
-            </div>
-            <div className="rounded-2xl bg-stone-50 border border-stone-100 p-3.5">
-              <p className="text-[10px] font-bold uppercase tracking-wide text-stone-500 mb-2">💦 Wet days</p>
-              <p className="text-xl font-black text-stone-900 tabular-nums">{insights.wetDaysLast30}</p>
-              <p className="text-[10px] text-stone-400 mt-1">last 30 days</p>
-            </div>
-            <div className="rounded-2xl bg-amber-50 border border-amber-100 p-3.5">
-              <p className="text-[10px] font-bold uppercase tracking-wide text-amber-600 mb-2">☀️ Dry streak</p>
-              <p className="text-xl font-black text-stone-900 tabular-nums">{insights.longestDryStreak}d</p>
-              <p className="text-[10px] text-stone-400 mt-1">longest recent</p>
-            </div>
-          </div>
-        </div>
 
         {/* Monthly bar chart */}
         <div className="px-3 pt-4">
@@ -733,15 +724,15 @@ export default function RainfallTab({ username, showDataToolsControls = false }:
           />
 
           {/* Save */}
-          <button
-            type="button"
+          <Button
+            size="2xl"
             onClick={handleSaveRecord}
             disabled={loading}
-            className="w-full h-14 rounded-2xl bg-sky-600 text-white text-base font-bold flex items-center justify-center gap-2 shadow-md shadow-sky-100 active:scale-[0.98] transition-all touch-manipulation disabled:opacity-70"
+            className="w-full border-sky-600 bg-sky-600 text-white shadow-md shadow-sky-100 hover:bg-sky-700 [&_svg]:size-5"
           >
-            <CloudRain className="h-5 w-5" />
+            <CloudRain />
             {loading ? "Saving…" : "Save record"}
-          </button>
+          </Button>
         </div>
         )}
 
@@ -807,24 +798,25 @@ export default function RainfallTab({ username, showDataToolsControls = false }:
               </div>
             </div>
             <div className="flex gap-2">
-              <button
-                type="button"
+              <Button
+                size="xl"
+                variant="outline"
                 onClick={() => handleRangeExport("csv")}
                 disabled={exporting}
-                className="flex-1 h-12 rounded-xl border-2 border-sky-200 bg-sky-50 text-sm font-bold text-sky-800 flex items-center justify-center gap-1.5 active:scale-[0.98] transition-all touch-manipulation disabled:opacity-60"
+                className="flex-1 border-sky-200 bg-sky-50 text-sky-800 hover:bg-sky-100"
               >
                 <Download className="h-4 w-4" />
                 CSV
-              </button>
-              <button
-                type="button"
+              </Button>
+              <Button
+                size="xl"
                 onClick={() => handleRangeExport("xlsx")}
                 disabled={exporting}
-                className="flex-1 h-12 rounded-xl bg-sky-600 text-sm font-bold text-white flex items-center justify-center gap-1.5 active:scale-[0.98] transition-all touch-manipulation disabled:opacity-60"
+                className="flex-1 border-sky-600 bg-sky-600 text-white hover:bg-sky-700"
               >
                 <Download className="h-4 w-4" />
                 Excel
-              </button>
+              </Button>
             </div>
           </div>
         </div>

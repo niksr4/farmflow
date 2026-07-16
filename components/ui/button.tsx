@@ -25,6 +25,9 @@ const buttonVariants = cva(
         sm: "h-10 rounded-md px-3 text-[15px] sm:h-9 sm:text-sm",
         lg: "h-12 rounded-md px-8 text-base sm:h-11 sm:text-sm",
         icon: "h-11 w-11 sm:h-10 sm:w-10",
+        // Mobile-first tap targets used across phone layouts — change here, not per-tab
+        xl: "h-12 rounded-xl px-5 text-base font-bold active:scale-[0.98]",
+        "2xl": "h-14 rounded-2xl px-6 text-base font-bold active:scale-[0.98]",
       },
     },
     defaultVariants: {

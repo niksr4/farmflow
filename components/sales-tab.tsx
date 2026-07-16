@@ -2,6 +2,8 @@
 
 import { useState, useEffect, useCallback, useMemo, useRef, type ChangeEvent, type KeyboardEvent as ReactKeyboardEvent } from "react"
 import InPageNav from "@/components/in-page-nav"
+import FilterBar from "@/components/filter-bar"
+import { useListControls } from "@/hooks/use-list-controls"
 import Link from "next/link"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -170,6 +172,16 @@ export default function SalesTab({
   const calculatedRevenue = Number((bagsSoldValue * pricePerBagValue).toFixed(2))
   
   const [salesRecords, setSalesRecords] = useState<SalesRecord[]>([])
+  const recordControls = useListControls(salesRecords, {
+    searchFields: (r) => [r.buyer_name, r.location_name, r.location_code, r.estate, r.coffee_type, r.bag_type, r.batch_no, r.lot_id],
+    sorters: {
+      date: (r) => String(r.sale_date || "").slice(0, 10),
+      revenue: (r) => Number(r.revenue) || 0,
+      bags: (r) => Number(r.bags_sold) || 0,
+      buyer: (r) => String(r.buyer_name || ""),
+    },
+    defaultSort: "date",
+  })
   const [dispatchSummary, setDispatchSummary] = useState<DispatchSummaryRow[]>([])
   const [overviewDispatchSummary, setOverviewDispatchSummary] = useState<DispatchSummaryRow[]>([])
   const [overviewSalesSummary, setOverviewSalesSummary] = useState<SalesSummaryRow[]>([])
@@ -1864,8 +1876,27 @@ export default function SalesTab({
               )}
             </div>
           </div>
+          <FilterBar
+            className="px-5 pb-4"
+            search={recordControls.search}
+            onSearchChange={recordControls.setSearch}
+            searchPlaceholder="Search buyer, location, coffee, batch…"
+            sortOptions={[
+              { value: "date", label: "Date" },
+              { value: "revenue", label: "Revenue" },
+              { value: "bags", label: "Bags" },
+              { value: "buyer", label: "Buyer" },
+            ]}
+            sortValue={recordControls.sortValue}
+            onSortChange={recordControls.setSortValue}
+            sortDirection={recordControls.sortDirection}
+            onSortDirectionChange={recordControls.setSortDirection}
+          />
         </div>
         <div className="p-5">
+          {recordControls.isFiltering && recordControls.items.length === 0 && !isLoading && salesRecords.length > 0 && (
+            <p className="py-6 text-center text-sm text-stone-400">No records match your search.</p>
+          )}
           {selectedSalesRecord && (
                 <div className="mb-4 rounded-xl border border-emerald-100 bg-emerald-50/50 p-3 text-sm">
                   <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
@@ -1920,7 +1951,7 @@ export default function SalesTab({
           ) : (
             <div className="space-y-4">
               <div className="space-y-3 md:hidden">
-                {salesRecords.map((record) => {
+                {recordControls.items.map((record) => {
                   const soldKgs = resolveSalesRecordKgs(record, bagWeightKg)
                   return (
                     <div
@@ -2016,7 +2047,7 @@ export default function SalesTab({
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {salesRecords.map((record) => (
+                    {recordControls.items.map((record) => (
                       <TableRow
                         key={record.id}
                         className={cn(

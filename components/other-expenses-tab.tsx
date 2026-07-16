@@ -4,6 +4,8 @@ import type React from "react"
 
 import { useState, useEffect, useCallback, useRef } from "react"
 import InPageNav from "@/components/in-page-nav"
+import FilterBar from "@/components/filter-bar"
+import { useListControls } from "@/hooks/use-list-controls"
 import { cn } from "@/lib/utils"
 import { FARMFLOW_RECORD_SAVED_EVENT } from "@/components/inventory-system/constants"
 import { useConsumablesData } from "@/hooks/use-consumables-data"
@@ -254,6 +256,15 @@ export default function OtherExpensesTab({
   const formSectionRef = useRef<HTMLDivElement>(null)
   const historySectionRef = useRef<HTMLDivElement>(null)
   const [activeSection, setActiveSection] = useState<"form" | "history">("form")
+  const historyControls = useListControls(deployments, {
+    searchFields: (d) => [d.code, d.reference, d.notes, d.user],
+    sorters: {
+      date: (d) => String(d.date || "").slice(0, 10),
+      amount: (d) => Number(d.amount) || 0,
+      code: (d) => String(d.code || ""),
+    },
+    defaultSort: "date",
+  })
 
   useEffect(() => {
     if (!savedConfirm) return
@@ -615,11 +626,29 @@ export default function OtherExpensesTab({
         <Card ref={historySectionRef}>
           <CardHeader>
             <CardTitle className="text-xl sm:text-2xl">📋 Expense History</CardTitle>
+            <FilterBar
+              className="mt-3"
+              search={historyControls.search}
+              onSearchChange={historyControls.setSearch}
+              searchPlaceholder="Search code, reference, notes…"
+              sortOptions={[
+                { value: "date", label: "Date" },
+                { value: "amount", label: "Amount" },
+                { value: "code", label: "Code" },
+              ]}
+              sortValue={historyControls.sortValue}
+              onSortChange={historyControls.setSortValue}
+              sortDirection={historyControls.sortDirection}
+              onSortDirectionChange={historyControls.setSortDirection}
+            />
           </CardHeader>
           <CardContent className="p-0">
+            {historyControls.isFiltering && historyControls.items.length === 0 && (
+              <p className="px-4 py-6 text-center text-sm text-stone-400">No entries match your search.</p>
+            )}
             {/* Mobile View */}
             <div className="block sm:hidden divide-y divide-stone-50">
-              {deployments.map((deployment) => {
+              {historyControls.items.map((deployment) => {
                 const isExpanded = expandedRows.has(deployment.id)
                 return (
                   <Collapsible key={deployment.id} open={isExpanded} onOpenChange={() => toggleRow(deployment.id)}>
@@ -708,7 +737,7 @@ export default function OtherExpensesTab({
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {deployments.map((deployment, index) => (
+                  {historyControls.items.map((deployment, index) => (
                     <TableRow key={deployment.id} className={index % 2 === 0 ? "bg-white" : "bg-muted/20"}>
                       <TableCell>{formatDateOnly(deployment.date)}</TableCell>
                       <TableCell className="font-medium">{deployment.code}</TableCell>
