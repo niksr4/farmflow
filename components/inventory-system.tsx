@@ -4611,8 +4611,10 @@ export default function InventorySystem() {
     />
   )
 
+  // Clearance for bottom nav (68px) + floating FABs (48px) + breathing room,
+  // so the last rows of lists are never hidden behind floating chrome
   const mobileBottomSpacingClass = isMobile
-    ? "pb-[calc(5rem+env(safe-area-inset-bottom))]"
+    ? "pb-[calc(9rem+env(safe-area-inset-bottom))]"
     : "pb-8"
 
   return (

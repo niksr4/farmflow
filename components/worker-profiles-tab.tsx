@@ -227,7 +227,7 @@ export default function WorkerProfilesTab() {
                   tooltip="Standard daily wage for this worker. Used to calculate attendance earnings in Payroll Summary. E.g. ₹500 per day."
                 />
                 <Input
-                  type="number"
+                  type="number" inputMode="decimal"
                   min={0}
                   value={form.dailyRate}
                   onChange={(e) => setForm((f) => ({ ...f, dailyRate: e.target.value }))}
@@ -293,7 +293,7 @@ export default function WorkerProfilesTab() {
                         </TableCell>
                         <TableCell>
                           <Input
-                            type="number"
+                            type="number" inputMode="decimal"
                             value={editForm.dailyRate}
                             onChange={(e) => setEditForm((f) => ({ ...f, dailyRate: e.target.value }))}
                             className="h-8 w-24"

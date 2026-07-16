@@ -407,7 +407,7 @@ export default function OtherExpensesTab({
                   </Label>
                   <Input
                     id="expense-amount"
-                    type="number"
+                    type="number" inputMode="decimal"
                     min="0"
                     step="0.01"
                     value={formData.amount}
@@ -594,7 +594,7 @@ export default function OtherExpensesTab({
                           <div className="space-y-1">
                             {idx === 0 && <Label className="text-xs text-muted-foreground">Qty used</Label>}
                             <Input
-                              type="number"
+                              type="number" inputMode="decimal"
                               min="0.001"
                               step="0.001"
                               value={line.quantity}

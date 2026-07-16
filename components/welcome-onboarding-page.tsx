@@ -224,7 +224,7 @@ export default function WelcomeOnboardingPage() {
                   <Label htmlFor="welcome-bag-weight">{t("public.welcome.bagWeight")}</Label>
                   <Input
                     id="welcome-bag-weight"
-                    type="number"
+                    type="number" inputMode="decimal"
                     min={40}
                     max={70}
                     step={1}

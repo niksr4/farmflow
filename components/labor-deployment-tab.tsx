@@ -691,7 +691,7 @@ export default function LaborDeploymentTab({
                           />
                         ) : (
                           <Input
-                            type="number"
+                            type="number" inputMode="decimal"
                             min="0"
                             step="0.01"
                             value={set.costPerLaborer || ""}
@@ -747,7 +747,7 @@ export default function LaborDeploymentTab({
                             </div>
                           ) : (
                             <Input
-                              type="number"
+                              type="number" inputMode="decimal"
                               min="0"
                               step="0.5"
                               value={set.laborers}
@@ -759,7 +759,7 @@ export default function LaborDeploymentTab({
                         <div className="space-y-2">
                           <Label className="text-base">Cost per worker (₹)</Label>
                           <Input
-                            type="number"
+                            type="number" inputMode="decimal"
                             min="0"
                             step="0.01"
                             value={set.costPerLaborer}

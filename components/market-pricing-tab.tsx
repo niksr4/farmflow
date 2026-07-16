@@ -345,7 +345,7 @@ export default function MarketPricingTab() {
             <div className="space-y-1">
               <Label className="text-xs">₹/kg threshold</Label>
               <Input
-                type="number"
+                type="number" inputMode="decimal"
                 className="h-8 w-32 text-sm font-mono"
                 placeholder="e.g. 12000"
                 value={alertDraft}
@@ -596,7 +596,7 @@ export default function MarketPricingTab() {
                   <div className="space-y-1.5">
                     <Label>Price / kg (₹) *</Label>
                     <Input
-                      type="number"
+                      type="number" inputMode="decimal"
                       step="0.01"
                       min="0"
                       value={priceForm.price_per_kg}
@@ -608,7 +608,7 @@ export default function MarketPricingTab() {
                   <div className="space-y-1.5">
                     <Label>Quantity (kg)</Label>
                     <Input
-                      type="number"
+                      type="number" inputMode="decimal"
                       step="0.01"
                       min="0"
                       value={priceForm.quantity_kg}

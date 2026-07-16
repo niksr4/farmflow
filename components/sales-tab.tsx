@@ -1682,7 +1682,7 @@ export default function SalesTab({
                 tooltip={`Enter kilograms sold. We'll convert to bags using ${bagWeightKg} kg per bag.`}
               />
               <Input
-                type="number"
+                type="number" inputMode="decimal"
                 step="0.01"
                 min={0}
                 placeholder="KGs sold"
@@ -1729,7 +1729,7 @@ export default function SalesTab({
                 tooltip="Selling price per bag; revenue auto-calculates."
               />
               <Input
-                type="number"
+                type="number" inputMode="decimal"
                 step="0.01"
                 min={0}
                 placeholder="Enter price per bag"

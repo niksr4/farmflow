@@ -466,7 +466,7 @@ export default function OtherSalesTab({
               <div className="space-y-2">
                 <Label>KGs sold</Label>
                 <Input
-                  type="number"
+                  type="number" inputMode="decimal"
                   min={0}
                   step="0.01"
                   value={form.kgs_sold}
@@ -478,7 +478,7 @@ export default function OtherSalesTab({
               <div className="space-y-2">
                 <Label>Rate / KG (Rs)</Label>
                 <Input
-                  type="number"
+                  type="number" inputMode="decimal"
                   min={0}
                   step="0.01"
                   value={form.rate_per_kg}
@@ -492,7 +492,7 @@ export default function OtherSalesTab({
             <div className="space-y-2">
               <Label>Contract value (Rs)</Label>
               <Input
-                type="number"
+                type="number" inputMode="decimal"
                 min={0}
                 step="0.01"
                 value={form.contract_amount}

@@ -21,12 +21,12 @@ export default function InventoryWorkspaceBanner({
       <div className="flex items-start gap-3">
         <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" />
         <div className="space-y-0.5">
-          <p className="text-sm font-semibold text-amber-900">Inventory handles stock usage directly</p>
+          <p className="text-sm font-semibold text-amber-900">Used fertiliser, fuel, or chemicals?</p>
           <p className="text-xs text-amber-800">
-            Use <strong>Deplete</strong> here when you only need stock tracking for fertiliser, chemicals, fuel, or other consumables.{" "}
+            Record it here to update your stock.{" "}
             {canShowAccounts
-              ? "Use Accounts → Other Expenses only when the same usage should also land in Accounts and P&L."
-              : "This works even if you do not use Accounts."}
+              ? "If it should also show as spending in your accounts, record it as an expense instead."
+              : "Stock tracking works even if you do not use Accounts."}
           </p>
         </div>
       </div>
@@ -44,7 +44,7 @@ export default function InventoryWorkspaceBanner({
             onClick={onOpenExpenses}
             className="rounded-lg border border-amber-300 bg-white px-3 py-2 text-xs font-semibold text-amber-800 transition-colors hover:bg-amber-100 touch-manipulation"
           >
-            Open Accounts expense
+            Record as expense
           </button>
         )}
         <button

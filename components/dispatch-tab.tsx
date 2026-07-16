@@ -1271,7 +1271,7 @@ export default function DispatchTab({ showDataToolsControls = false }: DispatchT
                 tooltip={`Number of bags shipped (estate bag weight ${bagWeightKg} kg).`}
               />
               <Input
-                type="number"
+                type="number" inputMode="decimal"
                 step="0.01"
                 min={0}
                 placeholder="Enter number of bags"
@@ -1296,7 +1296,7 @@ export default function DispatchTab({ showDataToolsControls = false }: DispatchT
               />
               <Input
                 ref={kgsReceivedInputRef}
-                type="number"
+                type="number" inputMode="decimal"
                 step="0.01"
                 min={0}
                 placeholder="Enter KGs received"

@@ -451,7 +451,7 @@ export function RubberTab() {
                 <Label htmlFor="latexKg">Latex collected (kg) *</Label>
                 <Input
                   id="latexKg"
-                  type="number"
+                  type="number" inputMode="decimal"
                   step="0.01"
                   min="0"
                   value={latexKg}
@@ -464,7 +464,7 @@ export function RubberTab() {
                 <Label htmlFor="drcPct">DRC % (optional)</Label>
                 <Input
                   id="drcPct"
-                  type="number"
+                  type="number" inputMode="decimal"
                   step="0.1"
                   min="0"
                   max="100"
@@ -487,7 +487,7 @@ export function RubberTab() {
                 <Label htmlFor="cupLumpKg">Cup lump produced (kg)</Label>
                 <Input
                   id="cupLumpKg"
-                  type="number"
+                  type="number" inputMode="decimal"
                   step="0.01"
                   min="0"
                   value={cupLumpKg}
@@ -514,7 +514,7 @@ export function RubberTab() {
                 <Label htmlFor="sheetsKg">Sheets / product weight (kg)</Label>
                 <Input
                   id="sheetsKg"
-                  type="number"
+                  type="number" inputMode="decimal"
                   step="0.01"
                   min="0"
                   value={sheetsKg}

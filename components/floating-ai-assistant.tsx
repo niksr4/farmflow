@@ -394,12 +394,13 @@ export default function FloatingAiAssistant() {
       <button
         type="button"
         onClick={() => setIsOpen((current) => !current)}
-        className="flex h-14 items-center gap-3 rounded-full border border-emerald-200 bg-white px-5 text-sm font-semibold text-emerald-900 shadow-[0_18px_40px_-20px_rgba(14,93,82,0.35)] transition-colors hover:border-emerald-300 hover:bg-emerald-50"
+        aria-label="Ask FarmFlow"
+        className="flex h-12 w-12 items-center justify-center rounded-full border border-emerald-200 bg-white text-sm font-semibold text-emerald-900 shadow-[0_18px_40px_-20px_rgba(14,93,82,0.35)] transition-colors hover:border-emerald-300 hover:bg-emerald-50 sm:h-14 sm:w-auto sm:gap-3 sm:px-5"
       >
         <span className="flex h-8 w-8 items-center justify-center rounded-full bg-emerald-700 text-white shadow-sm">
           <Brain className="h-4 w-4" />
         </span>
-        Ask FarmFlow
+        <span className="hidden sm:inline">Ask FarmFlow</span>
       </button>
     </div>
   )

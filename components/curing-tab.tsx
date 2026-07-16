@@ -347,7 +347,7 @@ export default function CuringTab() {
                 value={intakeKg}
                 onChange={handleNonNegativeChange(setIntakeKg)}
                 onKeyDown={blockInvalidNumberKey}
-                type="number"
+                type="number" inputMode="decimal"
                 min={0}
                 step="0.01"
               />
@@ -358,7 +358,7 @@ export default function CuringTab() {
                 value={intakeBags}
                 onChange={handleNonNegativeChange(setIntakeBags)}
                 onKeyDown={blockInvalidNumberKey}
-                type="number"
+                type="number" inputMode="decimal"
                 min={0}
                 step="0.01"
               />
@@ -372,7 +372,7 @@ export default function CuringTab() {
                 value={moistureStart}
                 onChange={handleNonNegativeChange(setMoistureStart)}
                 onKeyDown={blockInvalidNumberKey}
-                type="number"
+                type="number" inputMode="decimal"
                 min={0}
                 step="0.01"
               />
@@ -386,7 +386,7 @@ export default function CuringTab() {
                 value={moistureEnd}
                 onChange={handleNonNegativeChange(setMoistureEnd)}
                 onKeyDown={blockInvalidNumberKey}
-                type="number"
+                type="number" inputMode="decimal"
                 min={0}
                 step="0.01"
               />
@@ -400,7 +400,7 @@ export default function CuringTab() {
                 value={dryingDays}
                 onChange={handleNonNegativeChange(setDryingDays)}
                 onKeyDown={blockInvalidNumberKey}
-                type="number"
+                type="number" inputMode="decimal"
                 min={0}
                 step="1"
               />
@@ -414,7 +414,7 @@ export default function CuringTab() {
                 value={outputKg}
                 onChange={handleNonNegativeChange(setOutputKg)}
                 onKeyDown={blockInvalidNumberKey}
-                type="number"
+                type="number" inputMode="decimal"
                 min={0}
                 step="0.01"
               />
@@ -425,7 +425,7 @@ export default function CuringTab() {
                 value={outputBags}
                 onChange={handleNonNegativeChange(setOutputBags)}
                 onKeyDown={blockInvalidNumberKey}
-                type="number"
+                type="number" inputMode="decimal"
                 min={0}
                 step="0.01"
               />
@@ -439,7 +439,7 @@ export default function CuringTab() {
                 value={lossKg || calculatedLoss}
                 onChange={handleNonNegativeChange(setLossKg)}
                 onKeyDown={blockInvalidNumberKey}
-                type="number"
+                type="number" inputMode="decimal"
                 min={0}
                 step="0.01"
               />

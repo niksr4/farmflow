@@ -336,7 +336,7 @@ export default function QualityGradingTab() {
                 value={moisture}
                 onChange={handleNonNegativeChange(setMoisture)}
                 onKeyDown={blockInvalidNumberKey}
-                type="number"
+                type="number" inputMode="decimal"
                 min={0}
                 step="0.01"
               />
@@ -354,7 +354,7 @@ export default function QualityGradingTab() {
                 value={defectsCount}
                 onChange={handleNonNegativeChange(setDefectsCount)}
                 onKeyDown={blockInvalidNumberKey}
-                type="number"
+                type="number" inputMode="decimal"
                 min={0}
                 step="1"
               />
@@ -368,7 +368,7 @@ export default function QualityGradingTab() {
                 value={sampleWeight}
                 onChange={handleNonNegativeChange(setSampleWeight)}
                 onKeyDown={blockInvalidNumberKey}
-                type="number"
+                type="number" inputMode="decimal"
                 min={0}
                 step="0.01"
               />
@@ -382,7 +382,7 @@ export default function QualityGradingTab() {
                 value={outturnPct}
                 onChange={handleNonNegativeChange(setOutturnPct)}
                 onKeyDown={blockInvalidNumberKey}
-                type="number"
+                type="number" inputMode="decimal"
                 min={0}
                 step="0.01"
               />
@@ -396,7 +396,7 @@ export default function QualityGradingTab() {
                 value={cupScore}
                 onChange={handleNonNegativeChange(setCupScore)}
                 onKeyDown={blockInvalidNumberKey}
-                type="number"
+                type="number" inputMode="decimal"
                 min={0}
                 step="0.01"
               />

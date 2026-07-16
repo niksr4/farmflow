@@ -2,7 +2,7 @@
 
 import React from "react"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { Card, CardContent } from "@/components/ui/card"
 
 // These are loaded as dynamic imports in the parent; passed as components here to keep this file bundle-safe
 type CropComponent = React.ComponentType<{ showDataToolsControls?: boolean }>
@@ -62,41 +62,29 @@ export default function ProcessingWorkspace({
       onValueChange={(value) => onViewChange(value as ProcessingView)}
       className="space-y-6"
     >
+      {/* Compact crop switcher — the entry form is the point of this tab, not the chrome */}
       <Card className="border-border/70 bg-white/90">
-        <CardHeader className="pb-3">
-          <CardTitle className="text-xs uppercase tracking-[0.2em] text-muted-foreground">Post-Harvest Workspace</CardTitle>
-          <CardDescription>
-            Switch between crops in one workspace to keep records clean.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="grid gap-4 lg:grid-cols-[1.6fr_1fr]">
-          <div className="space-y-2">
-            <div>
-              <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">Current View</p>
-              <p className="text-2xl font-semibold text-foreground">{VIEW_LABEL[resolvedView]}</p>
-            </div>
-            <div>
-              <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">Use This For</p>
-              <p className="text-sm font-semibold text-foreground">{VIEW_DESCRIPTION[resolvedView]}</p>
-            </div>
-          </div>
-          <div className="rounded-xl border border-border/60 bg-muted/20 p-3">
-            <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">Crop Flow</p>
-            <TabsList
-              className={`mt-3 grid w-full rounded-xl border border-border/60 bg-white p-1 shadow-none grid-cols-${activeCropTabs.length}`}
-            >
-              {activeCropTabs.includes("coffee") && (
-                <TabsTrigger value="coffee" className="min-h-10 rounded-lg">Coffee</TabsTrigger>
-              )}
-              {activeCropTabs.includes("pepper") && (
-                <TabsTrigger value="pepper" className="min-h-10 rounded-lg">Pepper</TabsTrigger>
-              )}
-              {activeCropTabs.includes("rubber") && (
-                <TabsTrigger value="rubber" className="min-h-10 rounded-lg">Rubber</TabsTrigger>
-              )}
-            </TabsList>
-            <p className="mt-3 text-xs text-muted-foreground">Switch between crops here when needed.</p>
-          </div>
+        <CardContent className="flex flex-col gap-2 p-3 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
+          <TabsList
+            className={`grid w-full rounded-xl border border-border/60 bg-white p-1 shadow-none sm:w-auto sm:min-w-[280px] ${
+              activeCropTabs.length === 3 ? "grid-cols-3" : "grid-cols-2"
+            }`}
+          >
+            {activeCropTabs.includes("coffee") && (
+              <TabsTrigger value="coffee" className="min-h-10 rounded-lg">Coffee</TabsTrigger>
+            )}
+            {activeCropTabs.includes("pepper") && (
+              <TabsTrigger value="pepper" className="min-h-10 rounded-lg">Pepper</TabsTrigger>
+            )}
+            {activeCropTabs.includes("rubber") && (
+              <TabsTrigger value="rubber" className="min-h-10 rounded-lg">Rubber</TabsTrigger>
+            )}
+          </TabsList>
+          <p className="text-xs text-muted-foreground">
+            <span className="font-semibold text-foreground">{VIEW_LABEL[resolvedView]}</span>
+            {" — "}
+            {VIEW_DESCRIPTION[resolvedView]}
+          </p>
         </CardContent>
       </Card>
 

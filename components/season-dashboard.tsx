@@ -1044,7 +1044,7 @@ export default function SeasonDashboard() {
               <Input
                 value={bagWeightInput}
                 onChange={(event) => setBagWeightInput(event.target.value)}
-                type="number"
+                type="number" inputMode="decimal"
                 min="40"
                 max="70"
                 step="0.5"

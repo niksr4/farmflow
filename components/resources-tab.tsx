@@ -567,7 +567,7 @@ export default function ResourcesTab() {
               <div className="space-y-2">
                 <Label className="text-xs uppercase tracking-[0.16em] text-slate-600">Soil pH</Label>
                 <Input
-                  type="number"
+                  type="number" inputMode="decimal"
                   step="0.1"
                   min="3.5"
                   max="8.5"
@@ -580,7 +580,7 @@ export default function ResourcesTab() {
               <div className="space-y-2">
                 <Label className="text-xs uppercase tracking-[0.16em] text-slate-600">Organic matter %</Label>
                 <Input
-                  type="number"
+                  type="number" inputMode="decimal"
                   step="0.1"
                   min="0"
                   max="8"
@@ -611,7 +611,7 @@ export default function ResourcesTab() {
               <div className="space-y-2">
                 <Label className="text-xs uppercase tracking-[0.16em] text-slate-600">Target yield gain %</Label>
                 <Input
-                  type="number"
+                  type="number" inputMode="decimal"
                   step="1"
                   min="0"
                   max="40"

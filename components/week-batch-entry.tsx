@@ -221,7 +221,7 @@ export default function WeekBatchEntry({ locationId, defaultWage = 0, onSuccess,
                         </td>
                         <td className="py-2 pr-2">
                           <Input
-                            type="number"
+                            type="number" inputMode="decimal"
                             min={0}
                             step={50}
                             value={row.costPerWorker || ""}
@@ -233,7 +233,7 @@ export default function WeekBatchEntry({ locationId, defaultWage = 0, onSuccess,
                         {weekDays.map(d => (
                           <td key={d.iso} className="py-2 px-1 text-center">
                             <Input
-                              type="number"
+                              type="number" inputMode="decimal"
                               min={0}
                               step={0.5}
                               value={row.dayCounts[d.iso] || ""}

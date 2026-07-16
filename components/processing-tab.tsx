@@ -1261,7 +1261,7 @@ export default function ProcessingTab({ showDataToolsControls = false }: Process
                       tooltip="Total cherry received today before sorting."
                     />
                     <Input
-                      type="number"
+                      type="number" inputMode="decimal"
                       step="0.01"
                       min={0}
                       value={record.crop_today ?? ""}
@@ -1278,7 +1278,7 @@ export default function ProcessingTab({ showDataToolsControls = false }: Process
                   {showAutoCalc && <div>
                     <Label>Intake to date (kg)</Label>
                     <Input
-                      type="number"
+                      type="number" inputMode="decimal"
                       step="0.01"
                       value={record.crop_todate}
                       disabled
@@ -1301,7 +1301,7 @@ export default function ProcessingTab({ showDataToolsControls = false }: Process
                       tooltip="Ripe cherry selected for washed processing."
                     />
                     <Input
-                      type="number"
+                      type="number" inputMode="decimal"
                       step="0.01"
                       min={0}
                       value={record.ripe_today ?? ""}
@@ -1312,12 +1312,12 @@ export default function ProcessingTab({ showDataToolsControls = false }: Process
                   </div>
                   {showAutoCalc && <div>
                     <Label>Ripe To Date (kg)</Label>
-                    <Input type="number" step="0.01" value={record.ripe_todate} disabled className="bg-muted/60 text-muted-foreground cursor-not-allowed" />
+                    <Input type="number" inputMode="decimal" step="0.01" value={record.ripe_todate} disabled className="bg-muted/60 text-muted-foreground cursor-not-allowed" />
                     <p className="text-xs text-muted-foreground mt-1">Auto-calculated</p>
                   </div>}
                   {showAutoCalc && <div>
                     <Label>Ripe %</Label>
-                    <Input type="number" step="0.01" value={record.ripe_percent} disabled className="bg-muted/60 text-muted-foreground cursor-not-allowed" />
+                    <Input type="number" inputMode="decimal" step="0.01" value={record.ripe_percent} disabled className="bg-muted/60 text-muted-foreground cursor-not-allowed" />
                     <p className="text-xs text-muted-foreground mt-1">Auto-calculated</p>
                   </div>}
                 </CardContent>
@@ -1330,16 +1330,16 @@ export default function ProcessingTab({ showDataToolsControls = false }: Process
                 <CardContent className={cn("grid gap-4", showAutoCalc && "md:grid-cols-3")}>
                   <div>
                     <FieldLabel label="Green today (kg)" tooltip="Under-ripe cherry separated from ripe intake." />
-                    <Input type="number" step="0.01" min={0} value={record.green_today ?? ""} onKeyDown={blockInvalidNumberKey} onChange={handleNonNegativeFloat("green_today")} placeholder="Enter green today" />
+                    <Input type="number" inputMode="decimal" step="0.01" min={0} value={record.green_today ?? ""} onKeyDown={blockInvalidNumberKey} onChange={handleNonNegativeFloat("green_today")} placeholder="Enter green today" />
                   </div>
                   {showAutoCalc && <div>
                     <Label>Green To Date (kg)</Label>
-                    <Input type="number" step="0.01" value={record.green_todate} disabled className="bg-muted/60 text-muted-foreground cursor-not-allowed" />
+                    <Input type="number" inputMode="decimal" step="0.01" value={record.green_todate} disabled className="bg-muted/60 text-muted-foreground cursor-not-allowed" />
                     <p className="text-xs text-muted-foreground mt-1">Auto-calculated</p>
                   </div>}
                   {showAutoCalc && <div>
                     <Label>Green %</Label>
-                    <Input type="number" step="0.01" value={record.green_percent} disabled className="bg-muted/60 text-muted-foreground cursor-not-allowed" />
+                    <Input type="number" inputMode="decimal" step="0.01" value={record.green_percent} disabled className="bg-muted/60 text-muted-foreground cursor-not-allowed" />
                     <p className="text-xs text-muted-foreground mt-1">Auto-calculated</p>
                   </div>}
                 </CardContent>
@@ -1352,16 +1352,16 @@ export default function ProcessingTab({ showDataToolsControls = false }: Process
                 <CardContent className={cn("grid gap-4", showAutoCalc && "md:grid-cols-3")}>
                   <div>
                     <FieldLabel label="Floaters today (kg)" tooltip="Low-density floaters removed during water sorting." />
-                    <Input type="number" step="0.01" min={0} value={record.float_today ?? ""} onKeyDown={blockInvalidNumberKey} onChange={handleNonNegativeFloat("float_today")} placeholder="Enter float today" />
+                    <Input type="number" inputMode="decimal" step="0.01" min={0} value={record.float_today ?? ""} onKeyDown={blockInvalidNumberKey} onChange={handleNonNegativeFloat("float_today")} placeholder="Enter float today" />
                   </div>
                   {showAutoCalc && <div>
                     <Label>Float To Date (kg)</Label>
-                    <Input type="number" step="0.01" value={record.float_todate} disabled className="bg-muted/60 text-muted-foreground cursor-not-allowed" />
+                    <Input type="number" inputMode="decimal" step="0.01" value={record.float_todate} disabled className="bg-muted/60 text-muted-foreground cursor-not-allowed" />
                     <p className="text-xs text-muted-foreground mt-1">Auto-calculated</p>
                   </div>}
                   {showAutoCalc && <div>
                     <Label>Float %</Label>
-                    <Input type="number" step="0.01" value={record.float_percent} disabled className="bg-muted/60 text-muted-foreground cursor-not-allowed" />
+                    <Input type="number" inputMode="decimal" step="0.01" value={record.float_percent} disabled className="bg-muted/60 text-muted-foreground cursor-not-allowed" />
                     <p className="text-xs text-muted-foreground mt-1">Auto-calculated</p>
                   </div>}
                 </CardContent>
@@ -1374,12 +1374,12 @@ export default function ProcessingTab({ showDataToolsControls = false }: Process
                 <CardContent className={cn("grid gap-4", showAutoCalc && "md:grid-cols-2")}>
                   <div>
                     <FieldLabel label="Wet Parchment (kg)" tooltip="Weight after pulping, fermentation, and washing." />
-                    <Input type="number" step="0.01" min={0} value={record.wet_parchment ?? ""} onKeyDown={blockInvalidNumberKey} onChange={handleNonNegativeFloat("wet_parchment")} placeholder="Enter wet parchment" />
+                    <Input type="number" inputMode="decimal" step="0.01" min={0} value={record.wet_parchment ?? ""} onKeyDown={blockInvalidNumberKey} onChange={handleNonNegativeFloat("wet_parchment")} placeholder="Enter wet parchment" />
                     <AiValidationHint warning={wetParchValidation?.warning ?? null} severity={wetParchValidation?.severity ?? null} validating={wetParchValidating} />
                   </div>
                   {showAutoCalc && <div>
                     <Label>FR-WP %</Label>
-                    <Input type="number" step="0.01" value={record.fr_wp_percent} disabled className="bg-muted/60 text-muted-foreground cursor-not-allowed" />
+                    <Input type="number" inputMode="decimal" step="0.01" value={record.fr_wp_percent} disabled className="bg-muted/60 text-muted-foreground cursor-not-allowed" />
                     <p className="text-xs text-muted-foreground mt-1">Auto-calculated (WP/Ripe Today)</p>
                   </div>}
                 </CardContent>
@@ -1392,16 +1392,16 @@ export default function ProcessingTab({ showDataToolsControls = false }: Process
                 <CardContent className={cn("grid gap-4", showAutoCalc && "md:grid-cols-3")}>
                   <div>
                     <FieldLabel label="Dry Parchment (kg)" tooltip="Weight after drying to storage moisture." />
-                    <Input type="number" step="0.01" min={0} value={record.dry_parch ?? ""} onKeyDown={blockInvalidNumberKey} onChange={handleNonNegativeFloat("dry_parch")} placeholder="Enter dry parch" />
+                    <Input type="number" inputMode="decimal" step="0.01" min={0} value={record.dry_parch ?? ""} onKeyDown={blockInvalidNumberKey} onChange={handleNonNegativeFloat("dry_parch")} placeholder="Enter dry parch" />
                   </div>
                   {showAutoCalc && <div>
                     <Label>Dry Parchment To Date (kg)</Label>
-                    <Input type="number" step="0.01" value={record.dry_p_todate} disabled className="bg-muted/60 text-muted-foreground cursor-not-allowed" />
+                    <Input type="number" inputMode="decimal" step="0.01" value={record.dry_p_todate} disabled className="bg-muted/60 text-muted-foreground cursor-not-allowed" />
                     <p className="text-xs text-muted-foreground mt-1">Auto-calculated</p>
                   </div>}
                   {showAutoCalc && <div>
                     <Label>WP-DP %</Label>
-                    <Input type="number" step="0.01" value={record.wp_dp_percent} disabled className="bg-muted/60 text-muted-foreground cursor-not-allowed" />
+                    <Input type="number" inputMode="decimal" step="0.01" value={record.wp_dp_percent} disabled className="bg-muted/60 text-muted-foreground cursor-not-allowed" />
                     <p className="text-xs text-muted-foreground mt-1">Auto-calculated (DP/WP)</p>
                   </div>}
                 </CardContent>
@@ -1414,16 +1414,16 @@ export default function ProcessingTab({ showDataToolsControls = false }: Process
                 <CardContent className={cn("grid gap-4", showAutoCalc && "md:grid-cols-3")}>
                   <div>
                     <FieldLabel label="Dry Cherry (kg)" tooltip="Natural-process dried cherry weight." />
-                    <Input type="number" step="0.01" min={0} value={record.dry_cherry ?? ""} onKeyDown={blockInvalidNumberKey} onChange={handleNonNegativeFloat("dry_cherry")} placeholder="Enter dry cherry" />
+                    <Input type="number" inputMode="decimal" step="0.01" min={0} value={record.dry_cherry ?? ""} onKeyDown={blockInvalidNumberKey} onChange={handleNonNegativeFloat("dry_cherry")} placeholder="Enter dry cherry" />
                   </div>
                   {showAutoCalc && <div>
                     <Label>Dry Cherry To Date (kg)</Label>
-                    <Input type="number" step="0.01" value={record.dry_cherry_todate} disabled className="bg-muted/60 text-muted-foreground cursor-not-allowed" />
+                    <Input type="number" inputMode="decimal" step="0.01" value={record.dry_cherry_todate} disabled className="bg-muted/60 text-muted-foreground cursor-not-allowed" />
                     <p className="text-xs text-muted-foreground mt-1">Auto-calculated</p>
                   </div>}
                   {showAutoCalc && <div>
                     <Label>Dry Cherry %</Label>
-                    <Input type="number" step="0.01" value={record.dry_cherry_percent} disabled className="bg-muted/60 text-muted-foreground cursor-not-allowed" />
+                    <Input type="number" inputMode="decimal" step="0.01" value={record.dry_cherry_percent} disabled className="bg-muted/60 text-muted-foreground cursor-not-allowed" />
                     <p className="text-xs text-muted-foreground mt-1">Auto-calculated</p>
                   </div>}
                 </CardContent>
@@ -1436,22 +1436,22 @@ export default function ProcessingTab({ showDataToolsControls = false }: Process
                 <CardContent className="grid grid-cols-2 gap-4">
                   <div>
                     <Label>Dry Parchment Bags</Label>
-                    <Input type="number" step="0.01" value={record.dry_p_bags} disabled className="bg-muted/60 text-muted-foreground cursor-not-allowed" />
+                    <Input type="number" inputMode="decimal" step="0.01" value={record.dry_p_bags} disabled className="bg-muted/60 text-muted-foreground cursor-not-allowed" />
                     <p className="text-xs text-muted-foreground mt-1">Auto-calculated (kg/{bagWeightKg})</p>
                   </div>
                   <div>
                     <Label>Dry Parchment Bags To Date</Label>
-                    <Input type="number" step="0.01" value={record.dry_p_bags_todate} disabled className="bg-muted/60 text-muted-foreground cursor-not-allowed" />
+                    <Input type="number" inputMode="decimal" step="0.01" value={record.dry_p_bags_todate} disabled className="bg-muted/60 text-muted-foreground cursor-not-allowed" />
                     <p className="text-xs text-muted-foreground mt-1">Auto-calculated</p>
                   </div>
                   <div>
                     <Label>Dry Cherry Bags</Label>
-                    <Input type="number" step="0.01" value={record.dry_cherry_bags} disabled className="bg-muted/60 text-muted-foreground cursor-not-allowed" />
+                    <Input type="number" inputMode="decimal" step="0.01" value={record.dry_cherry_bags} disabled className="bg-muted/60 text-muted-foreground cursor-not-allowed" />
                     <p className="text-xs text-muted-foreground mt-1">Auto-calculated (kg/{bagWeightKg})</p>
                   </div>
                   <div>
                     <Label>Dry Cherry Bags To Date</Label>
-                    <Input type="number" step="0.01" value={record.dry_cherry_bags_todate} disabled className="bg-muted/60 text-muted-foreground cursor-not-allowed" />
+                    <Input type="number" inputMode="decimal" step="0.01" value={record.dry_cherry_bags_todate} disabled className="bg-muted/60 text-muted-foreground cursor-not-allowed" />
                     <p className="text-xs text-muted-foreground mt-1">Auto-calculated</p>
                   </div>
                 </CardContent>

@@ -493,7 +493,7 @@ export function PepperTab() {
               <Label htmlFor="kgPicked">KG Picked *</Label>
               <Input
                 id="kgPicked"
-                type="number"
+                type="number" inputMode="decimal"
                 step="0.01"
                 value={kgPicked}
                 onChange={(e) => setKgPicked(e.target.value)}
@@ -505,7 +505,7 @@ export function PepperTab() {
               <Label htmlFor="greenPepper">Green Pepper (KG) *</Label>
               <Input
                 id="greenPepper"
-                type="number"
+                type="number" inputMode="decimal"
                 step="0.01"
                 value={greenPepper}
                 onChange={(e) => setGreenPepper(e.target.value)}
@@ -522,7 +522,7 @@ export function PepperTab() {
               <Label htmlFor="dryPepper">Dry Pepper (KG) (optional)</Label>
               <Input
                 id="dryPepper"
-                type="number"
+                type="number" inputMode="decimal"
                 step="0.01"
                 value={dryPepper}
                 onChange={(e) => setDryPepper(e.target.value)}

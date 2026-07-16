@@ -234,7 +234,7 @@ export default function RecordMovementPanel({
             <div className="relative">
               <Input
                 data-testid="movement-quantity-input"
-                type="number"
+                type="number" inputMode="decimal"
                 min={0}
                 step="0.01"
                 placeholder="Enter quantity"
@@ -341,7 +341,7 @@ export default function RecordMovementPanel({
               </TooltipProvider>
             </div>
             <Input
-              type="number"
+              type="number" inputMode="decimal"
               min={0}
               step="0.01"
               placeholder="e.g. 60 for ₹60/kg"

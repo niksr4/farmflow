@@ -342,21 +342,21 @@ export default function BillingTab({ showDataToolsControls = false }: BillingTab
                       </TableCell>
                       <TableCell>
                         <Input
-                          type="number"
+                          type="number" inputMode="decimal"
                           value={item.quantity}
                           onChange={(event) => updateItem(index, { quantity: Number(event.target.value) })}
                         />
                       </TableCell>
                       <TableCell>
                         <Input
-                          type="number"
+                          type="number" inputMode="decimal"
                           value={item.unitPrice}
                           onChange={(event) => updateItem(index, { unitPrice: Number(event.target.value) })}
                         />
                       </TableCell>
                       <TableCell>
                         <Input
-                          type="number"
+                          type="number" inputMode="decimal"
                           value={item.taxRate}
                           onChange={(event) => updateItem(index, { taxRate: Number(event.target.value) })}
                         />

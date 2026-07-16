@@ -236,7 +236,7 @@ export default function PickingLogTab() {
                     tooltip="Total cherry weight this worker picked, in kilograms. Use decimals for precision — e.g. 48.5 kg."
                   />
                   <Input
-                    type="number" min={0} step={0.1}
+                    type="number" inputMode="decimal" min={0} step={0.1}
                     value={form.kgPicked}
                     onChange={(e) => setForm((f) => ({ ...f, kgPicked: e.target.value }))}
                     placeholder="48.5"
@@ -248,7 +248,7 @@ export default function PickingLogTab() {
                     tooltip="Piece rate paid per kg of cherry picked. Typically ₹3–₹6 per kg during harvest season. This rate is saved with the record."
                   />
                   <Input
-                    type="number" min={0} step={0.5}
+                    type="number" inputMode="decimal" min={0} step={0.5}
                     value={form.ratePerKg}
                     onChange={(e) => setForm((f) => ({ ...f, ratePerKg: e.target.value }))}
                     placeholder="4.00"
@@ -306,8 +306,8 @@ export default function PickingLogTab() {
                       <TableRow key={r.id} className="bg-muted/20">
                         <TableCell><Input type="date" value={editForm.pickDate} onChange={(e) => setEditForm((f) => ({ ...f, pickDate: e.target.value }))} className="h-8 w-36" /></TableCell>
                         <TableCell className="text-sm text-muted-foreground">{r.workerName}</TableCell>
-                        <TableCell><Input type="number" min={0} step={0.1} value={editForm.kgPicked} onChange={(e) => setEditForm((f) => ({ ...f, kgPicked: e.target.value }))} className="h-8 w-24 text-right" /></TableCell>
-                        <TableCell><Input type="number" min={0} step={0.5} value={editForm.ratePerKg} onChange={(e) => setEditForm((f) => ({ ...f, ratePerKg: e.target.value }))} className="h-8 w-24 text-right" /></TableCell>
+                        <TableCell><Input type="number" inputMode="decimal" min={0} step={0.1} value={editForm.kgPicked} onChange={(e) => setEditForm((f) => ({ ...f, kgPicked: e.target.value }))} className="h-8 w-24 text-right" /></TableCell>
+                        <TableCell><Input type="number" inputMode="decimal" min={0} step={0.5} value={editForm.ratePerKg} onChange={(e) => setEditForm((f) => ({ ...f, ratePerKg: e.target.value }))} className="h-8 w-24 text-right" /></TableCell>
                         <TableCell className="text-right text-sm">{editForm.kgPicked && editForm.ratePerKg ? formatCurrency(Number(editForm.kgPicked) * Number(editForm.ratePerKg)) : "—"}</TableCell>
                         <TableCell className="hidden sm:table-cell"><Input value={editForm.notes} onChange={(e) => setEditForm((f) => ({ ...f, notes: e.target.value }))} className="h-8 w-40" placeholder="Notes" /></TableCell>
                         <TableCell>

@@ -206,7 +206,7 @@ export default function OnboardingChecklist({
                     <Label htmlFor="onboarding-bag-weight">Standard bag weight (kg)</Label>
                     <Input
                       id="onboarding-bag-weight"
-                      type="number"
+                      type="number" inputMode="decimal"
                       min={40}
                       max={70}
                       step={1}

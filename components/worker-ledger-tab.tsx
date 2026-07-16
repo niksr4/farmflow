@@ -248,7 +248,7 @@ export default function WorkerLedgerTab() {
                 </div>
                 <div className="space-y-1.5">
                   <Label>Amount (₹) *</Label>
-                  <Input type="number" min={0} step={10} value={form.amount} onChange={(e) => setForm((f) => ({ ...f, amount: e.target.value }))} placeholder="500" />
+                  <Input type="number" inputMode="decimal" min={0} step={10} value={form.amount} onChange={(e) => setForm((f) => ({ ...f, amount: e.target.value }))} placeholder="500" />
                 </div>
               </div>
               <Input
@@ -305,7 +305,7 @@ export default function WorkerLedgerTab() {
                             </SelectContent>
                           </Select>
                         </TableCell>
-                        <TableCell><Input type="number" value={editForm.amount} onChange={(ev) => setEditForm((f) => ({ ...f, amount: ev.target.value }))} className="h-8 w-28 text-right" /></TableCell>
+                        <TableCell><Input type="number" inputMode="decimal" value={editForm.amount} onChange={(ev) => setEditForm((f) => ({ ...f, amount: ev.target.value }))} className="h-8 w-28 text-right" /></TableCell>
                         <TableCell className="hidden sm:table-cell"><Input value={editForm.description} onChange={(ev) => setEditForm((f) => ({ ...f, description: ev.target.value }))} className="h-8 w-48" placeholder="Description" /></TableCell>
                         <TableCell>
                           <div className="flex gap-1">

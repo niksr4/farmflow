@@ -453,7 +453,7 @@ export default function ReceivablesTab() {
             </div>
             <div className="space-y-2">
               <Label>Amount</Label>
-              <Input type="number" min="0" value={form.amount} onChange={handleChange("amount")} placeholder="0" />
+              <Input type="number" inputMode="decimal" min="0" value={form.amount} onChange={handleChange("amount")} placeholder="0" />
             </div>
             <div className="space-y-2">
               <Label>Status</Label>
