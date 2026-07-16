@@ -1,5 +1,4 @@
 import TenantSettingsPage from "@/components/tenant-settings-page"
-import UserSettingsPage from "@/components/user-settings-page"
 import { shouldForceGuidedSetup } from "@/lib/guided-setup"
 import { requireSessionUser } from "@/lib/server/auth"
 import { redirect } from "next/navigation"
@@ -10,8 +9,10 @@ export default async function SettingsPage() {
     redirect("/welcome")
   }
 
+  // Writers (role=user) have no settings surface — their locale and password
+  // are managed by the estate admin. Keep the pared app pared.
   if (sessionUser.role === "user") {
-    return <UserSettingsPage />
+    redirect("/dashboard")
   }
 
   return <TenantSettingsPage />

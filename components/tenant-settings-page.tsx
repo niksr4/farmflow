@@ -1080,11 +1080,14 @@ export default function TenantSettingsPage() {
       value: String(locations.length),
       detail: "Estate locations available for operations",
     },
-    {
-      label: "Enabled Modules",
-      value: String(enabledTenantModuleCount),
-      detail: isOwner ? "Plan and module controls available" : "Owner-managed access bundle",
-    },
+    // Module data only loads for owners — showing "0" to admins is misleading
+    ...(isOwner
+      ? [{
+          label: "Enabled Modules",
+          value: String(enabledTenantModuleCount),
+          detail: "Plan and module controls available",
+        }]
+      : []),
   ] : [
     {
       label: "Your Role",

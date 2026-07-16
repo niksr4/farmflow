@@ -131,28 +131,10 @@ export function TenantSettingsOverview({
       >
         <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(16,185,129,0.12),transparent_34%),radial-gradient(circle_at_bottom_right,rgba(245,158,11,0.10),transparent_32%)]" />
         <CardHeader className="relative">
-          <CardTitle className="flex items-baseline gap-3">
-            Workspace Settings
-            <span className="text-xs uppercase tracking-[0.3em] text-muted-foreground">FarmFlow</span>
-          </CardTitle>
-          <CardDescription>Manage estate basics, people, access, locations, and workspace behavior in one place.</CardDescription>
+          <CardTitle>Where to start</CardTitle>
+          <CardDescription>A suggested order — most estates only need the basics.</CardDescription>
         </CardHeader>
         <CardContent className="relative space-y-5">
-          <div className="grid gap-3 sm:grid-cols-3">
-            <div className="rounded-lg border border-emerald-100 bg-white/90 p-3">
-              <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-emerald-700">Your Role</p>
-              <p className="mt-1 text-lg font-black text-foreground">{roleDisplay}</p>
-            </div>
-            <div className="rounded-lg border border-emerald-100 bg-white/90 p-3">
-              <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-emerald-700">Users</p>
-              <p className="mt-1 text-2xl font-black tabular-nums text-foreground">{userCount}</p>
-            </div>
-            <div className="rounded-lg border border-emerald-100 bg-white/90 p-3">
-              <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-emerald-700">Locations</p>
-              <p className="mt-1 text-2xl font-black tabular-nums text-foreground">{locationCount}</p>
-            </div>
-          </div>
-
           <div className="grid gap-3 xl:grid-cols-3">
             <SettingsFlowCard
               eyebrow="Start here"
