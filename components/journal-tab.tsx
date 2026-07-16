@@ -8,7 +8,7 @@ import { Textarea } from "@/components/ui/textarea"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Calendar } from "@/components/ui/calendar"
-import { formatDateOnly } from "@/lib/date-utils"
+import { formatDateOnly, todayIso, toLocalIso } from "@/lib/date-utils"
 import { useToast } from "@/hooks/use-toast"
 import WorkflowEmptyState from "@/components/workflow-empty-state"
 
@@ -39,7 +39,7 @@ interface LocationOption {
 const LOCATION_ALL = "all"
 const LOCATION_NONE = "none"
 
-const toIsoDate = (value: Date) => value.toISOString().slice(0, 10)
+const toIsoDate = (value: Date) => toLocalIso(value)
 
 const resolveLocationLabel = (entry: JournalEntry) => {
   if (entry.location_name) return entry.location_name

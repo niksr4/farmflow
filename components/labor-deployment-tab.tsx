@@ -2,10 +2,11 @@
 
 import type React from "react"
 
-import { useState, useEffect, useRef, useCallback } from "react"
+import { useState, useEffect, useRef, useCallback, useMemo } from "react"
 import InPageNav from "@/components/in-page-nav"
 import FilterBar from "@/components/filter-bar"
 import { useListControls } from "@/hooks/use-list-controls"
+import { useFormDraft } from "@/hooks/use-form-draft"
 import { useLaborData } from "@/hooks/use-labor-data"
 import { useTenantSettings } from "@/hooks/use-tenant-settings"
 import { Button } from "@/components/ui/button"
@@ -18,7 +19,7 @@ import { PlusCircle, Trash2, Edit2, Save, X, ChevronDown, ChevronUp, Plus, Minus
 import { Textarea } from "@/components/ui/textarea"
 import { Badge } from "@/components/ui/badge"
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
-import { formatDateOnly } from "@/lib/date-utils"
+import { formatDateOnly, todayIso } from "@/lib/date-utils"
 import { cn } from "@/lib/utils"
 import { formatCurrency, formatNumber } from "@/lib/format"
 import { SkeletonTable } from "@/components/ui/skeleton"
@@ -29,6 +30,7 @@ import { FARMFLOW_RECORD_SAVED_EVENT } from "@/components/inventory-system/const
 import { useMediaQuery } from "@/hooks/use-media-query"
 import QuickLogPanel from "@/components/quick-log-panel"
 import { trackClick, reportActionFailure, reportActionError } from "@/lib/track-action"
+import { deleteWithUndo } from "@/lib/undo-delete"
 
 
 interface ActivityCode {
@@ -104,7 +106,7 @@ export default function LaborDeploymentTab({
   const [codeQuery, setCodeQuery] = useState<string | null>(null)
   const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set())
   const [formData, setFormData] = useState<FormData>({
-    date: new Date().toISOString().split("T")[0],
+    date: todayIso(),
     code: "",
     reference: "",
     laborSets: makeDefaultSets(inHouseWage, outsideWage),
@@ -113,6 +115,9 @@ export default function LaborDeploymentTab({
   })
 
   const formRef = useRef<HTMLFormElement>(null)
+
+  // Survive app kills / dead network: persist the in-progress new entry
+  const { loadDraft, clearDraft } = useFormDraft("labor-form", formData, isAdding && !editingId)
 
   const fetchActivities = useCallback(async () => {
     try {
@@ -174,6 +179,17 @@ export default function LaborDeploymentTab({
   }
 
   const openNewForm = useCallback(() => {
+    // Unsaved draft from a previous session wins over the last-entry prefill
+    const draft = loadDraft()
+    const draftIsMeaningful =
+      draft && (draft.code || draft.notes || draft.laborSets?.some((s) => s.laborers > 0))
+    if (draftIsMeaningful) {
+      setFormData(draft)
+      setPrefilled(false)
+      setIsAdding(true)
+      toast({ title: "Unsaved entry restored", description: "We kept the entry you didn't finish saving." })
+      return
+    }
     const last = deployments[0]
     if (last && last.laborEntries?.length > 0) {
       const sets: LaborSet[] = last.laborEntries.map((e: any) => ({
@@ -182,7 +198,7 @@ export default function LaborDeploymentTab({
         costPerLaborer: Number(e.costPerLabor) || 0,
       }))
       setFormData({
-        date: new Date().toISOString().split("T")[0],
+        date: todayIso(),
         code: last.code || "",
         reference: last.reference || "",
         laborSets: sets,
@@ -192,7 +208,7 @@ export default function LaborDeploymentTab({
       setPrefilled(true)
     } else {
       setFormData({
-        date: new Date().toISOString().split("T")[0],
+        date: todayIso(),
         code: "",
         reference: "",
         laborSets: makeDefaultSets(inHouseWage, outsideWage),
@@ -202,11 +218,11 @@ export default function LaborDeploymentTab({
       setPrefilled(false)
     }
     setIsAdding(true)
-  }, [deployments, inHouseWage, outsideWage])
+  }, [deployments, inHouseWage, outsideWage, loadDraft, toast])
 
   const resetForm = () => {
     setFormData({
-      date: new Date().toISOString().split("T")[0],
+      date: todayIso(),
       code: "",
       reference: "",
       laborSets: makeDefaultSets(inHouseWage, outsideWage),
@@ -216,6 +232,7 @@ export default function LaborDeploymentTab({
     setPrefilled(false)
     setIsAdding(false)
     setEditingId(null)
+    clearDraft()
   }
 
   const updateSet = (index: number, field: keyof LaborSet, value: string | number) => {
@@ -355,7 +372,38 @@ export default function LaborDeploymentTab({
   const formSectionRef = useRef<HTMLDivElement>(null)
   const historySectionRef = useRef<HTMLDivElement>(null)
   const [activeSection, setActiveSection] = useState<"form" | "history">("form")
-  const historyControls = useListControls(deployments, {
+
+  // Rows optimistically hidden while their undo-delete window is open
+  const [hiddenIds, setHiddenIds] = useState<Set<string>>(new Set())
+  const visibleDeployments = useMemo(
+    () => (hiddenIds.size === 0 ? deployments : deployments.filter((d) => !hiddenIds.has(d.id))),
+    [deployments, hiddenIds],
+  )
+  const unhide = (id: string) =>
+    setHiddenIds((prev) => {
+      const next = new Set(prev)
+      next.delete(id)
+      return next
+    })
+
+  const handleDeleteWithUndo = (deployment: any) => {
+    trackClick("labor_delete", { id: deployment.id })
+    deleteWithUndo({
+      description: `labour entry · ${formatDateOnly(deployment.date)}`,
+      onHide: () => setHiddenIds((prev) => new Set(prev).add(deployment.id)),
+      onRestore: () => unhide(deployment.id),
+      onDelete: async () => {
+        const result = await deleteDeployment(deployment.id)
+        if (!result.ok) {
+          unhide(deployment.id)
+          reportActionFailure("labor_delete", result.error || "non-ok response", { id: deployment.id })
+          toast({ title: "Couldn't delete record", description: result.error, variant: "destructive" })
+        }
+      },
+    })
+  }
+
+  const historyControls = useListControls(visibleDeployments, {
     searchFields: (d) => [d.code, d.reference, d.notes, d.user],
     sorters: {
       date: (d) => String(d.date || "").slice(0, 10),
@@ -903,16 +951,7 @@ export default function LaborDeploymentTab({
                           </button>
                           <button
                             type="button"
-                            onClick={async () => {
-                              trackClick("labor_delete", { id: deployment.id })
-                              if (confirm("Delete this labour entry?")) {
-                                const result = await deleteDeployment(deployment.id)
-                                if (!result.ok) {
-                                  reportActionFailure("labor_delete", result.error || "non-ok response", { id: deployment.id })
-                                  toast({ title: "Couldn't delete record", description: result.error, variant: "destructive" })
-                                }
-                              }
-                            }}
+                            onClick={() => handleDeleteWithUndo(deployment)}
                             className="flex-1 flex items-center justify-center gap-1.5 h-10 rounded-xl border border-stone-200 bg-white text-sm font-semibold text-red-500 touch-manipulation"
                           >
                             <Trash2 className="h-3.5 w-3.5" /> Delete
@@ -980,16 +1019,7 @@ export default function LaborDeploymentTab({
                                 <Button
                                   variant="ghost"
                                   size="icon"
-                                  onClick={async () => {
-                                    trackClick("labor_delete", { id: deployment.id })
-                                    if (confirm("Delete this labour entry? This cannot be undone.")) {
-                                      const result = await deleteDeployment(deployment.id)
-                                      if (!result.ok) {
-                                        reportActionFailure("labor_delete", result.error || "non-ok response", { id: deployment.id })
-                                        toast({ title: "Couldn't delete record", description: result.error, variant: "destructive" })
-                                      }
-                                    }
-                                  }}
+                                  onClick={() => handleDeleteWithUndo(deployment)}
                                 >
                                   <Trash2 className="h-4 w-4" />
                                 </Button>

@@ -11,7 +11,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { useToast } from "@/hooks/use-toast"
 import { useAuth } from "@/hooks/use-auth"
 import { formatCurrency, formatNumber } from "@/lib/format"
-import { formatDateOnly } from "@/lib/date-utils"
+import { formatDateOnly, todayIso } from "@/lib/date-utils"
 import { canAcceptNonNegative, isBlockedNumericKey } from "@/lib/number-input"
 import { Pencil, Save, Trash2 } from "lucide-react"
 
@@ -66,7 +66,7 @@ const emptyTotals: Totals = {
 }
 
 const newDefaultForm = () => ({
-  sale_date: new Date().toISOString().slice(0, 10),
+  sale_date: todayIso(),
   location_id: "",
   asset_type: "Pepper",
   sale_mode: "per_kg" as "per_kg" | "contract",
@@ -307,7 +307,7 @@ export default function OtherSalesTab({
   const handleEdit = (record: OtherSalesRecord) => {
     setEditingRecord(record)
     setForm({
-      sale_date: record.sale_date?.slice(0, 10) || new Date().toISOString().slice(0, 10),
+      sale_date: record.sale_date?.slice(0, 10) || todayIso(),
       location_id: record.location_id || "",
       asset_type: record.asset_type || "Pepper",
       sale_mode: record.sale_mode || "per_kg",

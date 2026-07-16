@@ -2,10 +2,11 @@
 
 import type React from "react"
 
-import { useState, useEffect, useCallback, useRef } from "react"
+import { useState, useEffect, useCallback, useRef, useMemo } from "react"
 import InPageNav from "@/components/in-page-nav"
 import FilterBar from "@/components/filter-bar"
 import { useListControls } from "@/hooks/use-list-controls"
+import { useFormDraft } from "@/hooks/use-form-draft"
 import { cn } from "@/lib/utils"
 import { FARMFLOW_RECORD_SAVED_EVENT } from "@/components/inventory-system/constants"
 import { useConsumablesData } from "@/hooks/use-consumables-data"
@@ -19,12 +20,13 @@ import { Check, PlusCircle, Trash2, Edit2, Save, X, ChevronDown, ChevronUp, Plus
 import { Textarea } from "@/components/ui/textarea"
 import { Badge } from "@/components/ui/badge"
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
-import { formatDateOnly } from "@/lib/date-utils"
+import { formatDateOnly, todayIso } from "@/lib/date-utils"
 import { formatCurrency } from "@/lib/format"
 import { SkeletonTable } from "@/components/ui/skeleton"
 import WorkflowEmptyState from "@/components/workflow-empty-state"
 import { toast } from "sonner"
 import { trackClick, reportActionFailure, reportActionError } from "@/lib/track-action"
+import { deleteWithUndo } from "@/lib/undo-delete"
 import { useMediaQuery } from "@/hooks/use-media-query"
 
 interface ActivityCode {
@@ -89,13 +91,30 @@ export default function OtherExpensesTab({
 
   // Form state
   const [formData, setFormData] = useState({
-    date: new Date().toISOString().split("T")[0],
+    date: todayIso(),
     code: "",
     reference: "",
     amount: 0,
     notes: "",
   })
   const [invLines, setInvLines] = useState<InventoryLineItem[]>([])
+
+  // Survive app kills / dead network: persist the in-progress new entry
+  const { loadDraft, clearDraft } = useFormDraft(
+    "expense-form",
+    { formData, invLines },
+    isAdding && !editingId,
+  )
+
+  const openNewExpenseForm = () => {
+    const draft = loadDraft()
+    if (draft && (draft.formData.code || draft.formData.notes || draft.formData.amount > 0)) {
+      setFormData(draft.formData)
+      setInvLines(draft.invLines || [])
+      toast.info("Unsaved entry restored")
+    }
+    setIsAdding(true)
+  }
 
   const fetchActivities = useCallback(async () => {
     try {
@@ -153,7 +172,7 @@ export default function OtherExpensesTab({
 
   const resetForm = () => {
     setFormData({
-      date: new Date().toISOString().split("T")[0],
+      date: todayIso(),
       code: "",
       reference: "",
       amount: 0,
@@ -162,6 +181,7 @@ export default function OtherExpensesTab({
     setInvLines([])
     setIsAdding(false)
     setEditingId(null)
+    clearDraft()
   }
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -256,7 +276,38 @@ export default function OtherExpensesTab({
   const formSectionRef = useRef<HTMLDivElement>(null)
   const historySectionRef = useRef<HTMLDivElement>(null)
   const [activeSection, setActiveSection] = useState<"form" | "history">("form")
-  const historyControls = useListControls(deployments, {
+
+  // Rows optimistically hidden while their undo-delete window is open
+  const [hiddenIds, setHiddenIds] = useState<Set<number>>(new Set())
+  const visibleDeployments = useMemo(
+    () => (hiddenIds.size === 0 ? deployments : deployments.filter((d) => !hiddenIds.has(d.id))),
+    [deployments, hiddenIds],
+  )
+  const unhide = (id: number) =>
+    setHiddenIds((prev) => {
+      const next = new Set(prev)
+      next.delete(id)
+      return next
+    })
+
+  const handleDeleteWithUndo = (deployment: any) => {
+    trackClick("expense_delete", { id: deployment.id })
+    deleteWithUndo({
+      description: `expense · ${formatDateOnly(deployment.date)}`,
+      onHide: () => setHiddenIds((prev) => new Set(prev).add(deployment.id)),
+      onRestore: () => unhide(deployment.id),
+      onDelete: async () => {
+        const result = await deleteDeployment(deployment.id)
+        if (!result.ok) {
+          unhide(deployment.id)
+          reportActionFailure("expense_delete", result.error || "non-ok response", { id: deployment.id })
+          toast.error(result.error)
+        }
+      },
+    })
+  }
+
+  const historyControls = useListControls(visibleDeployments, {
     searchFields: (d) => [d.code, d.reference, d.notes, d.user],
     sorters: {
       date: (d) => String(d.date || "").slice(0, 10),
@@ -299,7 +350,7 @@ export default function OtherExpensesTab({
       {activeSection === "form" && !isAdding && (
         <button
           type="button"
-          onClick={() => setIsAdding(true)}
+          onClick={openNewExpenseForm}
           className="flex h-14 w-full items-center justify-center gap-2 rounded-2xl bg-emerald-700 text-base font-bold text-white shadow-md shadow-emerald-100 active:scale-[0.98] transition-transform touch-manipulation hover:bg-emerald-600"
         >
           <PlusCircle className="h-5 w-5" /> Log expense
@@ -700,16 +751,7 @@ export default function OtherExpensesTab({
                           </button>
                           <button
                             type="button"
-                            onClick={async () => {
-                              trackClick("expense_delete", { id: deployment.id })
-                              if (confirm("Delete this expense?")) {
-                                const result = await deleteDeployment(deployment.id)
-                                if (!result.ok) {
-                                  reportActionFailure("expense_delete", result.error || "non-ok response", { id: deployment.id })
-                                  toast.error(result.error)
-                                }
-                              }
-                            }}
+                            onClick={() => handleDeleteWithUndo(deployment)}
                             className="flex-1 flex items-center justify-center gap-1.5 h-10 rounded-xl border border-stone-200 bg-white text-sm font-semibold text-red-500 touch-manipulation"
                           >
                             <Trash2 className="h-3.5 w-3.5" /> Delete
@@ -769,15 +811,7 @@ export default function OtherExpensesTab({
                                 <Button
                                   variant="ghost"
                                   size="icon"
-                                  onClick={async () => {
-                                    if (confirm("Are you sure you want to delete this expense?")) {
-                                      const result = await deleteDeployment(deployment.id)
-                                      if (!result.ok) {
-                                        reportActionFailure("expense_delete", result.error || "non-ok response", { id: deployment.id })
-                                        toast.error(result.error)
-                                      }
-                                    }
-                                  }}
+                                  onClick={() => handleDeleteWithUndo(deployment)}
                                 >
                                   <Trash2 className="h-4 w-4" />
                                 </Button>
@@ -812,7 +846,7 @@ export default function OtherExpensesTab({
           ]}
           tip="Do not postpone expense logging until the chart of accounts feels perfect. Clean up code labels later if needed."
           askPrompt="How do I log my first expense and inventory usage?"
-          primaryAction={{ label: isAdding ? "Continue entry" : "Add expense", onClick: () => setIsAdding(true) }}
+          primaryAction={{ label: isAdding ? "Continue entry" : "Add expense", onClick: openNewExpenseForm }}
           className="mt-2"
         />
       ))}

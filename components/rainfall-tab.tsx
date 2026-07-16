@@ -88,6 +88,18 @@ export default function RainfallTab({ username, showDataToolsControls = false }:
   const [loading, setLoading] = useState(false)
   const [drilldownMonthIndex, setDrilldownMonthIndex] = useState<number | null>(null)
   const [mobileSection, setMobileSection] = useState<"stats" | "log" | "records">("stats")
+
+  // Workspace sidebar/launcher sub-nav (Log / Records / Stats) dispatches this event
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const section = (e as CustomEvent<string>).detail
+      if (section === "log" || section === "records" || section === "stats") {
+        setMobileSection(section)
+      }
+    }
+    window.addEventListener("farmflow:scroll-to-section", handler)
+    return () => window.removeEventListener("farmflow:scroll-to-section", handler)
+  }, [])
   const [exportStart, setExportStart] = useState(() => `${new Date().getFullYear()}-01-01`)
   const [exportEnd, setExportEnd] = useState(() => format(new Date(), "yyyy-MM-dd"))
   const [exporting, setExporting] = useState(false)

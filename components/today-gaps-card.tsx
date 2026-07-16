@@ -13,6 +13,7 @@
 
 import { useCallback, useEffect, useState } from "react"
 import { addDays, format, isToday, startOfWeek } from "date-fns"
+import { reportActionError } from "@/lib/track-action"
 import { AlertTriangle, ArrowRight, Check, CloudRain, Droplets, Loader2, Users } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { formatCurrency, formatNumber } from "@/lib/format"
@@ -94,7 +95,8 @@ export default function TodayGapsCard({ onNavigate, className }: Props) {
         : []
 
       setGaps(gapDays)
-    } catch {
+    } catch (err) {
+      reportActionError("today_gaps_load", err)
       setGaps([])
       setStats(null)
     } finally {

@@ -34,6 +34,14 @@ describe("spreadsheet helpers", () => {
     expect(sheet.getColumn(2).width).toBeGreaterThan(20)
   })
 
+  it("keeps leading-zero codes as text", async () => {
+    const csv = ["Code,Amount", "007,100.00", "0012,50.00"].join("\n")
+    const sheet = await loadSheet(await buildXlsxArrayBufferFromCsv(csv))
+    expect(sheet.getRow(2).getCell(1).value).toBe("007")
+    expect(sheet.getRow(3).getCell(1).value).toBe("0012")
+    expect(sheet.getRow(2).getCell(2).value).toBe(100)
+  })
+
   it("handles quoted fields containing commas", async () => {
     const csv = 'Code,Reference\n102,"Provident Fund, Insurance"'
     const sheet = await loadSheet(await buildXlsxArrayBufferFromCsv(csv))

@@ -10,7 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Badge } from "@/components/ui/badge"
 import { GST_STATES, computeInvoiceTotals } from "@/lib/billing"
-import { formatDateOnly } from "@/lib/date-utils"
+import { formatDateOnly, todayIso } from "@/lib/date-utils"
 import { formatCurrency } from "@/lib/format"
 import { useAuth } from "@/hooks/use-auth"
 import TaskGuideCard from "@/components/task-guide-card"
@@ -73,7 +73,7 @@ export default function BillingTab({ showDataToolsControls = false }: BillingTab
   const [billToState, setBillToState] = useState("")
   const [placeOfSupply, setPlaceOfSupply] = useState("")
   const [supplyState, setSupplyState] = useState("")
-  const [invoiceDate, setInvoiceDate] = useState(new Date().toISOString().slice(0, 10))
+  const [invoiceDate, setInvoiceDate] = useState(todayIso())
   const [dueDate, setDueDate] = useState("")
   const [notes, setNotes] = useState("")
   const [items, setItems] = useState<LineItem[]>([defaultLineItem()])
@@ -125,7 +125,7 @@ export default function BillingTab({ showDataToolsControls = false }: BillingTab
     setBillToState("")
     setPlaceOfSupply("")
     setSupplyState("")
-    setInvoiceDate(new Date().toISOString().slice(0, 10))
+    setInvoiceDate(todayIso())
     setDueDate("")
     setNotes("")
     setItems([defaultLineItem()])

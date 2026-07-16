@@ -11,6 +11,7 @@ import BrandWatermark from "@/components/brand-watermark"
 import FloatingAiAssistant from "@/components/floating-ai-assistant"
 import FeedbackWidget from "@/components/feedback-widget"
 import { Toaster } from "@/components/ui/toaster"
+import { Toaster as SonnerToaster } from "sonner"
 import PwaRegister from "@/components/pwa-register"
 import PostHogAuthSync from "@/components/posthog-auth-sync"
 import WebVitals from "@/components/web-vitals"
@@ -124,6 +125,8 @@ gtag('config', 'G-X0RB06WXE9');`}
               </Suspense>
               <BrandWatermark />
               <Toaster />
+              {/* Several components toast via sonner — without this mount those messages never render */}
+              <SonnerToaster position="top-center" richColors closeButton />
               <PwaRegister />
               <Suspense fallback={null}>
                 <WebVitals />

@@ -138,6 +138,7 @@ export async function GET(request: Request) {
             SELECT 
               id,
               deployment_date as date,
+              recorded_by,
               code,
               hf_laborers,
               hf_cost_per_laborer,
@@ -157,6 +158,7 @@ export async function GET(request: Request) {
             SELECT 
               id,
               deployment_date as date,
+              recorded_by,
               code,
               hf_laborers,
               hf_cost_per_laborer,
@@ -176,6 +178,7 @@ export async function GET(request: Request) {
             SELECT 
               id,
               deployment_date as date,
+              recorded_by,
               code,
               hf_laborers,
               hf_cost_per_laborer,
@@ -193,6 +196,7 @@ export async function GET(request: Request) {
             SELECT 
               id,
               deployment_date as date,
+              recorded_by,
               code,
               hf_laborers,
               hf_cost_per_laborer,
@@ -281,7 +285,7 @@ export async function GET(request: Request) {
         notes: row.notes || "",
         locationId: supportsLocation && row.location_id ? String(row.location_id) : null,
         taskDescription: supportsTaskDescription && row.task_description ? String(row.task_description) : null,
-        user: "system",
+        user: row.recorded_by || "—",
       }
     })
 
@@ -455,6 +459,7 @@ export async function POST(request: Request) {
               outside_cost_per_laborer,
               total_cost,
               notes${taskDescriptionInsertColumn}${laborEntriesInsertColumn},
+              recorded_by,
               location_id,
               tenant_id
             ) VALUES (
@@ -466,6 +471,7 @@ export async function POST(request: Request) {
               ${outsideCostPer},
               ${computedTotalCost},
               ${normalizedNotes}${taskDescriptionInsertValue}${laborEntriesInsertValue},
+              ${sessionUser.username || null},
               ${validLocationId}::uuid,
               ${tenantContext.tenantId}
             )
@@ -485,6 +491,7 @@ export async function POST(request: Request) {
               outside_cost_per_laborer,
               total_cost,
               notes${taskDescriptionInsertColumn}${laborEntriesInsertColumn},
+              recorded_by,
               tenant_id
             ) VALUES (
               ${date}::timestamp,
@@ -495,6 +502,7 @@ export async function POST(request: Request) {
               ${outsideCostPer},
               ${computedTotalCost},
               ${normalizedNotes}${taskDescriptionInsertValue}${laborEntriesInsertValue},
+              ${sessionUser.username || null},
               ${tenantContext.tenantId}
             )
             RETURNING id

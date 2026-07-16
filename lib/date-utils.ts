@@ -96,3 +96,21 @@ export function generateTimestamp(dateInput?: DateInput): string {
   const date = resolveDate(dateInput) ?? new Date()
   return date.toISOString()
 }
+
+/**
+ * YYYY-MM-DD of a Date in LOCAL time. Never use toISOString().slice(0,10)
+ * for calendar dates — it converts to UTC first, which shifts IST (+5:30)
+ * dates back a day between midnight and 5:30 AM local.
+ */
+export function toLocalIso(dateInput?: DateInput): string {
+  const date = resolveDate(dateInput) ?? new Date()
+  const year = date.getFullYear()
+  const month = (date.getMonth() + 1).toString().padStart(2, "0")
+  const day = date.getDate().toString().padStart(2, "0")
+  return `${year}-${month}-${day}`
+}
+
+/** Today's date as YYYY-MM-DD in the user's local timezone. */
+export function todayIso(): string {
+  return toLocalIso(new Date())
+}

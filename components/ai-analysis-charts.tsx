@@ -16,7 +16,7 @@ import { ChartContainer, ChartTooltip, ChartTooltipContent, type ChartConfig } f
 import type { InventoryItem, Transaction } from "@/lib/inventory-types"
 import { getFiscalYearDateRange, getCurrentFiscalYear } from "@/lib/fiscal-year-utils"
 import { useAuth } from "@/hooks/use-auth"
-import { formatDateForDisplay, formatDateOnly } from "@/lib/date-utils"
+import { formatDateForDisplay, formatDateOnly, toLocalIso } from "@/lib/date-utils"
 
 interface AiAnalysisChartsProps {
   inventory: InventoryItem[]
@@ -276,7 +276,7 @@ export default function AiAnalysisCharts({ inventory, transactions }: AiAnalysis
       // Assuming they are handled by inventory rebuild or specific value adjustments not covered here.
 
       if (parsedDate) {
-        const formattedDate = parsedDate.toISOString().split("T")[0] // YYYY-MM-DD
+        const formattedDate = toLocalIso(parsedDate) // YYYY-MM-DD in local time
         valueOverTime.push({ date: formattedDate, value: Math.max(0, runningTotalValue) })
       }
     })

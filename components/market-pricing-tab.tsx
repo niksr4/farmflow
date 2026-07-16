@@ -1,6 +1,7 @@
 "use client"
 
 import { useCallback, useEffect, useState } from "react"
+import { todayIso } from "@/lib/date-utils"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -110,7 +111,7 @@ export default function MarketPricingTab() {
     variety: "",
     price_per_kg: "",
     quantity_kg: "",
-    record_date: new Date().toISOString().split("T")[0],
+    record_date: todayIso(),
     notes: "",
   })
 
@@ -179,7 +180,7 @@ export default function MarketPricingTab() {
         variety: "",
         price_per_kg: "",
         quantity_kg: "",
-        record_date: new Date().toISOString().split("T")[0],
+        record_date: todayIso(),
         notes: "",
       })
       await fetchData()

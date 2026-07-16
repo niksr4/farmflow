@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useEffect, useCallback } from "react"
+import { todayIso } from "@/lib/date-utils"
 import { Plus, Pencil, Trash2, Check, X, Loader2, BookOpen } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -42,7 +43,7 @@ const TYPE_COLORS: Record<EntryType, string> = {
   adjustment: "border-sky-400/30 bg-sky-400/10 text-sky-300",
 }
 
-const today = () => new Date().toISOString().slice(0, 10)
+const today = () => todayIso()
 const firstOfMonth = () => new Date().toISOString().slice(0, 7) + "-01"
 
 const EMPTY_FORM = { workerId: "", entryDate: today(), entryType: "" as EntryType | "", amount: "", description: "" }

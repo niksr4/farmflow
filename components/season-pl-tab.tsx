@@ -1,6 +1,7 @@
 "use client"
 
 import { useCallback, useEffect, useRef, useState } from "react"
+import { toLocalIso } from "@/lib/date-utils"
 import InPageNav from "@/components/in-page-nav"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
@@ -88,8 +89,8 @@ function getCurrentSeasonRange(): DateRange {
   const seasonEnd = new Date(seasonStart)
   seasonEnd.setMonth(seasonEnd.getMonth() + 6)
   return {
-    start: seasonStart.toISOString().slice(0, 10),
-    end: seasonEnd.toISOString().slice(0, 10),
+    start: toLocalIso(seasonStart),
+    end: toLocalIso(seasonEnd),
   }
 }
 
@@ -128,8 +129,8 @@ export default function SeasonPlTab() {
     {
       label: "Last 12 months",
       range: {
-        start: new Date(Date.now() - 365 * 86400_000).toISOString().slice(0, 10),
-        end: new Date().toISOString().slice(0, 10),
+        start: toLocalIso(new Date(Date.now() - 365 * 86400_000)),
+        end: toLocalIso(new Date()),
       },
     },
     {

@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useEffect, useCallback } from "react"
+import { todayIso } from "@/lib/date-utils"
 import { Plus, Pencil, UserX, Check, X, Loader2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -65,7 +66,7 @@ export default function WorkerProfilesTab() {
 
   const fetchWorkers = useCallback(async () => {
     try {
-      const res = await fetch("/api/attendance?date=" + new Date().toISOString().slice(0, 10))
+      const res = await fetch("/api/attendance?date=" + todayIso())
       const data = await res.json()
       if (data.success) {
         setWorkers(

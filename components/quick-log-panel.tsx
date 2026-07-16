@@ -5,6 +5,7 @@ import { ArrowRight, Check, Loader2, Minus, Plus, Search, X } from "lucide-react
 import { cn } from "@/lib/utils"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
+import { reportActionError } from "@/lib/track-action"
 import { formatCurrency } from "@/lib/format"
 import { useTenantSettings } from "@/hooks/use-tenant-settings"
 import { format, subDays } from "date-fns"
@@ -109,7 +110,9 @@ export default function QuickLogPanel({ onNavigateToFull, locationId, className 
               lastUsedDate: "",
             })),
       )
-    } catch {
+    } catch (err) {
+      // Fallback tiles keep the panel usable, but surface the failure to Sentry
+      reportActionError("quick_log_load", err)
       setRecentCodes(ESTATE_TOP_CODES.map((c) => ({ ...c, useCount: 0, lastUsedDate: "" })))
     } finally {
       setLoading(false)

@@ -48,7 +48,9 @@ const parseCsv = (csv: string): string[][] => {
   return rows
 }
 
-const NUMERIC_CELL = /^-?\d+(\.\d+)?$/
+// Coerce to number only when the text round-trips losslessly — "007" and
+// "0012" keep leading zeros (activity codes) by staying text.
+const NUMERIC_CELL = /^-?(0|[1-9]\d*)(\.\d+)?$/
 
 const EMERALD_HEADER_FILL = { type: "pattern", pattern: "solid", fgColor: { argb: "FF047857" } } as const
 const SECTION_FILL = { type: "pattern", pattern: "solid", fgColor: { argb: "FFD1FAE5" } } as const

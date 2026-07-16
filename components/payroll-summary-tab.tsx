@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useCallback } from "react"
+import { todayIso } from "@/lib/date-utils"
 import { Download, Loader2, DollarSign, AlertTriangle } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -38,8 +39,8 @@ type Totals = {
   netPayable: number
 }
 
-const today = () => new Date().toISOString().slice(0, 10)
-const firstOfMonth = () => new Date().toISOString().slice(0, 7) + "-01"
+const today = () => todayIso()
+const firstOfMonth = () => todayIso().slice(0, 7) + "-01"
 
 const escapeCsv = (v: string | number | null | undefined) => {
   const s = String(v ?? "")

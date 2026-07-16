@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useEffect, useCallback } from "react"
+import { todayIso } from "@/lib/date-utils"
 import { Plus, Pencil, Trash2, Check, X, Loader2, Wheat } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -31,8 +32,8 @@ type PickingRecord = {
   notes: string | null
 }
 
-const today = () => new Date().toISOString().slice(0, 10)
-const firstOfMonth = () => new Date().toISOString().slice(0, 7) + "-01"
+const today = () => todayIso()
+const firstOfMonth = () => todayIso().slice(0, 7) + "-01"
 
 const EMPTY_FORM = {
   workerId: "",

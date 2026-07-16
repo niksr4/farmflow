@@ -11,7 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { useToast } from "@/hooks/use-toast"
 import { useAuth } from "@/hooks/use-auth"
-import { formatDateOnly } from "@/lib/date-utils"
+import { formatDateOnly, todayIso } from "@/lib/date-utils"
 import { formatCurrency } from "@/lib/format"
 import { cn } from "@/lib/utils"
 import WorkflowEmptyState from "@/components/workflow-empty-state"
@@ -79,7 +79,7 @@ const emptySummary: ReceivablesSummary = {
 const emptyForm = {
   buyer_name: "",
   invoice_no: "",
-  invoice_date: new Date().toISOString().slice(0, 10),
+  invoice_date: todayIso(),
   due_date: "",
   amount: "",
   status: "unpaid",
@@ -312,7 +312,7 @@ export default function ReceivablesTab() {
     setForm({
       buyer_name: record.buyer_name || "",
       invoice_no: record.invoice_no || "",
-      invoice_date: record.invoice_date?.slice(0, 10) || new Date().toISOString().slice(0, 10),
+      invoice_date: record.invoice_date?.slice(0, 10) || todayIso(),
       due_date: record.due_date?.slice(0, 10) || "",
       amount: String(record.amount ?? ""),
       status: getEffectiveStatus(record),

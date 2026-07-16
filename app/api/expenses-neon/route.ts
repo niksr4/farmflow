@@ -574,6 +574,9 @@ function buildCreateExpenseMutationStatement(options: {
     expenseValueParts.push(`$${params.push(options.inventoryItemType)}`, `$${params.push(options.inventoryQuantity)}::numeric`)
   }
 
+  expenseColumns.push("recorded_by")
+  expenseValueParts.push(`$${params.push(options.username || null)}`)
+
   expenseColumns.push("tenant_id")
   expenseValueParts.push(`$${params.push(options.tenantId)}`)
 
@@ -979,6 +982,7 @@ export async function GET(request: Request) {
             SELECT
               et.id,
               et.entry_date as date,
+              et.recorded_by,
               et.code,
               COALESCE(aa.activity, et.code) as reference,
               et.total_amount as amount,
@@ -1000,6 +1004,7 @@ export async function GET(request: Request) {
             SELECT
               et.id,
               et.entry_date as date,
+              et.recorded_by,
               et.code,
               COALESCE(aa.activity, et.code) as reference,
               et.total_amount as amount,
@@ -1022,6 +1027,7 @@ export async function GET(request: Request) {
               SELECT
                 et.id,
                 et.entry_date as date,
+                et.recorded_by,
                 et.code,
                 COALESCE(aa.activity, et.code) as reference,
                 et.total_amount as amount,
@@ -1041,6 +1047,7 @@ export async function GET(request: Request) {
               SELECT
                 et.id,
                 et.entry_date as date,
+                et.recorded_by,
                 et.code,
                 COALESCE(aa.activity, et.code) as reference,
                 et.total_amount as amount,
@@ -1060,6 +1067,7 @@ export async function GET(request: Request) {
               SELECT
                 et.id,
                 et.entry_date as date,
+                et.recorded_by,
                 et.code,
                 COALESCE(aa.activity, et.code) as reference,
                 et.total_amount as amount,
@@ -1077,6 +1085,7 @@ export async function GET(request: Request) {
               SELECT
                 et.id,
                 et.entry_date as date,
+                et.recorded_by,
                 et.code,
                 COALESCE(aa.activity, et.code) as reference,
                 et.total_amount as amount,
@@ -1138,7 +1147,7 @@ export async function GET(request: Request) {
         inventoryItems,
         inventoryItemType: inventoryItems[0]?.itemType ?? null,
         inventoryQuantity: inventoryItems[0]?.quantity ?? null,
-        user: "system",
+        user: row.recorded_by || "—",
       }
     })
 
