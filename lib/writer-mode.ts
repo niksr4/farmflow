@@ -8,7 +8,10 @@
  * nothing else. Managers and admins keep the full workspace.
  */
 
-export const WRITER_TABS = ["home", "accounts", "rainfall"] as const
+// Grounded in real writer usage (audit log): writers record labour, expenses,
+// rain, stock usage, pepper/processing, and dispatch. Analysis tabs
+// (balance sheet, P&L, season, AI, sales) stay manager-only.
+export const WRITER_TABS = ["home", "accounts", "rainfall", "inventory", "processing", "dispatch"] as const
 
 /** Entry-oriented accounts sub-tabs; analysis/management ones are hidden */
 export const WRITER_ACCOUNTS_TABS = ["labour", "expenses", "attendance", "picking"] as const
