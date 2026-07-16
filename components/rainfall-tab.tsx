@@ -87,6 +87,37 @@ export default function RainfallTab({ username, showDataToolsControls = false }:
   const [loading, setLoading] = useState(false)
   const [drilldownMonthIndex, setDrilldownMonthIndex] = useState<number | null>(null)
   const [mobileSection, setMobileSection] = useState<"stats" | "log" | "records">("stats")
+  const [exportStart, setExportStart] = useState(() => `${new Date().getFullYear()}-01-01`)
+  const [exportEnd, setExportEnd] = useState(() => format(new Date(), "yyyy-MM-dd"))
+  const [exporting, setExporting] = useState(false)
+
+  const handleRangeExport = async (exportFormat: "csv" | "xlsx") => {
+    setExporting(true)
+    try {
+      const params = new URLSearchParams({
+        dataset: "rainfall",
+        format: exportFormat,
+        startDate: exportStart,
+        endDate: exportEnd,
+      })
+      const response = await fetch(`/api/exports/ops?${params.toString()}`, { cache: "no-store" })
+      if (!response.ok) throw new Error("Export failed")
+      const blob = await response.blob()
+      const url = URL.createObjectURL(blob)
+      const link = document.createElement("a")
+      link.href = url
+      link.download = `rainfall-${exportStart}-to-${exportEnd}.${exportFormat}`
+      document.body.appendChild(link)
+      link.click()
+      document.body.removeChild(link)
+      URL.revokeObjectURL(url)
+      toast({ title: "Exported", description: `Rainfall ${exportStart} to ${exportEnd}` })
+    } catch {
+      toast({ title: "Error", description: "Failed to export rainfall records", variant: "destructive" })
+    } finally {
+      setExporting(false)
+    }
+  }
 
   const handleWholeNumberChange = (setter: (value: string) => void) => (event: ChangeEvent<HTMLInputElement>) => {
     const nextValue = event.target.value
@@ -748,6 +779,54 @@ export default function RainfallTab({ username, showDataToolsControls = false }:
               ))}
             </div>
           )}
+
+          {/* Export with date range */}
+          <div className="mt-5 rounded-2xl bg-white shadow-sm p-4">
+            <p className="text-sm font-black text-stone-700 mb-3">⬇️ Export records</p>
+            <div className="flex gap-2 mb-3">
+              <div className="flex-1 min-w-0">
+                <p className="text-[10px] font-bold uppercase tracking-wide text-stone-400 mb-1">From</p>
+                <input
+                  type="date"
+                  value={exportStart}
+                  max={exportEnd}
+                  onChange={(e) => setExportStart(e.target.value)}
+                  className="w-full h-11 rounded-xl border border-stone-200 px-3 text-sm font-semibold text-stone-800 bg-stone-50 focus:outline-none focus:ring-2 focus:ring-sky-400"
+                />
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-[10px] font-bold uppercase tracking-wide text-stone-400 mb-1">To</p>
+                <input
+                  type="date"
+                  value={exportEnd}
+                  min={exportStart}
+                  max={format(new Date(), "yyyy-MM-dd")}
+                  onChange={(e) => setExportEnd(e.target.value)}
+                  className="w-full h-11 rounded-xl border border-stone-200 px-3 text-sm font-semibold text-stone-800 bg-stone-50 focus:outline-none focus:ring-2 focus:ring-sky-400"
+                />
+              </div>
+            </div>
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={() => handleRangeExport("csv")}
+                disabled={exporting}
+                className="flex-1 h-12 rounded-xl border-2 border-sky-200 bg-sky-50 text-sm font-bold text-sky-800 flex items-center justify-center gap-1.5 active:scale-[0.98] transition-all touch-manipulation disabled:opacity-60"
+              >
+                <Download className="h-4 w-4" />
+                CSV
+              </button>
+              <button
+                type="button"
+                onClick={() => handleRangeExport("xlsx")}
+                disabled={exporting}
+                className="flex-1 h-12 rounded-xl bg-sky-600 text-sm font-bold text-white flex items-center justify-center gap-1.5 active:scale-[0.98] transition-all touch-manipulation disabled:opacity-60"
+              >
+                <Download className="h-4 w-4" />
+                Excel
+              </button>
+            </div>
+          </div>
         </div>
         )}
       </div>

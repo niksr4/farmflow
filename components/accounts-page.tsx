@@ -737,19 +737,30 @@ export default function AccountsPage({
     URL.revokeObjectURL(url)
   }
 
-  const downloadActivityReference = (format: AccountActivityReferenceExportFormat) => {
+  const downloadActivityReference = async (format: AccountActivityReferenceExportFormat) => {
     try {
       const filename = buildAccountActivityReferenceFilename(format)
 
+      // Export the tenant's live codes so the reference always matches what's
+      // actually in the system; fall back to the starter list before any load.
+      const liveCodes = activities.length > 0
+        ? [...activities]
+            .map((a) => ({ code: String(a.code || ""), reference: String(a.reference || "") }))
+            .sort((a, b) => a.code.localeCompare(b.code, undefined, { numeric: true }))
+        : undefined
+      const subtitle = liveCodes
+        ? `Your estate's activity codes as of ${new Date().toLocaleDateString("en-IN")}.`
+        : undefined
+
       if (format === "csv") {
-        const csv = buildAccountActivityReferenceCsv()
+        const csv = buildAccountActivityReferenceCsv(liveCodes)
         downloadBlob(new Blob([csv], { type: "text/csv;charset=utf-8" }), filename)
       } else if (format === "xlsx") {
-        const csv = buildAccountActivityReferenceCsv()
-        const workbookBytes = buildXlsxArrayBufferFromCsv(csv, "Activity Reference")
+        const csv = buildAccountActivityReferenceCsv(liveCodes)
+        const workbookBytes = await buildXlsxArrayBufferFromCsv(csv, "Activity Reference")
         downloadBlob(new Blob([workbookBytes], { type: XLSX_MIME_TYPE }), filename)
       } else {
-        const pdfBytes = buildAccountActivityReferencePdf()
+        const pdfBytes = buildAccountActivityReferencePdf(liveCodes, subtitle)
         downloadBlob(new Blob([pdfBytes], { type: "application/pdf" }), filename)
       }
 
@@ -808,7 +819,7 @@ export default function AccountsPage({
       const deploymentsToExport = await getFilteredDeploymentsForExport()
       if (!deploymentsToExport) return
       const csvBody = buildCombinedAccountsCsv(deploymentsToExport)
-      const workbookBytes = buildXlsxArrayBufferFromCsv(csvBody, "Accounts Export")
+      const workbookBytes = await buildXlsxArrayBufferFromCsv(csvBody, "Accounts Export")
       const blob = new Blob([workbookBytes], { type: XLSX_MIME_TYPE })
       downloadBlob(blob, buildAccountsXlsxFilename(resolvedExportStartDate, resolvedExportEndDate))
       toast.success(`Accounts XLSX exported (${deploymentsToExport.length} entries)`)
@@ -824,6 +835,61 @@ export default function AccountsPage({
       toast.error(error?.message || "Failed to export XLSX file")
       posthog.capture("accounts_export_failed", {
         format: "xlsx",
+        reason: error?.message || "unknown",
+      })
+    }
+  }
+
+  const exportSummaryByCode = async () => {
+    posthog.capture("accounts_export_requested", {
+      format: "summary_xlsx",
+      date_range_start: resolvedExportStartDate || null,
+      date_range_end: resolvedExportEndDate || null,
+    })
+
+    try {
+      const deploymentsToExport = await getFilteredDeploymentsForExport()
+      if (!deploymentsToExport) return
+
+      const totalsByCode: { [code: string]: { reference: string; total: number } } = {}
+      deploymentsToExport.forEach((d) => {
+        const amount = d.entryType === "Labour" ? d.totalCost : (d as ConsumableDeployment).amount
+        const existing = totalsByCode[d.code]
+        if (existing) {
+          existing.total += amount
+        } else {
+          totalsByCode[d.code] = { reference: d.reference || d.code, total: amount }
+        }
+      })
+
+      const headers = ["Code", "Reference", "Total Expenditure (₹)"]
+      let csvContent = escapeCsvField(`Expenditure Summary by Code — ${resolvedExportStartDate} to ${resolvedExportEndDate}`) + ",,\n"
+      csvContent += headers.map(escapeCsvField).join(",") + "\n"
+      let grandTotal = 0
+      Object.entries(totalsByCode)
+        .sort(([codeA], [codeB]) => codeA.localeCompare(codeB, undefined, { numeric: true }))
+        .forEach(([code, { reference, total }]) => {
+          grandTotal += total
+          csvContent += [escapeCsvField(code), escapeCsvField(reference), escapeCsvField(total.toFixed(2))].join(",") + "\n"
+        })
+      csvContent += ["", escapeCsvField("GRAND TOTAL"), escapeCsvField(grandTotal.toFixed(2))].join(",")
+
+      const workbookBytes = await buildXlsxArrayBufferFromCsv(csvContent, "Summary by Code")
+      const blob = new Blob([workbookBytes], { type: XLSX_MIME_TYPE })
+      downloadBlob(blob, `expenditure-summary-${resolvedExportStartDate}-to-${resolvedExportEndDate}.xlsx`)
+      toast.success(`Summary exported (${Object.keys(totalsByCode).length} codes)`)
+
+      posthog.capture("accounts_export_downloaded", {
+        format: "summary_xlsx",
+        rows_exported: Object.keys(totalsByCode).length,
+        date_range_start: resolvedExportStartDate || null,
+        date_range_end: resolvedExportEndDate || null,
+      })
+    } catch (error: any) {
+      console.error("Error exporting summary:", error)
+      toast.error(error?.message || "Failed to export summary")
+      posthog.capture("accounts_export_failed", {
+        format: "summary_xlsx",
         reason: error?.message || "unknown",
       })
     }
@@ -1897,8 +1963,11 @@ export default function AccountsPage({
               <Button onClick={() => void exportInterchange("qif")} variant="outline" size="sm" disabled={!canExport} className="w-full sm:w-auto bg-transparent">
                 <Coins className="mr-2 h-4 w-4" /> Export QIF
               </Button>
+              <Button onClick={exportSummaryByCode} variant="outline" size="sm" disabled={!canExport} className="w-full sm:w-auto bg-transparent">
+                <FileSpreadsheet className="mr-2 h-4 w-4" /> Export Summary
+              </Button>
               <p className={cn("w-full text-xs", exportDateRangeError ? "text-rose-600" : "text-muted-foreground")}>
-                {exportDisabledReason || "CSV, XLSX, and QIF exports use the range shown above."}
+                {exportDisabledReason || "CSV, XLSX, QIF, and Summary exports use the range shown above."}
               </p>
             </div>
           </CardContent>

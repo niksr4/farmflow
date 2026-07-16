@@ -98,6 +98,8 @@ export default function LaborDeploymentTab({
   const [savedConfirm, setSavedConfirm] = useState<{ reference: string; total: number } | null>(null)
   const [activities, setActivities] = useState<ActivityCode[]>([])
   const [showAllCodes, setShowAllCodes] = useState(false)
+  // Mobile activity picker: null = show selected code, string = active search query
+  const [codeQuery, setCodeQuery] = useState<string | null>(null)
   const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set())
   const [formData, setFormData] = useState<FormData>({
     date: new Date().toISOString().split("T")[0],
@@ -484,36 +486,40 @@ export default function LaborDeploymentTab({
                   <Label htmlFor="code" className="text-base">Activity code</Label>
                   {isMobile && activities.length > 0 ? (
                     <>
-                      <select
-                        value={formData.code}
-                        onChange={(e) => handleCodeChange(e.target.value)}
+                      <Input
+                        id="code"
+                        value={codeQuery !== null ? codeQuery : formData.code ? `${formData.code} — ${formData.reference}` : ""}
+                        onChange={(e) => setCodeQuery(e.target.value)}
+                        onFocus={() => setCodeQuery("")}
+                        onBlur={() => setTimeout(() => setCodeQuery(null), 150)}
+                        placeholder="Search activity name or code…"
                         required
-                        className="w-full h-12 rounded-xl border border-input bg-background px-3 text-base font-medium focus:outline-none focus:ring-2 focus:ring-emerald-500"
-                      >
-                        <option value="">Select activity code…</option>
-                        {usedActivities.length > 0 && (
-                          <optgroup label="Used codes">
-                            {usedActivities.map((a) => (
-                              <option key={a.code} value={a.code}>{a.code} — {a.reference}</option>
+                        className="h-12 rounded-xl text-base"
+                      />
+                      {codeQuery !== null && (
+                        <div className="rounded-2xl border border-stone-200 bg-white shadow-md overflow-hidden divide-y divide-stone-100 max-h-72 overflow-y-auto">
+                          {sortedActivities
+                            .filter((a) =>
+                              codeQuery.trim() === "" ||
+                              a.code.toLowerCase().includes(codeQuery.toLowerCase()) ||
+                              a.reference.toLowerCase().includes(codeQuery.toLowerCase()))
+                            .slice(0, 8)
+                            .map((a) => (
+                              <button
+                                key={a.code}
+                                type="button"
+                                onPointerDown={(e) => e.preventDefault()}
+                                onClick={() => {
+                                  handleCodeChange(a.code)
+                                  setCodeQuery(null)
+                                }}
+                                className="w-full flex items-center gap-2.5 px-4 py-3 text-left active:bg-emerald-50 transition-colors touch-manipulation"
+                              >
+                                <span className="text-sm font-black tabular-nums text-emerald-700 shrink-0">{a.code}</span>
+                                <span className="text-sm font-medium text-stone-800 truncate">{a.reference}</span>
+                              </button>
                             ))}
-                          </optgroup>
-                        )}
-                        {showAllCodes && unusedActivities.length > 0 && (
-                          <optgroup label="Unused codes">
-                            {unusedActivities.map((a) => (
-                              <option key={a.code} value={a.code}>{a.code} — {a.reference}</option>
-                            ))}
-                          </optgroup>
-                        )}
-                      </select>
-                      {unusedActivities.length > 0 && (
-                        <button
-                          type="button"
-                          onClick={() => setShowAllCodes((v) => !v)}
-                          className="text-xs text-emerald-700 underline underline-offset-2 hover:text-emerald-800"
-                        >
-                          {showAllCodes ? "Show fewer codes" : `Show ${unusedActivities.length} unused codes`}
-                        </button>
+                        </div>
                       )}
                     </>
                   ) : (

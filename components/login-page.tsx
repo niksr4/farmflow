@@ -90,7 +90,7 @@ export default function LoginPage() {
         requiresGuidedSetup: sessionPayload?.user?.requiresGuidedSetup,
         setupCompleted: sessionPayload?.user?.setupCompleted,
       })
-      router.push(role === "owner" ? "/admin/tenants" : mustCompleteGuidedSetup ? "/welcome" : "/dashboard")
+      router.replace(role === "owner" ? "/admin/tenants" : mustCompleteGuidedSetup ? "/welcome" : "/dashboard")
     } catch (err: any) {
       posthog.captureException(err)
       const fallback = "Unable to sign in right now. Please try again."

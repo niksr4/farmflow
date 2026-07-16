@@ -123,6 +123,7 @@ export const buildAccountActivityReferenceCsv = (suggestions: AccountActivitySug
 
 export const buildAccountActivityReferencePdf = (
   suggestions: AccountActivitySuggestion[] = ACCOUNT_ACTIVITY_SUGGESTIONS,
+  subtitle: string = REFERENCE_SUBTITLE,
 ) => {
   const rows = suggestions.map((suggestion) => `${suggestion.code.padEnd(8, " ")} ${suggestion.reference}`)
   const pagedRows = chunkRows(rows, PDF_PAGE_ROW_LIMIT)
@@ -149,7 +150,7 @@ export const buildAccountActivityReferencePdf = (
       `(${escapePdfText(REFERENCE_TITLE)}) Tj`,
       "/F1 10 Tf",
       "0 -18 Td",
-      `(${escapePdfText(`${REFERENCE_SUBTITLE} | ${suggestions.length} codes | ${pageLabel}`)}) Tj`,
+      `(${escapePdfText(`${subtitle} | ${suggestions.length} codes | ${pageLabel}`)}) Tj`,
       "0 -24 Td",
       `(${escapePdfText("Code      Activity")}) Tj`,
       "0 -12 Td",

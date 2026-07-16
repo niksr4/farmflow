@@ -834,7 +834,7 @@ export async function GET(request: NextRequest) {
     }
 
     if (format === "xlsx") {
-      const workbookBytes = buildXlsxArrayBufferFromCsv(csv, dataset)
+      const workbookBytes = await buildXlsxArrayBufferFromCsv(csv, dataset)
       return new NextResponse(workbookBytes, {
         status: 200,
         headers: {

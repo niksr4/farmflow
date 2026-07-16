@@ -4154,6 +4154,31 @@ export default function InventorySystem() {
     router.replace(nextPath, { scroll: false })
   }, [isMobile, markTabAsLoaded, router, searchParams])
 
+  // Phone/PWA back-button trap: hardware Back returns to the home screen
+  // instead of leaving the dashboard (which lands on login and reads as a
+  // sign-out). Back from the home screen stays put — exit via the OS.
+  const activeTabRef = useRef(activeTab)
+  activeTabRef.current = activeTab
+  const goToWorkspaceNavigatorRef = useRef(goToWorkspaceNavigator)
+  goToWorkspaceNavigatorRef.current = goToWorkspaceNavigator
+  useEffect(() => {
+    if (typeof window === "undefined") return
+    const isStandalone = window.matchMedia("(display-mode: standalone)").matches
+    const isSmallScreen = window.matchMedia("(max-width: 768px)").matches
+    if (!isStandalone && !isSmallScreen) return
+
+    window.history.pushState({ farmflowBackTrap: true }, "")
+    const onPopState = () => {
+      window.history.pushState({ farmflowBackTrap: true }, "")
+      const homeTab = isSmallScreen ? "home" : DASHBOARD_LAUNCHER_TAB
+      if (activeTabRef.current !== homeTab) {
+        goToWorkspaceNavigatorRef.current()
+      }
+    }
+    window.addEventListener("popstate", onPopState)
+    return () => window.removeEventListener("popstate", onPopState)
+  }, [])
+
   type TabGroupKey = "dashboard" | "operations" | "finance" | "insights"
   type SectionTabItem = {
     value: string

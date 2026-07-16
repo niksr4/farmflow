@@ -217,7 +217,7 @@ export default function QuickLogPanel({ onNavigateToFull, locationId, className 
           <Input
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search activity codes…"
+            placeholder="Search by activity name or code…"
             className="h-11 text-base rounded-2xl border-stone-200 bg-white px-4"
             autoFocus
           />
@@ -232,8 +232,11 @@ export default function QuickLogPanel({ onNavigateToFull, locationId, className 
                 >
                   <span className="text-xl">{activityEmoji(a.reference)}</span>
                   <div className="flex-1 min-w-0">
-                    <p className="text-sm font-semibold text-stone-900 truncate">{a.reference}</p>
-                    <p className="text-[10px] text-stone-400">{a.code}</p>
+                    <p className="text-sm font-semibold text-stone-900 truncate">
+                      <span className="font-black text-emerald-700 tabular-nums">{a.code}</span>
+                      <span className="text-stone-300 mx-1.5">·</span>
+                      {a.reference}
+                    </p>
                   </div>
                   <ArrowRight className="h-3.5 w-3.5 text-stone-300 shrink-0" />
                 </button>
@@ -277,7 +280,15 @@ export default function QuickLogPanel({ onNavigateToFull, locationId, className 
                       <Check className="h-8 w-8 text-white stroke-[2.5]" />
                     </div>
                   )}
-                  <span className="text-2xl mb-2 leading-none">{emoji}</span>
+                  <div className="flex w-full items-start justify-between mb-2">
+                    <span className="text-2xl leading-none">{emoji}</span>
+                    <span className={cn(
+                      "text-[11px] font-black tabular-nums rounded-full px-2 py-0.5",
+                      isActive ? "bg-white/20 text-white" : "bg-stone-100 text-stone-500",
+                    )}>
+                      {code.code}
+                    </span>
+                  </div>
                   <p className={cn(
                     "text-sm font-bold leading-tight line-clamp-2",
                     isActive ? "text-white" : "text-stone-800",
@@ -438,10 +449,10 @@ export default function QuickLogPanel({ onNavigateToFull, locationId, className 
         <button
           type="button"
           onClick={onNavigateToFull}
-          className="w-full flex items-center justify-center gap-1.5 py-2 text-xs font-medium text-stone-400 hover:text-stone-600 transition-colors touch-manipulation"
+          className="w-full flex items-center justify-center gap-2 h-12 rounded-2xl border-2 border-emerald-200 bg-emerald-50 text-sm font-bold text-emerald-800 hover:bg-emerald-100 active:scale-[0.98] transition-all touch-manipulation"
         >
           Log with more detail
-          <ArrowRight className="h-3 w-3" />
+          <ArrowRight className="h-4 w-4" />
         </button>
       )}
     </div>
