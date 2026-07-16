@@ -4,6 +4,7 @@ import type React from "react"
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select"
 import { useMemo, useState, useEffect, useRef } from "react"
 import { useAuth } from "@/hooks/use-auth"
+import { isWriterRole } from "@/lib/writer-mode"
 import { useLaborData, type LaborEntry, type LaborDeployment } from "@/hooks/use-labor-data"
 import { useConsumablesData, type ConsumableDeployment } from "@/hooks/use-consumables-data"
 import { Button } from "@/components/ui/button"
@@ -1001,6 +1002,17 @@ export default function AccountsPage({
   const visibleActivitySuggestions = showAllActivitySuggestions ? activitySuggestions : activitySuggestions.slice(0, 12)
 
   const mobileTabItems = useMemo(() => {
+    // Writers (role=user) get only the daily-entry views — no summary
+    // analytics, code management, ledger, or payroll
+    if (isWriterRole(user?.role)) {
+      const writerItems: Array<{ value: AccountsView; label: string; icon: React.ComponentType<{ className?: string }> }> = [
+        { value: "labour", label: "Labour", icon: Users },
+        { value: "expenses", label: "Expenses", icon: Receipt },
+        { value: "attendance", label: "Attend", icon: Check },
+      ]
+      if (showPickingLog || showLaborManagement) writerItems.push({ value: "picking", label: "Picking", icon: Wheat })
+      return writerItems
+    }
     const items: Array<{ value: AccountsView; label: string; icon: React.ComponentType<{ className?: string }> }> = [
       { value: "dashboard", label: "Summary", icon: BarChart2 },
       { value: "labour", label: "Labour", icon: Users },
@@ -1016,7 +1028,14 @@ export default function AccountsPage({
     }
     if (isAdmin || isOwner) items.push({ value: "export", label: "Export", icon: FileSpreadsheet })
     return items
-  }, [showLaborManagement, showPickingLog, isAdmin, isOwner])
+  }, [showLaborManagement, showPickingLog, isAdmin, isOwner, user?.role])
+
+  // Writers land on Labour, never on a view their pared nav doesn't include
+  useEffect(() => {
+    if (isWriterRole(user?.role) && !mobileTabItems.some((item) => item.value === activeTab)) {
+      setActiveTab("labour")
+    }
+  }, [user?.role, activeTab, mobileTabItems])
   const accountsShellStats = [
     {
       label: "Fiscal Year",

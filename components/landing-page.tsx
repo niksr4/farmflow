@@ -418,8 +418,11 @@ export default function LandingPage() {
 
         {/* ── Coffee chain flow ── */}
         <MotionDiv {...reveal(0.05)}>
-          <p className="mb-6 text-center text-xs uppercase tracking-[0.3em] text-stone-600">
+          <p className="mb-2 text-center text-xs uppercase tracking-[0.3em] text-stone-600">
             One estate · One season · End to end
+          </p>
+          <p className="mb-6 text-center text-xs text-stone-500">
+            Actual records from the working Coorg coffee estate FarmFlow was built on — logged daily in the app.
           </p>
           <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
             {representativeEstateFlow.map((step, index) => {
@@ -778,7 +781,7 @@ export default function LandingPage() {
                 Your estate live today. Your first digest next Monday.
               </h2>
               <p className="mx-auto max-w-xl text-base leading-7 text-stone-400">
-                Sign up, complete a 5-minute setup, and start logging. Most estates are recording live entries within the hour — and get their first AI-written weekly brief the following Monday morning.
+                Sign up, complete a 5-minute setup, and start logging. You can be recording live entries within the hour — and get your first AI-written weekly brief the following Monday morning.
               </p>
               <div className="flex flex-wrap items-center justify-center gap-3 pt-2">
                 <Button

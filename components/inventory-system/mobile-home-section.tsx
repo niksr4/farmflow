@@ -1,6 +1,7 @@
 "use client"
 
 import React from "react"
+import { useLocale } from "@/components/locale-provider"
 import TodayGapsCard from "@/components/today-gaps-card"
 import QuickLogPanel from "@/components/quick-log-panel"
 import WeekBatchEntry from "@/components/week-batch-entry"
@@ -27,6 +28,7 @@ export default function MobileHomeSection({
   onTabChange,
   onOpenSidebar,
 }: Props) {
+  const { t } = useLocale()
   return (
     <div className="space-y-4 pb-24">
       {/* Estate morning header */}
@@ -52,7 +54,7 @@ export default function MobileHomeSection({
             className="flex flex-col items-center justify-center gap-1.5 rounded-2xl bg-emerald-700 py-4 px-2 shadow-sm active:scale-[0.97] touch-manipulation"
           >
             <span className="text-xl leading-none">👷</span>
-            <span className="text-[11px] font-bold text-white leading-tight text-center">Log Labour</span>
+            <span className="text-[11px] font-bold text-white leading-tight text-center">{t("writer.home.logLabour")}</span>
           </button>
           <button
             type="button"
@@ -60,7 +62,7 @@ export default function MobileHomeSection({
             className="flex flex-col items-center justify-center gap-1.5 rounded-2xl bg-amber-700 py-4 px-2 shadow-sm active:scale-[0.97] touch-manipulation"
           >
             <span className="text-xl leading-none">🧾</span>
-            <span className="text-[11px] font-bold text-white leading-tight text-center">Other Expense</span>
+            <span className="text-[11px] font-bold text-white leading-tight text-center">{t("writer.home.otherExpense")}</span>
           </button>
           {canShowRainfallSection ? (
             <button
@@ -69,7 +71,7 @@ export default function MobileHomeSection({
               className="flex flex-col items-center justify-center gap-1.5 rounded-2xl bg-sky-700 py-4 px-2 shadow-sm active:scale-[0.97] touch-manipulation"
             >
               <span className="text-xl leading-none">🌧️</span>
-              <span className="text-[11px] font-bold text-white leading-tight text-center">Rainfall</span>
+              <span className="text-[11px] font-bold text-white leading-tight text-center">{t("writer.home.rainfall")}</span>
             </button>
           ) : (
             <button
@@ -78,7 +80,7 @@ export default function MobileHomeSection({
               className="flex flex-col items-center justify-center gap-1.5 rounded-2xl bg-violet-700 py-4 px-2 shadow-sm active:scale-[0.97] touch-manipulation"
             >
               <span className="text-xl leading-none">📦</span>
-              <span className="text-[11px] font-bold text-white leading-tight text-center">Inventory</span>
+              <span className="text-[11px] font-bold text-white leading-tight text-center">{t("writer.home.inventory")}</span>
             </button>
           )}
         </div>
@@ -108,7 +110,7 @@ export default function MobileHomeSection({
         onClick={onOpenSidebar}
         className="w-full flex items-center justify-between rounded-2xl border border-stone-200 bg-stone-50 px-4 py-3.5 text-left touch-manipulation active:bg-stone-100 transition-colors"
       >
-        <span className="text-sm font-semibold text-stone-700">Explore all modules</span>
+        <span className="text-sm font-semibold text-stone-700">{t("writer.home.exploreModules")}</span>
         <span className="text-stone-400 text-lg leading-none">›</span>
       </button>
     </div>

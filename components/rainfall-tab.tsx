@@ -14,6 +14,7 @@ import { toast } from "@/components/ui/use-toast"
 import { CalendarIcon, ChevronLeft, ChevronRight, CloudRain, Download, Trash2 } from "lucide-react"
 import { addYears, format, subYears } from "date-fns"
 import { useAuth } from "@/hooks/use-auth"
+import { useLocale } from "@/components/locale-provider"
 import { useMediaQuery } from "@/hooks/use-media-query"
 import { formatDateOnly } from "@/lib/date-utils"
 import { formatNumber } from "@/lib/format"
@@ -76,6 +77,7 @@ const toIsoDate = (date: Date) => format(date, "yyyy-MM-dd")
 
 export default function RainfallTab({ username, showDataToolsControls = false }: RainfallTabProps) {
   const { user } = useAuth()
+  const { t } = useLocale()
   const canDelete = user?.role === "admin" || user?.role === "owner"
   const isMobile = useMediaQuery("(max-width: 768px)")
   const [showAnalysis, setShowAnalysis] = useState(false)
@@ -537,7 +539,11 @@ export default function RainfallTab({ username, showDataToolsControls = false }:
         {/* Quick-nav strip */}
         <div className="flex gap-2 overflow-x-auto pb-2 -mx-3 px-3 pt-3">
           {(["stats", "log", "records"] as const).map((section) => {
-            const labels = { stats: "📊 Stats", log: "🌧️ Log", records: "📋 Records" }
+            const labels = {
+              stats: `📊 ${t("writer.rain.stats")}`,
+              log: `🌧️ ${t("writer.rain.log")}`,
+              records: `📋 ${t("writer.rain.records")}`,
+            }
             return (
               <button
                 key={section}
@@ -639,11 +645,11 @@ export default function RainfallTab({ username, showDataToolsControls = false }:
 
         {mobileSection === "log" && (
         <div className="px-3 pt-4 pb-5 bg-white border-b border-stone-100">
-          <p className="text-sm font-black text-stone-700 mb-4">🌧️ Log rainfall</p>
+          <p className="text-sm font-black text-stone-700 mb-4">🌧️ {t("writer.rain.logRainfall")}</p>
 
           {/* Date */}
           <div className="flex items-center justify-between mb-4">
-            <p className="text-sm font-bold text-stone-700">📅 Date</p>
+            <p className="text-sm font-bold text-stone-700">📅 {t("writer.rain.date")}</p>
             <input
               type="date"
               value={format(selectedDate, "yyyy-MM-dd")}
@@ -661,7 +667,7 @@ export default function RainfallTab({ username, showDataToolsControls = false }:
 
           {/* Inches stepper */}
           <div className="mb-4">
-            <p className="text-sm font-bold text-stone-700 mb-2">💧 Full inches</p>
+            <p className="text-sm font-bold text-stone-700 mb-2">💧 {t("writer.rain.fullInches")}</p>
             <div className="flex items-center gap-4">
               <button
                 type="button"
@@ -691,7 +697,7 @@ export default function RainfallTab({ username, showDataToolsControls = false }:
 
           {/* Cents stepper */}
           <div className="mb-4">
-            <p className="text-sm font-bold text-stone-700 mb-2">💧 Decimal part (0–99)</p>
+            <p className="text-sm font-bold text-stone-700 mb-2">💧 {t("writer.rain.decimalPart")}</p>
             <p className="text-xs text-stone-400 mb-2">25 = quarter inch · 50 = half inch · 75 = three-quarter inch</p>
             <div className="flex items-center gap-4">
               <button
@@ -722,7 +728,7 @@ export default function RainfallTab({ username, showDataToolsControls = false }:
 
           {/* Total preview */}
           <div className="flex items-center justify-between rounded-2xl bg-sky-50 px-4 py-3 mb-4">
-            <p className="text-sm font-bold text-sky-700">Total today</p>
+            <p className="text-sm font-bold text-sky-700">{t("writer.rain.totalToday")}</p>
             <p className="text-2xl font-black text-sky-700 tabular-nums">{totalDisplay}</p>
           </div>
 
@@ -743,14 +749,14 @@ export default function RainfallTab({ username, showDataToolsControls = false }:
             className="w-full border-sky-600 bg-sky-600 text-white shadow-md shadow-sky-100 hover:bg-sky-700 [&_svg]:size-5"
           >
             <CloudRain />
-            {loading ? "Saving…" : "Save record"}
+            {loading ? t("writer.rain.savingRecord") : t("writer.rain.saveRecord")}
           </Button>
         </div>
         )}
 
         {mobileSection === "records" && (
         <div className="px-3 pt-4">
-          <p className="text-sm font-black text-stone-700 mb-3">📋 Recent records</p>
+          <p className="text-sm font-black text-stone-700 mb-3">📋 {t("writer.rain.recentRecords")}</p>
           {records.length === 0 ? (
             <div className="rounded-3xl bg-white shadow-sm px-5 py-8 text-center">
               <p className="text-base font-bold text-stone-400">No records yet</p>
@@ -785,7 +791,7 @@ export default function RainfallTab({ username, showDataToolsControls = false }:
 
           {/* Export with date range */}
           <div className="mt-5 rounded-2xl bg-white shadow-sm p-4">
-            <p className="text-sm font-black text-stone-700 mb-3">⬇️ Export records</p>
+            <p className="text-sm font-black text-stone-700 mb-3">⬇️ {t("writer.rain.exportRecords")}</p>
             <div className="flex gap-2 mb-3">
               <div className="flex-1 min-w-0">
                 <p className="text-[10px] font-bold uppercase tracking-wide text-stone-400 mb-1">From</p>

@@ -6,6 +6,7 @@ import { cn } from "@/lib/utils"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
 import { reportActionError } from "@/lib/track-action"
+import { useLocale } from "@/components/locale-provider"
 import { formatCurrency } from "@/lib/format"
 import { useTenantSettings } from "@/hooks/use-tenant-settings"
 import { format, subDays } from "date-fns"
@@ -49,6 +50,7 @@ function activityEmoji(ref: string): string {
 }
 
 export default function QuickLogPanel({ onNavigateToFull, locationId, className }: QuickLogPanelProps) {
+  const { t } = useLocale()
   const [recentCodes, setRecentCodes] = useState<RecentCode[]>([])
   const [allActivities, setAllActivities] = useState<ActivityCode[]>([])
   const [loading, setLoading] = useState(true)
@@ -190,20 +192,20 @@ export default function QuickLogPanel({ onNavigateToFull, locationId, className 
         <div className="flex h-24 w-24 items-center justify-center rounded-full bg-white/20 mb-6">
           <Check className="h-14 w-14 text-white stroke-[3]" />
         </div>
-        <p className="text-4xl font-black text-white mb-2">Saved!</p>
+        <p className="text-4xl font-black text-white mb-2">{t("writer.quickLog.saved")}</p>
         <p className="text-lg font-semibold text-white/90 mb-1">{savedSummary.reference}</p>
         <p className="text-base text-white/70">
-          {savedSummary.workers} {savedSummary.workers === 1 ? "person" : "people"}
+          {savedSummary.workers} {savedSummary.workers === 1 ? t("writer.quickLog.person") : t("writer.quickLog.people")}
           {savedSummary.total > 0 ? ` · ${formatCurrency(savedSummary.total)}` : ""}
         </p>
-        <p className="mt-8 text-xs text-white/40">Tap anywhere to continue</p>
+        <p className="mt-8 text-xs text-white/40">{t("writer.quickLog.tapToContinue")}</p>
       </div>
     )}
     <div className={cn("space-y-2", className)}>
       {/* Section header */}
       <div className="flex items-center justify-between px-1">
         <p className="text-[11px] font-bold uppercase tracking-[0.15em] text-stone-400">
-          Quick log labour
+          {t("writer.quickLog.title")}
         </p>
         <button
           type="button"
@@ -211,7 +213,7 @@ export default function QuickLogPanel({ onNavigateToFull, locationId, className 
           className="flex items-center gap-1 text-[11px] font-semibold text-emerald-700 touch-manipulation"
         >
           <Search className="h-3 w-3" />
-          Other
+          {t("writer.quickLog.other")}
         </button>
       </div>
 
@@ -221,7 +223,7 @@ export default function QuickLogPanel({ onNavigateToFull, locationId, className 
           <Input
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search by activity name or code…"
+            placeholder={t("writer.quickLog.searchPlaceholder")}
             className="h-11 text-base rounded-2xl border-stone-200 bg-white px-4"
             autoFocus
           />
@@ -360,7 +362,7 @@ export default function QuickLogPanel({ onNavigateToFull, locationId, className 
                         className="text-5xl font-black text-stone-900 tabular-nums text-center leading-none w-full bg-transparent border-none outline-none focus:ring-0"
                       />
                       <span className="text-xs font-semibold text-stone-400 mt-1.5 uppercase tracking-wide">
-                        {workers === 1 ? "person" : "people"}
+                        {workers === 1 ? t("writer.quickLog.person") : t("writer.quickLog.people")}
                       </span>
                     </div>
                     <button
@@ -456,7 +458,7 @@ export default function QuickLogPanel({ onNavigateToFull, locationId, className 
           onClick={onNavigateToFull}
           className="w-full rounded-2xl border-2 border-emerald-200 bg-emerald-50 text-emerald-800 hover:bg-emerald-100"
         >
-          Log with more detail
+          {t("writer.quickLog.moreDetail")}
           <ArrowRight className="h-4 w-4" />
         </Button>
       )}

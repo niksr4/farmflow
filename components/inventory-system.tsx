@@ -172,6 +172,7 @@ import TodayGapsCard from "@/components/today-gaps-card"
 import QuickLogPanel from "@/components/quick-log-panel"
 import WeekBatchEntry from "@/components/week-batch-entry"
 import { getSeasonAwareTabOrder, getSeasonQuickActions } from "@/lib/season-utils"
+import { filterTabsForWriter } from "@/lib/writer-mode"
 import {
   INITIAL_ONBOARDING_STATUS,
   buildOnboardingSteps,
@@ -334,6 +335,7 @@ export default function InventorySystem() {
   const [activeTab, setActiveTab] = useState(DASHBOARD_LAUNCHER_TAB)
   const [showTabSwitchLoader, setShowTabSwitchLoader] = useState(false)
   const visitedTabsRef = useRef<Set<string>>(new Set([DASHBOARD_LAUNCHER_TAB]))
+  const gatedTabWarnedRef = useRef<string | null>(null)
   const [inventoryWorkspaceView, setInventoryWorkspaceView] = useState<InventoryWorkspaceView>("inventory")
   const [salesWorkspaceView, setSalesWorkspaceView] = useState<SalesWorkspaceView>("coffee")
   const [processingWorkspaceView, setProcessingWorkspaceView] = useState<ProcessingWorkspaceView>("coffee")
@@ -3260,10 +3262,14 @@ export default function InventorySystem() {
     if (canShowCompliance) tabs.push("compliance")
     if (canShowReceivables) tabs.push("receivables")
     if (canShowBilling) tabs.push("billing")
+    // Writers (role=user) get the pared daily-entry app: Home, Labour & Costs,
+    // Rain. Managers and admins keep the full workspace.
+    const roleFilteredTabs = filterTabsForWriter(tabs, effectiveRole)
     // Apply season-aware ordering so harvest tabs surface in Oct-Mar,
     // maintenance tabs (accounts, rainfall, inventory) lead in off-season
-    return getSeasonAwareTabOrder(tabs)
+    return getSeasonAwareTabOrder(roleFilteredTabs)
   }, [
+    effectiveRole,
     canShowAccounts,
     canShowBalanceSheet,
     canShowAiAnalysis,
@@ -3334,7 +3340,7 @@ export default function InventorySystem() {
         "activity-log": { label: "Activity Log", icon: History },
         rainfall: { label: "Rain & Weather", icon: CloudRain },
         documents: { label: "Documents", icon: FileText },
-        journal: { label: "All Transactions", icon: NotebookPen },
+        journal: { label: "Journal", icon: NotebookPen },
         resources: { label: "Resources", icon: BookOpen },
         "plant-health": { label: "Crop Health", icon: Leaf },
         "ai-analysis": { label: "AI Insights", icon: Brain },
@@ -4196,21 +4202,42 @@ export default function InventorySystem() {
   }, [activeTab, financeTabItems, insightsTabItems, operationsTabItems])
 
   const activeSectionTabs = useMemo(() => {
-    if (activeTabGroup === "operations") return operationsTabItems
-    if (activeTabGroup === "finance") return financeTabItems
-    if (activeTabGroup === "insights") return insightsTabItems
-    return []
-  }, [activeTabGroup, financeTabItems, insightsTabItems, operationsTabItems])
+    const items =
+      activeTabGroup === "operations"
+        ? operationsTabItems
+        : activeTabGroup === "finance"
+          ? financeTabItems
+          : activeTabGroup === "insights"
+            ? insightsTabItems
+            : []
+    // Section items derive from module flags; visibleTabs additionally applies
+    // role paring (writer mode), so filter to what this user can actually open
+    return items.filter((item) => visibleTabs.includes(item.value))
+  }, [activeTabGroup, financeTabItems, insightsTabItems, operationsTabItems, visibleTabs])
+  // Role paring (writer mode) lives in visibleTabs — keep launcher sections in sync
+  const visibleFinanceTabItems = useMemo(
+    () => financeTabItems.filter((item) => visibleTabs.includes(item.value)),
+    [financeTabItems, visibleTabs],
+  )
+  const visibleOperationsTabItems = useMemo(
+    () => operationsTabItems.filter((item) => visibleTabs.includes(item.value)),
+    [operationsTabItems, visibleTabs],
+  )
+  const visibleInsightsTabItems = useMemo(
+    () => insightsTabItems.filter((item) => visibleTabs.includes(item.value)),
+    [insightsTabItems, visibleTabs],
+  )
+
   const launcherSections = useMemo(
     () =>
       [
-        showFinanceTabs
+        showFinanceTabs && visibleFinanceTabItems.length > 0
           ? {
               id: "finance" as const,
               label: "Finance",
               description: "Accounts, balance, P&L, receivables, and market rates.",
               icon: Scale,
-              tabs: financeTabItems as SectionTabItem[],
+              tabs: visibleFinanceTabItems as SectionTabItem[],
               cardClassName: "border-amber-200/80 bg-amber-50/50",
               badgeClassName: "border-amber-200 bg-white text-amber-700",
               tabClassName: "border-amber-200 bg-white text-amber-900 hover:bg-amber-50",
@@ -4224,13 +4251,13 @@ export default function InventorySystem() {
               previewTabActiveClassName: "border-white/30 bg-white/15 text-white",
             }
           : null,
-        showOperationsTabs
+        showOperationsTabs && visibleOperationsTabItems.length > 0
           ? {
               id: "operations" as const,
               label: "Operations",
               description: "Processing, dispatch, sales, stock, and rain & weather.",
               icon: Factory,
-              tabs: operationsTabItems as SectionTabItem[],
+              tabs: visibleOperationsTabItems as SectionTabItem[],
               cardClassName: "border-emerald-200/80 bg-emerald-50/50",
               badgeClassName: "border-emerald-200 bg-white text-emerald-700",
               tabClassName: "border-emerald-200 bg-white text-emerald-900 hover:bg-emerald-50",
@@ -4244,13 +4271,13 @@ export default function InventorySystem() {
               previewTabActiveClassName: "border-white/30 bg-white/15 text-white",
             }
           : null,
-        showInsightsTabs
+        showInsightsTabs && visibleInsightsTabItems.length > 0
           ? {
               id: "insights" as const,
               label: "Reports",
               description: "Season summary, rain & weather, AI insights, and records.",
               icon: BarChart3,
-              tabs: insightsTabItems as SectionTabItem[],
+              tabs: visibleInsightsTabItems as SectionTabItem[],
               cardClassName: "border-cyan-200/80 bg-cyan-50/50",
               badgeClassName: "border-cyan-200 bg-white text-cyan-700",
               tabClassName: "border-cyan-200 bg-white text-cyan-900 hover:bg-cyan-50",
@@ -4402,8 +4429,18 @@ export default function InventorySystem() {
     if (requestedTab === "sales") {
       setSalesWorkspaceView(canShowSales ? "coffee" : "other-sales")
     }
-    if (visibleTabs.includes(requestedTab) && requestedTab !== activeTab) {
-      setActiveTab(requestedTab)
+    if (visibleTabs.includes(requestedTab)) {
+      if (requestedTab !== activeTab) {
+        setActiveTab(requestedTab)
+      }
+    } else if (visibleTabs.length > 0 && gatedTabWarnedRef.current !== requestedTab) {
+      // Explain the bounce instead of silently landing on the default tab —
+      // a tapped stale link that "does nothing" reads as the app being broken
+      gatedTabWarnedRef.current = requestedTab
+      toast({
+        title: "That feature isn't available",
+        description: "It's not included in your current plan or access. Ask your estate owner if you need it.",
+      })
     }
   }, [activeTab, canShowInventory, canShowProcessing, canShowSales, isMobile, tabParam, visibleTabs])
 
@@ -4880,8 +4917,10 @@ export default function InventorySystem() {
           {activeTab !== DASHBOARD_LAUNCHER_TAB && activeTabGroup !== "dashboard" && activeSectionTabs.length > 0 && (
             <div className={cn("sticky top-2 z-20 mb-1", isMobile && "top-0")}>
               {isMobile ? (
-                /* Mobile: horizontal scroll strip — compact, pill-shaped, no wrap */
-                <div className="flex gap-2 overflow-x-auto no-scrollbar px-1 py-1 -mx-1">
+                /* Mobile: underline-style tab strip — visually distinct from the
+                   pill-shaped section nav inside each tab, so the two nav levels
+                   read as different things at a glance */
+                <div className="flex gap-1 overflow-x-auto no-scrollbar border-b border-stone-200 bg-stone-50/95 px-1 -mx-1 backdrop-blur">
                   {activeSectionTabs.map((tab) => {
                     const TabIcon = tab.icon
                     const isActive = activeTab === tab.value
@@ -4891,14 +4930,15 @@ export default function InventorySystem() {
                         type="button"
                         onClick={() => handleTabChange(tab.value)}
                         className={cn(
-                          "flex shrink-0 items-center gap-1.5 rounded-full border px-4 py-2 text-sm font-semibold transition-all touch-manipulation",
-                          isActive
-                            ? "border-emerald-600 bg-emerald-600 text-white shadow-[0_4px_12px_-4px_rgba(5,150,105,0.5)]"
-                            : "border-black/10 bg-white text-neutral-600",
+                          "relative flex shrink-0 items-center gap-1.5 px-3 py-2.5 text-sm font-semibold transition-colors touch-manipulation",
+                          isActive ? "text-emerald-700" : "text-stone-500",
                         )}
                       >
                         <TabIcon className="h-3.5 w-3.5 shrink-0" />
                         {tab.label}
+                        {isActive && (
+                          <span className="absolute inset-x-2 bottom-0 h-[3px] rounded-full bg-emerald-600" />
+                        )}
                       </button>
                     )
                   })}

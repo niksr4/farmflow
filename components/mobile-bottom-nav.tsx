@@ -14,6 +14,7 @@
 import { cn } from "@/lib/utils"
 import { Lock, MoreHorizontal } from "lucide-react"
 import { getMobileBottomNavTabs, isTabOffSeason } from "@/lib/season-utils"
+import { useLocale } from "@/components/locale-provider"
 
 type MobileBottomNavProps = {
   activeTab: string
@@ -46,6 +47,13 @@ export default function MobileBottomNav({
   onOpenSidebar,
 }: MobileBottomNavProps) {
   const primaryTabs = getMobileBottomNavTabs(visibleTabs)
+  const { t } = useLocale()
+  // t() returns the key itself on a miss — fall back to the English short label
+  const navLabel = (tabId: string, fallback: string) => {
+    const key = `writer.nav.${tabId}`
+    const translated = t(key)
+    return translated === key ? fallback : translated
+  }
 
   return (
     <nav
@@ -63,7 +71,7 @@ export default function MobileBottomNav({
           const Icon = meta.icon
           const isActive = activeTab === tabId
           const offSeason = isTabOffSeason(tabId)
-          const label = SHORT_LABELS[tabId] || meta.label.split(" ")[0]
+          const label = navLabel(tabId, SHORT_LABELS[tabId] || meta.label.split(" ")[0])
 
           return (
             <button
@@ -110,7 +118,7 @@ export default function MobileBottomNav({
           <div className="flex h-9 w-14 items-center justify-center rounded-full">
             <MoreHorizontal className="h-[22px] w-[22px] stroke-[2.5] text-stone-800" />
           </div>
-          <span className="text-[11px] font-black tracking-wide leading-none text-stone-800">More</span>
+          <span className="text-[11px] font-black tracking-wide leading-none text-stone-800">{navLabel("more", "More")}</span>
         </button>
       </div>
     </nav>
