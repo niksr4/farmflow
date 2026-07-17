@@ -29,7 +29,7 @@ test("self-serve signup submits and routes to login", async ({ page }) => {
   await page.locator("#password").fill("RegressionPass123!")
   await page.locator("#estateName").fill("Regression Estate")
   await page.locator("#country").fill("Coorg")
-  await page.getByRole("button", { name: "Create workspace" }).click()
+  await page.getByRole("button", { name: "Create estate" }).click()
 
   await expect(page).toHaveURL(/\/login(?:\?|$)/)
   await expect(page.getByRole("heading", { name: /sign in/i })).toBeVisible()

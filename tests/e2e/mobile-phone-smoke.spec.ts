@@ -194,7 +194,7 @@ test.describe("mobile public smoke", () => {
     })
 
     await page.goto("/")
-    await expect(page.getByRole("link", { name: "Create your workspace" }).first()).toBeVisible()
+    await expect(page.getByRole("link", { name: "Create your estate" }).first()).toBeVisible()
     await expect(page.getByText("Install FarmFlow on your phone")).toHaveCount(0)
     await expectNoHorizontalOverflow(page, "landing")
 

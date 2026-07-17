@@ -72,7 +72,7 @@ export default function ContactPage() {
             </Link>
           </Button>
           <Button className="border-emerald-300/40 bg-emerald-300 text-[#06110f] shadow-[0_18px_36px_-18px_rgba(110,231,183,0.6)] hover:bg-emerald-200" asChild>
-            <Link href="/signup">Create Workspace</Link>
+            <Link href="/signup">Create Your Estate</Link>
           </Button>
         </div>
 

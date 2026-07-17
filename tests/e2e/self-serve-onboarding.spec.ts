@@ -61,7 +61,7 @@ test("self-serve signup provisions a basic workspace end to end", async ({ page 
 
     const verificationLink = await waitForVerificationLink(email)
     await page.goto(verificationLink)
-    await expect(page.getByText("Workspace Ready", { exact: true })).toBeVisible()
+    await expect(page.getByText("Estate Ready", { exact: true })).toBeVisible()
     await page.getByRole("link", { name: "Sign In" }).click()
 
     await expect(page).toHaveURL(/\/login(?:\?|$)/)
@@ -71,7 +71,7 @@ test("self-serve signup provisions a basic workspace end to end", async ({ page 
     await page.getByRole("button", { name: "Sign In" }).click()
 
     await expect(page).toHaveURL(/\/welcome(?:\?|$)/)
-    await expect(page.getByRole("heading", { name: "Finish your workspace in five minutes" }).first()).toBeVisible()
+    await expect(page.getByRole("heading", { name: "Finish setting up your estate in five minutes" }).first()).toBeVisible()
 
     await page.getByRole("button", { name: /Basic/i }).click()
     const selectedPlanSummary = page.locator(

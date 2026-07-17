@@ -65,7 +65,7 @@ export default function SignupRoute() {
         <div className="mt-10 rounded-2xl border border-white/[0.08] bg-white/[0.03] px-5 py-4">
           <p className="text-xs font-bold uppercase tracking-[0.18em] text-emerald-500">What happens after signup</p>
           <div className="mt-3 space-y-2 text-sm text-stone-400">
-            <p>1. Workspace ready in under a minute</p>
+            <p>1. Estate ready in under a minute</p>
             <p>2. 91 activity codes pre-loaded — no blank slate</p>
             <p>3. Guided setup walks you through the first entry</p>
             <p>4. First weekly digest arrives Monday morning</p>
@@ -119,7 +119,7 @@ export default function SignupRoute() {
                   })
                   const data = await response.json()
                   if (!response.ok || !data?.success) {
-                    throw new Error(data?.error || "Failed to create workspace")
+                    throw new Error(data?.error || "Failed to create estate")
                   }
                   posthog.capture("signup_started", {
                     estate: normalized.estateName,
