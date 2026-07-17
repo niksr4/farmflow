@@ -1,6 +1,6 @@
 "use client"
 
-import { useMemo, useRef, useState } from "react"
+import { useMemo, useState } from "react"
 import type { SortDirection } from "@/components/filter-bar"
 
 type ListControlsOptions<T> = {
@@ -22,12 +22,13 @@ export function useListControls<T>(items: T[], options: ListControlsOptions<T>) 
   const [sortValue, setSortValue] = useState(options.defaultSort)
   const [sortDirection, setSortDirection] = useState<SortDirection>(options.defaultDirection ?? "desc")
 
-  // Options hold inline functions; keep the latest without invalidating the memo
-  const optionsRef = useRef(options)
-  optionsRef.current = options
+  // `options` holds inline functions with a fresh identity every render. We intentionally
+  // depend only on the data + search/sort state below and treat the accessors as stable
+  // config, so the memo doesn't recompute on every parent render. (Accessing them via a ref
+  // is disallowed during render by the React Compiler, so we close over them directly.)
+  const { searchFields, sorters } = options
 
   const visibleItems = useMemo(() => {
-    const { searchFields, sorters } = optionsRef.current
     const query = search.trim().toLowerCase()
     let list = query
       ? items.filter((item) =>
@@ -48,6 +49,9 @@ export function useListControls<T>(items: T[], options: ListControlsOptions<T>) 
       })
     }
     return list
+    // searchFields/sorters are treated as stable config (see note above); depending on them
+    // would defeat the memo since they get a new identity every render.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [items, search, sortValue, sortDirection])
 
   return {
