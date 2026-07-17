@@ -1,0 +1,16 @@
+#!/usr/bin/env bash
+# Fast local guard so a whole-repo failure can't reach a shared branch. Runs the same early
+# checks CI runs (lint → typecheck → unit tests), which is what would otherwise fail in CI.
+# Skip with:  git push --no-verify
+set -e
+
+echo "▶ pre-push: lint"
+pnpm lint
+
+echo "▶ pre-push: typecheck"
+pnpm typecheck
+
+echo "▶ pre-push: unit tests"
+pnpm test
+
+echo "✓ pre-push checks passed"
