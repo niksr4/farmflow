@@ -97,7 +97,9 @@ export default function LoginPage() {
       const message = String(err?.message || fallback)
       const isCredentialError = message.includes("Invalid email, username, or password")
       const isAuthSystemError = message.includes("Authentication is temporarily unavailable")
-      setError(isCredentialError || isAuthSystemError ? message : fallback)
+      // Ambiguous username across estates — surface the guidance to sign in with email.
+      const isAmbiguousUsername = message.includes("more than one estate")
+      setError(isCredentialError || isAuthSystemError || isAmbiguousUsername ? message : fallback)
     } finally {
       setIsSubmitting(false)
     }

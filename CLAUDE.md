@@ -209,11 +209,28 @@ CI runs automatically on every push to main via `.github/workflows/ci.yml`.
 ## Database Migrations
 
 Sequential SQL files in `scripts/`. Highest numbered = latest schema state.
-As of 2026-05-05: up to `87-default-activity-codes.sql`.
+As of 2026-07-17: up to `98-enable-rls-all-tenant-tables.sql`.
 
-Apply via Neon console or psql. No ORM — raw SQL only.
+Apply with the migration runner (preferred): `pnpm migrate` (dev) / `pnpm migrate:prod`.
+It records applied files in `schema_migrations`, is dollar-quote-aware (handles `DO $$ … $$`
+blocks), and rejects new duplicate migration numbers. Files may still be applied via psql.
+No ORM — raw SQL only. Both prod (`DATABASE_URL`) and dev (`DATABASE_URL_DEV`) Neon instances
+must be migrated separately.
 
-Both prod (`DATABASE_URL`) and dev (`DATABASE_URL_DEV`) Neon instances must be migrated separately.
+### Tenant isolation (RLS)
+
+- `scripts/98-enable-rls-all-tenant-tables.sql` enables + forces RLS on **every** table with a
+  `tenant_id` column (discovers them by column, so new tenant tables are covered automatically).
+- `pnpm schema:rls` / `schema:rls:prod` — fails if any `tenant_id` table lacks RLS.
+- `pnpm schema:isolation` / `schema:isolation:prod` — proves a non-bypass role cannot read
+  another tenant's rows.
+- **Important:** the app currently connects as the schema owner (`neondb_owner`), which has
+  `BYPASSRLS`, so the RLS policies are a dormant backstop — isolation still relies on each
+  query's `tenant_id` filter. To activate real DB-enforced isolation: run
+  `scripts/app-runtime-role.sql` (manual — not auto-applied), then set `APP_DATABASE_URL` to
+  that least-privilege role's connection string. `lib/server/db.ts` exposes `sql` (runtime,
+  uses `APP_DATABASE_URL` when set) and `adminSql` (owner, for DDL/self-healing). Roll back by
+  unsetting `APP_DATABASE_URL`.
 
 ---
 

@@ -14,6 +14,7 @@ import { assertCoreRuntimeConfig } from "@/lib/runtime-config"
 import { logServerWarning } from "@/lib/server/safe-logging"
 import { sendAgentAlertEmail } from "@/lib/server/agents/alert-email"
 import { normalizeUsername, normalizeUsernameLookup } from "@/lib/usernames"
+import { classifyCredentialMatches } from "@/lib/credential-match"
 
 type SessionMode = "app" | "web"
 type FarmFlowRole = "admin" | "user" | "owner"
@@ -332,17 +333,40 @@ export const authOptions: NextAuthOptions = {
           return null
         }
 
-        let user: UserRow | null = null
-        let needsRehash = false
+        // Collect EVERY candidate whose password matches, not just the first. Usernames are
+        // only unique per tenant (uq_users_tenant_username), and this lookup spans all
+        // tenants — so two estates can each have e.g. "manager". If the same username+password
+        // exists in more than one tenant we must NOT silently pick one (the old `break` could
+        // log a manager into the wrong estate). Email logins are globally unique and unaffected.
+        const matches: Array<{ candidate: UserRow; needsRehash: boolean }> = []
         for (const candidate of users) {
           const storedHash = String(candidate.password_hash || "")
           const verifyResult = verifyPassword(password, storedHash)
           if (verifyResult.matches) {
-            user = candidate
-            needsRehash = verifyResult.needsRehash
-            break
+            matches.push({ candidate, needsRehash: verifyResult.needsRehash })
           }
         }
+
+        const { ambiguous, distinctTenants } = classifyCredentialMatches(
+          matches.map((m) => m.candidate.tenant_id),
+          isEmailLogin,
+        )
+        if (ambiguous) {
+          // Ambiguous username login across estates — refuse rather than guess. Steer the user
+          // to their globally-unique email so they reach the intended estate.
+          await logSecurityEvent({
+            eventType: "auth_login_failure",
+            severity: "warning",
+            source: eventSource,
+            ipAddress,
+            userAgent,
+            metadata: { identifier, reason: "ambiguous_username", tenants: distinctTenants },
+          })
+          throw new Error("This username exists on more than one estate. Please sign in with your email address instead.")
+        }
+
+        const user: UserRow | null = matches[0]?.candidate ?? null
+        const needsRehash = matches[0]?.needsRehash ?? false
 
         if (!user) {
           await logSecurityEvent({

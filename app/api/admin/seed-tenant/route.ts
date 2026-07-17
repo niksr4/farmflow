@@ -323,7 +323,7 @@ export async function POST(request: Request) {
       },
     ]
 
-    await repairCurrentInventoryUpsertConstraints(sql, tenantContext)
+    await repairCurrentInventoryUpsertConstraints(tenantContext)
 
     for (const tx of transactions) {
       await runTenantQuery(

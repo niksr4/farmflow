@@ -106,7 +106,7 @@ const ensureInventorySlotExists = async (
     }
 
     try {
-      await repairCurrentInventoryUpsertConstraints(inventorySql, tenantContext)
+      await repairCurrentInventoryUpsertConstraints(tenantContext)
       await upsertSlot()
       return
     } catch (repairError) {
@@ -347,7 +347,7 @@ export async function POST(request: NextRequest) {
         if (!isMissingCurrentInventoryUpsertConstraintError(error)) {
           throw error
         }
-        await repairCurrentInventoryUpsertConstraints(inventorySql, tenantContext)
+        await repairCurrentInventoryUpsertConstraints(tenantContext)
         await insertInitialTransaction()
       }
     }
@@ -513,7 +513,7 @@ export async function DELETE(request: NextRequest) {
         if (!isMissingCurrentInventoryUpsertConstraintError(error)) {
           throw error
         }
-        await repairCurrentInventoryUpsertConstraints(inventorySql, tenantContext)
+        await repairCurrentInventoryUpsertConstraints(tenantContext)
         await insertDeletionTransaction()
       }
     }

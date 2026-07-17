@@ -1,6 +1,6 @@
 import "server-only"
 
-import type { NeonSql } from "@/lib/tenant-db"
+import { adminSql } from "@/lib/server/db"
 import { runTenantQuery } from "@/lib/tenant-db"
 
 type TenantContext = {
@@ -20,14 +20,18 @@ export const isMissingCurrentInventoryUpsertConstraintError = (error: unknown) =
   )
 }
 
+// Global maintenance: rewrites constraints/indexes on the shared current_inventory table and
+// de-duplicates rows across all tenants. This is DDL that only the schema-owning role may run,
+// so it always uses adminSql (the owner connection) rather than the request's runtime client —
+// which lets the runtime connection move to a least-privilege, RLS-respecting role (C-1) while
+// this self-healing path keeps working. The passed-in client is no longer needed.
 export async function repairCurrentInventoryUpsertConstraints(
-  client: NeonSql,
   tenantContext: TenantContext,
 ) {
   await runTenantQuery(
-    client,
+    adminSql,
     tenantContext,
-    client`
+    adminSql`
       DO $$
       DECLARE
         constraint_record RECORD;
@@ -47,9 +51,9 @@ export async function repairCurrentInventoryUpsertConstraints(
   )
 
   await runTenantQuery(
-    client,
+    adminSql,
     tenantContext,
-    client`
+    adminSql`
       DO $$
       DECLARE
         index_record RECORD;
@@ -70,9 +74,9 @@ export async function repairCurrentInventoryUpsertConstraints(
   )
 
   await runTenantQuery(
-    client,
+    adminSql,
     tenantContext,
-    client`
+    adminSql`
       WITH ranked AS (
         SELECT
           ctid,
@@ -127,9 +131,9 @@ export async function repairCurrentInventoryUpsertConstraints(
   )
 
   await runTenantQuery(
-    client,
+    adminSql,
     tenantContext,
-    client`
+    adminSql`
       CREATE UNIQUE INDEX IF NOT EXISTS uq_current_inventory_item_tenant_null_location
         ON current_inventory (item_type, tenant_id)
         WHERE location_id IS NULL;
@@ -137,9 +141,9 @@ export async function repairCurrentInventoryUpsertConstraints(
   )
 
   await runTenantQuery(
-    client,
+    adminSql,
     tenantContext,
-    client`
+    adminSql`
       CREATE UNIQUE INDEX IF NOT EXISTS uq_current_inventory_item_tenant_location
         ON current_inventory (item_type, tenant_id, location_id)
         WHERE location_id IS NOT NULL;
@@ -147,9 +151,9 @@ export async function repairCurrentInventoryUpsertConstraints(
   )
 
   await runTenantQuery(
-    client,
+    adminSql,
     tenantContext,
-    client`
+    adminSql`
       CREATE INDEX IF NOT EXISTS idx_current_inventory_tenant_item_location
         ON current_inventory (tenant_id, item_type, location_id);
     `,

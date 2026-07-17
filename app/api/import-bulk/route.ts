@@ -1009,7 +1009,7 @@ export async function POST(request: Request) {
     }
 
     if (dataset === "transactions") {
-      await repairCurrentInventoryUpsertConstraints(sql, tenantContext)
+      await repairCurrentInventoryUpsertConstraints(tenantContext)
 
       const queries: SqlQuery[] = []
       const affectedItems = new Set<string>()
@@ -1138,7 +1138,7 @@ export async function POST(request: Request) {
     }
 
     if (dataset === "inventory") {
-      await repairCurrentInventoryUpsertConstraints(sql, tenantContext)
+      await repairCurrentInventoryUpsertConstraints(tenantContext)
 
       const affectedItems = new Set<string>()
 

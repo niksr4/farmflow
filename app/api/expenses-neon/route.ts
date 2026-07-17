@@ -62,7 +62,7 @@ async function runExpenseMutationWithInventoryConstraintRepair<T>(
       throw error
     }
 
-    await repairCurrentInventoryUpsertConstraints(accountsSql, tenantContext)
+    await repairCurrentInventoryUpsertConstraints(tenantContext)
     return runMutation()
   }
 }

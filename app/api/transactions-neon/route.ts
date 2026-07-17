@@ -678,7 +678,7 @@ export async function POST(request: NextRequest) {
       if (!isMissingCurrentInventoryUpsertConstraintError(error)) {
         throw error
       }
-      await repairCurrentInventoryUpsertConstraints(inventorySql, tenantContext)
+      await repairCurrentInventoryUpsertConstraints(tenantContext)
       result = await insertTransaction()
     }
 

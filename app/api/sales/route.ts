@@ -7,7 +7,7 @@ import { normalizeTenantContext, runTenantQueries, runTenantQuery } from "@/lib/
 import { resolveLocationInfo } from "@/lib/server/location-utils"
 import { logAuditEvent } from "@/lib/server/audit-log"
 import { resolveLocationCompatibility } from "@/lib/server/location-compatibility"
-import { computeRemainingKgs, hasSufficientStock } from "@/lib/sales-math"
+import { STOCK_EPSILON_KGS, computeRemainingKgs } from "@/lib/sales-math"
 import { getPostHogClient } from "@/lib/posthog-server"
 import { logRouteMutationFailure } from "@/lib/server/route-error-events"
 import { sanitizeRouteError } from "@/lib/server/sanitize-route-error"
@@ -115,6 +115,58 @@ async function resolveSlotStock(
   const remainingKgs = computeRemainingKgs(receivedKgs, soldKgs)
   return { receivedKgs, soldKgs, remainingKgs }
 }
+
+// Builds a SQL boolean fragment that is TRUE only when the slot (coffee_type + bag_type)
+// still has enough received-but-unsold stock to cover `kgsSold`. Embedding the check in
+// the write's WHERE clause — under a transaction-level advisory lock on the same slot —
+// makes the stock check and the write a single atomic step, closing the check-then-write
+// race where two concurrent sales could both pass and oversell below zero.
+function buildSlotStockGuard(
+  db: typeof sql,
+  tenantId: string,
+  input: {
+    coffeePattern: string
+    bagPattern: string
+    bagWeightKg: number
+    kgsSold: number
+    excludeSaleId?: number
+  },
+) {
+  const excludeClause = input.excludeSaleId ? db` AND id <> ${input.excludeSaleId}` : db``
+  return db`(
+    (
+      SELECT COALESCE(SUM(NULLIF(kgs_received, 0)), 0)
+      FROM dispatch_records
+      WHERE tenant_id = ${tenantId}
+        AND lower(coffee_type) LIKE ${input.coffeePattern}
+        AND lower(bag_type) LIKE ${input.bagPattern}
+    )
+    -
+    (
+      SELECT COALESCE(
+        SUM(
+          COALESCE(
+            NULLIF(kgs_received, 0),
+            NULLIF(kgs, 0),
+            NULLIF(weight_kgs, 0),
+            NULLIF(kgs_sent, 0),
+            bags_sold * ${input.bagWeightKg}
+          )
+        ),
+        0
+      )
+      FROM sales_records
+      WHERE tenant_id = ${tenantId}
+        AND lower(coffee_type) LIKE ${input.coffeePattern}
+        AND lower(bag_type) LIKE ${input.bagPattern}${excludeClause}
+    )
+    + ${STOCK_EPSILON_KGS}
+  ) >= ${input.kgsSold}`
+}
+
+// Transaction-level advisory lock key for a slot, so only same-slot sales serialize.
+const slotLockKey = (tenantId: string, coffeeType: string, bagType: string) =>
+  `sales:${tenantId}:${coffeeType}:${bagType}`
 
 export async function GET(request: Request) {
   try {
@@ -381,31 +433,19 @@ export async function POST(request: Request) {
       )
     }
     const resolvedEstate = (locationInfo.name || locationInfo.code || payload.estate || null) as string | null
-    const slotStock = await resolveSlotStock(sql, tenantContext, {
-      coffeeType,
-      bagType,
-      bagWeightKg,
-    })
-    if (!hasSufficientStock(slotStock.receivedKgs, slotStock.soldKgs, kgsSold)) {
-      const remainingKgs = Math.max(0, slotStock.remainingKgs)
-      return NextResponse.json(
-        {
-          success: false,
-          error: `Insufficient stock for ${coffeeType} ${bagType}. Available ${remainingKgs.toFixed(2)} KGs, requested ${kgsSold.toFixed(2)} KGs.`,
-          stock: {
-            receivedKgs: slotStock.receivedKgs,
-            soldKgs: slotStock.soldKgs,
-            remainingKgs,
-            requestedKgs: kgsSold,
-          },
-        },
-        { status: 400 },
-      )
-    }
 
-    const result = await runTenantQuery(
-      sql,
-      tenantContext,
+    // Atomic stock guard: acquire a transaction-level advisory lock on this slot so that
+    // concurrent sales for the same coffee_type/bag_type serialize, then insert only if the
+    // slot still has enough unsold stock. The WHERE guard is re-evaluated inside the same
+    // locked transaction, so two racing sales can never both pass and oversell.
+    const stockGuard = buildSlotStockGuard(sql, tenantContext.tenantId, {
+      coffeePattern: coffeePatternFor(coffeeType),
+      bagPattern: bagPatternFor(bagType),
+      bagWeightKg,
+      kgsSold,
+    })
+    const [, insertedRows] = await runTenantQueries(sql, tenantContext, [
+      sql`SELECT pg_advisory_xact_lock(hashtext(${slotLockKey(tenantContext.tenantId, coffeeType, bagType)}))`,
       sql`
       INSERT INTO sales_records (
         sale_date,
@@ -428,7 +468,8 @@ export async function POST(request: Request) {
         bank_account,
         notes,
         tenant_id
-      ) VALUES (
+      )
+      SELECT
         ${payload.sale_date}::date,
         ${payload.batch_no || null},
         ${payload.lot_id || null},
@@ -449,10 +490,32 @@ export async function POST(request: Request) {
         ${payload.bank_account || null},
         ${payload.notes || null},
         ${tenantContext.tenantId}
-      )
+      WHERE ${stockGuard}
       RETURNING *
     `,
-    )
+    ])
+
+    const result = (insertedRows || []) as any[]
+
+    if (!Array.isArray(result) || result.length === 0) {
+      // The guard rejected the write — stock ran out (possibly to a concurrent sale that
+      // committed first). Re-read the slot for a friendly, up-to-date error message.
+      const slotStock = await resolveSlotStock(sql, tenantContext, { coffeeType, bagType, bagWeightKg })
+      const remainingKgs = Math.max(0, slotStock.remainingKgs)
+      return NextResponse.json(
+        {
+          success: false,
+          error: `Insufficient stock for ${coffeeType} ${bagType}. Available ${remainingKgs.toFixed(2)} KGs, requested ${kgsSold.toFixed(2)} KGs.`,
+          stock: {
+            receivedKgs: slotStock.receivedKgs,
+            soldKgs: slotStock.soldKgs,
+            remainingKgs,
+            requestedKgs: kgsSold,
+          },
+        },
+        { status: 400 },
+      )
+    }
 
     await logAuditEvent(sql, sessionUser, {
       action: "create",
@@ -572,32 +635,19 @@ export async function PUT(request: Request) {
       )
     }
     const resolvedEstate = (locationInfo.name || locationInfo.code || payload.estate || null) as string | null
-    const slotStock = await resolveSlotStock(sql, tenantContext, {
-      coffeeType,
-      bagType,
+
+    // Atomic stock guard (see POST): lock the slot, then update only if enough unsold stock
+    // remains for the new quantity. The guard excludes this sale's own current kilos so an
+    // edit that keeps or reduces the quantity always succeeds.
+    const stockGuard = buildSlotStockGuard(sql, tenantContext.tenantId, {
+      coffeePattern: coffeePatternFor(coffeeType),
+      bagPattern: bagPatternFor(bagType),
       bagWeightKg,
+      kgsSold,
       excludeSaleId: payload.id,
     })
-    if (!hasSufficientStock(slotStock.receivedKgs, slotStock.soldKgs, kgsSold)) {
-      const remainingKgs = Math.max(0, slotStock.remainingKgs)
-      return NextResponse.json(
-        {
-          success: false,
-          error: `Insufficient stock for ${coffeeType} ${bagType}. Available ${remainingKgs.toFixed(2)} KGs, requested ${kgsSold.toFixed(2)} KGs.`,
-          stock: {
-            receivedKgs: slotStock.receivedKgs,
-            soldKgs: slotStock.soldKgs,
-            remainingKgs,
-            requestedKgs: kgsSold,
-          },
-        },
-        { status: 400 },
-      )
-    }
-
-    const result = await runTenantQuery(
-      sql,
-      tenantContext,
+    const [, updatedRows] = await runTenantQueries(sql, tenantContext, [
+      sql`SELECT pg_advisory_xact_lock(hashtext(${slotLockKey(tenantContext.tenantId, coffeeType, bagType)}))`,
       sql`
       UPDATE sales_records SET
         sale_date = ${payload.sale_date}::date,
@@ -623,14 +673,46 @@ export async function PUT(request: Request) {
         updated_at = CURRENT_TIMESTAMP
       WHERE id = ${payload.id}
         AND tenant_id = ${tenantContext.tenantId}
+        AND ${stockGuard}
       RETURNING *
     `,
-    )
+    ])
+
+    const result = (updatedRows || []) as any[]
 
     if (!Array.isArray(result) || result.length === 0) {
+      // Empty result means either the record does not belong to this tenant, or the guard
+      // rejected an increase that would oversell. Disambiguate for an accurate status/message.
+      const existing = await runTenantQuery(
+        sql,
+        tenantContext,
+        sql`SELECT 1 FROM sales_records WHERE id = ${payload.id} AND tenant_id = ${tenantContext.tenantId} LIMIT 1`,
+      )
+      if (!Array.isArray(existing) || existing.length === 0) {
+        return NextResponse.json(
+          { success: false, error: "Sales record not found for this tenant." },
+          { status: 404 },
+        )
+      }
+      const slotStock = await resolveSlotStock(sql, tenantContext, {
+        coffeeType,
+        bagType,
+        bagWeightKg,
+        excludeSaleId: payload.id,
+      })
+      const remainingKgs = Math.max(0, slotStock.remainingKgs)
       return NextResponse.json(
-        { success: false, error: "Sales record not found for this tenant." },
-        { status: 404 },
+        {
+          success: false,
+          error: `Insufficient stock for ${coffeeType} ${bagType}. Available ${remainingKgs.toFixed(2)} KGs, requested ${kgsSold.toFixed(2)} KGs.`,
+          stock: {
+            receivedKgs: slotStock.receivedKgs,
+            soldKgs: slotStock.soldKgs,
+            remainingKgs,
+            requestedKgs: kgsSold,
+          },
+        },
+        { status: 400 },
       )
     }
 

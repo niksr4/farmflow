@@ -2,6 +2,7 @@ import { NextResponse } from "next/server"
 import type { NextRequest } from "next/server"
 import { getToken } from "next-auth/jwt"
 import { shouldForceGuidedSetup } from "@/lib/guided-setup"
+import { isPublicApiPath } from "@/lib/public-routes"
 import { formatBodyLimit, parseContentLengthHeader, resolveApiBodyLimit } from "@/lib/request-limits"
 import { assertCoreRuntimeConfig } from "@/lib/runtime-config"
 
@@ -31,12 +32,9 @@ export async function proxy(request: NextRequest) {
     }
   }
 
-  if (
-    pathname.startsWith("/api/auth") ||
-    pathname.startsWith("/api/register-interest") ||
-    pathname.startsWith("/api/cron/") ||
-    pathname.startsWith("/api/ops/error-ingest")
-  ) {
+  // Public API routes skip the session gate (allowlist lives in lib/public-routes.ts so it is
+  // unit-tested and can't silently drift). Anything not listed requires a valid session.
+  if (isPublicApiPath(pathname)) {
     return NextResponse.next()
   }
 

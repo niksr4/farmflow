@@ -16,6 +16,11 @@ import fs from "fs"
 import path from "path"
 import { fileURLToPath } from "url"
 import { neon } from "@neondatabase/serverless"
+import {
+  GRANDFATHERED_DUPLICATE_NUMBERS,
+  findNewDuplicateMigrationNumbers,
+  splitSqlStatements,
+} from "./migrate-utils.mjs"
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
@@ -74,13 +79,9 @@ const toRows = (r) => (Array.isArray(r) ? r : r?.rows ?? [])
 // All scripts up to and including this one will be bootstrapped as already-applied.
 const BOOTSTRAP_CUTOFF = "87-default-activity-codes.sql"
 
-// Execute a SQL string that may contain multiple semicolon-separated statements.
+// Execute a SQL string that may contain multiple statements (dollar-quote aware).
 const execFile = async (sql, content) => {
-  const statements = content
-    .split(";")
-    .map((s) => s.replace(/--[^\n]*/g, "").trim())
-    .filter((s) => s.length > 0)
-  for (const stmt of statements) {
+  for (const stmt of splitSqlStatements(content)) {
     await sql.unsafe(stmt)
   }
 }
@@ -108,6 +109,18 @@ const allFiles = fs
 if (allFiles.length === 0) {
   console.log("No SQL migration files found.\n")
   process.exit(0)
+}
+
+// Guard against NEW duplicate migration numbers. The grandfathered numbers already had
+// duplicate files when this guard was added — they are recorded by full filename and
+// re-running them is harmless. Any NEW duplicate number is rejected so the ambiguity is
+// caught in review rather than in production.
+const newDuplicates = findNewDuplicateMigrationNumbers(allFiles, GRANDFATHERED_DUPLICATE_NUMBERS)
+if (newDuplicates.length > 0) {
+  console.error("Error: new duplicate migration number(s) detected:")
+  for (const pair of newDuplicates) console.error(`  - ${pair}`)
+  console.error("Renumber the newer file to keep ordering unambiguous.\n")
+  process.exit(1)
 }
 
 // Check which are already recorded

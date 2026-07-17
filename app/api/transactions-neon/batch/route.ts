@@ -53,7 +53,7 @@ export async function POST(request: NextRequest) {
       `,
     )
 
-    await repairCurrentInventoryUpsertConstraints(accountsSql, tenantContext)
+    await repairCurrentInventoryUpsertConstraints(tenantContext)
     
     const sortedTransactions = [...transactions].sort((a, b) => {
       const dateA = a?.transaction_date ? new Date(a.transaction_date).getTime() : 0
