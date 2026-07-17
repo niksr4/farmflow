@@ -142,6 +142,8 @@ import {
   type ExecutionOutcomeCheck,
 } from "@/components/inventory-system/execution-outcomes"
 import { buildSmartNextSteps } from "@/components/inventory-system/smart-next-steps"
+import { buildDashboardTabItems } from "@/components/inventory-system/tab-items"
+import { useHomeInsights } from "@/components/inventory-system/use-home-insights"
 import RecordMovementPanel from "@/components/inventory-system/record-movement-panel"
 import MobileSidebarDrawer from "@/components/inventory-system/mobile-sidebar-drawer"
 import PreviewModeBanner from "@/components/inventory-system/preview-mode-banner"
@@ -488,27 +490,7 @@ export default function InventorySystem() {
     [],
   )
   const [isOnboardingExpanded, setIsOnboardingExpanded] = useState(false)
-  const [intelligenceBrief, setIntelligenceBrief] = useState<IntelligenceBrief | null>(null)
-  const [intelligenceLoading, setIntelligenceLoading] = useState(false)
-  const [intelligenceError, setIntelligenceError] = useState<string | null>(null)
-  const [proactiveInsights, setProactiveInsights] = useState<Array<{ text: string; severity: "good" | "warning" | "info" }> | null>(null)
-  const [proactiveInsightsLoading, setProactiveInsightsLoading] = useState(false)
-  const [proactiveInsightsError, setProactiveInsightsError] = useState<string | null>(null)
-  const [seasonCompareNarrative, setSeasonCompareNarrative] = useState<string | null>(null)
-  const [seasonCompareLoading, setSeasonCompareLoading] = useState(false)
-  const [seasonCompareError, setSeasonCompareError] = useState<string | null>(null)
-  const [seasonCompareFYLabels, setSeasonCompareFYLabels] = useState<{ curr: string; prev: string } | null>(null)
-  const [recentActivity, setRecentActivity] = useState<Array<{ module: string; label: string; detail: string; date: string }> | null>(null)
-  const [recentActivityLoading, setRecentActivityLoading] = useState(false)
-  const hasTrackedInsightViewRef = useRef(false)
   const lastExecutionOutcomeSignatureRef = useRef("")
-  // Each ref remembers the tenant it last loaded successfully for, so revisiting the
-  // Home tab within the same session doesn't re-fire these fetches every time.
-  const intelligenceBriefLoadedRef = useRef<string | null>(null)
-  const activityStreakLoadedRef = useRef<string | null>(null)
-  const proactiveInsightsLoadedRef = useRef<string | null>(null)
-  const seasonCompareLoadedRef = useRef<string | null>(null)
-  const recentActivityLoadedRef = useRef<string | null>(null)
   const [onboardingStatus, setOnboardingStatus] = useState<OnboardingStatusSnapshot>(INITIAL_ONBOARDING_STATUS)
   const [isOnboardingLoading, setIsOnboardingLoading] = useState(false)
   const [hasLoadedOnboardingStatus, setHasLoadedOnboardingStatus] = useState(false)
@@ -523,7 +505,6 @@ export default function InventorySystem() {
   const [isSavingOnboardingDefaults, setIsSavingOnboardingDefaults] = useState(false)
   const [trialDaysRemaining, setTrialDaysRemaining] = useState<number | null>(null)
   const [trialBannerDismissed, setTrialBannerDismissed] = useState(false)
-  const [activityStreak, setActivityStreak] = useState<number>(0)
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false)
 
   // auth + router
@@ -2874,296 +2855,99 @@ export default function InventorySystem() {
     canShowAiAnalysis ||
     canShowNews
 
-  const operationsTabItems = useMemo(
-    () =>
+  const { operations: operationsTabItems, finance: financeTabItems, insights: insightsTabItems } =
+    useMemo(
+      () =>
+        buildDashboardTabItems({
+          canShowProcessingWorkspace,
+          processingWorkspaceLabel,
+          processingWorkspaceIcon,
+          canShowProcessing,
+          canShowPepper,
+          canShowRubber,
+          canShowCuring,
+          canShowQuality,
+          canShowDispatch,
+          canShowSalesWorkspace,
+          canShowSales,
+          canShowOtherSales,
+          canShowInventoryWorkspace,
+          showTransactionHistory,
+          canShowRainfallSection,
+          canShowRainfall,
+          canShowWeather,
+          canShowAccounts,
+          canShowBalanceSheet,
+          canShowSeasonPl,
+          canShowReceivables,
+          canShowBilling,
+          canShowSeason,
+          canShowYieldForecast,
+          canShowPlantHealth,
+          canShowAiAnalysis,
+          canShowNews,
+          canShowDocuments,
+          canShowJournal,
+          canShowResources,
+          canShowActivityLog,
+        }),
       [
-        canShowProcessingWorkspace
-          ? {
-              value: "processing",
-              label: processingWorkspaceLabel,
-              icon: processingWorkspaceIcon,
-              subtabs: [
-                canShowProcessing && "Coffee Pulping",
-                canShowPepper && "Pepper Processing",
-                canShowRubber && "Rubber Tapping",
-              ].filter(Boolean) as string[],
-            }
-          : null,
-        canShowCuring ? { value: "curing", label: "Curing & Drying", icon: Factory } : null,
-        canShowQuality ? { value: "quality", label: "Quality Grading", icon: CheckCircle2 } : null,
-        canShowDispatch ? { value: "dispatch", label: "Dispatch", icon: Truck } : null,
-        canShowSalesWorkspace
-          ? {
-              value: "sales",
-              label: "Sales",
-              icon: TrendingUp,
-              subtabs:
-                canShowSales && canShowOtherSales
-                  ? ["Coffee Sales", "Other Sales"]
-                  : canShowSales
-                    ? ["Coffee Sales"]
-                    : ["Other Sales"],
-            }
-          : null,
-        // Inventory handles stock movement and sits with the core operations tabs.
-        canShowInventoryWorkspace
-          ? {
-              value: "inventory",
-              label: "Stock & Inventory",
-              icon: List,
-              subtabs: showTransactionHistory ? ["Stock Levels", "Transaction History"] : ["Stock Levels"],
-            }
-          : null,
-        canShowRainfallSection
-          ? {
-              value: "rainfall",
-              label: "Rain & Weather",
-              icon: CloudRain,
-              subtabs:
-                canShowRainfall && canShowWeather
-                  ? ["Rainfall Logs", "Forecast"]
-                  : canShowWeather
-                    ? ["Forecast", "Estate Coordinates"]
-                    : ["Rainfall Logs"],
-            }
-          : null,
-      ].filter(Boolean) as Array<{
-        value: string
-        label: string
-        icon: React.ComponentType<{ className?: string }>
-        subtabs?: string[]
-      }>,
-    [
-      canShowCuring,
-      canShowDispatch,
-      canShowInventoryWorkspace,
-      canShowOtherSales,
-      canShowPepper,
-      canShowProcessingWorkspace,
-      canShowQuality,
-      canShowProcessing,
-      canShowRainfall,
-      canShowRainfallSection,
-      canShowRubber,
-      canShowSales,
-      canShowSalesWorkspace,
-      canShowWeather,
-      processingWorkspaceIcon,
-      processingWorkspaceLabel,
-      showTransactionHistory,
-    ],
-  )
+        canShowProcessingWorkspace,
+        processingWorkspaceLabel,
+        processingWorkspaceIcon,
+        canShowProcessing,
+        canShowPepper,
+        canShowRubber,
+        canShowCuring,
+        canShowQuality,
+        canShowDispatch,
+        canShowSalesWorkspace,
+        canShowSales,
+        canShowOtherSales,
+        canShowInventoryWorkspace,
+        showTransactionHistory,
+        canShowRainfallSection,
+        canShowRainfall,
+        canShowWeather,
+        canShowAccounts,
+        canShowBalanceSheet,
+        canShowSeasonPl,
+        canShowReceivables,
+        canShowBilling,
+        canShowSeason,
+        canShowYieldForecast,
+        canShowPlantHealth,
+        canShowAiAnalysis,
+        canShowNews,
+        canShowDocuments,
+        canShowJournal,
+        canShowResources,
+        canShowActivityLog,
+      ],
+    )
 
-  const financeTabItems = useMemo(
-    () =>
-      [
-        canShowAccounts
-          ? {
-              value: "accounts",
-              label: "Accounts",
-              icon: Users,
-              subtabs: ["Daily Labour", "Expenses", "Attendance", "Cost Codes"],
-            }
-          : null,
-        canShowBalanceSheet ? { value: "balance-sheet", label: "Live Balance", icon: Scale } : null,
-        canShowSeasonPl ? { value: "season-pl", label: "P&L Report", icon: TrendingUp } : null,
-        canShowReceivables ? { value: "receivables", label: "Receivables", icon: Receipt } : null,
-        canShowBilling ? { value: "billing", label: "Billing", icon: Receipt } : null,
-      ].filter(Boolean) as Array<{
-        value: string
-        label: string
-        icon: React.ComponentType<{ className?: string }>
-        subtabs?: string[]
-      }>,
-    [canShowAccounts, canShowBalanceSheet, canShowBilling, canShowReceivables, canShowSeasonPl],
-  )
-
-  const insightsTabItems = useMemo(
-    () =>
-      [
-        canShowSeason ? { value: "season", label: "Season Summary", icon: BarChart3 } : null,
-        canShowYieldForecast ? { value: "yield-forecast", label: "Harvest Forecast", icon: TrendingUp } : null,
-        canShowPlantHealth ? { value: "plant-health", label: "Crop Health", icon: Leaf } : null,
-        canShowAiAnalysis ? { value: "ai-analysis", label: "AI Insights", icon: Brain } : null,
-        canShowNews ? { value: "news", label: "Market News", icon: Newspaper } : null,
-        canShowDocuments ? { value: "documents", label: "Documents", icon: FileText } : null,
-        canShowJournal ? { value: "journal", label: "Journal", icon: NotebookPen } : null,
-        canShowResources ? { value: "resources", label: "Resources", icon: BookOpen } : null,
-        canShowActivityLog ? { value: "activity-log", label: "Audit Log", icon: History } : null,
-      ].filter(Boolean) as Array<{
-        value: string
-        label: string
-        icon: React.ComponentType<{ className?: string }>
-        subtabs?: string[]
-      }>,
-    [
-      canShowActivityLog,
-      canShowAiAnalysis,
-      canShowDocuments,
-      canShowJournal,
-      canShowNews,
-      canShowPlantHealth,
-      canShowResources,
-      canShowSeason,
-      canShowYieldForecast,
-    ],
-  )
-
-  useEffect(() => {
-    if (!tenantId || !canShowIntelligence) {
-      setIntelligenceBrief(null)
-      setIntelligenceError(null)
-      return
-    }
-    if (!shouldLoadHomeMetrics) return
-    if (intelligenceBriefLoadedRef.current === tenantId) return
-    let ignore = false
-
-    const loadIntelligenceBrief = async () => {
-      setIntelligenceLoading(true)
-      setIntelligenceError(null)
-      try {
-        const params = new URLSearchParams({
-          startDate: currentFiscalYear.startDate,
-          endDate: currentFiscalYear.endDate,
-        })
-        const response = await fetch(`/api/intelligence-brief?${params.toString()}`, { cache: "no-store" })
-        const data = await response.json().catch(() => ({}))
-        if (!response.ok || !data?.success) {
-          throw new Error(data?.error || "Failed to load intelligence brief")
-        }
-        if (!ignore) {
-          const brief = data as IntelligenceBrief
-          setIntelligenceBrief(brief)
-          const highlightCount = Array.isArray(brief.highlights) ? brief.highlights.length : 0
-          const actionCount = Array.isArray(brief.actions) ? brief.actions.length : 0
-          const hasInsight = highlightCount > 0 || actionCount > 0 || Boolean(brief.reconciliation)
-          if (!hasTrackedInsightViewRef.current && hasInsight) {
-            posthog.capture("funnel_first_dashboard_insight_viewed", {
-              source: "intelligence-brief",
-              highlight_count: highlightCount,
-              action_count: actionCount,
-              has_reconciliation: Boolean(brief.reconciliation),
-              fiscal_year_start: currentFiscalYear.startDate,
-              fiscal_year_end: currentFiscalYear.endDate,
-              tenant_id: tenantId || "global",
-              role: effectiveRole || "unknown",
-            })
-            hasTrackedInsightViewRef.current = true
-          }
-        }
-      } catch (error: any) {
-        if (!ignore) {
-          setIntelligenceBrief(null)
-          setIntelligenceError(error?.message || "Failed to load intelligence brief")
-        }
-      } finally {
-        if (!ignore) {
-          setIntelligenceLoading(false)
-          intelligenceBriefLoadedRef.current = tenantId
-        }
-      }
-    }
-
-    loadIntelligenceBrief()
-    return () => {
-      ignore = true
-    }
-  }, [canShowIntelligence, currentFiscalYear.endDate, currentFiscalYear.startDate, effectiveRole, shouldLoadHomeMetrics, tenantId])
-
-  useEffect(() => {
-    if (!tenantId || !shouldLoadHomeMetrics) return
-    if (activityStreakLoadedRef.current === tenantId) return
-    activityStreakLoadedRef.current = tenantId
-    fetch("/api/activity-streak", { cache: "no-store" })
-      .then((r) => r.json())
-      .then((d) => { if (d.success && d.streak > 0) setActivityStreak(d.streak) })
-      .catch(() => {})
-  }, [shouldLoadHomeMetrics, tenantId])
-
-  useEffect(() => {
-    if (!canShowAiAnalysis || !shouldLoadHomeMetrics) return
-    if (proactiveInsightsLoadedRef.current === tenantId) return
-    let ignore = false
-    const loadProactiveInsights = async () => {
-      setProactiveInsightsLoading(true)
-      setProactiveInsightsError(null)
-      try {
-        const response = await fetch("/api/ai-proactive-insights", { cache: "no-store" })
-        const data = await response.json().catch(() => ({}))
-        if (!response.ok || !data?.success) throw new Error(data?.error || "Failed to load insights")
-        if (!ignore) setProactiveInsights(Array.isArray(data.insights) ? data.insights : [])
-      } catch (error: any) {
-        if (!ignore) setProactiveInsightsError(error?.message || "Failed to load insights")
-      } finally {
-        if (!ignore) {
-          setProactiveInsightsLoading(false)
-          proactiveInsightsLoadedRef.current = tenantId
-        }
-      }
-    }
-    loadProactiveInsights()
-    return () => { ignore = true }
-  }, [canShowAiAnalysis, shouldLoadHomeMetrics, tenantId])
-
-  useEffect(() => {
-    if (!canShowAiAnalysis || !shouldLoadHomeMetrics) return
-    if (seasonCompareLoadedRef.current === tenantId) return
-    let ignore = false
-    const loadSeasonCompare = async () => {
-      setSeasonCompareLoading(true)
-      setSeasonCompareError(null)
-      try {
-        const response = await fetch("/api/ai-season-compare", { cache: "no-store" })
-        const { json, text } = await parseJsonResponse(response)
-        if (!response.ok || !json?.success) {
-          throw new Error(json?.error || json?.message || text || "Season comparison is temporarily unavailable.")
-        }
-        if (!ignore) {
-          setSeasonCompareNarrative(json.narrative || null)
-          setSeasonCompareFYLabels(json.currentFY && json.prevFY ? { curr: json.currentFY, prev: json.prevFY } : null)
-        }
-      } catch (error: any) {
-        if (!ignore) {
-          setSeasonCompareNarrative(null)
-          setSeasonCompareFYLabels(null)
-          setSeasonCompareError(error?.message || "Season comparison is temporarily unavailable.")
-        }
-      } finally {
-        if (!ignore) {
-          setSeasonCompareLoading(false)
-          seasonCompareLoadedRef.current = tenantId
-        }
-      }
-    }
-    loadSeasonCompare()
-    return () => { ignore = true }
-  }, [canShowAiAnalysis, shouldLoadHomeMetrics, tenantId])
-
-  useEffect(() => {
-    if (!shouldLoadHomeMetrics) return
-    if (recentActivityLoadedRef.current === tenantId) return
-    let ignore = false
-    const load = async () => {
-      setRecentActivityLoading(true)
-      try {
-        const res = await fetch("/api/recent-activity", { cache: "no-store" })
-        const data = await res.json().catch(() => ({}))
-        if (!ignore && data?.success && Array.isArray(data.entries)) {
-          setRecentActivity(data.entries)
-        }
-      } catch {
-        // silent — feed just stays hidden
-      } finally {
-        if (!ignore) {
-          setRecentActivityLoading(false)
-          recentActivityLoadedRef.current = tenantId
-        }
-      }
-    }
-    load()
-    return () => { ignore = true }
-  }, [shouldLoadHomeMetrics, tenantId])
+  const {
+    intelligenceBrief,
+    intelligenceLoading,
+    intelligenceError,
+    proactiveInsights,
+    proactiveInsightsLoading,
+    proactiveInsightsError,
+    seasonCompareNarrative,
+    seasonCompareLoading,
+    seasonCompareError,
+    seasonCompareFYLabels,
+    recentActivity,
+    recentActivityLoading,
+    activityStreak,
+  } = useHomeInsights({
+    tenantId,
+    canShowIntelligence,
+    canShowAiAnalysis,
+    shouldLoadHomeMetrics,
+    currentFiscalYear,
+    effectiveRole,
+  })
 
   const commandStripItems = useMemo(() => {
     const processingTotalKg = processingTotals.arabicaKg + processingTotals.robustaKg
@@ -3540,10 +3324,6 @@ export default function InventorySystem() {
     (tabs: string[]) => DEFAULT_DASHBOARD_TAB_PRIORITY.find((tab) => tabs.includes(tab)) || tabs[0],
     [],
   )
-
-  useEffect(() => {
-    hasTrackedInsightViewRef.current = false
-  }, [effectiveRole, tenantId])
 
 
   const inferBriefTabFromText = useCallback(
