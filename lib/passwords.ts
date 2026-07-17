@@ -76,9 +76,12 @@ export function verifyPassword(password: string, storedHash: string): VerifyResu
     return { matches: normalizedStored.toLowerCase() === legacyHash, needsRehash: true }
   }
 
+  // Plaintext-stored passwords are never accepted for login. Production has none (verified),
+  // so this only closes the door on the worst-case scheme: any row that is still plaintext must
+  // be reset by an admin rather than logged into. classifyStoredPasswordHash still reports
+  // "legacy_plaintext" so such rows can be found and rotated.
   if (storedScheme === "legacy_plaintext") {
-    const normalizedStored = String(storedHash).trim()
-    return { matches: safeEqual(Buffer.from(normalizedStored), Buffer.from(password)), needsRehash: true }
+    return { matches: false, needsRehash: false }
   }
 
   return { matches: false, needsRehash: false }

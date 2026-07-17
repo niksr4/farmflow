@@ -256,7 +256,11 @@ export async function GET(request: NextRequest) {
         )
       }
     } else {
-      const limitValue = limit ? Number.parseInt(limit) : 100
+      // Clamp to a sane ceiling so a client (or a many-season tenant) can't pull the whole
+      // table into one payload/render. Default 100, hard max 500.
+      const MAX_TRANSACTION_LIMIT = 500
+      const parsedLimit = Number.parseInt(limit || "100", 10)
+      const limitValue = Math.min(Math.max(Number.isFinite(parsedLimit) ? parsedLimit : 100, 1), MAX_TRANSACTION_LIMIT)
       if (!locationFilter) {
         query = await runTenantQuery(
           inventorySql,

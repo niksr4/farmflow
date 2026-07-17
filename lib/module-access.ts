@@ -7,10 +7,13 @@ import { normalizeTenantContext, runTenantQuery } from "@/lib/server/tenant-db"
 import { resolveTenantPlanId } from "@/lib/server/tenant-subscriptions"
 import { requireSessionUser, type SessionUser } from "@/lib/server/auth"
 
-// In-process cache for module lists. Warm serverless instances reuse this,
-// eliminating 3 DB queries per API request. TTL = 5 minutes.
+// In-process cache for module lists. Warm serverless instances reuse this, eliminating 3 DB
+// queries per API request. invalidateModuleCache() only clears the instance that handled the
+// admin toggle, so the TTL bounds how long OTHER warm instances can serve stale access. Kept
+// short (30s) so a module enable/disable takes effect everywhere within seconds instead of
+// minutes; still absorbs the vast majority of per-request lookups. Tunable via env.
 const MODULE_CACHE = new Map<string, { modules: string[]; expiresAt: number }>()
-const CACHE_TTL_MS = 5 * 60 * 1000
+const CACHE_TTL_MS = Number(process.env.MODULE_CACHE_TTL_MS) || 30_000
 
 function getCachedModules(key: string): string[] | null {
   const entry = MODULE_CACHE.get(key)

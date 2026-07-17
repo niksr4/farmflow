@@ -54,9 +54,10 @@ describe("verifyPassword (legacy schemes flag a rehash)", () => {
     expect(verifyPassword("nope", legacy).matches).toBe(false)
   })
 
-  it("matches a legacy plaintext value and signals rehash", () => {
-    expect(verifyPassword("plain", "plain")).toEqual({ matches: true, needsRehash: true })
-    expect(verifyPassword("other", "plain").matches).toBe(false)
+  it("never accepts a plaintext-stored password (must be admin-reset), though it is still classified", () => {
+    // Hardening: plaintext acceptance was removed. A plaintext row cannot be logged into.
+    expect(classifyStoredPasswordHash("plain")).toBe("legacy_plaintext")
+    expect(verifyPassword("plain", "plain")).toEqual({ matches: false, needsRehash: false })
   })
 
   it("never matches against an empty stored hash", () => {

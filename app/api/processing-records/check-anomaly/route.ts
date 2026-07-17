@@ -35,18 +35,11 @@ export async function POST(req: Request) {
 
     // Fetch the last 90 days of processing records for this tenant to build a baseline.
     // We scope to coffeeType when provided, falling back to all types if the history is thin.
-    const params: any[] = [tenantContext.tenantId]
-    let whereClause = `tenant_id = $1 AND crop_today > 0 AND dry_parch > 0 AND process_date >= CURRENT_DATE - INTERVAL '90 days'`
-
-    if (coffeeType) {
-      params.push(coffeeType)
-      whereClause += ` AND coffee_type = $${params.length}`
-    }
-
-    if (locationId) {
-      params.push(locationId)
-      whereClause += ` AND location_id = $${params.length}`
-    }
+    // Uses tagged-template fragments so every value is a bound parameter (the previous
+    // version built $1/$2/$3 placeholders but never bound them, so the query always failed
+    // and the anomaly check silently did nothing).
+    const coffeeClause = coffeeType ? sql` AND coffee_type = ${coffeeType}` : sql``
+    const locationClause = locationId ? sql` AND location_id = ${locationId}` : sql``
 
     const historyRows = await runTenantQuery(
       sql,
@@ -54,7 +47,12 @@ export async function POST(req: Request) {
       sql`
         SELECT crop_today, dry_parch
         FROM processing_records
-        WHERE ${sql.unsafe(whereClause)}
+        WHERE tenant_id = ${tenantContext.tenantId}
+          AND crop_today > 0
+          AND dry_parch > 0
+          AND process_date >= CURRENT_DATE - INTERVAL '90 days'
+          ${coffeeClause}
+          ${locationClause}
         ORDER BY process_date DESC
         LIMIT 60
       `,

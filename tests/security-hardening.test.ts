@@ -26,8 +26,10 @@ describe("security hardening helpers", () => {
     expect(classifyStoredPasswordHash(shaHash)).toBe("legacy_sha256")
     expect(verifyPassword("hello", shaHash)).toEqual({ matches: true, needsRehash: true })
 
+    // Plaintext rows are still classified (so they can be found and rotated) but are never
+    // accepted for login — hardened away since prod has zero plaintext passwords.
     expect(classifyStoredPasswordHash("plaintext-password")).toBe("legacy_plaintext")
-    expect(verifyPassword("plaintext-password", "plaintext-password")).toEqual({ matches: true, needsRehash: true })
+    expect(verifyPassword("plaintext-password", "plaintext-password")).toEqual({ matches: false, needsRehash: false })
   })
 
   it("encrypts and decrypts text and json payloads for app-layer sensitive fields", () => {
