@@ -550,7 +550,27 @@ export default function LaborDeploymentTab({
                         value={codeQuery !== null ? codeQuery : formData.code ? `${formData.code} — ${formData.reference}` : ""}
                         onChange={(e) => setCodeQuery(e.target.value)}
                         onFocus={() => setCodeQuery("")}
-                        onBlur={() => setTimeout(() => setCodeQuery(null), 150)}
+                        onBlur={() => {
+                          // Commit a typed-but-not-tapped code before clearing the search text,
+                          // otherwise scrolling away (which blurs this field) would silently
+                          // discard the code + category the user just entered. Only commits when
+                          // the query resolves to a real activity, so validation still holds.
+                          const query = (codeQuery ?? "").trim()
+                          setTimeout(() => {
+                            if (query) {
+                              const q = query.toLowerCase()
+                              const partialMatches = sortedActivities.filter(
+                                (a) => a.code.toLowerCase().includes(q) || a.reference.toLowerCase().includes(q),
+                              )
+                              const resolved =
+                                activities.find((a) => a.code.toLowerCase() === q) ||
+                                activities.find((a) => a.reference.toLowerCase() === q) ||
+                                (partialMatches.length === 1 ? partialMatches[0] : null)
+                              if (resolved) handleCodeChange(resolved.code)
+                            }
+                            setCodeQuery(null)
+                          }, 150)
+                        }}
                         placeholder="Search activity name or code…"
                         required
                         className="h-12 rounded-xl text-base"
