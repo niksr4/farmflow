@@ -7,6 +7,7 @@ import InPageNav from "@/components/in-page-nav"
 import FilterBar from "@/components/filter-bar"
 import { useListControls } from "@/hooks/use-list-controls"
 import { useFormDraft } from "@/hooks/use-form-draft"
+import { resolveActivityFromQuery } from "@/lib/activity-code-match"
 import { useLaborData } from "@/hooks/use-labor-data"
 import { useTenantSettings } from "@/hooks/use-tenant-settings"
 import { Button } from "@/components/ui/button"
@@ -557,17 +558,8 @@ export default function LaborDeploymentTab({
                           // the query resolves to a real activity, so validation still holds.
                           const query = (codeQuery ?? "").trim()
                           setTimeout(() => {
-                            if (query) {
-                              const q = query.toLowerCase()
-                              const partialMatches = sortedActivities.filter(
-                                (a) => a.code.toLowerCase().includes(q) || a.reference.toLowerCase().includes(q),
-                              )
-                              const resolved =
-                                activities.find((a) => a.code.toLowerCase() === q) ||
-                                activities.find((a) => a.reference.toLowerCase() === q) ||
-                                (partialMatches.length === 1 ? partialMatches[0] : null)
-                              if (resolved) handleCodeChange(resolved.code)
-                            }
+                            const resolved = resolveActivityFromQuery(query, activities)
+                            if (resolved) handleCodeChange(resolved.code)
                             setCodeQuery(null)
                           }, 150)
                         }}
