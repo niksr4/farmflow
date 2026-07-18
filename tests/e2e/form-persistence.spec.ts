@@ -2,14 +2,15 @@ import { devices, expect, test } from "@playwright/test"
 import { getDashboardRouteContext, hasRequiredAuthCredentials, waitForDashboardReady } from "./helpers"
 
 /**
- * Guards the class of regression that lost the labour code + category when the user scrolled
- * to the quantity field: an entry-form input whose value is committed only on an explicit tap,
- * so blurring (which scrolling does on a phone) discards it. Runs on a phone viewport because
- * that mobile-only code selector was where the bug lived. Part of `pnpm test:e2e:auth`.
+ * Guards the regression that lost the labour code + category when the user scrolled to the
+ * quantity field: on a phone the activity-code box is a search input whose value was committed
+ * to the form only when a dropdown row was tapped, so blurring (which scrolling does) discarded
+ * anything typed. Runs on a phone viewport because that mobile-only selector is where the bug
+ * lived. Part of `pnpm test:e2e:auth`.
  *
- * The navigation into the labour form is defensive: if the accounts/labour UI differs from what
- * this test expects it skips (with a reason) rather than false-failing — but once the code field
- * is filled, the persistence assertion is hard.
+ * The form prefills from the last entry, so the test types a code that is DIFFERENT from the
+ * prefill and asserts THAT code survives a blur — otherwise a buggy build would "pass" simply
+ * by showing the prefilled code.
  */
 const iPhone13 = devices["iPhone 13"]
 test.use({
@@ -22,52 +23,45 @@ test.use({
 test.describe("labour form field persistence (mobile)", () => {
   test.skip(!hasRequiredAuthCredentials, "Set E2E owner credentials to run authenticated form-persistence tests")
 
-  test("activity code survives a blur (scroll away) after being typed", async ({ page }) => {
+  test("a typed activity code survives a blur (scroll away)", async ({ page }) => {
     const { route } = await getDashboardRouteContext(page, "accounts")
     await page.goto(route)
     await waitForDashboardReady(page)
 
-    // Reach the Daily Labour sub-view.
-    const labourNav = page.getByRole("button", { name: /daily labour|labour/i }).first()
-    if (await labourNav.count()) {
-      await labourNav.click().catch(() => {})
-    }
+    const activityPayload = await (await page.request.get("/api/get-activity")).json().catch(() => ({}))
+    const codes: string[] = (Array.isArray(activityPayload?.activities) ? activityPayload.activities : [])
+      .map((a: any) => String(a?.code || "").trim())
+      .filter(Boolean)
+    test.skip(codes.length < 2, "Tenant needs at least two activity codes to exercise the labour form")
+    if (codes.length < 2) return
 
-    // Open the entry form.
-    const openForm = page.getByRole("button", { name: /log labour entry|add labour entry/i }).first()
-    if (!(await openForm.count())) {
-      test.skip(true, "Could not locate the labour entry form open button on this build")
-      return
-    }
-    await openForm.click()
+    // accounts → Labour sub-view (last "Labour" button; the first is the bottom nav) → open form.
+    await page.getByRole("button", { name: "Labour", exact: true }).last().click()
+    await page.getByRole("button", { name: /log with more detail/i }).first().click()
 
     const codeInput = page.locator("#code")
     await expect(codeInput).toBeVisible({ timeout: 10_000 })
+    // The buggy selector is the MOBILE one, which only renders once activity codes have loaded.
+    // Until then the component shows the desktop datalist (which commits directly and has no
+    // bug), so wait for the mobile search box or we'd test the wrong code path.
+    await expect(codeInput).toHaveAttribute("placeholder", /search activity/i, { timeout: 10_000 })
 
-    // Read the first available activity code from the API so we type a real one.
-    const activityResponse = await page.request.get("/api/get-activity")
-    const activityPayload = await activityResponse.json().catch(() => ({}))
-    const firstActivity = (Array.isArray(activityPayload?.activities) ? activityPayload.activities : [])
-      .map((a: any) => ({ code: String(a?.code || "").trim(), reference: String(a?.reference || "").trim() }))
-      .find((a: { code: string }) => Boolean(a.code))
-    if (!firstActivity) {
-      test.skip(true, "Tenant has no activity codes to exercise the labour form")
-      return
-    }
+    // The form may be prefilled from the last entry; pick a target code that is NOT what is
+    // already shown, so "did MY code persist?" can't be masked by the prefill.
+    const prefilled = (await codeInput.inputValue()).toLowerCase()
+    const targetCode = codes.find((c) => !prefilled.includes(c.toLowerCase())) ?? codes[0]
 
-    // Type the code, then blur by focusing another field — the phone-scroll equivalent.
+    // Type the target code, then blur by focusing the date field — the phone-scroll equivalent.
     await codeInput.click()
-    await codeInput.fill(firstActivity.code)
-    await page.locator("#date").click().catch(() => {})
-    // Allow the debounced blur-commit (150ms) to run.
-    await page.waitForTimeout(400)
+    await codeInput.fill(targetCode)
+    await page.locator("#date").click()
+    await page.waitForTimeout(400) // let the debounced blur-commit (150ms) run
 
-    // The regression: after blur the field went blank because the code was never committed.
-    const displayed = await codeInput.inputValue()
+    // Regression: a buggy build shows the prefilled code (or blank) here, never the typed one.
+    const displayed = (await codeInput.inputValue()).toLowerCase()
     expect(
-      displayed.trim(),
-      "Activity code was lost after blur — the entry did not persist",
-    ).not.toBe("")
-    expect(displayed.toLowerCase()).toContain(firstActivity.code.toLowerCase())
+      displayed,
+      `The typed activity code "${targetCode}" was lost after blur — the labour entry did not persist`,
+    ).toContain(targetCode.toLowerCase())
   })
 })

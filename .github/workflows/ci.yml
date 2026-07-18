@@ -55,3 +55,50 @@ jobs:
 
       - name: Public E2E
         run: pnpm test:e2e:public
+
+  # Authenticated smoke tests exercise the LOGGED-IN app (dashboard tabs + labour form
+  # persistence) — the surface the public E2E can't reach and where recent regressions hid.
+  # Runs only when the E2E secrets are configured, so forks / secretless PRs skip it cleanly
+  # instead of failing. Add these repo secrets to enable it:
+  #   E2E_OWNER_USERNAME, E2E_OWNER_PASSWORD  (an owner account on the dev DB)
+  #   DATABASE_URL_DEV                        (dev/test Neon connection the app runs against)
+  #   NEXTAUTH_SECRET                         (matching the dev DB's sessions)
+  authenticated-e2e:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      E2E_OWNER_USERNAME: ${{ secrets.E2E_OWNER_USERNAME }}
+      E2E_OWNER_PASSWORD: ${{ secrets.E2E_OWNER_PASSWORD }}
+      DATABASE_URL: ${{ secrets.DATABASE_URL_DEV }}
+      DATABASE_URL_DEV: ${{ secrets.DATABASE_URL_DEV }}
+      NEXTAUTH_SECRET: ${{ secrets.NEXTAUTH_SECRET }}
+      NEXT_PUBLIC_APP_URL: http://127.0.0.1:3000
+      NEXTAUTH_URL: http://127.0.0.1:3000
+      NEXT_PUBLIC_POSTHOG_KEY: phc_ci_key
+      NEXT_PUBLIC_POSTHOG_HOST: https://us.i.posthog.com
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Install Playwright browser
+        run: pnpm exec playwright install --with-deps chromium
+
+      # These specs self-skip when creds are absent; the guard avoids even starting the dev
+      # server (which needs a real DB) on secretless runs.
+      - name: Authenticated E2E smoke (dashboard tabs + labour form persistence)
+        if: ${{ env.E2E_OWNER_PASSWORD != '' && env.DATABASE_URL_DEV != '' }}
+        run: pnpm exec playwright test tests/e2e/tab-smoke.spec.ts tests/e2e/form-persistence.spec.ts
