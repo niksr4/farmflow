@@ -1,6 +1,10 @@
 import "server-only"
 
-import { sql } from "@/lib/server/db"
+// This module is only ever called from cron-triggered background agents (never a per-request
+// handler), so it queries/writes across tenants using the RLS-bypassing owner connection rather
+// than the app_runtime role, which requires a per-request app.tenant_id session context this
+// code never has.
+import { adminSql as sql } from "@/lib/server/db"
 
 type AgentRunStatus = "running" | "success" | "failed"
 type FindingSeverity = "low" | "medium" | "high" | "critical"

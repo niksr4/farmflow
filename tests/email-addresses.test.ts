@@ -5,6 +5,7 @@ import {
   DEFAULT_ALERT_EMAIL_FROM,
   DEFAULT_AUTH_EMAIL_FROM,
   DEFAULT_DIGEST_EMAIL_FROM,
+  DEFAULT_DAILY_DIGEST_EMAIL_FROM,
   EMAIL_BCC_MONITORING,
 } from "@/lib/email-addresses"
 
@@ -15,6 +16,7 @@ describe("email address constants", () => {
       DEFAULT_ALERT_EMAIL_FROM,
       DEFAULT_AUTH_EMAIL_FROM,
       DEFAULT_DIGEST_EMAIL_FROM,
+      DEFAULT_DAILY_DIGEST_EMAIL_FROM,
     ]) {
       expect(from).toContain(`<${DEFAULT_SUPPORT_EMAIL}>`)
       expect(from).toMatch(/^FarmFlow.*<.+@.+>$/)

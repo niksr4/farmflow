@@ -2,7 +2,10 @@ import "server-only"
 
 import { generateObject } from "ai"
 import { z } from "zod"
-import { sql } from "@/lib/server/db"
+// This agent runs from cron across every tenant, not inside a per-request handler, so it uses
+// the RLS-bypassing owner connection rather than app_runtime, which requires a per-request
+// app.tenant_id session context this code never has.
+import { adminSql as sql } from "@/lib/server/db"
 import { normalizeTenantContext, runTenantQuery } from "@/lib/server/tenant-db"
 import { resolveAgentModel } from "@/lib/server/agents/ai-model"
 import { buildErrorFingerprint, DAY_MS, normalizeMessage } from "@/lib/server/agents/utils"

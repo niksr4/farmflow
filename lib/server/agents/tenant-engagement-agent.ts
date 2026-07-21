@@ -3,7 +3,10 @@ import "server-only"
 import { DEFAULT_ALERT_EMAIL_FROM, DEFAULT_SUPPORT_EMAIL } from "@/lib/email-addresses"
 import { classifyTenantGuidance, type TenantGuidanceSummary } from "@/lib/tenant-guidance"
 import { getCurrentEstatePhase } from "@/lib/coffee-estate-calendar"
-import { sql } from "@/lib/server/db"
+// This agent runs from cron across every tenant, not inside a per-request handler, so it uses
+// the RLS-bypassing owner connection rather than app_runtime, which requires a per-request
+// app.tenant_id session context this code never has.
+import { adminSql as sql } from "@/lib/server/db"
 import { fetchWithTimeout } from "@/lib/server/http"
 import { logServerWarning } from "@/lib/server/safe-logging"
 

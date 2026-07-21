@@ -1,12 +1,15 @@
 import "server-only"
 
 import { DEFAULT_ALERT_EMAIL_FROM, DEFAULT_DIGEST_EMAIL_FROM, EMAIL_BCC_MONITORING } from "@/lib/email-addresses"
-import { sql } from "@/lib/server/db"
+// This agent runs from cron across every tenant, not inside a per-request handler, so it uses
+// the RLS-bypassing owner connection rather than app_runtime, which requires a per-request
+// app.tenant_id session context this code never has.
+import { adminSql as sql } from "@/lib/server/db"
 import { buildTenantAiDataSummary } from "@/lib/server/ai-analysis"
 import { getClaudeClient, isClaudeConfigured, extractClaudeText, CLAUDE_SONNET } from "@/lib/server/claude"
 import { fetchWithTimeout } from "@/lib/server/http"
 import { logServerError, logServerWarning } from "@/lib/server/safe-logging"
-import { getCropLabel, getCropVarietiesLabel, mergeTenantEstateProfile, buildTenantWeatherQuery } from "@/lib/tenant-estate-profile"
+import { getCropLabel, getCropVarietiesLabel } from "@/lib/tenant-estate-profile"
 import { buildEstateCalendarContext } from "@/lib/coffee-estate-calendar"
 import { buildAgronomyContext } from "@/lib/coffee-agronomy"
 import { upsertWeeklyMetrics, fetchHistoricalMetrics, buildHistoricalBaselineContext } from "@/lib/server/tenant-weekly-metrics"
@@ -15,16 +18,7 @@ import { DEFAULT_WEATHER_QUERY } from "@/lib/weather-config"
 import { getCoffeePriceAnalysis, estimateSellableStock, buildMarketTimingSection } from "@/lib/server/coffee-prices"
 import { getCurrentFiscalYear } from "@/lib/fiscal-year-utils"
 import { createDigestFeedbackLinks, type DigestFeedbackLinks } from "@/lib/server/digest-feedback"
-
-type TenantDigestRow = {
-  tenantId: string
-  tenantName: string
-  ownerEmail: string
-  ownerName: string
-  cropFamily: string | null
-  primaryVarieties: string[]
-  weatherLocationQuery: string | null
-}
+import { fetchTenantOwnersWithVerifiedEmail, fetchRecentRainfallSummary, type TenantDigestRow } from "@/lib/server/agents/digest-shared"
 
 type DigestResult = {
   tenantId: string
@@ -38,48 +32,6 @@ const toRows = <T = any>(value: unknown): T[] => {
   if (Array.isArray(value)) return value as T[]
   const candidate = (value as any)?.rows
   return Array.isArray(candidate) ? (candidate as T[]) : []
-}
-
-async function fetchTenantOwnersWithVerifiedEmail(): Promise<TenantDigestRow[]> {
-  if (!sql) throw new Error("Database not configured")
-
-  // Prefer the explicit digest_email the user set in Settings.
-  // Fall back to users.email only when it has been verified (self-serve signups).
-  // Username-only tenants (no email, no digest_email) are skipped — they won't
-  // receive a digest until they add an address in Settings.
-  const result = await sql.query(`
-    SELECT DISTINCT ON (t.id)
-      t.id AS tenant_id,
-      t.name AS tenant_name,
-      t.ui_preferences,
-      COALESCE(
-        NULLIF(BTRIM(u.digest_email), ''),
-        CASE WHEN u.email_verified_at IS NOT NULL THEN NULLIF(BTRIM(u.email), '') END
-      ) AS owner_email,
-      COALESCE(u.username, u.email) AS owner_name
-    FROM tenants t
-    JOIN users u ON u.tenant_id = t.id
-    WHERE COALESCE(
-        NULLIF(BTRIM(u.digest_email), ''),
-        CASE WHEN u.email_verified_at IS NOT NULL THEN NULLIF(BTRIM(u.email), '') END
-      ) IS NOT NULL
-      AND u.role IN ('owner', 'admin')
-    ORDER BY t.id, CASE u.role WHEN 'owner' THEN 0 ELSE 1 END, u.created_at ASC
-  `)
-
-  return toRows<any>(result).map((row: any) => {
-    const prefs = row.ui_preferences && typeof row.ui_preferences === "object" ? row.ui_preferences : {}
-    const profile = mergeTenantEstateProfile(prefs.estateProfile ?? null)
-    return {
-      tenantId: String(row.tenant_id),
-      tenantName: String(row.tenant_name || "Your Estate"),
-      ownerEmail: String(row.owner_email),
-      ownerName: String(row.owner_name || "Estate Manager"),
-      cropFamily: profile.cropFamily,
-      primaryVarieties: profile.primaryVarieties,
-      weatherLocationQuery: buildTenantWeatherQuery(profile) ?? null,
-    }
-  })
 }
 
 type LastWeekActivity = {
@@ -179,38 +131,6 @@ function buildLastWeekSection(w: LastWeekActivity): string {
   if (w.rainfallInches > 0) lines.push(`- Rainfall recorded: ${w.rainfallInches.toFixed(2)} inches`)
   if (lines.length === 1) lines.push("- No activity recorded last week.")
   return lines.join("\n")
-}
-
-async function fetchRecentRainfallSummary(tenantId: string): Promise<{
-  last7DaysInches: number
-  last30DaysInches: number
-  loggedDaysInLast30: number
-  recentDailyAverageInches: number
-}> {
-  const empty = { last7DaysInches: 0, last30DaysInches: 0, loggedDaysInLast30: 0, recentDailyAverageInches: 0 }
-  if (!sql) return empty
-  try {
-    const result = await sql.query(`
-      SELECT
-        COALESCE(SUM(CASE WHEN record_date >= NOW() - INTERVAL '7 days'  THEN inches + cents::numeric/100 END), 0) AS last7,
-        COALESCE(SUM(CASE WHEN record_date >= NOW() - INTERVAL '30 days' THEN inches + cents::numeric/100 END), 0) AS last30,
-        COUNT(CASE  WHEN record_date >= NOW() - INTERVAL '30 days' THEN 1 END) AS logged30
-      FROM rainfall_records
-      WHERE tenant_id = $1
-    `, [tenantId])
-    const row = (Array.isArray(result) ? result[0] : (result as any)?.rows?.[0]) ?? {}
-    const last7 = Number(row.last7) || 0
-    const last30 = Number(row.last30) || 0
-    const logged30 = Number(row.logged30) || 0
-    return {
-      last7DaysInches: last7,
-      last30DaysInches: last30,
-      loggedDaysInLast30: logged30,
-      recentDailyAverageInches: logged30 > 0 ? last30 / logged30 : 0,
-    }
-  } catch {
-    return empty
-  }
 }
 
 async function fetchWeatherForecast(locationQuery: string): Promise<string | null> {

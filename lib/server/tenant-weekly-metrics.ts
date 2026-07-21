@@ -1,6 +1,9 @@
 import "server-only"
 
-import { sql } from "@/lib/server/db"
+// Only ever called from cron-triggered digest agents, not a per-request handler, so this uses
+// the RLS-bypassing owner connection rather than app_runtime, which requires a per-request
+// app.tenant_id session context this code never has.
+import { adminSql as sql } from "@/lib/server/db"
 import { logServerError } from "@/lib/server/safe-logging"
 
 export type WeeklyMetrics = {

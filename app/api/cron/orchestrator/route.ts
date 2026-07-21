@@ -8,6 +8,7 @@ import { runImportJobRetentionCleanup } from "@/lib/server/import-jobs"
 import { runTenantSmokeAgent } from "@/lib/server/agents/tenant-smoke-agent"
 import { runTenantEngagementAgent } from "@/lib/server/agents/tenant-engagement-agent"
 import { runWeeklyDigestAgent } from "@/lib/server/agents/weekly-digest-agent"
+import { runDailyDigestAgent } from "@/lib/server/agents/daily-digest-agent"
 import { runOnboardingNudgeAgent } from "@/lib/server/agents/onboarding-nudge-agent"
 import { runTenantDormancyProbeAgent } from "@/lib/server/agents/tenant-dormancy-probe-agent"
 import { sql } from "@/lib/server/db"
@@ -62,7 +63,24 @@ async function handleCronInvocation(request: Request) {
       } catch { /* non-critical — allow digest to run if guard fails */ }
     }
 
-    const [dataIntegrity, logAnomaly, retention, tenantSmoke, tenantEngagement, weeklyDigest, onboardingNudge, tenantDormancyProbe] =
+    // Guard: skip daily digest if a successful run already completed today.
+    // Prevents double-sends on Vercel cron retries or manual re-triggers.
+    let dailyDigestAlreadySentToday = false
+    if (sql) {
+      try {
+        const guard = await sql`
+          SELECT id FROM agent_runs
+          WHERE agent_name = 'daily-digest'
+            AND status = 'success'
+            AND completed_at >= date_trunc('day', NOW())
+          LIMIT 1
+        `
+        const rows = Array.isArray(guard) ? guard : (guard as any)?.rows ?? []
+        dailyDigestAlreadySentToday = rows.length > 0
+      } catch { /* non-critical — allow digest to run if guard fails */ }
+    }
+
+    const [dataIntegrity, logAnomaly, retention, tenantSmoke, tenantEngagement, weeklyDigest, dailyDigest, onboardingNudge, tenantDormancyProbe] =
       await Promise.allSettled([
         runDataIntegrityAgent({ triggerSource: "cron" }),
         runLogAnomalyAgent({ triggerSource: "cron" }),
@@ -72,6 +90,9 @@ async function handleCronInvocation(request: Request) {
         isMonday && !digestAlreadySentThisWeek
           ? runWeeklyDigestAgent({ triggerSource: "cron" })
           : Promise.resolve({ skipped: true, reason: isMonday ? "already-sent-this-week" : "not-monday" }),
+        dailyDigestAlreadySentToday
+          ? Promise.resolve({ skipped: true, reason: "already-sent-today" })
+          : runDailyDigestAgent({ triggerSource: "cron" }),
         runOnboardingNudgeAgent({ triggerSource: "cron" }),
         runTenantDormancyProbeAgent({ triggerSource: "cron" }),
       ])
@@ -86,6 +107,7 @@ async function handleCronInvocation(request: Request) {
       tenantSmoke: toResult(tenantSmoke),
       tenantEngagement: toResult(tenantEngagement),
       weeklyDigest: toResult(weeklyDigest),
+      dailyDigest: toResult(dailyDigest),
       onboardingNudge: toResult(onboardingNudge),
       tenantDormancyProbe: toResult(tenantDormancyProbe),
     }

@@ -621,7 +621,7 @@ export default function InventorySystem() {
   const canShowSeason = isModuleEnabled("season")
   const canShowYieldForecast = canShowSeason
   const canShowActivityLog = (isAdmin || isOwner) && isFeatureEnabled("showActivityLogTab")
-  const canShowLaborManagement = isModuleEnabled("labour")
+  const canShowLaborManagement = isModuleEnabled("labor")
   const canShowPickingLog = isModuleEnabled("picking")
   const canShowReceivables = isModuleEnabled("receivables")
   const canShowBilling = isModuleEnabled("billing")

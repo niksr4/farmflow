@@ -2,7 +2,10 @@ import "server-only"
 
 import { createHash, randomBytes } from "crypto"
 
-import { sql } from "@/lib/server/db"
+// Called from a cron-triggered digest agent (no per-request tenant context) and from a public,
+// unauthenticated feedback link (token is the only auth — the tenant isn't known until the
+// token is looked up), so this uses the RLS-bypassing owner connection rather than app_runtime.
+import { adminSql as sql } from "@/lib/server/db"
 import { resolvePublicAppUrl } from "@/lib/server/onboarding/utils"
 import { logServerError, logServerWarning } from "@/lib/server/safe-logging"
 
