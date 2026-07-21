@@ -1,13 +1,14 @@
 "use client"
 
-import { useCallback, useEffect, useMemo, useState } from "react"
+import { useCallback, useEffect, useState } from "react"
 import { Bar, BarChart, CartesianGrid, Line, LineChart, XAxis, YAxis } from "recharts"
 import { AlertTriangle, CloudRain, Loader2, TrendingUp } from "lucide-react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Button } from "@/components/ui/button"
 import { ChartContainer, ChartTooltip, ChartTooltipContent, type ChartConfig } from "@/components/ui/chart"
-import { getCurrentFiscalYear } from "@/lib/fiscal-year-utils"
+import { useFiscalYearSelection } from "@/hooks/use-fiscal-year-selection"
+import { FiscalYearSelect } from "@/components/ui/fiscal-year-select"
 import { formatNumber } from "@/lib/format"
 
 type CoffeeScope = "all" | "arabica" | "robusta"
@@ -82,13 +83,11 @@ const TREND_CHART_CONFIG = {
 } satisfies ChartConfig
 
 export default function YieldForecastTab() {
-  const currentFiscalYear = useMemo(() => getCurrentFiscalYear(), [])
+  const { selectedFiscalYear, setSelectedFiscalYear, availableFiscalYears } = useFiscalYearSelection()
   const [coffeeScope, setCoffeeScope] = useState<CoffeeScope>("all")
   const [forecast, setForecast] = useState<YieldForecastResponse | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
-
-  const selectedFiscalYear = currentFiscalYear
 
   const loadForecast = useCallback(async () => {
     if (!selectedFiscalYear) return
@@ -135,7 +134,13 @@ export default function YieldForecastTab() {
               Seasonal dry output forecast using rainfall signals and processing trend.
             </CardDescription>
           </div>
-          <div className="grid gap-3 md:grid-cols-2">
+          <div className="grid gap-3 md:grid-cols-3">
+            <FiscalYearSelect
+              value={selectedFiscalYear}
+              options={availableFiscalYears}
+              onChange={setSelectedFiscalYear}
+              variant="full"
+            />
             <div className="space-y-2">
               <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">Coffee Scope</p>
               <Select value={coffeeScope} onValueChange={(value) => setCoffeeScope(value as CoffeeScope)}>

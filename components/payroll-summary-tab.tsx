@@ -2,7 +2,7 @@
 
 import { useState, useCallback } from "react"
 import { todayIso } from "@/lib/date-utils"
-import { Download, Loader2, DollarSign, AlertTriangle } from "lucide-react"
+import { Download, FileSpreadsheet, Loader2, DollarSign, AlertTriangle } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -13,6 +13,8 @@ import { EmptyStateTable } from "@/components/ui/empty-state"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import { toast } from "sonner"
 import { formatCurrency } from "@/lib/format"
+import { useTenantSettings } from "@/hooks/use-tenant-settings"
+import { buildXlsxArrayBufferFromCsv, XLSX_MIME_TYPE } from "@/lib/spreadsheet"
 
 type PayrollWorker = {
   id: string
@@ -48,6 +50,7 @@ const escapeCsv = (v: string | number | null | undefined) => {
 }
 
 export default function PayrollSummaryTab() {
+  const { settings: tenantSettings } = useTenantSettings()
   const [startDate, setStartDate] = useState(firstOfMonth())
   const [endDate, setEndDate] = useState(today())
   const [workers, setWorkers] = useState<PayrollWorker[]>([])
@@ -72,9 +75,8 @@ export default function PayrollSummaryTab() {
     }
   }, [startDate, endDate])
 
-  const handleExportCsv = () => {
-    if (!workers.length) return
-    const header = ["Worker", "Type", "Days Present", "Daily Rate", "Attendance Earnings", "Picking Kg", "Picking Earnings", "Adjustments", "Deductions", "Net Payable"]
+  const buildPayrollExportCsv = () => {
+    const header = ["Worker", "Type", "Days Present", "Daily Rate (₹)", "Attendance Earnings (₹)", "Picking (kg)", "Picking Earnings (₹)", "Adjustments (₹)", "Deductions (₹)", "Net Payable (₹)"]
     const rows = workers.map((w) => [
       w.name,
       w.workerType || "",
@@ -90,12 +92,31 @@ export default function PayrollSummaryTab() {
     if (totals) {
       rows.push(["TOTAL", "", totals.daysPresent, "", totals.attendanceEarnings.toFixed(2), totals.pickingKg.toFixed(3), totals.pickingEarnings.toFixed(2), totals.adjustments.toFixed(2), totals.deductions.toFixed(2), totals.netPayable.toFixed(2)])
     }
-    const csv = [header, ...rows].map((r) => r.map(escapeCsv).join(",")).join("\n")
-    const blob = new Blob([csv], { type: "text/csv" })
+    return [header, ...rows].map((r) => r.map(escapeCsv).join(",")).join("\n")
+  }
+
+  const handleExportCsv = () => {
+    if (!workers.length) return
+    const blob = new Blob([buildPayrollExportCsv()], { type: "text/csv" })
     const url = URL.createObjectURL(blob)
     const a = document.createElement("a")
     a.href = url
     a.download = `payroll-${startDate}-to-${endDate}.csv`
+    a.click()
+    URL.revokeObjectURL(url)
+  }
+
+  const handleExportXlsx = async () => {
+    if (!workers.length) return
+    const workbookBytes = await buildXlsxArrayBufferFromCsv(buildPayrollExportCsv(), "Payroll Summary", {
+      title: tenantSettings.estateName ? `${tenantSettings.estateName} — Payroll Summary` : "Payroll Summary",
+      subtitle: `${startDate} to ${endDate}`,
+    })
+    const blob = new Blob([workbookBytes], { type: XLSX_MIME_TYPE })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement("a")
+    a.href = url
+    a.download = `payroll-${startDate}-to-${endDate}.xlsx`
     a.click()
     URL.revokeObjectURL(url)
   }
@@ -136,10 +157,16 @@ export default function PayrollSummaryTab() {
               </Tooltip>
             </TooltipProvider>
             {hasGenerated && workers.length > 0 && (
-              <Button size="sm" variant="outline" onClick={handleExportCsv}>
-                <Download className="mr-1.5 h-4 w-4" />
-                Export CSV
-              </Button>
+              <>
+                <Button size="sm" variant="outline" onClick={handleExportCsv}>
+                  <Download className="mr-1.5 h-4 w-4" />
+                  CSV
+                </Button>
+                <Button size="sm" variant="outline" onClick={handleExportXlsx}>
+                  <FileSpreadsheet className="mr-1.5 h-4 w-4" />
+                  XLSX
+                </Button>
+              </>
             )}
           </div>
 

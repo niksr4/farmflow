@@ -49,6 +49,7 @@ import {
 } from "@/lib/account-activity-suggestions"
 import posthog from "posthog-js"
 import { useMediaQuery } from "@/hooks/use-media-query"
+import { useTenantSettings } from "@/hooks/use-tenant-settings"
 
 interface AccountActivity {
   code: string
@@ -139,6 +140,7 @@ export default function AccountsPage({
   const isMobile = useMediaQuery("(max-width: 768px)")
   const { isAdmin, isOwner, user } = useAuth()
   const canManageActivities = isAdmin || isOwner || user?.role === "user"
+  const { settings: tenantSettings } = useTenantSettings()
   const {
     selectedFiscalYear,
     setSelectedFiscalYear,
@@ -586,8 +588,15 @@ export default function AccountsPage({
     return stringField
   }
 
-  const buildCombinedAccountsCsv = (deploymentsToExport: CombinedDeployment[]) => {
-    const sortedDeployments = [...deploymentsToExport].sort((a, b) => String(b.date || "").slice(0, 10).localeCompare(String(a.date || "").slice(0, 10)))
+  const buildCombinedAccountsCsv = (deploymentsToExport: CombinedDeployment[], sortBy: "date" | "code" = "date") => {
+    const sortedDeployments = [...deploymentsToExport].sort((a, b) => {
+      if (sortBy === "code") {
+        const codeCompare = String(a.code || "").localeCompare(String(b.code || ""), undefined, { numeric: true })
+        if (codeCompare !== 0) return codeCompare
+        return String(a.date || "").slice(0, 10).localeCompare(String(b.date || "").slice(0, 10))
+      }
+      return String(b.date || "").slice(0, 10).localeCompare(String(a.date || "").slice(0, 10))
+    })
     const headers = [
       "Date",
       "Entry Type",
@@ -758,7 +767,10 @@ export default function AccountsPage({
         downloadBlob(new Blob([csv], { type: "text/csv;charset=utf-8" }), filename)
       } else if (format === "xlsx") {
         const csv = buildAccountActivityReferenceCsv(liveCodes)
-        const workbookBytes = await buildXlsxArrayBufferFromCsv(csv, "Activity Reference")
+        const workbookBytes = await buildXlsxArrayBufferFromCsv(csv, "Activity Reference", {
+          title: tenantSettings.estateName ? `${tenantSettings.estateName} — Activity Reference` : "Activity Reference",
+          subtitle,
+        })
         downloadBlob(new Blob([workbookBytes], { type: XLSX_MIME_TYPE }), filename)
       } else {
         const pdfBytes = buildAccountActivityReferencePdf(liveCodes, subtitle)
@@ -820,7 +832,10 @@ export default function AccountsPage({
       const deploymentsToExport = await getFilteredDeploymentsForExport()
       if (!deploymentsToExport) return
       const csvBody = buildCombinedAccountsCsv(deploymentsToExport)
-      const workbookBytes = await buildXlsxArrayBufferFromCsv(csvBody, "Accounts Export")
+      const workbookBytes = await buildXlsxArrayBufferFromCsv(csvBody, "Accounts Export", {
+        title: tenantSettings.estateName ? `${tenantSettings.estateName} — Accounts Export` : "Accounts Export",
+        subtitle: `${resolvedExportStartDate} to ${resolvedExportEndDate}`,
+      })
       const blob = new Blob([workbookBytes], { type: XLSX_MIME_TYPE })
       downloadBlob(blob, buildAccountsXlsxFilename(resolvedExportStartDate, resolvedExportEndDate))
       toast.success(`Accounts XLSX exported (${deploymentsToExport.length} entries)`)
@@ -836,6 +851,41 @@ export default function AccountsPage({
       toast.error(error?.message || "Failed to export XLSX file")
       posthog.capture("accounts_export_failed", {
         format: "xlsx",
+        reason: error?.message || "unknown",
+      })
+    }
+  }
+
+  const exportCombinedByCode = async () => {
+    posthog.capture("accounts_export_requested", {
+      format: "by_code_xlsx",
+      date_range_start: resolvedExportStartDate || null,
+      date_range_end: resolvedExportEndDate || null,
+    })
+
+    try {
+      const deploymentsToExport = await getFilteredDeploymentsForExport()
+      if (!deploymentsToExport) return
+      const csvBody = buildCombinedAccountsCsv(deploymentsToExport, "code")
+      const workbookBytes = await buildXlsxArrayBufferFromCsv(csvBody, "Accounts by Code", {
+        title: tenantSettings.estateName ? `${tenantSettings.estateName} — Accounts Export (by Code)` : "Accounts Export (by Code)",
+        subtitle: `${resolvedExportStartDate} to ${resolvedExportEndDate} · sorted by activity code`,
+      })
+      const blob = new Blob([workbookBytes], { type: XLSX_MIME_TYPE })
+      downloadBlob(blob, buildAccountsXlsxFilename(resolvedExportStartDate, resolvedExportEndDate).replace(/\.xlsx$/, "_by_code.xlsx"))
+      toast.success(`Accounts XLSX exported by code (${deploymentsToExport.length} entries)`)
+
+      posthog.capture("accounts_export_downloaded", {
+        format: "by_code_xlsx",
+        rows_exported: deploymentsToExport.length,
+        date_range_start: resolvedExportStartDate || null,
+        date_range_end: resolvedExportEndDate || null,
+      })
+    } catch (error: any) {
+      console.error("Error exporting accounts by code:", error)
+      toast.error(error?.message || "Failed to export by code")
+      posthog.capture("accounts_export_failed", {
+        format: "by_code_xlsx",
         reason: error?.message || "unknown",
       })
     }
@@ -864,8 +914,7 @@ export default function AccountsPage({
       })
 
       const headers = ["Code", "Reference", "Total Expenditure (₹)"]
-      let csvContent = escapeCsvField(`Expenditure Summary by Code — ${resolvedExportStartDate} to ${resolvedExportEndDate}`) + ",,\n"
-      csvContent += headers.map(escapeCsvField).join(",") + "\n"
+      let csvContent = headers.map(escapeCsvField).join(",") + "\n"
       let grandTotal = 0
       Object.entries(totalsByCode)
         .sort(([codeA], [codeB]) => codeA.localeCompare(codeB, undefined, { numeric: true }))
@@ -875,7 +924,10 @@ export default function AccountsPage({
         })
       csvContent += ["", escapeCsvField("GRAND TOTAL"), escapeCsvField(grandTotal.toFixed(2))].join(",")
 
-      const workbookBytes = await buildXlsxArrayBufferFromCsv(csvContent, "Summary by Code")
+      const workbookBytes = await buildXlsxArrayBufferFromCsv(csvContent, "Summary by Code", {
+        title: tenantSettings.estateName ? `${tenantSettings.estateName} — Expenditure Summary by Code` : "Expenditure Summary by Code",
+        subtitle: `${resolvedExportStartDate} to ${resolvedExportEndDate}`,
+      })
       const blob = new Blob([workbookBytes], { type: XLSX_MIME_TYPE })
       downloadBlob(blob, `expenditure-summary-${resolvedExportStartDate}-to-${resolvedExportEndDate}.xlsx`)
       toast.success(`Summary exported (${Object.keys(totalsByCode).length} codes)`)
@@ -1287,6 +1339,9 @@ export default function AccountsPage({
                   </Button>
                   <Button onClick={exportCombinedXlsx} variant="outline" size="sm" disabled={!canExport} className="flex-1">
                     <FileSpreadsheet className="mr-2 h-4 w-4" /> XLSX
+                  </Button>
+                  <Button onClick={exportCombinedByCode} variant="outline" size="sm" disabled={!canExport} className="flex-1">
+                    <FileSpreadsheet className="mr-2 h-4 w-4" /> By Code
                   </Button>
                 </div>
                 {exportDisabledReason && (
@@ -1979,6 +2034,9 @@ export default function AccountsPage({
               <Button onClick={exportCombinedXlsx} variant="outline" size="sm" disabled={!canExport} className="w-full sm:w-auto bg-transparent">
                 <FileSpreadsheet className="mr-2 h-4 w-4" /> Export XLSX
               </Button>
+              <Button onClick={exportCombinedByCode} variant="outline" size="sm" disabled={!canExport} className="w-full sm:w-auto bg-transparent">
+                <FileSpreadsheet className="mr-2 h-4 w-4" /> Export by Code
+              </Button>
               <Button onClick={() => void exportInterchange("qif")} variant="outline" size="sm" disabled={!canExport} className="w-full sm:w-auto bg-transparent">
                 <Coins className="mr-2 h-4 w-4" /> Export QIF
               </Button>
@@ -1986,7 +2044,7 @@ export default function AccountsPage({
                 <FileSpreadsheet className="mr-2 h-4 w-4" /> Export Summary
               </Button>
               <p className={cn("w-full text-xs", exportDateRangeError ? "text-rose-600" : "text-muted-foreground")}>
-                {exportDisabledReason || "CSV, XLSX, QIF, and Summary exports use the range shown above."}
+                {exportDisabledReason || "CSV, XLSX, QIF, by-code, and Summary exports use the range shown above."}
               </p>
             </div>
           </CardContent>

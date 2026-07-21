@@ -1,15 +1,18 @@
 "use client"
 
 import { useEffect, useState, useCallback } from "react"
-import { Download, Loader2 } from "lucide-react"
+import { Download, FileSpreadsheet, Loader2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { formatCurrency } from "@/lib/format"
 import { getCurrentFiscalYear, getAvailableFiscalYears, type FiscalYear } from "@/lib/fiscal-year-utils"
+import { useTenantSettings } from "@/hooks/use-tenant-settings"
+import { buildXlsxArrayBufferFromCsv, XLSX_MIME_TYPE } from "@/lib/spreadsheet"
 
 type SummaryRow = { code: string; reference: string; total: number }
 
 export default function AccountsSummaryCard() {
+  const { settings: tenantSettings } = useTenantSettings()
   const [selectedFY, setSelectedFY] = useState<FiscalYear>(getCurrentFiscalYear)
   const [rows, setRows] = useState<SummaryRow[]>([])
   const [grandTotal, setGrandTotal] = useState(0)
@@ -38,16 +41,33 @@ export default function AccountsSummaryCard() {
 
   useEffect(() => { fetchSummary(selectedFY) }, [selectedFY, fetchSummary])
 
-  const handleExportCsv = () => {
+  const buildSummaryExportCsv = () => {
     const header = "Code,Reference,Total Expenditure (₹)"
     const dataRows = rows.map((r) => `${r.code},"${r.reference.replace(/"/g, '""')}",${r.total.toFixed(2)}`)
-    const totalsRow = `,,${grandTotal.toFixed(2)}`
-    const csv = [header, ...dataRows, totalsRow].join("\n")
-    const blob = new Blob([csv], { type: "text/csv" })
+    const totalsRow = `,GRAND TOTAL,${grandTotal.toFixed(2)}`
+    return [header, ...dataRows, totalsRow].join("\n")
+  }
+
+  const handleExportCsv = () => {
+    const blob = new Blob([buildSummaryExportCsv()], { type: "text/csv" })
     const url = URL.createObjectURL(blob)
     const a = document.createElement("a")
     a.href = url
     a.download = `accounts_summary_${selectedFY.startDate}_to_${selectedFY.endDate}.csv`
+    a.click()
+    URL.revokeObjectURL(url)
+  }
+
+  const handleExportXlsx = async () => {
+    const workbookBytes = await buildXlsxArrayBufferFromCsv(buildSummaryExportCsv(), "Expenditure Summary", {
+      title: tenantSettings.estateName ? `${tenantSettings.estateName} — Expenditure Summary` : "Expenditure Summary",
+      subtitle: `${selectedFY.startDate} to ${selectedFY.endDate}`,
+    })
+    const blob = new Blob([workbookBytes], { type: XLSX_MIME_TYPE })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement("a")
+    a.href = url
+    a.download = `accounts_summary_${selectedFY.startDate}_to_${selectedFY.endDate}.xlsx`
     a.click()
     URL.revokeObjectURL(url)
   }
@@ -93,6 +113,16 @@ export default function AccountsSummaryCard() {
           >
             <Download className="mr-1.5 h-3.5 w-3.5" />
             CSV
+          </Button>
+          <Button
+            size="sm"
+            variant="outline"
+            className="bg-white dark:bg-transparent"
+            onClick={handleExportXlsx}
+            disabled={loading || rows.length === 0}
+          >
+            <FileSpreadsheet className="mr-1.5 h-3.5 w-3.5" />
+            XLSX
           </Button>
         </div>
       </div>

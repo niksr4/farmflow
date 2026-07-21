@@ -13,7 +13,9 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { useAuth } from "@/hooks/use-auth"
 import { useTenantSettings } from "@/hooks/use-tenant-settings"
 import { useToast } from "@/hooks/use-toast"
-import { getCurrentFiscalYear, getFiscalYearDateRange } from "@/lib/fiscal-year-utils"
+import { getFiscalYearDateRange } from "@/lib/fiscal-year-utils"
+import { useFiscalYearSelection } from "@/hooks/use-fiscal-year-selection"
+import { FiscalYearSelect } from "@/components/ui/fiscal-year-select"
 import { useRouter, useSearchParams } from "next/navigation"
 import WorkspacePageShell from "@/components/workspace-page-shell"
 
@@ -503,7 +505,7 @@ export default function SeasonDashboard() {
   const searchParams = useSearchParams()
   const focusedAlertId = (searchParams.get(DASHBOARD_SEASON_ALERT_ID_PARAM) || "").trim()
   const focusedMetric = (searchParams.get(DASHBOARD_SEASON_METRIC_PARAM) || "").trim()
-  const selectedFiscalYear = useMemo(() => getCurrentFiscalYear(), [])
+  const { selectedFiscalYear, setSelectedFiscalYear, availableFiscalYears } = useFiscalYearSelection()
   const [summary, setSummary] = useState<SeasonSummary | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -1037,26 +1039,36 @@ export default function SeasonDashboard() {
         </div>
       }
       actions={
-        isAdmin ? (
+        <div className="flex flex-col gap-3 sm:items-end">
           <div className="rounded-2xl border border-sky-100/90 bg-white/85 p-3 shadow-sm">
-            <Label className="text-[11px] uppercase tracking-[0.18em] text-slate-500">Bag Weight (KG)</Label>
-            <div className="mt-2 flex items-end gap-2">
-              <Input
-                value={bagWeightInput}
-                onChange={(event) => setBagWeightInput(event.target.value)}
-                type="number" inputMode="decimal"
-                min="40"
-                max="70"
-                step="0.5"
-                className="w-full min-w-[140px] bg-white"
-              />
-              <Button size="sm" onClick={handleSaveBagWeight} disabled={isSaving}>
-                {isSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
-                <span className="ml-2">Save</span>
-              </Button>
-            </div>
+            <FiscalYearSelect
+              value={selectedFiscalYear}
+              options={availableFiscalYears}
+              onChange={setSelectedFiscalYear}
+              variant="full"
+            />
           </div>
-        ) : null
+          {isAdmin && (
+            <div className="rounded-2xl border border-sky-100/90 bg-white/85 p-3 shadow-sm">
+              <Label className="text-[11px] uppercase tracking-[0.18em] text-slate-500">Bag Weight (KG)</Label>
+              <div className="mt-2 flex items-end gap-2">
+                <Input
+                  value={bagWeightInput}
+                  onChange={(event) => setBagWeightInput(event.target.value)}
+                  type="number" inputMode="decimal"
+                  min="40"
+                  max="70"
+                  step="0.5"
+                  className="w-full min-w-[140px] bg-white"
+                />
+                <Button size="sm" onClick={handleSaveBagWeight} disabled={isSaving}>
+                  {isSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+                  <span className="ml-2">Save</span>
+                </Button>
+              </div>
+            </div>
+          )}
+        </div>
       }
     >
 

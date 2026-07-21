@@ -12,12 +12,14 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Alert, AlertDescription } from "@/components/ui/alert"
-import { CalendarIcon, Download, Loader2, Save, Leaf, Edit, Trash2 } from "lucide-react"
+import { CalendarIcon, Download, FileSpreadsheet, Loader2, Save, Leaf, Edit, Trash2 } from "lucide-react"
 import { format } from "date-fns"
 import { cn } from "@/lib/utils"
 import { formatDateOnly } from "@/lib/date-utils"
 import { formatNumber } from "@/lib/format"
 import { useAuth } from "@/hooks/use-auth"
+import { useTenantSettings } from "@/hooks/use-tenant-settings"
+import { buildXlsxArrayBufferFromCsv, XLSX_MIME_TYPE } from "@/lib/spreadsheet"
 import TaskGuideCard from "@/components/task-guide-card"
 
 interface LocationOption {
@@ -49,6 +51,7 @@ const UNASSIGNED_LABEL = "Unassigned (legacy)"
 
 export function PepperTab() {
   const { user } = useAuth()
+  const { settings: tenantSettings } = useTenantSettings()
 
   const [locations, setLocations] = useState<LocationOption[]>([])
   const [selectedLocationId, setSelectedLocationId] = useState(LOCATION_ALL)
@@ -233,9 +236,7 @@ export function PepperTab() {
     }
   }
 
-  const handleExportCSV = () => {
-    if (recentRecords.length === 0) return
-
+  const buildPepperExportCsv = () => {
     const toCsvCell = (value: unknown) => `"${String(value ?? "").replace(/"/g, '""')}"`
     const toCsvRow = (values: unknown[]) => values.map((value) => toCsvCell(value)).join(",")
     const toNumber = (value: unknown) => {
@@ -257,7 +258,7 @@ export function PepperTab() {
 
     const locationLabels = [...groups.keys()].sort((a, b) => a.localeCompare(b))
     const csvRows: string[] = [
-      toCsvRow(["Location", "Date", "KG Picked", "Green Pepper", "Green %", "Dry Pepper", "Dry %", "Notes"]),
+      toCsvRow(["Location", "Date", "KG Picked", "Green Pepper (kg)", "Green %", "Dry Pepper (kg)", "Dry %", "Notes"]),
     ]
     const grandTotals = {
       kgPicked: 0,
@@ -330,16 +331,36 @@ export function PepperTab() {
       ]),
     )
 
-    const csvContent = csvRows.join("\n")
+    return csvRows.join("\n")
+  }
 
+  const pepperExportFilenameBase = () =>
+    `pepper-${(selectedLocation?.name || "estate").toLowerCase().replace(" ", "-")}-${format(new Date(), "yyyy-MM-dd")}`
+
+  const handleExportCSV = () => {
+    if (recentRecords.length === 0) return
+    const csvContent = buildPepperExportCsv()
     const blob = new Blob([csvContent], { type: "text/csv" })
     const url = window.URL.createObjectURL(blob)
     const a = document.createElement("a")
     a.href = url
-    a.download = `pepper-${(selectedLocation?.name || "estate").toLowerCase().replace(" ", "-")}-${format(
-      new Date(),
-      "yyyy-MM-dd",
-    )}.csv`
+    a.download = `${pepperExportFilenameBase()}.csv`
+    a.click()
+    window.URL.revokeObjectURL(url)
+  }
+
+  const handleExportXlsx = async () => {
+    if (recentRecords.length === 0) return
+    const csvContent = buildPepperExportCsv()
+    const workbookBytes = await buildXlsxArrayBufferFromCsv(csvContent, "Pepper Records", {
+      title: tenantSettings.estateName ? `${tenantSettings.estateName} — Pepper Records` : "Pepper Records",
+      subtitle: selectedLocation?.name ? `Location: ${selectedLocation.name}` : undefined,
+    })
+    const blob = new Blob([workbookBytes], { type: XLSX_MIME_TYPE })
+    const url = window.URL.createObjectURL(blob)
+    const a = document.createElement("a")
+    a.href = url
+    a.download = `${pepperExportFilenameBase()}.xlsx`
     a.click()
     window.URL.revokeObjectURL(url)
   }
@@ -576,10 +597,16 @@ export function PepperTab() {
         <CardHeader>
           <div className="flex items-center justify-between">
             <CardTitle>Recent Records</CardTitle>
-            <Button variant="outline" size="sm" onClick={handleExportCSV} disabled={recentRecords.length === 0}>
-              <Download className="mr-2 h-4 w-4" />
-              Export CSV
-            </Button>
+            <div className="flex gap-2">
+              <Button variant="outline" size="sm" onClick={handleExportCSV} disabled={recentRecords.length === 0}>
+                <Download className="mr-2 h-4 w-4" />
+                CSV
+              </Button>
+              <Button variant="outline" size="sm" onClick={handleExportXlsx} disabled={recentRecords.length === 0}>
+                <FileSpreadsheet className="mr-2 h-4 w-4" />
+                XLSX
+              </Button>
+            </div>
           </div>
           <CardDescription>Click a row to edit that record</CardDescription>
         </CardHeader>

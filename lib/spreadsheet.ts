@@ -51,9 +51,12 @@ const parseCsv = (csv: string): string[][] => {
 // Coerce to number only when the text round-trips losslessly — "007" and
 // "0012" keep leading zeros (activity codes) by staying text.
 const NUMERIC_CELL = /^-?(0|[1-9]\d*)(\.\d+)?$/
+const TOTAL_LABEL = /total|grand total/i
 
+const TITLE_FILL = { type: "pattern", pattern: "solid", fgColor: { argb: "FF065F46" } } as const
 const EMERALD_HEADER_FILL = { type: "pattern", pattern: "solid", fgColor: { argb: "FF047857" } } as const
 const SECTION_FILL = { type: "pattern", pattern: "solid", fgColor: { argb: "FFD1FAE5" } } as const
+const SUBHEADER_FILL = { type: "pattern", pattern: "solid", fgColor: { argb: "FFECFDF5" } } as const
 const THIN_BORDER = {
   top: { style: "thin", color: { argb: "FFD6D3D1" } },
   left: { style: "thin", color: { argb: "FFD6D3D1" } },
@@ -61,69 +64,131 @@ const THIN_BORDER = {
   right: { style: "thin", color: { argb: "FFD6D3D1" } },
 } as const
 
+export type BuildXlsxOptions = {
+  /** Bold banner row spanning every column — typically the tenant's estate name + report name. */
+  title?: string
+  /** Smaller italic row directly under the title — e.g. the date range or a units note. */
+  subtitle?: string
+}
+
 /**
  * Build a styled .xlsx workbook from CSV text.
  * - Numeric-looking cells are written as real numbers so Excel SUM works
+ * - Optional title/subtitle banner rows, merged across every column
  * - Header row: bold white on emerald, centered, frozen
- * - Section title rows (single filled cell) and total rows are bolded
- * - Column widths sized to content, thin borders throughout
+ * - Section title rows (single filled cell) are bolded and merged across the full width
+ * - Sub-header rows (all-text rows immediately followed by numeric data, e.g. a repeated
+ *   column-heading row inside a matrix export) are bolded with a light fill
+ * - Total/aggregate rows (first filled cell contains "total") are bolded
+ * - Every cell — including blank ones — gets a thin border so the grid reads as a table;
+ *   fully empty rows are left as clean spacers with no border
+ * - All cells are centered; column widths size to content
  */
-export const buildXlsxArrayBufferFromCsv = async (csv: string, sheetName = "Sheet1"): Promise<ArrayBuffer> => {
+export const buildXlsxArrayBufferFromCsv = async (
+  csv: string,
+  sheetName = "Sheet1",
+  options: BuildXlsxOptions = {},
+): Promise<ArrayBuffer> => {
   const ExcelJS = (await import("exceljs")).default
   const workbook = new ExcelJS.Workbook()
-  const sheet = workbook.addWorksheet(sanitizeSheetName(sheetName), {
-    views: [{ state: "frozen", ySplit: 1 }],
-  })
 
   const rows = csv.trim() ? parseCsv(csv) : [[]]
-  const columnCount = rows.reduce((max, r) => Math.max(max, r.length), 1)
+  const columnCount = Math.max(rows.reduce((max, r) => Math.max(max, r.length), 1), 1)
   const columnWidths: number[] = Array.from({ length: columnCount }, () => 8)
 
-  rows.forEach((cells, rowIndex) => {
-    const excelRow = sheet.getRow(rowIndex + 1)
-    const filledCells = cells.filter((c) => c.trim() !== "")
-    const isHeaderRow = rowIndex === 0
-    const isSectionTitle = !isHeaderRow && filledCells.length === 1 && cells[0]?.trim() !== "" && !NUMERIC_CELL.test(cells[0].trim())
-    const isTotalRow = filledCells.some((c) => /total/i.test(c)) && filledCells.length <= 4
+  let bannerRows = 0
+  const sheet = workbook.addWorksheet(sanitizeSheetName(sheetName))
 
-    cells.forEach((raw, colIndex) => {
-      const value = raw.trim()
+  const writeBannerRow = (text: string, isTitle: boolean) => {
+    bannerRows += 1
+    const excelRow = sheet.getRow(bannerRows)
+    const cell = excelRow.getCell(1)
+    cell.value = text
+    cell.alignment = { horizontal: "center", vertical: "middle", wrapText: true }
+    cell.font = isTitle
+      ? { bold: true, size: 13, color: { argb: "FFFFFFFF" } }
+      : { italic: true, size: 10, color: { argb: "FF44403C" } }
+    if (isTitle) cell.fill = TITLE_FILL
+    if (columnCount > 1) sheet.mergeCells(bannerRows, 1, bannerRows, columnCount)
+    excelRow.height = isTitle ? 24 : 16
+    excelRow.commit()
+  }
+
+  if (options.title) writeBannerRow(options.title, true)
+  if (options.subtitle) writeBannerRow(options.subtitle, false)
+
+  rows.forEach((cells, rowIndex) => {
+    const trimmed = Array.from({ length: columnCount }, (_, i) => (cells[i] ?? "").trim())
+    const filledIndexes = trimmed.reduce<number[]>((acc, v, i) => {
+      if (v !== "") acc.push(i)
+      return acc
+    }, [])
+    const filledCount = filledIndexes.length
+
+    // A fully blank CSV line is a spacer — leave it borderless so sections breathe.
+    if (filledCount === 0) {
+      sheet.getRow(rowIndex + 1 + bannerRows).commit()
+      return
+    }
+
+    const firstFilled = trimmed[filledIndexes[0]]
+    const isHeaderRow = rowIndex === 0
+    const isSectionTitle = !isHeaderRow && filledCount === 1 && !NUMERIC_CELL.test(firstFilled)
+    const isTotalRow = !isHeaderRow && !isSectionTitle && TOTAL_LABEL.test(firstFilled)
+    const nextRow = rows[rowIndex + 1]
+    const isAllTextRow = filledCount > 1 && filledIndexes.every((i) => !NUMERIC_CELL.test(trimmed[i]))
+    const nextRowHasNumeric = !!nextRow && nextRow.some((c) => NUMERIC_CELL.test((c ?? "").trim()))
+    const isSubHeaderRow = !isHeaderRow && !isSectionTitle && !isTotalRow && isAllTextRow && nextRowHasNumeric
+
+    const excelRow = sheet.getRow(rowIndex + 1 + bannerRows)
+
+    trimmed.forEach((value, colIndex) => {
       const cell = excelRow.getCell(colIndex + 1)
       const isNumeric = NUMERIC_CELL.test(value)
 
       if (isNumeric) {
         cell.value = Number(value)
         if (value.includes(".")) cell.numFmt = "#,##0.00"
-        cell.alignment = { horizontal: "right", vertical: "middle" }
-      } else {
-        cell.value = raw
-        cell.alignment = { horizontal: isHeaderRow ? "center" : "left", vertical: "middle", wrapText: false }
+      } else if (value !== "") {
+        cell.value = value
       }
+      cell.alignment = { horizontal: "center", vertical: "middle", wrapText: false }
       cell.border = THIN_BORDER
 
       if (isHeaderRow) {
         cell.font = { bold: true, color: { argb: "FFFFFFFF" }, size: 11 }
         cell.fill = EMERALD_HEADER_FILL
-        cell.alignment = { horizontal: "center", vertical: "middle" }
       } else if (isSectionTitle) {
         cell.font = { bold: true, size: 11 }
-        if (value) cell.fill = SECTION_FILL
+        if (colIndex === 0) cell.fill = SECTION_FILL
+      } else if (isSubHeaderRow) {
+        cell.font = { bold: true, size: 10.5 }
+        cell.fill = SUBHEADER_FILL
       } else if (isTotalRow) {
         cell.font = { bold: true }
       }
 
-      const displayLength = value.length
-      if (displayLength > columnWidths[colIndex]) {
-        columnWidths[colIndex] = displayLength
+      // Section-title text is merged across the row, so its own length shouldn't force
+      // every column wide — only count it against its own column like everything else.
+      if (!isSectionTitle && value.length > columnWidths[colIndex]) {
+        columnWidths[colIndex] = value.length
       }
     })
+
+    if (isSectionTitle && columnCount > 1) {
+      sheet.mergeCells(excelRow.number, 1, excelRow.number, columnCount)
+    }
+
     excelRow.commit()
   })
 
   columnWidths.forEach((width, index) => {
     sheet.getColumn(index + 1).width = Math.min(Math.max(width + 3, 10), 52)
   })
-  sheet.getRow(1).height = 22
+
+  const headerRowNumber = 1 + bannerRows
+  sheet.getRow(headerRowNumber).height = 22
+  sheet.views = [{ state: "frozen", ySplit: headerRowNumber }]
 
   return workbook.xlsx.writeBuffer() as Promise<ArrayBuffer>
 }

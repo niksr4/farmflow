@@ -14,7 +14,7 @@ import { Textarea } from "@/components/ui/textarea"
 import { Calendar } from "@/components/ui/calendar"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { CalendarIcon, Loader2, Save, Trash2, Download, ChevronDown } from "lucide-react"
+import { CalendarIcon, Loader2, Save, Trash2, Download, FileSpreadsheet, ChevronDown } from "lucide-react"
 import { format } from "date-fns"
 import { cn } from "@/lib/utils"
 import { useToast } from "@/hooks/use-toast"
@@ -34,6 +34,7 @@ import { useMediaQuery } from "@/hooks/use-media-query"
 import { useFiscalYearSelection } from "@/hooks/use-fiscal-year-selection"
 import { FiscalYearSelect } from "@/components/ui/fiscal-year-select"
 import { trackClick, reportActionFailure, reportActionError } from "@/lib/track-action"
+import { buildXlsxArrayBufferFromCsv, XLSX_MIME_TYPE } from "@/lib/spreadsheet"
 
 interface ProcessingRecord {
   id?: number
@@ -731,40 +732,38 @@ export default function ProcessingTab({ showDataToolsControls = false }: Process
     await loadRecentRecords(recordsPage + 1, true)
   }
 
-  const handleExportCSV = async () => {
+  const buildProcessingExportCsv = async (): Promise<string | null> => {
     if (!selectedLocationId) {
       toast({
         title: "Estate not ready",
         description: "Add an estate location first (Settings → Locations).",
         variant: "destructive",
       })
-      return
+      return null
     }
-    setIsExporting(true)
-    try {
-      const response = await fetch(
-        `/api/processing-records?locationId=${selectedLocationId}&coffeeType=${encodeURIComponent(
-          coffeeType,
-        )}&all=true`,
-      )
-      const data = await response.json()
+    const response = await fetch(
+      `/api/processing-records?locationId=${selectedLocationId}&coffeeType=${encodeURIComponent(
+        coffeeType,
+      )}&all=true`,
+    )
+    const data = await response.json()
 
-      let records: ProcessingRecord[] = []
+    let records: ProcessingRecord[] = []
 
-      if (data.success && Array.isArray(data.records)) {
-        records = data.records
-      } else {
-        throw new Error("No records to export")
-      }
+    if (data.success && Array.isArray(data.records)) {
+      records = data.records
+    } else {
+      throw new Error("No records to export")
+    }
 
-      if (records.length === 0) {
-        toast({
-          title: "No Data",
-          description: "No records available to export",
-          variant: "destructive",
-        })
-        return
-      }
+    if (records.length === 0) {
+      toast({
+        title: "No Data",
+        description: "No records available to export",
+        variant: "destructive",
+      })
+      return null
+    }
 
       records.sort((a, b) => new Date(a.process_date).getTime() - new Date(b.process_date).getTime())
 
@@ -869,24 +868,29 @@ export default function ProcessingTab({ showDataToolsControls = false }: Process
         `"${(rec.notes || "").replace(/"/g, '""')}"`,
       ])
 
-      const csvContent = [headers.join(","), ...rows.map((row: any[]) => row.join(","))].join("\n")
+      return [headers.join(","), ...rows.map((row: any[]) => row.join(","))].join("\n")
+  }
 
-      const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" })
-      const link = document.createElement("a")
-      const url = URL.createObjectURL(blob)
-      link.setAttribute("href", url)
-      link.setAttribute(
-        "download",
-        `${(selectedLocation?.name || "estate").replace(/\s+/g, "-")}-${coffeeType.toLowerCase()}-pulping-records-${format(
-          new Date(),
-          "yyyy-MM-dd",
-        )}.csv`,
-      )
-      link.style.visibility = "hidden"
-      document.body.appendChild(link)
-      link.click()
-      document.body.removeChild(link)
+  const processingExportFilenameBase = () =>
+    `${(selectedLocation?.name || "estate").replace(/\s+/g, "-")}-${coffeeType.toLowerCase()}-pulping-records-${format(new Date(), "yyyy-MM-dd")}`
 
+  const downloadProcessingExport = (blob: Blob, extension: string) => {
+    const link = document.createElement("a")
+    const url = URL.createObjectURL(blob)
+    link.setAttribute("href", url)
+    link.setAttribute("download", `${processingExportFilenameBase()}.${extension}`)
+    link.style.visibility = "hidden"
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+  }
+
+  const handleExportCSV = async () => {
+    setIsExporting(true)
+    try {
+      const csvContent = await buildProcessingExportCsv()
+      if (csvContent === null) return
+      downloadProcessingExport(new Blob([csvContent], { type: "text/csv;charset=utf-8;" }), "csv")
       toast({
         title: "Success",
         description: `Coffee pulping records exported to CSV for ${selectedLocation?.name || "location"}`,
@@ -896,6 +900,32 @@ export default function ProcessingTab({ showDataToolsControls = false }: Process
       toast({
         title: "Error",
         description: error.message || "Failed to export CSV",
+        variant: "destructive",
+      })
+    } finally {
+      setIsExporting(false)
+    }
+  }
+
+  const handleExportXlsx = async () => {
+    setIsExporting(true)
+    try {
+      const csvContent = await buildProcessingExportCsv()
+      if (csvContent === null) return
+      const workbookBytes = await buildXlsxArrayBufferFromCsv(csvContent, "Processing Records", {
+        title: settings.estateName ? `${settings.estateName} — Processing Records` : "Processing Records",
+        subtitle: `${selectedLocation?.name || "Estate"} · ${coffeeType}`,
+      })
+      downloadProcessingExport(new Blob([workbookBytes], { type: XLSX_MIME_TYPE }), "xlsx")
+      toast({
+        title: "Success",
+        description: `Coffee pulping records exported to XLSX for ${selectedLocation?.name || "location"}`,
+      })
+    } catch (error: any) {
+      console.error("Export error:", error)
+      toast({
+        title: "Error",
+        description: error.message || "Failed to export XLSX",
         variant: "destructive",
       })
     } finally {
@@ -1108,19 +1138,25 @@ export default function ProcessingTab({ showDataToolsControls = false }: Process
               <CardDescription>Enter one day of intake and output for one location and one coffee type.</CardDescription>
             </div>
             {showDataToolsControls && (
-              <Button onClick={handleExportCSV} disabled={isExporting} variant="outline">
-                {isExporting ? (
-                  <>
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    Exporting...
-                  </>
-                ) : (
-                  <>
-                    <Download className="mr-2 h-4 w-4" />
-                    Export to CSV
-                  </>
-                )}
-              </Button>
+              <div className="flex gap-2">
+                <Button onClick={handleExportCSV} disabled={isExporting} variant="outline">
+                  {isExporting ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      Exporting...
+                    </>
+                  ) : (
+                    <>
+                      <Download className="mr-2 h-4 w-4" />
+                      CSV
+                    </>
+                  )}
+                </Button>
+                <Button onClick={handleExportXlsx} disabled={isExporting} variant="outline">
+                  <FileSpreadsheet className="mr-2 h-4 w-4" />
+                  XLSX
+                </Button>
+              </div>
             )}
           </div>
         </CardHeader>

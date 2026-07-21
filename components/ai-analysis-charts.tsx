@@ -14,7 +14,9 @@ import {
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { ChartContainer, ChartTooltip, ChartTooltipContent, type ChartConfig } from "@/components/ui/chart"
 import type { InventoryItem, Transaction } from "@/lib/inventory-types"
-import { getFiscalYearDateRange, getCurrentFiscalYear } from "@/lib/fiscal-year-utils"
+import { getFiscalYearDateRange } from "@/lib/fiscal-year-utils"
+import { useFiscalYearSelection } from "@/hooks/use-fiscal-year-selection"
+import { FiscalYearSelect } from "@/components/ui/fiscal-year-select"
 import { useAuth } from "@/hooks/use-auth"
 import { formatDateForDisplay, formatDateOnly, toLocalIso } from "@/lib/date-utils"
 
@@ -73,6 +75,7 @@ const parseTransactionDate = (dateString: string): Date | null => {
 
 export default function AiAnalysisCharts({ inventory, transactions }: AiAnalysisChartsProps) {
   const { user } = useAuth()
+  const { selectedFiscalYear, setSelectedFiscalYear, availableFiscalYears } = useFiscalYearSelection()
   const [laborData, setLaborData] = React.useState<LaborRecord[]>([])
   const [processingData, setProcessingData] = React.useState<Record<string, ProcessingRecord[]>>({})
   const [fallbackTransactions, setFallbackTransactions] = React.useState<ChartTransaction[]>([])
@@ -81,8 +84,7 @@ export default function AiAnalysisCharts({ inventory, transactions }: AiAnalysis
   React.useEffect(() => {
     const fetchData = async () => {
       if (!user?.tenantId) return
-      const fiscalYear = getCurrentFiscalYear()
-      const { startDate, endDate } = getFiscalYearDateRange(fiscalYear)
+      const { startDate, endDate } = getFiscalYearDateRange(selectedFiscalYear)
 
       try {
         const response = await fetch(
@@ -104,7 +106,7 @@ export default function AiAnalysisCharts({ inventory, transactions }: AiAnalysis
     }
 
     fetchData()
-  }, [user?.tenantId])
+  }, [user?.tenantId, selectedFiscalYear])
 
   React.useEffect(() => {
     const fetchFallbackTransactions = async () => {
@@ -394,28 +396,43 @@ export default function AiAnalysisCharts({ inventory, transactions }: AiAnalysis
     },
   }
 
+  const seasonSelector = (
+    <div className="mb-4 flex justify-end">
+      <FiscalYearSelect
+        value={selectedFiscalYear}
+        options={availableFiscalYears}
+        onChange={setSelectedFiscalYear}
+      />
+    </div>
+  )
+
   if (transactions.length === 0 && inventory.length === 0) {
     return (
-      <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-6 mb-6">
-        {[1, 2, 3].map((i) => (
-          <Card key={i}>
-            <CardHeader>
-              <CardTitle>
-                {i === 1 ? "Monthly Consumption" : i === 2 ? "Restocking Cost Analysis" : "Inventory Value Over Time"}
-              </CardTitle>
-              <CardDescription>No data available to display charts.</CardDescription>
-            </CardHeader>
-            <CardContent className="flex items-center justify-center min-h-[250px]">
-              <p className="text-sm text-muted-foreground">Please add some transactions.</p>
-            </CardContent>
-          </Card>
-        ))}
+      <div className="mb-6">
+        {seasonSelector}
+        <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-6">
+          {[1, 2, 3].map((i) => (
+            <Card key={i}>
+              <CardHeader>
+                <CardTitle>
+                  {i === 1 ? "Monthly Consumption" : i === 2 ? "Restocking Cost Analysis" : "Inventory Value Over Time"}
+                </CardTitle>
+                <CardDescription>No data available to display charts.</CardDescription>
+              </CardHeader>
+              <CardContent className="flex items-center justify-center min-h-[250px]">
+                <p className="text-sm text-muted-foreground">Please add some transactions.</p>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
       </div>
     )
   }
 
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-6 mb-6">
+    <div className="mb-6">
+      {seasonSelector}
+      <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-6">
       {/* Labour Cost Chart */}
       <Card className="xl:col-span-1">
         <CardHeader>
@@ -561,6 +578,7 @@ export default function AiAnalysisCharts({ inventory, transactions }: AiAnalysis
           )}
         </CardContent>
       </Card>
+      </div>
     </div>
   )
 }

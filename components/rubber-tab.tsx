@@ -12,12 +12,14 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Alert, AlertDescription } from "@/components/ui/alert"
-import { CalendarIcon, Download, Loader2, Save, Droplets, Edit, Trash2 } from "lucide-react"
+import { CalendarIcon, Download, FileSpreadsheet, Loader2, Save, Droplets, Edit, Trash2 } from "lucide-react"
 import { format } from "date-fns"
 import { cn } from "@/lib/utils"
 import { formatDateOnly } from "@/lib/date-utils"
 import { formatNumber } from "@/lib/format"
 import { useAuth } from "@/hooks/use-auth"
+import { useTenantSettings } from "@/hooks/use-tenant-settings"
+import { buildXlsxArrayBufferFromCsv, XLSX_MIME_TYPE } from "@/lib/spreadsheet"
 import TaskGuideCard from "@/components/task-guide-card"
 
 interface LocationOption {
@@ -63,6 +65,7 @@ function getGradeLabel(value: string) {
 
 export function RubberTab() {
   const { user } = useAuth()
+  const { settings: tenantSettings } = useTenantSettings()
 
   const [locations, setLocations] = useState<LocationOption[]>([])
   const [selectedLocationId, setSelectedLocationId] = useState(LOCATION_ALL)
@@ -271,8 +274,7 @@ export function RubberTab() {
     }
   }
 
-  const handleExportCSV = () => {
-    if (!recentRecords.length) return
+  const buildRubberExportCsv = () => {
     const toCsvCell = (v: unknown) => `"${String(v ?? "").replace(/"/g, '""')}"`
     const toCsvRow = (values: unknown[]) => values.map(toCsvCell).join(",")
 
@@ -339,11 +341,34 @@ export function RubberTab() {
       "", "", "",
     ]))
 
-    const blob = new Blob([rows.join("\n")], { type: "text/csv" })
+    return rows.join("\n")
+  }
+
+  const rubberExportFilenameBase = () =>
+    `rubber-${(selectedLocation?.name || "estate").toLowerCase().replace(/\s+/g, "-")}-${format(new Date(), "yyyy-MM-dd")}`
+
+  const handleExportCSV = () => {
+    if (!recentRecords.length) return
+    const blob = new Blob([buildRubberExportCsv()], { type: "text/csv" })
     const url = window.URL.createObjectURL(blob)
     const a = document.createElement("a")
     a.href = url
-    a.download = `rubber-${(selectedLocation?.name || "estate").toLowerCase().replace(/\s+/g, "-")}-${format(new Date(), "yyyy-MM-dd")}.csv`
+    a.download = `${rubberExportFilenameBase()}.csv`
+    a.click()
+    window.URL.revokeObjectURL(url)
+  }
+
+  const handleExportXlsx = async () => {
+    if (!recentRecords.length) return
+    const workbookBytes = await buildXlsxArrayBufferFromCsv(buildRubberExportCsv(), "Rubber Records", {
+      title: tenantSettings.estateName ? `${tenantSettings.estateName} — Rubber Records` : "Rubber Records",
+      subtitle: selectedLocation?.name ? `Location: ${selectedLocation.name}` : undefined,
+    })
+    const blob = new Blob([workbookBytes], { type: XLSX_MIME_TYPE })
+    const url = window.URL.createObjectURL(blob)
+    const a = document.createElement("a")
+    a.href = url
+    a.download = `${rubberExportFilenameBase()}.xlsx`
     a.click()
     window.URL.revokeObjectURL(url)
   }
@@ -586,10 +611,16 @@ export function RubberTab() {
         <CardHeader>
           <div className="flex items-center justify-between">
             <CardTitle>Recent Records</CardTitle>
-            <Button variant="outline" size="sm" onClick={handleExportCSV} disabled={recentRecords.length === 0}>
-              <Download className="mr-2 h-4 w-4" />
-              Export CSV
-            </Button>
+            <div className="flex gap-2">
+              <Button variant="outline" size="sm" onClick={handleExportCSV} disabled={recentRecords.length === 0}>
+                <Download className="mr-2 h-4 w-4" />
+                CSV
+              </Button>
+              <Button variant="outline" size="sm" onClick={handleExportXlsx} disabled={recentRecords.length === 0}>
+                <FileSpreadsheet className="mr-2 h-4 w-4" />
+                XLSX
+              </Button>
+            </div>
           </div>
           <CardDescription>Click a row to edit that record</CardDescription>
         </CardHeader>

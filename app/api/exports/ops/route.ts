@@ -3,7 +3,7 @@ import { sql } from "@/lib/server/db"
 import { getCurrentFiscalYear } from "@/lib/fiscal-year-utils"
 import { isModuleAccessError, requireAnyModuleAccess } from "@/lib/server/module-access"
 import { normalizeTenantContext, runTenantQuery } from "@/lib/server/tenant-db"
-import type { ExportDatasetId } from "@/lib/data-tools"
+import { EXPORT_DATASET_MAP, type ExportDatasetId } from "@/lib/data-tools"
 import { buildSalesCsv, type SalesExportRecord } from "@/lib/sales-export"
 import { buildXlsxArrayBufferFromCsv, XLSX_MIME_TYPE } from "@/lib/spreadsheet"
 import { computeNetPnl } from "@/lib/server/pnl"
@@ -60,7 +60,7 @@ const buildPepperByLocationCsv = (rows: Array<Record<string, unknown>>) => {
   })
 
   const locationLabels = [...grouped.keys()].sort((a, b) => a.localeCompare(b))
-  const lines = [toCsvLine(["Location", "Date", "KG Picked", "Green Pepper", "Green %", "Dry Pepper", "Dry %", "Notes"])]
+  const lines = [toCsvLine(["Location", "Date", "KG Picked", "Green Pepper (kg)", "Green %", "Dry Pepper (kg)", "Dry %", "Notes"])]
   const overallTotals = {
     kgPicked: 0,
     greenPepper: 0,
@@ -222,6 +222,15 @@ const parseTenantId = (input: string | null, sessionTenantId: string, role: stri
 }
 
 const datasetUsesDateRange = (dataset: ExportDatasetId) => dataset !== "inventory"
+
+const loadEstateName = async (tenantId: string, tenantContext: ReturnType<typeof normalizeTenantContext>) => {
+  const rows = await runTenantQuery(
+    sql,
+    tenantContext,
+    sql`SELECT name FROM tenants WHERE id = ${tenantId} LIMIT 1`,
+  )
+  return String((rows as any)?.[0]?.name || "").trim()
+}
 
 const tableHasColumn = async (
   tenantContext: ReturnType<typeof normalizeTenantContext>,
@@ -865,7 +874,12 @@ export async function GET(request: NextRequest) {
     }
 
     if (format === "xlsx") {
-      const workbookBytes = await buildXlsxArrayBufferFromCsv(csv, dataset)
+      const estateName = await loadEstateName(tenantId, tenantContext)
+      const datasetLabel = EXPORT_DATASET_MAP[dataset]?.label || dataset
+      const title = estateName ? `${estateName} — ${datasetLabel}` : datasetLabel
+      const rangeNote = datasetUsesDateRange(dataset) ? `${startDate} to ${endDate}` : "Current snapshot"
+      const subtitle = dataset === "rainfall" ? `${rangeNote} · Values shown as inches.points (2.50 = 2in 50pts)` : rangeNote
+      const workbookBytes = await buildXlsxArrayBufferFromCsv(csv, dataset, { title, subtitle })
       return new NextResponse(workbookBytes, {
         status: 200,
         headers: {
