@@ -28,6 +28,8 @@ import { toast } from "sonner"
 import { trackClick, reportActionFailure, reportActionError } from "@/lib/track-action"
 import { deleteWithUndo } from "@/lib/undo-delete"
 import { useMediaQuery } from "@/hooks/use-media-query"
+import { resolveActivityFromQuery } from "@/lib/activity-code-match"
+import ActivitySuggestList, { filterActivitySuggestions } from "@/components/activity-suggest-list"
 
 interface ActivityCode {
   code: string
@@ -83,6 +85,12 @@ export default function OtherExpensesTab({
   const [savedConfirm, setSavedConfirm] = useState<{ reference: string; total: number } | null>(null)
   const [activities, setActivities] = useState<ActivityCode[]>([])
   const [showAllCodes, setShowAllCodes] = useState(false)
+  // Activity picker: null = no dropdown open, string = active search query.
+  // codeQuery drives the "Type of cost" field, referenceQuery the "Cost name"
+  // field — both search the same activities list by code or reference, so
+  // either field can be typed into and resolves the other.
+  const [codeQuery, setCodeQuery] = useState<string | null>(null)
+  const [referenceQuery, setReferenceQuery] = useState<string | null>(null)
   const [inventoryItems, setInventoryItems] = useState<InventoryItem[]>([])
   const [supportsMultiInventoryItems, setSupportsMultiInventoryItems] = useState(false)
   const [expandedRows, setExpandedRows] = useState<Set<number>>(new Set())
@@ -423,70 +431,49 @@ export default function OtherExpensesTab({
                   <Label htmlFor="expense-code" className="text-base">
                     Type of cost
                   </Label>
-                  {isMobile && activities.length > 0 ? (
-                    <>
-                      <select
-                        value={formData.code}
-                        onChange={(e) => handleCodeChange(e.target.value)}
-                        required
-                        className="w-full h-12 rounded-xl border border-input bg-background px-3 text-base font-medium focus:outline-none focus:ring-2 focus:ring-emerald-500"
-                      >
-                        <option value="">Choose a cost type…</option>
-                        {usedActivities.length > 0 && (
-                          <optgroup label="Used codes">
-                            {usedActivities.map((a) => (
-                              <option key={a.code} value={a.code}>{a.code} — {a.reference}</option>
-                            ))}
-                          </optgroup>
-                        )}
-                        {showAllCodes && unusedActivities.length > 0 && (
-                          <optgroup label="Unused codes">
-                            {unusedActivities.map((a) => (
-                              <option key={a.code} value={a.code}>{a.code} — {a.reference}</option>
-                            ))}
-                          </optgroup>
-                        )}
-                      </select>
-                      {unusedActivities.length > 0 && (
-                        <button
-                          type="button"
-                          onClick={() => setShowAllCodes((v) => !v)}
-                          className="text-xs text-emerald-700 underline underline-offset-2 hover:text-emerald-800"
-                        >
-                          {showAllCodes ? "Show fewer codes" : `Show ${unusedActivities.length} unused codes`}
-                        </button>
-                      )}
-                    </>
-                  ) : (
-                    <>
-                      <Input
-                        id="expense-code"
-                        value={formData.code}
-                        onChange={(e) => handleCodeChange(e.target.value)}
-                        placeholder="e.g. Fertiliser, Fuel"
-                        required
-                        list="expense-activity-codes"
-                        className="h-11"
-                      />
-                      <div className="flex items-center justify-between">
-                        <p className="text-xs text-muted-foreground">Your most-used cost types appear first. Type to search.</p>
-                        {unusedActivities.length > 0 && (
-                          <button
-                            type="button"
-                            onClick={() => setShowAllCodes((v) => !v)}
-                            className="text-xs text-emerald-700 underline underline-offset-2 hover:text-emerald-800"
-                          >
-                            {showAllCodes ? "Fewer" : `+${unusedActivities.length} unused`}
-                          </button>
-                        )}
-                      </div>
-                      <datalist id="expense-activity-codes">
-                        {visibleActivities.map((a) => (
-                          <option key={a.code} value={a.code}>{a.reference}</option>
-                        ))}
-                      </datalist>
-                    </>
+                  <Input
+                    id="expense-code"
+                    value={codeQuery !== null ? codeQuery : formData.code ? `${formData.code} — ${formData.reference}` : ""}
+                    onChange={(e) => setCodeQuery(e.target.value)}
+                    onFocus={() => setCodeQuery("")}
+                    onBlur={() => {
+                      // Commit a typed-but-not-tapped code before clearing the search text,
+                      // so navigating away doesn't silently discard what was typed. Only
+                      // commits when the query resolves to a real activity; otherwise the
+                      // free-typed code in formData.code (set on every change below) stands,
+                      // since expenses allow ad-hoc codes not yet in the saved list.
+                      const query = (codeQuery ?? "").trim()
+                      setTimeout(() => {
+                        const resolved = resolveActivityFromQuery(query, activities)
+                        if (resolved) handleCodeChange(resolved.code)
+                        setCodeQuery(null)
+                      }, 150)
+                    }}
+                    placeholder="e.g. Fertiliser, Fuel"
+                    required
+                    className={cn("h-11", isMobile && "h-12 rounded-xl text-base")}
+                  />
+                  {codeQuery !== null && (
+                    <ActivitySuggestList
+                      options={filterActivitySuggestions(codeQuery, visibleActivities, sortedActivities)}
+                      onSelect={(a) => {
+                        handleCodeChange(a.code)
+                        setCodeQuery(null)
+                      }}
+                    />
                   )}
+                  <div className="flex items-center justify-between">
+                    <p className="text-xs text-muted-foreground">Your most-used cost types appear first. Type a code or category name.</p>
+                    {unusedActivities.length > 0 && (
+                      <button
+                        type="button"
+                        onClick={() => setShowAllCodes((v) => !v)}
+                        className="text-xs text-emerald-700 underline underline-offset-2 hover:text-emerald-800"
+                      >
+                        {showAllCodes ? "Fewer" : `+${unusedActivities.length} unused`}
+                      </button>
+                    )}
+                  </div>
                 </div>
 
                 {selectedActivityHint === "labour" && (
@@ -505,12 +492,27 @@ export default function OtherExpensesTab({
                   </Label>
                   <Input
                     id="expense-reference"
-                    value={formData.reference}
-                    onChange={(e) => setFormData((prev) => ({ ...prev, reference: e.target.value }))}
-                    placeholder="Auto-filled from code"
+                    value={referenceQuery !== null ? referenceQuery : formData.reference}
+                    onChange={(e) => {
+                      const value = e.target.value
+                      setReferenceQuery(value)
+                      setFormData((prev) => ({ ...prev, reference: value }))
+                    }}
+                    onFocus={() => setReferenceQuery(formData.reference)}
+                    onBlur={() => setTimeout(() => setReferenceQuery(null), 150)}
+                    placeholder="Auto-filled from code, or type a category to search codes"
                     required
-                    className="h-11"
+                    className={cn("h-11", isMobile && "h-12 rounded-xl text-base")}
                   />
+                  {referenceQuery !== null && (
+                    <ActivitySuggestList
+                      options={filterActivitySuggestions(referenceQuery, visibleActivities, sortedActivities)}
+                      onSelect={(a) => {
+                        handleCodeChange(a.code)
+                        setReferenceQuery(null)
+                      }}
+                    />
+                  )}
                   <p className="text-xs text-muted-foreground">Use a plain category name the owner and accountant will both recognize.</p>
                 </div>
               </div>

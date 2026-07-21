@@ -8,6 +8,7 @@ import FilterBar from "@/components/filter-bar"
 import { useListControls } from "@/hooks/use-list-controls"
 import { useFormDraft } from "@/hooks/use-form-draft"
 import { resolveActivityFromQuery } from "@/lib/activity-code-match"
+import ActivitySuggestList, { filterActivitySuggestions } from "@/components/activity-suggest-list"
 import { useLaborData } from "@/hooks/use-labor-data"
 import { useTenantSettings } from "@/hooks/use-tenant-settings"
 import { Button } from "@/components/ui/button"
@@ -103,8 +104,12 @@ export default function LaborDeploymentTab({
   const [savedConfirm, setSavedConfirm] = useState<{ reference: string; total: number } | null>(null)
   const [activities, setActivities] = useState<ActivityCode[]>([])
   const [showAllCodes, setShowAllCodes] = useState(false)
-  // Mobile activity picker: null = show selected code, string = active search query
+  // Activity picker: null = show selected value, string = active search query.
+  // codeQuery drives the "Activity code" field, referenceQuery the "Category
+  // name" field — both search the same activities list by code or reference,
+  // so either field can be typed into and resolves the other.
   const [codeQuery, setCodeQuery] = useState<string | null>(null)
+  const [referenceQuery, setReferenceQuery] = useState<string | null>(null)
   const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set())
   const [formData, setFormData] = useState<FormData>({
     date: todayIso(),
@@ -544,85 +549,48 @@ export default function LaborDeploymentTab({
 
                 <div className="space-y-2">
                   <Label htmlFor="code" className="text-base">Activity code</Label>
-                  {isMobile && activities.length > 0 ? (
-                    <>
-                      <Input
-                        id="code"
-                        value={codeQuery !== null ? codeQuery : formData.code ? `${formData.code} — ${formData.reference}` : ""}
-                        onChange={(e) => setCodeQuery(e.target.value)}
-                        onFocus={() => setCodeQuery("")}
-                        onBlur={() => {
-                          // Commit a typed-but-not-tapped code before clearing the search text,
-                          // otherwise scrolling away (which blurs this field) would silently
-                          // discard the code + category the user just entered. Only commits when
-                          // the query resolves to a real activity, so validation still holds.
-                          const query = (codeQuery ?? "").trim()
-                          setTimeout(() => {
-                            const resolved = resolveActivityFromQuery(query, activities)
-                            if (resolved) handleCodeChange(resolved.code)
-                            setCodeQuery(null)
-                          }, 150)
-                        }}
-                        placeholder="Search activity name or code…"
-                        required
-                        className="h-12 rounded-xl text-base"
-                      />
-                      {codeQuery !== null && (
-                        <div className="rounded-2xl border border-stone-200 bg-white shadow-md overflow-hidden divide-y divide-stone-100 max-h-72 overflow-y-auto">
-                          {sortedActivities
-                            .filter((a) =>
-                              codeQuery.trim() === "" ||
-                              a.code.toLowerCase().includes(codeQuery.toLowerCase()) ||
-                              a.reference.toLowerCase().includes(codeQuery.toLowerCase()))
-                            .slice(0, 8)
-                            .map((a) => (
-                              <button
-                                key={a.code}
-                                type="button"
-                                onPointerDown={(e) => e.preventDefault()}
-                                onClick={() => {
-                                  handleCodeChange(a.code)
-                                  setCodeQuery(null)
-                                }}
-                                className="w-full flex items-center gap-2.5 px-4 py-3 text-left active:bg-emerald-50 transition-colors touch-manipulation"
-                              >
-                                <span className="text-sm font-black tabular-nums text-emerald-700 shrink-0">{a.code}</span>
-                                <span className="text-sm font-medium text-stone-800 truncate">{a.reference}</span>
-                              </button>
-                            ))}
-                        </div>
-                      )}
-                    </>
-                  ) : (
-                    <>
-                      <Input
-                        id="code"
-                        value={formData.code}
-                        onChange={(e) => handleCodeChange(e.target.value)}
-                        placeholder="Enter activity code"
-                        required
-                        list="activity-codes"
-                        className="h-11"
-                      />
-                      <datalist id="activity-codes">
-                        {visibleActivities.map((a) => (
-                          <option key={a.code} value={a.code}>{a.reference}</option>
-                        ))}
-                      </datalist>
-                      <div className="flex items-center justify-between">
-                        <p className="text-xs text-muted-foreground">Most-used codes appear first. Type a code or name to filter.</p>
-                        {unusedActivities.length > 0 && (
-                          <button
-                            type="button"
-                            onClick={() => setShowAllCodes((v) => !v)}
-                            className="text-xs text-emerald-700 underline underline-offset-2 hover:text-emerald-800"
-                          >
-                            {showAllCodes ? "Fewer" : `+${unusedActivities.length} unused`}
-                          </button>
-                        )}
-                      </div>
-                    </>
+                  <Input
+                    id="code"
+                    value={codeQuery !== null ? codeQuery : formData.code ? `${formData.code} — ${formData.reference}` : ""}
+                    onChange={(e) => setCodeQuery(e.target.value)}
+                    onFocus={() => setCodeQuery("")}
+                    onBlur={() => {
+                      // Commit a typed-but-not-tapped code before clearing the search text,
+                      // otherwise scrolling away (which blurs this field) would silently
+                      // discard the code + category the user just entered. Only commits when
+                      // the query resolves to a real activity, so validation still holds.
+                      const query = (codeQuery ?? "").trim()
+                      setTimeout(() => {
+                        const resolved = resolveActivityFromQuery(query, activities)
+                        if (resolved) handleCodeChange(resolved.code)
+                        setCodeQuery(null)
+                      }, 150)
+                    }}
+                    placeholder="Search activity name or code…"
+                    required
+                    className={cn("h-11", isMobile && "h-12 rounded-xl text-base")}
+                  />
+                  {codeQuery !== null && (
+                    <ActivitySuggestList
+                      options={filterActivitySuggestions(codeQuery, visibleActivities, sortedActivities)}
+                      onSelect={(a) => {
+                        handleCodeChange(a.code)
+                        setCodeQuery(null)
+                      }}
+                    />
                   )}
+                  <div className="flex items-center justify-between">
+                    <p className="text-xs text-muted-foreground">Most-used codes appear first. Type a code or category name.</p>
+                    {unusedActivities.length > 0 && (
+                      <button
+                        type="button"
+                        onClick={() => setShowAllCodes((v) => !v)}
+                        className="text-xs text-emerald-700 underline underline-offset-2 hover:text-emerald-800"
+                      >
+                        {showAllCodes ? "Fewer" : `+${unusedActivities.length} unused`}
+                      </button>
+                    )}
+                  </div>
                 </div>
 
                 {selectedActivityHint === "expense" && (
@@ -639,12 +607,27 @@ export default function LaborDeploymentTab({
                   <Label htmlFor="reference" className="text-base">Category name</Label>
                   <Input
                     id="reference"
-                    value={formData.reference}
-                    onChange={(e) => setFormData((prev) => ({ ...prev, reference: e.target.value }))}
-                    placeholder="Auto-filled from activity code"
+                    value={referenceQuery !== null ? referenceQuery : formData.reference}
+                    onChange={(e) => {
+                      const value = e.target.value
+                      setReferenceQuery(value)
+                      setFormData((prev) => ({ ...prev, reference: value }))
+                    }}
+                    onFocus={() => setReferenceQuery(formData.reference)}
+                    onBlur={() => setTimeout(() => setReferenceQuery(null), 150)}
+                    placeholder="Auto-filled from activity code, or type a category to search codes"
                     required
-                    className="h-11"
+                    className={cn("h-11", isMobile && "h-12 rounded-xl text-base")}
                   />
+                  {referenceQuery !== null && (
+                    <ActivitySuggestList
+                      options={filterActivitySuggestions(referenceQuery, visibleActivities, sortedActivities)}
+                      onSelect={(a) => {
+                        handleCodeChange(a.code)
+                        setReferenceQuery(null)
+                      }}
+                    />
+                  )}
                   <p className="text-xs text-muted-foreground">Use a plain work name the field team and owner will both recognize.</p>
                 </div>
               </div>
