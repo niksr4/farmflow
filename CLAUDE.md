@@ -224,13 +224,16 @@ must be migrated separately.
 - `pnpm schema:rls` / `schema:rls:prod` — fails if any `tenant_id` table lacks RLS.
 - `pnpm schema:isolation` / `schema:isolation:prod` — proves a non-bypass role cannot read
   another tenant's rows.
-- **Important:** the app currently connects as the schema owner (`neondb_owner`), which has
-  `BYPASSRLS`, so the RLS policies are a dormant backstop — isolation still relies on each
-  query's `tenant_id` filter. To activate real DB-enforced isolation: run
-  `scripts/app-runtime-role.sql` (manual — not auto-applied), then set `APP_DATABASE_URL` to
-  that least-privilege role's connection string. `lib/server/db.ts` exposes `sql` (runtime,
-  uses `APP_DATABASE_URL` when set) and `adminSql` (owner, for DDL/self-healing). Roll back by
-  unsetting `APP_DATABASE_URL`.
+- **Status: fully active in both dev and prod (as of 2026-07-21).** The `app_runtime` role
+  (non-bypass, DML-only, no DDL) exists on both Neon instances. `pnpm schema:rls[:prod]` and
+  `pnpm schema:isolation[:prod]` both pass. `APP_DATABASE_URL` is set in `.env.local` (dev) and
+  as a Production env var in Vercel (prod) — confirmed live by observing real `app_runtime`
+  connections in `pg_stat_activity` after a production redeploy, with zero runtime errors
+  since. Tenant isolation is now DB-enforced, not just query-discipline-enforced. `lib/server/db.ts`
+  exposes `sql` (runtime, uses `APP_DATABASE_URL`) and `adminSql` (owner, for DDL/self-healing —
+  always `DATABASE_URL`, unaffected). Roll back instantly by unsetting `APP_DATABASE_URL`
+  wherever it's set — the app falls back to the owner connection (RLS-bypassing, isolation via
+  query filters only, same as before this was activated).
 
 ---
 
@@ -254,6 +257,47 @@ Key env vars:
 - `THENEWSAPI_API_KEY` — coffee market news tab
 - `RESEND_API_KEY` — transactional email (digest, onboarding, alerts)
 - Razorpay vars (when billing is activated): `RAZORPAY_KEY_ID`, `RAZORPAY_KEY_SECRET`, `RAZORPAY_WEBHOOK_SECRET`, plan IDs
+
+### Release process
+
+**Current state:** every push to `main` auto-deploys straight to production — no staging environment,
+no manual promotion gate. The only check is CI (lint → typecheck → unit tests → build → public e2e).
+This is fine for pre-revenue validation but has zero buffer between "pushed" and "live for every tenant."
+
+**A structural git-level gate (stop `main` pushes from auto-shipping) is NOT available on this
+project's plan.** Investigated 2026-07-21:
+- Vercel's clean mechanism for this, `deploymentPolicy` (per-branch production gating via the
+  Project API), is **Pro/Enterprise only** — confirmed by a clean `pro_plan_required` rejection on
+  this Hobby-tier project.
+- The older per-domain `gitBranch` binding looked like a workaround (point the live domain at a
+  branch other than the configured Production Branch) but **caused a real, if brief, live outage**
+  when tried: any branch other than the one branch designated Production gets classified
+  **Preview-tier** by Vercel, and Preview deployments sit behind Vercel's own SSO/login wall on this
+  project — so real visitors to thefarmflow.in got redirected to a Vercel login page instead of the
+  app. Reverting the domain's `gitBranch` setting did **not** auto-restore service; recovery required
+  explicitly re-aliasing the domain to the last known-good deployment
+  (`vercel alias set <deployment-id> www.thefarmflow.in`). **Do not attempt the domain-`gitBranch`
+  approach again** — it's a live-outage risk on this plan tier, not a viable gate.
+
+**What actually works — the CLI staged-deploy workflow**, which correctly builds with Production-tier
+classification (no SSO wall) from the start:
+
+1. `vercel --prod --skip-domain` — builds a real production deployment (production env vars, prod
+   behavior, public URL, no protection wall) but does **not** point thefarmflow.in at it. Safe to
+   build and poke at without any customer seeing it.
+2. Verify it: `vercel inspect <deployment-url>`, `vercel logs --deployment <deployment-url> --level error`,
+   or click around the unique URL it gets — it's genuinely public, no login wall.
+3. `vercel alias set <deployment-id> www.thefarmflow.in` (or `vercel promote <deployment-url-or-id>`)
+   — this is the moment it actually goes live.
+
+Rollback: `vercel alias set <previous-known-good-deployment-id> www.thefarmflow.in`, or
+`vercel rollback`.
+
+This needs zero dashboard/plan changes and works today via the authenticated CLI (`Vercel_token` in
+`.env.local`, passed as `--token`; see `reference_vercel_cli_token` memory). The auto-deploy-per-push
+behavior on `main` keeps working exactly as before for anyone who pushes without using this flow —
+so the actual discipline is: **stop pushing straight to `main` for anything you want gated, build and
+alias deliberately instead using the sequence above.**
 
 ---
 

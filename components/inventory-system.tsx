@@ -1818,7 +1818,7 @@ export default function InventorySystem() {
           </h2>
           <p className="text-xs text-muted-foreground">Inventory restocks, stock usage, and corrections across the estate.</p>
         </div>
-        {showDataToolsControls && (
+        {canManageData && (
           <div className="flex gap-2">
             <Button size="sm" variant="outline" onClick={exportToCSV} className="h-10 bg-transparent">
               <Download className="mr-2 h-4 w-4" /> Export
@@ -4670,7 +4670,7 @@ export default function InventorySystem() {
                         </div>
                       </div>
                       <div className="flex shrink-0 flex-wrap gap-2">
-                        {showDataToolsControls && (
+                        {canManageData && (
                           <Button size="sm" variant="outline" onClick={exportInventoryToCSV} className="h-9 rounded-lg bg-transparent">
                             <Download className="mr-2 h-4 w-4" /> Export
                           </Button>

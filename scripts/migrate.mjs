@@ -80,9 +80,12 @@ const toRows = (r) => (Array.isArray(r) ? r : r?.rows ?? [])
 const BOOTSTRAP_CUTOFF = "87-default-activity-codes.sql"
 
 // Execute a SQL string that may contain multiple statements (dollar-quote aware).
+// NOTE: sql.query(text) executes; sql.unsafe(text) does NOT — it returns an UnsafeRawSql
+// composition fragment, so `await sql.unsafe(stmt)` silently runs nothing. The runner
+// shipped with .unsafe and recorded migrations in the ledger without applying them.
 const execFile = async (sql, content) => {
   for (const stmt of splitSqlStatements(content)) {
-    await sql.unsafe(stmt)
+    await sql.query(stmt)
   }
 }
 

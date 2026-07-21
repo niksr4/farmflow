@@ -13,7 +13,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react"
 import { addDays, format, isToday, isFuture, startOfWeek } from "date-fns"
-import { Check, IndianRupee, Loader2, PlusCircle, Users } from "lucide-react"
+import { Check, Download, IndianRupee, Loader2, PlusCircle, Users } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { cn } from "@/lib/utils"
@@ -111,6 +111,20 @@ export default function AttendanceTab() {
     } finally {
       setIsSaving(false)
     }
+  }
+
+  const exportWeeklySummaryToCSV = () => {
+    const weekLabel = dateToStr(weekDays[0])
+    const headers = ["Worker", "Days Present"]
+    const rows = weeklySummary.map((row) => [row.name, String(row.daysPresent)])
+    const csvContent = [headers.join(","), ...rows.map((r) => r.join(","))].join("\n")
+    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" })
+    const link = document.createElement("a")
+    link.href = URL.createObjectURL(blob)
+    link.download = `attendance-week-${weekLabel}.csv`
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
   }
 
   const handleAddWorker = async (e: React.FormEvent) => {
@@ -317,14 +331,19 @@ export default function AttendanceTab() {
         {/* Weekly summary */}
         {weeklySummary.length > 0 && (
           <div className="pt-1">
-            <button
-              type="button"
-              onClick={() => setShowSummary(!showSummary)}
-              className="w-full flex items-center justify-between px-1 py-2.5 text-xs font-bold uppercase tracking-widest text-stone-400"
-            >
-              <span>Week summary</span>
-              <span>{showSummary ? "▲" : "▼"}</span>
-            </button>
+            <div className="flex items-center justify-between px-1 py-1">
+              <button
+                type="button"
+                onClick={() => setShowSummary(!showSummary)}
+                className="flex flex-1 items-center justify-between py-1.5 text-xs font-bold uppercase tracking-widest text-stone-400"
+              >
+                <span>Week summary</span>
+                <span className="ml-2">{showSummary ? "▲" : "▼"}</span>
+              </button>
+              <Button size="sm" variant="outline" onClick={exportWeeklySummaryToCSV} className="h-8 shrink-0 bg-transparent px-2.5 text-xs">
+                <Download className="mr-1.5 h-3.5 w-3.5" /> Export
+              </Button>
+            </div>
             {showSummary && (
               <div className="rounded-2xl bg-white shadow-sm overflow-hidden divide-y divide-stone-50">
                 {weeklySummary.map((row) => (
