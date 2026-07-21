@@ -435,7 +435,7 @@ export async function DELETE(request: NextRequest) {
         inventorySql,
         tenantContext,
         inventorySql`
-          SELECT item_type, quantity, unit, location_id
+          SELECT item_type, quantity, unit, location_id, COALESCE(avg_price, 0) AS avg_price
           FROM current_inventory
           WHERE tenant_id = ${tenantContext.tenantId}
             AND item_type = ${itemType}
@@ -446,7 +446,7 @@ export async function DELETE(request: NextRequest) {
         inventorySql,
         tenantContext,
         inventorySql`
-          SELECT item_type, quantity, unit, location_id
+          SELECT item_type, quantity, unit, location_id, COALESCE(avg_price, 0) AS avg_price
           FROM current_inventory
           WHERE tenant_id = ${tenantContext.tenantId}
             AND item_type = ${itemType}
@@ -458,7 +458,7 @@ export async function DELETE(request: NextRequest) {
         inventorySql,
         tenantContext,
         inventorySql`
-          SELECT item_type, quantity, unit, location_id
+          SELECT item_type, quantity, unit, location_id, COALESCE(avg_price, 0) AS avg_price
           FROM current_inventory
           WHERE tenant_id = ${tenantContext.tenantId}
             AND item_type = ${itemType}
@@ -473,6 +473,11 @@ export async function DELETE(request: NextRequest) {
       if (quantityValue <= 0) {
         continue
       }
+      // Value the write-off at the slot's own weighted-average cost so the
+      // asset value leaving current_inventory (via the trigger) is also
+      // reflected on the transaction_history row, instead of recording 0.
+      const rowAvgPrice = Number(row.avg_price) || 0
+      const rowTotalCost = Number((quantityValue * rowAvgPrice).toFixed(2))
       const insertDeletionTransaction = async () =>
         runTenantQuery(
           inventorySql,
@@ -498,8 +503,8 @@ export async function DELETE(request: NextRequest) {
               ${`Inventory item deleted by ${sessionUser.username || "system"}`},
               ${sessionUser.username || "system"},
               ${tenantUserUuid},
-              0,
-              0,
+              ${rowAvgPrice},
+              ${rowTotalCost},
               ${tenantContext.tenantId},
               ${row.location_id ?? null},
               ${row.unit || "kg"}

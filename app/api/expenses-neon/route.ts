@@ -72,6 +72,7 @@ type PlannedExpenseInventoryTransaction = {
   quantity: number
   locationId: string | null
   unit: string
+  unitCost: number
 }
 
 const normalizeInventoryQuantity = (value: unknown) => {
@@ -131,7 +132,7 @@ async function loadInventorySlotsForItem(
     accountsSql,
     tenantContext,
     accountsSql`
-      SELECT item_type, location_id, COALESCE(quantity, 0) AS quantity, COALESCE(unit, 'kg') AS unit
+      SELECT item_type, location_id, COALESCE(quantity, 0) AS quantity, COALESCE(unit, 'kg') AS unit, COALESCE(avg_price, 0) AS avg_price
       FROM current_inventory
       WHERE tenant_id = ${tenantContext.tenantId}
         AND lower(regexp_replace(btrim(item_type), '\s+', ' ', 'g')) = lower(${normalizedItemType})
@@ -143,6 +144,7 @@ async function loadInventorySlotsForItem(
     locationId: row.location_id ? String(row.location_id) : null,
     quantity: Number(row.quantity) || 0,
     unit: String(row.unit || "kg"),
+    avgPrice: Number(row.avg_price) || 0,
   }))
 }
 
@@ -245,7 +247,7 @@ async function planExpenseInventoryTransactions(
     }
   }
 
-  const plannedTransactions: Array<{ itemType: string; quantity: number; locationId: string | null; unit: string }> = []
+  const plannedTransactions: Array<{ itemType: string; quantity: number; locationId: string | null; unit: string; unitCost: number }> = []
 
   for (const request of requestedByItem.values()) {
     const slots = await loadInventorySlotsForItem(tenantContext, request.itemType)
@@ -608,11 +610,15 @@ function buildCreateExpenseMutationStatement(options: {
 
   if (options.plannedTransactions.length > 0) {
     const transactionPayloadParts = options.plannedTransactions.map((transaction) => {
+      const unitCost = Number(transaction.unitCost) || 0
+      const totalCost = Number((transaction.quantity * unitCost).toFixed(2))
       const itemTypeParam = params.push(transaction.itemType)
       const quantityParam = params.push(transaction.quantity)
       const locationParam = params.push(transaction.locationId)
       const unitParam = params.push(transaction.unit)
-      return `($${itemTypeParam}, $${quantityParam}::numeric, $${locationParam}::uuid, $${unitParam})`
+      const priceParam = params.push(unitCost)
+      const totalCostParam = params.push(totalCost)
+      return `($${itemTypeParam}, $${quantityParam}::numeric, $${locationParam}::uuid, $${unitParam}, $${priceParam}::numeric, $${totalCostParam}::numeric)`
     })
 
     const noteBaseParam = params.push(buildExpenseInventoryNoteBase(options.code, options.notes))
@@ -622,7 +628,7 @@ function buildCreateExpenseMutationStatement(options: {
     const tenantParam = params.push(options.tenantId)
 
     ctes.push(
-      `transaction_payload(item_type, quantity, location_id, unit) AS (VALUES ${transactionPayloadParts.join(", ")})`,
+      `transaction_payload(item_type, quantity, location_id, unit, price, total_cost) AS (VALUES ${transactionPayloadParts.join(", ")})`,
       `inserted_transactions AS (
         INSERT INTO transaction_history (
           item_type,
@@ -646,8 +652,8 @@ function buildCreateExpenseMutationStatement(options: {
           $${dateParam}::timestamp,
           $${userParam},
           $${userUuidParam},
-          0,
-          0,
+          tp.price,
+          tp.total_cost,
           $${tenantParam},
           tp.location_id,
           tp.unit
@@ -786,6 +792,8 @@ function buildInsertExpenseInventoryTransactionsStatement(options: {
   const params: any[] = []
     const valuesClause = options.transactions
     .map((transaction) => {
+      const unitCost = Number(transaction.unitCost) || 0
+      const totalCost = Number((transaction.quantity * unitCost).toFixed(2))
       const itemTypeParam = params.push(transaction.itemType)
       const quantityParam = params.push(transaction.quantity)
       const noteParam = params.push(expenseNote)
@@ -795,7 +803,9 @@ function buildInsertExpenseInventoryTransactionsStatement(options: {
       const tenantParam = params.push(options.tenantId)
       const locationParam = params.push(transaction.locationId)
       const unitParam = params.push(transaction.unit)
-      return `($${itemTypeParam}, $${quantityParam}::numeric, 'deplete', $${noteParam}, $${dateParam}::timestamp, $${userParam}, $${userUuidParam}, 0, 0, $${tenantParam}, $${locationParam}::uuid, $${unitParam})`
+      const priceParam = params.push(unitCost)
+      const totalCostParam = params.push(totalCost)
+      return `($${itemTypeParam}, $${quantityParam}::numeric, 'deplete', $${noteParam}, $${dateParam}::timestamp, $${userParam}, $${userUuidParam}, $${priceParam}::numeric, $${totalCostParam}::numeric, $${tenantParam}, $${locationParam}::uuid, $${unitParam})`
     })
     .join(", ")
 

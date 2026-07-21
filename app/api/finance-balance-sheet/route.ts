@@ -2,6 +2,7 @@ import { NextResponse } from "next/server"
 import { sql } from "@/lib/server/db"
 import { requireModuleAccess, isModuleAccessError } from "@/lib/server/module-access"
 import { normalizeTenantContext, runTenantQuery } from "@/lib/server/tenant-db"
+import { computeNetPnl } from "@/lib/server/pnl"
 
 export const dynamic = "force-dynamic"
 export const revalidate = 0
@@ -312,7 +313,6 @@ export async function GET(request: Request) {
 
     const salesRevenue = toAmount((salesRow as any).total_revenue)
     const otherSalesRevenue = toAmount((otherSalesRow as any).total_revenue)
-    const totalRevenueBooked = salesRevenue + otherSalesRevenue
     const laborCost = toAmount((laborRow as any).total_cost)
     const expenseCost = toAmount((expenseRow as any).total_amount)
     const inventoryRestockOutflow = toAmount((inventoryRow as any).restock_outflow)
@@ -327,8 +327,12 @@ export async function GET(request: Request) {
     // Inventory restock costs are asset purchases, not P&L expenses.
     // Including them alongside expense_transactions double-counts consumable costs.
     // They are shown as a separate reference line in modules[] below.
-    const totalOutflow = laborCost + expenseCost
-    const netBooked = totalRevenueBooked - totalOutflow
+    const { totalRevenue: totalRevenueBooked, totalOutflow, netMargin: netBooked } = computeNetPnl({
+      salesRevenue,
+      otherSalesRevenue,
+      laborCost,
+      expenseCost,
+    })
     const liveNetPosition = netBooked + receivablesOutstandingLive
 
     const modules = [

@@ -5,6 +5,7 @@ export type InventoryAllocationSlot = {
   locationId: string | null
   quantity: number
   unit?: string | null
+  avgPrice?: number
 }
 
 export type InventoryAllocation = {
@@ -12,6 +13,7 @@ export type InventoryAllocation = {
   locationId: string | null
   quantity: number
   unit: string
+  unitCost: number
 }
 
 export type ExpenseInventoryLinkItem = {
@@ -45,6 +47,7 @@ export function allocateInventoryQuantity(
       itemType: normalizeInventoryItemType(slot.itemType),
       quantity: toRoundedQuantity(Number(slot.quantity) || 0),
       unit: String(slot.unit || "kg"),
+      avgPrice: Number(slot.avgPrice) || 0,
     }))
     .filter((slot) => slot.itemType && slot.quantity > INVENTORY_EPSILON)
     .sort((left, right) => {
@@ -75,6 +78,7 @@ export function allocateInventoryQuantity(
       locationId: slot.locationId,
       quantity: allocatedQuantity,
       unit: slot.unit || "kg",
+      unitCost: slot.avgPrice,
     })
     remainingQuantity = toRoundedQuantity(remainingQuantity - allocatedQuantity)
   }

@@ -6,6 +6,7 @@ import { normalizeTenantContext, runTenantQuery } from "@/lib/server/tenant-db"
 import type { ExportDatasetId } from "@/lib/data-tools"
 import { buildSalesCsv, type SalesExportRecord } from "@/lib/sales-export"
 import { buildXlsxArrayBufferFromCsv, XLSX_MIME_TYPE } from "@/lib/spreadsheet"
+import { computeNetPnl } from "@/lib/server/pnl"
 
 const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/
 const MAX_ROWS = 8000
@@ -670,8 +671,8 @@ const loadPnlRows = async (
   startDate: string,
   endDate: string,
   tenantContext: ReturnType<typeof normalizeTenantContext>,
-) =>
-  runTenantQuery(
+) => {
+  const rows = await runTenantQuery(
     sql,
     tenantContext,
     sql`
@@ -682,6 +683,14 @@ const loadPnlRows = async (
       sales AS (
         SELECT date_trunc('month', sale_date)::date AS month_start, COALESCE(SUM(COALESCE(revenue, 0)), 0) AS sales_revenue
         FROM sales_records
+        WHERE tenant_id = ${tenantId}
+          AND sale_date >= ${startDate}::date
+          AND sale_date <= ${endDate}::date
+        GROUP BY 1
+      ),
+      other_sales AS (
+        SELECT date_trunc('month', sale_date)::date AS month_start, COALESCE(SUM(COALESCE(revenue, 0)), 0) AS other_sales_revenue
+        FROM other_sales_records
         WHERE tenant_id = ${tenantId}
           AND sale_date >= ${startDate}::date
           AND sale_date <= ${endDate}::date
@@ -706,18 +715,40 @@ const loadPnlRows = async (
       SELECT
         to_char(m.month_start, 'YYYY-MM') AS month,
         ROUND(COALESCE(s.sales_revenue, 0)::numeric, 2) AS sales_revenue,
+        ROUND(COALESCE(os.other_sales_revenue, 0)::numeric, 2) AS other_sales_revenue,
         ROUND(COALESCE(l.labor_cost, 0)::numeric, 2) AS labor_cost,
-        ROUND(COALESCE(e.expense_cost, 0)::numeric, 2) AS other_expenses,
-        ROUND((COALESCE(l.labor_cost, 0) + COALESCE(e.expense_cost, 0))::numeric, 2) AS total_cost,
-        ROUND((COALESCE(s.sales_revenue, 0) - (COALESCE(l.labor_cost, 0) + COALESCE(e.expense_cost, 0)))::numeric, 2) AS gross_margin
+        ROUND(COALESCE(e.expense_cost, 0)::numeric, 2) AS other_expenses
       FROM months m
       LEFT JOIN sales s ON s.month_start = m.month_start
+      LEFT JOIN other_sales os ON os.month_start = m.month_start
       LEFT JOIN labor l ON l.month_start = m.month_start
       LEFT JOIN expense e ON e.month_start = m.month_start
       ORDER BY m.month_start ASC
       LIMIT ${FETCH_LIMIT}
     `,
   )
+
+  // Same revenue/outflow definition and arithmetic as finance-balance-sheet,
+  // via computeNetPnl — this export used to only sum sales_records (missing
+  // other_sales_records) and re-derive the margin formula inline, which let
+  // it silently drift from the balance sheet's numbers for the same period.
+  return (rows as any[]).map((row) => {
+    const salesRevenue = toFiniteNumber(row.sales_revenue)
+    const otherSalesRevenue = toFiniteNumber(row.other_sales_revenue)
+    const laborCost = toFiniteNumber(row.labor_cost)
+    const expenseCost = toFiniteNumber(row.other_expenses)
+    const { totalOutflow, netMargin } = computeNetPnl({ salesRevenue, otherSalesRevenue, laborCost, expenseCost })
+    return {
+      month: row.month,
+      sales_revenue: Number(salesRevenue.toFixed(2)),
+      other_sales_revenue: Number(otherSalesRevenue.toFixed(2)),
+      labor_cost: Number(laborCost.toFixed(2)),
+      other_expenses: Number(expenseCost.toFixed(2)),
+      total_cost: Number(totalOutflow.toFixed(2)),
+      gross_margin: Number(netMargin.toFixed(2)),
+    }
+  })
+}
 
 const loadDatasetRows = async (
   dataset: ExportDatasetId,

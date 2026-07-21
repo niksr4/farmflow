@@ -189,6 +189,86 @@ export async function GET(request: NextRequest) {
       checks.push({ id: "processing_yield", label: "Processing yield", status: "warning", detail: "Could not check processing yield." })
     }
 
+    // ── 6. Labour cost pipeline overlap — bulk deployment vs payroll/attendance ──
+    // labor_transactions (Labour deployment tab) is the only labour source that
+    // feeds Accounts/P&L (accounts-totals, accounts-summary, finance-balance-sheet).
+    // worker_ledger + attendance_records + picking_records (Payroll summary) is a
+    // separate, un-reconciled pipeline. Neither side checks the other, so a tenant
+    // can double-log the same spend in both, or log real labour cost only in
+    // payroll and have it silently missing from every P&L total.
+    try {
+      const [bulkRows, payrollRows] = await Promise.all([
+        accountsSql.query(
+          `SELECT COALESCE(SUM(total_cost), 0) AS cost, COUNT(*) AS entries
+           FROM labor_transactions
+           WHERE tenant_id = $1 AND deployment_date >= $2::date AND deployment_date <= $3::date`,
+          [tenantId, start, end],
+        ).then(toRows),
+        accountsSql.query(
+          `WITH attendance_days AS (
+             SELECT worker_id, COUNT(*)::int AS days_present
+             FROM attendance_records
+             WHERE tenant_id = $1 AND attendance_date BETWEEN $2::date AND $3::date
+             GROUP BY worker_id
+           ),
+           picking_earnings AS (
+             SELECT worker_id, COALESCE(SUM(kg_picked * rate_per_kg), 0) AS picking_total
+             FROM picking_records
+             WHERE tenant_id = $1 AND pick_date BETWEEN $2::date AND $3::date
+             GROUP BY worker_id
+           )
+           SELECT
+             COALESCE(SUM(COALESCE(a.days_present, 0) * COALESCE(w.daily_rate, 0)), 0) AS attendance_cost,
+             COALESCE(SUM(COALESCE(p.picking_total, 0)), 0) AS picking_cost,
+             COUNT(*) FILTER (WHERE COALESCE(a.days_present, 0) > 0 OR COALESCE(p.picking_total, 0) > 0) AS active_workers
+           FROM attendance_workers w
+           LEFT JOIN attendance_days a ON a.worker_id = w.id
+           LEFT JOIN picking_earnings p ON p.worker_id = w.id
+           WHERE w.tenant_id = $1`,
+          [tenantId, start, end],
+        ).then(toRows),
+      ])
+
+      const bulkCost = Number(bulkRows[0]?.cost ?? 0)
+      const bulkEntries = Number(bulkRows[0]?.entries ?? 0)
+      const payrollCost = Number(payrollRows[0]?.attendance_cost ?? 0) + Number(payrollRows[0]?.picking_cost ?? 0)
+      const activeWorkers = Number(payrollRows[0]?.active_workers ?? 0)
+
+      if (bulkEntries === 0 && activeWorkers === 0) {
+        checks.push({
+          id: "labor_pipeline_overlap",
+          label: "Labour cost pipeline check",
+          status: "ok",
+          detail: "No labour activity recorded in either pipeline for this period.",
+        })
+      } else if (bulkEntries > 0 && activeWorkers > 0) {
+        checks.push({
+          id: "labor_pipeline_overlap",
+          label: "Labour cost pipeline check",
+          status: "warning",
+          detail: `Both labour pipelines have entries this period — ₹${bulkCost.toFixed(0)} via Labour deployment (${bulkEntries} entries, included in Accounts/P&L) and ₹${payrollCost.toFixed(0)} via Payroll/attendance (${activeWorkers} workers, NOT included in Accounts/P&L). These are never cross-checked against each other — confirm the same spend isn't logged in both.`,
+          value: `₹${bulkCost.toFixed(0)} vs ₹${payrollCost.toFixed(0)}`,
+        })
+      } else if (activeWorkers > 0) {
+        checks.push({
+          id: "labor_pipeline_overlap",
+          label: "Labour cost pipeline check",
+          status: "warning",
+          detail: `₹${payrollCost.toFixed(0)} in payroll/attendance costs this period (${activeWorkers} workers) is not reflected in Accounts/P&L — only the Labour deployment tab feeds the balance sheet. If this is real spend, it's currently invisible to your P&L.`,
+          value: `₹${payrollCost.toFixed(0)} untracked`,
+        })
+      } else {
+        checks.push({
+          id: "labor_pipeline_overlap",
+          label: "Labour cost pipeline check",
+          status: "ok",
+          detail: `₹${bulkCost.toFixed(0)} logged via Labour deployment (${bulkEntries} entries) this period — single pipeline in use, no overlap risk.`,
+        })
+      }
+    } catch {
+      checks.push({ id: "labor_pipeline_overlap", label: "Labour cost pipeline check", status: "warning", detail: "Could not check labour pipeline overlap." })
+    }
+
     const hasErrors = checks.some((c) => c.status === "error")
     const hasWarnings = checks.some((c) => c.status === "warning")
 

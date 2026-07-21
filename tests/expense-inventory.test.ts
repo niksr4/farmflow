@@ -15,7 +15,21 @@ describe("allocateInventoryQuantity", () => {
     )
 
     expect(allocations).toEqual([
-      { itemType: "Diesel (L)", locationId: "loc-a", quantity: 40, unit: "L" },
+      { itemType: "Diesel (L)", locationId: "loc-a", quantity: 40, unit: "L", unitCost: 0 },
+    ])
+  })
+
+  it("carries each slot's weighted-average cost onto its allocation", () => {
+    const allocations = allocateInventoryQuantity(
+      [
+        { itemType: "Diesel (L)", locationId: "loc-a", quantity: 60, unit: "L", avgPrice: 92.5 },
+      ],
+      40,
+      "loc-a",
+    )
+
+    expect(allocations).toEqual([
+      { itemType: "Diesel (L)", locationId: "loc-a", quantity: 40, unit: "L", unitCost: 92.5 },
     ])
   })
 
@@ -31,9 +45,9 @@ describe("allocateInventoryQuantity", () => {
     )
 
     expect(allocations).toEqual([
-      { itemType: "Urea Fertilizer", locationId: "loc-a", quantity: 30, unit: "kg" },
-      { itemType: "Urea Fertilizer", locationId: null, quantity: 15, unit: "kg" },
-      { itemType: "Urea Fertilizer", locationId: "loc-b", quantity: 5, unit: "kg" },
+      { itemType: "Urea Fertilizer", locationId: "loc-a", quantity: 30, unit: "kg", unitCost: 0 },
+      { itemType: "Urea Fertilizer", locationId: null, quantity: 15, unit: "kg", unitCost: 0 },
+      { itemType: "Urea Fertilizer", locationId: "loc-b", quantity: 5, unit: "kg", unitCost: 0 },
     ])
   })
 

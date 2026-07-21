@@ -85,6 +85,7 @@ type InventorySlotMatch = {
   item_type: string
   quantity: number
   unit: string | null
+  avg_price: number
 }
 
 const loadInventorySlotByNormalizedItem = async (
@@ -97,7 +98,7 @@ const loadInventorySlotByNormalizedItem = async (
     inventorySql,
     tenantContext,
     inventorySql`
-      SELECT item_type, COALESCE(quantity, 0) AS quantity, unit
+      SELECT item_type, COALESCE(quantity, 0) AS quantity, unit, COALESCE(avg_price, 0) AS avg_price
       FROM current_inventory
       WHERE tenant_id = ${tenantContext.tenantId}
         AND lower(regexp_replace(btrim(item_type), '\s+', ' ', 'g')) = lower(${normalizedItemType})
@@ -111,6 +112,7 @@ const loadInventorySlotByNormalizedItem = async (
     item_type: String(rows[0].item_type || normalizedItemType),
     quantity: Number(rows[0].quantity) || 0,
     unit: rows[0].unit ? String(rows[0].unit) : null,
+    avg_price: Number(rows[0].avg_price) || 0,
   } satisfies InventorySlotMatch
 }
 
@@ -123,7 +125,7 @@ const loadAnyInventorySlotByNormalizedItem = async (
     inventorySql,
     tenantContext,
     inventorySql`
-      SELECT item_type, COALESCE(quantity, 0) AS quantity, unit, location_id
+      SELECT item_type, COALESCE(quantity, 0) AS quantity, unit, location_id, COALESCE(avg_price, 0) AS avg_price
       FROM current_inventory
       WHERE tenant_id = ${tenantContext.tenantId}
         AND lower(regexp_replace(btrim(item_type), '\s+', ' ', 'g')) = lower(${normalizedItemType})
@@ -136,6 +138,7 @@ const loadAnyInventorySlotByNormalizedItem = async (
     item_type: String(rows[0].item_type || normalizedItemType),
     quantity: Number(rows[0].quantity) || 0,
     unit: rows[0].unit ? String(rows[0].unit) : null,
+    avg_price: Number(rows[0].avg_price) || 0,
   } satisfies InventorySlotMatch
 }
 
@@ -616,7 +619,12 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    const priceValue = Number(price) || 0
+    // Deplete rows carry no user-entered price — value them at the inventory
+    // slot's current weighted-average cost so total_cost matches what the
+    // update_inventory() trigger is about to deduct from current_inventory,
+    // instead of being silently recorded as 0.
+    const priceValue =
+      normalizedType === "deplete" ? Number(effectiveSlotMatch?.avg_price) || 0 : Number(price) || 0
     const total_cost = quantityValue * priceValue
 
     if (normalizedType === "deplete") {

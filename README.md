@@ -88,3 +88,5 @@ If you want App Store / Play Store binaries:
 - E2E runbook and auth matrix: `docs/e2e-regression.md`
 - Product validation metrics and funnel runbook: `docs/product-validation-metrics.md`
 - DB schema and migrations: `scripts/`
+- QA/audit prompts, scenarios, and release playbooks for driving Claude Code
+  as an external reviewer: `engineering/`
