@@ -34,6 +34,7 @@ type ExpenseInventoryTransactionRow = {
   quantity: number
   location_id: string | null
   unit: string | null
+  price: number
 }
 type ExpenseInventoryLinkRow = {
   id: number
@@ -157,7 +158,7 @@ async function loadExpenseInventoryTransactions(
     accountsSql,
     tenantContext,
     accountsSql`
-      SELECT id, item_type, quantity, location_id, unit
+      SELECT id, item_type, quantity, location_id, unit, COALESCE(price, 0) AS price
       FROM transaction_history
       WHERE tenant_id = ${tenantContext.tenantId}
         AND notes ILIKE ${`%${tag}%`}
@@ -171,6 +172,7 @@ async function loadExpenseInventoryTransactions(
     quantity: Number(row.quantity) || 0,
     location_id: row.location_id ? String(row.location_id) : null,
     unit: row.unit ? String(row.unit) : null,
+    price: Number(row.price) || 0,
   }))
 }
 
@@ -191,7 +193,7 @@ async function loadLegacyExpenseInventoryTransactions(
     accountsSql,
     tenantContext,
     accountsSql`
-      SELECT id, item_type, quantity, location_id, unit
+      SELECT id, item_type, quantity, location_id, unit, COALESCE(price, 0) AS price
       FROM transaction_history
       WHERE tenant_id = ${tenantContext.tenantId}
         AND lower(coalesce(transaction_type, '')) IN ('deplete', 'depleting')
@@ -210,6 +212,7 @@ async function loadLegacyExpenseInventoryTransactions(
     quantity: Number(row.quantity) || 0,
     location_id: row.location_id ? String(row.location_id) : null,
     unit: row.unit ? String(row.unit) : null,
+    price: Number(row.price) || 0,
   }))
 }
 
@@ -269,11 +272,15 @@ async function planExpenseInventoryTransactions(
           existingSlot.unit = restored.unit
         }
       } else {
+        // No live current_inventory row for this item/location (fully depleted
+        // or removed elsewhere) — fall back to the price this same quantity was
+        // actually recorded at originally, rather than defaulting to 0.
         slotMap.set(key, {
           itemType: String(restored.item_type || request.itemType),
           locationId: restored.location_id,
           quantity: normalizeInventoryQuantity(restored.quantity),
           unit: restored.unit || "kg",
+          avgPrice: Number(restored.price) || 0,
         })
       }
     }

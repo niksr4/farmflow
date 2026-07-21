@@ -203,10 +203,17 @@ export default function OtherExpensesTab({
       .filter((l) => l.itemType && l.quantity > 0)
     const inventoryPayload = supportsMultiInventoryItems ? validInvItems : validInvItems.slice(0, 1)
 
+    // formData.code already tracks every keystroke (see the code field's onChange),
+    // so a fast Save can't lose the typed code — but if it also resolves to a saved
+    // activity, prefer the canonical code/reference over raw not-yet-blurred text.
+    const pendingCodeResolution = codeQuery !== null ? resolveActivityFromQuery(codeQuery, activities) : null
+    const effectiveCode = pendingCodeResolution?.code ?? formData.code
+    const effectiveReference = pendingCodeResolution?.reference ?? formData.reference
+
     const deployment: any = {
       date: formData.date,
-      code: formData.code,
-      reference: formData.reference,
+      code: effectiveCode,
+      reference: effectiveReference,
       amount: formData.amount,
       notes: formData.notes,
       user: "admin",
@@ -433,15 +440,29 @@ export default function OtherExpensesTab({
                   </Label>
                   <Input
                     id="expense-code"
-                    value={codeQuery !== null ? codeQuery : formData.code ? `${formData.code} — ${formData.reference}` : ""}
-                    onChange={(e) => setCodeQuery(e.target.value)}
+                    value={
+                      codeQuery !== null
+                        ? codeQuery
+                        : formData.code
+                          ? formData.reference
+                            ? `${formData.code} — ${formData.reference}`
+                            : formData.code
+                          : ""
+                    }
+                    onChange={(e) => {
+                      const value = e.target.value
+                      setCodeQuery(value)
+                      // Expenses allow ad-hoc codes that aren't in the saved list yet, so
+                      // formData.code must track every keystroke directly — unlike labour,
+                      // it can't wait for a resolved match, or a typed-but-unmatched code
+                      // would be silently discarded when the field loses focus.
+                      setFormData((prev) => ({ ...prev, code: value }))
+                    }}
                     onFocus={() => setCodeQuery("")}
                     onBlur={() => {
-                      // Commit a typed-but-not-tapped code before clearing the search text,
-                      // so navigating away doesn't silently discard what was typed. Only
-                      // commits when the query resolves to a real activity; otherwise the
-                      // free-typed code in formData.code (set on every change below) stands,
-                      // since expenses allow ad-hoc codes not yet in the saved list.
+                      // If the typed text also resolves to a saved activity, canonicalize
+                      // the code and auto-fill its category — a convenience on top of the
+                      // live commit above, not something the field's correctness depends on.
                       const query = (codeQuery ?? "").trim()
                       setTimeout(() => {
                         const resolved = resolveActivityFromQuery(query, activities)

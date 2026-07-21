@@ -288,11 +288,20 @@ export default function LaborDeploymentTab({
       return
     }
 
-    const matchingActivity = activities.find((a) => a.code.toLowerCase() === formData.code.trim().toLowerCase())
+    // A click on Save/Update blurs the code field first, but that field's own
+    // commit is deferred 150ms past blur — a fast click or Enter right after
+    // typing (without tapping a suggestion) would otherwise read stale
+    // formData.code here. Resolve any still-in-flight search synchronously so
+    // submit never races the field's own commit.
+    const pendingCodeResolution = codeQuery !== null ? resolveActivityFromQuery(codeQuery, activities) : null
+    const effectiveCode = pendingCodeResolution?.code ?? formData.code
+    const effectiveReference = pendingCodeResolution?.reference ?? formData.reference
+
+    const matchingActivity = activities.find((a) => a.code.toLowerCase() === effectiveCode.trim().toLowerCase())
     if (!matchingActivity) {
       toast({
         title: "Unknown activity code",
-        description: `"${formData.code}" isn't one of your activity codes. Pick one from the list, or add it under Codes settings first.`,
+        description: `"${effectiveCode}" isn't one of your activity codes. Pick one from the list, or add it under Codes settings first.`,
         variant: "destructive",
       })
       setIsSubmitting(false)
@@ -302,7 +311,7 @@ export default function LaborDeploymentTab({
     const deployment = {
       date: formData.date,
       code: matchingActivity.code,
-      reference: formData.reference,
+      reference: effectiveReference,
       laborEntries,
       totalCost: calculateTotal(),
       notes: formData.notes,
