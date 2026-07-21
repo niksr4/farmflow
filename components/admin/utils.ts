@@ -113,7 +113,7 @@ export const buildWeeklySummaryText = (
       compareSummary ? formatDeltaText(summary.salesRevenue - compareSummary.salesRevenue, true) : null,
     ),
     withCompare(
-      `Labor spend (${periodDays}d)`,
+      `Labour spend (${periodDays}d)`,
       formatCurrency(summary.laborSpend),
       compareSummary ? formatDeltaText(summary.laborSpend - compareSummary.laborSpend, true) : null,
     ),

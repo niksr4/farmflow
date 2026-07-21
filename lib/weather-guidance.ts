@@ -71,7 +71,7 @@ export function buildWeatherOperationsGuidance(risk: string) {
   }
   return {
     drying: "Low near-term rain risk. Strong window for drying throughput.",
-    picking: "Good window to run a full picking schedule if labor is available.",
+    picking: "Good window to run a full picking schedule if labour is available.",
     operations: "Use this period to clear pending lots before the next weather shift.",
   }
 }

@@ -44,7 +44,7 @@ const seedLocation = async (page: Page, tenantId: string | null, name: string, c
 test.describe("full UI write workflows", () => {
   test.skip(!hasRequiredAuthCredentials, "Set E2E credentials to run UI workflow checks")
 
-  test("labor entry: form fill, save, and row appears in list", async ({ page }) => {
+  test("labour entry: form fill, save, and row appears in list", async ({ page }) => {
     const token = `${Date.now().toString(36)}`.toUpperCase().slice(-6)
     const activityCode = `UIT${token}`.slice(0, 10)
     const today = new Date().toISOString().slice(0, 10)
@@ -57,14 +57,14 @@ test.describe("full UI write workflows", () => {
     await page.goto(route)
     await waitForDashboardReady(page)
     await applyPreviewTenantCookie(page, context.tenantId)
-    await seedActivityCode(page, activityCode, `UI Test Labor ${token}`)
+    await seedActivityCode(page, activityCode, `UI Test Labour ${token}`)
 
     await page.goto(buildDashboardRouteForTab(context, "accounts"))
     await waitForDashboardReady(page)
 
-    const laborTab = page.getByRole("tab", { name: "Labor" })
+    const laborTab = page.getByRole("tab", { name: "Labour" })
     if ((await laborTab.count()) === 0) {
-      test.skip(true, "Labor sub-tab not visible for this tenant/role")
+      test.skip(true, "Labour sub-tab not visible for this tenant/role")
       return
     }
     await laborTab.click()
@@ -72,7 +72,7 @@ test.describe("full UI write workflows", () => {
     await page.waitForLoadState("networkidle")
 
     // Open the inline form
-    await page.getByRole("button", { name: "Add labor entry" }).first().click()
+    await page.getByRole("button", { name: "Add labour entry" }).first().click()
     await page.waitForTimeout(300)
 
     // Fill date
@@ -97,17 +97,17 @@ test.describe("full UI write workflows", () => {
     // Fill task description
     const taskInput = page.getByLabel("What work was done")
     if ((await taskInput.count()) > 0) {
-      await taskInput.fill(`UI e2e labor test ${token}`)
+      await taskInput.fill(`UI e2e labour test ${token}`)
     }
 
     // Save — intercept the POST and verify success
     const [saveResponse] = await Promise.all([
       page.waitForResponse((r) => r.url().includes("/api/labor-neon") && r.request().method() === "POST"),
-      page.getByRole("button", { name: "Save labor entry" }).first().click(),
+      page.getByRole("button", { name: "Save labour entry" }).first().click(),
     ])
-    expect(saveResponse.ok(), `Labor save returned ${saveResponse.status()}`).toBeTruthy()
+    expect(saveResponse.ok(), `Labour save returned ${saveResponse.status()}`).toBeTruthy()
     const saveData = await saveResponse.json()
-    expect(Boolean(saveData?.success), `Labor API did not return success: ${JSON.stringify(saveData)}`).toBeTruthy()
+    expect(Boolean(saveData?.success), `Labour API did not return success: ${JSON.stringify(saveData)}`).toBeTruthy()
   })
 
   test("expense entry: form fill, save, and row appears in list", async ({ page }) => {

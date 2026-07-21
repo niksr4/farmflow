@@ -295,7 +295,7 @@ export function buildHeroContent(p: BuildHeroContentParams): HeroContent {
   // ── Accounts stats ────────────────────────────────────────────────────────
   const accountsStats: HeroStat[] = [
     { label: "FY total spend", value: accountsTotalsLoading ? "Loading..." : formatCurrency(accountsTotals.grandTotal, 0), metricValue: accountsTotalsLoading ? null : accountsTotals.grandTotal },
-    { label: "FY labor spend", value: accountsTotalsLoading ? "Loading..." : formatCurrency(accountsTotals.laborTotal, 0), metricValue: accountsTotalsLoading ? null : accountsTotals.laborTotal },
+    { label: "FY labour spend", value: accountsTotalsLoading ? "Loading..." : formatCurrency(accountsTotals.laborTotal, 0), metricValue: accountsTotalsLoading ? null : accountsTotals.laborTotal },
     { label: "FY other expenses", value: accountsTotalsLoading ? "Loading..." : formatCurrency(accountsTotals.otherTotal, 0), metricValue: accountsTotalsLoading ? null : accountsTotals.otherTotal },
   ]
 
@@ -364,7 +364,7 @@ export function buildHeroContent(p: BuildHeroContentParams): HeroContent {
     { icon: TrendingUp, label: pepErr ? (pepperHeroTotals.loading ? "Conversion loading..." : "Conversion unavailable") : `Dry conversion: ${fmt(pepperDryPercent, 1)}%`, metricValue: pepErr ? null : pepperDryPercent },
   ]
   const chipsAccounts: HeroChip[] = [
-    { icon: Users, label: "Labor + expense logs stay audit-ready", metricValue: null },
+    { icon: Users, label: "Labour + expense logs stay audit-ready", metricValue: null },
     { icon: Receipt, label: `Tracking ${currentFiscalYearLabel}`, metricValue: null },
   ]
   const chipsBalanceSheet: HeroChip[] = [
@@ -448,7 +448,7 @@ export function buildHeroContent(p: BuildHeroContentParams): HeroContent {
     case "activity-log":
       return { badge: "Activity Log", title: "Who changed what, and when", description: "Cross-module timeline of create, update, and delete events.", chips: chipsActivity, stats: activityStats }
     case "accounts":
-      return { badge: "Accounts Overview", title: "Labor and expense logging", description: "Keep cost tracking tight and audit-ready.", chips: chipsAccounts, stats: accountsStats }
+      return { badge: "Accounts Overview", title: "Labour and expense logging", description: "Keep cost tracking tight and audit-ready.", chips: chipsAccounts, stats: accountsStats }
     case "balance-sheet":
       return { badge: "Live Balance Sheet", title: "Estate cash position in one view", description: "See booked inflow/outflow and receivable-backed live position.", chips: chipsBalanceSheet, stats: balanceSheetStats }
     case "receivables":

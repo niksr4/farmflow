@@ -43,7 +43,7 @@ export async function GET(request: Request) {
       `,
       )
     } catch (error) {
-      console.error("Error fetching labor data:", error)
+      console.error("Error fetching labour data:", error)
     }
 
     const processingRows = await runTenantQuery(

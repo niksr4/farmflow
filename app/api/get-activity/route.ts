@@ -390,7 +390,7 @@ export async function DELETE(request: Request) {
       return NextResponse.json(
         {
           success: false,
-          error: "This activity code is already used in labor/expense records. Edit it instead of deleting.",
+          error: "This activity code is already used in labour/expense records. Edit it instead of deleting.",
         },
         { status: 409 },
       )

@@ -84,10 +84,10 @@ test.describe("accounts export e2e", () => {
           costPerLabor: 550,
         },
       ],
-      notes: `E2E labor ${token}`,
+      notes: `E2E labour ${token}`,
     })
-    expect(laborResult.ok, `Failed to seed labor entry (status ${laborResult.status}): ${laborResult.text}`).toBeTruthy()
-    expect(Boolean(laborResult.data?.success), `Labor seed API did not return success: ${laborResult.text}`).toBeTruthy()
+    expect(laborResult.ok, `Failed to seed labour entry (status ${laborResult.status}): ${laborResult.text}`).toBeTruthy()
+    expect(Boolean(laborResult.data?.success), `Labour seed API did not return success: ${laborResult.text}`).toBeTruthy()
 
     const expenseResult = await requestJson(page, "POST", "/api/expenses-neon", {
       date: now,

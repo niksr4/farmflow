@@ -43,7 +43,7 @@ const EN_TRANSLATIONS: TranslationTree = {
       description:
         "FarmFlow tracks every cherry and every rupee — then tells you what it means. A weekly AI digest, market timing signals, and an assistant that answers questions about your own numbers.",
       bullet1: "Log cherry intake, pulping batches, and dry output every day",
-      bullet2: "Track plucker productivity and labor costs by block",
+      bullet2: "Track plucker productivity and labour costs by block",
       bullet3: "Know your conversion ratio and catch losses before they compound",
       bullet4: "Use rainfall records to plan drying windows and protect parchment",
       bullet5: "Add curing, grading, and quality notes when your workflow needs them",

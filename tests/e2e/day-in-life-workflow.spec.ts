@@ -215,7 +215,7 @@ test.describe("day-in-life workflow regression", () => {
       date: today,
       code: activityCode,
       locationId: location.id,
-      notes: `Workflow labor ${token}`,
+      notes: `Workflow labour ${token}`,
       laborEntries: [
         {
           name: "Estate Labor",
@@ -224,8 +224,8 @@ test.describe("day-in-life workflow regression", () => {
         },
       ],
     })
-    expect(laborSeed.ok, `Failed to seed labor record (status ${laborSeed.status}): ${laborSeed.text}`).toBeTruthy()
-    expect(Boolean(laborSeed.data?.success), `Labor API did not return success: ${laborSeed.text}`).toBeTruthy()
+    expect(laborSeed.ok, `Failed to seed labour record (status ${laborSeed.status}): ${laborSeed.text}`).toBeTruthy()
+    expect(Boolean(laborSeed.data?.success), `Labour API did not return success: ${laborSeed.text}`).toBeTruthy()
     cleanup.laborId = laborSeed.data?.id
 
     const expenseSeed = await requestJson(page, "POST", "/api/expenses-neon", {
@@ -262,10 +262,10 @@ test.describe("day-in-life workflow regression", () => {
     await page.goto(buildDashboardRouteForTab(context, "accounts"))
     await waitForDashboardReady(page)
     // Accounts Export card requires !isPreviewMode — unavailable when owner previews a tenant.
-    // Verify the page loaded by checking the always-visible Labor sub-tab instead.
-    const laborSubTab = page.getByRole("tab", { name: "Labor" })
+    // Verify the page loaded by checking the always-visible Labour sub-tab instead.
+    const laborSubTab = page.getByRole("tab", { name: "Labour" })
     if ((await laborSubTab.count()) === 0) {
-      test.skip(true, "Accounts Labor sub-tab not visible for this tenant/role configuration")
+      test.skip(true, "Accounts Labour sub-tab not visible for this tenant/role configuration")
     }
     await expect(laborSubTab.first()).toBeVisible()
 

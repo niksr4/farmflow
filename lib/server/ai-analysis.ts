@@ -182,7 +182,7 @@ async function fetchLaborData(startDate: string, endDate: string, tenantContext:
       `,
     )
   } catch (error) {
-    logServerError("Error fetching labor data", error)
+    logServerError("Error fetching labour data", error)
     return []
   }
 }
@@ -455,7 +455,7 @@ function buildDataSummary(data: DataSummaryInput): string {
   }
 
   if (data.laborData && data.laborData.length > 0) {
-    sections.push("\n## Labor Deployment Summary")
+    sections.push("\n## Labour Deployment Summary")
     const totalEstateWorkers = data.laborData.reduce((sum, labor) => sum + (Number(labor.hf_laborers) || 0), 0)
     const totalEstateAmount = data.laborData.reduce(
       (sum, labor) => sum + (Number(labor.hf_laborers) || 0) * (Number(labor.hf_cost_per_laborer) || 0),
@@ -467,10 +467,10 @@ function buildDataSummary(data: DataSummaryInput): string {
       0,
     )
     const totalCost = data.laborData.reduce((sum, labor) => sum + (Number(labor.total_cost) || 0), 0)
-    sections.push(`- Total labor entries: ${data.laborData.length}`)
+    sections.push(`- Total labour entries: ${data.laborData.length}`)
     sections.push(`- Estate workers deployed: ${totalEstateWorkers} (Total: ₹${totalEstateAmount.toLocaleString()})`)
     sections.push(`- Outside workers deployed: ${totalOutsideWorkers} (Total: ₹${totalOutsideAmount.toLocaleString()})`)
-    sections.push(`- Total labor cost: ₹${totalCost.toLocaleString()}`)
+    sections.push(`- Total labour cost: ₹${totalCost.toLocaleString()}`)
   }
 
   if (data.processingData && Object.keys(data.processingData).length > 0) {

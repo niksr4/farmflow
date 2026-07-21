@@ -1,7 +1,7 @@
 export const API_TRANSACTIONS = "/api/transactions-neon"
 export const API_INVENTORY = "/api/inventory-neon"
 
-// Dispatched by any tab (labor, expenses, picking) after a successful write.
+// Dispatched by any tab (labour, expenses, picking) after a successful write.
 // inventory-system listens for this to refresh the onboarding checklist.
 export const FARMFLOW_RECORD_SAVED_EVENT = "farmflow:record-saved"
 

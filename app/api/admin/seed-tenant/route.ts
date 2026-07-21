@@ -16,7 +16,7 @@ const isMissingRelation = (error: unknown) => {
 
 const accountActivities = [
   { code: "ADMIN", activity: "Administrative Expenses" },
-  { code: "LABOR", activity: "Labor Costs" },
+  { code: "LABOR", activity: "Labour Costs" },
   { code: "SUPPLIES", activity: "Office Supplies" },
   { code: "UTILITIES", activity: "Utilities" },
   { code: "MAINT", activity: "Equipment Maintenance" },

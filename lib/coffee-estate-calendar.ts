@@ -47,7 +47,7 @@ const PHASES: EstatePhase[] = [
       "Dispatch of dry parchment bags to curing works",
       "Post-harvest pruning: desuckering, tipping, stumping old bushes",
       "Blossom irrigation (pumping water to dehydrated bushes to trigger flowering)",
-      "High labor spend on pruning crews",
+      "High labour spend on pruning crews",
       "Fertiliser application after pruning",
     ],
     abnormalIfMissing: [
@@ -57,7 +57,7 @@ const PHASES: EstatePhase[] = [
     abnormalIfPresent: [
       "Fresh picking records in late February — season should be winding down",
     ],
-    laborExpectation: "High — pruning crews are large and expensive. Labor cost spike in Jan–Feb is expected and not a cause for alarm.",
+    laborExpectation: "High — pruning crews are large and expensive. Labour cost spike in Jan–Feb is expected and not a cause for alarm.",
     processingExpectation: "Moderate to high in January (Robusta); dropping to near-zero by February.",
     keyWatchPoints: [
       "Track blossom irrigation dates and water usage",
@@ -141,7 +141,7 @@ const PHASES: EstatePhase[] = [
     ],
     abnormalIfMissing: [
       "No rainfall records in June–August — check if recording is happening; this is the wettest period",
-      "Very low weed-management labor — estates need constant weeding during monsoon",
+      "Very low weed-management labour — estates need constant weeding during monsoon",
     ],
     abnormalIfPresent: [
       "Processing or picking records — absolutely no harvest activity expected",
@@ -171,7 +171,7 @@ const PHASES: EstatePhase[] = [
       "Storage preparation — clean bags, check bag inventory",
     ],
     abnormalIfMissing: [
-      "No labor ramp-up in October — picking crews should be mobilising",
+      "No labour ramp-up in October — picking crews should be mobilising",
       "No processing records in October — early Arabica should be coming in",
       "No equipment maintenance expenses in September — harvest prep is critical",
     ],
@@ -199,15 +199,15 @@ const PHASES: EstatePhase[] = [
       "Dispatch of dried parchment to curing works",
       "Sales of parchment coffee to exporters or co-ops",
       "Pepper picking and drying (if intercropped)",
-      "Extremely high labor — this is the most labor-intensive period of the year",
+      "Extremely high labour — this is the most labour-intensive period of the year",
     ],
     abnormalIfMissing: [
       "No picking or processing records — harvest should be in full swing",
-      "No labor records — picking crews should be deployed daily",
+      "No labour records — picking crews should be deployed daily",
       "No rainfall records — winter drizzle (November–December) affects drying; should still be tracked",
     ],
     abnormalIfPresent: [],
-    laborExpectation: "Maximum. Highest labor cost of the year. Cost spikes are expected and normal.",
+    laborExpectation: "Maximum. Highest labour cost of the year. Cost spikes are expected and normal.",
     processingExpectation: "Maximum. Processing records should appear daily or near-daily.",
     keyWatchPoints: [
       "Cherry-to-wet-parchment ratio (should be ~5–6:1 by weight) — low ratio means green cherry being picked",
@@ -245,7 +245,7 @@ export function buildEstateCalendarContext(): string {
     `Robusta: ${phase.robustaStatus}`,
     `Pepper: ${phase.pepperStatus}`,
     ``,
-    `Labor expectation this season: ${phase.laborExpectation}`,
+    `Labour expectation this season: ${phase.laborExpectation}`,
     `Processing expectation this season: ${phase.processingExpectation}`,
     ``,
     `Normal activities right now:`,

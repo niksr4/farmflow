@@ -94,7 +94,7 @@ export async function GET(request: NextRequest) {
         [tenantId, start, end],
       ),
 
-      // Labor costs
+      // Labour costs
       accountsSql.query(
         `SELECT
            COALESCE(SUM(total_cost), 0) AS total_cost,
@@ -154,7 +154,7 @@ export async function GET(request: NextRequest) {
       }
     })
 
-    // Labor
+    // Labour
     const laborData = toRows(laborRows)[0] ?? {}
     const laborTotalInr = Number(laborData.total_cost ?? 0)
 
@@ -167,7 +167,7 @@ export async function GET(request: NextRequest) {
 
     // Cost breakdown
     const allCosts: Array<{ category: string; amountInr: number }> = [
-      { category: "Labor", amountInr: laborTotalInr },
+      { category: "Labour", amountInr: laborTotalInr },
       ...expenseData.map((r) => ({
         category: String(r.activity_label || r.code || "Other"),
         amountInr: Number(r.total_amount ?? 0),

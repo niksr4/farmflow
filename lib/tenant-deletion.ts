@@ -68,7 +68,7 @@ export const TENANT_DELETION_DEPENDENCIES: TenantDeletionDependencySpec[] = [
   withRequiredTables("receivables", "Receivables", "blocking"),
   withRequiredTables("billing_invoices", "Billing invoices", "blocking"),
   withRequiredTables("billing_invoice_items", "Billing invoice items", "blocking"),
-  withRequiredTables("labor_transactions", "Labor transactions", "blocking"),
+  withRequiredTables("labor_transactions", "Labour transactions", "blocking"),
   withRequiredTables("expense_transactions", "Expense transactions", "blocking"),
   withRequiredTables("attendance_records", "Attendance records", "blocking"),
   withRequiredTables("picking_records", "Picking records", "blocking"),

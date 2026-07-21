@@ -552,7 +552,7 @@ export async function GET(request: Request) {
       }
       if (highestLaborDay) {
         highlights.push(
-          `Labor peak day: ${highestLaborDay.date} with ₹${Math.round(highestLaborDay.totalAmount).toLocaleString()} across ${highestLaborDay.entryCount} entries.`,
+          `Labour peak day: ${highestLaborDay.date} with ₹${Math.round(highestLaborDay.totalAmount).toLocaleString()} across ${highestLaborDay.entryCount} entries.`,
         )
       }
       if (highestExpenseDay) {
@@ -578,7 +578,7 @@ export async function GET(request: Request) {
         const client = getClaudeClient()
         const highlightList = highlights.map((h, i) => `${i + 1}. ${h}`).join("\n")
         const contextBlurb = accountsPatterns
-          ? `Labor share: ${Math.round(accountsPatterns.laborSharePct)}% of spend. Total spend: ₹${Math.round(accountsPatterns.totalSpend).toLocaleString()}.`
+          ? `Labour share: ${Math.round(accountsPatterns.laborSharePct)}% of spend. Total spend: ₹${Math.round(accountsPatterns.totalSpend).toLocaleString()}.`
           : ""
 
         const reasoningResponse = await client.messages.create({

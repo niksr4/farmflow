@@ -97,7 +97,7 @@ export async function GET() {
     for (const row of toArray(labor)) {
       entries.push({
         module: "labor",
-        label: `Labor · ${row.code || ""}`,
+        label: `Labour · ${row.code || ""}`,
         detail: `₹${Number(row.total_cost || 0).toLocaleString()}`,
         date: String(row.date),
       })

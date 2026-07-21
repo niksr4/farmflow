@@ -58,7 +58,7 @@ export function classifyTenantGuidance(metrics: TenantGuidanceMetrics): TenantGu
   }
 
   if (metrics.accountCodesCount === 0 && daysSinceCreated >= 3 && totalLogins >= 1) {
-    flags.push("No account codes - labor & expense entry blocked")
+    flags.push("No account codes - labour & expense entry blocked")
   }
 
   return {
@@ -72,7 +72,7 @@ import { getEstatePhaseForMonth } from "@/lib/coffee-estate-calendar"
 
 const SEASON_FIRST_ENTRY_HINT: Record<string, { body: string; action: WorkspaceHintAction }> = {
   "post-harvest-pruning": {
-    body: "It's pruning season — log your first labor entry for the pruning crew, or record a dispatch if parchment is moving to the curing works.",
+    body: "It's pruning season — log your first labour entry for the pruning crew, or record a dispatch if parchment is moving to the curing works.",
     action: { label: "Log labor", tab: "accounts", panel: "labor" },
   },
   "blossom": {
@@ -111,8 +111,8 @@ export function buildTenantWorkspaceHints(metrics: TenantGuidanceMetrics): Works
       type: "warning",
       title: "Account codes are missing",
       body: isStuck
-        ? "You've signed in a few times, but labor and expense entry is still blocked because this estate has no account codes. Open Accounts → Codes and add the few codes your team actually uses."
-        : "Labor and expense entry needs account codes. Open Accounts → Codes and add the few codes your team actually uses every week.",
+        ? "You've signed in a few times, but labour and expense entry is still blocked because this estate has no account codes. Open Accounts → Codes and add the few codes your team actually uses."
+        : "Labour and expense entry needs account codes. Open Accounts → Codes and add the few codes your team actually uses every week.",
       action: { label: "Go to Codes", tab: "accounts", panel: "activities" },
       dismissible: false,
     })
@@ -143,7 +143,7 @@ export function buildTenantWorkspaceHints(metrics: TenantGuidanceMetrics): Works
       id: "welcome-get-started",
       type: "tip",
       title: "Start with one live entry",
-      body: seasonHint?.body ?? "Open Accounts and log today's labor or an expense. If your team is already pulping, you can start there instead.",
+      body: seasonHint?.body ?? "Open Accounts and log today's labour or an expense. If your team is already pulping, you can start there instead.",
       action: seasonHint?.action ?? { label: "Open Accounts", tab: "accounts", panel: "labor" },
     })
   } else if (totalLogins > 3) {
@@ -151,7 +151,7 @@ export function buildTenantWorkspaceHints(metrics: TenantGuidanceMetrics): Works
       id: "no-data-entered",
       type: "warning",
       title: "Workspace ready, no records yet",
-      body: seasonHint?.body ?? "Log your first labor, expense, or pulping entry so live totals and season reporting can start reflecting real work.",
+      body: seasonHint?.body ?? "Log your first labour, expense, or pulping entry so live totals and season reporting can start reflecting real work.",
       action: seasonHint?.action ?? { label: "Open Accounts", tab: "accounts", panel: "labor" },
       dismissible: false,
     })

@@ -167,7 +167,7 @@ export function buildHistoricalBaselineContext(
   const workerDayBase = baseline(history.map((h) => h.laborWorkerDays))
   if (laborCostBase || current.laborCost > 0) {
     if (laborCostBase) {
-      lines.push(`Labor cost/week: avg ₹${fmt(laborCostBase.avg, 0)} (range ₹${fmt(laborCostBase.min, 0)}–₹${fmt(laborCostBase.max, 0)})`)
+      lines.push(`Labour cost/week: avg ₹${fmt(laborCostBase.avg, 0)} (range ₹${fmt(laborCostBase.min, 0)}–₹${fmt(laborCostBase.max, 0)})`)
       if (current.laborCost > 0) lines.push(`  This week: ₹${fmt(current.laborCost, 0)}${pct(current.laborCost, laborCostBase.avg)}`)
     }
     if (workerDayBase && workerDayBase.avg > 0 && laborCostBase) {

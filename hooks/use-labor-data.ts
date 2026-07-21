@@ -91,7 +91,7 @@ export function useLaborData(locationId?: string, options: LaborDataOptions = {}
         }
 
         if (!response.ok) {
-          console.error("❌ Labor API error:", response.status, responseText)
+          console.error("❌ Labour API error:", response.status, responseText)
           setError(responseText || `Failed to load deployments (${response.status})`)
           setDeployments([])
           setHasMore(false)
@@ -140,7 +140,7 @@ export function useLaborData(locationId?: string, options: LaborDataOptions = {}
           setTotalCost(0)
         }
       } catch (err: any) {
-        console.error("❌ Error fetching labor deployments:", err)
+        console.error("❌ Error fetching labour deployments:", err)
         setError(err.message || "Failed to fetch deployments")
         setDeployments([])
         setHasMore(false)
@@ -185,12 +185,12 @@ export function useLaborData(locationId?: string, options: LaborDataOptions = {}
       } else {
         console.error("❌ Failed to add deployment:", data.message)
         setError(data.message || "Failed to add deployment")
-        return { ok: false, error: data.message || "Failed to save labor record" }
+        return { ok: false, error: data.message || "Failed to save labour record" }
       }
     } catch (err: any) {
       console.error("❌ Error adding deployment:", err)
       setError(err.message || "Failed to add deployment")
-      return { ok: false, error: "Network error — labor record may not have saved" }
+      return { ok: false, error: "Network error — labour record may not have saved" }
     }
   }
 
@@ -214,12 +214,12 @@ export function useLaborData(locationId?: string, options: LaborDataOptions = {}
       } else {
         console.error("❌ Failed to update deployment:", data.message)
         setError(data.message || "Failed to update deployment")
-        return { ok: false, error: data.message || "Failed to update labor record" }
+        return { ok: false, error: data.message || "Failed to update labour record" }
       }
     } catch (err: any) {
       console.error("❌ Error updating deployment:", err)
       setError(err.message || "Failed to update deployment")
-      return { ok: false, error: "Network error — labor record may not have saved" }
+      return { ok: false, error: "Network error — labour record may not have saved" }
     }
   }
 
@@ -239,12 +239,12 @@ export function useLaborData(locationId?: string, options: LaborDataOptions = {}
       } else {
         console.error("❌ Failed to delete deployment:", data.message)
         setError(data.message || "Failed to delete deployment")
-        return { ok: false, error: data.message || "Failed to delete labor record" }
+        return { ok: false, error: data.message || "Failed to delete labour record" }
       }
     } catch (err: any) {
       console.error("❌ Error deleting deployment:", err)
       setError(err.message || "Failed to delete deployment")
-      return { ok: false, error: "Network error — labor record may not have deleted" }
+      return { ok: false, error: "Network error — labour record may not have deleted" }
     }
   }
 

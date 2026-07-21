@@ -115,8 +115,8 @@ export const IMPORT_DATASETS: ImportDatasetConfig[] = [
   },
   {
     id: "labor",
-    label: "Labor Deployments",
-    description: "Import labor deployments and costs.",
+    label: "Labour Deployments",
+    description: "Import labour deployments and costs.",
     template: [
       "deployment_date",
       "location",
@@ -168,7 +168,7 @@ export const EXPORT_DATASETS: ExportDatasetConfig[] = [
   {
     id: "pnl-monthly",
     label: "Monthly P&L",
-    description: "Monthly sales, labor, expense, and gross margin rollup.",
+    description: "Monthly sales, labour, expense, and gross margin rollup.",
   },
   {
     id: "pepper",
@@ -192,8 +192,8 @@ export const EXPORT_DATASETS: ExportDatasetConfig[] = [
   },
   {
     id: "labor",
-    label: "Labor",
-    description: "Labor deployment entries and costs.",
+    label: "Labour",
+    description: "Labour deployment entries and costs.",
   },
   {
     id: "expenses",

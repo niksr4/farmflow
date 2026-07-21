@@ -112,7 +112,7 @@ export const buildOnboardingSteps = (
     steps.push({
       key: "team_member",
       title: "Add your estate manager",
-      description: "Create a login for the person who will log daily data — processing, labor, expenses. Each user gets their own secure account.",
+      description: "Create a login for the person who will log daily data — processing, labour, expenses. Each user gets their own secure account.",
       done: status.team_member,
       actionLabel: "Go to Settings",
       actionTab: "settings",
@@ -135,7 +135,7 @@ export const buildOnboardingSteps = (
     steps.push({
       key: "account_codes",
       title: "Set up activity codes",
-      description: "Add the codes your team uses to categorize labor and expenses before daily records begin.",
+      description: "Add the codes your team uses to categorize labour and expenses before daily records begin.",
       done: status.account_codes,
       actionLabel: "Go to Accounts",
       actionTab: "accounts",
@@ -156,7 +156,7 @@ export const buildOnboardingSteps = (
   if (access.canShowLabor) {
     steps.push({
       key: "labor",
-      title: "Log first labor deployment",
+      title: "Log first labour deployment",
       description: "Track workers deployed for harvesting, pruning, irrigation, or any farm activity.",
       done: status.labor,
       actionLabel: "Go to Accounts",
@@ -205,7 +205,7 @@ export const buildLaunchGuidePhases = (
     phases.push({
       id: "phase-labor",
       label: "Week 2",
-      title: "Labor tracking",
+      title: "Labour tracking",
       detail: "Log daily worker deployments by activity code so costs stay accurate from week one.",
       done: status.labor,
       actionLabel: "Open Accounts",

@@ -30,8 +30,8 @@ Provide a comprehensive analysis covering:
 ## 1. Processing Performance
 Evaluate cherry-to-dry conversion efficiency by location and coffee type. Flag any ratios that look anomalous compared to the season average. Identify the strongest and weakest processing days.
 
-## 2. Labor & Cost Efficiency
-Review labor deployment — estate workers vs outside workers, cost per laborer per day, activity distribution. Identify weeks or periods where outside labor cost spiked relative to processing volume.
+## 2. Labour & Cost Efficiency
+Review labour deployment — estate workers vs outside workers, cost per laborer per day, activity distribution. Identify weeks or periods where outside labour cost spiked relative to processing volume.
 
 ## 3. Transaction & Inventory Patterns
 Analyse stock movement trends: top restocking spend, fastest-depleting items, months with unusual inflow/outflow ratios. Flag items that may need restocking soon.
@@ -40,7 +40,7 @@ Analyse stock movement trends: top restocking spend, fastest-depleting items, mo
 Review dispatch volume, confirmation rates, and any pending unconfirmed dispatches. Analyse revenue by buyer — identify which buyers consistently pay above or below average price per kg.
 
 ## 5. Rainfall & Operational Timing
-If rainfall data is present, correlate heavy rain periods with processing dips or labor adjustments. Suggest optimal upcoming windows for drying based on current rainfall patterns.
+If rainfall data is present, correlate heavy rain periods with processing dips or labour adjustments. Suggest optimal upcoming windows for drying based on current rainfall patterns.
 
 ## 6. Key Recommendations
 Provide 3–5 specific, actionable recommendations the estate manager can act on this week. Be concrete — name the location, coffee type, or cost code where relevant.`

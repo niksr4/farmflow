@@ -918,7 +918,7 @@ export async function GET(request: NextRequest) {
       pepper_records: "Pepper table is not available for this tenant database.",
       transaction_history: "Transactions table is not available for this tenant database.",
       current_inventory: "Inventory table is not available for this tenant database.",
-      labor_transactions: "Labor table is not available for this tenant database.",
+      labor_transactions: "Labour table is not available for this tenant database.",
       expense_transactions: "Expense table is not available for this tenant database.",
     }
 

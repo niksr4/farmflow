@@ -80,7 +80,7 @@ const WORKSPACE_DEFINITIONS: WorkspaceDefinition[] = [
   },
   {
     label: "Accounts",
-    detail: "Use Accounts for labor, expenses, attendance, and activity codes.",
+    detail: "Use Accounts for labour, expenses, attendance, and activity codes.",
     isAvailable: (modules: Set<string>) => modules.has("accounts"),
   },
   {

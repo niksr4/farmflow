@@ -318,7 +318,7 @@ export async function GET(request: Request) {
       totalCost,
     })
   } catch (error: any) {
-    console.error("❌ Error fetching labor deployments:", error.message)
+    console.error("❌ Error fetching labour deployments:", error.message)
     if (isModuleAccessError(error)) {
       return NextResponse.json({ success: false, error: "Module access disabled", deployments: [] }, { status: 403 })
     }
@@ -374,7 +374,7 @@ export async function POST(request: Request) {
       ? accountsSql` AND location_id IS NOT DISTINCT FROM ${validLocationId}::uuid`
       : accountsSql``
 
-    // Extract estate and outside labor details. Any group beyond the in-house
+    // Extract estate and outside labour details. Any group beyond the in-house
     // bucket — "Outside", a custom "+Add group" label, or a lump-sum "Contract"
     // entry — is folded into the outside bucket by aggregateLaborEntries so its
     // cost is never silently dropped from the stored breakdown (it used to only
@@ -532,7 +532,7 @@ export async function POST(request: Request) {
       id: result[0].id,
     })
   } catch (error: any) {
-    console.error("❌ Error adding labor deployment:", error.message)
+    console.error("❌ Error adding labour deployment:", error.message)
     if (isModuleAccessError(error)) {
       return NextResponse.json({ success: false, error: "Module access disabled" }, { status: 403 })
     }
@@ -588,7 +588,7 @@ export async function PUT(request: Request) {
       return NextResponse.json({ success: false, error: "Selected location is invalid for this tenant" }, { status: 400 })
     }
 
-    // Extract estate and outside labor details (same flexible matching as POST, no fallback).
+    // Extract estate and outside labour details (same flexible matching as POST, no fallback).
     const { hfLaborers, hfCostPer, outsideLaborers, outsideCostPer } = aggregateLaborEntries(laborEntries)
     const computedTotalCost = computeLaborTotalCost(laborEntries)
     const supportsLaborEntries = await tableHasLaborEntriesColumn("labor_transactions")
@@ -672,7 +672,7 @@ export async function PUT(request: Request) {
       success: true,
     })
   } catch (error: any) {
-    console.error("❌ Error updating labor deployment:", error.message)
+    console.error("❌ Error updating labour deployment:", error.message)
     if (isModuleAccessError(error)) {
       return NextResponse.json({ success: false, error: "Module access disabled" }, { status: 403 })
     }
@@ -743,7 +743,7 @@ export async function DELETE(request: Request) {
       success: true,
     })
   } catch (error: any) {
-    console.error("❌ Error deleting labor deployment:", error.message)
+    console.error("❌ Error deleting labour deployment:", error.message)
     if (isModuleAccessError(error)) {
       return NextResponse.json({ success: false, error: "Module access disabled" }, { status: 403 })
     }

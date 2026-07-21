@@ -360,14 +360,14 @@ export async function GET(request: Request) {
       },
       {
         id: "labor_cost",
-        label: "Labor outflow",
+        label: "Labour outflow",
         tab: "Accounts",
         direction: "outflow",
         amount: laborCost,
         records: toCount((laborRow as any).total_count),
         includedInBookedNet: true,
         status: laborResult.available ? "available" : "missing",
-        note: "Labor transactions from Accounts tab.",
+        note: "Labour transactions from Accounts tab.",
       },
       {
         id: "expense_cost",

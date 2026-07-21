@@ -112,7 +112,7 @@ function buildYesterdaySection(a: YesterdayActivity, dateLabel: string): string 
   const lines: string[] = [`## Yesterday (${dateLabel})`]
   if (a.processingKg > 0) lines.push(`- Cherry processed: ${a.processingKg.toFixed(1)} kg`)
   if (a.pickingEntries > 0) lines.push(`- Picking entries recorded: ${a.pickingEntries}`)
-  if (a.laborEntries > 0) lines.push(`- Labor deployments: ${a.laborEntries} entries, ${a.laborWorkers} worker-days, ₹${a.laborCost.toLocaleString("en-IN")} cost`)
+  if (a.laborEntries > 0) lines.push(`- Labour deployments: ${a.laborEntries} entries, ${a.laborWorkers} worker-days, ₹${a.laborCost.toLocaleString("en-IN")} cost`)
   if (a.expenseEntries > 0) lines.push(`- Other expenses: ₹${a.expenseTotal.toLocaleString("en-IN")} across ${a.expenseEntries} entries`)
   if (a.salesRevenue > 0) lines.push(`- Sales revenue: ₹${a.salesRevenue.toLocaleString("en-IN")}`)
   if (a.dispatchBags > 0) lines.push(`- Bags dispatched: ${a.dispatchBags.toFixed(1)}`)

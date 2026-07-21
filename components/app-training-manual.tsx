@@ -486,7 +486,7 @@ const buildManualGroups = (
     hasModule(enabledModules, "accounts")
       ? {
           name: "Accounts",
-          whatItIs: "Daily Labour, Expenses, Attendance, and Cost Codes always live here. Turn on Picking Log for piece-rate picking pay, or Labor Management for a full Worker Roster plus an advances/deductions Ledger and Payroll. Tap Cost Patterns for a spending analysis when you need it.",
+          whatItIs: "Daily Labour, Expenses, Attendance, and Cost Codes always live here. Turn on Picking Log for piece-rate picking pay, or Labour Management for a full Worker Roster plus an advances/deductions Ledger and Payroll. Tap Cost Patterns for a spending analysis when you need it.",
           openItWhen: "People worked, money was spent, or you need to maintain accounting categories.",
           doneLooksLike: "Costs are captured with enough detail to explain the season and labour use. Cost Patterns shows where money is going without cluttering the entry view.",
         }

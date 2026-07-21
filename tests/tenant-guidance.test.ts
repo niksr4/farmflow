@@ -50,6 +50,6 @@ describe("tenant guidance", () => {
     })
 
     expect(summary.status).toBe("active")
-    expect(summary.flags).toContain("No account codes - labor & expense entry blocked")
+    expect(summary.flags).toContain("No account codes - labour & expense entry blocked")
   })
 })

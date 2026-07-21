@@ -5,7 +5,7 @@ import { getCurrentEstatePhase, getEstatePhaseForMonth, type EstateSeason } from
 export type TabSeasonality = "always" | "harvest" | "post-harvest" | "analytics"
 
 // Ground truth from HoneyFarm usage data:
-// - Labor: 701 records (year-round, every week)
+// - Labour: 701 records (year-round, every week)
 // - Expenses: 349 records (year-round, 2-3x/week)
 // - Processing: active Oct-Jan only
 // - Dispatch: active Dec-Mar only
@@ -40,7 +40,7 @@ const SEASON_TAB_ORDER: Record<string, string[]> = {
     "plant-health", "news", "market-pricing", "resources", "documents",
     "journal", "picking", "compliance", "receivables", "billing",
   ],
-  // Off-season (berry-formation, monsoon, blossom) — labor & maintenance dominant
+  // Off-season (berry-formation, monsoon, blossom) — labour & maintenance dominant
   "default": [
     "home", "accounts", "rainfall", "inventory", "season", "balance-sheet",
     "season-pl", "ai-analysis", "activity-log", "plant-health", "news",
@@ -114,7 +114,7 @@ export function getSeasonContextLine(): string {
   const lines: Record<EstateSeason, string> = {
     "harvest-peak":        "Peak harvest. Log picking and pulping daily — accuracy matters most now.",
     "pre-harvest":         "Harvest starting soon. Check pulping equipment and roster picking crews.",
-    "post-harvest-pruning":"Pruning crews active. Log labor carefully — this is your biggest cost month.",
+    "post-harvest-pruning":"Pruning crews active. Log labour carefully — this is your biggest cost month.",
     "blossom":             "Blossom season. Record the shower date — it sets your harvest window.",
     "berry-formation":     "Log fertiliser applications and borer checks. Monsoon prep starts soon.",
     "monsoon":             "Maintenance season. Focus on drainage, weeding, and second fertiliser dose.",
@@ -127,7 +127,7 @@ export function getMobileBottomNavTabs(availableTabs: string[]): string[] {
   const phase = getCurrentEstatePhase()
   const isHarvest = [...HARVEST_SEASONS, ...POST_HARVEST_SEASONS].includes(phase.season)
 
-  // Always show accounts (labor+expenses) and rainfall
+  // Always show accounts (labour+expenses) and rainfall
   // In harvest: swap one slot for processing
   if (isHarvest) {
     return ["home", "processing", "accounts", "rainfall"].filter((t) => availableTabs.includes(t))

@@ -156,13 +156,13 @@ ${prevFY.label} — ${prevPeriodLabel}:
 - Pulping output: ${prev.pulpingKg.toLocaleString()} KG
 - Dispatch received: ${prev.dispatchBags.toLocaleString()} bags
 - Sales volume: ${prev.salesKg.toLocaleString()} KG | Revenue: ₹${prev.salesRevenue.toLocaleString()}
-- Labor cost: ₹${prev.laborCost.toLocaleString()} | Other expenses: ₹${prev.expenseCost.toLocaleString()}
+- Labour cost: ₹${prev.laborCost.toLocaleString()} | Other expenses: ₹${prev.expenseCost.toLocaleString()}
 
 ${currentFY.label} — ${periodLabel} (in progress, same point in season):
 - Pulping output: ${curr.pulpingKg.toLocaleString()} KG  (${pctChange(curr.pulpingKg, prev.pulpingKg)} vs same point last season)
 - Dispatch received: ${curr.dispatchBags.toLocaleString()} bags  (${pctChange(curr.dispatchBags, prev.dispatchBags)} vs same point last season)
 - Sales volume: ${curr.salesKg.toLocaleString()} KG | Revenue: ₹${curr.salesRevenue.toLocaleString()}  (${pctChange(curr.salesRevenue, prev.salesRevenue)} vs same point last season)
-- Labor cost: ₹${curr.laborCost.toLocaleString()} | Other expenses: ₹${curr.expenseCost.toLocaleString()}
+- Labour cost: ₹${curr.laborCost.toLocaleString()} | Other expenses: ₹${curr.expenseCost.toLocaleString()}
     `.trim()
 
     const narrative =

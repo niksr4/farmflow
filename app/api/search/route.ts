@@ -89,7 +89,7 @@ export async function GET(request: NextRequest) {
         LIMIT 6
       `),
 
-      // Labor transactions — search by activity name, notes, or task description
+      // Labour transactions — search by activity name, notes, or task description
       runTenantQuery(sql, tenantContext, sql`
         SELECT
           lt.id::text,

@@ -42,7 +42,7 @@ export const MODULES: ModuleDefinition[] = [
   { id: "news", label: "Market News", defaultEnabled: true },
   { id: "weather", label: "Weather", defaultEnabled: true },
   { id: "season", label: "Season View", defaultEnabled: false },
-  { id: "labor", label: "Labor Management", defaultEnabled: false },
+  { id: "labor", label: "Labour Management", defaultEnabled: false },
   { id: "picking", label: "Picking Log", defaultEnabled: false },
   { id: "market-pricing", label: "Market Pricing & Buyers", defaultEnabled: false },
   { id: "compliance", label: "Compliance & Certifications", defaultEnabled: false },

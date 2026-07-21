@@ -7,7 +7,7 @@ export const AUDIT_ENTITY_TYPES = [
   { id: "dispatch_records", label: "Dispatch" },
   { id: "sales_records", label: "Sales" },
   { id: "transaction_history", label: "Inventory" },
-  { id: "labor_transactions", label: "Labor" },
+  { id: "labor_transactions", label: "Labour" },
   { id: "expense_transactions", label: "Expenses" },
 ] as const
 

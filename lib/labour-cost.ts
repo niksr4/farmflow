@@ -41,10 +41,10 @@ export type AggregatedLaborBreakdown = {
 const IN_HOUSE_NAMES = new Set(["Estate Labor", "Estate Labour", "In-house"])
 
 /**
- * Collapse an arbitrary-length labor entry list into the two summary buckets
+ * Collapse an arbitrary-length labour entry list into the two summary buckets
  * the database stores (in-house / outside).
  *
- * The form allows adding labor groups beyond the two defaults ("+Add group",
+ * The form allows adding labour groups beyond the two defaults ("+Add group",
  * or a lump-sum "Contract" entry) — anything that isn't the in-house bucket
  * gets folded into "outside" here instead of being matched by exact name and
  * silently dropped if unmatched. Worker counts sum directly; the rate is a

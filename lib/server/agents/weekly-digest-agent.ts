@@ -124,7 +124,7 @@ function buildLastWeekSection(w: LastWeekActivity): string {
   const lines: string[] = [`## Last Week (${w.weekLabel})`]
   if (w.processingKg > 0) lines.push(`- Cherry processed: ${w.processingKg.toFixed(1)} kg over ${w.processingDays} day(s)`)
   if (w.pickingEntries > 0) lines.push(`- Picking entries recorded: ${w.pickingEntries}`)
-  if (w.laborEntries > 0) lines.push(`- Labor deployments: ${w.laborEntries} entries, ${w.laborWorkers} worker-days, ₹${w.laborCost.toLocaleString("en-IN")} cost`)
+  if (w.laborEntries > 0) lines.push(`- Labour deployments: ${w.laborEntries} entries, ${w.laborWorkers} worker-days, ₹${w.laborCost.toLocaleString("en-IN")} cost`)
   if (w.expenseEntries > 0) lines.push(`- Other expenses: ₹${w.expenseTotal.toLocaleString("en-IN")} across ${w.expenseEntries} entries`)
   if (w.salesRevenue > 0) lines.push(`- Sales revenue: ₹${w.salesRevenue.toLocaleString("en-IN")}`)
   if (w.dispatchBags > 0) lines.push(`- Bags dispatched: ${w.dispatchBags.toFixed(1)}`)

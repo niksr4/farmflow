@@ -389,7 +389,7 @@ test.describe("mobile dashboard smoke", () => {
         "Fewer Missed Field Tasks",
         "Better Harvest Records",
         "Input Usage Tracking",
-        "Labor Visibility",
+        "Labour Visibility",
         "Structured Daily Updates",
         "Reports for Owner, Exporter, and Manager",
       ]

@@ -187,7 +187,7 @@ function buildActivitySummary(a: YesterdayActivity | undefined): string {
   if (a.processingYesterday) parts.push(`${a.processingYesterday} processing`)
   if (a.dispatchYesterday) parts.push(`${a.dispatchYesterday} dispatch`)
   if (a.salesYesterday) parts.push(`${a.salesYesterday} sales`)
-  if (a.laborYesterday) parts.push(`${a.laborYesterday} labor`)
+  if (a.laborYesterday) parts.push(`${a.laborYesterday} labour`)
   if (a.attendanceYesterday) parts.push(`${a.attendanceYesterday} attendance`)
   if (a.pickingYesterday) parts.push(`${a.pickingYesterday} picking`)
   if (a.expensesYesterday) parts.push(`${a.expensesYesterday} expenses`)

@@ -41,8 +41,8 @@ const ASSISTANT_SHORTCUTS: AssistantShortcut[] = [
   },
   {
     id: "labor",
-    label: "Open Labor",
-    description: "Record labor, attendance, payroll, or worker-linked account entries.",
+    label: "Open Labour",
+    description: "Record labour, attendance, payroll, or worker-linked account entries.",
     action: { tab: "accounts", panel: "labor" },
     keywords: ["labor", "labour", "wage", "wages", "deployment", "deployments"],
     requiresOneOf: ["accounts"],
@@ -90,7 +90,7 @@ const ASSISTANT_SHORTCUTS: AssistantShortcut[] = [
   {
     id: "codes",
     label: "Open Account Codes",
-    description: "Manage account activity codes used for labor and expense entry.",
+    description: "Manage account activity codes used for labour and expense entry.",
     action: { tab: "accounts", panel: "activities" },
     keywords: ["account code", "account codes", "activity code", "activity codes", "cost code", "cost codes", "code", "codes", "reference"],
     requiresOneOf: ["accounts"],
