@@ -213,13 +213,22 @@ CI runs automatically on every push to main via `.github/workflows/ci.yml`.
 ## Database Migrations
 
 Sequential SQL files in `scripts/`. Highest numbered = latest schema state.
-As of 2026-07-17: up to `98-enable-rls-all-tenant-tables.sql`.
+As of 2026-07-22: up to `101-password-reset-tokens.sql`, both dev and prod fully migrated.
 
 Apply with the migration runner (preferred): `pnpm migrate` (dev) / `pnpm migrate:prod`.
 It records applied files in `schema_migrations`, is dollar-quote-aware (handles `DO $$ … $$`
-blocks), and rejects new duplicate migration numbers. Files may still be applied via psql.
-No ORM — raw SQL only. Both prod (`DATABASE_URL`) and dev (`DATABASE_URL_DEV`) Neon instances
-must be migrated separately.
+blocks), sorts/compares migration numbers numerically (not lexicographically — a 2026-07-22
+bug had 3-digit files like `100-*`/`101-*` silently bootstrapped as "already applied" without
+ever running, because `"100-..." < "87-..."` as strings), and rejects new duplicate migration
+numbers. Files may still be applied via psql. No ORM — raw SQL only. Both prod (`DATABASE_URL`)
+and dev (`DATABASE_URL_DEV`) Neon instances must be migrated separately — prod's `DATABASE_URL`
+lives in `.env.vercel.production`, not `.env.local` (`migrate.mjs` only auto-loads `.env`/
+`.env.local`, so prod runs need `DATABASE_URL` exported into the shell first).
+
+Migration 90 (`90-honeyfarm-activity-code-cleanup.sql`) is intentionally recorded as applied
+on prod **without** its DELETE having run — those "unused" codes are genuinely in use in real
+HoneyFarm data, so the DELETE correctly fails its FK constraint there. See the note at the
+bottom of that file. Don't try to force it through.
 
 ### Tenant isolation (RLS)
 

@@ -61,6 +61,20 @@ export const splitSqlStatements = (content) => {
 
 export const migrationNumberOf = (file) => (file.match(/^(\d+)-/) || [])[1]
 
+// Plain string comparison ("100-..." < "87-...") breaks down once migration numbers cross a
+// digit-count boundary, since '1' < '8' lexicographically. Compare the numeric prefixes as
+// numbers first, falling back to the full filename only to order same-number duplicates
+// (e.g. the grandfathered "88-a.sql" / "88-b.sql" pairs) deterministically.
+export const compareMigrationFiles = (a, b) => {
+  const numA = Number(migrationNumberOf(a))
+  const numB = Number(migrationNumberOf(b))
+  if (Number.isFinite(numA) && Number.isFinite(numB) && numA !== numB) return numA - numB
+  return a < b ? -1 : a > b ? 1 : 0
+}
+
+// True when `file`'s migration number is <= `cutoffFile`'s — numeric-aware (see above).
+export const isAtOrBeforeMigration = (file, cutoffFile) => compareMigrationFiles(file, cutoffFile) <= 0
+
 // Returns "NN & MM" pairs for any duplicate migration number that is NOT grandfathered.
 // Historic duplicates predate the guard and are recorded by full filename, so they are allowed.
 export const findNewDuplicateMigrationNumbers = (files, grandfathered = new Set()) => {

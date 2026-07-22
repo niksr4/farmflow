@@ -18,7 +18,9 @@ import { fileURLToPath } from "url"
 import { neon } from "@neondatabase/serverless"
 import {
   GRANDFATHERED_DUPLICATE_NUMBERS,
+  compareMigrationFiles,
   findNewDuplicateMigrationNumbers,
+  isAtOrBeforeMigration,
   splitSqlStatements,
 } from "./migrate-utils.mjs"
 
@@ -107,7 +109,7 @@ await sql`
 const allFiles = fs
   .readdirSync(__dirname)
   .filter((f) => /^\d{2,}-.*\.sql$/.test(f))
-  .sort()
+  .sort(compareMigrationFiles)
 
 if (allFiles.length === 0) {
   console.log("No SQL migration files found.\n")
@@ -133,7 +135,7 @@ const applied = new Set(appliedRows.map((r) => r.version))
 // Bootstrap: if the table is empty, mark all scripts up to the cutoff as applied.
 // These were run manually before this runner existed.
 if (applied.size === 0) {
-  const baseline = allFiles.filter((f) => f <= BOOTSTRAP_CUTOFF)
+  const baseline = allFiles.filter((f) => isAtOrBeforeMigration(f, BOOTSTRAP_CUTOFF))
   if (baseline.length > 0) {
     for (const file of baseline) {
       await sql`

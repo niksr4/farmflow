@@ -4,6 +4,8 @@ import {
   migrationNumberOf,
   findNewDuplicateMigrationNumbers,
   GRANDFATHERED_DUPLICATE_NUMBERS,
+  compareMigrationFiles,
+  isAtOrBeforeMigration,
 } from "../scripts/migrate-utils.mjs"
 
 describe("splitSqlStatements", () => {
@@ -91,5 +93,35 @@ describe("findNewDuplicateMigrationNumbers", () => {
 
   it("ignores files without a numeric prefix", () => {
     expect(findNewDuplicateMigrationNumbers(["app-runtime-role.sql", "notes.md"])).toEqual([])
+  })
+})
+
+describe("compareMigrationFiles", () => {
+  it("sorts numerically across a digit-count boundary", () => {
+    const files = ["101-b.sql", "9-a.sql", "88-c.sql", "100-a.sql", "10-d.sql"]
+    expect([...files].sort(compareMigrationFiles)).toEqual([
+      "9-a.sql",
+      "10-d.sql",
+      "88-c.sql",
+      "100-a.sql",
+      "101-b.sql",
+    ])
+  })
+
+  it("falls back to filename order for same-numbered duplicates", () => {
+    expect(compareMigrationFiles("88-a.sql", "88-b.sql")).toBeLessThan(0)
+    expect(compareMigrationFiles("88-b.sql", "88-a.sql")).toBeGreaterThan(0)
+  })
+})
+
+describe("isAtOrBeforeMigration", () => {
+  it("does not treat a 3-digit migration as before an older 2-digit cutoff", () => {
+    expect(isAtOrBeforeMigration("100-restore.sql", "87-default-activity-codes.sql")).toBe(false)
+    expect(isAtOrBeforeMigration("101-password-reset.sql", "87-default-activity-codes.sql")).toBe(false)
+  })
+
+  it("still treats real prior migrations as before the cutoff", () => {
+    expect(isAtOrBeforeMigration("50-a.sql", "87-default-activity-codes.sql")).toBe(true)
+    expect(isAtOrBeforeMigration("87-default-activity-codes.sql", "87-default-activity-codes.sql")).toBe(true)
   })
 })

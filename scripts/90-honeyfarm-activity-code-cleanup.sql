@@ -18,6 +18,14 @@
 --   - 101 Salaries And Allowances: remove 'labour' hint — staff salaries are correctly
 --     logged as expenses; the hint was causing false warnings
 --   - 108 Medical Exp Staff, Labour: remove 'labour' hint — medical bills are expenses
+--
+-- NOTE (2026-07-22): this DELETE was only ever applied to dev. On prod, several of the
+-- "unused" codes below are genuinely in use by real HoneyFarm labor_transactions rows, so
+-- the DELETE correctly fails on its FK constraint there — that's by design, not a bug (see
+-- the comment right above it). Prod's schema_migrations now records this file as applied
+-- WITHOUT running the DELETE (the module_hint UPDATE above is harmless and did commit).
+-- scripts/100-restore-honeyfarm-activity-codes.sql exists to re-sync dev with what prod
+-- never lost. Do not try to "fix" prod's ledger to force this DELETE through.
 
 BEGIN;
 
