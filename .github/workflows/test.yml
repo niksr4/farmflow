@@ -1,0 +1,71 @@
+name: Test
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+    branches: ["**"]
+  workflow_dispatch: {}
+
+env:
+  # Wired from repo secrets if configured (Settings > Secrets and variables > Actions).
+  # Most are optional: the app degrades gracefully (per lib/server/db.ts) when DATABASE_URL
+  # is unset, and the E2E login/landing/route-guard specs don't require a live DB.
+  DATABASE_URL: ${{ secrets.DATABASE_URL }}
+  GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+  NEWS_API_KEY: ${{ secrets.NEWS_API_KEY }}
+  THENEWSAPI_API_KEY: ${{ secrets.THENEWSAPI_API_KEY }}
+  UPSTASH_REDIS_REST_URL: ${{ secrets.UPSTASH_REDIS_REST_URL }}
+  UPSTASH_REDIS_REST_TOKEN: ${{ secrets.UPSTASH_REDIS_REST_TOKEN }}
+  WEATHERAPI_API_KEY: ${{ secrets.WEATHERAPI_API_KEY }}
+  # Optional: set these as repo secrets to enable the "signs in with valid credentials" E2E test.
+  E2E_TEST_USERNAME: ${{ secrets.E2E_TEST_USERNAME }}
+  E2E_TEST_PASSWORD: ${{ secrets.E2E_TEST_PASSWORD }}
+
+jobs:
+  unit:
+    name: Unit tests (Vitest)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm test
+
+  e2e:
+    name: E2E tests (Playwright)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm exec playwright install --with-deps chromium
+
+      - name: Run Playwright tests
+        run: pnpm test:e2e
+
+      - name: Upload Playwright report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: playwright-report/
+          retention-days: 14
