@@ -6,7 +6,7 @@ Role: `admin` for setup, `user` for day-to-day entry if a user account with
 
 ## Setup
 
-- A dev tenant with at least one location and the default 91 activity codes
+- A dev tenant with at least one location and the default 80 activity codes
   (seeded automatically on provisioning — see `provision-tenant.ts`).
 
 ## Steps

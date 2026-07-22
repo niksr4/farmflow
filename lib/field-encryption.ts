@@ -21,6 +21,13 @@ const resolveEncryptionSecret = () => {
 
   const fallback = String(process.env.NEXTAUTH_SECRET || "").trim()
   if (fallback) {
+    // Not set up with its own key — reusing the session secret means rotating
+    // NEXTAUTH_SECRET (e.g. for session security) will also break decryption of
+    // already-encrypted fields. Set APP_DATA_ENCRYPTION_KEY to decouple the two.
+    console.warn(
+      "APP_DATA_ENCRYPTION_KEY is not set — falling back to NEXTAUTH_SECRET for field encryption. " +
+        "Rotating NEXTAUTH_SECRET will break decryption of existing encrypted fields.",
+    )
     return fallback
   }
 

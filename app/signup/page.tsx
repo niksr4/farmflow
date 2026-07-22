@@ -66,7 +66,7 @@ export default function SignupRoute() {
           <p className="text-xs font-bold uppercase tracking-[0.18em] text-emerald-500">What happens after signup</p>
           <div className="mt-3 space-y-2 text-sm text-stone-400">
             <p>1. Estate ready in under a minute</p>
-            <p>2. 91 activity codes pre-loaded — no blank slate</p>
+            <p>2. 80 activity codes pre-loaded — no blank slate</p>
             <p>3. Guided setup walks you through the first entry</p>
             <p>4. First weekly digest arrives Monday morning</p>
           </div>

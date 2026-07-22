@@ -7,6 +7,7 @@ import { EXPORT_DATASET_MAP, type ExportDatasetId } from "@/lib/data-tools"
 import { buildSalesCsv, type SalesExportRecord } from "@/lib/sales-export"
 import { buildXlsxArrayBufferFromCsv, XLSX_MIME_TYPE } from "@/lib/spreadsheet"
 import { computeNetPnl } from "@/lib/server/pnl"
+import { assertValidModuleIds } from "@/lib/modules"
 
 const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/
 const MAX_ROWS = 8000
@@ -27,6 +28,7 @@ const DATASET_TO_MODULES: Record<ExportDatasetId, string[]> = {
   "receivables-aging": ["receivables"],
   "pnl-monthly": ["accounts", "sales", "season"],
 }
+assertValidModuleIds(Object.values(DATASET_TO_MODULES).flat(), "DATASET_TO_MODULES")
 
 const DATASET_LABELS = Object.keys(DATASET_TO_MODULES).join(", ")
 const MONTH_LABELS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"] as const

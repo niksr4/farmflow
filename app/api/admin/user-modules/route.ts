@@ -8,6 +8,7 @@ import { logAuditEvent } from "@/lib/server/audit-log"
 import { logSecurityEvent } from "@/lib/server/security-events"
 import { buildAdminErrorResponse, databaseNotConfiguredResponse } from "@/lib/server/route-utils"
 import { invalidateModuleCache } from "@/lib/module-access"
+import { isForbiddenTenantAccess, resolveOwnerScopedTenantId } from "@/lib/permissions"
 
 type ModuleState = { id: string; label: string; enabled: boolean; lockedByPlan?: boolean }
 const MODULE_LABEL_BY_ID = new Map(MODULES.map((module) => [module.id, module.label]))
@@ -31,10 +32,7 @@ export async function GET(request: Request) {
       return NextResponse.json({ success: false, error: "userId is required" }, { status: 400 })
     }
 
-    const lookupContext = normalizeTenantContext(
-      sessionUser.role === "owner" ? undefined : sessionUser.tenantId,
-      sessionUser.role,
-    )
+    const lookupContext = normalizeTenantContext(resolveOwnerScopedTenantId(sessionUser), sessionUser.role)
     const [userRows, userModules, tenantModules] = await runTenantQueries(sql, lookupContext, [
       sql`
         SELECT id, tenant_id, role
@@ -62,7 +60,7 @@ export async function GET(request: Request) {
 
     const targetTenantId = String(userRows[0].tenant_id)
     const targetRole = String(userRows[0].role || "")
-    if (sessionUser.role !== "owner" && targetTenantId !== sessionUser.tenantId) {
+    if (isForbiddenTenantAccess(sessionUser, targetTenantId)) {
       return NextResponse.json({ success: false, error: "Forbidden" }, { status: 403 })
     }
 
@@ -119,10 +117,7 @@ export async function PUT(request: Request) {
       return NextResponse.json({ success: false, error: "userId is required" }, { status: 400 })
     }
 
-    const lookupContext = normalizeTenantContext(
-      sessionUser.role === "owner" ? undefined : sessionUser.tenantId,
-      sessionUser.role,
-    )
+    const lookupContext = normalizeTenantContext(resolveOwnerScopedTenantId(sessionUser), sessionUser.role)
     const userRows = await runTenantQuery(
       sql,
       lookupContext,
@@ -140,7 +135,7 @@ export async function PUT(request: Request) {
 
     const tenantId = String(userRows[0].tenant_id)
     const targetRole = String(userRows[0].role || "")
-    if (sessionUser.role !== "owner" && tenantId !== sessionUser.tenantId) {
+    if (isForbiddenTenantAccess(sessionUser, tenantId)) {
       return NextResponse.json({ success: false, error: "Forbidden" }, { status: 403 })
     }
 
@@ -241,10 +236,7 @@ export async function DELETE(request: Request) {
       return NextResponse.json({ success: false, error: "userId is required" }, { status: 400 })
     }
 
-    const lookupContext = normalizeTenantContext(
-      sessionUser.role === "owner" ? undefined : sessionUser.tenantId,
-      sessionUser.role,
-    )
+    const lookupContext = normalizeTenantContext(resolveOwnerScopedTenantId(sessionUser), sessionUser.role)
     const userRows = await runTenantQuery(
       sql,
       lookupContext,
@@ -261,7 +253,7 @@ export async function DELETE(request: Request) {
     }
 
     const tenantId = String(userRows[0].tenant_id)
-    if (sessionUser.role !== "owner" && tenantId !== sessionUser.tenantId) {
+    if (isForbiddenTenantAccess(sessionUser, tenantId)) {
       return NextResponse.json({ success: false, error: "Forbidden" }, { status: 403 })
     }
 

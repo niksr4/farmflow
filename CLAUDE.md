@@ -81,13 +81,13 @@ Key files:
 - `app/signup/` — public signup page
 - `app/verify-email/` — email verification
 - `app/api/onboarding/` — provisioning API
-- `lib/server/onboarding/provision-tenant.ts` — creates tenant, modules, location, **seeds 91 default activity codes**
+- `lib/server/onboarding/provision-tenant.ts` — creates tenant, modules, location, **seeds 80 default activity codes**
 - `components/welcome-onboarding-page.tsx`, `components/onboarding-checklist.tsx`
 
 **Onboarding checklist steps** (in order):
 1. Add estate manager (creates a second user account)
 2. Add estate locations (if processing/dispatch/sales enabled)
-3. Set up activity codes (auto-completed — 91 codes pre-seeded)
+3. Set up activity codes (auto-completed — 80 codes pre-seeded)
 4. Add first inventory item
 5. Log first labor deployment
 
@@ -96,29 +96,34 @@ Key files:
 
 ---
 
-## Activity Codes (91 default codes)
+## Activity Codes (80 default codes)
 
-- On every new tenant provisioning, `ensureDefaultActivityCodes()` seeds 91 codes from HoneyFarm/Seshagiri estate structure
+- On every new tenant provisioning, `ensureDefaultActivityCodes()` seeds 80 codes from HoneyFarm/Seshagiri estate structure
 - Codes are pre-seeded for any existing tenant with 0 codes via `scripts/87-default-activity-codes.sql`
 - Constraint changed from global unique `(code)` to per-tenant `(tenant_id, code)` in script 87
 - Users can edit, add, or delete codes at any time
 
 ---
 
-## Razorpay Billing (BUILT LOCALLY — NOT DEPLOYED)
+## Razorpay Billing (BUILT — NOT ENFORCED)
 
 **Status: intentionally not enforcing yet.** Targeting 3–5 customers for product validation before automating revenue.
 
-Files (all untracked / not committed):
+Billing code is committed and deployed; it's just not wired into an enforcement path yet:
 - `lib/server/billing/razorpay.ts` + `checkout/`, `invoices/`, `subscription/`, `webhooks/`
 - `app/api/billing/checkout/`, `app/api/billing/subscription/`, `app/api/billing/webhooks/`
-- `lib/server/tenant-commercial-access.ts`
+- `lib/commercial-access.ts` — canonical resolver (trial/paid/grace/inactive)
+- `lib/server/tenant-commercial-access.ts` — DB layer; `initializeTenantTrialAccess()` now runs
+  on every self-serve signup (`lib/server/onboarding/provision-tenant.ts`), so `tenant_commercial_access`
+  has accurate trial data ready for whenever enforcement is turned on
 - `scripts/74-tenant-commercial-access.sql` — already applied
 
 **Remaining billing work when ready:**
-1. Deploy untracked billing code + set Razorpay env vars in production
-2. Access gate at bootstrap (expired trial → checkout redirect)
-3. Trial countdown banner in dashboard
+1. Set Razorpay env vars in production
+2. Access gate at bootstrap (expired trial → checkout redirect) — read `resolveTenantCommercialAccess`
+   in `app/api/dashboard/bootstrap/route.ts` instead of the hardcoded `trialDaysRemaining = null`
+3. Trial countdown banner in dashboard — `TrialBanner` component already exists
+   (`components/inventory-system/trial-banner.tsx`) but bootstrap doesn't feed it real data yet
 
 ---
 
@@ -138,8 +143,8 @@ Files (all untracked / not committed):
 | File | Purpose |
 |------|---------|
 | `lib/modules.ts` | Plan/module definitions and bundles |
-| `lib/module-access.ts` | Client-side module access checks |
-| `lib/server/module-access.ts` | Server-side module access checks |
+| `lib/module-access.ts` | Server-only module access checks (DB-backed, cached) |
+| `lib/server/module-access.ts` | Re-exports `lib/module-access.ts` |
 | `lib/commercial-access.ts` | Resolve billing stage from raw DB row |
 | `lib/server/tenant-commercial-access.ts` | Fetch + upsert commercial access (DB layer) |
 | `lib/permissions.ts` | Role-based permission checks |
@@ -152,10 +157,9 @@ Files (all untracked / not committed):
 | `lib/server/auth.ts` | Server-side auth helpers |
 | `lib/server/db.ts` | Neon DB connection |
 | `lib/server/audit-log.ts` | Audit trail writes |
-| `lib/server/audit-log.ts` | Audit trail writes |
 | `lib/server/response-cache.ts` | `withResponseCache` — DB-backed API response cache |
 | `lib/workspace-hero-content.ts` | `buildHeroContent()` — per-tab hero section data |
-| `lib/account-activity-suggestions.ts` | 91 default activity codes + PDF/CSV export |
+| `lib/account-activity-suggestions.ts` | 80 default activity codes + PDF/CSV export |
 
 ---
 
@@ -251,12 +255,28 @@ Deployed on Vercel. Config in `vercel.json`.
 Key env vars:
 - `DATABASE_URL` — prod Neon connection
 - `DATABASE_URL_DEV` — dev Neon connection (used in non-production)
-- `ANTHROPIC_API_KEY` — Claude API (AI assistant, weekly digest, AI analysis)
+- `APP_DATABASE_URL` — least-privilege `app_runtime` role connection (RLS-enforced); falls back to
+  `DATABASE_URL`/`DATABASE_URL_DEV` when unset
+- `ANTHROPIC_API_KEY` — Claude API (AI assistant, weekly digest, AI analysis). Background agents
+  (digest, log-anomaly, etc.) also support an undocumented-until-now fallback chain to
+  `OPENAI_API_KEY`/`AGENT_OPENAI_MODEL` then `GROQ_API_KEY`/`AGENT_GROQ_MODEL` — see
+  `lib/server/agents/ai-model.ts`
 - `ALPHAVANTAGE_API_KEY` — coffee price data (weekly digest market timing)
 - `WEATHERAPI_API_KEY` — weather forecast in weekly digest
 - `THENEWSAPI_API_KEY` — coffee market news tab
 - `RESEND_API_KEY` — transactional email (digest, onboarding, alerts)
-- Razorpay vars (when billing is activated): `RAZORPAY_KEY_ID`, `RAZORPAY_KEY_SECRET`, `RAZORPAY_WEBHOOK_SECRET`, plan IDs
+- `CRON_SECRET` — gates all `/api/cron/*` routes; fails closed (503) when unset
+- `APP_DATA_ENCRYPTION_KEY` — field-level encryption key (`lib/field-encryption.ts`). Falls back to
+  `NEXTAUTH_SECRET` if unset, which couples encrypted-field decryption to auth session rotation —
+  set this explicitly to decouple them (logs a warning when the fallback is used)
+- `PLANTHEALTH_API_KEY` (+ `PLANTHEALTH_API_URL` or `KINDWISE_HEALTH_API_URL` to override the
+  endpoint) — plant health assessment. A legacy lowercase `planthealth` fallback still exists in
+  `app/api/plant-health/route.ts`; confirm nothing in prod relies on it before deleting
+- `AUTH_APP_SESSION_MAX_AGE_SECONDS` / `AUTH_WEB_SESSION_MAX_AGE_SECONDS` — override the 30-day
+  session default (see "Sessions always 30 days" below) if ever needed; unset in normal operation
+- Razorpay vars (when billing is activated): `RAZORPAY_KEY_ID`, `RAZORPAY_KEY_SECRET`,
+  `RAZORPAY_WEBHOOK_SECRET`, plan IDs via `RAZORPAY_PLAN_{PLAN}_{CYCLE}_ID` (e.g.
+  `RAZORPAY_PLAN_CORE_MONTHLY_ID`) — see `lib/server/billing/razorpay.ts`
 
 ### Release process
 
@@ -310,4 +330,4 @@ alias deliberately instead using the sequence above.**
 - **Missing commercial record = legacy/always-active** — safe rollout path for existing tenants
 - **AI assistant open to all users** — it's a help/navigation tool, not a premium analytics feature
 - **Sessions always 30 days** — estate managers use personal devices; short sessions add friction with no security benefit
-- **Activity codes pre-seeded** — 91 codes from HoneyFarm/Seshagiri structure provisioned on signup; removes blank-slate friction
+- **Activity codes pre-seeded** — 80 codes from HoneyFarm/Seshagiri structure provisioned on signup; removes blank-slate friction

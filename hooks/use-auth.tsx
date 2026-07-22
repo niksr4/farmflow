@@ -3,6 +3,7 @@
 import { useEffect, useMemo } from "react"
 import { SessionProvider, signIn, signOut, useSession } from "next-auth/react"
 import type { ReactNode } from "react"
+import { isAdminRole } from "@/lib/permissions"
 
 interface User {
   username: string
@@ -25,6 +26,7 @@ interface AuthContextType {
   logout: () => void
   isAdmin: boolean
   isOwner: boolean
+  isAdminOrOwner: boolean
   status: "loading" | "authenticated" | "unauthenticated"
 }
 
@@ -124,6 +126,7 @@ export function useAuth(): AuthContextType {
     logout,
     isAdmin: user?.role === "admin",
     isOwner: user?.role === "owner",
+    isAdminOrOwner: isAdminRole(user?.role),
     status,
   }
 }

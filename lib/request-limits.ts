@@ -10,6 +10,8 @@ const EXPLICIT_API_BODY_LIMITS: RouteBodyLimit[] = [
   { pattern: /^\/api\/auth\/signup$/, bytes: 32 * KB },
   { pattern: /^\/api\/auth\/resend-verification$/, bytes: 16 * KB },
   { pattern: /^\/api\/auth\/verify-email$/, bytes: 16 * KB },
+  { pattern: /^\/api\/auth\/forgot-password$/, bytes: 16 * KB },
+  { pattern: /^\/api\/auth\/reset-password$/, bytes: 16 * KB },
   { pattern: /^\/api\/account\/password$/, bytes: 16 * KB },
   { pattern: /^\/api\/register-interest$/, bytes: 64 * KB },
   { pattern: /^\/api\/ops\/error-ingest$/, bytes: 256 * KB },

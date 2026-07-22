@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server"
-import { sql } from "@/lib/server/db"
+import { adminSql } from "@/lib/server/db"
 import { inspectPlatformSchemaReadiness } from "@/lib/schema-readiness"
 import { requireOwnerRole } from "@/lib/tenant"
 import { requireAdminSession } from "@/lib/server/mfa"
@@ -90,7 +90,7 @@ export async function GET() {
     const sessionUser = await requireAdminSession()
     requireOwnerRole(sessionUser.role)
 
-    if (!sql) {
+    if (!adminSql) {
       return databaseNotConfiguredResponse()
     }
 
@@ -108,7 +108,7 @@ export async function GET() {
     let errorEventsLast24h = 0
 
     try {
-      const schemaReadiness = await inspectPlatformSchemaReadiness(sql)
+      const schemaReadiness = await inspectPlatformSchemaReadiness(adminSql)
       checks.push({
         id: "schema-readiness",
         label: "Platform schema readiness",
@@ -131,7 +131,7 @@ export async function GET() {
 
     try {
       const dataIntegrityRows = asRows(
-        await sql.query(
+        await adminSql.query(
           `
             SELECT id, status, started_at, completed_at, summary
             FROM agent_runs
@@ -145,7 +145,7 @@ export async function GET() {
       latestDataIntegrityRun = dataIntegrityRows[0] || null
 
       const logAnomalyRows = asRows(
-        await sql.query(
+        await adminSql.query(
           `
             SELECT id, status, started_at, completed_at, summary
             FROM agent_runs
@@ -159,7 +159,7 @@ export async function GET() {
       latestLogAnomalyRun = logAnomalyRows[0] || null
 
       const tenantSmokeRows = asRows(
-        await sql.query(
+        await adminSql.query(
           `
             SELECT id, status, started_at, completed_at, summary
             FROM agent_runs
@@ -181,7 +181,7 @@ export async function GET() {
 
     try {
       const exceptionRows = asRows(
-        await sql.query(
+        await adminSql.query(
           `
             SELECT
               COUNT(*) FILTER (WHERE status = 'open')::int AS open_count,
@@ -216,7 +216,7 @@ export async function GET() {
 
     try {
       const importRows = asRows(
-        await sql.query(
+        await adminSql.query(
           `
             SELECT
               COUNT(*) FILTER (WHERE status = 'failed' AND updated_at >= NOW() - INTERVAL '24 hours')::int AS failed_last_24h,
@@ -253,7 +253,7 @@ export async function GET() {
 
     try {
       const errorRows = asRows(
-        await sql.query(
+        await adminSql.query(
           `
             SELECT
               COUNT(*) FILTER (WHERE severity = 'critical' AND created_at >= NOW() - INTERVAL '24 hours')::int AS critical_last_24h,

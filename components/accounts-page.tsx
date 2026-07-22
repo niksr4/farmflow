@@ -138,7 +138,7 @@ export default function AccountsPage({
   showPickingLog = false,
 }: AccountsPageProps) {
   const isMobile = useMediaQuery("(max-width: 768px)")
-  const { isAdmin, isOwner, user } = useAuth()
+  const { isAdmin, isOwner, isAdminOrOwner, user } = useAuth()
   const canManageActivities = isAdmin || isOwner || user?.role === "user"
   const { settings: tenantSettings } = useTenantSettings()
   const {
@@ -1078,9 +1078,9 @@ export default function AccountsPage({
       items.push({ value: "ledger", label: "Ledger", icon: BookOpen })
       items.push({ value: "payroll", label: "Payroll", icon: DollarSign })
     }
-    if (isAdmin || isOwner) items.push({ value: "export", label: "Export", icon: FileSpreadsheet })
+    if (isAdminOrOwner) items.push({ value: "export", label: "Export", icon: FileSpreadsheet })
     return items
-  }, [showLaborManagement, showPickingLog, isAdmin, isOwner, user?.role])
+  }, [showLaborManagement, showPickingLog, isAdminOrOwner, user?.role])
 
   // Writers land on Labour, never on a view their pared nav doesn't include
   useEffect(() => {
@@ -1155,7 +1155,7 @@ export default function AccountsPage({
     { value: "labour", label: "Labour", icon: Users },
     { value: "expenses", label: "Expenses", icon: Receipt },
     { value: "activities", label: "Activity Codes", icon: Settings },
-    ...(isAdmin || isOwner ? [{ value: "export" as AccountsView, label: "Export", icon: FileSpreadsheet }] : []),
+    ...(isAdminOrOwner ? [{ value: "export" as AccountsView, label: "Export", icon: FileSpreadsheet }] : []),
   ]
   const secondaryNavItems: NavItem[] = [
     { value: "attendance", label: "Attendance", icon: Check },
@@ -1326,7 +1326,7 @@ export default function AccountsPage({
           {showLaborManagement && activeTab === "workers" && <WorkerProfilesTab />}
           {showLaborManagement && activeTab === "ledger" && <WorkerLedgerTab />}
           {showLaborManagement && activeTab === "payroll" && <PayrollSummaryTab />}
-          {(isAdmin || isOwner) && activeTab === "export" && (
+          {isAdminOrOwner && activeTab === "export" && (
             <div className="px-3 pt-2 pb-4 space-y-4">
               <div className="flex flex-col gap-3 rounded-2xl border border-stone-200 bg-white p-4 shadow-sm">
                 <div>
@@ -1959,7 +1959,7 @@ export default function AccountsPage({
       {showLaborManagement && activeTab === "payroll" && <PayrollSummaryTab />}
 
       {/* ── Export ── */}
-      {(isAdmin || isOwner) && activeTab === "export" && (
+      {isAdminOrOwner && activeTab === "export" && (
         <Card>
           <CardHeader>
             <div className="flex justify-between items-start">

@@ -542,9 +542,12 @@ export default function InventorySystem() {
   const isAdmin = effectiveRole === "admin"
   const isOwner = effectiveRole === "owner"
   const isScopedUser = effectiveRole === "user"
-  const showFinancialHomeCards = isAdmin || isOwner
-  const canManageData = !isPreviewMode && (isAdmin || isOwner)
-  const canManageRecords = !isPreviewMode && (isAdmin || isOwner || isScopedUser)
+  // Preview-mode aware: an owner previewing a tenant as "admin"/"user" gets that role's
+  // effective access, not their real platform-owner access — see effectiveRole above.
+  const isAdminOrOwner = isAdmin || isOwner
+  const showFinancialHomeCards = isAdminOrOwner
+  const canManageData = !isPreviewMode && isAdminOrOwner
+  const canManageRecords = !isPreviewMode && (isAdminOrOwner || isScopedUser)
   const showDataToolsControls = canManageData && showDataToolsPanel
   const isTenantLoading = status === "loading"
   const buildWorkspaceHref = useCallback(
@@ -599,11 +602,11 @@ export default function InventorySystem() {
   const showTransactionHistory = isModuleEnabled("transactions")
   const canShowInventory = isModuleEnabled("inventory")
   const canShowAccounts = isModuleEnabled("accounts")
-  const canShowBalanceSheet = isModuleEnabled("balance-sheet") && (isAdmin || isOwner)
-  const canShowSeasonPl = isModuleEnabled("accounts") && (isAdmin || isOwner)
+  const canShowBalanceSheet = isModuleEnabled("balance-sheet") && isAdminOrOwner
+  const canShowSeasonPl = isModuleEnabled("accounts") && isAdminOrOwner
   const canShowProcessing = isModuleEnabled("processing")
   const canShowDispatch = isModuleEnabled("dispatch")
-  const canShowSales = isModuleEnabled("sales") && isAdmin
+  const canShowSales = isModuleEnabled("sales") && isAdminOrOwner
   const canShowOtherSales = isModuleEnabled("other-sales") && !isScopedUser
   const canShowInventoryWorkspace = canShowInventory || showTransactionHistory
   const canShowSalesWorkspace = canShowSales || canShowOtherSales
@@ -620,7 +623,7 @@ export default function InventorySystem() {
   const canShowWeather = isModuleEnabled("weather")
   const canShowSeason = isModuleEnabled("season")
   const canShowYieldForecast = canShowSeason
-  const canShowActivityLog = (isAdmin || isOwner) && isFeatureEnabled("showActivityLogTab")
+  const canShowActivityLog = isAdminOrOwner && isFeatureEnabled("showActivityLogTab")
   const canShowLaborManagement = isModuleEnabled("labor")
   const canShowPickingLog = isModuleEnabled("picking")
   const canShowReceivables = isModuleEnabled("receivables")
@@ -2388,14 +2391,6 @@ export default function InventorySystem() {
   }
 
   const handleOpenInventoryEdit = (item: InventoryItem) => {
-    if (selectedLocationId === LOCATION_ALL) {
-      toast({
-        title: "Select a location",
-        description: "Choose a specific location before adjusting inventory quantities.",
-        variant: "destructive",
-      })
-      return
-    }
     setEditingInventoryItem(item)
     setInventoryEditForm({
       name: item.name || "",
@@ -4827,26 +4822,19 @@ export default function InventorySystem() {
                                     <TooltipProvider>
                                       <Tooltip>
                                         <TooltipTrigger asChild>
-                                          <span>
-                                            <Button
-                                              size="sm"
-                                              variant="ghost"
-                                              onClick={(event) => {
-                                                event.stopPropagation()
-                                                handleOpenInventoryEdit(item)
-                                              }}
-                                              disabled={selectedLocationId === LOCATION_ALL}
-                                              className="text-amber-600 p-2 h-auto"
-                                            >
-                                              <Edit className="h-4 w-4" />
-                                            </Button>
-                                          </span>
+                                          <Button
+                                            size="sm"
+                                            variant="ghost"
+                                            onClick={(event) => {
+                                              event.stopPropagation()
+                                              handleOpenInventoryEdit(item)
+                                            }}
+                                            className="text-amber-600 p-2 h-auto"
+                                          >
+                                            <Edit className="h-4 w-4" />
+                                          </Button>
                                         </TooltipTrigger>
-                                        <TooltipContent>
-                                          {selectedLocationId === LOCATION_ALL
-                                            ? "Select a specific location to edit quantities."
-                                            : "Edit inventory item"}
-                                        </TooltipContent>
+                                        <TooltipContent>Edit inventory item</TooltipContent>
                                       </Tooltip>
                                     </TooltipProvider>
                                     <Button

@@ -158,7 +158,7 @@ function SettingsGroup({
 }
 
 export default function TenantSettingsPage() {
-  const { user, logout } = useAuth()
+  const { user, logout, isAdminOrOwner } = useAuth()
   const { update: updateSession } = useSession()
   const { toast } = useToast()
   const { setLocale } = useLocale()
@@ -224,7 +224,6 @@ export default function TenantSettingsPage() {
   const [isUpdatingConsent, setIsUpdatingConsent] = useState(false)
 
   const isOwner = user?.role === "owner"
-  const isAdminOrOwner = user?.role === "admin" || user?.role === "owner"
   const canManageTenantExperience = isOwner
   const privacyFeatureEnabled = Boolean(tenantId)
   const [openGroup, setOpenGroup] = useState<SettingsGroupId | null>("estate")

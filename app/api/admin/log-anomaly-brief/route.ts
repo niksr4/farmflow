@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server"
-import { sql } from "@/lib/server/db"
+import { adminSql } from "@/lib/server/db"
 import { requireOwnerRole } from "@/lib/tenant"
 import { requireAdminSession } from "@/lib/server/mfa"
 import { buildAdminErrorResponse, databaseNotConfiguredResponse } from "@/lib/server/route-utils"
@@ -14,7 +14,7 @@ export async function GET(request: Request) {
     const sessionUser = await requireAdminSession()
     requireOwnerRole(sessionUser.role)
 
-    if (!sql) {
+    if (!adminSql) {
       return databaseNotConfiguredResponse()
     }
 
@@ -22,7 +22,7 @@ export async function GET(request: Request) {
     const limitRaw = Number.parseInt(String(searchParams.get("limit") || "25"), 10)
     const limit = Number.isFinite(limitRaw) ? Math.min(Math.max(limitRaw, 1), 100) : 25
 
-    const runsResult = await sql.query(
+    const runsResult = await adminSql.query(
       `
         SELECT id, started_at, completed_at, status, trigger_source, summary
         FROM agent_runs
@@ -41,7 +41,7 @@ export async function GET(request: Request) {
     const latestRunId = runs[0]?.id ? String(runs[0].id) : null
     let findings: any[] = []
     if (latestRunId) {
-      const findingsResult = await sql.query(
+      const findingsResult = await adminSql.query(
         `
           SELECT
             tenant_id::text AS tenant_id,

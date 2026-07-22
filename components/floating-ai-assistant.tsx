@@ -25,6 +25,7 @@ const APP_PATH_PREFIXES = ["/dashboard", "/settings", "/welcome"]
 
 const STARTER_PROMPTS = [
   "What should I check first in the estate data today?",
+  "Is my cherry-to-parchment ratio normal for this location?",
   "Why can dispatched KGs and sold KGs be different?",
   "Where do I update locations or account activities?",
   "Find fertilizer stock or expense records for me.",
@@ -261,12 +262,12 @@ export default function FloatingAiAssistant() {
                 FarmFlow Assistant
               </div>
               <p className="mt-1 text-xs text-slate-600">
-                Ask about tenant data or where to find things in {helperLabel}.
+                Your agronomy advisor for {helperLabel} — reasons from your own estate data.
               </p>
               <div className="mt-2 flex flex-wrap items-center gap-2 text-[11px] font-medium uppercase tracking-[0.18em] text-emerald-700">
                 <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-100 bg-white px-3 py-1 text-emerald-700">
                   <Sparkles className="h-3.5 w-3.5" />
-                  Grounded in tenant data
+                  Agronomy + your data
                 </span>
               </div>
             </div>
@@ -305,7 +306,7 @@ export default function FloatingAiAssistant() {
                     <Sparkles className="h-4 w-4" />
                     Start with a focused question
                   </div>
-                  <p className="mt-2 leading-6">Ask about discrepancies, stock, sales, or where something lives in the app.</p>
+                  <p className="mt-2 leading-6">Ask about discrepancies, agronomy decisions, stock, sales, or where something lives in the app.</p>
                 </div>
                 <div className="flex flex-col gap-2">
                   {STARTER_PROMPTS.map((prompt) => (

@@ -11,7 +11,8 @@ export type ModuleBundle = {
   modules: string[]
 }
 
-export type TenantPlanId = "basic" | "core" | "enterprise"
+export const TENANT_PLAN_IDS = ["basic", "core", "enterprise"] as const
+export type TenantPlanId = (typeof TENANT_PLAN_IDS)[number]
 
 export type ModuleState = ModuleDefinition & {
   enabled: boolean
@@ -99,6 +100,16 @@ export const MODULE_BUNDLES: ModuleBundle[] = [
 ]
 
 export const MODULE_IDS = MODULES.map((module) => module.id)
+
+// Fails fast (at import time) if a hand-maintained module-id list elsewhere in the codebase
+// (e.g. lib/permissions.ts's USER_MUTATION_MODULES) references an id that doesn't exist in
+// MODULES — catches drift from a module rename immediately instead of silently no-op'ing.
+export const assertValidModuleIds = (ids: string[], label: string) => {
+  const invalid = ids.filter((id) => !MODULE_IDS.includes(id))
+  if (invalid.length) {
+    throw new Error(`${label} references unknown module id(s): ${invalid.join(", ")}`)
+  }
+}
 export const DEFAULT_TENANT_PLAN_ID: TenantPlanId = "core"
 export const DEFAULT_ENABLED_MODULE_IDS = MODULES.filter((module) => module.defaultEnabled === true).map(
   (module) => module.id,

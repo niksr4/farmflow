@@ -5,6 +5,7 @@ import {
 } from "@/lib/ai-assistant"
 import { findAssistantActions } from "@/lib/assistant-search"
 import { buildAgronomyContext } from "@/lib/coffee-agronomy"
+import { resolveFiscalYearWindows } from "@/lib/fiscal-year-utils"
 import { buildRateLimitHeaders, checkRateLimit } from "@/lib/rate-limit"
 import { buildTenantAiDataSummary } from "@/lib/server/ai-analysis"
 import { buildClaudeRouteErrorResponse, classifyClaudeRouteError } from "@/lib/server/claude-errors"
@@ -120,20 +121,62 @@ export async function POST(req: Request) {
       )
     }
 
-    const { dataSummary, fiscalYearLabel } = await buildTenantAiDataSummary({
-      tenantId: sessionUser.tenantId,
-      role: effectiveAssistantRole,
-    })
+    const { primary: primaryFiscalYear, secondary: secondaryFiscalYear } = resolveFiscalYearWindows(latestQuestion)
 
-    const systemPrompt = `You are FarmFlow Assistant, a knowledgeable operations guide for South Indian coffee, pepper, and rubber estates. You have two sources of knowledge: (1) deep agronomic expertise about South Indian estate management, and (2) the tenant's own operational data loaded below. Use both together. When answering agronomic questions (fertiliser timing, pest thresholds, irrigation, harvest maturity, processing ratios), draw on your domain knowledge and be specific — cite doses, dates, and thresholds. When answering data questions, use only the tenant data provided. Point users to the exact FarmFlow tab or button they should use. If data is missing, say so plainly. Do not invent numbers. Keep answers practical and actionable.
+    let dataSummary: string
+    let fiscalYearLabel: string
+    if (secondaryFiscalYear) {
+      const [primaryResult, secondaryResult] = await Promise.all([
+        buildTenantAiDataSummary({
+          tenantId: sessionUser.tenantId,
+          role: effectiveAssistantRole,
+          fiscalYear: primaryFiscalYear,
+        }),
+        buildTenantAiDataSummary({
+          tenantId: sessionUser.tenantId,
+          role: effectiveAssistantRole,
+          fiscalYear: secondaryFiscalYear,
+          includeInventory: false,
+        }),
+      ])
+      dataSummary = `# ${primaryFiscalYear.label} (primary period asked about)\n${primaryResult.dataSummary}\n\n# ${secondaryFiscalYear.label} (comparison period)\n${secondaryResult.dataSummary}`
+      fiscalYearLabel = `${primaryFiscalYear.label} compared with ${secondaryFiscalYear.label}`
+    } else {
+      const result = await buildTenantAiDataSummary({
+        tenantId: sessionUser.tenantId,
+        role: effectiveAssistantRole,
+        fiscalYear: primaryFiscalYear,
+      })
+      dataSummary = result.dataSummary
+      fiscalYearLabel = result.fiscalYearLabel
+    }
+
+    const systemPrompt = `You are FarmFlow Assistant — this estate's own agronomy advisor, not a generic chatbot and not a data lookup tool. You have two sources of knowledge and must fuse them on every answer: (1) deep agronomic expertise for South Indian coffee, pepper, and rubber estates (variety behaviour, nutrition schedules, pest/disease thresholds, processing and yield benchmarks, cost economics), and (2) this tenant's actual operational numbers loaded below.
+
+Always read the tenant's numbers against the agronomic benchmarks, never just against each other. When their data shows a ratio, cost, yield, or timing, check it against the benchmark ranges in your reference and say explicitly whether it looks normal, borderline, or a red flag — citing the actual figure next to the benchmark. When giving agronomic advice (fertiliser timing, pest thresholds, irrigation, harvest maturity, processing technique), don't answer generically — pull in this tenant's own recent data (rainfall, processing dates, locations, season) wherever it's relevant so the advice is specific to their estate, not a textbook answer. Never hand back tenant data and agronomy advice as two separate answers — weave them into one diagnosis with a clear recommendation and next action, the way a senior estate manager would during a walk-around.
+
+Point users to the exact FarmFlow tab or button when there's something to act on there. If data needed to fully answer is missing, say so plainly and tell them what to log going forward. Do not invent numbers — only use figures present in the tenant data below. Keep answers specific and actionable, not a list of caveats.
 
 ${AGRONOMY_CONTEXT}`
+
+    const matchingRecordsSection =
+      results.length > 0
+        ? `\n## Matching records for this question\n${results.map((result) => `- ${result.title}: ${result.detail}`).join("\n")}\n`
+        : ""
 
     const groundingMessage = `Grounding context for the current tenant:
 
 ${dataSummary}
-${workspaceContextSummary ? `\n${workspaceContextSummary}\n` : ""}
-Treat the tenant data above as the working dataset for ${fiscalYearLabel}. Use the exact workspace labels from the navigation guidance when telling the user where to go.`
+${matchingRecordsSection}${workspaceContextSummary ? `\n${workspaceContextSummary}\n` : ""}
+Treat the tenant data above as the working dataset for ${fiscalYearLabel}.${
+      secondaryFiscalYear
+        ? " The data above covers two separate fiscal-year periods, each under its own heading — compare them directly and cite both period labels explicitly when answering."
+        : ""
+    }${
+      results.length > 0
+        ? " The matching records above were pulled specifically for this question — use their exact names, dates, and amounts in your answer instead of speaking only in aggregates."
+        : ""
+    } Use the exact workspace labels from the navigation guidance when telling the user where to go.`
 
     // Prepend grounding as the first user message, then alternate correctly for Claude
     const claudeMessages: { role: "user" | "assistant"; content: string }[] = [

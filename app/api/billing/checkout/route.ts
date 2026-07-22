@@ -2,6 +2,7 @@ import { NextResponse } from "next/server"
 import { z } from "zod"
 
 import { requireAdminRole } from "@/lib/permissions"
+import { TENANT_PLAN_IDS } from "@/lib/modules"
 import { createRazorpaySubscription, type RazorpayBillingCycle } from "@/lib/server/billing/razorpay"
 import { requireSessionUser } from "@/lib/server/auth"
 import { isDbConfigured, sql } from "@/lib/server/db"
@@ -20,7 +21,7 @@ const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000
 const CHECKOUT_EXPIRY_MS = 7 * 24 * 60 * 60 * 1000
 
 const checkoutBodySchema = z.object({
-  planId: z.enum(["basic", "core", "enterprise"]),
+  planId: z.enum(TENANT_PLAN_IDS),
   billingCycle: z.enum(["monthly"]).optional().default("monthly"),
 })
 

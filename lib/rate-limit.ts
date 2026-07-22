@@ -16,6 +16,9 @@ type RateLimitKey =
   | "authSignupResend"
   | "authSignupVerify"
   | "authSignupIp"
+  | "authForgotPassword"
+  | "authForgotPasswordIp"
+  | "authResetPassword"
   | "opsErrorIngest"
 
 type RateLimitResult = {
@@ -31,6 +34,9 @@ const SENSITIVE_RATE_LIMIT_KEYS = new Set<RateLimitKey>([
   "authSignup",
   "authSignupResend",
   "authSignupVerify",
+  "authForgotPassword",
+  "authForgotPasswordIp",
+  "authResetPassword",
   "opsErrorIngest",
 ])
 
@@ -68,6 +74,9 @@ const LIMITS: Record<RateLimitKey, { limit: number; windowMs: number }> = {
   authSignupResend:      { limit: 6,  windowMs: 10 * 60_000 },
   authSignupVerify:      { limit: 20, windowMs: 10 * 60_000 },
   authSignupIp:          { limit: 15, windowMs: 60 * 60_000 },
+  authForgotPassword:    { limit: 6,  windowMs: 15 * 60_000 },
+  authForgotPasswordIp:  { limit: 15, windowMs: 60 * 60_000 },
+  authResetPassword:     { limit: 20, windowMs: 10 * 60_000 },
   opsErrorIngest:        { limit: 20, windowMs: 60_000 },
 }
 

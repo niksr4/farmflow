@@ -15,6 +15,7 @@ import { logAuditEvent } from "@/lib/server/audit-log"
 import { logSecurityEvent } from "@/lib/server/security-events"
 import { buildAdminErrorResponse, databaseNotConfiguredResponse } from "@/lib/server/route-utils"
 import { invalidateModuleCache } from "@/lib/module-access"
+import { isForbiddenTenantAccess, resolveRequestedTenantId } from "@/lib/permissions"
 
 export async function GET(request: Request) {
   try {
@@ -25,14 +26,14 @@ export async function GET(request: Request) {
 
     const { searchParams } = new URL(request.url)
     const requestedTenantId = searchParams.get("tenantId")
-    const tenantId = sessionUser.role === "owner" ? requestedTenantId : sessionUser.tenantId
+    const tenantId = resolveRequestedTenantId(sessionUser, requestedTenantId)
     const allowPlanOverrides = sessionUser.role === "owner" && searchParams.get("includePlanOverrides") === "true"
 
     if (!tenantId) {
       return NextResponse.json({ success: false, error: "tenantId is required" }, { status: 400 })
     }
 
-    if (sessionUser.role !== "owner" && requestedTenantId && requestedTenantId !== sessionUser.tenantId) {
+    if (isForbiddenTenantAccess(sessionUser, requestedTenantId)) {
       return NextResponse.json({ success: false, error: "Forbidden" }, { status: 403 })
     }
 
@@ -72,7 +73,7 @@ export async function PUT(request: Request) {
 
     const body = await request.json()
     const requestedTenantId = String(body.tenantId || "").trim()
-    const tenantId = sessionUser.role === "owner" ? requestedTenantId : sessionUser.tenantId
+    const tenantId = resolveRequestedTenantId(sessionUser, requestedTenantId)
     const modules = Array.isArray(body.modules) ? body.modules : []
     const requestedPlanId = body.planId ? normalizeTenantPlanId(body.planId) : null
     const allowPlanOverrides = sessionUser.role === "owner" && body.allowPlanOverride === true
@@ -81,7 +82,7 @@ export async function PUT(request: Request) {
       return NextResponse.json({ success: false, error: "tenantId is required" }, { status: 400 })
     }
 
-    if (sessionUser.role !== "owner" && requestedTenantId && requestedTenantId !== sessionUser.tenantId) {
+    if (isForbiddenTenantAccess(sessionUser, requestedTenantId)) {
       return NextResponse.json({ success: false, error: "Forbidden" }, { status: 403 })
     }
 

@@ -1,5 +1,5 @@
 import { sql } from "@/lib/server/db"
-import { getFiscalYearDateRange, getCurrentFiscalYear } from "@/lib/fiscal-year-utils"
+import { getFiscalYearDateRange, getCurrentFiscalYear, type FiscalYear } from "@/lib/fiscal-year-utils"
 import { normalizeTenantContext, runTenantQuery } from "@/lib/server/tenant-db"
 import { logServerError } from "@/lib/server/safe-logging"
 import type { InventoryItem, Transaction } from "@/lib/inventory-types"
@@ -49,6 +49,7 @@ interface DataSummaryInput {
     price_per_kg: number
     total_revenue: number
     buyer_name: string
+    location?: string
   }>
   fiscalYear: string
   cropFamily?: string | null
@@ -60,19 +61,27 @@ export async function buildTenantAiDataSummary({
   role,
   inventory = [],
   transactions = [],
+  fiscalYear: fiscalYearOverride,
+  includeInventory = true,
 }: {
   tenantId: string
   role: string
   inventory?: InventoryItem[]
   transactions?: Transaction[]
+  fiscalYear?: FiscalYear
+  includeInventory?: boolean
 }) {
   const tenantContext = normalizeTenantContext(tenantId, role)
-  const fiscalYear = getCurrentFiscalYear()
+  const fiscalYear = fiscalYearOverride ?? getCurrentFiscalYear()
   const { startDate, endDate } = getFiscalYearDateRange(fiscalYear)
 
   const [inventorySnapshot, laborData, processingData, rainfallData, expenseData, dispatchData, salesData, transactionHistory, cropProfile] =
     await Promise.all([
-      inventory.length > 0 ? Promise.resolve(inventory) : fetchInventorySnapshot(tenantContext),
+      !includeInventory
+        ? Promise.resolve([])
+        : inventory.length > 0
+          ? Promise.resolve(inventory)
+          : fetchInventorySnapshot(tenantContext),
       fetchLaborData(startDate, endDate, tenantContext),
       fetchProcessingData(startDate, endDate, tenantContext),
       fetchRainfallData(tenantContext),
@@ -320,17 +329,19 @@ async function fetchSalesData(startDate: string, endDate: string, tenantContext:
       tenantContext,
       sql`
         SELECT
-          sale_date,
-          coffee_type,
-          bag_type,
-          kgs AS weight_kgs,
-          price_per_bag AS price_per_kg,
-          revenue AS total_revenue,
-          buyer_name
-        FROM sales_records
-        WHERE sale_date >= ${startDate} AND sale_date <= ${endDate}
-          AND tenant_id = ${tenantId}
-        ORDER BY sale_date DESC
+          sr.sale_date,
+          sr.coffee_type,
+          sr.bag_type,
+          sr.kgs AS weight_kgs,
+          sr.price_per_bag AS price_per_kg,
+          sr.revenue AS total_revenue,
+          sr.buyer_name,
+          COALESCE(l.name, l.code, 'Unknown') AS location
+        FROM sales_records sr
+        LEFT JOIN locations l ON l.id = sr.location_id
+        WHERE sr.sale_date >= ${startDate} AND sr.sale_date <= ${endDate}
+          AND sr.tenant_id = ${tenantId}
+        ORDER BY sr.sale_date DESC
         LIMIT 200
       `,
     )
@@ -391,7 +402,14 @@ function buildDataSummary(data: DataSummaryInput): string {
     sections.push("\n## Current Inventory Snapshot")
     const lowStock = data.inventory.filter((item) => item.quantity < 10)
     sections.push(`- Total items tracked: ${data.inventory.length}`)
-    sections.push(`- Low stock items (<10 units): ${lowStock.length}`)
+    const itemLines = data.inventory
+      .slice()
+      .sort((left, right) => left.name.localeCompare(right.name))
+      .map((item) => `${item.name}: ${Number(item.quantity).toFixed(2)} ${item.unit}${item.quantity < 10 ? " (LOW STOCK)" : ""}`)
+    sections.push(`- Items: ${itemLines.join("; ")}`)
+    if (lowStock.length > 0) {
+      sections.push(`- Low stock items (<10 units): ${lowStock.map((item) => item.name).join(", ")}`)
+    }
   }
 
   if (history && history.length > 0) {
@@ -576,14 +594,63 @@ function buildDataSummary(data: DataSummaryInput): string {
       .map(([type, bags]) => `${type}: ${bags.toFixed(2)} bags`)
       .join(", ")
     sections.push(`- By bag type: ${bagTypeSummary}`)
+
+    const byLocation: Record<string, number> = {}
+    data.dispatchData.forEach((dispatch) => {
+      const key = dispatch.location || "Unknown"
+      byLocation[key] = (byLocation[key] || 0) + (Number(dispatch.bags_dispatched) || 0)
+    })
+    sections.push(
+      `- By location: ${Object.entries(byLocation)
+        .map(([location, bags]) => `${location}: ${bags.toFixed(2)} bags`)
+        .join(", ")}`,
+    )
   }
 
   if (data.salesData && data.salesData.length > 0) {
     sections.push("\n## Sales Summary")
     const totalSales = data.salesData.length
     const totalRevenue = data.salesData.reduce((sum, sale) => sum + (Number(sale.total_revenue) || 0), 0)
+    const totalKgs = data.salesData.reduce((sum, sale) => sum + (Number(sale.weight_kgs) || 0), 0)
     sections.push(`- Total sales entries: ${totalSales}`)
-    sections.push(`- Total revenue: ₹${totalRevenue.toLocaleString()}`)
+    sections.push(`- Total volume sold: ${totalKgs.toFixed(2)} kg | Total revenue: ₹${totalRevenue.toLocaleString()}`)
+
+    const byCoffeeType: Record<string, { kgs: number; revenue: number }> = {}
+    data.salesData.forEach((sale) => {
+      const key = sale.coffee_type || "Unknown"
+      if (!byCoffeeType[key]) byCoffeeType[key] = { kgs: 0, revenue: 0 }
+      byCoffeeType[key].kgs += Number(sale.weight_kgs) || 0
+      byCoffeeType[key].revenue += Number(sale.total_revenue) || 0
+    })
+    sections.push(
+      `- By coffee type: ${Object.entries(byCoffeeType)
+        .map(([type, totals]) => `${type}: ${totals.kgs.toFixed(2)} kg (₹${totals.revenue.toLocaleString()})`)
+        .join(", ")}`,
+    )
+
+    const byLocation: Record<string, number> = {}
+    data.salesData.forEach((sale) => {
+      const key = sale.location || "Unknown"
+      byLocation[key] = (byLocation[key] || 0) + (Number(sale.weight_kgs) || 0)
+    })
+    sections.push(
+      `- By location: ${Object.entries(byLocation)
+        .map(([location, kgs]) => `${location}: ${kgs.toFixed(2)} kg`)
+        .join(", ")}`,
+    )
+
+    const byBuyer: Record<string, number> = {}
+    data.salesData.forEach((sale) => {
+      const buyer = sale.buyer_name || "Unknown buyer"
+      byBuyer[buyer] = (byBuyer[buyer] || 0) + (Number(sale.total_revenue) || 0)
+    })
+    const topBuyers = Object.entries(byBuyer)
+      .sort((left, right) => right[1] - left[1])
+      .slice(0, 5)
+      .map(([buyer, revenue]) => `${buyer}: ₹${revenue.toLocaleString()}`)
+    if (topBuyers.length > 0) {
+      sections.push(`- Top buyers by revenue: ${topBuyers.join(", ")}`)
+    }
   }
 
   return sections.join("\n")

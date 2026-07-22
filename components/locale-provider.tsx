@@ -29,6 +29,8 @@ const isEnglishOnlyPublicPath = (pathname: string) =>
   pathname === "/login" ||
   pathname === "/signup" ||
   pathname === "/verify-email" ||
+  pathname === "/forgot-password" ||
+  pathname === "/reset-password" ||
   pathname === "/privacy" ||
   pathname === "/standards" ||
   pathname === "/offline" ||

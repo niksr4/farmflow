@@ -18,6 +18,8 @@ type NormalizedFinding = {
 const getApiKey = () => {
   const explicit = String(process.env.PLANTHEALTH_API_KEY || "").trim()
   if (explicit) return explicit
+  // Legacy fallback — check Vercel prod env vars before removing; if nothing depends on the
+  // lowercase name, delete this line and keep PLANTHEALTH_API_KEY as the only source.
   return String(process.env.planthealth || "").trim()
 }
 

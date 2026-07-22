@@ -4,7 +4,7 @@
 // here requires a valid session (the defence-in-depth backstop for routes that might forget
 // their own guard). Kept as a pure, unit-tested module so the allowlist can't silently drift.
 export const PUBLIC_API_PREFIXES = [
-  "/api/auth", // next-auth, signup, verify-email, resend-verification, session
+  "/api/auth", // next-auth, signup, verify-email, resend-verification, forgot/reset-password, session
   "/api/register-interest", // public landing form
   "/api/contact", // public contact form (rate limited)
   "/api/cron/", // bearer CRON_SECRET

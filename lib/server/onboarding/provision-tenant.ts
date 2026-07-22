@@ -7,6 +7,7 @@ import { PRIVACY_NOTICE_VERSION } from "@/lib/privacy-config"
 import { logSecurityEvent } from "@/lib/server/security-events"
 import { sql } from "@/lib/server/db"
 import { persistTenantPlanId } from "@/lib/server/tenant-subscriptions"
+import { initializeTenantTrialAccess } from "@/lib/server/tenant-commercial-access"
 import { normalizeTenantContext, runTenantQuery } from "@/lib/server/tenant-db"
 import { sendOwnerTenantCreatedAlert } from "@/lib/server/onboarding/owner-alerts"
 import { ACCOUNT_ACTIVITY_SUGGESTIONS } from "@/lib/account-activity-suggestions"
@@ -578,6 +579,10 @@ const provisionSignupRequestRecord = async (
     await ensureTenantModules(tenant.id)
     await ensureStarterLocation(tenant.id, signupRequest.estate_name)
     await ensureDefaultActivityCodes(tenant.id)
+    // Populates tenant_commercial_access with a real 30-day trial record so the canonical
+    // resolver (lib/commercial-access.ts) has accurate data whenever billing enforcement is
+    // turned on. No-op today — bootstrap doesn't read this yet (enforcement deferred).
+    await initializeTenantTrialAccess(sql, tenant.id, "owner", { source: "self-serve-signup" })
     const user = await ensureUser(signupRequest, tenant.id)
 
     await runTenantQuery(

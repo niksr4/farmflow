@@ -68,6 +68,7 @@ export default function WorkspaceHeader({
   onOpenSearch,
   onOpenSidebar,
 }: Props) {
+  const isAdminOrOwner = isAdmin || isOwner
   return (
     <header className={cn(
       "relative mb-4 overflow-hidden",
@@ -152,7 +153,7 @@ export default function WorkspaceHeader({
                   <Badge variant="outline" className="text-[11px] font-medium">{roleBadgeLabel}</Badge>
                 </div>
                 <DropdownMenuSeparator />
-                {(isAdmin || isOwner) && (
+                {isAdminOrOwner && (
                   <DropdownMenuItem asChild>
                     <Link href={buildWorkspaceHref("/settings")}>
                       <Settings className="h-4 w-4 mr-2" />
@@ -304,7 +305,7 @@ export default function WorkspaceHeader({
                   <Badge variant="outline" className="text-[11px] font-medium">{roleBadgeLabel}</Badge>
                 </div>
                 <DropdownMenuSeparator />
-                {(isAdmin || isOwner) && (
+                {isAdminOrOwner && (
                   <DropdownMenuItem asChild>
                     <Link href={buildWorkspaceHref("/settings")}>
                       <Settings className="h-4 w-4 mr-2" />

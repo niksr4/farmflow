@@ -3,7 +3,7 @@ import { sql } from "@/lib/server/db"
 import { requireSessionUser } from "@/lib/server/auth"
 import { resolveScopedSessionUser } from "@/lib/server/module-access"
 import { normalizeTenantContext, runTenantQuery } from "@/lib/server/tenant-db"
-import { requireAdminRole } from "@/lib/permissions"
+import { requireAdminRole, resolveRequestedTenantId } from "@/lib/permissions"
 import { logAuditEvent } from "@/lib/server/audit-log"
 import { loadTenantExperienceColumnStatus, parseJsonObject } from "@/lib/server/tenant-experience-db"
 import {
@@ -132,7 +132,7 @@ export async function GET(request: Request) {
     const sessionUser = await resolveScopedSessionUser(await requireSessionUser())
     const { searchParams } = new URL(request.url)
     const requestedTenantId = String(searchParams.get("tenantId") || "").trim()
-    const tenantId = sessionUser.role === "owner" && requestedTenantId ? requestedTenantId : sessionUser.tenantId
+    const tenantId = resolveRequestedTenantId(sessionUser, requestedTenantId, { fallbackToSessionTenant: true }) || sessionUser.tenantId
     const tenantContext = normalizeTenantContext(tenantId, sessionUser.role)
     const columnStatus = await loadTenantExperienceColumnStatus(sql, tenantContext)
     const rows = columnStatus.hasUiVariant && columnStatus.hasFeatureFlags
@@ -231,7 +231,7 @@ export async function PUT(request: Request) {
     }
 
     const requestedTenantId = String(body.tenantId || "").trim()
-    const tenantId = sessionUser.role === "owner" && requestedTenantId ? requestedTenantId : sessionUser.tenantId
+    const tenantId = resolveRequestedTenantId(sessionUser, requestedTenantId, { fallbackToSessionTenant: true }) || sessionUser.tenantId
     const tenantContext = normalizeTenantContext(tenantId, sessionUser.role)
     const columnStatus = await loadTenantExperienceColumnStatus(sql, tenantContext)
     const hasExperienceUpdateInput = body.uiVariant !== undefined || body.featureFlags !== undefined

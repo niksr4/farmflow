@@ -498,7 +498,7 @@ const TENANT_KPI_BASELINE_TARGETS: Record<string, Partial<Record<KpiMetricId, nu
 }
 
 export default function SeasonDashboard() {
-  const { user } = useAuth()
+  const { user, isAdminOrOwner } = useAuth()
   const { toast } = useToast()
   const { settings, updateSettings, loading: settingsLoading } = useTenantSettings()
   const router = useRouter()
@@ -516,8 +516,6 @@ export default function SeasonDashboard() {
   const [weeklyError, setWeeklyError] = useState<string | null>(null)
   const [benchmarkMode, setBenchmarkMode] = useState<"week" | "month" | "location" | "target">("week")
   const [briefCopied, setBriefCopied] = useState(false)
-
-  const isAdmin = user?.role === "admin" || user?.role === "owner"
 
   const zeroCoffeeTotals: SeasonCoffeeTotals = useMemo(
     () => ({
@@ -1048,7 +1046,7 @@ export default function SeasonDashboard() {
               variant="full"
             />
           </div>
-          {isAdmin && (
+          {isAdminOrOwner && (
             <div className="rounded-2xl border border-sky-100/90 bg-white/85 p-3 shadow-sm">
               <Label className="text-[11px] uppercase tracking-[0.18em] text-slate-500">Bag Weight (KG)</Label>
               <div className="mt-2 flex items-end gap-2">

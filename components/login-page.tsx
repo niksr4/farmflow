@@ -212,12 +212,12 @@ export default function LoginPage() {
                 <Label htmlFor="password" className="mb-1 block text-stone-200">
                   {t("public.login.password")}
                 </Label>
-                <a
-                  href="mailto:support@thefarmflow.in?subject=Password%20Reset%20Request"
+                <Link
+                  href="/forgot-password"
                   className="mb-1 text-xs text-emerald-300 hover:text-emerald-200"
                 >
                   Forgot password?
-                </a>
+                </Link>
                 <TooltipProvider>
                   <Tooltip>
                     <TooltipTrigger asChild>

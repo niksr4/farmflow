@@ -2,7 +2,7 @@ import { NextResponse } from "next/server"
 import { sql } from "@/lib/server/db"
 import { requireModuleAccess, isModuleAccessError } from "@/lib/server/module-access"
 import { normalizeTenantContext, runTenantQuery } from "@/lib/server/tenant-db"
-import { canDeleteModule, canWriteModule } from "@/lib/permissions"
+import { canDeleteModule, canWriteModule, resolveRequestedTenantId } from "@/lib/permissions"
 import { logAuditEvent } from "@/lib/server/audit-log"
 import { logRouteMutationFailure } from "@/lib/server/route-error-events"
 import { sanitizeRouteError } from "@/lib/server/sanitize-route-error"
@@ -76,7 +76,7 @@ export async function GET(request: Request) {
     const statusFilterRaw = String(searchParams.get("status") || "").trim().toLowerCase()
     const locationFilter = String(searchParams.get("locationId") || "").trim()
     const searchQuery = String(searchParams.get("q") || "").trim().toLowerCase()
-    const tenantId = sessionUser.role === "owner" && requestedTenantId ? requestedTenantId : sessionUser.tenantId
+    const tenantId = resolveRequestedTenantId(sessionUser, requestedTenantId, { fallbackToSessionTenant: true }) || sessionUser.tenantId
     const tenantContext = normalizeTenantContext(tenantId, sessionUser.role)
 
     const todayIso = new Date().toISOString().slice(0, 10)

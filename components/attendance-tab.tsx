@@ -13,7 +13,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react"
 import { addDays, format, isToday, isFuture, startOfWeek } from "date-fns"
-import { Check, Download, IndianRupee, Loader2, PlusCircle, Users } from "lucide-react"
+import { Check, ChevronLeft, ChevronRight, Download, IndianRupee, Loader2, PlusCircle, Trash2, Users } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { cn } from "@/lib/utils"
@@ -26,12 +26,13 @@ type AttendanceSummaryRow = { workerId: string; name: string; daysPresent: numbe
 
 function dateToStr(d: Date): string { return format(d, "yyyy-MM-dd") }
 
-function getWeekDays(): Date[] {
-  const start = startOfWeek(new Date(), { weekStartsOn: 1 })
+function getWeekDays(weekOffset: number): Date[] {
+  const start = addDays(startOfWeek(new Date(), { weekStartsOn: 1 }), weekOffset * 7)
   return Array.from({ length: 7 }, (_, i) => addDays(start, i))
 }
 
 export default function AttendanceTab() {
+  const [weekOffset, setWeekOffset] = useState(0)
   const [selectedDate, setSelectedDate] = useState(dateToStr(new Date()))
   const [workers, setWorkers] = useState<AttendanceWorker[]>([])
   const [presentWorkerIds, setPresentWorkerIds] = useState<string[]>([])
@@ -39,13 +40,19 @@ export default function AttendanceTab() {
   const [loading, setLoading] = useState(true)
   const [isSaving, setIsSaving] = useState(false)
   const [isAddingWorker, setIsAddingWorker] = useState(false)
+  const [removingWorkerId, setRemovingWorkerId] = useState<string | null>(null)
   const [newWorkerName, setNewWorkerName] = useState("")
   const [showAddWorker, setShowAddWorker] = useState(false)
   const [showSummary, setShowSummary] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [autoSelectedDate, setAutoSelectedDate] = useState<string | null>(null)
 
-  const weekDays = useMemo(() => getWeekDays(), [])
+  const weekDays = useMemo(() => getWeekDays(weekOffset), [weekOffset])
+
+  useEffect(() => {
+    const days = getWeekDays(weekOffset)
+    setSelectedDate(dateToStr(weekOffset === 0 ? new Date() : days[0]))
+  }, [weekOffset])
 
   const loadSnapshot = useCallback(
     async (date: string) => {
@@ -151,10 +158,47 @@ export default function AttendanceTab() {
     }
   }
 
+  const handleRemoveWorker = async (id: string, name: string) => {
+    if (!window.confirm(`Remove ${name}? They'll no longer appear in attendance, but past records are kept.`)) return
+    setRemovingWorkerId(id)
+    try {
+      const res = await fetch(`/api/attendance/workers/${id}`, { method: "DELETE" })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok || !data?.success) throw new Error(data?.error || "Failed to remove")
+      toast.success(`${name} removed`)
+      setWorkers((cur) => cur.filter((w) => w.id !== id))
+      setPresentWorkerIds((cur) => cur.filter((workerId) => workerId !== id))
+    } catch (e: unknown) {
+      toast.error(e instanceof Error ? e.message : "Failed to remove")
+    } finally {
+      setRemovingWorkerId(null)
+    }
+  }
+
   return (
     <div className="pb-28">
       {/* Day strip */}
       <div className="sticky top-0 z-10 bg-white border-b border-stone-100 px-3 pt-2 pb-3 space-y-2">
+        <div className="flex items-center justify-between px-1">
+          <button
+            type="button"
+            onClick={() => setWeekOffset((o) => o - 1)}
+            className="flex items-center gap-1 rounded-lg px-2 py-1 text-xs font-semibold text-stone-500 active:bg-stone-100 touch-manipulation"
+          >
+            <ChevronLeft className="h-3.5 w-3.5" /> Prev week
+          </button>
+          <span className="text-xs font-bold uppercase tracking-widest text-stone-400">
+            {weekOffset === 0 ? "This week" : `${format(weekDays[0], "d MMM")} – ${format(weekDays[6], "d MMM")}`}
+          </span>
+          <button
+            type="button"
+            disabled={weekOffset === 0}
+            onClick={() => setWeekOffset((o) => Math.min(0, o + 1))}
+            className="flex items-center gap-1 rounded-lg px-2 py-1 text-xs font-semibold text-stone-500 active:bg-stone-100 touch-manipulation disabled:opacity-30"
+          >
+            Next week <ChevronRight className="h-3.5 w-3.5" />
+          </button>
+        </div>
         <div className="flex gap-1">
           {weekDays.map((day) => {
             const str = dateToStr(day)
@@ -232,13 +276,21 @@ export default function AttendanceTab() {
         ) : (
           workers.map((worker) => {
             const isPresent = presentSet.has(worker.id)
+            const isRemoving = removingWorkerId === worker.id
             return (
-              <button
+              <div
                 key={worker.id}
-                type="button"
+                role="button"
+                tabIndex={0}
                 onClick={() => toggleWorker(worker.id)}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter" || event.key === " ") {
+                    event.preventDefault()
+                    toggleWorker(worker.id)
+                  }
+                }}
                 className={cn(
-                  "w-full flex items-center justify-between rounded-2xl px-4 py-4",
+                  "w-full flex items-center justify-between rounded-2xl px-4 py-4 cursor-pointer",
                   "transition-all active:scale-[0.98] touch-manipulation",
                   isPresent
                     ? "bg-emerald-600 shadow-md shadow-emerald-100"
@@ -259,13 +311,30 @@ export default function AttendanceTab() {
                     {worker.dailyRate !== null ? `₹${worker.dailyRate}/day` : "No rate"}
                   </p>
                 </div>
-                <div className={cn(
-                  "flex h-9 w-9 shrink-0 items-center justify-center rounded-xl transition-all",
-                  isPresent ? "bg-white/20" : "border-2 border-stone-200 bg-white",
-                )}>
-                  {isPresent && <Check className="h-5 w-5 text-white stroke-[3]" />}
+                <div className="flex shrink-0 items-center gap-1">
+                  <button
+                    type="button"
+                    aria-label={`Remove ${worker.name}`}
+                    disabled={isRemoving}
+                    onClick={(event) => {
+                      event.stopPropagation()
+                      handleRemoveWorker(worker.id, worker.name)
+                    }}
+                    className={cn(
+                      "flex h-9 w-9 items-center justify-center rounded-xl touch-manipulation disabled:opacity-50",
+                      isPresent ? "text-emerald-100 active:bg-white/20" : "text-stone-300 active:bg-stone-100",
+                    )}
+                  >
+                    {isRemoving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
+                  </button>
+                  <div className={cn(
+                    "flex h-9 w-9 shrink-0 items-center justify-center rounded-xl transition-all",
+                    isPresent ? "bg-white/20" : "border-2 border-stone-200 bg-white",
+                  )}>
+                    {isPresent && <Check className="h-5 w-5 text-white stroke-[3]" />}
+                  </div>
                 </div>
-              </button>
+              </div>
             )
           })
         )}

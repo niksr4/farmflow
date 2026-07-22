@@ -3,6 +3,7 @@ import { sql } from "@/lib/server/db"
 import { requireAdminSession } from "@/lib/server/mfa"
 import { normalizeTenantContext, runTenantQueries } from "@/lib/server/tenant-db"
 import { buildAdminErrorResponse, databaseNotConfiguredResponse } from "@/lib/server/route-utils"
+import { isForbiddenTenantAccess, resolveRequestedTenantId } from "@/lib/permissions"
 
 // Maps a source name to a SQL fragment for the UNION.
 // Returns null if the source is unknown (for safety).
@@ -24,7 +25,7 @@ export async function GET(request: Request) {
 
     const { searchParams } = new URL(request.url)
     const requestedTenantId = searchParams.get("tenantId")
-    const tenantId = sessionUser.role === "owner" ? requestedTenantId : sessionUser.tenantId
+    const tenantId = resolveRequestedTenantId(sessionUser, requestedTenantId)
     const sourceFilter = searchParams.get("source") || "all"
     const limitParam = searchParams.get("limit")
     const offsetParam = searchParams.get("offset")
@@ -35,7 +36,7 @@ export async function GET(request: Request) {
       return NextResponse.json({ success: false, error: "tenantId is required" }, { status: 400 })
     }
 
-    if (sessionUser.role !== "owner" && requestedTenantId && requestedTenantId !== sessionUser.tenantId) {
+    if (isForbiddenTenantAccess(sessionUser, requestedTenantId)) {
       return NextResponse.json({ success: false, error: "Forbidden" }, { status: 403 })
     }
 
