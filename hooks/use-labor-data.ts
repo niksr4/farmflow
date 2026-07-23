@@ -19,6 +19,7 @@ export interface LaborDeployment {
   notes?: string
   taskDescription?: string
   user: string
+  locationId?: string | null
   updatedAt?: string
 }
 
@@ -173,7 +174,9 @@ export function useLaborData(locationId?: string, options: LaborDataOptions = {}
       const response = await fetch("/api/labor-neon", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ...deployment, locationId }),
+        // deployment's own locationId (a per-entry form field) wins over the hook-scope
+        // default — the spread order matters here, don't swap it back.
+        body: JSON.stringify({ locationId, ...deployment }),
       })
 
       const data = await response.json()
@@ -202,7 +205,7 @@ export function useLaborData(locationId?: string, options: LaborDataOptions = {}
       const response = await fetch("/api/labor-neon", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ id, ...deployment, locationId }),
+        body: JSON.stringify({ locationId, id, ...deployment }),
       })
 
       const data = await response.json()

@@ -46,29 +46,34 @@ export async function GET(request: Request) {
       console.error("Error fetching labour data:", error)
     }
 
-    const processingRows = await runTenantQuery(
-      sql,
-      tenantContext,
-      sql`
-        SELECT 
-          pr.process_date,
-          pr.crop_today,
-          pr.ripe_today,
-          pr.dry_parch,
-          pr.dry_cherry,
-          pr.dry_p_bags,
-          pr.dry_cherry_bags,
-          pr.dry_p_bags_todate,
-          pr.dry_cherry_bags_todate,
-          pr.coffee_type,
-          l.name as location_name
-        FROM processing_records pr
-        LEFT JOIN locations l ON l.id = pr.location_id
-        WHERE pr.process_date >= ${start}::date AND pr.process_date <= ${end}::date
-          AND pr.tenant_id = ${tenantId}
-        ORDER BY pr.process_date DESC
-      `,
-    )
+    let processingRows: any[] = []
+    try {
+      processingRows = await runTenantQuery(
+        sql,
+        tenantContext,
+        sql`
+          SELECT
+            pr.process_date,
+            pr.crop_today,
+            pr.ripe_today,
+            pr.dry_parch,
+            pr.dry_cherry,
+            pr.dry_p_bags,
+            pr.dry_cherry_bags,
+            pr.dry_p_bags_todate,
+            pr.dry_cherry_bags_todate,
+            pr.coffee_type,
+            l.name as location_name
+          FROM processing_records pr
+          LEFT JOIN locations l ON l.id = pr.location_id
+          WHERE pr.process_date >= ${start}::date AND pr.process_date <= ${end}::date
+            AND pr.tenant_id = ${tenantId}
+          ORDER BY pr.process_date DESC
+        `,
+      )
+    } catch (error) {
+      console.error("Error fetching processing data:", error)
+    }
 
     const processingData: Record<string, unknown[]> = {}
     for (const row of processingRows) {

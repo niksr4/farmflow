@@ -26,6 +26,7 @@ type LaborRow = {
   reference: string
   costPerWorker: number
   dayCounts: Record<string, number> // ISO date -> worker count
+  notes: string
 }
 
 type WeekBatchEntryProps = {
@@ -75,7 +76,7 @@ export default function WeekBatchEntry({ locationId, defaultWage = 0, onSuccess,
       if (prev.some(r => r.code === code)) return prev
       const dayCounts: Record<string, number> = {}
       weekDays.forEach(d => { dayCounts[d.iso] = 0 })
-      return [...prev, { code, reference, costPerWorker: defaultWage, dayCounts }]
+      return [...prev, { code, reference, costPerWorker: defaultWage, dayCounts, notes: "" }]
     })
     setAddingCode(false)
     setCodeSearch("")
@@ -89,6 +90,10 @@ export default function WeekBatchEntry({ locationId, defaultWage = 0, onSuccess,
   const updateWage = (rowIdx: number, value: string) => {
     const num = Number(value) || 0
     setRows(prev => prev.map((r, i) => i === rowIdx ? { ...r, costPerWorker: num } : r))
+  }
+
+  const updateNotes = (rowIdx: number, value: string) => {
+    setRows(prev => prev.map((r, i) => i === rowIdx ? { ...r, notes: value } : r))
   }
 
   const removeRow = (rowIdx: number) => {
@@ -105,11 +110,11 @@ export default function WeekBatchEntry({ locationId, defaultWage = 0, onSuccess,
   }, 0)
 
   const handleSubmit = async () => {
-    const entries: { date: string; code: string; reference: string; workers: number; costPerWorker: number }[] = []
+    const entries: { date: string; code: string; reference: string; workers: number; costPerWorker: number; notes: string }[] = []
     for (const row of rows) {
       for (const [date, count] of Object.entries(row.dayCounts)) {
         if (count > 0) {
-          entries.push({ date, code: row.code, reference: row.reference, workers: count, costPerWorker: row.costPerWorker })
+          entries.push({ date, code: row.code, reference: row.reference, workers: count, costPerWorker: row.costPerWorker, notes: row.notes })
         }
       }
     }
@@ -132,7 +137,7 @@ export default function WeekBatchEntry({ locationId, defaultWage = 0, onSuccess,
               reference: e.reference,
               laborEntries: [{ name: "In-house", laborCount: e.workers, costPerLabor: e.costPerWorker }],
               totalCost: e.workers * e.costPerWorker,
-              notes: "",
+              notes: e.notes,
               taskDescription: "",
               ...(locationId ? { locationId } : {}),
             }),
@@ -218,6 +223,12 @@ export default function WeekBatchEntry({ locationId, defaultWage = 0, onSuccess,
                           {rowTotal > 0 && (
                             <span className="text-[10px] text-neutral-400">{formatCurrency(rowTotal)}</span>
                           )}
+                          <Input
+                            value={row.notes}
+                            onChange={e => updateNotes(rowIdx, e.target.value)}
+                            placeholder="Notes (optional)"
+                            className="mt-1 h-7 w-full min-w-[110px] text-[11px] rounded-md border-black/10 bg-white/60 px-2"
+                          />
                         </td>
                         <td className="py-2 pr-2">
                           <Input

@@ -220,8 +220,8 @@ export async function GET(request: NextRequest) {
       name: String(item.item_type),
       quantity: Number(item.quantity) || 0,
       unit: String(item.unit || "kg"),
-      avg_price: item.avg_price ? Number(item.avg_price) : undefined,
-      total_cost: item.total_cost ? Number(item.total_cost) : undefined,
+      avg_price: item.avg_price != null ? Number(item.avg_price) : undefined,
+      total_cost: item.total_cost != null ? Number(item.total_cost) : undefined,
     }))
 
 

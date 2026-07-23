@@ -14,9 +14,11 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import { Check, PlusCircle, Trash2, Edit2, Save, X, ChevronDown, ChevronUp, Plus } from "lucide-react"
+import type { LocationOption } from "@/components/inventory-system/types"
 import { Textarea } from "@/components/ui/textarea"
 import { Badge } from "@/components/ui/badge"
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
@@ -57,14 +59,17 @@ const formatInventoryUsage = (inventoryItems?: Array<{ itemType: string; quantit
 }
 
 export default function OtherExpensesTab({
-  locationId,
   startDate,
   endDate,
 }: {
-  locationId?: string
   startDate?: string
   endDate?: string
 }) {
+  const [locations, setLocations] = useState<LocationOption[]>([])
+  // Form-only field, not a history filter — expense history predates this field and mostly
+  // has no location on existing rows, so filtering the list by it would hide old entries.
+  const [formLocationId, setFormLocationId] = useState("")
+
   const {
     deployments,
     loading,
@@ -76,7 +81,7 @@ export default function OtherExpensesTab({
     addDeployment,
     updateDeployment,
     deleteDeployment,
-  } = useConsumablesData(locationId, { startDate, endDate })
+  } = useConsumablesData(undefined, { startDate, endDate })
 
   const isMobile = useMediaQuery("(max-width: 768px)")
   const [isAdding, setIsAdding] = useState(false)
@@ -127,7 +132,7 @@ export default function OtherExpensesTab({
   const fetchActivities = useCallback(async () => {
     try {
       const response = await fetch(
-        locationId ? `/api/get-activity?locationId=${locationId}` : "/api/get-activity",
+        formLocationId ? `/api/get-activity?locationId=${formLocationId}` : "/api/get-activity",
       )
       const data = await response.json()
       if (data.success && data.activities) {
@@ -136,7 +141,7 @@ export default function OtherExpensesTab({
     } catch (error) {
       console.error("Error fetching activities:", error)
     }
-  }, [locationId])
+  }, [formLocationId])
 
   const fetchInventoryItems = useCallback(async () => {
     try {
@@ -151,10 +156,26 @@ export default function OtherExpensesTab({
     }
   }, [])
 
+  const fetchLocations = useCallback(async () => {
+    try {
+      const response = await fetch("/api/locations")
+      const data = await response.json()
+      if (data.success) {
+        setLocations(data.locations || [])
+        if (data.locations?.length) {
+          setFormLocationId((prev) => prev || data.locations[0].id)
+        }
+      }
+    } catch (error) {
+      console.error("Error fetching locations:", error)
+    }
+  }, [])
+
   useEffect(() => {
     fetchActivities()
     fetchInventoryItems()
-  }, [fetchActivities, fetchInventoryItems])
+    fetchLocations()
+  }, [fetchActivities, fetchInventoryItems, fetchLocations])
 
   // Autofill reference when code changes
   const handleCodeChange = (code: string) => {
@@ -195,6 +216,10 @@ export default function OtherExpensesTab({
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     if (isSubmitting) return
+    if (locations.length > 0 && !formLocationId) {
+      toast.error("Select a location before saving.")
+      return
+    }
     trackClick(editingId ? "expense_update" : "expense_save")
     setIsSubmitting(true)
 
@@ -216,6 +241,7 @@ export default function OtherExpensesTab({
       reference: effectiveReference,
       amount: formData.amount,
       notes: formData.notes,
+      locationId: formLocationId || null,
       user: "admin",
     }
     if (validInvItems.length > 0) {
@@ -252,6 +278,7 @@ export default function OtherExpensesTab({
       amount: deployment.amount,
       notes: deployment.notes || "",
     })
+    if (deployment.locationId) setFormLocationId(deployment.locationId)
     const linkedItems = Array.isArray(deployment.inventoryItems) && deployment.inventoryItems.length > 0
       ? deployment.inventoryItems
       : deployment.inventoryItemType
@@ -283,6 +310,9 @@ export default function OtherExpensesTab({
       return newSet
     })
   }
+
+  const resolveLocationName = (locationId?: string | null) =>
+    locationId ? locations.find((loc) => loc.id === locationId)?.name || null : null
 
   const computedTotalAmount = deployments.reduce((sum, d) => sum + d.amount, 0)
   const totalExpenses = totalAmount || computedTotalAmount
@@ -415,6 +445,26 @@ export default function OtherExpensesTab({
                     className="h-11"
                   />
                 </div>
+
+                {locations.length > 0 && (
+                  <div className="space-y-2">
+                    <Label htmlFor="expense-location" className="text-base">
+                      Location
+                    </Label>
+                    <Select value={formLocationId} onValueChange={setFormLocationId}>
+                      <SelectTrigger id="expense-location" className="h-11 w-full">
+                        <SelectValue placeholder="Select location" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {locations.map((loc) => (
+                          <SelectItem key={loc.id} value={loc.id}>
+                            {loc.name || loc.code}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )}
 
                 <div className="space-y-2">
                   <Label htmlFor="expense-amount" className="text-base">
@@ -743,6 +793,9 @@ export default function OtherExpensesTab({
                           <p className="text-lg font-black text-emerald-700 mt-0.5 tabular-nums leading-none">
                             {formatCurrency(deployment.amount)}
                           </p>
+                          {resolveLocationName(deployment.locationId) && (
+                            <p className="text-xs text-stone-400 mt-0.5">{resolveLocationName(deployment.locationId)}</p>
+                          )}
                         </div>
                         <div className="shrink-0 ml-3 text-stone-400">
                           {isExpanded ? <ChevronUp className="h-5 w-5" /> : <ChevronDown className="h-5 w-5" />}
@@ -796,6 +849,7 @@ export default function OtherExpensesTab({
                     <TableHead className="sticky top-0 bg-muted/60">Code</TableHead>
                     <TableHead className="sticky top-0 bg-muted/60">Reference</TableHead>
                     <TableHead className="text-right sticky top-0 bg-muted/60">Amount</TableHead>
+                    <TableHead className="sticky top-0 bg-muted/60">Location</TableHead>
                     <TableHead className="sticky top-0 bg-muted/60">Inventory used</TableHead>
                     <TableHead className="sticky top-0 bg-muted/60">Notes</TableHead>
                     <TableHead className="w-[100px] sticky top-0 bg-muted/60">Actions</TableHead>
@@ -808,6 +862,7 @@ export default function OtherExpensesTab({
                       <TableCell className="font-medium">{deployment.code}</TableCell>
                       <TableCell>{deployment.reference || deployment.code}</TableCell>
                       <TableCell className="text-right font-semibold">{formatCurrency(deployment.amount)}</TableCell>
+                      <TableCell className="text-sm text-muted-foreground">{resolveLocationName(deployment.locationId) || "-"}</TableCell>
                       <TableCell className="text-sm">
                         {formatInventoryUsage(
                           Array.isArray(deployment.inventoryItems) && deployment.inventoryItems.length > 0

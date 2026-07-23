@@ -18,6 +18,7 @@ import { FARMFLOW_RECORD_SAVED_EVENT } from "@/components/inventory-system/const
 import { canWriteModule, canDeleteModule, type UserRole } from "@/lib/permissions"
 import { useAuth } from "@/hooks/use-auth"
 import { formatCurrency } from "@/lib/format"
+import type { LocationOption } from "@/components/inventory-system/types"
 
 type Worker = { id: string; name: string }
 
@@ -29,6 +30,7 @@ type PickingRecord = {
   kgPicked: number
   ratePerKg: number
   amount: number
+  locationId: string | null
   notes: string | null
 }
 
@@ -40,6 +42,7 @@ const EMPTY_FORM = {
   pickDate: today(),
   kgPicked: "",
   ratePerKg: "",
+  locationId: "",
   notes: "",
 }
 
@@ -50,6 +53,7 @@ export default function PickingLogTab() {
 
   const [records, setRecords] = useState<PickingRecord[]>([])
   const [workers, setWorkers] = useState<Worker[]>([])
+  const [locations, setLocations] = useState<LocationOption[]>([])
   const [loading, setLoading] = useState(true)
   const [totalKg, setTotalKg] = useState(0)
   const [totalAmount, setTotalAmount] = useState(0)
@@ -68,6 +72,19 @@ export default function PickingLogTab() {
       const res = await fetch("/api/attendance?date=" + today())
       const data = await res.json()
       if (data.success) setWorkers((data.workers || []).map((w: any) => ({ id: String(w.id), name: String(w.name) })))
+    } catch {}
+  }, [])
+
+  const fetchLocations = useCallback(async () => {
+    try {
+      const res = await fetch("/api/locations")
+      const data = await res.json()
+      if (data.success) {
+        setLocations(data.locations || [])
+        if (data.locations?.length) {
+          setForm((f) => ({ ...f, locationId: f.locationId || data.locations[0].id }))
+        }
+      }
     } catch {}
   }, [])
 
@@ -91,10 +108,15 @@ export default function PickingLogTab() {
   }, [startDate, endDate, filterWorker])
 
   useEffect(() => { fetchWorkers() }, [fetchWorkers])
+  useEffect(() => { fetchLocations() }, [fetchLocations])
   useEffect(() => { fetchRecords() }, [fetchRecords])
 
   const handleAdd = async () => {
     if (!form.workerId || !form.kgPicked || !form.ratePerKg) return
+    if (locations.length > 0 && !form.locationId) {
+      toast.error("Select a location before saving.")
+      return
+    }
     setSaving(true)
     try {
       const res = await fetch("/api/picking-records", {
@@ -105,13 +127,14 @@ export default function PickingLogTab() {
           pickDate: form.pickDate,
           kgPicked: Number(form.kgPicked),
           ratePerKg: Number(form.ratePerKg),
+          locationId: form.locationId || null,
           notes: form.notes.trim() || null,
         }),
       })
       const data = await res.json()
       if (!res.ok || !data.success) throw new Error(data.error || "Failed to save")
       toast.success("Picking record saved")
-      setForm(EMPTY_FORM)
+      setForm({ ...EMPTY_FORM, locationId: form.locationId })
       setIsAdding(false)
       fetchRecords()
       window.dispatchEvent(new CustomEvent(FARMFLOW_RECORD_SAVED_EVENT))
@@ -124,7 +147,14 @@ export default function PickingLogTab() {
 
   const startEdit = (r: PickingRecord) => {
     setEditingId(r.id)
-    setEditForm({ workerId: r.workerId, pickDate: r.pickDate.slice(0, 10), kgPicked: String(r.kgPicked), ratePerKg: String(r.ratePerKg), notes: r.notes || "" })
+    setEditForm({
+      workerId: r.workerId,
+      pickDate: r.pickDate.slice(0, 10),
+      kgPicked: String(r.kgPicked),
+      ratePerKg: String(r.ratePerKg),
+      locationId: r.locationId || "",
+      notes: r.notes || "",
+    })
   }
 
   const handleSaveEdit = async (id: string) => {
@@ -137,6 +167,7 @@ export default function PickingLogTab() {
           pickDate: editForm.pickDate,
           kgPicked: Number(editForm.kgPicked),
           ratePerKg: Number(editForm.ratePerKg),
+          locationId: editForm.locationId || null,
           notes: editForm.notes.trim() || null,
         }),
       })
@@ -165,7 +196,14 @@ export default function PickingLogTab() {
     }
   }
 
-  const canSaveForm = form.workerId && Number(form.kgPicked) > 0 && Number(form.ratePerKg) >= 0
+  const resolveLocationName = (locationId?: string | null) =>
+    locationId ? locations.find((loc) => loc.id === locationId)?.name || null : null
+
+  const canSaveForm =
+    form.workerId &&
+    Number(form.kgPicked) > 0 &&
+    Number(form.ratePerKg) >= 0 &&
+    (locations.length === 0 || Boolean(form.locationId))
 
   return (
     <div className="space-y-4">
@@ -230,6 +268,17 @@ export default function PickingLogTab() {
                   <Label>Date *</Label>
                   <Input type="date" value={form.pickDate} onChange={(e) => setForm((f) => ({ ...f, pickDate: e.target.value }))} />
                 </div>
+                {locations.length > 0 && (
+                  <div className="space-y-1.5">
+                    <Label>Location *</Label>
+                    <Select value={form.locationId} onValueChange={(v) => setForm((f) => ({ ...f, locationId: v }))}>
+                      <SelectTrigger><SelectValue placeholder="Select location" /></SelectTrigger>
+                      <SelectContent>
+                        {locations.map((loc) => <SelectItem key={loc.id} value={loc.id}>{loc.name || loc.code}</SelectItem>)}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )}
                 <div className="space-y-1.5">
                   <FieldLabel
                     label="Kg picked *"
@@ -268,7 +317,7 @@ export default function PickingLogTab() {
                 className="resize-none text-sm"
               />
               <div className="flex justify-end gap-2">
-                <Button variant="ghost" size="sm" onClick={() => { setIsAdding(false); setForm(EMPTY_FORM) }}>
+                <Button variant="ghost" size="sm" onClick={() => { setIsAdding(false); setForm({ ...EMPTY_FORM, locationId: form.locationId }) }}>
                   <X className="mr-1 h-4 w-4" /> Cancel
                 </Button>
                 <Button size="sm" disabled={!canSaveForm || saving} onClick={handleAdd}>
@@ -296,6 +345,7 @@ export default function PickingLogTab() {
                     <TableHead className="text-right">Kg</TableHead>
                     <TableHead className="text-right">Rate</TableHead>
                     <TableHead className="text-right">Amount</TableHead>
+                    <TableHead className="hidden md:table-cell">Location</TableHead>
                     <TableHead className="hidden sm:table-cell">Notes</TableHead>
                     {(canWrite || canDelete) && <TableHead className="w-20" />}
                   </TableRow>
@@ -309,6 +359,14 @@ export default function PickingLogTab() {
                         <TableCell><Input type="number" inputMode="decimal" min={0} step={0.1} value={editForm.kgPicked} onChange={(e) => setEditForm((f) => ({ ...f, kgPicked: e.target.value }))} className="h-8 w-24 text-right" /></TableCell>
                         <TableCell><Input type="number" inputMode="decimal" min={0} step={0.5} value={editForm.ratePerKg} onChange={(e) => setEditForm((f) => ({ ...f, ratePerKg: e.target.value }))} className="h-8 w-24 text-right" /></TableCell>
                         <TableCell className="text-right text-sm">{editForm.kgPicked && editForm.ratePerKg ? formatCurrency(Number(editForm.kgPicked) * Number(editForm.ratePerKg)) : "—"}</TableCell>
+                        <TableCell className="hidden md:table-cell">
+                          <Select value={editForm.locationId} onValueChange={(v) => setEditForm((f) => ({ ...f, locationId: v }))}>
+                            <SelectTrigger className="h-8 w-32 text-xs"><SelectValue placeholder="Location" /></SelectTrigger>
+                            <SelectContent>
+                              {locations.map((loc) => <SelectItem key={loc.id} value={loc.id}>{loc.name || loc.code}</SelectItem>)}
+                            </SelectContent>
+                          </Select>
+                        </TableCell>
                         <TableCell className="hidden sm:table-cell"><Input value={editForm.notes} onChange={(e) => setEditForm((f) => ({ ...f, notes: e.target.value }))} className="h-8 w-40" placeholder="Notes" /></TableCell>
                         <TableCell>
                           <div className="flex gap-1">
@@ -326,6 +384,7 @@ export default function PickingLogTab() {
                         <TableCell className="text-right text-sm">{r.kgPicked.toLocaleString("en-IN", { maximumFractionDigits: 1 })}</TableCell>
                         <TableCell className="text-right text-sm">₹{r.ratePerKg}</TableCell>
                         <TableCell className="text-right text-sm font-medium">{formatCurrency(r.amount)}</TableCell>
+                        <TableCell className="hidden md:table-cell text-xs text-muted-foreground">{resolveLocationName(r.locationId) || "—"}</TableCell>
                         <TableCell className="hidden sm:table-cell text-xs text-muted-foreground max-w-[160px] truncate">{r.notes || "—"}</TableCell>
                         {(canWrite || canDelete) && (
                           <TableCell>

@@ -382,6 +382,10 @@ export async function DELETE(request: Request) {
           `,
         )
 
+    if (!existing?.length) {
+      return NextResponse.json({ success: false, error: "Record not found" }, { status: 404 })
+    }
+
     if (isUnassigned) {
       await runTenantQuery(
         sql,

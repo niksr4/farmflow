@@ -528,6 +528,17 @@ export async function POST(request: Request) {
     }
 
     const locationCache = new Map<string, string>()
+    const locationDisplayCache = new Map<string, { name?: string | null; code?: string | null }>()
+
+    const resolveLocationDisplay = async (locationId: string, fallback: string) => {
+      let info = locationDisplayCache.get(locationId)
+      if (!info) {
+        const resolved = await resolveLocationInfo(sql, tenantContext, { locationId })
+        info = { name: resolved?.name, code: resolved?.code }
+        locationDisplayCache.set(locationId, info)
+      }
+      return info.name || info.code || fallback
+    }
 
     const resolveOrCreateLocationId = async (rawValue: string) => {
       const raw = String(rawValue || "").trim()
@@ -862,8 +873,7 @@ export async function POST(request: Request) {
           continue
         }
 
-        const resolvedLocation = await resolveLocationInfo(sql, tenantContext, { locationId })
-        const resolvedEstate = resolvedLocation?.name || resolvedLocation?.code || locationRaw
+        const resolvedEstate = await resolveLocationDisplay(locationId, locationRaw)
 
         const kgsReceived = parseNumber(getField(row, ["kgs_received", "kgs", "weight_kgs"]))
         const lotId = getField(row, ["lot_id", "lot"]) || null
@@ -928,8 +938,7 @@ export async function POST(request: Request) {
           continue
         }
 
-        const resolvedLocation = await resolveLocationInfo(sql, tenantContext, { locationId })
-        const resolvedEstate = resolvedLocation?.name || resolvedLocation?.code || locationRaw
+        const resolvedEstate = await resolveLocationDisplay(locationId, locationRaw)
 
         const bagsSoldInput = parseNumber(getField(row, ["bags_sold", "bags", "bags_sent"]))
         const kgsInput = parseNumber(getField(row, ["kgs", "kgs_sold", "weight_kgs"]))

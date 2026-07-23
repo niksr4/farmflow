@@ -5,6 +5,7 @@ import { useLocale } from "@/components/locale-provider"
 import TodayGapsCard from "@/components/today-gaps-card"
 import QuickLogPanel from "@/components/quick-log-panel"
 import WeekBatchEntry from "@/components/week-batch-entry"
+import { LOCATION_ALL } from "@/components/inventory-system/constants"
 import type { DrilldownOptions } from "@/components/inventory-system/types"
 
 type Props = {
@@ -29,6 +30,9 @@ export default function MobileHomeSection({
   onOpenSidebar,
 }: Props) {
   const { t } = useLocale()
+  // "All locations" is a view-filter sentinel, not a real location id — never forward it
+  // to a save call, or the API rejects it (locationId must be a valid location UUID or absent).
+  const realLocationId = selectedLocationId && selectedLocationId !== LOCATION_ALL ? selectedLocationId : undefined
   return (
     <div className="space-y-4 pb-24">
       {/* Estate morning header */}
@@ -90,13 +94,13 @@ export default function MobileHomeSection({
 
       {canShowAccounts && (
         <QuickLogPanel
-          locationId={selectedLocationId || undefined}
+          locationId={realLocationId}
           onNavigateToFull={() => onTabChange("accounts")}
         />
       )}
       {canShowAccounts && (
         <WeekBatchEntry
-          locationId={selectedLocationId || undefined}
+          locationId={realLocationId}
           defaultWage={defaultWage}
           onSuccess={() => {
             window.dispatchEvent(new CustomEvent("farmflow:record-saved"))

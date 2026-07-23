@@ -11,7 +11,7 @@ import { FieldLabel } from "@/components/ui/field-label"
 import { Calendar } from "@/components/ui/calendar"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { toast } from "@/components/ui/use-toast"
-import { CalendarIcon, ChevronLeft, ChevronRight, CloudRain, Download, Trash2 } from "lucide-react"
+import { CalendarIcon, ChevronLeft, ChevronRight, CloudRain, Download, Pencil, Trash2 } from "lucide-react"
 import { addYears, format, subYears } from "date-fns"
 import { useAuth } from "@/hooks/use-auth"
 import { useLocale } from "@/components/locale-provider"
@@ -88,6 +88,7 @@ export default function RainfallTab({ username, showDataToolsControls = false }:
   const [cents, setCents] = useState("")
   const [notes, setNotes] = useState("")
   const [loading, setLoading] = useState(false)
+  const [editingId, setEditingId] = useState<number | null>(null)
   const [drilldownMonthIndex, setDrilldownMonthIndex] = useState<number | null>(null)
   const [mobileSection, setMobileSection] = useState<"stats" | "log" | "records">("stats")
 
@@ -156,6 +157,26 @@ export default function RainfallTab({ username, showDataToolsControls = false }:
     fetchRecords()
   }, [])
 
+  const resetForm = () => {
+    setEditingId(null)
+    setInches("")
+    setCents("")
+    setNotes("")
+    setSelectedDate(new Date())
+    setCalendarMonth(new Date())
+  }
+
+  const handleEditRecord = (record: RainfallRecord) => {
+    const date = parseRecordDate(record.record_date) || new Date()
+    setEditingId(record.id)
+    setSelectedDate(date)
+    setCalendarMonth(date)
+    setInches(String(record.inches ?? 0))
+    setCents(String(record.cents ?? 0))
+    setNotes(record.notes || "")
+    if (isMobile) setMobileSection("log")
+  }
+
   const handleSaveRecord = async () => {
     const inchesNum = inches === "" ? 0 : Number(inches)
     const centsNum = cents === "" ? 0 : Number(cents)
@@ -190,9 +211,10 @@ export default function RainfallTab({ username, showDataToolsControls = false }:
     setLoading(true)
     try {
       const response = await fetch("/api/rainfall", {
-        method: "POST",
+        method: editingId ? "PUT" : "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
+          id: editingId ?? undefined,
           record_date: format(selectedDate, "yyyy-MM-dd"),
           inches: inchesNum,
           cents: centsNum,
@@ -204,12 +226,12 @@ export default function RainfallTab({ username, showDataToolsControls = false }:
       const data = await response.json()
       if (data.success) {
         toast({
-          title: "Record saved",
-          description: "Rainfall record has been saved successfully",
+          title: editingId ? "Record updated" : "Record saved",
+          description: editingId
+            ? "Rainfall record has been updated successfully"
+            : "Rainfall record has been saved successfully",
         })
-        setInches("")
-        setCents("")
-        setNotes("")
+        resetForm()
         fetchRecords()
       } else {
         toast({
@@ -221,7 +243,7 @@ export default function RainfallTab({ username, showDataToolsControls = false }:
     } catch {
       toast({
         title: "Error",
-        description: "Failed to save rainfall record",
+        description: editingId ? "Failed to update rainfall record" : "Failed to save rainfall record",
         variant: "destructive",
       })
     } finally {
@@ -237,6 +259,7 @@ export default function RainfallTab({ username, showDataToolsControls = false }:
       const data = await response.json()
       if (data.success) {
         toast({ title: "Record deleted", description: "Rainfall record has been deleted" })
+        if (id === editingId) resetForm()
         fetchRecords()
       }
     } catch {
@@ -645,7 +668,20 @@ export default function RainfallTab({ username, showDataToolsControls = false }:
 
         {mobileSection === "log" && (
         <div className="px-3 pt-4 pb-5 bg-white border-b border-stone-100">
-          <p className="text-sm font-black text-stone-700 mb-4">🌧️ {t("writer.rain.logRainfall")}</p>
+          <div className="flex items-center justify-between mb-4">
+            <p className="text-sm font-black text-stone-700">
+              {editingId ? "✏️ Edit rainfall record" : `🌧️ ${t("writer.rain.logRainfall")}`}
+            </p>
+            {editingId && (
+              <button
+                type="button"
+                onClick={resetForm}
+                className="text-xs font-bold text-stone-400 hover:text-stone-600 touch-manipulation"
+              >
+                Cancel
+              </button>
+            )}
+          </div>
 
           {/* Date */}
           <div className="flex items-center justify-between mb-4">
@@ -749,7 +785,9 @@ export default function RainfallTab({ username, showDataToolsControls = false }:
             className="w-full border-sky-600 bg-sky-600 text-white shadow-md shadow-sky-100 hover:bg-sky-700 [&_svg]:size-5"
           >
             <CloudRain />
-            {loading ? t("writer.rain.savingRecord") : t("writer.rain.saveRecord")}
+            {loading
+              ? editingId ? "Updating..." : t("writer.rain.savingRecord")
+              : editingId ? "Update record" : t("writer.rain.saveRecord")}
           </Button>
         </div>
         )}
@@ -770,10 +808,19 @@ export default function RainfallTab({ username, showDataToolsControls = false }:
                     <p className="text-sm font-bold text-stone-800">{formatDateOnly(record.record_date)}</p>
                     {record.notes && <p className="text-xs text-stone-400 mt-0.5">{record.notes}</p>}
                   </div>
-                  <div className="flex items-center gap-3">
+                  <div className="flex items-center gap-2">
                     <p className="text-xl font-black text-sky-700 tabular-nums">
                       {parseInt(String(record.inches || 0), 10)}.{String(parseInt(String(record.cents || 0), 10)).padStart(2, "0")}&quot;
                     </p>
+                    {canDelete && (
+                      <button
+                        type="button"
+                        onClick={() => handleEditRecord(record)}
+                        className="text-stone-300 p-1.5 rounded-xl hover:bg-sky-50 hover:text-sky-500 transition-colors touch-manipulation"
+                      >
+                        <Pencil className="h-4 w-4" />
+                      </button>
+                    )}
                     {canDelete && (
                       <button
                         type="button"
@@ -1015,16 +1062,27 @@ export default function RainfallTab({ username, showDataToolsControls = false }:
       </div>
 
       <div className="overflow-hidden rounded-xl border border-stone-200 bg-white shadow-sm dark:border-white/[0.06] dark:bg-card">
-        <div className="flex items-center gap-3 border-b border-stone-100 px-5 py-4 dark:border-white/[0.05]">
-          <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-emerald-800 dark:bg-emerald-900/40">
-            <svg className="h-4 w-4 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m-4-4l4 4 4-4M4 8h.01M8 8h.01M12 8h.01M16 8h.01M20 8h.01" />
-            </svg>
+        <div className="flex items-center justify-between gap-3 border-b border-stone-100 px-5 py-4 dark:border-white/[0.05]">
+          <div className="flex items-center gap-3">
+            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-emerald-800 dark:bg-emerald-900/40">
+              <svg className="h-4 w-4 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m-4-4l4 4 4-4M4 8h.01M8 8h.01M12 8h.01M16 8h.01M20 8h.01" />
+              </svg>
+            </div>
+            <div>
+              <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-emerald-700 dark:text-emerald-500">
+                {editingId ? "Editing Record" : "Rainfall Entry"}
+              </p>
+              <p className="text-sm font-bold text-stone-900 dark:text-white">
+                {editingId ? "Edit Rainfall Record" : "Log Rainfall Record"}
+              </p>
+            </div>
           </div>
-          <div>
-            <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-emerald-700 dark:text-emerald-500">Rainfall Entry</p>
-            <p className="text-sm font-bold text-stone-900 dark:text-white">Log Rainfall Record</p>
-          </div>
+          {editingId && (
+            <Button variant="ghost" size="sm" onClick={resetForm} className="text-stone-500">
+              Cancel
+            </Button>
+          )}
         </div>
         <div className="space-y-4 p-5">
           <div className="grid gap-4 md:grid-cols-2">
@@ -1078,7 +1136,7 @@ export default function RainfallTab({ username, showDataToolsControls = false }:
             </div>
           )}
           <Button onClick={handleSaveRecord} disabled={loading} className="h-11 w-full rounded-lg bg-emerald-700 font-semibold text-white hover:bg-emerald-600">
-            {loading ? "Saving..." : "Save Record"}
+            {loading ? (editingId ? "Updating..." : "Saving...") : editingId ? "Update Record" : "Save Record"}
           </Button>
         </div>
       </div>
@@ -1192,9 +1250,14 @@ export default function RainfallTab({ username, showDataToolsControls = false }:
                     </div>
                   </div>
                   {canDelete && (
-                    <Button variant="ghost" size="sm" onClick={() => handleDeleteRecord(record.id)} className="h-8 w-8 p-0 hover:bg-red-50 dark:hover:bg-red-900/20">
-                      <Trash2 className="h-4 w-4 text-red-500" />
-                    </Button>
+                    <div className="flex items-center gap-1">
+                      <Button variant="ghost" size="sm" onClick={() => handleEditRecord(record)} className="h-8 w-8 p-0 hover:bg-sky-50 dark:hover:bg-sky-900/20">
+                        <Pencil className="h-4 w-4 text-sky-600" />
+                      </Button>
+                      <Button variant="ghost" size="sm" onClick={() => handleDeleteRecord(record.id)} className="h-8 w-8 p-0 hover:bg-red-50 dark:hover:bg-red-900/20">
+                        <Trash2 className="h-4 w-4 text-red-500" />
+                      </Button>
+                    </div>
                   )}
                 </div>
               ))

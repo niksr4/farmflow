@@ -121,6 +121,100 @@ export async function POST(request: NextRequest) {
   }
 }
 
+export async function PUT(request: NextRequest) {
+  let tenantId: string | null = null
+  try {
+    const sessionUser = await requireModuleAccess("rainfall")
+    if (!canWriteModule(sessionUser.role, "rainfall")) {
+      return NextResponse.json({ success: false, error: "Insufficient role" }, { status: 403 })
+    }
+    tenantId = sessionUser.tenantId
+    const tenantContext = normalizeTenantContext(sessionUser.tenantId, sessionUser.role)
+    const { id, record_date, inches, cents, notes } = await request.json()
+
+    if (!id) {
+      return NextResponse.json({ success: false, error: "ID is required" }, { status: 400 })
+    }
+    if (!record_date) {
+      return NextResponse.json({ success: false, error: "Date is required" }, { status: 400 })
+    }
+
+    const inchesValue = parseWholeNonNegative(inches)
+    if (inchesValue === null) {
+      return NextResponse.json({ success: false, error: "Inches must be a whole number (0 or more)" }, { status: 400 })
+    }
+    const centsValue = parseWholeNonNegative(cents)
+    if (centsValue === null || centsValue > 99) {
+      return NextResponse.json(
+        { success: false, error: "Cents/points must be a whole number between 0 and 99" },
+        { status: 400 },
+      )
+    }
+    if (inchesValue === 0 && centsValue === 0) {
+      return NextResponse.json(
+        { success: false, error: "Rainfall amount must be greater than 0 (at least 1 point / 0.01 inch)" },
+        { status: 400 },
+      )
+    }
+
+    const existing = await runTenantQuery(
+      sql,
+      tenantContext,
+      sql`
+        SELECT *
+        FROM rainfall_records
+        WHERE id = ${id}
+          AND tenant_id = ${tenantContext.tenantId}
+        LIMIT 1
+      `,
+    )
+
+    if (!existing?.[0]) {
+      return NextResponse.json({ success: false, error: "Record not found" }, { status: 404 })
+    }
+
+    const result = await runTenantQuery(
+      sql,
+      tenantContext,
+      sql`
+        UPDATE rainfall_records
+        SET record_date = ${record_date}, inches = ${inchesValue}, cents = ${centsValue}, notes = ${notes || ""}
+        WHERE id = ${id} AND tenant_id = ${tenantContext.tenantId}
+        RETURNING *
+      `,
+    )
+
+    await logAuditEvent(sql, sessionUser, {
+      action: "update",
+      entityType: "rainfall_records",
+      entityId: id,
+      before: existing[0],
+      after: result?.[0] ?? null,
+    })
+
+    return NextResponse.json({ success: true, record: result[0] })
+  } catch (error: any) {
+    if (isModuleAccessError(error)) {
+      return NextResponse.json({ success: false, error: "Module access disabled" }, { status: 403 })
+    }
+    if (String(error?.code) === "23505") {
+      return NextResponse.json(
+        { success: false, error: "A rainfall record for this date already exists." },
+        { status: 409 },
+      )
+    }
+    console.error("[v0] Error updating rainfall record:", error)
+    await logRouteMutationFailure({
+      tenantId,
+      source: "rainfall-api",
+      endpoint: "/api/rainfall",
+      action: "update_rainfall_record",
+      error,
+    })
+    return NextResponse.json({ success: false, error: sanitizeRouteError(error, "Failed to update rainfall data") }, { status: 500 })
+  }
+}
+
 export async function DELETE(request: NextRequest) {
   let tenantId: string | null = null
   try {

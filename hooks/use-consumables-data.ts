@@ -11,6 +11,7 @@ export interface ConsumableDeployment {
   amount: number
   notes: string
   user: string
+  locationId?: string | null
   inventoryItems?: Array<{ itemType: string; quantity: number }>
   inventoryItemType?: string | null
   inventoryQuantity?: number | null
@@ -137,7 +138,9 @@ export function useConsumablesData(locationId?: string, options: ConsumablesData
       const response = await fetch("/api/expenses-neon", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ...deployment, locationId }),
+        // deployment's own locationId (a per-entry form field) wins over the hook-scope
+        // default — the spread order matters here, don't swap it back.
+        body: JSON.stringify({ locationId, ...deployment }),
       })
 
       const data = await response.json()
@@ -160,7 +163,7 @@ export function useConsumablesData(locationId?: string, options: ConsumablesData
       const response = await fetch("/api/expenses-neon", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ id, ...deployment, locationId }),
+        body: JSON.stringify({ locationId, id, ...deployment }),
       })
 
       const data = await response.json()

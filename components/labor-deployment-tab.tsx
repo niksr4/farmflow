@@ -15,9 +15,11 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import { PlusCircle, Trash2, Edit2, Save, X, ChevronDown, ChevronUp, Plus, Minus } from "lucide-react"
+import type { LocationOption } from "@/components/inventory-system/types"
 import { Textarea } from "@/components/ui/textarea"
 import { Badge } from "@/components/ui/badge"
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
@@ -69,14 +71,17 @@ function makeDefaultSets(inHouseWage: number, outsideWage: number): LaborSet[] {
 }
 
 export default function LaborDeploymentTab({
-  locationId,
   startDate,
   endDate,
 }: {
-  locationId?: string
   startDate?: string
   endDate?: string
 }) {
+  const [locations, setLocations] = useState<LocationOption[]>([])
+  // Form-only field, not a history filter — labour history predates this field and mostly
+  // has no location on existing rows, so filtering the list by it would hide old entries.
+  const [formLocationId, setFormLocationId] = useState("")
+
   const {
     deployments,
     loading,
@@ -89,7 +94,7 @@ export default function LaborDeploymentTab({
     updateDeployment,
     deleteDeployment,
     refetch,
-  } = useLaborData(locationId, { startDate, endDate })
+  } = useLaborData(undefined, { startDate, endDate })
   const { settings } = useTenantSettings()
   const isMobile = useMediaQuery("(max-width: 768px)")
   const { toast } = useToast()
@@ -128,7 +133,7 @@ export default function LaborDeploymentTab({
   const fetchActivities = useCallback(async () => {
     try {
       const response = await fetch(
-        locationId ? `/api/get-activity?locationId=${locationId}` : "/api/get-activity",
+        formLocationId ? `/api/get-activity?locationId=${formLocationId}` : "/api/get-activity",
       )
       const data = await response.json()
       if (data.success && data.activities) {
@@ -137,11 +142,30 @@ export default function LaborDeploymentTab({
     } catch (error) {
       console.error("Error fetching activities:", error)
     }
-  }, [locationId])
+  }, [formLocationId])
+
+  const fetchLocations = useCallback(async () => {
+    try {
+      const response = await fetch("/api/locations")
+      const data = await response.json()
+      if (data.success) {
+        setLocations(data.locations || [])
+        if (data.locations?.length) {
+          setFormLocationId((prev) => prev || data.locations[0].id)
+        }
+      }
+    } catch (error) {
+      console.error("Error fetching locations:", error)
+    }
+  }, [])
 
   useEffect(() => {
     fetchActivities()
   }, [fetchActivities])
+
+  useEffect(() => {
+    fetchLocations()
+  }, [fetchLocations])
 
   // Refresh history when QuickLogPanel (or anything else) saves a record
   useEffect(() => {
@@ -272,6 +296,10 @@ export default function LaborDeploymentTab({
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     if (isSubmitting) return
+    if (locations.length > 0 && !formLocationId) {
+      toast({ title: "Location required", description: "Select a location before saving.", variant: "destructive" })
+      return
+    }
     trackClick(editingId ? "labor_update" : "labor_save")
     setIsSubmitting(true)
 
@@ -316,6 +344,7 @@ export default function LaborDeploymentTab({
       totalCost: calculateTotal(),
       notes: formData.notes,
       taskDescription: formData.taskDescription,
+      locationId: formLocationId || null,
       user: "admin",
     }
 
@@ -364,6 +393,7 @@ export default function LaborDeploymentTab({
       notes: deployment.notes || "",
       taskDescription: deployment.taskDescription || "",
     })
+    if (deployment.locationId) setFormLocationId(deployment.locationId)
     setPrefilled(false)
     setEditingId(deployment.id)
     setIsAdding(true)
@@ -379,6 +409,9 @@ export default function LaborDeploymentTab({
       return next
     })
   }
+
+  const resolveLocationName = (locationId?: string | null) =>
+    locationId ? locations.find((loc) => loc.id === locationId)?.name || null : null
 
   const computedTotalCost = deployments.reduce((sum, d) => sum + d.totalCost, 0)
   const totalDeploymentCost = totalCost || computedTotalCost
@@ -454,7 +487,7 @@ export default function LaborDeploymentTab({
       {/* Mobile: QuickLogPanel tiles as default entry — full form opens via "More details" */}
       {activeSection === "form" && isMobile && !isAdding && (
         <QuickLogPanel
-          locationId={locationId}
+          locationId={formLocationId || undefined}
           onNavigateToFull={openNewForm}
         />
       )}
@@ -555,6 +588,24 @@ export default function LaborDeploymentTab({
                     className="h-11"
                   />
                 </div>
+
+                {locations.length > 0 && (
+                  <div className="space-y-2">
+                    <Label htmlFor="labor-location" className="text-base">Location</Label>
+                    <Select value={formLocationId} onValueChange={setFormLocationId}>
+                      <SelectTrigger id="labor-location" className="h-11 w-full">
+                        <SelectValue placeholder="Select location" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {locations.map((loc) => (
+                          <SelectItem key={loc.id} value={loc.id}>
+                            {loc.name || loc.code}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )}
 
                 <div className="space-y-2">
                   <Label htmlFor="code" className="text-base">Activity code</Label>
@@ -918,6 +969,9 @@ export default function LaborDeploymentTab({
                               </span>
                             )}
                           </div>
+                          {resolveLocationName(deployment.locationId) && (
+                            <p className="text-xs text-stone-400 mt-0.5">{resolveLocationName(deployment.locationId)}</p>
+                          )}
                         </div>
                         <div className="shrink-0 ml-3 text-stone-400">
                           {isExpanded ? <ChevronUp className="h-5 w-5" /> : <ChevronDown className="h-5 w-5" />}
@@ -978,6 +1032,7 @@ export default function LaborDeploymentTab({
                     <TableHead className="text-stone-300 font-bold text-[11px] uppercase tracking-[0.16em] dark:text-stone-400">Category</TableHead>
                     <TableHead className="text-stone-300 font-bold text-[11px] uppercase tracking-[0.16em] dark:text-stone-400">Workers</TableHead>
                     <TableHead className="text-right text-stone-300 font-bold text-[11px] uppercase tracking-[0.16em] dark:text-stone-400">Total Cost</TableHead>
+                    <TableHead className="text-stone-300 font-bold text-[11px] uppercase tracking-[0.16em] dark:text-stone-400">Location</TableHead>
                     <TableHead className="text-stone-300 font-bold text-[11px] uppercase tracking-[0.16em] dark:text-stone-400">Notes</TableHead>
                     <TableHead className="w-[100px] text-stone-300 font-bold text-[11px] uppercase tracking-[0.16em] dark:text-stone-400">Actions</TableHead>
                   </TableRow>
@@ -1006,6 +1061,7 @@ export default function LaborDeploymentTab({
                         </div>
                       </TableCell>
                       <TableCell className="text-right font-semibold">{formatCurrency(deployment.totalCost)}</TableCell>
+                      <TableCell className="text-sm text-muted-foreground">{resolveLocationName(deployment.locationId) || "-"}</TableCell>
                       <TableCell className="max-w-[180px] truncate text-xs text-muted-foreground">{deployment.notes || "-"}</TableCell>
                       <TableCell>
                         <TooltipProvider>
