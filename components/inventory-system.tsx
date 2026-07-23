@@ -622,7 +622,7 @@ export default function InventorySystem() {
   const canShowCompliance = isModuleEnabled("compliance")
   const canShowWeather = isModuleEnabled("weather")
   const canShowSeason = isModuleEnabled("season")
-  const canShowYieldForecast = canShowSeason
+  const canShowYieldForecast = isModuleEnabled("yield-forecast")
   const canShowActivityLog = isAdminOrOwner && isFeatureEnabled("showActivityLogTab")
   const canShowLaborManagement = isModuleEnabled("labor")
   const canShowPickingLog = isModuleEnabled("picking")
@@ -631,7 +631,7 @@ export default function InventorySystem() {
   const canShowDocuments = isModuleEnabled("documents")
   const canShowJournal = isModuleEnabled("journal")
   const canShowResources = isModuleEnabled("resources") && isFeatureEnabled("showResourcesTab")
-  const canShowPlantHealth = isOwner || isModuleEnabled("plant-health") || canShowResources || canShowAiAnalysis
+  const canShowPlantHealth = isOwner || isModuleEnabled("plant-health")
   const canShowWelcomeCard = isFeatureEnabled("showWelcomeCard")
   const canShowRainfallSection = canShowRainfall || canShowWeather
   const canShowIntelligence = !isScopedUser && (canShowDispatch || canShowSalesWorkspace || canShowAccounts || canShowSeason)

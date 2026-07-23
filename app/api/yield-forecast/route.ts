@@ -91,7 +91,7 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ success: false, error: "Database not configured" }, { status: 500 })
     }
 
-    const sessionUser = await requireModuleAccess("season")
+    const sessionUser = await requireModuleAccess("yield-forecast")
     const tenantContext = normalizeTenantContext(sessionUser.tenantId, sessionUser.role)
     const { searchParams } = new URL(request.url)
     const currentFiscalYear = getCurrentFiscalYear()

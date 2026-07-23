@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server"
-import { isModuleAccessError, requireAnyModuleAccess } from "@/lib/server/module-access"
+import { isModuleAccessError, requireModuleAccess } from "@/lib/server/module-access"
 import { fetchWithTimeout } from "@/lib/server/http"
 
 export const dynamic = "force-dynamic"
@@ -104,7 +104,7 @@ const buildRecommendations = (findings: NormalizedFinding[], cropType: string | 
 
 export async function POST(request: Request) {
   try {
-    await requireAnyModuleAccess(["plant-health", "resources", "ai-analysis"])
+    await requireModuleAccess("plant-health")
 
     const apiKey = getApiKey()
     if (!apiKey) {
