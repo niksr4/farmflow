@@ -38,6 +38,13 @@ export async function GET(request: NextRequest) {
 
     const periodStart = new Date(fiscalYearStart)
     const periodEnd = new Date(fiscalYearEnd)
+    if (Number.isNaN(periodStart.getTime()) || Number.isNaN(periodEnd.getTime())) {
+      return NextResponse.json(
+        { success: false, error: "fiscalYearStart and fiscalYearEnd must be valid dates" },
+        { status: 400 },
+      )
+    }
+
     const recentStart = new Date(periodEnd)
     recentStart.setDate(recentStart.getDate() - 30)
     const recentStartDate = recentStart.toISOString().slice(0, 10)

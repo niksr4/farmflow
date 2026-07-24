@@ -25,14 +25,34 @@ export async function POST(request: NextRequest) {
 
     if (!Array.isArray(transactions)) {
       return NextResponse.json(
-        { 
-          success: false, 
-          message: "Transactions must be an array" 
+        {
+          success: false,
+          message: "Transactions must be an array"
         },
         { status: 400 }
       )
     }
 
+    if (transactions.length === 0) {
+      return NextResponse.json(
+        {
+          success: false,
+          message: "Refusing to replace all transactions with an empty array — this would wipe transaction_history and current_inventory for the tenant with no way to restore them.",
+        },
+        { status: 400 },
+      )
+    }
+
+    const existingCountRows = await runTenantQuery(
+      accountsSql,
+      tenantContext,
+      accountsSql`
+        SELECT COUNT(*)::int AS count
+        FROM transaction_history
+        WHERE tenant_id = ${tenantContext.tenantId}
+      `,
+    )
+    const existingCount = Number((existingCountRows as Array<{ count: number }>)?.[0]?.count) || 0
 
     // Delete all existing transactions and reset inventory before re-insert
     await runTenantQuery(
@@ -120,6 +140,7 @@ export async function POST(request: NextRequest) {
       action: "upsert",
       entityType: "transaction_history",
       entityId: null,
+      before: { count: existingCount },
       after: { count: updatedTransactions.length },
     })
 

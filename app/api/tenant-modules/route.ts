@@ -75,6 +75,9 @@ export async function GET(_request: Request) {
     return NextResponse.json({ success: true, modules: cappedTenantEnabled, planId, plans: MODULE_BUNDLES })
   } catch (error: any) {
     console.error("Error loading tenant modules:", error)
+    if (error?.message === "Unauthorized") {
+      return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 })
+    }
     return NextResponse.json({ success: false, error: error.message || "Failed to load modules" }, { status: 500 })
   }
 }

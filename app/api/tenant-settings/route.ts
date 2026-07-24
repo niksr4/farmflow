@@ -67,7 +67,7 @@ const sanitizeAlertThresholds = (input: any) => {
 
   allowedFields.forEach((field) => {
     const value = input[field]
-    if (typeof value === "number" && Number.isFinite(value)) {
+    if (typeof value === "number" && Number.isFinite(value) && value >= 0) {
       cleaned[field] = value
     }
   })
@@ -80,7 +80,7 @@ const sanitizeAlertThresholds = (input: any) => {
         targetPayload[field] = null
         return
       }
-      if (typeof value === "number" && Number.isFinite(value)) {
+      if (typeof value === "number" && Number.isFinite(value) && value >= 0) {
         targetPayload[field] = value
       }
     })
@@ -179,6 +179,9 @@ export async function GET(request: Request) {
     })
   } catch (error: any) {
     console.error("Error loading tenant settings:", error)
+    if (error?.message === "Unauthorized") {
+      return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 })
+    }
     return NextResponse.json({ success: false, error: sanitizeRouteError(error, "Failed to load tenant settings") }, { status: 500 })
   }
 }
