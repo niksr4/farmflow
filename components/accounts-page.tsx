@@ -1153,12 +1153,12 @@ export default function AccountsPage({
   const primaryNavItems: NavItem[] = [
     { value: "dashboard", label: "Dashboard", icon: BarChart2 },
     { value: "labour", label: "Labour", icon: Users },
+    { value: "attendance", label: "Attendance", icon: Check },
     { value: "expenses", label: "Expenses", icon: Receipt },
     { value: "activities", label: "Activity Codes", icon: Settings },
     ...(isAdminOrOwner ? [{ value: "export" as AccountsView, label: "Export", icon: FileSpreadsheet }] : []),
   ]
   const secondaryNavItems: NavItem[] = [
-    { value: "attendance", label: "Attendance", icon: Check },
     ...(showPickingLog || showLaborManagement ? [{ value: "picking" as AccountsView, label: "Picking", icon: Wheat }] : []),
     ...(showLaborManagement ? [
       { value: "workers" as AccountsView, label: "Workers", icon: UserCheck },

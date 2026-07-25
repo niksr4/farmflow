@@ -338,16 +338,20 @@ async function tableHasExpenseInventoryLinksTable() {
   return Array.isArray(rows) && rows.length > 0
 }
 
-async function fetchInventoryItemsForTenant(tenantId: string): Promise<Array<{ itemType: string; unit: string; quantity: number }>> {
+async function fetchInventoryItemsForTenant(tenantContext: TenantContext): Promise<Array<{ itemType: string; unit: string; quantity: number }>> {
   try {
-    const rows = await accountsSql`
-      SELECT item_type, COALESCE(unit, 'kg') AS unit, COALESCE(SUM(quantity), 0) AS quantity
-      FROM current_inventory
-      WHERE tenant_id = ${tenantId}
-      GROUP BY item_type, unit
-      ORDER BY item_type ASC
-      LIMIT 200
-    `
+    const rows = await runTenantQuery(
+      accountsSql,
+      tenantContext,
+      accountsSql`
+        SELECT item_type, COALESCE(unit, 'kg') AS unit, COALESCE(SUM(quantity), 0) AS quantity
+        FROM current_inventory
+        WHERE tenant_id = ${tenantContext.tenantId}
+        GROUP BY item_type, unit
+        ORDER BY item_type ASC
+        LIMIT 200
+      `,
+    )
     return (Array.isArray(rows) ? rows : []).map((r: any) => ({
       itemType: String(r.item_type || ""),
       unit: String(r.unit || "kg"),
@@ -961,7 +965,7 @@ export async function GET(request: Request) {
 
     // Inventory items list endpoint — used by the expense form dropdown
     if (searchParams.get("inventoryItems") === "1") {
-      const items = await fetchInventoryItemsForTenant(tenantContext.tenantId)
+      const items = await fetchInventoryItemsForTenant(tenantContext)
       const supportsInventoryLinksTable = await tableHasExpenseInventoryLinksTable()
       return NextResponse.json({ success: true, items, supportsInventoryLinksTable })
     }

@@ -62,6 +62,22 @@ const RAINFALL_TREND_CHART_CONFIG = {
 
 const round2 = (value: number) => Math.round((value + Number.EPSILON) * 100) / 100
 
+const MM_PER_INCH = 25.4
+
+// cents = hundredths of an inch; mm = tenths of a cm — both are the sub-unit conventions
+// requested for the estate rain gauge, so conversions round to those grids.
+const cmMmToInchesCents = (cmWhole: number, mmPart: number) => {
+  const totalMm = cmWhole * 10 + mmPart
+  const totalHundredthsInch = Math.max(0, Math.round((totalMm / MM_PER_INCH) * 100))
+  return { inches: Math.floor(totalHundredthsInch / 100), cents: totalHundredthsInch % 100 }
+}
+
+const inchesCentsToCmMm = (inchesWhole: number, centsPart: number) => {
+  const totalHundredthsInch = inchesWhole * 100 + centsPart
+  const totalMm = Math.max(0, Math.round((totalHundredthsInch / 100) * MM_PER_INCH))
+  return { cm: Math.floor(totalMm / 10), mm: totalMm % 10 }
+}
+
 const parseRecordDate = (value: string): Date | null => {
   const [yearRaw, monthRaw, dayRaw] = String(value).slice(0, 10).split("-")
   const year = Number(yearRaw)
@@ -86,6 +102,9 @@ export default function RainfallTab({ username, showDataToolsControls = false }:
   const [calendarMonth, setCalendarMonth] = useState<Date>(new Date())
   const [inches, setInches] = useState("")
   const [cents, setCents] = useState("")
+  const [rainUnit, setRainUnit] = useState<"in" | "cm">("in")
+  const [cm, setCm] = useState("")
+  const [mm, setMm] = useState("")
   const [notes, setNotes] = useState("")
   const [loading, setLoading] = useState(false)
   const [editingId, setEditingId] = useState<number | null>(null)
@@ -141,6 +160,30 @@ export default function RainfallTab({ username, showDataToolsControls = false }:
     setter(nextValue)
   }
 
+  // inches/cents stay the values actually submitted to the API — cm/mm are kept in sync
+  // alongside them so switching the unit toggle never loses what was already entered.
+  const applyInchesCents = (nextInches: string, nextCents: string) => {
+    setInches(nextInches)
+    setCents(nextCents)
+    const converted = inchesCentsToCmMm(parseInt(nextInches || "0", 10) || 0, parseInt(nextCents || "0", 10) || 0)
+    setCm(String(converted.cm))
+    setMm(String(converted.mm))
+  }
+
+  const applyCmMm = (nextCm: string, nextMm: string) => {
+    setCm(nextCm)
+    setMm(nextMm)
+    const converted = cmMmToInchesCents(parseInt(nextCm || "0", 10) || 0, parseInt(nextMm || "0", 10) || 0)
+    setInches(String(converted.inches))
+    setCents(String(converted.cents))
+  }
+
+  const handleMmChange = (event: ChangeEvent<HTMLInputElement>) => {
+    const nextValue = event.target.value
+    if (!/^\d?$/.test(nextValue)) return
+    applyCmMm(cm, nextValue)
+  }
+
   const fetchRecords = async () => {
     try {
       const response = await fetch("/api/rainfall")
@@ -161,6 +204,8 @@ export default function RainfallTab({ username, showDataToolsControls = false }:
     setEditingId(null)
     setInches("")
     setCents("")
+    setCm("")
+    setMm("")
     setNotes("")
     setSelectedDate(new Date())
     setCalendarMonth(new Date())
@@ -171,8 +216,13 @@ export default function RainfallTab({ username, showDataToolsControls = false }:
     setEditingId(record.id)
     setSelectedDate(date)
     setCalendarMonth(date)
-    setInches(String(record.inches ?? 0))
-    setCents(String(record.cents ?? 0))
+    const recordInches = record.inches ?? 0
+    const recordCents = record.cents ?? 0
+    setInches(String(recordInches))
+    setCents(String(recordCents))
+    const converted = inchesCentsToCmMm(recordInches, recordCents)
+    setCm(String(converted.cm))
+    setMm(String(converted.mm))
     setNotes(record.notes || "")
     if (isMobile) setMobileSection("log")
   }
@@ -555,7 +605,10 @@ export default function RainfallTab({ username, showDataToolsControls = false }:
   if (isMobile) {
     const inchesNum = parseInt(inches || "0", 10)
     const centsNum = parseInt(cents || "0", 10)
-    const totalDisplay = `${inchesNum}.${String(centsNum).padStart(2, "0")}"`
+    const cmNum = parseInt(cm || "0", 10)
+    const mmNum = parseInt(mm || "0", 10)
+    const totalDisplay =
+      rainUnit === "cm" ? `${cmNum}.${mmNum} cm` : `${inchesNum}.${String(centsNum).padStart(2, "0")}"`
 
     return (
       <div className="pb-6">
@@ -701,66 +754,150 @@ export default function RainfallTab({ username, showDataToolsControls = false }:
             />
           </div>
 
-          {/* Inches stepper */}
-          <div className="mb-4">
-            <p className="text-sm font-bold text-stone-700 mb-2">💧 {t("writer.rain.fullInches")}</p>
-            <div className="flex items-center gap-4">
+          {/* Unit toggle */}
+          <div className="flex gap-1 rounded-full bg-stone-100 p-1 mb-4 w-fit">
+            {(["in", "cm"] as const).map((u) => (
               <button
+                key={u}
                 type="button"
-                onClick={() => setInches(String(Math.max(0, inchesNum - 1)))}
-                className="h-14 w-14 rounded-2xl bg-stone-100 flex items-center justify-center active:scale-95 transition-transform touch-manipulation"
+                onClick={() => setRainUnit(u)}
+                className={[
+                  "px-4 py-1.5 rounded-full text-xs font-bold touch-manipulation transition-all",
+                  rainUnit === u ? "bg-stone-800 text-white shadow-sm" : "text-stone-500",
+                ].join(" ")}
               >
-                <Minus className="h-6 w-6 text-stone-600" />
+                {u === "in" ? "Inches" : "cm / mm"}
               </button>
-              <input
-                type="text"
-                inputMode="numeric"
-                pattern="[0-9]*"
-                value={inches}
-                onChange={handleWholeNumberChange(setInches)}
-                className="text-5xl font-black w-16 text-center bg-transparent border-none outline-none text-stone-900 tabular-nums"
-                placeholder="0"
-              />
-              <button
-                type="button"
-                onClick={() => setInches(String(inchesNum + 1))}
-                className="h-14 w-14 rounded-2xl bg-stone-100 flex items-center justify-center active:scale-95 transition-transform touch-manipulation"
-              >
-                <Plus className="h-6 w-6 text-stone-600" />
-              </button>
-            </div>
+            ))}
           </div>
 
-          {/* Cents stepper */}
-          <div className="mb-4">
-            <p className="text-sm font-bold text-stone-700 mb-2">💧 {t("writer.rain.decimalPart")}</p>
-            <p className="text-xs text-stone-400 mb-2">25 = quarter inch · 50 = half inch · 75 = three-quarter inch</p>
-            <div className="flex items-center gap-4">
-              <button
-                type="button"
-                onClick={() => setCents(String(Math.max(0, centsNum - 1)))}
-                className="h-14 w-14 rounded-2xl bg-stone-100 flex items-center justify-center active:scale-95 transition-transform touch-manipulation"
-              >
-                <Minus className="h-6 w-6 text-stone-600" />
-              </button>
-              <input
-                type="text"
-                inputMode="numeric"
-                pattern="[0-9]*"
-                value={cents}
-                onChange={handleWholeNumberChange(setCents)}
-                className="text-5xl font-black w-16 text-center bg-transparent border-none outline-none text-stone-900 tabular-nums"
-                placeholder="0"
-              />
-              <button
-                type="button"
-                onClick={() => setCents(String(Math.min(99, centsNum + 1)))}
-                className="h-14 w-14 rounded-2xl bg-stone-100 flex items-center justify-center active:scale-95 transition-transform touch-manipulation"
-              >
-                <Plus className="h-6 w-6 text-stone-600" />
-              </button>
-            </div>
-          </div>
+          {rainUnit === "in" ? (
+            <>
+              {/* Inches stepper */}
+              <div className="mb-4">
+                <p className="text-sm font-bold text-stone-700 mb-2">💧 {t("writer.rain.fullInches")}</p>
+                <div className="flex items-center gap-4">
+                  <button
+                    type="button"
+                    onClick={() => applyInchesCents(String(Math.max(0, inchesNum - 1)), cents)}
+                    className="h-14 w-14 rounded-2xl bg-stone-100 flex items-center justify-center active:scale-95 transition-transform touch-manipulation"
+                  >
+                    <Minus className="h-6 w-6 text-stone-600" />
+                  </button>
+                  <input
+                    type="text"
+                    inputMode="numeric"
+                    pattern="[0-9]*"
+                    value={inches}
+                    onChange={handleWholeNumberChange((v) => applyInchesCents(v, cents))}
+                    className="text-5xl font-black w-16 text-center bg-transparent border-none outline-none text-stone-900 tabular-nums"
+                    placeholder="0"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => applyInchesCents(String(inchesNum + 1), cents)}
+                    className="h-14 w-14 rounded-2xl bg-stone-100 flex items-center justify-center active:scale-95 transition-transform touch-manipulation"
+                  >
+                    <Plus className="h-6 w-6 text-stone-600" />
+                  </button>
+                </div>
+              </div>
+
+              {/* Cents stepper */}
+              <div className="mb-4">
+                <p className="text-sm font-bold text-stone-700 mb-2">💧 {t("writer.rain.decimalPart")}</p>
+                <p className="text-xs text-stone-400 mb-2">25 = quarter inch · 50 = half inch · 75 = three-quarter inch</p>
+                <div className="flex items-center gap-4">
+                  <button
+                    type="button"
+                    onClick={() => applyInchesCents(inches, String(Math.max(0, centsNum - 1)))}
+                    className="h-14 w-14 rounded-2xl bg-stone-100 flex items-center justify-center active:scale-95 transition-transform touch-manipulation"
+                  >
+                    <Minus className="h-6 w-6 text-stone-600" />
+                  </button>
+                  <input
+                    type="text"
+                    inputMode="numeric"
+                    pattern="[0-9]*"
+                    value={cents}
+                    onChange={handleWholeNumberChange((v) => applyInchesCents(inches, v))}
+                    className="text-5xl font-black w-16 text-center bg-transparent border-none outline-none text-stone-900 tabular-nums"
+                    placeholder="0"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => applyInchesCents(inches, String(Math.min(99, centsNum + 1)))}
+                    className="h-14 w-14 rounded-2xl bg-stone-100 flex items-center justify-center active:scale-95 transition-transform touch-manipulation"
+                  >
+                    <Plus className="h-6 w-6 text-stone-600" />
+                  </button>
+                </div>
+              </div>
+            </>
+          ) : (
+            <>
+              {/* Centimeters stepper */}
+              <div className="mb-4">
+                <p className="text-sm font-bold text-stone-700 mb-2">💧 Full centimeters</p>
+                <div className="flex items-center gap-4">
+                  <button
+                    type="button"
+                    onClick={() => applyCmMm(String(Math.max(0, cmNum - 1)), mm)}
+                    className="h-14 w-14 rounded-2xl bg-stone-100 flex items-center justify-center active:scale-95 transition-transform touch-manipulation"
+                  >
+                    <Minus className="h-6 w-6 text-stone-600" />
+                  </button>
+                  <input
+                    type="text"
+                    inputMode="numeric"
+                    pattern="[0-9]*"
+                    value={cm}
+                    onChange={handleWholeNumberChange((v) => applyCmMm(v, mm))}
+                    className="text-5xl font-black w-16 text-center bg-transparent border-none outline-none text-stone-900 tabular-nums"
+                    placeholder="0"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => applyCmMm(String(cmNum + 1), mm)}
+                    className="h-14 w-14 rounded-2xl bg-stone-100 flex items-center justify-center active:scale-95 transition-transform touch-manipulation"
+                  >
+                    <Plus className="h-6 w-6 text-stone-600" />
+                  </button>
+                </div>
+              </div>
+
+              {/* Millimeters stepper */}
+              <div className="mb-4">
+                <p className="text-sm font-bold text-stone-700 mb-2">💧 Millimeters (0–9)</p>
+                <p className="text-xs text-stone-400 mb-2">10mm = 1cm · 5mm = half cm</p>
+                <div className="flex items-center gap-4">
+                  <button
+                    type="button"
+                    onClick={() => applyCmMm(cm, String(Math.max(0, mmNum - 1)))}
+                    className="h-14 w-14 rounded-2xl bg-stone-100 flex items-center justify-center active:scale-95 transition-transform touch-manipulation"
+                  >
+                    <Minus className="h-6 w-6 text-stone-600" />
+                  </button>
+                  <input
+                    type="text"
+                    inputMode="numeric"
+                    pattern="[0-9]"
+                    value={mm}
+                    onChange={handleMmChange}
+                    className="text-5xl font-black w-16 text-center bg-transparent border-none outline-none text-stone-900 tabular-nums"
+                    placeholder="0"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => applyCmMm(cm, String(Math.min(9, mmNum + 1)))}
+                    className="h-14 w-14 rounded-2xl bg-stone-100 flex items-center justify-center active:scale-95 transition-transform touch-manipulation"
+                  >
+                    <Plus className="h-6 w-6 text-stone-600" />
+                  </button>
+                </div>
+              </div>
+            </>
+          )}
 
           {/* Total preview */}
           <div className="flex items-center justify-between rounded-2xl bg-sky-50 px-4 py-3 mb-4">
@@ -1119,22 +1256,57 @@ export default function RainfallTab({ username, showDataToolsControls = false }:
               <Input placeholder="e.g., Heavy rain in afternoon" value={notes} onChange={(e) => setNotes(e.target.value)} />
             </div>
           </div>
-          <div className="grid gap-4 md:grid-cols-2">
-            <div>
-              <FieldLabel label="Full inches" htmlFor="rainfall-inches-top" className="mb-2" labelClassName="text-sm font-medium" tooltip="Whole inches of rainfall. Enter 0 if less than 1 inch." />
-              <Input id="rainfall-inches-top" type="text" inputMode="numeric" pattern="[0-9]*" placeholder="0" value={inches} onChange={handleWholeNumberChange(setInches)} />
-            </div>
-            <div>
-              <FieldLabel label="Decimal part (0–99)" htmlFor="rainfall-cents-top" className="mb-2" labelClassName="text-sm font-medium" tooltip="The decimal portion. 25 = quarter inch, 50 = half inch, 75 = three-quarter inch." />
-              <Input id="rainfall-cents-top" type="text" inputMode="numeric" pattern="[0-9]*" placeholder="0" value={cents} onChange={handleWholeNumberChange(setCents)} />
-            </div>
+          <div className="flex gap-1 rounded-full bg-stone-100 p-1 w-fit">
+            {(["in", "cm"] as const).map((u) => (
+              <button
+                key={u}
+                type="button"
+                onClick={() => setRainUnit(u)}
+                className={[
+                  "px-4 py-1.5 rounded-full text-xs font-bold transition-all",
+                  rainUnit === u ? "bg-stone-800 text-white shadow-sm" : "text-stone-500",
+                ].join(" ")}
+              >
+                {u === "in" ? "Inches" : "cm / mm"}
+              </button>
+            ))}
           </div>
-          {(Number(inches) > 0 || Number(cents) > 0) && (
-            <div className="flex items-center gap-2 rounded-lg border border-sky-200 bg-sky-50 px-3 py-2 text-sm font-semibold text-sky-800">
-              <CloudRain className="h-4 w-4 shrink-0" />
-              Total: {Number(inches || 0)}.{String(Number(cents || 0)).padStart(2, "0")} inches
+          {rainUnit === "in" ? (
+            <div className="grid gap-4 md:grid-cols-2">
+              <div>
+                <FieldLabel label="Full inches" htmlFor="rainfall-inches-top" className="mb-2" labelClassName="text-sm font-medium" tooltip="Whole inches of rainfall. Enter 0 if less than 1 inch." />
+                <Input id="rainfall-inches-top" type="text" inputMode="numeric" pattern="[0-9]*" placeholder="0" value={inches} onChange={handleWholeNumberChange((v) => applyInchesCents(v, cents))} />
+              </div>
+              <div>
+                <FieldLabel label="Decimal part (0–99)" htmlFor="rainfall-cents-top" className="mb-2" labelClassName="text-sm font-medium" tooltip="The decimal portion. 25 = quarter inch, 50 = half inch, 75 = three-quarter inch." />
+                <Input id="rainfall-cents-top" type="text" inputMode="numeric" pattern="[0-9]*" placeholder="0" value={cents} onChange={handleWholeNumberChange((v) => applyInchesCents(inches, v))} />
+              </div>
+            </div>
+          ) : (
+            <div className="grid gap-4 md:grid-cols-2">
+              <div>
+                <FieldLabel label="Full centimeters" htmlFor="rainfall-cm-top" className="mb-2" labelClassName="text-sm font-medium" tooltip="Whole centimeters of rainfall. Enter 0 if less than 1 cm." />
+                <Input id="rainfall-cm-top" type="text" inputMode="numeric" pattern="[0-9]*" placeholder="0" value={cm} onChange={handleWholeNumberChange((v) => applyCmMm(v, mm))} />
+              </div>
+              <div>
+                <FieldLabel label="Millimeters (0–9)" htmlFor="rainfall-mm-top" className="mb-2" labelClassName="text-sm font-medium" tooltip="Tenths of a centimeter. 10mm = 1cm, 5mm = half a cm." />
+                <Input id="rainfall-mm-top" type="text" inputMode="numeric" pattern="[0-9]" placeholder="0" value={mm} onChange={handleMmChange} />
+              </div>
             </div>
           )}
+          {rainUnit === "in"
+            ? (Number(inches) > 0 || Number(cents) > 0) && (
+                <div className="flex items-center gap-2 rounded-lg border border-sky-200 bg-sky-50 px-3 py-2 text-sm font-semibold text-sky-800">
+                  <CloudRain className="h-4 w-4 shrink-0" />
+                  Total: {Number(inches || 0)}.{String(Number(cents || 0)).padStart(2, "0")} inches
+                </div>
+              )
+            : (Number(cm) > 0 || Number(mm) > 0) && (
+                <div className="flex items-center gap-2 rounded-lg border border-sky-200 bg-sky-50 px-3 py-2 text-sm font-semibold text-sky-800">
+                  <CloudRain className="h-4 w-4 shrink-0" />
+                  Total: {Number(cm || 0)}.{Number(mm || 0)} cm
+                </div>
+              )}
           <Button onClick={handleSaveRecord} disabled={loading} className="h-11 w-full rounded-lg bg-emerald-700 font-semibold text-white hover:bg-emerald-600">
             {loading ? (editingId ? "Updating..." : "Saving...") : editingId ? "Update Record" : "Save Record"}
           </Button>

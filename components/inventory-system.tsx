@@ -3108,7 +3108,7 @@ export default function InventorySystem() {
     () =>
       ({
         home: { label: "Dashboard", icon: Home },
-        inventory: { label: "Stock & Inputs", icon: List },
+        inventory: { label: "Inventory", icon: List },
         processing: { label: processingWorkspaceLabel, icon: processingWorkspaceIcon },
         dispatch: { label: "Dispatch", icon: Truck },
         sales: { label: "Sales", icon: TrendingUp },
