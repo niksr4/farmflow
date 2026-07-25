@@ -136,7 +136,7 @@ async function loadInventorySlotsForItem(
       SELECT item_type, location_id, COALESCE(quantity, 0) AS quantity, COALESCE(unit, 'kg') AS unit, COALESCE(avg_price, 0) AS avg_price
       FROM current_inventory
       WHERE tenant_id = ${tenantContext.tenantId}
-        AND lower(regexp_replace(btrim(item_type), '\s+', ' ', 'g')) = lower(${normalizedItemType})
+        AND lower(regexp_replace(btrim(item_type), '\\s+', ' ', 'g')) = lower(${normalizedItemType})
     `,
   )
 
@@ -197,7 +197,7 @@ async function loadLegacyExpenseInventoryTransactions(
       FROM transaction_history
       WHERE tenant_id = ${tenantContext.tenantId}
         AND lower(coalesce(transaction_type, '')) IN ('deplete', 'depleting')
-        AND lower(regexp_replace(btrim(item_type), '\s+', ' ', 'g')) = lower(${itemType})
+        AND lower(regexp_replace(btrim(item_type), '\\s+', ' ', 'g')) = lower(${itemType})
         AND ABS(COALESCE(quantity, 0) - ${quantity}) < 0.0001
         AND location_id IS NOT DISTINCT FROM ${expense.location_id}
         AND (notes = ${primaryNote} OR notes = ${secondaryNote})

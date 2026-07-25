@@ -70,7 +70,7 @@ const loadInventorySlotByNormalizedItem = async (
       SELECT item_type, COALESCE(quantity, 0) AS quantity, unit
       FROM current_inventory
       WHERE tenant_id = ${tenantContext.tenantId}
-        AND lower(regexp_replace(btrim(item_type), '\s+', ' ', 'g')) = lower(${normalizedItemType})
+        AND lower(regexp_replace(btrim(item_type), '\\s+', ' ', 'g')) = lower(${normalizedItemType})
         AND location_id IS NOT DISTINCT FROM ${locationId}
       ORDER BY item_type ASC
       LIMIT 1
@@ -96,7 +96,7 @@ const loadAnyInventorySlotByNormalizedItem = async (
       SELECT item_type, COALESCE(quantity, 0) AS quantity, unit, location_id
       FROM current_inventory
       WHERE tenant_id = ${tenantContext.tenantId}
-        AND lower(regexp_replace(btrim(item_type), '\s+', ' ', 'g')) = lower(${normalizedItemType})
+        AND lower(regexp_replace(btrim(item_type), '\\s+', ' ', 'g')) = lower(${normalizedItemType})
       ORDER BY location_id NULLS FIRST, item_type ASC
       LIMIT 1
     `,
