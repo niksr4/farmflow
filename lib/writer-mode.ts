@@ -10,11 +10,13 @@
 
 // Grounded in real writer usage (audit log): writers record labour, expenses,
 // rain, stock usage, pepper/processing, and dispatch. Analysis tabs
-// (balance sheet, P&L, season, AI, sales) stay manager-only.
-export const WRITER_TABS = ["home", "accounts", "rainfall", "inventory", "processing", "dispatch"] as const
+// (balance sheet, P&L, season, AI, sales) stay manager-only. Attendance is its
+// own standalone tab now, but it's the same daily headcount check a writer
+// always had access to via the accounts sub-nav, so it stays in reach here.
+export const WRITER_TABS = ["home", "attendance", "accounts", "rainfall", "inventory", "processing", "dispatch"] as const
 
 /** Entry-oriented accounts sub-tabs; analysis/management ones are hidden */
-export const WRITER_ACCOUNTS_TABS = ["labour", "expenses", "attendance", "picking"] as const
+export const WRITER_ACCOUNTS_TABS = ["labour", "expenses", "picking"] as const
 
 export const isWriterRole = (role: string | null | undefined): boolean =>
   String(role || "").toLowerCase() === "user"

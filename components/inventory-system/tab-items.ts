@@ -28,6 +28,8 @@ export type DashboardTabItem = {
 
 export type DashboardTabItemsInput = {
   // operations
+  canShowAttendance: boolean
+  canShowAccounts: boolean
   canShowProcessingWorkspace: boolean
   processingWorkspaceLabel: string
   processingWorkspaceIcon: React.ComponentType<{ className?: string }>
@@ -45,13 +47,11 @@ export type DashboardTabItemsInput = {
   canShowRainfallSection: boolean
   canShowRainfall: boolean
   canShowWeather: boolean
-  // finance
-  canShowAccounts: boolean
+  // insights (financial reports + reference/analysis)
   canShowBalanceSheet: boolean
   canShowSeasonPl: boolean
   canShowReceivables: boolean
   canShowBilling: boolean
-  // insights
   canShowSeason: boolean
   canShowYieldForecast: boolean
   canShowPlantHealth: boolean
@@ -64,17 +64,25 @@ export type DashboardTabItemsInput = {
 }
 
 /**
- * Builds the three grouped navigation lists (operations / finance / insights) from the
- * tenant's enabled modules. Pure so it can be unit-tested and keeps the shell lean.
+ * Builds the two grouped navigation lists (operations / insights) from the tenant's
+ * enabled modules. Pure so it can be unit-tested and keeps the shell lean.
  */
 export function buildDashboardTabItems(input: DashboardTabItemsInput): {
   operations: DashboardTabItem[]
-  finance: DashboardTabItem[]
   insights: DashboardTabItem[]
 } {
   const compact = (items: Array<DashboardTabItem | null>) => items.filter(Boolean) as DashboardTabItem[]
 
   const operations = compact([
+    input.canShowAttendance ? { value: "attendance", label: "Attendance", icon: Users } : null,
+    input.canShowAccounts
+      ? {
+          value: "accounts",
+          label: "Accounts",
+          icon: Users,
+          subtabs: ["Daily Labour", "Expenses", "Cost Codes"],
+        }
+      : null,
     input.canShowProcessingWorkspace
       ? {
           value: "processing",
@@ -127,22 +135,11 @@ export function buildDashboardTabItems(input: DashboardTabItemsInput): {
       : null,
   ])
 
-  const finance = compact([
-    input.canShowAccounts
-      ? {
-          value: "accounts",
-          label: "Accounts",
-          icon: Users,
-          subtabs: ["Daily Labour", "Expenses", "Attendance", "Cost Codes"],
-        }
-      : null,
+  const insights = compact([
     input.canShowBalanceSheet ? { value: "balance-sheet", label: "Live Balance", icon: Scale } : null,
     input.canShowSeasonPl ? { value: "season-pl", label: "P&L Report", icon: TrendingUp } : null,
     input.canShowReceivables ? { value: "receivables", label: "Receivables", icon: Receipt } : null,
     input.canShowBilling ? { value: "billing", label: "Billing", icon: Receipt } : null,
-  ])
-
-  const insights = compact([
     input.canShowSeason ? { value: "season", label: "Season Summary", icon: BarChart3 } : null,
     input.canShowYieldForecast ? { value: "yield-forecast", label: "Harvest Forecast", icon: TrendingUp } : null,
     input.canShowPlantHealth ? { value: "plant-health", label: "Crop Health", icon: Leaf } : null,
@@ -154,5 +151,5 @@ export function buildDashboardTabItems(input: DashboardTabItemsInput): {
     input.canShowActivityLog ? { value: "activity-log", label: "Audit Log", icon: History } : null,
   ])
 
-  return { operations, finance, insights }
+  return { operations, insights }
 }

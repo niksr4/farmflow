@@ -212,6 +212,9 @@ const AiAnalysisCharts = dynamic(() => import("@/components/ai-analysis-charts")
 const AccountsPage = dynamic(() => import("@/components/accounts-page"), {
   loading: () => <TabPanelLoading label="Accounts" />,
 })
+const AttendanceTab = dynamic(() => import("@/components/attendance-tab"), {
+  loading: () => <TabPanelLoading label="Attendance" />,
+})
 const ActivityLogTab = dynamic(() => import("@/components/activity-log-tab"), {
   loading: () => <TabPanelLoading label="Activity log" />,
 })
@@ -316,12 +319,11 @@ type TransactionWriteFailureSnapshot = {
   transaction: Transaction
 }
 
-type AccountsWorkspaceTab = "labour" | "expenses" | "attendance" | "activities" | "workers" | "picking" | "ledger" | "payroll"
+type AccountsWorkspaceTab = "labour" | "expenses" | "activities" | "workers" | "picking" | "ledger" | "payroll"
 
 const ACCOUNTS_WORKSPACE_TABS: AccountsWorkspaceTab[] = [
   "labour",
   "expenses",
-  "attendance",
   "activities",
   "workers",
   "picking",
@@ -602,6 +604,9 @@ export default function InventorySystem() {
   const showTransactionHistory = isModuleEnabled("transactions")
   const canShowInventory = isModuleEnabled("inventory")
   const canShowAccounts = isModuleEnabled("accounts")
+  // Attendance is a standalone headcount log, gated the same as Accounts (where it
+  // used to live as a sub-tab) — it never feeds labour cost or P&L totals.
+  const canShowAttendance = isModuleEnabled("accounts")
   const canShowBalanceSheet = isModuleEnabled("balance-sheet") && isAdminOrOwner
   const canShowSeasonPl = isModuleEnabled("accounts") && isAdminOrOwner
   const canShowProcessing = isModuleEnabled("processing")
@@ -2830,6 +2835,8 @@ export default function InventorySystem() {
   }
 
   const showOperationsTabs =
+    canShowAttendance ||
+    canShowAccounts ||
     canShowInventoryWorkspace ||
     canShowProcessingWorkspace ||
     canShowCuring ||
@@ -2837,9 +2844,10 @@ export default function InventorySystem() {
     canShowDispatch ||
     canShowSalesWorkspace ||
     canShowRainfallSection
-  const showFinanceTabs =
-    canShowAccounts || canShowBalanceSheet || canShowReceivables || canShowBilling
   const showInsightsTabs =
+    canShowBalanceSheet ||
+    canShowReceivables ||
+    canShowBilling ||
     canShowSeason ||
     canShowYieldForecast ||
     canShowActivityLog ||
@@ -2850,10 +2858,12 @@ export default function InventorySystem() {
     canShowAiAnalysis ||
     canShowNews
 
-  const { operations: operationsTabItems, finance: financeTabItems, insights: insightsTabItems } =
+  const { operations: operationsTabItems, insights: insightsTabItems } =
     useMemo(
       () =>
         buildDashboardTabItems({
+          canShowAttendance,
+          canShowAccounts,
           canShowProcessingWorkspace,
           processingWorkspaceLabel,
           processingWorkspaceIcon,
@@ -2871,7 +2881,6 @@ export default function InventorySystem() {
           canShowRainfallSection,
           canShowRainfall,
           canShowWeather,
-          canShowAccounts,
           canShowBalanceSheet,
           canShowSeasonPl,
           canShowReceivables,
@@ -2887,6 +2896,8 @@ export default function InventorySystem() {
           canShowActivityLog,
         }),
       [
+        canShowAttendance,
+        canShowAccounts,
         canShowProcessingWorkspace,
         processingWorkspaceLabel,
         processingWorkspaceIcon,
@@ -2904,7 +2915,6 @@ export default function InventorySystem() {
         canShowRainfallSection,
         canShowRainfall,
         canShowWeather,
-        canShowAccounts,
         canShowBalanceSheet,
         canShowSeasonPl,
         canShowReceivables,
@@ -3023,6 +3033,7 @@ export default function InventorySystem() {
   const intelligenceTopFrequencyCode = intelligenceBrief?.accountsPatterns?.mostFrequentCodes?.[0] || null
   const visibleTabs = useMemo(() => {
     const tabs: string[] = ["home"]
+    if (canShowAttendance) tabs.push("attendance")
     if (canShowInventoryWorkspace) tabs.push("inventory")
     if (canShowAccounts) tabs.push("accounts")
     if (canShowBalanceSheet) tabs.push("balance-sheet")
@@ -3055,6 +3066,7 @@ export default function InventorySystem() {
   }, [
     effectiveRole,
     canShowAccounts,
+    canShowAttendance,
     canShowBalanceSheet,
     canShowAiAnalysis,
     canShowBilling,
@@ -3108,6 +3120,7 @@ export default function InventorySystem() {
     () =>
       ({
         home: { label: "Dashboard", icon: Home },
+        attendance: { label: "Attendance", icon: Check },
         inventory: { label: "Inventory", icon: List },
         processing: { label: processingWorkspaceLabel, icon: processingWorkspaceIcon },
         dispatch: { label: "Dispatch", icon: Truck },
@@ -3633,7 +3646,7 @@ export default function InventorySystem() {
     return () => window.removeEventListener("popstate", onPopState)
   }, [])
 
-  type TabGroupKey = "dashboard" | "operations" | "finance" | "insights"
+  type TabGroupKey = "dashboard" | "operations" | "insights"
   type SectionTabItem = {
     value: string
     label: string
@@ -3644,29 +3657,22 @@ export default function InventorySystem() {
   const activeTabGroup = useMemo<TabGroupKey>(() => {
     if (activeTab === "home") return "dashboard"
     if (operationsTabItems.some((item) => item.value === activeTab)) return "operations"
-    if (financeTabItems.some((item) => item.value === activeTab)) return "finance"
     if (insightsTabItems.some((item) => item.value === activeTab)) return "insights"
     return "dashboard"
-  }, [activeTab, financeTabItems, insightsTabItems, operationsTabItems])
+  }, [activeTab, insightsTabItems, operationsTabItems])
 
   const activeSectionTabs = useMemo(() => {
     const items =
       activeTabGroup === "operations"
         ? operationsTabItems
-        : activeTabGroup === "finance"
-          ? financeTabItems
-          : activeTabGroup === "insights"
-            ? insightsTabItems
-            : []
+        : activeTabGroup === "insights"
+          ? insightsTabItems
+          : []
     // Section items derive from module flags; visibleTabs additionally applies
     // role paring (writer mode), so filter to what this user can actually open
     return items.filter((item) => visibleTabs.includes(item.value))
-  }, [activeTabGroup, financeTabItems, insightsTabItems, operationsTabItems, visibleTabs])
+  }, [activeTabGroup, insightsTabItems, operationsTabItems, visibleTabs])
   // Role paring (writer mode) lives in visibleTabs — keep launcher sections in sync
-  const visibleFinanceTabItems = useMemo(
-    () => financeTabItems.filter((item) => visibleTabs.includes(item.value)),
-    [financeTabItems, visibleTabs],
-  )
   const visibleOperationsTabItems = useMemo(
     () => operationsTabItems.filter((item) => visibleTabs.includes(item.value)),
     [operationsTabItems, visibleTabs],
@@ -3679,31 +3685,11 @@ export default function InventorySystem() {
   const launcherSections = useMemo(
     () =>
       [
-        showFinanceTabs && visibleFinanceTabItems.length > 0
-          ? {
-              id: "finance" as const,
-              label: "Finance",
-              description: "Accounts, balance, P&L, receivables, and market rates.",
-              icon: Scale,
-              tabs: visibleFinanceTabItems as SectionTabItem[],
-              cardClassName: "border-amber-200/80 bg-amber-50/50",
-              badgeClassName: "border-amber-200 bg-white text-amber-700",
-              tabClassName: "border-amber-200 bg-white text-amber-900 hover:bg-amber-50",
-              subtabChipClassName: "border-amber-100 bg-amber-100/70 text-amber-800/80",
-              iconClassName: "text-amber-700",
-              activeCardClassName: "border-amber-500 bg-amber-500 text-white shadow-[0_14px_30px_-20px_rgba(217,119,6,0.95)]",
-              inactiveCardClassName: "border-amber-200 bg-amber-50/70 text-slate-900 hover:border-amber-300 hover:bg-amber-50",
-              activeDescriptionClassName: "text-amber-100",
-              inactiveDescriptionClassName: "text-slate-500",
-              previewTabClassName: "border-amber-200 bg-white/90 text-amber-900 hover:bg-white",
-              previewTabActiveClassName: "border-white/30 bg-white/15 text-white",
-            }
-          : null,
         showOperationsTabs && visibleOperationsTabItems.length > 0
           ? {
               id: "operations" as const,
               label: "Operations",
-              description: "Processing, dispatch, sales, stock, and rain & weather.",
+              description: "Attendance, Accounts, processing, dispatch, sales, stock, and rain & weather.",
               icon: Factory,
               tabs: visibleOperationsTabItems as SectionTabItem[],
               cardClassName: "border-emerald-200/80 bg-emerald-50/50",
@@ -3722,8 +3708,8 @@ export default function InventorySystem() {
         showInsightsTabs && visibleInsightsTabItems.length > 0
           ? {
               id: "insights" as const,
-              label: "Reports",
-              description: "Season summary, rain & weather, AI insights, and records.",
+              label: "Insights",
+              description: "Financial reports, season summary, AI insights, and records.",
               icon: BarChart3,
               tabs: visibleInsightsTabItems as SectionTabItem[],
               cardClassName: "border-cyan-200/80 bg-cyan-50/50",
@@ -3757,7 +3743,7 @@ export default function InventorySystem() {
         previewTabClassName: string
         previewTabActiveClassName: string
       }>,
-    [financeTabItems, insightsTabItems, operationsTabItems, showFinanceTabs, showInsightsTabs, showOperationsTabs],
+    [showInsightsTabs, showOperationsTabs, visibleInsightsTabItems, visibleOperationsTabItems],
   )
 
   const handleSectionSelect = useCallback(
@@ -3771,15 +3757,10 @@ export default function InventorySystem() {
         handleTabChange(nextTab)
         return
       }
-      if (group === "finance") {
-        const nextTab = financeTabItems[0]?.value || "home"
-        handleTabChange(nextTab)
-        return
-      }
       const nextTab = insightsTabItems[0]?.value || "home"
       handleTabChange(nextTab)
     },
-    [financeTabItems, handleTabChange, insightsTabItems, operationsTabItems],
+    [handleTabChange, insightsTabItems, operationsTabItems],
   )
 
   const tabParam = searchParams.get("tab")
@@ -4340,8 +4321,7 @@ export default function InventorySystem() {
           const Icon = meta.icon
           const groupStyle: Record<string, { icon: string; groupLabel: string }> = {
             operations: { icon: "bg-emerald-100/60 border-emerald-200/80 text-emerald-700", groupLabel: "Operations" },
-            finance:    { icon: "bg-amber-100/60 border-amber-200/80 text-amber-700",       groupLabel: "Finance" },
-            insights:   { icon: "bg-stone-100 border-stone-200 text-stone-600",             groupLabel: "Reports" },
+            insights:   { icon: "bg-stone-100 border-stone-200 text-stone-600",             groupLabel: "Insights" },
             dashboard:  { icon: "bg-stone-100 border-stone-200 text-stone-600",             groupLabel: "" },
           }
           const gs = groupStyle[activeTabGroup] ?? groupStyle.dashboard
@@ -4912,6 +4892,12 @@ export default function InventorySystem() {
                 </div>
               </div>
               )}
+            </TabsContent>
+          )}
+
+          {canShowAttendance && (
+            <TabsContent value="attendance" className="space-y-6" forceMount={isTabLoaded("attendance") ? true : undefined}>
+              <AttendanceTab />
             </TabsContent>
           )}
 

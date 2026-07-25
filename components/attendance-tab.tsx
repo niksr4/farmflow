@@ -93,6 +93,18 @@ export default function AttendanceTab() {
   const absentCount = workers.length - presentCount
   const noRateWorkers = workers.filter((w) => w.dailyRate === null)
 
+  const workersById = useMemo(() => new Map(workers.map((w) => [w.id, w])), [workers])
+  const weeklyReportRows = useMemo(
+    () =>
+      weeklySummary.map((row) => {
+        const dailyRate = workersById.get(row.workerId)?.dailyRate ?? null
+        return { ...row, dailyRate, wageTotal: dailyRate !== null ? row.daysPresent * dailyRate : null }
+      }),
+    [weeklySummary, workersById],
+  )
+  const weeklyReportTotal = weeklyReportRows.reduce((sum, row) => sum + (row.wageTotal ?? 0), 0)
+  const weeklyReportHasRates = weeklyReportRows.some((row) => row.wageTotal !== null)
+
   const toggleWorker = (id: string) => {
     setPresentWorkerIds((cur) => {
       const s = new Set(cur)
@@ -122,8 +134,16 @@ export default function AttendanceTab() {
 
   const exportWeeklySummaryToCSV = () => {
     const weekLabel = dateToStr(weekDays[0])
-    const headers = ["Worker", "Days Present"]
-    const rows = weeklySummary.map((row) => [row.name, String(row.daysPresent)])
+    const headers = ["Worker", "Days Present", "Daily Rate", "Wage Total"]
+    const rows = weeklyReportRows.map((row) => [
+      row.name,
+      String(row.daysPresent),
+      row.dailyRate !== null ? String(row.dailyRate) : "",
+      row.wageTotal !== null ? String(row.wageTotal) : "",
+    ])
+    if (weeklyReportHasRates) {
+      rows.push(["Total", "", "", String(weeklyReportTotal)])
+    }
     const csvContent = [headers.join(","), ...rows.map((r) => r.join(","))].join("\n")
     const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" })
     const link = document.createElement("a")
@@ -397,8 +417,8 @@ export default function AttendanceTab() {
           </form>
         )}
 
-        {/* Weekly summary */}
-        {weeklySummary.length > 0 && (
+        {/* Weekly report */}
+        {weeklyReportRows.length > 0 && (
           <div className="pt-1">
             <div className="flex items-center justify-between px-1 py-1">
               <button
@@ -406,7 +426,7 @@ export default function AttendanceTab() {
                 onClick={() => setShowSummary(!showSummary)}
                 className="flex flex-1 items-center justify-between py-1.5 text-xs font-bold uppercase tracking-widest text-stone-400"
               >
-                <span>Week summary</span>
+                <span>Weekly report — {format(weekDays[0], "d MMM")}–{format(weekDays[6], "d MMM")}</span>
                 <span className="ml-2">{showSummary ? "▲" : "▼"}</span>
               </button>
               <Button size="sm" variant="outline" onClick={exportWeeklySummaryToCSV} className="h-8 shrink-0 bg-transparent px-2.5 text-xs">
@@ -415,14 +435,23 @@ export default function AttendanceTab() {
             </div>
             {showSummary && (
               <div className="rounded-2xl bg-white shadow-sm overflow-hidden divide-y divide-stone-50">
-                {weeklySummary.map((row) => (
+                {weeklyReportRows.map((row) => (
                   <div key={row.workerId} className="flex items-center justify-between px-4 py-3.5">
                     <span className="text-sm font-semibold text-stone-700">{row.name}</span>
-                    <span className="text-base font-black text-stone-900">
-                      {row.daysPresent}d
-                    </span>
+                    <div className="text-right">
+                      <span className="block text-base font-black text-stone-900">{row.daysPresent}d</span>
+                      {row.wageTotal !== null && (
+                        <span className="block text-xs font-semibold text-emerald-700">₹{row.wageTotal}</span>
+                      )}
+                    </div>
                   </div>
                 ))}
+                {weeklyReportHasRates && (
+                  <div className="flex items-center justify-between px-4 py-3.5 bg-stone-50">
+                    <span className="text-sm font-bold text-stone-700">Total</span>
+                    <span className="text-base font-black text-emerald-700">₹{weeklyReportTotal}</span>
+                  </div>
+                )}
               </div>
             )}
           </div>

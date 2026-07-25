@@ -16,7 +16,6 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { FileSpreadsheet, FileText, Coins, PlusCircle, Settings, Users, Receipt, Loader2, Pencil, Trash2, Check, X, BarChart2, Wheat, BookOpen, DollarSign, UserCheck, ChevronDown } from "lucide-react"
 import { Skeleton, SkeletonTable, SkeletonCard } from "@/components/ui/skeleton"
 import { EmptyStateTable } from "@/components/ui/empty-state"
-import AttendanceTab from "./attendance-tab"
 import LaborDeploymentTab from "./labor-deployment-tab"
 import OtherExpensesTab from "./other-expenses-tab"
 import WorkerProfilesTab from "./worker-profiles-tab"
@@ -98,10 +97,15 @@ interface AccountsIntelligence {
   highlights: string[]
 }
 
-type AccountsTabValue = "labour" | "expenses" | "attendance" | "activities" | "workers" | "picking" | "ledger" | "payroll"
+type AccountsTabValue = "labour" | "expenses" | "activities" | "workers" | "picking" | "ledger" | "payroll"
 type AccountsView = AccountsTabValue | "dashboard" | "export"
 
 const LABOR_MANAGEMENT_TAB_VALUES = new Set<AccountsTabValue>(["workers", "ledger", "payroll"])
+
+// TEMPORARY: Picking and Ledger crash for some tenants in production — taken offline
+// until the underlying issue is fixed. Remove these two flags to bring them back.
+const PICKING_TAB_DISABLED = true
+const LEDGER_TAB_DISABLED = true
 
 const normalizeAccountsTab = (
   initialTab: AccountsTabValue | undefined,
@@ -109,6 +113,12 @@ const normalizeAccountsTab = (
   showPickingLog: boolean,
 ): AccountsView => {
   if (!initialTab) {
+    return "dashboard"
+  }
+  if (PICKING_TAB_DISABLED && initialTab === "picking") {
+    return "dashboard"
+  }
+  if (LEDGER_TAB_DISABLED && initialTab === "ledger") {
     return "dashboard"
   }
   if (!showLaborManagement && LABOR_MANAGEMENT_TAB_VALUES.has(initialTab)) {
@@ -1060,22 +1070,20 @@ export default function AccountsPage({
       const writerItems: Array<{ value: AccountsView; label: string; icon: React.ComponentType<{ className?: string }> }> = [
         { value: "labour", label: "Labour", icon: Users },
         { value: "expenses", label: "Expenses", icon: Receipt },
-        { value: "attendance", label: "Attend", icon: Check },
       ]
-      if (showPickingLog || showLaborManagement) writerItems.push({ value: "picking", label: "Picking", icon: Wheat })
+      if (!PICKING_TAB_DISABLED && (showPickingLog || showLaborManagement)) writerItems.push({ value: "picking", label: "Picking", icon: Wheat })
       return writerItems
     }
     const items: Array<{ value: AccountsView; label: string; icon: React.ComponentType<{ className?: string }> }> = [
       { value: "dashboard", label: "Summary", icon: BarChart2 },
       { value: "labour", label: "Labour", icon: Users },
-      { value: "attendance", label: "Attend", icon: Check },
       { value: "expenses", label: "Expenses", icon: Receipt },
       { value: "activities", label: "Codes", icon: Settings },
     ]
-    if (showPickingLog || showLaborManagement) items.push({ value: "picking", label: "Picking", icon: Wheat })
+    if (!PICKING_TAB_DISABLED && (showPickingLog || showLaborManagement)) items.push({ value: "picking", label: "Picking", icon: Wheat })
     if (showLaborManagement) {
       items.push({ value: "workers", label: "Workers", icon: UserCheck })
-      items.push({ value: "ledger", label: "Ledger", icon: BookOpen })
+      if (!LEDGER_TAB_DISABLED) items.push({ value: "ledger", label: "Ledger", icon: BookOpen })
       items.push({ value: "payroll", label: "Payroll", icon: DollarSign })
     }
     if (isAdminOrOwner) items.push({ value: "export", label: "Export", icon: FileSpreadsheet })
@@ -1143,7 +1151,6 @@ export default function AccountsPage({
     expenses: { active: "bg-amber-600 border-amber-600 text-white" },
     activities: { active: "bg-violet-600 border-violet-600 text-white" },
     export: { active: "bg-slate-700 border-slate-700 text-white" },
-    attendance: { active: "bg-teal-600 border-teal-600 text-white" },
     picking: { active: "bg-lime-700 border-lime-700 text-white" },
     workers: { active: "bg-cyan-600 border-cyan-600 text-white" },
     ledger: { active: "bg-indigo-600 border-indigo-600 text-white" },
@@ -1153,16 +1160,15 @@ export default function AccountsPage({
   const primaryNavItems: NavItem[] = [
     { value: "dashboard", label: "Dashboard", icon: BarChart2 },
     { value: "labour", label: "Labour", icon: Users },
-    { value: "attendance", label: "Attendance", icon: Check },
     { value: "expenses", label: "Expenses", icon: Receipt },
     { value: "activities", label: "Activity Codes", icon: Settings },
     ...(isAdminOrOwner ? [{ value: "export" as AccountsView, label: "Export", icon: FileSpreadsheet }] : []),
   ]
   const secondaryNavItems: NavItem[] = [
-    ...(showPickingLog || showLaborManagement ? [{ value: "picking" as AccountsView, label: "Picking", icon: Wheat }] : []),
+    ...(!PICKING_TAB_DISABLED && (showPickingLog || showLaborManagement) ? [{ value: "picking" as AccountsView, label: "Picking", icon: Wheat }] : []),
     ...(showLaborManagement ? [
       { value: "workers" as AccountsView, label: "Workers", icon: UserCheck },
-      { value: "ledger" as AccountsView, label: "Ledger", icon: BookOpen },
+      ...(!LEDGER_TAB_DISABLED ? [{ value: "ledger" as AccountsView, label: "Ledger", icon: BookOpen }] : []),
       { value: "payroll" as AccountsView, label: "Payroll", icon: DollarSign },
     ] : []),
   ]
@@ -1240,7 +1246,6 @@ export default function AccountsPage({
           {activeTab === "expenses" && (
             <OtherExpensesTab startDate={fiscalYearStartDate} endDate={fiscalYearEndDate} />
           )}
-          {activeTab === "attendance" && <AttendanceTab />}
           {activeTab === "activities" && (
             <div className="px-3 pt-2 space-y-4">
               {!isAddingActivity ? (
@@ -1322,9 +1327,9 @@ export default function AccountsPage({
               )}
             </div>
           )}
-          {(showPickingLog || showLaborManagement) && activeTab === "picking" && <PickingLogTab />}
+          {!PICKING_TAB_DISABLED && (showPickingLog || showLaborManagement) && activeTab === "picking" && <PickingLogTab />}
           {showLaborManagement && activeTab === "workers" && <WorkerProfilesTab />}
-          {showLaborManagement && activeTab === "ledger" && <WorkerLedgerTab />}
+          {!LEDGER_TAB_DISABLED && showLaborManagement && activeTab === "ledger" && <WorkerLedgerTab />}
           {showLaborManagement && activeTab === "payroll" && <PayrollSummaryTab />}
           {isAdminOrOwner && activeTab === "export" && (
             <div className="px-3 pt-2 pb-4 space-y-4">
@@ -1360,7 +1365,7 @@ export default function AccountsPage({
       className="container mx-auto px-4 py-6 sm:p-6"
       badge="Finance workspace"
       title="Accounts Management"
-      description="Track labour, expenses, attendance, and estate activity codes."
+      description="Track labour, expenses, and estate activity codes."
       accent="amber"
       stats={accountsShellStats}
       supportingContent={
@@ -1617,9 +1622,6 @@ export default function AccountsPage({
       {activeTab === "expenses" && (
         <OtherExpensesTab startDate={fiscalYearStartDate} endDate={fiscalYearEndDate} />
       )}
-
-      {/* ── Attendance ── */}
-      {activeTab === "attendance" && <AttendanceTab />}
 
       {/* ── Activity Codes ── */}
       {activeTab === "activities" && (
@@ -1947,13 +1949,13 @@ export default function AccountsPage({
       )}
 
       {/* ── Picking ── */}
-      {(showPickingLog || showLaborManagement) && activeTab === "picking" && <PickingLogTab />}
+      {!PICKING_TAB_DISABLED && (showPickingLog || showLaborManagement) && activeTab === "picking" && <PickingLogTab />}
 
       {/* ── Workers ── */}
       {showLaborManagement && activeTab === "workers" && <WorkerProfilesTab />}
 
       {/* ── Ledger ── */}
-      {showLaborManagement && activeTab === "ledger" && <WorkerLedgerTab />}
+      {!LEDGER_TAB_DISABLED && showLaborManagement && activeTab === "ledger" && <WorkerLedgerTab />}
 
       {/* ── Payroll ── */}
       {showLaborManagement && activeTab === "payroll" && <PayrollSummaryTab />}

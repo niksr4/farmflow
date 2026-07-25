@@ -20,21 +20,21 @@ const PEPPER_SEASONS: EstateSeason[] = ["post-harvest-pruning", "harvest-peak"]
 // Tab ordering by priority for each phase
 const SEASON_TAB_ORDER: Record<string, string[]> = {
   "harvest-peak": [
-    "home", "accounts", "processing", "dispatch", "sales", "pepper",
+    "home", "attendance", "accounts", "processing", "dispatch", "sales", "pepper",
     "inventory", "rainfall", "season", "season-pl", "balance-sheet",
     "yield-forecast", "ai-analysis", "quality", "curing", "picking",
     "activity-log", "plant-health", "news", "market-pricing",
     "resources", "documents", "journal", "compliance", "receivables", "billing",
   ],
   "pre-harvest": [
-    "home", "accounts", "processing", "inventory", "season", "rainfall",
+    "home", "attendance", "accounts", "processing", "inventory", "season", "rainfall",
     "dispatch", "sales", "season-pl", "balance-sheet", "yield-forecast",
     "ai-analysis", "activity-log", "plant-health", "news", "market-pricing",
     "resources", "documents", "journal", "quality", "curing", "picking",
     "compliance", "receivables", "billing",
   ],
   "post-harvest-pruning": [
-    "home", "accounts", "processing", "dispatch", "sales", "pepper",
+    "home", "attendance", "accounts", "processing", "dispatch", "sales", "pepper",
     "inventory", "rainfall", "season", "season-pl", "balance-sheet",
     "activity-log", "ai-analysis", "quality", "curing", "yield-forecast",
     "plant-health", "news", "market-pricing", "resources", "documents",
@@ -42,7 +42,7 @@ const SEASON_TAB_ORDER: Record<string, string[]> = {
   ],
   // Off-season (berry-formation, monsoon, blossom) — labour & maintenance dominant
   "default": [
-    "home", "accounts", "rainfall", "inventory", "season", "balance-sheet",
+    "home", "attendance", "accounts", "rainfall", "inventory", "season", "balance-sheet",
     "season-pl", "ai-analysis", "activity-log", "plant-health", "news",
     "market-pricing", "yield-forecast", "resources", "documents", "journal",
     "processing", "dispatch", "sales", "pepper", "quality", "curing", "picking",
@@ -54,7 +54,7 @@ const SEASON_TAB_ORDER: Record<string, string[]> = {
 export const SEASONAL_TABS = new Set(["processing", "dispatch", "sales", "pepper", "curing", "quality", "picking"])
 
 // Tabs that are always primary regardless of season
-export const ALWAYS_PRIMARY_TABS = new Set(["home", "accounts", "inventory", "rainfall", "season"])
+export const ALWAYS_PRIMARY_TABS = new Set(["home", "attendance", "accounts", "inventory", "rainfall", "season"])
 
 export function getSeasonAwareTabOrder(availableTabs: string[]): string[] {
   const phase = getCurrentEstatePhase()

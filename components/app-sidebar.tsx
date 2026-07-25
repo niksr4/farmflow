@@ -66,17 +66,21 @@ const NAV_GROUPS: Array<{ id: string; label?: string; items: string[] }> = [
     // "picking" lives inside the Accounts workspace and "pepper"/"rubber" are Processing
     // sub-views (see AccountsWorkspaceTab / ProcessingWorkspaceView in inventory-system.tsx)
     // — none of them are ever pushed into visibleTabs as standalone tabs, so they don't belong here.
-    items: ["rainfall", "inventory", "processing", "curing", "quality", "dispatch", "sales"],
-  },
-  {
-    id: "finance",
-    label: "Finance",
-    items: ["accounts", "balance-sheet", "season-pl", "receivables", "billing", "market-pricing"],
+    // "attendance" leads the group — a daily headcount check before anything else.
+    // "accounts" (Labour & Costs) is the daily data-entry workspace, so it lives here too;
+    // the read-only financial reports it feeds (balance-sheet, season-pl, receivables,
+    // billing) live under Insights instead.
+    items: ["attendance", "rainfall", "inventory", "accounts", "processing", "curing", "quality", "dispatch", "sales"],
   },
   {
     id: "insights",
-    label: "Reports",
+    label: "Insights",
     items: [
+      "balance-sheet",
+      "season-pl",
+      "receivables",
+      "billing",
+      "market-pricing",
       "season",
       "yield-forecast",
       "plant-health",
