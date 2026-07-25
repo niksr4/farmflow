@@ -1,0 +1,88 @@
+"use client"
+
+import { useState } from "react"
+import { Check, Users, BookOpen, DollarSign } from "lucide-react"
+import { cn } from "@/lib/utils"
+import AttendanceTab from "./attendance-tab"
+import WorkerProfilesTab from "./worker-profiles-tab"
+import WorkerLedgerTab from "./worker-ledger-tab"
+import PayrollSummaryTab from "./payroll-summary-tab"
+
+// TEMPORARY: Ledger crashes for some tenants in production — taken offline until
+// the underlying issue is fixed. Keep in sync with the equivalent flag that used
+// to live in accounts-page.tsx before Workers/Ledger/Payroll moved here.
+const LEDGER_TAB_DISABLED = true
+
+type AttendanceSection = "attendance" | "workers" | "ledger" | "payroll"
+
+type AttendanceWorkspaceProps = {
+  showLaborManagement?: boolean
+}
+
+const SECTION_COLORS: Record<AttendanceSection, string> = {
+  attendance: "bg-teal-600 border-teal-600 text-white",
+  workers: "bg-cyan-600 border-cyan-600 text-white",
+  ledger: "bg-indigo-600 border-indigo-600 text-white",
+  payroll: "bg-purple-600 border-purple-600 text-white",
+}
+
+export default function AttendanceWorkspace({ showLaborManagement = false }: AttendanceWorkspaceProps) {
+  const [activeSection, setActiveSection] = useState<AttendanceSection>("attendance")
+
+  const navItems: Array<{ value: AttendanceSection; label: string; icon: React.ComponentType<{ className?: string }> }> = [
+    { value: "attendance", label: "Attendance", icon: Check },
+    ...(showLaborManagement
+      ? [
+          { value: "workers" as AttendanceSection, label: "Workers", icon: Users },
+          ...(!LEDGER_TAB_DISABLED ? [{ value: "ledger" as AttendanceSection, label: "Ledger", icon: BookOpen }] : []),
+          { value: "payroll" as AttendanceSection, label: "Payroll", icon: DollarSign },
+        ]
+      : []),
+  ]
+
+  return (
+    <div className="space-y-4">
+      {navItems.length > 1 && (
+        <div className="flex flex-wrap gap-1.5 px-3 pt-2 sm:px-0">
+          {navItems.map((item) => {
+            const Icon = item.icon
+            const isActive = activeSection === item.value
+            return (
+              <button
+                key={item.value}
+                type="button"
+                onClick={() => setActiveSection(item.value)}
+                className={cn(
+                  "flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-semibold transition-colors",
+                  isActive
+                    ? SECTION_COLORS[item.value]
+                    : "border-stone-200 bg-white text-stone-500 hover:bg-stone-50",
+                )}
+              >
+                <Icon className="h-3.5 w-3.5" />
+                {item.label}
+              </button>
+            )
+          })}
+        </div>
+      )}
+
+      {activeSection === "attendance" && <AttendanceTab />}
+      {showLaborManagement && activeSection === "workers" && (
+        <div className="px-3 sm:px-0">
+          <WorkerProfilesTab />
+        </div>
+      )}
+      {!LEDGER_TAB_DISABLED && showLaborManagement && activeSection === "ledger" && (
+        <div className="px-3 sm:px-0">
+          <WorkerLedgerTab />
+        </div>
+      )}
+      {showLaborManagement && activeSection === "payroll" && (
+        <div className="px-3 sm:px-0">
+          <PayrollSummaryTab />
+        </div>
+      )}
+    </div>
+  )
+}

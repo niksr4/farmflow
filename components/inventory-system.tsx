@@ -212,7 +212,7 @@ const AiAnalysisCharts = dynamic(() => import("@/components/ai-analysis-charts")
 const AccountsPage = dynamic(() => import("@/components/accounts-page"), {
   loading: () => <TabPanelLoading label="Accounts" />,
 })
-const AttendanceTab = dynamic(() => import("@/components/attendance-tab"), {
+const AttendanceWorkspace = dynamic(() => import("@/components/attendance-workspace"), {
   loading: () => <TabPanelLoading label="Attendance" />,
 })
 const ActivityLogTab = dynamic(() => import("@/components/activity-log-tab"), {
@@ -319,16 +319,13 @@ type TransactionWriteFailureSnapshot = {
   transaction: Transaction
 }
 
-type AccountsWorkspaceTab = "labour" | "expenses" | "activities" | "workers" | "picking" | "ledger" | "payroll"
+type AccountsWorkspaceTab = "labour" | "expenses" | "activities" | "picking"
 
 const ACCOUNTS_WORKSPACE_TABS: AccountsWorkspaceTab[] = [
   "labour",
   "expenses",
   "activities",
-  "workers",
   "picking",
-  "ledger",
-  "payroll",
 ]
 
 const isAccountsWorkspaceTab = (value: string | null | undefined): value is AccountsWorkspaceTab =>
@@ -4897,7 +4894,7 @@ export default function InventorySystem() {
 
           {canShowAttendance && (
             <TabsContent value="attendance" className="space-y-6" forceMount={isTabLoaded("attendance") ? true : undefined}>
-              <AttendanceTab />
+              <AttendanceWorkspace showLaborManagement={canShowLaborManagement} />
             </TabsContent>
           )}
 
