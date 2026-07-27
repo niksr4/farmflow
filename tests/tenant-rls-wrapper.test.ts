@@ -54,9 +54,22 @@ const KNOWN_UNWRAPPED = [
   "app/api/benchmarks/route.ts", // CONFIRMED — peer benchmarks always "not enough estates"
   "app/api/dashboard/season-pace/route.ts", // CONFIRMED — pace chart always empty
   "app/api/dashboard/season-projection/route.ts", // CONFIRMED — projection always hasData:false
-  "app/api/lots/[lotId]/route.ts", // pending confirmation
   "app/api/reconciliation/route.ts", // pending confirmation
 ].sort()
+
+/**
+ * Routes that legitimately query a tenant table with no tenant wrapper, because there is no
+ * session/tenant context to set in the first place — not bugs, and not pending confirmation.
+ *
+ * `app/api/lots/[lotId]/route.ts` is a public, unauthenticated QR-code lot-traceability lookup
+ * (see its own header comment: "Public endpoint — no auth required"). It looks up a lot by an
+ * opaque `lot_id` across ALL tenants deliberately, so there is no single tenant to scope a
+ * `runTenantQuery` call to. Confirmed this run (2026-07-27, cycle 1, files 76-90) by reading the
+ * route: it never calls requireSessionUser/requireModuleAccess and joins to `tenants` only to read
+ * a display name, not to authorize. This closes out the "pending confirmation" note left on it in
+ * the 61-75 batch — it does not belong on KNOWN_UNWRAPPED, which is reserved for actual bugs.
+ */
+const PUBLIC_NO_TENANT_CONTEXT_ROUTES = ["app/api/lots/[lotId]/route.ts"]
 
 const collectRouteFiles = (dir: string): string[] => {
   const out: string[] = []
@@ -88,7 +101,9 @@ const findUnwrappedRoutes = () => {
 describe("tenant RLS wrapper guard", () => {
   it("does not add any new route that queries tenant tables without a tenant wrapper", () => {
     const unwrapped = findUnwrappedRoutes()
-    const added = unwrapped.filter((route) => !KNOWN_UNWRAPPED.includes(route))
+    const added = unwrapped.filter(
+      (route) => !KNOWN_UNWRAPPED.includes(route) && !PUBLIC_NO_TENANT_CONTEXT_ROUTES.includes(route),
+    )
 
     expect(
       added,
@@ -120,5 +135,14 @@ describe("tenant RLS wrapper guard", () => {
     expect(unwrapped).not.toContain("app/api/finance-balance-sheet/route.ts")
     expect(unwrapped).not.toContain("app/api/dashboard/estate-pulse/route.ts")
     expect(unwrapped).not.toContain("app/api/exception-alerts/route.ts")
+  })
+
+  it("keeps app/api/lots/[lotId]/route.ts on the public-no-tenant-context list, not the bug list", () => {
+    // If this route ever starts requiring a session (requireSessionUser/requireModuleAccess) it
+    // should move to using runTenantQuery like everything else, and drop off both lists.
+    const unwrapped = findUnwrappedRoutes()
+    expect(unwrapped).toContain("app/api/lots/[lotId]/route.ts")
+    expect(KNOWN_UNWRAPPED).not.toContain("app/api/lots/[lotId]/route.ts")
+    expect(PUBLIC_NO_TENANT_CONTEXT_ROUTES).toContain("app/api/lots/[lotId]/route.ts")
   })
 })
