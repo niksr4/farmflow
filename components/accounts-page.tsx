@@ -1104,12 +1104,6 @@ export default function AccountsPage({
       detail: "Labour + non-labour expenses",
       tooltip: "Combined labour and non-labour spend for the selected fiscal year and active filters.",
     },
-    {
-      label: "Account Codes",
-      value: formatNumber(accountActivities.length || activities.length, 0),
-      detail: topCostCode ? `Top cost code: ${topCostCode.code}` : "Add estate codes for exports and summaries",
-      tooltip: "Estate-defined activity codes used to categorize labour and expenses. Used for cost reporting and export formats.",
-    },
   ]
 
   useEffect(() => {
