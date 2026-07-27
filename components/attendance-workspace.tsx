@@ -1,7 +1,7 @@
 "use client"
 
 import { useState } from "react"
-import { Check, Users, BookOpen, DollarSign } from "lucide-react"
+import { Check, Users, BookOpen, IndianRupee } from "lucide-react"
 import { cn } from "@/lib/utils"
 import AttendanceTab from "./attendance-tab"
 import WorkerProfilesTab from "./worker-profiles-tab"
@@ -35,7 +35,7 @@ export default function AttendanceWorkspace({ showLaborManagement = false }: Att
       ? [
           { value: "workers" as AttendanceSection, label: "Workers", icon: Users },
           ...(!LEDGER_TAB_DISABLED ? [{ value: "ledger" as AttendanceSection, label: "Ledger", icon: BookOpen }] : []),
-          { value: "payroll" as AttendanceSection, label: "Payroll", icon: DollarSign },
+          { value: "payroll" as AttendanceSection, label: "Payroll", icon: IndianRupee },
         ]
       : []),
   ]

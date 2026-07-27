@@ -398,7 +398,7 @@ export default function OtherExpensesTab({
           onClick={openNewExpenseForm}
           className="flex h-14 w-full items-center justify-center gap-2 rounded-2xl bg-emerald-700 text-base font-bold text-white shadow-md shadow-emerald-100 active:scale-[0.98] transition-transform touch-manipulation hover:bg-emerald-600"
         >
-          <PlusCircle className="h-5 w-5" /> Log expense
+          <PlusCircle className="h-5 w-5" /> Log non-labour expense
         </button>
       )}
 
@@ -406,11 +406,11 @@ export default function OtherExpensesTab({
         <CardHeader>
           <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
             <div>
-              <CardTitle className="text-xl sm:text-2xl">💸 Other Expenses</CardTitle>
+              <CardTitle className="text-xl sm:text-2xl">💸 Non-Labour Expenses</CardTitle>
               <CardDescription className="text-sm">Track real spend with a simple estate code and category</CardDescription>
             </div>
             <div className="text-left sm:text-right">
-              <p className="text-sm font-medium text-muted-foreground">Total Expenses</p>
+              <p className="text-sm font-medium text-muted-foreground">Total Non-Labour Expenses</p>
               <p className="text-xl sm:text-2xl font-bold">{formatCurrency(totalExpenses)}</p>
               {resolvedTotalCount > deployments.length && (
                 <p className="text-xs text-muted-foreground mt-1">

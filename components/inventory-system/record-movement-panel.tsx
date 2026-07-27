@@ -313,7 +313,7 @@ export default function RecordMovementPanel({
               {canShowAccounts ? (
                 <>
                   Use this when you only need stock tracking. If the same usage should also appear in Accounts and P&amp;L, record it in{" "}
-                  <strong>Accounts → Other Expenses</strong> instead.
+                  <strong>Accounts → Non-Labour Expenses</strong> instead.
                 </>
               ) : (
                 "Use this for regular stock usage, losses, or corrections."

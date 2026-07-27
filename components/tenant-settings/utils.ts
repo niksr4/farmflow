@@ -8,7 +8,7 @@ export const AUDIT_ENTITY_TYPES = [
   { id: "sales_records", label: "Sales" },
   { id: "transaction_history", label: "Inventory" },
   { id: "labor_transactions", label: "Labour" },
-  { id: "expense_transactions", label: "Expenses" },
+  { id: "expense_transactions", label: "Non-Labour Expenses" },
 ] as const
 
 export const formatAuditTimestamp = (value: string) => formatDateForDisplay(value)

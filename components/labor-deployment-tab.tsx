@@ -63,10 +63,21 @@ interface FormData {
 
 const DEFAULT_SET_LABELS = ["In-house", "Outside"]
 
-function makeDefaultSets(inHouseWage: number, outsideWage: number): LaborSet[] {
+// The DB stores whatever group name was typed; only these two legacy names are remapped.
+const normalizeSetLabel = (name: string) =>
+  name === "Estate Labour" ? "In-house" : name === "Outside Labour" ? "Outside" : name
+
+const setLabelKey = (label: string) => label.trim().toLowerCase()
+
+function makeDefaultSets(
+  inHouseWage: number,
+  outsideWage: number,
+  lastWageByLabel: Map<string, number> = new Map(),
+): LaborSet[] {
+  const wageFor = (label: string, fallback: number) => lastWageByLabel.get(setLabelKey(label)) ?? fallback
   return [
-    { label: "In-house", laborers: 0, costPerLaborer: inHouseWage },
-    { label: "Outside", laborers: 0, costPerLaborer: outsideWage },
+    { label: "In-house", laborers: 0, costPerLaborer: wageFor("In-house", inHouseWage) },
+    { label: "Outside", laborers: 0, costPerLaborer: wageFor("Outside", outsideWage) },
   ]
 }
 
@@ -102,6 +113,23 @@ export default function LaborDeploymentTab({
   const inHouseWage = settings.laborWages?.defaultInHouseWage ?? 0
   const outsideWage = settings.laborWages?.defaultOutsideWage ?? 0
 
+  // Most recent cost-per-worker for each labour group name, so a group carries its own rate
+  // forward instead of everyone inheriting the tenant default. deployments is newest-first,
+  // so the first rate seen for a name is the last one used. Zero rates are skipped — they
+  // mean "not recorded", and treating them as the remembered value would wipe a real rate.
+  const lastWageByLabel = useMemo(() => {
+    const wages = new Map<string, number>()
+    for (const deployment of deployments) {
+      for (const entry of (deployment as any).laborEntries ?? []) {
+        const key = setLabelKey(normalizeSetLabel(String(entry?.name ?? "")))
+        const wage = Number(entry?.costPerLabor) || 0
+        if (!key || wage <= 0 || wages.has(key)) continue
+        wages.set(key, wage)
+      }
+    }
+    return wages
+  }, [deployments])
+
   const [isAdding, setIsAdding] = useState(false)
   const [prefilled, setPrefilled] = useState(false)
   const [editingId, setEditingId] = useState<string | null>(null)
@@ -120,7 +148,7 @@ export default function LaborDeploymentTab({
     date: todayIso(),
     code: "",
     reference: "",
-    laborSets: makeDefaultSets(inHouseWage, outsideWage),
+    laborSets: makeDefaultSets(inHouseWage, outsideWage, lastWageByLabel),
     notes: "",
     taskDescription: "",
   })
@@ -223,7 +251,7 @@ export default function LaborDeploymentTab({
     const last = deployments[0]
     if (last && last.laborEntries?.length > 0) {
       const sets: LaborSet[] = last.laborEntries.map((e: any) => ({
-        label: e.name === "Estate Labour" ? "In-house" : e.name === "Outside Labour" ? "Outside" : e.name,
+        label: normalizeSetLabel(e.name),
         laborers: Number(e.laborCount) || 0,
         costPerLaborer: Number(e.costPerLabor) || 0,
       }))
@@ -241,21 +269,21 @@ export default function LaborDeploymentTab({
         date: todayIso(),
         code: "",
         reference: "",
-        laborSets: makeDefaultSets(inHouseWage, outsideWage),
+        laborSets: makeDefaultSets(inHouseWage, outsideWage, lastWageByLabel),
         notes: "",
         taskDescription: "",
       })
       setPrefilled(false)
     }
     setIsAdding(true)
-  }, [deployments, inHouseWage, outsideWage, loadDraft, toast])
+  }, [deployments, inHouseWage, outsideWage, lastWageByLabel, loadDraft, toast])
 
   const resetForm = () => {
     setFormData({
       date: todayIso(),
       code: "",
       reference: "",
-      laborSets: makeDefaultSets(inHouseWage, outsideWage),
+      laborSets: makeDefaultSets(inHouseWage, outsideWage, lastWageByLabel),
       notes: "",
       taskDescription: "",
     })
@@ -267,7 +295,18 @@ export default function LaborDeploymentTab({
 
   const updateSet = (index: number, field: keyof LaborSet, value: string | number) => {
     setFormData((prev) => {
-      const sets = prev.laborSets.map((s, i) => (i === index ? { ...s, [field]: value } : s))
+      const sets = prev.laborSets.map((s, i) => {
+        if (i !== index) return s
+        const next = { ...s, [field]: value }
+        // Naming a group something we've paid before (e.g. "Migrant Labour") loads that
+        // group's own last rate, replacing the tenant default or the rate a new group
+        // inherited from the row above it. Editing the rate afterwards still wins.
+        if (field === "label") {
+          const remembered = lastWageByLabel.get(setLabelKey(String(value)))
+          if (remembered) next.costPerLaborer = remembered
+        }
+        return next
+      })
       return { ...prev, laborSets: sets }
     })
   }
@@ -378,12 +417,12 @@ export default function LaborDeploymentTab({
     trackClick("labor_edit", { id: deployment.id })
     setActiveSection("form")
     const sets: LaborSet[] = (deployment.laborEntries || []).map((e: any) => ({
-      label: e.name === "Estate Labour" ? "In-house" : e.name === "Outside Labour" ? "Outside" : e.name,
+      label: normalizeSetLabel(e.name),
       laborers: Number(e.laborCount) || 0,
       costPerLaborer: Number(e.costPerLabor) || 0,
     }))
     if (sets.length === 0) {
-      sets.push(...makeDefaultSets(inHouseWage, outsideWage))
+      sets.push(...makeDefaultSets(inHouseWage, outsideWage, lastWageByLabel))
     }
     setFormData({
       date: deployment.date.split("T")[0],
@@ -562,7 +601,7 @@ export default function LaborDeploymentTab({
                   <button
                     type="button"
                     onClick={() => {
-                      setFormData((prev) => ({ ...prev, code: "", reference: "", laborSets: makeDefaultSets(inHouseWage, outsideWage), taskDescription: "" }))
+                      setFormData((prev) => ({ ...prev, code: "", reference: "", laborSets: makeDefaultSets(inHouseWage, outsideWage, lastWageByLabel), taskDescription: "" }))
                       setPrefilled(false)
                     }}
                     className="ml-3 text-blue-600 underline text-xs hover:text-blue-800"
@@ -658,7 +697,7 @@ export default function LaborDeploymentTab({
                     <span className="mt-0.5 shrink-0 text-base leading-none">⚠️</span>
                     <span>
                       <strong>{formData.code} — {formData.reference}</strong> is an expense code (materials, utilities, capital).
-                      If this is not a wages payment, use the <strong>Other Expenses tab</strong> instead.
+                      If this is not a wages payment, use the <strong>Non-Labour Expenses tab</strong> instead.
                     </span>
                   </div>
                 )}
@@ -985,7 +1024,7 @@ export default function LaborDeploymentTab({
                           Number(entry.laborCount) > 0 ? (
                             <div key={i} className="flex justify-between text-sm">
                               <span className="font-semibold text-stone-600">
-                                {entry.name === "Estate Labour" ? "In-house" : entry.name === "Outside Labour" ? "Outside" : entry.name}
+                                {normalizeSetLabel(entry.name)}
                               </span>
                               <span className="text-stone-800 font-medium">
                                 {formatLaborCount(Number(entry.laborCount))} × {formatCurrency(entry.costPerLabor)}
@@ -1049,7 +1088,7 @@ export default function LaborDeploymentTab({
                             Number(entry.laborCount) > 0 ? (
                               <div key={i} className="text-sm">
                                 <span className="text-muted-foreground text-xs">
-                                  {entry.name === "Estate Labour" ? "In-house" : entry.name === "Outside Labour" ? "Outside" : entry.name}:
+                                  {normalizeSetLabel(entry.name)}:
                                 </span>{" "}
                                 {formatLaborCount(Number(entry.laborCount))} @ {formatCurrency(entry.costPerLabor)}
                               </div>

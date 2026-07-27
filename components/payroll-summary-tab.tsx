@@ -2,7 +2,7 @@
 
 import { useState, useCallback } from "react"
 import { todayIso } from "@/lib/date-utils"
-import { Download, FileSpreadsheet, Loader2, DollarSign, AlertTriangle } from "lucide-react"
+import { Download, FileSpreadsheet, Loader2, IndianRupee, AlertTriangle } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -128,7 +128,7 @@ export default function PayrollSummaryTab() {
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2 text-base">
-            <DollarSign className="h-4 w-4 text-emerald-400" />
+            <IndianRupee className="h-4 w-4 text-emerald-400" />
             Payroll Summary
           </CardTitle>
           <CardDescription>

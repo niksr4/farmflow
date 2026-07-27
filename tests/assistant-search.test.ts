@@ -11,9 +11,9 @@ describe("assistant search shortcuts", () => {
     })
 
     expect(actions[0]).toEqual({
-      label: "Open Other Expenses",
+      label: "Open Non-Labour Expenses",
       href: "/dashboard?tab=accounts&panel=expenses",
-      description: "Log fertilizer, maintenance, diesel, or other account expenses.",
+      description: "Log fertilizer, maintenance, diesel, or other non-labour account expenses.",
     })
   })
 

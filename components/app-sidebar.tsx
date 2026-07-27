@@ -15,7 +15,7 @@ const TAB_SUB_SECTIONS: Record<string, SubItem[]> = {
   accounts: [
     { emoji: "📊", label: "Dashboard", accountsPanel: "labour" },
     { emoji: "👷", label: "Labour", accountsPanel: "labour" },
-    { emoji: "💸", label: "Expenses", accountsPanel: "expenses" },
+    { emoji: "💸", label: "Non-Labour Expenses", accountsPanel: "expenses" },
     { emoji: "🏷️", label: "Codes", accountsPanel: "activities" },
     { emoji: "📤", label: "Export", accountsPanel: "expenses" },
   ],

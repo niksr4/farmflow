@@ -80,7 +80,7 @@ export function buildDashboardTabItems(input: DashboardTabItemsInput): {
           value: "accounts",
           label: "Accounts",
           icon: Users,
-          subtabs: ["Daily Labour", "Expenses", "Cost Codes"],
+          subtabs: ["Daily Labour", "Non-Labour Expenses", "Cost Codes"],
         }
       : null,
     input.canShowProcessingWorkspace

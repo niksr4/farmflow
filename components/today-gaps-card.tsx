@@ -238,7 +238,7 @@ export default function TodayGapsCard({ onNavigate, className }: Props) {
           >
             <div className="flex items-center gap-1.5 mb-2">
               <span className="text-sm leading-none">💸</span>
-              <p className="text-[10px] font-bold uppercase tracking-wide text-stone-500">Expenses</p>
+              <p className="text-[10px] font-bold uppercase tracking-wide text-stone-500">Non-Labour</p>
             </div>
             <p className="text-base font-black text-stone-900 tabular-nums leading-none">
               {formatCurrency(stats.expenseCost)}

@@ -15,7 +15,7 @@ type Props = {
 
 const TYPE_META: Record<SearchResultItem["type"], { label: string; icon: React.ComponentType<{ className?: string }> }> = {
   inventory: { label: "Inventory", icon: Package },
-  expense:   { label: "Expenses",  icon: ReceiptText },
+  expense:   { label: "Non-Labour Expenses",  icon: ReceiptText },
   labor:      { label: "Labour",    icon: Users },
 }
 

@@ -218,7 +218,7 @@ export default function DailyPulseCard({ onNavigate, className }: DailyPulseCard
               )}>
                 <IndianRupee className="h-3 w-3 text-amber-700" />
               </div>
-              <span className="text-[10px] uppercase tracking-[0.14em] text-stone-400 font-semibold">Expenses</span>
+              <span className="text-[10px] uppercase tracking-[0.14em] text-stone-400 font-semibold">Non-Labour</span>
             </div>
             {summary.loading ? (
               <div className="h-4 w-16 rounded bg-stone-100 animate-pulse" />

@@ -33,8 +33,8 @@ const ASSISTANT_SHORTCUTS: AssistantShortcut[] = [
   },
   {
     id: "expenses",
-    label: "Open Other Expenses",
-    description: "Log fertilizer, maintenance, diesel, or other account expenses.",
+    label: "Open Non-Labour Expenses",
+    description: "Log fertilizer, maintenance, diesel, or other non-labour account expenses.",
     action: { tab: "accounts", panel: "expenses" },
     keywords: ["expense", "expenses", "spend", "spending", "fertilizer", "fertiliser", "diesel", "petrol", "maintenance"],
     requiresOneOf: ["accounts"],

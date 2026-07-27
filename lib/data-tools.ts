@@ -132,8 +132,8 @@ export const IMPORT_DATASETS: ImportDatasetConfig[] = [
   },
   {
     id: "expenses",
-    label: "Other Expenses",
-    description: "Import expense entries.",
+    label: "Non-Labour Expenses",
+    description: "Import non-labour expense entries.",
     template: ["entry_date", "location", "code", "total_amount", "notes"],
     tips: "Use the account activity code for `code`.",
   },
@@ -197,8 +197,8 @@ export const EXPORT_DATASETS: ExportDatasetConfig[] = [
   },
   {
     id: "expenses",
-    label: "Expenses",
-    description: "Expense ledger entries by code and date.",
+    label: "Non-Labour Expenses",
+    description: "Non-labour expense ledger entries by code and date.",
   },
 ]
 

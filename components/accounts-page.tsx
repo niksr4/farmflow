@@ -712,7 +712,7 @@ export default function AccountsPage({
       const contractSummaryRow = ["", "", "", "Total Contract Labour", "Lump-sum (no per-worker breakdown)", "", totalContractLaborCost.toFixed(2), "", ""]
       csvContent += "\n" + contractSummaryRow.map(escapeCsvField).join(",")
     }
-    const consumablesSummaryRow = ["", "", "", "Total Other Expenses", "", "", totalConsumablesCost.toFixed(2), "", ""]
+    const consumablesSummaryRow = ["", "", "", "Total Non-Labour Expenses", "", "", totalConsumablesCost.toFixed(2), "", ""]
     csvContent += "\n" + consumablesSummaryRow.map(escapeCsvField).join(",")
     const totalRow = ["", "", "", "GRAND TOTAL", "", "", grandTotalForExport.toFixed(2), "", ""]
     csvContent += "\n" + totalRow.map(escapeCsvField).join(",")
@@ -1057,7 +1057,7 @@ export default function AccountsPage({
     if (isWriterRole(user?.role)) {
       const writerItems: Array<{ value: AccountsView; label: string; icon: React.ComponentType<{ className?: string }> }> = [
         { value: "labour", label: "Labour", icon: Users },
-        { value: "expenses", label: "Expenses", icon: Receipt },
+        { value: "expenses", label: "Non-Labour Expenses", icon: Receipt },
       ]
       if (!PICKING_TAB_DISABLED && (showPickingLog || showLaborManagement)) writerItems.push({ value: "picking", label: "Picking", icon: Wheat })
       return writerItems
@@ -1065,7 +1065,7 @@ export default function AccountsPage({
     const items: Array<{ value: AccountsView; label: string; icon: React.ComponentType<{ className?: string }> }> = [
       { value: "dashboard", label: "Summary", icon: BarChart2 },
       { value: "labour", label: "Labour", icon: Users },
-      { value: "expenses", label: "Expenses", icon: Receipt },
+      { value: "expenses", label: "Non-Labour Expenses", icon: Receipt },
       { value: "activities", label: "Codes", icon: Settings },
     ]
     if (!PICKING_TAB_DISABLED && (showPickingLog || showLaborManagement)) items.push({ value: "picking", label: "Picking", icon: Wheat })
@@ -1093,10 +1093,16 @@ export default function AccountsPage({
       tooltip: "Total wages, advances, and labour costs recorded for the selected fiscal year and active filters.",
     },
     {
-      label: "Expenses",
+      label: "Non-Labour Expenses",
       value: summaryLoading ? "Loading..." : formatCurrency(filteredOtherExpensesTotal),
       detail: `${formatNumber(consumablesCount || consumableDeployments.length, 0)} expense records in range`,
       tooltip: "Non-labour operational expenses: consumables, equipment, repairs, and other coded activities.",
+    },
+    {
+      label: "Total",
+      value: summaryLoading ? "Loading..." : formatCurrency(filteredGrandTotal),
+      detail: "Labour + non-labour expenses",
+      tooltip: "Combined labour and non-labour spend for the selected fiscal year and active filters.",
     },
     {
       label: "Account Codes",
@@ -1140,7 +1146,7 @@ export default function AccountsPage({
   const primaryNavItems: NavItem[] = [
     { value: "dashboard", label: "Dashboard", icon: BarChart2 },
     { value: "labour", label: "Labour", icon: Users },
-    { value: "expenses", label: "Expenses", icon: Receipt },
+    { value: "expenses", label: "Non-Labour Expenses", icon: Receipt },
     { value: "activities", label: "Activity Codes", icon: Settings },
     ...(isAdminOrOwner ? [{ value: "export" as AccountsView, label: "Export", icon: FileSpreadsheet }] : []),
   ]
@@ -1931,7 +1937,7 @@ export default function AccountsPage({
               <div>
                 <CardTitle>Accounts Export</CardTitle>
                 <CardDescription className="mt-1">
-                  Export labour and other expenses. Uses the fiscal year selected above, or set a custom date range.
+                  Export labour and non-labour expenses. Uses the fiscal year selected above, or set a custom date range.
                 </CardDescription>
               </div>
               <div className="text-right flex-shrink-0 pl-4">
@@ -1943,7 +1949,7 @@ export default function AccountsPage({
                     <p className="text-2xl font-bold">{formatCurrency(filteredGrandTotal)}</p>
                     <div className="text-xs text-muted-foreground space-y-0.5">
                       <div>Labour: {formatCurrency(filteredLaborTotal)}</div>
-                      <div>Other: {formatCurrency(filteredOtherExpensesTotal)}</div>
+                      <div>Non-Labour: {formatCurrency(filteredOtherExpensesTotal)}</div>
                     </div>
                   </div>
                 )}

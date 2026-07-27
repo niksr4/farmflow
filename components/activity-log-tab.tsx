@@ -32,14 +32,14 @@ const PAGE_SIZE = 50
 
 const SOURCE_LABELS: Record<string, string> = {
   labour: "Labour",
-  expense: "Expenses",
+  expense: "Non-Labour Expenses",
   inventory: "Inventory",
 }
 
 const SOURCE_OPTIONS: Array<{ value: string; label: string }> = [
   { value: "all", label: "All modules" },
   { value: "labour", label: "Labour" },
-  { value: "expense", label: "Expenses" },
+  { value: "expense", label: "Non-Labour Expenses" },
   { value: "inventory", label: "Inventory" },
 ]
 

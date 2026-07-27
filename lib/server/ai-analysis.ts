@@ -540,7 +540,7 @@ function buildDataSummary(data: DataSummaryInput): string {
   }
 
   if (data.expenseData && data.expenseData.length > 0) {
-    sections.push("\n## Other Expenses Summary")
+    sections.push("\n## Non-Labour Expenses Summary")
     const totalExpenses = data.expenseData.reduce((sum, expense) => sum + (Number(expense.total_amount) || 0), 0)
     const byActivity: Record<string, number> = {}
     data.expenseData.forEach((expense) => {
