@@ -21,6 +21,9 @@ import { useAuth } from "@/hooks/use-auth"
 import { useTenantSettings } from "@/hooks/use-tenant-settings"
 import { buildXlsxArrayBufferFromCsv, XLSX_MIME_TYPE } from "@/lib/spreadsheet"
 import TaskGuideCard from "@/components/task-guide-card"
+import { formatLocationLabel } from "@/lib/location-label"
+import FilterBar from "@/components/filter-bar"
+import { useListControls } from "@/hooks/use-list-controls"
 
 interface LocationOption {
   id: string
@@ -77,6 +80,17 @@ export function RubberTab() {
   const [drcPct, setDrcPct] = useState("")
   const [notes, setNotes] = useState("")
   const [recentRecords, setRecentRecords] = useState<RubberRecord[]>([])
+  const recordControls = useListControls(recentRecords, {
+    searchFields: (r) => [r.location_name, r.location_code, r.record_date, r.sheet_grade, r.notes],
+    sorters: {
+      date: (r) => String(r.record_date || "").slice(0, 10),
+      latex: (r) => Number(r.latex_kg) || 0,
+      sheets: (r) => Number(r.sheets_kg) || 0,
+      grade: (r) => String(r.sheet_grade || ""),
+      location: (r) => String(r.location_name || r.location_code || ""),
+    },
+    defaultSort: "date",
+  })
   const [selectedRecord, setSelectedRecord] = useState<RubberRecord | null>(null)
   const [loading, setLoading] = useState(false)
   const [saving, setSaving] = useState(false)
@@ -449,7 +463,7 @@ export function RubberTab() {
                   <SelectItem value={LOCATION_UNASSIGNED}>{UNASSIGNED_LABEL}</SelectItem>
                   {locations.map((loc) => (
                     <SelectItem key={loc.id} value={loc.id}>
-                      {loc.name || loc.code}
+                      {formatLocationLabel(loc, locations)}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -623,6 +637,23 @@ export function RubberTab() {
             </div>
           </div>
           <CardDescription>Click a row to edit that record</CardDescription>
+          <FilterBar
+            className="mt-3"
+            search={recordControls.search}
+            onSearchChange={recordControls.setSearch}
+            searchPlaceholder="Search location, grade, notes…"
+            sortOptions={[
+              { value: "date", label: "Date" },
+              { value: "latex", label: "Latex (kg)" },
+              { value: "sheets", label: "Sheets (kg)" },
+              { value: "grade", label: "Grade" },
+              { value: "location", label: "Location" },
+            ]}
+            sortValue={recordControls.sortValue}
+            onSortChange={recordControls.setSortValue}
+            sortDirection={recordControls.sortDirection}
+            onSortDirectionChange={recordControls.setSortDirection}
+          />
         </CardHeader>
         <CardContent>
           {selectedRecord && (
@@ -677,6 +708,8 @@ export function RubberTab() {
               <p>No rubber records yet</p>
               <p className="text-sm mt-2">Log the first tapping to start tracking latex and sheet production.</p>
             </div>
+          ) : recordControls.isFiltering && recordControls.items.length === 0 ? (
+            <p className="py-8 text-center text-sm text-muted-foreground">No records match your search.</p>
           ) : (
             <div className="rounded-md border overflow-x-auto">
               <Table>
@@ -694,7 +727,7 @@ export function RubberTab() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {recentRecords.map((record, index) => (
+                  {recordControls.items.map((record, index) => (
                     <TableRow
                       key={record.id}
                       className={cn(

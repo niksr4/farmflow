@@ -18,6 +18,8 @@ import { useLocale } from "@/components/locale-provider"
 import { useMediaQuery } from "@/hooks/use-media-query"
 import { formatDateOnly } from "@/lib/date-utils"
 import { formatNumber } from "@/lib/format"
+import FilterBar from "@/components/filter-bar"
+import { useListControls } from "@/hooks/use-list-controls"
 import { Minus, Plus } from "lucide-react"
 
 type RainfallRecord = {
@@ -98,6 +100,14 @@ export default function RainfallTab({ username, showDataToolsControls = false }:
   const isMobile = useMediaQuery("(max-width: 768px)")
   const [showAnalysis, setShowAnalysis] = useState(false)
   const [records, setRecords] = useState<RainfallRecord[]>([])
+  const recordControls = useListControls(records, {
+    searchFields: (r) => [r.record_date, r.notes, r.user_id],
+    sorters: {
+      date: (r) => String(r.record_date || "").slice(0, 10),
+      amount: (r) => (Number(r.inches) || 0) + (Number(r.cents) || 0) / 100,
+    },
+    defaultSort: "date",
+  })
   const [selectedDate, setSelectedDate] = useState<Date>(new Date())
   const [calendarMonth, setCalendarMonth] = useState<Date>(new Date())
   const [inches, setInches] = useState("")
@@ -1408,11 +1418,29 @@ export default function RainfallTab({ username, showDataToolsControls = false }:
           </div>
         </div>
         <div className="p-5">
+          {records.length > 0 && (
+            <FilterBar
+              className="mb-4"
+              search={recordControls.search}
+              onSearchChange={recordControls.setSearch}
+              searchPlaceholder="Search date or notes…"
+              sortOptions={[
+                { value: "date", label: "Date" },
+                { value: "amount", label: "Rainfall" },
+              ]}
+              sortValue={recordControls.sortValue}
+              onSortChange={recordControls.setSortValue}
+              sortDirection={recordControls.sortDirection}
+              onSortDirectionChange={recordControls.setSortDirection}
+            />
+          )}
           <div className="space-y-2">
             {records.length === 0 ? (
               <p className="py-8 text-center text-stone-400 dark:text-stone-500">No records yet</p>
+            ) : recordControls.isFiltering && recordControls.items.length === 0 ? (
+              <p className="py-8 text-center text-stone-400 dark:text-stone-500">No records match your search.</p>
             ) : (
-              records.map((record) => (
+              recordControls.items.map((record) => (
                 <div key={record.id} className="flex items-center justify-between rounded-lg border border-stone-200 bg-stone-50 px-4 py-3 dark:border-white/[0.05] dark:bg-white/[0.02]">
                   <div className="flex-1">
                     <div className="text-sm font-semibold text-stone-900 dark:text-white">{formatDateOnly(record.record_date)}</div>

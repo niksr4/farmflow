@@ -14,6 +14,9 @@ import { formatCurrency, formatNumber } from "@/lib/format"
 import { formatDateOnly, todayIso } from "@/lib/date-utils"
 import { canAcceptNonNegative, isBlockedNumericKey } from "@/lib/number-input"
 import { Pencil, Save, Trash2 } from "lucide-react"
+import { formatLocationLabel } from "@/lib/location-label"
+import FilterBar from "@/components/filter-bar"
+import { useListControls } from "@/hooks/use-list-controls"
 
 type LocationOption = {
   id: string
@@ -95,6 +98,17 @@ export default function OtherSalesTab({
 
   const [locations, setLocations] = useState<LocationOption[]>([])
   const [records, setRecords] = useState<OtherSalesRecord[]>([])
+  const recordControls = useListControls(records, {
+    searchFields: (r) => [r.sale_date, r.asset_type, r.buyer_name, r.bank_account, r.notes, r.location_name, r.location_code],
+    sorters: {
+      date: (r) => String(r.sale_date || "").slice(0, 10),
+      revenue: (r) => Number(r.revenue) || 0,
+      kgs: (r) => Number(r.kgs_sold) || 0,
+      asset: (r) => String(r.asset_type || ""),
+      buyer: (r) => String(r.buyer_name || ""),
+    },
+    defaultSort: "date",
+  })
   const [totals, setTotals] = useState<Totals>(emptyTotals)
   const [byAsset, setByAsset] = useState<AssetSummary[]>([])
   const [isLoading, setIsLoading] = useState(false)
@@ -411,7 +425,7 @@ export default function OtherSalesTab({
               <SelectContent>
                 {locations.map((location) => (
                   <SelectItem key={location.id} value={location.id}>
-                    {location.name || location.code || "Location"}
+                    {formatLocationLabel(location, locations, "Location")}
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -565,7 +579,7 @@ export default function OtherSalesTab({
                 <SelectItem value="all">All estates</SelectItem>
                 {locations.map((location) => (
                   <SelectItem key={location.id} value={location.id}>
-                    {location.name || location.code || "Estate"}
+                    {formatLocationLabel(location, locations, "Estate")}
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -573,6 +587,22 @@ export default function OtherSalesTab({
           </div>
         </CardHeader>
         <CardContent className="space-y-4">
+          <FilterBar
+            search={recordControls.search}
+            onSearchChange={recordControls.setSearch}
+            searchPlaceholder="Search asset, buyer, notes…"
+            sortOptions={[
+              { value: "date", label: "Date" },
+              { value: "revenue", label: "Revenue" },
+              { value: "kgs", label: "KGs Sold" },
+              { value: "asset", label: "Asset" },
+              { value: "buyer", label: "Buyer" },
+            ]}
+            sortValue={recordControls.sortValue}
+            onSortChange={recordControls.setSortValue}
+            sortDirection={recordControls.sortDirection}
+            onSortDirectionChange={recordControls.setSortDirection}
+          />
           <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-5">
             {byAsset.map((asset) => (
               <div key={asset.assetType} className="rounded-lg border border-border/70 bg-muted/20 p-3">
@@ -604,14 +634,14 @@ export default function OtherSalesTab({
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {records.length === 0 ? (
+                {recordControls.items.length === 0 ? (
                   <TableRow>
                     <TableCell colSpan={12} className="text-center text-sm text-muted-foreground">
-                      No records yet.
+                      {records.length === 0 ? "No records yet." : "No records match your search."}
                     </TableCell>
                   </TableRow>
                 ) : (
-                  records.map((record) => (
+                  recordControls.items.map((record) => (
                     <TableRow key={record.id}>
                       <TableCell>{formatDateOnly(record.sale_date)}</TableCell>
                       <TableCell>{resolveLocationLabel(record)}</TableCell>

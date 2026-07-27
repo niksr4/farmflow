@@ -12,6 +12,8 @@ import { Skeleton } from "@/components/ui/skeleton"
 import { Dialog, DialogContent, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
 import { ShieldCheck, ClipboardList, Plus, CheckCircle2, Clock, AlertCircle, XCircle } from "lucide-react"
 import { formatDateOnly } from "@/lib/date-utils"
+import FilterBar from "@/components/filter-bar"
+import { useListControls } from "@/hooks/use-list-controls"
 
 interface Certification {
   id: string
@@ -63,7 +65,28 @@ const CHECKLIST_STATUS_CONFIG: Record<string, { label: string; cls: string }> = 
 
 export default function ComplianceTab() {
   const [certifications, setCertifications] = useState<Certification[]>([])
+  const certControls = useListControls(certifications, {
+    searchFields: (c) => [c.name, c.certification_type, c.issuing_body, c.certificate_number, c.status, c.notes],
+    sorters: {
+      valid_until: (c) => String(c.valid_until || ""),
+      name: (c) => String(c.name || ""),
+      type: (c) => String(c.certification_type || ""),
+      status: (c) => String(c.status || ""),
+    },
+    defaultSort: "valid_until",
+    defaultDirection: "asc",
+  })
   const [checklistItems, setChecklistItems] = useState<ChecklistItem[]>([])
+  const checklistControls = useListControls(checklistItems, {
+    searchFields: (i) => [i.title, i.description, i.certification_name, i.status, i.completed_by, i.notes],
+    sorters: {
+      due_date: (i) => String(i.due_date || ""),
+      title: (i) => String(i.title || ""),
+      status: (i) => String(i.status || ""),
+    },
+    defaultSort: "due_date",
+    defaultDirection: "asc",
+  })
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
@@ -379,13 +402,33 @@ export default function ComplianceTab() {
           </Dialog>
         </CardHeader>
         <CardContent>
+          {certifications.length > 0 && (
+            <FilterBar
+              className="mb-4"
+              search={certControls.search}
+              onSearchChange={certControls.setSearch}
+              searchPlaceholder="Search name, body, certificate no…"
+              sortOptions={[
+                { value: "valid_until", label: "Expiry" },
+                { value: "name", label: "Name" },
+                { value: "type", label: "Type" },
+                { value: "status", label: "Status" },
+              ]}
+              sortValue={certControls.sortValue}
+              onSortChange={certControls.setSortValue}
+              sortDirection={certControls.sortDirection}
+              onSortDirectionChange={certControls.setSortDirection}
+            />
+          )}
           {certifications.length === 0 ? (
             <p className="py-6 text-center text-sm text-muted-foreground">
               No certifications recorded. Add Rainforest Alliance, organic, or other certifications.
             </p>
+          ) : certControls.isFiltering && certControls.items.length === 0 ? (
+            <p className="py-6 text-center text-sm text-muted-foreground">No certifications match your search.</p>
           ) : (
             <div className="divide-y divide-border/60">
-              {certifications.map((cert) => {
+              {certControls.items.map((cert) => {
                 const statusCfg = STATUS_CONFIG[cert.status] ?? STATUS_CONFIG.pending
                 const StatusIcon = statusCfg.icon
                 return (
@@ -492,13 +535,32 @@ export default function ComplianceTab() {
           </Dialog>
         </CardHeader>
         <CardContent>
+          {checklistItems.length > 0 && (
+            <FilterBar
+              className="mb-4"
+              search={checklistControls.search}
+              onSearchChange={checklistControls.setSearch}
+              searchPlaceholder="Search task, certification, notes…"
+              sortOptions={[
+                { value: "due_date", label: "Due Date" },
+                { value: "title", label: "Task" },
+                { value: "status", label: "Status" },
+              ]}
+              sortValue={checklistControls.sortValue}
+              onSortChange={checklistControls.setSortValue}
+              sortDirection={checklistControls.sortDirection}
+              onSortDirectionChange={checklistControls.setSortDirection}
+            />
+          )}
           {checklistItems.length === 0 ? (
             <p className="py-6 text-center text-sm text-muted-foreground">
               No compliance tasks yet. Add audit requirements, reporting deadlines, or renewal reminders.
             </p>
+          ) : checklistControls.isFiltering && checklistControls.items.length === 0 ? (
+            <p className="py-6 text-center text-sm text-muted-foreground">No tasks match your search.</p>
           ) : (
             <div className="divide-y divide-border/60">
-              {checklistItems.map((item) => {
+              {checklistControls.items.map((item) => {
                 const statusCfg = CHECKLIST_STATUS_CONFIG[item.status] ?? CHECKLIST_STATUS_CONFIG.pending
                 return (
                   <div key={item.id} className="flex items-start justify-between gap-3 py-3">

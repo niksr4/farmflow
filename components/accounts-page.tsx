@@ -46,6 +46,8 @@ import {
 import posthog from "posthog-js"
 import { useMediaQuery } from "@/hooks/use-media-query"
 import { useTenantSettings } from "@/hooks/use-tenant-settings"
+import FilterBar from "@/components/filter-bar"
+import { useListControls } from "@/hooks/use-list-controls"
 
 interface AccountActivity {
   code: string
@@ -160,6 +162,17 @@ export default function AccountsPage({
   const [customExportStartDate, setCustomExportStartDate] = useState<string>("")
   const [customExportEndDate, setCustomExportEndDate] = useState<string>("")
   const [accountActivities, setAccountActivities] = useState<AccountActivity[]>([])
+  // 80 codes are seeded per tenant, so this list needs narrowing to be workable.
+  const activityControls = useListControls(accountActivities, {
+    searchFields: (a) => [a.code, a.reference],
+    sorters: {
+      code: (a) => String(a.code || ""),
+      reference: (a) => String(a.reference || ""),
+      usage: (a) => (Number(a.labor_count) || 0) + (Number(a.expense_count) || 0),
+    },
+    defaultSort: "code",
+    defaultDirection: "asc",
+  })
   const [activities, setActivities] = useState<Activity[]>([])
   const [activitySuggestions, setActivitySuggestions] = useState<ActivitySuggestion[]>([])
   const [loadingActivities, setLoadingActivities] = useState(false)
@@ -1266,13 +1279,32 @@ export default function AccountsPage({
                   </div>
                 </form>
               )}
+              {accountActivities.length > 0 && (
+                <FilterBar
+                  className="mb-4"
+                  search={activityControls.search}
+                  onSearchChange={activityControls.setSearch}
+                  searchPlaceholder="Search code or reference…"
+                  sortOptions={[
+                    { value: "code", label: "Code" },
+                    { value: "reference", label: "Reference" },
+                    { value: "usage", label: "Usage" },
+                  ]}
+                  sortValue={activityControls.sortValue}
+                  onSortChange={activityControls.setSortValue}
+                  sortDirection={activityControls.sortDirection}
+                  onSortDirectionChange={activityControls.setSortDirection}
+                />
+              )}
               {loadingActivities ? (
                 <div className="space-y-2">
                   {[1, 2, 3].map((i) => <div key={i} className="h-14 rounded-2xl bg-stone-100 animate-pulse" />)}
                 </div>
+              ) : activityControls.isFiltering && activityControls.items.length === 0 ? (
+                <p className="py-8 text-center text-sm text-stone-400">No activity codes match your search.</p>
               ) : (
                 <div className="rounded-2xl bg-white shadow-sm divide-y divide-stone-50 overflow-hidden">
-                  {accountActivities.map((activity) => {
+                  {activityControls.items.map((activity) => {
                     const usageCount = (activity.labor_count || 0) + (activity.expense_count || 0)
                     return (
                       <div key={activity.code} className="flex items-center justify-between px-4 py-3.5">
@@ -1717,8 +1749,27 @@ export default function AccountsPage({
                 </div>
               )}
 
+              {accountActivities.length > 0 && (
+                <FilterBar
+                  className="mb-4"
+                  search={activityControls.search}
+                  onSearchChange={activityControls.setSearch}
+                  searchPlaceholder="Search code or reference…"
+                  sortOptions={[
+                    { value: "code", label: "Code" },
+                    { value: "reference", label: "Reference" },
+                    { value: "usage", label: "Usage" },
+                  ]}
+                  sortValue={activityControls.sortValue}
+                  onSortChange={activityControls.setSortValue}
+                  sortDirection={activityControls.sortDirection}
+                  onSortDirectionChange={activityControls.setSortDirection}
+                />
+              )}
               {loadingActivities ? (
                 <SkeletonTable rows={4} cols={4} />
+              ) : activityControls.isFiltering && activityControls.items.length === 0 ? (
+                <p className="py-8 text-center text-sm text-muted-foreground">No activity codes match your search.</p>
               ) : accountActivities.length > 0 ? (
                 <>
                   <div className="rounded-md border hidden md:block">
@@ -1732,7 +1783,7 @@ export default function AccountsPage({
                         </TableRow>
                       </TableHeader>
                       <TableBody>
-                        {accountActivities.map((activity) => {
+                        {activityControls.items.map((activity) => {
                           const isEditing = editingActivityCode === activity.code
                           const usageCount = (activity.labor_count || 0) + (activity.expense_count || 0)
                           const canDelete = canManageActivities && usageCount === 0
@@ -1822,7 +1873,7 @@ export default function AccountsPage({
                   </div>
 
                   <div className="space-y-3 md:hidden">
-                    {accountActivities.map((activity) => {
+                    {activityControls.items.map((activity) => {
                       const isEditing = editingActivityCode === activity.code
                       const usageCount = (activity.labor_count || 0) + (activity.expense_count || 0)
                       const canDelete = canManageActivities && usageCount === 0

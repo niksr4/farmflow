@@ -12,6 +12,8 @@ import { Badge } from "@/components/ui/badge"
 import { GST_STATES, computeInvoiceTotals } from "@/lib/billing"
 import { formatDateOnly, todayIso } from "@/lib/date-utils"
 import { formatCurrency } from "@/lib/format"
+import FilterBar from "@/components/filter-bar"
+import { useListControls } from "@/hooks/use-list-controls"
 import { useAuth } from "@/hooks/use-auth"
 import TaskGuideCard from "@/components/task-guide-card"
 import { toast } from "@/components/ui/use-toast"
@@ -67,6 +69,17 @@ export default function BillingTab({ showDataToolsControls = false }: BillingTab
   const canEdit = user?.role === "admin" || user?.role === "owner" || user?.role === "user"
   const [loading, setLoading] = useState(false)
   const [invoices, setInvoices] = useState<InvoiceRow[]>([])
+  const invoiceControls = useListControls(invoices, {
+    searchFields: (r) => [r.invoice_number, r.bill_to_name, r.bill_to_gstin, r.status, r.irn],
+    sorters: {
+      date: (r) => String(r.invoice_date || "").slice(0, 10),
+      number: (r) => String(r.invoice_number || ""),
+      total: (r) => Number(r.total) || 0,
+      customer: (r) => String(r.bill_to_name || ""),
+      status: (r) => String(r.status || ""),
+    },
+    defaultSort: "date",
+  })
   const [billToName, setBillToName] = useState("")
   const [billToGstin, setBillToGstin] = useState("")
   const [billToAddress, setBillToAddress] = useState("")
@@ -435,12 +448,31 @@ export default function BillingTab({ showDataToolsControls = false }: BillingTab
         <CardHeader>
           <CardTitle>Recent invoices</CardTitle>
           <CardDescription>Generated GST invoices for this tenant.</CardDescription>
+          <FilterBar
+            className="mt-3"
+            search={invoiceControls.search}
+            onSearchChange={invoiceControls.setSearch}
+            searchPlaceholder="Search invoice no, customer, GSTIN…"
+            sortOptions={[
+              { value: "date", label: "Date" },
+              { value: "number", label: "Invoice No" },
+              { value: "total", label: "Total" },
+              { value: "customer", label: "Customer" },
+              { value: "status", label: "Status" },
+            ]}
+            sortValue={invoiceControls.sortValue}
+            onSortChange={invoiceControls.setSortValue}
+            sortDirection={invoiceControls.sortDirection}
+            onSortDirectionChange={invoiceControls.setSortDirection}
+          />
         </CardHeader>
         <CardContent className="space-y-3">
           {loading ? (
             <div className="text-sm text-muted-foreground">Loading invoices...</div>
           ) : invoices.length === 0 ? (
             <div className="text-sm text-muted-foreground">No invoices created yet.</div>
+          ) : invoiceControls.isFiltering && invoiceControls.items.length === 0 ? (
+            <div className="text-sm text-muted-foreground">No invoices match your search.</div>
           ) : (
             <div className="rounded-md border">
               <Table>
@@ -455,7 +487,7 @@ export default function BillingTab({ showDataToolsControls = false }: BillingTab
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {invoices.map((invoice) => (
+                  {invoiceControls.items.map((invoice) => (
                     <TableRow key={invoice.id}>
                       <TableCell className="font-medium">{invoice.invoice_number}</TableCell>
                       <TableCell>{formatDateOnly(invoice.invoice_date)}</TableCell>

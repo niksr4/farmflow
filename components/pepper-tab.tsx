@@ -21,6 +21,9 @@ import { useAuth } from "@/hooks/use-auth"
 import { useTenantSettings } from "@/hooks/use-tenant-settings"
 import { buildXlsxArrayBufferFromCsv, XLSX_MIME_TYPE } from "@/lib/spreadsheet"
 import TaskGuideCard from "@/components/task-guide-card"
+import { formatLocationLabel } from "@/lib/location-label"
+import FilterBar from "@/components/filter-bar"
+import { useListControls } from "@/hooks/use-list-controls"
 
 interface LocationOption {
   id: string
@@ -61,6 +64,16 @@ export function PepperTab() {
   const [dryPepper, setDryPepper] = useState("")
   const [notes, setNotes] = useState("")
   const [recentRecords, setRecentRecords] = useState<PepperRecord[]>([])
+  const recordControls = useListControls(recentRecords, {
+    searchFields: (r) => [r.location_name, r.location_code, r.process_date, r.notes],
+    sorters: {
+      date: (r) => String(r.process_date || "").slice(0, 10),
+      picked: (r) => Number(r.kg_picked) || 0,
+      dry: (r) => Number(r.dry_pepper) || 0,
+      location: (r) => String(r.location_name || r.location_code || ""),
+    },
+    defaultSort: "date",
+  })
   const [selectedPepperRecord, setSelectedPepperRecord] = useState<PepperRecord | null>(null)
   const [loading, setLoading] = useState(false)
   const [saving, setSaving] = useState(false)
@@ -491,7 +504,7 @@ export function PepperTab() {
                   <SelectItem value={LOCATION_UNASSIGNED}>{UNASSIGNED_LABEL}</SelectItem>
                   {locations.map((loc) => (
                     <SelectItem key={loc.id} value={loc.id}>
-                      {loc.name || loc.code}
+                      {formatLocationLabel(loc, locations)}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -609,6 +622,22 @@ export function PepperTab() {
             </div>
           </div>
           <CardDescription>Click a row to edit that record</CardDescription>
+          <FilterBar
+            className="mt-3"
+            search={recordControls.search}
+            onSearchChange={recordControls.setSearch}
+            searchPlaceholder="Search location, date, notes…"
+            sortOptions={[
+              { value: "date", label: "Date" },
+              { value: "picked", label: "KG Picked" },
+              { value: "dry", label: "Dry Pepper" },
+              { value: "location", label: "Location" },
+            ]}
+            sortValue={recordControls.sortValue}
+            onSortChange={recordControls.setSortValue}
+            sortDirection={recordControls.sortDirection}
+            onSortDirectionChange={recordControls.setSortDirection}
+          />
         </CardHeader>
         <CardContent>
           {selectedPepperRecord && (
@@ -661,6 +690,8 @@ export function PepperTab() {
               <p>No pepper records yet</p>
               <p className="text-sm mt-2">Log the first picking to start tracking conversions.</p>
             </div>
+          ) : recordControls.isFiltering && recordControls.items.length === 0 ? (
+            <p className="py-8 text-center text-sm text-muted-foreground">No records match your search.</p>
           ) : (
             <div className="rounded-md border overflow-x-auto">
               <Table>
@@ -678,7 +709,7 @@ export function PepperTab() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {recentRecords.map((record, index) => (
+                  {recordControls.items.map((record, index) => (
                     <TableRow
                       key={record.id}
                       className={cn(

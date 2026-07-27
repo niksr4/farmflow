@@ -36,6 +36,7 @@ import { useFiscalYearSelection } from "@/hooks/use-fiscal-year-selection"
 import { FiscalYearSelect } from "@/components/ui/fiscal-year-select"
 import posthog from "posthog-js"
 import { trackClick, reportActionFailure, reportActionError } from "@/lib/track-action"
+import { formatLocationLabel, resolveLocationIdFromLabel as resolveLocationIdFromLabelValue } from "@/lib/location-label"
 
 interface SalesRecord {
   id?: number
@@ -276,18 +277,7 @@ export default function SalesTab({
   }, [selectedLocationId])
 
   const resolveLocationIdFromLabel = useCallback(
-    (label?: string | null) => {
-      const value = String(label || "").trim()
-      if (!value) return ""
-      const normalized = value.toLowerCase()
-      const token = normalized.split(" ")[0] || normalized
-      const match = locations.find((loc) => {
-        const name = String(loc.name || "").toLowerCase()
-        const code = String(loc.code || "").toLowerCase()
-        return name === normalized || code === normalized || name === token || code === token
-      })
-      return match?.id || ""
-    },
+    (label?: string | null) => resolveLocationIdFromLabelValue(label, locations),
     [locations],
   )
 
@@ -1590,7 +1580,7 @@ export default function SalesTab({
                 >
                   <option value="">{locations.length ? "Select location" : "Add a location first"}</option>
                   {locations.map(loc => (
-                    <option key={loc.id} value={loc.id}>{loc.name || loc.code}</option>
+                    <option key={loc.id} value={loc.id}>{formatLocationLabel(loc, locations)}</option>
                   ))}
                 </select>
               ) : (
@@ -1601,7 +1591,7 @@ export default function SalesTab({
                   <SelectContent>
                     {locations.map((loc) => (
                       <SelectItem key={loc.id} value={loc.id}>
-                        {loc.name || loc.code}
+                        {formatLocationLabel(loc, locations)}
                       </SelectItem>
                     ))}
                   </SelectContent>
@@ -1863,7 +1853,7 @@ export default function SalesTab({
                   <SelectItem value={LOCATION_ALL}>All locations</SelectItem>
                   {locations.map((loc) => (
                     <SelectItem key={loc.id} value={loc.id}>
-                      {loc.name || loc.code}
+                      {formatLocationLabel(loc, locations)}
                     </SelectItem>
                   ))}
                 </SelectContent>

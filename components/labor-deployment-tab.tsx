@@ -35,6 +35,7 @@ import { useMediaQuery } from "@/hooks/use-media-query"
 import QuickLogPanel from "@/components/quick-log-panel"
 import { trackClick, reportActionFailure, reportActionError } from "@/lib/track-action"
 import { deleteWithUndo } from "@/lib/undo-delete"
+import { formatLocationLabel } from "@/lib/location-label"
 
 
 interface ActivityCode {
@@ -638,7 +639,7 @@ export default function LaborDeploymentTab({
                       <SelectContent>
                         {locations.map((loc) => (
                           <SelectItem key={loc.id} value={loc.id}>
-                            {loc.name || loc.code}
+                            {formatLocationLabel(loc, locations)}
                           </SelectItem>
                         ))}
                       </SelectContent>

@@ -21,6 +21,9 @@ import { useToast } from "@/hooks/use-toast"
 import { useAuth } from "@/hooks/use-auth"
 import { canAcceptNonNegative, isBlockedNumericKey } from "@/lib/number-input"
 import { cn } from "@/lib/utils"
+import { formatLocationLabel } from "@/lib/location-label"
+import FilterBar from "@/components/filter-bar"
+import { useListControls } from "@/hooks/use-list-controls"
 
 interface LocationOption {
   id: string
@@ -71,6 +74,17 @@ export default function CuringTab() {
   const [hasExistingRecord, setHasExistingRecord] = useState(false)
 
   const [recentRecords, setRecentRecords] = useState<CuringRecord[]>([])
+  const recordControls = useListControls(recentRecords, {
+    searchFields: (r) => [r.process_date, r.lot_id, r.coffee_type, r.process_type, r.storage_bin, r.notes],
+    sorters: {
+      date: (r) => String(r.process_date || "").slice(0, 10),
+      intake: (r) => Number(r.intake_kg) || 0,
+      output: (r) => Number(r.output_kg) || 0,
+      loss: (r) => Number(r.loss_kg) || 0,
+      lot: (r) => String(r.lot_id || ""),
+    },
+    defaultSort: "date",
+  })
   const [selectedCuringRecord, setSelectedCuringRecord] = useState<CuringRecord | null>(null)
   const [loading, setLoading] = useState(false)
   const [saving, setSaving] = useState(false)
@@ -300,7 +314,7 @@ export default function CuringTab() {
                 <SelectContent>
                   {locations.map((loc) => (
                     <SelectItem key={loc.id} value={loc.id}>
-                      {loc.name || loc.code}
+                      {formatLocationLabel(loc, locations)}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -462,6 +476,23 @@ export default function CuringTab() {
         <CardHeader>
           <CardTitle>Recent Records</CardTitle>
           <CardDescription>Latest curing entries for {selectedLocation?.name || "estate"}</CardDescription>
+          <FilterBar
+            className="mt-3"
+            search={recordControls.search}
+            onSearchChange={recordControls.setSearch}
+            searchPlaceholder="Search lot, coffee type, bin, notes…"
+            sortOptions={[
+              { value: "date", label: "Date" },
+              { value: "intake", label: "Input (KG)" },
+              { value: "output", label: "Output (KG)" },
+              { value: "loss", label: "Loss" },
+              { value: "lot", label: "Lot" },
+            ]}
+            sortValue={recordControls.sortValue}
+            onSortChange={recordControls.setSortValue}
+            sortDirection={recordControls.sortDirection}
+            onSortDirectionChange={recordControls.setSortDirection}
+          />
         </CardHeader>
         <CardContent>
           {selectedCuringRecord && (
@@ -499,6 +530,8 @@ export default function CuringTab() {
               description="Log your first curing batch above to start tracking moisture loss and output yields."
               size="sm"
             />
+          ) : recordControls.isFiltering && recordControls.items.length === 0 ? (
+            <p className="py-8 text-center text-sm text-muted-foreground">No records match your search.</p>
           ) : (
             <div className="overflow-x-auto">
               <Table>
@@ -513,7 +546,7 @@ export default function CuringTab() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {recentRecords.map((record) => (
+                  {recordControls.items.map((record) => (
                     <TableRow
                       key={record.id}
                       className={cn(

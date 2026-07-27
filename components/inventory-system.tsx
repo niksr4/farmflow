@@ -82,6 +82,7 @@ import { type AccountsExportFormat } from "@/lib/accounts-export"
 import { getCurrentFiscalYear } from "@/lib/fiscal-year-utils"
 import { getCurrentEstatePhase } from "@/lib/coffee-estate-calendar"
 import { normalizeInventoryItemType } from "@/lib/inventory-item-type"
+import { isRestockType, projectSlotBalance, requiresRestockUnitPrice } from "@/lib/inventory-edit-rules"
 import { ASSISTANT_PROMPT_EVENT, type AssistantPromptEventDetail } from "@/lib/assistant-events"
 import { getModuleDefaultEnabled } from "@/lib/modules"
 import { appendOwnerPreviewContext, normalizeOwnerPreviewContext } from "@/lib/owner-preview"
@@ -190,6 +191,7 @@ import {
 } from "@/components/inventory-system/onboarding"
 
 import posthog from "posthog-js"
+import { formatLocationLabel } from "@/lib/location-label"
 
 const WRITE_QUEUE_STATUS_EVENT = "farmflow:write-queue-status"
 
@@ -464,6 +466,7 @@ export default function InventorySystem() {
   // transaction creation/editing
   const [newTransaction, setNewTransaction] = useState<Transaction | null>(createDefaultTransaction())
   const [editingTransaction, setEditingTransaction] = useState<Transaction | null>(null)
+  const [editingTransactionOriginal, setEditingTransactionOriginal] = useState<Transaction | null>(null)
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false)
   const [isSavingTransactionEdit, setIsSavingTransactionEdit] = useState(false)
   const [deleteConfirmDialogOpen, setDeleteConfirmDialogOpen] = useState(false)
@@ -1867,7 +1870,7 @@ export default function InventorySystem() {
               )}
               {locations.map((loc) => (
                 <SelectItem key={loc.id} value={loc.id}>
-                  {loc.name || loc.code || "Unnamed location"}
+                  {formatLocationLabel(loc, locations)}
                 </SelectItem>
               ))}
             </SelectContent>
@@ -2307,7 +2310,46 @@ export default function InventorySystem() {
     const safe = ensureTransactionSafety(transaction)
     const normalizedType = String(safe.transaction_type || "").toLowerCase().includes("restock") ? "restock" : "deplete"
     setEditingTransaction({ ...safe, transaction_type: normalizedType })
+    // Kept so the save can tell an edit *to* a legacy ₹0 restock from one that newly
+    // creates a zero-priced one, and can spot a restock -> deplete flip.
+    setEditingTransactionOriginal({ ...safe, transaction_type: normalizedType })
     setIsEditDialogOpen(true)
+  }
+
+  // The dialog closes by clearing the edited transaction; the stored original has to go
+  // with it, or the next edit would be compared against a stale row.
+  const setEditingTransactionAndOriginal = (tx: Transaction | null) => {
+    setEditingTransaction(tx)
+    if (tx === null) setEditingTransactionOriginal(null)
+  }
+
+  const editingTransactionOriginalIsRestock = isRestockType(editingTransactionOriginal?.transaction_type)
+
+  const editingTransactionIsLegacyZeroPriced =
+    editingTransactionOriginalIsRestock && !(Number(editingTransactionOriginal?.price) > 0)
+
+  /**
+   * Stock balance for this transaction's slot once the pending edit is applied, or null
+   * when the slot can't be found (nothing to warn about).
+   */
+  const projectedBalanceAfterEdit = (tx: Transaction, nextQuantity: number): number | null => {
+    const original = editingTransactionOriginal
+    if (!original) return null
+
+    const itemKey = normalizeInventoryItemType(tx.item_type)
+    const locationId = tx.location_id ?? null
+    const slot = inventory.find(
+      (item) => normalizeInventoryItemType(item.name) === itemKey && (item.location_id ?? null) === locationId,
+    )
+    if (!slot) return null
+
+    return projectSlotBalance({
+      currentBalance: slot.quantity,
+      storedType: original.transaction_type,
+      storedQuantity: original.quantity,
+      nextType: tx.transaction_type,
+      nextQuantity,
+    })
   }
 
   const handleEditTransactionChange = (field: keyof Transaction, value: any) => {
@@ -2333,7 +2375,15 @@ export default function InventorySystem() {
       toast({ title: "Invalid quantity", description: "Quantity must be a positive number.", variant: "destructive" })
       return
     }
-    if (String(tx.transaction_type).toLowerCase().includes("restock") && !(Number(tx.price) > 0)) {
+    const isRestock = isRestockType(tx.transaction_type)
+    if (
+      requiresRestockUnitPrice({
+        nextType: tx.transaction_type,
+        nextPrice: tx.price,
+        storedType: editingTransactionOriginal?.transaction_type,
+        storedPrice: editingTransactionOriginal?.price,
+      })
+    ) {
       toast({
         title: "Unit price required",
         description: "Enter the price paid per unit — restocks at ₹0 corrupt the average cost for every future depletion.",
@@ -2341,6 +2391,25 @@ export default function InventorySystem() {
       })
       return
     }
+
+    // Flipping a restock to a depletion removes stock twice over: the incoming quantity
+    // stops counting, and the same quantity is then taken out. Done unwittingly it reads
+    // as "my stock vanished", so spell the outcome out before saving it.
+    if (!isRestock && editingTransactionOriginalIsRestock) {
+      const shortfall = projectedBalanceAfterEdit(tx, normalizedQty)
+      if (shortfall !== null && shortfall < 0) {
+        const shortBy = [formatNumber(Math.abs(shortfall)), tx.unit].filter(Boolean).join(" ")
+        const confirmed = window.confirm(
+          `This changes a restock into a depletion, which leaves ${tx.item_type} short by ${shortBy} — ` +
+            `the balance will show 0.\n\n` +
+            `If you meant to correct the incoming quantity, keep the type as "Restocking" instead. ` +
+            `If you meant to record usage, add a new depletion rather than editing the purchase.\n\n` +
+            `Save anyway?`,
+        )
+        if (!confirmed) return
+      }
+    }
+
     tx.quantity = normalizedQty
     tx.total_cost = (Number(tx.price) || 0) * normalizedQty
 
@@ -2358,7 +2427,7 @@ export default function InventorySystem() {
       toast({ title: "Transaction updated", description: "Changes saved successfully.", variant: "default" })
       await refreshData(true)
       setIsEditDialogOpen(false)
-      setEditingTransaction(null)
+      setEditingTransactionAndOriginal(null)
     } catch (error: any) {
       toast({ title: "Update failed", description: error.message || "Try again", variant: "destructive" })
     } finally {
@@ -4683,7 +4752,7 @@ export default function InventorySystem() {
                                 : "border border-stone-200 bg-white text-stone-600 hover:bg-stone-50 dark:border-white/[0.1] dark:bg-white/[0.04] dark:text-stone-300",
                             )}
                           >
-                            {loc.name || loc.code || "Unnamed"}
+                            {formatLocationLabel(loc, locations, "Unnamed")}
                           </button>
                         ))}
                         {(hasLegacyUnassignedTransactions || selectedLocationId === LOCATION_UNASSIGNED) && (
@@ -5089,9 +5158,10 @@ export default function InventorySystem() {
           handleCreateNewItem={handleCreateNewItem}
           isEditDialogOpen={isEditDialogOpen}
           editingTransaction={editingTransaction}
+          editingTransactionIsLegacyZeroPriced={editingTransactionIsLegacyZeroPriced}
           isSavingTransactionEdit={isSavingTransactionEdit}
           setIsEditDialogOpen={setIsEditDialogOpen}
-          setEditingTransaction={setEditingTransaction}
+          setEditingTransaction={setEditingTransactionAndOriginal}
           handleEditTransactionChange={handleEditTransactionChange}
           handleUpdateTransaction={handleUpdateTransaction}
           handleDeleteConfirm={handleDeleteConfirm}

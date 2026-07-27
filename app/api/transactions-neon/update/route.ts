@@ -7,6 +7,7 @@ import { recalculateInventoryForItem } from "@/lib/server/inventory-recalc"
 import { canWriteModule } from "@/lib/permissions"
 import { logAuditEvent } from "@/lib/server/audit-log"
 import { normalizeInventoryItemType } from "@/lib/inventory-item-type"
+import { requiresRestockUnitPrice } from "@/lib/inventory-edit-rules"
 import { logRouteMutationFailure } from "@/lib/server/route-error-events"
 
 export const dynamic = "force-dynamic"
@@ -164,7 +165,16 @@ export async function PUT(request: NextRequest) {
       normalizedType = "deplete"
     }
 
-    if (normalizedType === "restock" && !(Number(price) > 0)) {
+    const existingRow = existing[0]
+
+    if (
+      requiresRestockUnitPrice({
+        nextType: normalizedType,
+        nextPrice: price,
+        storedType: existingRow?.transaction_type,
+        storedPrice: existingRow?.price,
+      })
+    ) {
       return NextResponse.json(
         {
           success: false,
@@ -174,7 +184,6 @@ export async function PUT(request: NextRequest) {
       )
     }
 
-    const existingRow = existing[0]
     const existingStockLocationId = existingRow?.location_id ? String(existingRow.location_id) : null
     const existingUsageLocationId = extractUsageLocationId(existingRow?.notes ? String(existingRow.notes) : "")
     const resolvedLocationId = typeof location_id === "string" ? location_id.trim() : ""

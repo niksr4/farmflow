@@ -19,6 +19,9 @@ import { canWriteModule, canDeleteModule, type UserRole } from "@/lib/permission
 import { useAuth } from "@/hooks/use-auth"
 import { formatCurrency } from "@/lib/format"
 import type { LocationOption } from "@/components/inventory-system/types"
+import { formatLocationLabel } from "@/lib/location-label"
+import FilterBar from "@/components/filter-bar"
+import { useListControls } from "@/hooks/use-list-controls"
 
 type Worker = { id: string; name: string }
 
@@ -52,6 +55,16 @@ export default function PickingLogTab() {
   const canDelete = canDeleteModule((user?.role ?? "user") as UserRole, "accounts")
 
   const [records, setRecords] = useState<PickingRecord[]>([])
+  const recordControls = useListControls(records, {
+    searchFields: (r) => [r.workerName, r.pickDate, r.notes],
+    sorters: {
+      date: (r) => String(r.pickDate || "").slice(0, 10),
+      worker: (r) => String(r.workerName || ""),
+      kg: (r) => Number(r.kgPicked) || 0,
+      amount: (r) => Number(r.amount) || 0,
+    },
+    defaultSort: "date",
+  })
   const [workers, setWorkers] = useState<Worker[]>([])
   const [locations, setLocations] = useState<LocationOption[]>([])
   const [loading, setLoading] = useState(true)
@@ -274,7 +287,7 @@ export default function PickingLogTab() {
                     <Select value={form.locationId} onValueChange={(v) => setForm((f) => ({ ...f, locationId: v }))}>
                       <SelectTrigger><SelectValue placeholder="Select location" /></SelectTrigger>
                       <SelectContent>
-                        {locations.map((loc) => <SelectItem key={loc.id} value={loc.id}>{loc.name || loc.code}</SelectItem>)}
+                        {locations.map((loc) => <SelectItem key={loc.id} value={loc.id}>{formatLocationLabel(loc, locations)}</SelectItem>)}
                       </SelectContent>
                     </Select>
                   </div>
@@ -329,12 +342,32 @@ export default function PickingLogTab() {
           )}
 
           {/* Table */}
+          {records.length > 0 && (
+            <FilterBar
+              className="mb-4"
+              search={recordControls.search}
+              onSearchChange={recordControls.setSearch}
+              searchPlaceholder="Search worker, date, notes…"
+              sortOptions={[
+                { value: "date", label: "Date" },
+                { value: "worker", label: "Worker" },
+                { value: "kg", label: "Kg Picked" },
+                { value: "amount", label: "Amount" },
+              ]}
+              sortValue={recordControls.sortValue}
+              onSortChange={recordControls.setSortValue}
+              sortDirection={recordControls.sortDirection}
+              onSortDirectionChange={recordControls.setSortDirection}
+            />
+          )}
           {loading ? (
             <div className="flex items-center justify-center py-10 text-sm text-muted-foreground">
               <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Loading…
             </div>
           ) : records.length === 0 ? (
             <EmptyStateTable title="No picking records for this period." />
+          ) : recordControls.isFiltering && recordControls.items.length === 0 ? (
+            <p className="py-8 text-center text-sm text-muted-foreground">No picking records match your search.</p>
           ) : (
             <div className="overflow-x-auto">
               <Table>
@@ -351,7 +384,7 @@ export default function PickingLogTab() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {records.map((r) =>
+                  {recordControls.items.map((r) =>
                     editingId === r.id ? (
                       <TableRow key={r.id} className="bg-muted/20">
                         <TableCell><Input type="date" value={editForm.pickDate} onChange={(e) => setEditForm((f) => ({ ...f, pickDate: e.target.value }))} className="h-8 w-36" /></TableCell>
@@ -363,7 +396,7 @@ export default function PickingLogTab() {
                           <Select value={editForm.locationId} onValueChange={(v) => setEditForm((f) => ({ ...f, locationId: v }))}>
                             <SelectTrigger className="h-8 w-32 text-xs"><SelectValue placeholder="Location" /></SelectTrigger>
                             <SelectContent>
-                              {locations.map((loc) => <SelectItem key={loc.id} value={loc.id}>{loc.name || loc.code}</SelectItem>)}
+                              {locations.map((loc) => <SelectItem key={loc.id} value={loc.id}>{formatLocationLabel(loc, locations)}</SelectItem>)}
                             </SelectContent>
                           </Select>
                         </TableCell>

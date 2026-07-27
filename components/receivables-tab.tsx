@@ -15,6 +15,9 @@ import { formatDateOnly, todayIso } from "@/lib/date-utils"
 import { formatCurrency } from "@/lib/format"
 import { cn } from "@/lib/utils"
 import WorkflowEmptyState from "@/components/workflow-empty-state"
+import { formatLocationLabel } from "@/lib/location-label"
+import FilterBar from "@/components/filter-bar"
+import { useListControls } from "@/hooks/use-list-controls"
 
 const STATUS_OPTIONS = [
   { value: "unpaid", label: "Unpaid" },
@@ -149,7 +152,6 @@ export default function ReceivablesTab() {
   const [updatingStatusId, setUpdatingStatusId] = useState<string | number | null>(null)
   const [statusFilter, setStatusFilter] = useState("all")
   const [locationFilter, setLocationFilter] = useState(LOCATION_ALL_VALUE)
-  const [searchQuery, setSearchQuery] = useState("")
   const [selectedReceivable, setSelectedReceivable] = useState<ReceivableRecord | null>(null)
   const [form, setForm] = useState({ ...emptyForm })
   const formCardRef = useRef<HTMLDivElement | null>(null)
@@ -221,37 +223,39 @@ export default function ReceivablesTab() {
           return false
         }
       }
-      if (searchQuery.trim()) {
-        const needle = searchQuery.trim().toLowerCase()
-        const haystack = [
-          record.buyer_name || "",
-          record.invoice_no || "",
-          record.notes || "",
-          record.location_name || "",
-          record.location_code || "",
-        ]
-          .join(" ")
-          .toLowerCase()
-        if (!haystack.includes(needle)) return false
-      }
       return true
     })
-  }, [locationFilter, records, searchQuery, statusFilter])
+  }, [locationFilter, records, statusFilter])
+
+  // Search + sort layer on top of the status/location filters above.
+  const recordControls = useListControls(filteredRecords, {
+    searchFields: (r) => [r.buyer_name, r.invoice_no, r.notes, r.location_name, r.location_code],
+    sorters: {
+      invoice_date: (r) => String(r.invoice_date || "").slice(0, 10),
+      due_date: (r) => String(r.due_date || "").slice(0, 10),
+      amount: (r) => Number(r.amount) || 0,
+      buyer: (r) => String(r.buyer_name || ""),
+      status: (r) => String(getEffectiveStatus(r) || ""),
+    },
+    defaultSort: "invoice_date",
+  })
+
+  const visibleRecords = recordControls.items
 
   const filteredTotal = useMemo(() => {
-    return filteredRecords.reduce((sum, record) => sum + (Number(record.amount) || 0), 0)
-  }, [filteredRecords])
+    return visibleRecords.reduce((sum, record) => sum + (Number(record.amount) || 0), 0)
+  }, [visibleRecords])
 
   useEffect(() => {
-    if (!filteredRecords.length) {
+    if (!visibleRecords.length) {
       setSelectedReceivable(null)
       return
     }
     setSelectedReceivable((prev) => {
-      if (!prev) return filteredRecords[0]
-      return filteredRecords.find((record) => record.id === prev.id) || filteredRecords[0]
+      if (!prev) return visibleRecords[0]
+      return visibleRecords.find((record) => record.id === prev.id) || visibleRecords[0]
     })
-  }, [filteredRecords])
+  }, [visibleRecords])
 
   const handleChange = (field: keyof typeof form) => (event: ChangeEvent<HTMLInputElement>) => {
     setForm((prev) => ({ ...prev, [field]: event.target.value }))
@@ -485,7 +489,7 @@ export default function ReceivablesTab() {
                   <SelectItem value={LOCATION_UNASSIGNED_VALUE}>Unassigned</SelectItem>
                   {locations.map((loc) => (
                     <SelectItem key={loc.id} value={loc.id}>
-                      {loc.name || loc.code}
+                      {formatLocationLabel(loc, locations)}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -515,59 +519,60 @@ export default function ReceivablesTab() {
           <CardDescription>Filter by status, location, and buyer to focus collection follow-up.</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
-          <div className="grid gap-3 md:grid-cols-3">
-            <div className="space-y-2">
-              <Label>Search</Label>
-              <Input
-                value={searchQuery}
-                onChange={(event) => setSearchQuery(event.target.value)}
-                placeholder="Buyer, invoice no, notes..."
-              />
-            </div>
-            <div className="space-y-2">
-              <Label>Status</Label>
-              <Select value={statusFilter} onValueChange={setStatusFilter}>
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {STATUS_FILTER_OPTIONS.map((status) => (
-                    <SelectItem key={status.value} value={status.value}>
-                      {status.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-2">
-              <Label>Location</Label>
-              <Select value={locationFilter} onValueChange={setLocationFilter}>
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value={LOCATION_ALL_VALUE}>All locations</SelectItem>
-                  <SelectItem value={LOCATION_UNASSIGNED_VALUE}>Unassigned</SelectItem>
-                  {locations.map((loc) => (
-                    <SelectItem key={loc.id} value={loc.id}>
-                      {loc.name || loc.code}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
+          <FilterBar
+            search={recordControls.search}
+            onSearchChange={recordControls.setSearch}
+            searchPlaceholder="Search buyer, invoice no, notes…"
+            sortOptions={[
+              { value: "invoice_date", label: "Invoice Date" },
+              { value: "due_date", label: "Due Date" },
+              { value: "amount", label: "Amount" },
+              { value: "buyer", label: "Buyer" },
+              { value: "status", label: "Status" },
+            ]}
+            sortValue={recordControls.sortValue}
+            onSortChange={recordControls.setSortValue}
+            sortDirection={recordControls.sortDirection}
+            onSortDirectionChange={recordControls.setSortDirection}
+          >
+            <Select value={statusFilter} onValueChange={setStatusFilter}>
+              <SelectTrigger className="h-11 w-full shrink-0 rounded-xl sm:w-40" aria-label="Filter by status">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {STATUS_FILTER_OPTIONS.map((status) => (
+                  <SelectItem key={status.value} value={status.value}>
+                    {status.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Select value={locationFilter} onValueChange={setLocationFilter}>
+              <SelectTrigger className="h-11 w-full shrink-0 rounded-xl sm:w-48" aria-label="Filter by location">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent className="max-h-[40vh] overflow-y-auto">
+                <SelectItem value={LOCATION_ALL_VALUE}>All locations</SelectItem>
+                <SelectItem value={LOCATION_UNASSIGNED_VALUE}>Unassigned</SelectItem>
+                {locations.map((loc) => (
+                  <SelectItem key={loc.id} value={loc.id}>
+                    {formatLocationLabel(loc, locations)}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </FilterBar>
 
           <div className="flex items-center justify-between text-sm text-muted-foreground">
             <span>
-              Showing {filteredRecords.length} of {records.length} invoice(s)
+              Showing {visibleRecords.length} of {records.length} invoice(s)
             </span>
             <span>Filtered amount: {formatCurrency(filteredTotal)}</span>
           </div>
 
           {isLoading ? (
             <div className="text-sm text-muted-foreground">Loading receivables...</div>
-          ) : filteredRecords.length === 0 ? (
+          ) : visibleRecords.length === 0 ? (
             records.length === 0 ? (
               <WorkflowEmptyState
                 title="No receivables yet"
@@ -648,7 +653,7 @@ export default function ReceivablesTab() {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {filteredRecords.map((record) => {
+                    {visibleRecords.map((record) => {
                       const effectiveStatus = getEffectiveStatus(record)
                       const dueContext = getDueContext(record)
                       return (

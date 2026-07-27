@@ -17,6 +17,8 @@ import { formatCurrency } from "@/lib/format"
 import { LOCATION_UNASSIGNED, UNASSIGNED_LABEL } from "@/components/inventory-system/constants"
 import type { InventoryItem, Transaction } from "@/lib/inventory-types"
 import type { LocationOption } from "@/components/inventory-system/types"
+import { formatLocationLabel } from "@/lib/location-label"
+import { isRestockType } from "@/lib/inventory-edit-rules"
 
 // ── Shared types ─────────────────────────────────────────────────────────────
 
@@ -50,6 +52,8 @@ type DialogProps = {
   // Edit transaction dialog
   isEditDialogOpen: boolean
   editingTransaction: Transaction | null
+  /** True when the stored row was already a ₹0 restock, which is exempt from the price rule. */
+  editingTransactionIsLegacyZeroPriced?: boolean
   isSavingTransactionEdit: boolean
   setIsEditDialogOpen: (open: boolean) => void
   setEditingTransaction: (tx: Transaction | null) => void
@@ -139,6 +143,13 @@ function FieldLabel({ htmlFor, label, tooltip }: { htmlFor: string; label: strin
 export default function InventoryDialogs(p: DialogProps) {
   const { isMobile, locations } = p
 
+  // Surfaced on the field itself rather than as a toast after pressing Save: a user who
+  // can't see why the save is refused looks for another way to make it go through, and the
+  // one that works — switching the type to "Depleting" — quietly destroys real stock.
+  const editIsRestock = isRestockType(p.editingTransaction?.transaction_type)
+  const editRequiresPrice =
+    editIsRestock && !(Number(p.editingTransaction?.price) > 0) && !p.editingTransactionIsLegacyZeroPriced
+
   return (
     <>
       {/* ── New inventory item ── */}
@@ -183,7 +194,7 @@ export default function InventoryDialogs(p: DialogProps) {
                 <SelectTrigger id="new-item-location" className="w-full"><SelectValue placeholder="Select location" /></SelectTrigger>
                 <SelectContent className="max-h-[40vh] overflow-y-auto">
                   <SelectItem value={LOCATION_UNASSIGNED}>{UNASSIGNED_LABEL}</SelectItem>
-                  {locations.map((loc) => <SelectItem key={loc.id} value={loc.id}>{loc.name || loc.code || "Unnamed location"}</SelectItem>)}
+                  {locations.map((loc) => <SelectItem key={loc.id} value={loc.id}>{formatLocationLabel(loc, locations)}</SelectItem>)}
                 </SelectContent>
               </Select>
               <p className="text-xs text-muted-foreground">Choose where this item is stored.</p>
@@ -247,7 +258,7 @@ export default function InventoryDialogs(p: DialogProps) {
                 <SelectTrigger id="edit-transaction-location" className="w-full"><SelectValue placeholder="Select location" /></SelectTrigger>
                 <SelectContent className="max-h-[40vh] overflow-y-auto">
                   <SelectItem value={LOCATION_UNASSIGNED}>{UNASSIGNED_LABEL}</SelectItem>
-                  {locations.map((loc) => <SelectItem key={loc.id} value={loc.id}>{loc.name || loc.code || "Unnamed location"}</SelectItem>)}
+                  {locations.map((loc) => <SelectItem key={loc.id} value={loc.id}>{formatLocationLabel(loc, locations)}</SelectItem>)}
                 </SelectContent>
               </Select>
               {!p.editingTransaction.location_id && (
@@ -266,8 +277,26 @@ export default function InventoryDialogs(p: DialogProps) {
                 />
               </div>
               <div className="space-y-2">
-                <FieldLabel htmlFor="edit-transaction-price" label="Unit Price" tooltip="Price per unit for this transaction. For restocks, this updates the weighted average cost (total spend ÷ total quantity). Depletions are always valued at the running average, not this field." />
-                <Input id="edit-transaction-price" type="number" inputMode="decimal" value={p.editingTransaction.price ?? ""} onChange={(e) => p.handleEditTransactionChange("price", Number(e.target.value))} />
+                <FieldLabel htmlFor="edit-transaction-price" label={editRequiresPrice ? "Unit Price (required)" : "Unit Price"} tooltip="Price per unit for this transaction. For restocks, this updates the weighted average cost (total spend ÷ total quantity). Depletions are always valued at the running average, not this field." />
+                <Input
+                  id="edit-transaction-price" type="number" inputMode="decimal"
+                  value={p.editingTransaction.price ?? ""}
+                  aria-invalid={editRequiresPrice || undefined}
+                  aria-describedby={editRequiresPrice ? "edit-transaction-price-error" : undefined}
+                  className={cn(editRequiresPrice && "border-destructive focus-visible:ring-destructive")}
+                  onChange={(e) => p.handleEditTransactionChange("price", Number(e.target.value))}
+                />
+                {editRequiresPrice && (
+                  <p id="edit-transaction-price-error" className="text-xs text-destructive">
+                    Restocks need the price paid per unit — ₹0 corrupts the average cost for every future depletion.
+                  </p>
+                )}
+                {editIsRestock && p.editingTransactionIsLegacyZeroPriced && !(Number(p.editingTransaction.price) > 0) && (
+                  <p className="text-xs text-muted-foreground">
+                    This restock was recorded without a price. You can save your changes as-is, but adding the unit
+                    price now fixes the average cost for this item.
+                  </p>
+                )}
               </div>
             </div>
             <div className="text-sm text-muted-foreground">Total Cost: {formatCurrency(Number(p.editingTransaction.total_cost || 0))}</div>
@@ -278,7 +307,7 @@ export default function InventoryDialogs(p: DialogProps) {
           </div>
           <div className={cn("mt-6 flex gap-2", isMobile ? "flex-col-reverse" : "justify-end")}>
             <Button variant="outline" onClick={() => { p.setIsEditDialogOpen(false); p.setEditingTransaction(null) }}>Cancel</Button>
-            <Button onClick={p.handleUpdateTransaction} disabled={p.isSavingTransactionEdit}>{p.isSavingTransactionEdit ? "Saving..." : "Save changes"}</Button>
+            <Button onClick={p.handleUpdateTransaction} disabled={p.isSavingTransactionEdit || editRequiresPrice}>{p.isSavingTransactionEdit ? "Saving..." : "Save changes"}</Button>
           </div>
         </DialogOverlay>
       )}
@@ -310,7 +339,7 @@ export default function InventoryDialogs(p: DialogProps) {
                 <SelectTrigger id="edit-item-location" className="w-full"><SelectValue placeholder="Select location" /></SelectTrigger>
                 <SelectContent className="max-h-[40vh] overflow-y-auto">
                   <SelectItem value={LOCATION_UNASSIGNED}>{UNASSIGNED_LABEL}</SelectItem>
-                  {locations.map((loc) => <SelectItem key={loc.id} value={loc.id}>{loc.name || loc.code || "Unnamed location"}</SelectItem>)}
+                  {locations.map((loc) => <SelectItem key={loc.id} value={loc.id}>{formatLocationLabel(loc, locations)}</SelectItem>)}
                 </SelectContent>
               </Select>
               <p className="text-xs text-muted-foreground">Inventory adjustments are recorded against this location.</p>

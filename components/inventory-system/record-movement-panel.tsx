@@ -12,6 +12,7 @@ import { cn } from "@/lib/utils"
 import { LOCATION_UNASSIGNED, UNASSIGNED_LABEL_PICKER } from "@/components/inventory-system/constants"
 import type { Transaction } from "@/lib/inventory-types"
 import type { LocationOption } from "@/components/inventory-system/types"
+import { formatLocationLabel } from "@/lib/location-label"
 
 type TransactionWriteFailureSnapshot = {
   message: string
@@ -184,7 +185,7 @@ export default function RecordMovementPanel({
               <SelectItem value={LOCATION_UNASSIGNED}>{UNASSIGNED_LABEL_PICKER}</SelectItem>
               {locations.map((loc) => (
                 <SelectItem key={loc.id} value={loc.id}>
-                  {loc.name || loc.code || "Unnamed location"}
+                  {formatLocationLabel(loc, locations)}
                 </SelectItem>
               ))}
             </SelectContent>

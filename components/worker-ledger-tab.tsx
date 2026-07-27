@@ -17,6 +17,8 @@ import { toast } from "sonner"
 import { canWriteModule, canDeleteModule, type UserRole } from "@/lib/permissions"
 import { useAuth } from "@/hooks/use-auth"
 import { formatCurrency } from "@/lib/format"
+import FilterBar from "@/components/filter-bar"
+import { useListControls } from "@/hooks/use-list-controls"
 
 type EntryType = "advance" | "deduction" | "adjustment"
 type Worker = { id: string; name: string }
@@ -54,6 +56,16 @@ export default function WorkerLedgerTab() {
   const canDelete = canDeleteModule((user?.role ?? "user") as UserRole, "accounts")
 
   const [entries, setEntries] = useState<LedgerEntry[]>([])
+  const entryControls = useListControls(entries, {
+    searchFields: (e) => [e.workerName, e.entryDate, e.entryType, e.description],
+    sorters: {
+      date: (e) => String(e.entryDate || "").slice(0, 10),
+      worker: (e) => String(e.workerName || ""),
+      type: (e) => String(e.entryType || ""),
+      amount: (e) => Number(e.amount) || 0,
+    },
+    defaultSort: "date",
+  })
   const [workers, setWorkers] = useState<Worker[]>([])
   const [loading, setLoading] = useState(true)
   const [startDate, setStartDate] = useState(firstOfMonth())
@@ -270,12 +282,32 @@ export default function WorkerLedgerTab() {
           )}
 
           {/* Table */}
+          {entries.length > 0 && (
+            <FilterBar
+              className="mb-4"
+              search={entryControls.search}
+              onSearchChange={entryControls.setSearch}
+              searchPlaceholder="Search worker, type, description…"
+              sortOptions={[
+                { value: "date", label: "Date" },
+                { value: "worker", label: "Worker" },
+                { value: "type", label: "Type" },
+                { value: "amount", label: "Amount" },
+              ]}
+              sortValue={entryControls.sortValue}
+              onSortChange={entryControls.setSortValue}
+              sortDirection={entryControls.sortDirection}
+              onSortDirectionChange={entryControls.setSortDirection}
+            />
+          )}
           {loading ? (
             <div className="flex items-center justify-center py-10 text-sm text-muted-foreground">
               <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Loading…
             </div>
           ) : entries.length === 0 ? (
             <EmptyStateTable title="No ledger entries for this period." />
+          ) : entryControls.isFiltering && entryControls.items.length === 0 ? (
+            <p className="py-8 text-center text-sm text-muted-foreground">No ledger entries match your search.</p>
           ) : (
             <div className="overflow-x-auto">
               <Table>
@@ -290,7 +322,7 @@ export default function WorkerLedgerTab() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {entries.map((e) =>
+                  {entryControls.items.map((e) =>
                     editingId === e.id ? (
                       <TableRow key={e.id} className="bg-muted/20">
                         <TableCell><Input type="date" value={editForm.entryDate} onChange={(ev) => setEditForm((f) => ({ ...f, entryDate: ev.target.value }))} className="h-8 w-36" /></TableCell>

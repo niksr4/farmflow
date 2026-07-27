@@ -4,7 +4,9 @@ import type React from "react"
 import { ArrowDown, ArrowUp, Search, X } from "lucide-react"
 import { cn } from "@/lib/utils"
 
-export type SortDirection = "asc" | "desc"
+export type { SortDirection } from "@/lib/list-controls"
+import type { SortDirection } from "@/lib/list-controls"
+
 export type FilterBarSortOption = { value: string; label: string }
 
 /**

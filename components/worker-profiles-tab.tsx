@@ -15,6 +15,8 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/comp
 import { toast } from "sonner"
 import { canWriteModule, type UserRole } from "@/lib/permissions"
 import { useAuth } from "@/hooks/use-auth"
+import FilterBar from "@/components/filter-bar"
+import { useListControls } from "@/hooks/use-list-controls"
 
 type WorkerType = "permanent" | "seasonal" | "contractor"
 
@@ -57,6 +59,16 @@ export default function WorkerProfilesTab() {
   const canWrite = canWriteModule((user?.role ?? "user") as UserRole, "accounts")
 
   const [workers, setWorkers] = useState<Worker[]>([])
+  const workerControls = useListControls(workers, {
+    searchFields: (w) => [w.name, w.phone, w.bankName, w.bankAccount, w.workerType],
+    sorters: {
+      name: (w) => String(w.name || ""),
+      type: (w) => String(w.workerType || ""),
+      rate: (w) => Number(w.dailyRate) || 0,
+    },
+    defaultSort: "name",
+    defaultDirection: "asc",
+  })
   const [loading, setLoading] = useState(true)
   const [isAdding, setIsAdding] = useState(false)
   const [editingId, setEditingId] = useState<string | null>(null)
@@ -248,12 +260,31 @@ export default function WorkerProfilesTab() {
         )}
 
         <CardContent className={isAdding ? "pt-2" : undefined}>
+          {workers.length > 0 && (
+            <FilterBar
+              className="mb-4"
+              search={workerControls.search}
+              onSearchChange={workerControls.setSearch}
+              searchPlaceholder="Search name, phone, bank…"
+              sortOptions={[
+                { value: "name", label: "Name" },
+                { value: "type", label: "Type" },
+                { value: "rate", label: "Daily Rate" },
+              ]}
+              sortValue={workerControls.sortValue}
+              onSortChange={workerControls.setSortValue}
+              sortDirection={workerControls.sortDirection}
+              onSortDirectionChange={workerControls.setSortDirection}
+            />
+          )}
           {loading ? (
             <div className="flex items-center justify-center py-10 text-muted-foreground text-sm">
               <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Loading workers…
             </div>
           ) : workers.length === 0 ? (
             <EmptyStateTable title="No workers yet — add your first worker to start tracking attendance, picking, ledger, or payroll." />
+          ) : workerControls.isFiltering && workerControls.items.length === 0 ? (
+            <p className="py-8 text-center text-sm text-muted-foreground">No workers match your search.</p>
           ) : (
             <div className="overflow-x-auto">
               <Table>
@@ -268,7 +299,7 @@ export default function WorkerProfilesTab() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {workers.map((w) =>
+                  {workerControls.items.map((w) =>
                     editingId === w.id ? (
                       <TableRow key={w.id} className="bg-muted/30">
                         <TableCell>

@@ -35,6 +35,7 @@ import { useFiscalYearSelection } from "@/hooks/use-fiscal-year-selection"
 import { FiscalYearSelect } from "@/components/ui/fiscal-year-select"
 import { trackClick, reportActionFailure, reportActionError } from "@/lib/track-action"
 import { buildXlsxArrayBufferFromCsv, XLSX_MIME_TYPE } from "@/lib/spreadsheet"
+import { formatLocationLabel } from "@/lib/location-label"
 
 interface ProcessingRecord {
   id?: number
@@ -1176,7 +1177,7 @@ export default function ProcessingTab({ showDataToolsControls = false }: Process
                 >
                   <option value="">Select location</option>
                   {locations.map(loc => (
-                    <option key={loc.id} value={loc.id}>{loc.name || loc.code || "Unnamed location"}</option>
+                    <option key={loc.id} value={loc.id}>{formatLocationLabel(loc, locations)}</option>
                   ))}
                 </select>
               ) : (
@@ -1187,7 +1188,7 @@ export default function ProcessingTab({ showDataToolsControls = false }: Process
                   <SelectContent>
                     {locations.map((loc) => (
                       <SelectItem key={loc.id} value={loc.id}>
-                        {loc.name || loc.code || "Unnamed location"}
+                        {formatLocationLabel(loc, locations)}
                       </SelectItem>
                     ))}
                   </SelectContent>

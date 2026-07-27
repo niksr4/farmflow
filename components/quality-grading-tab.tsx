@@ -19,6 +19,9 @@ import { useToast } from "@/hooks/use-toast"
 import { useAuth } from "@/hooks/use-auth"
 import { canAcceptNonNegative, isBlockedNumericKey } from "@/lib/number-input"
 import { cn } from "@/lib/utils"
+import { formatLocationLabel } from "@/lib/location-label"
+import FilterBar from "@/components/filter-bar"
+import { useListControls } from "@/hooks/use-list-controls"
 
 interface LocationOption {
   id: string
@@ -69,6 +72,17 @@ export default function QualityGradingTab() {
   const [hasExistingRecord, setHasExistingRecord] = useState(false)
 
   const [recentRecords, setRecentRecords] = useState<QualityRecord[]>([])
+  const recordControls = useListControls(recentRecords, {
+    searchFields: (r) => [r.grade_date, r.lot_id, r.coffee_type, r.grade, r.screen_size, r.buyer_reference, r.graded_by, r.notes],
+    sorters: {
+      date: (r) => String(r.grade_date || "").slice(0, 10),
+      grade: (r) => String(r.grade || ""),
+      moisture: (r) => Number(r.moisture_pct) || 0,
+      defects: (r) => Number(r.defects_count) || 0,
+      cup: (r) => Number(r.cup_score) || 0,
+    },
+    defaultSort: "date",
+  })
   const [selectedQualityRecord, setSelectedQualityRecord] = useState<QualityRecord | null>(null)
   const [loading, setLoading] = useState(false)
   const [saving, setSaving] = useState(false)
@@ -289,7 +303,7 @@ export default function QualityGradingTab() {
                 <SelectContent>
                   {locations.map((loc) => (
                     <SelectItem key={loc.id} value={loc.id}>
-                      {loc.name || loc.code}
+                      {formatLocationLabel(loc, locations)}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -434,6 +448,23 @@ export default function QualityGradingTab() {
         <CardHeader>
           <CardTitle>Recent Records</CardTitle>
           <CardDescription>Latest grading entries for the selected location.</CardDescription>
+          <FilterBar
+            className="mt-3"
+            search={recordControls.search}
+            onSearchChange={recordControls.setSearch}
+            searchPlaceholder="Search lot, grade, buyer ref, notes…"
+            sortOptions={[
+              { value: "date", label: "Date" },
+              { value: "grade", label: "Grade" },
+              { value: "moisture", label: "Moisture" },
+              { value: "defects", label: "Defects" },
+              { value: "cup", label: "Cup Score" },
+            ]}
+            sortValue={recordControls.sortValue}
+            onSortChange={recordControls.setSortValue}
+            sortDirection={recordControls.sortDirection}
+            onSortDirectionChange={recordControls.setSortDirection}
+          />
         </CardHeader>
         <CardContent>
           {selectedQualityRecord && (
@@ -470,6 +501,8 @@ export default function QualityGradingTab() {
             </div>
           ) : recentRecords.length === 0 ? (
             <div className="text-sm text-muted-foreground">No grading records yet.</div>
+          ) : recordControls.isFiltering && recordControls.items.length === 0 ? (
+            <p className="py-8 text-center text-sm text-muted-foreground">No records match your search.</p>
           ) : (
             <div className="overflow-x-auto">
               <Table>
@@ -483,7 +516,7 @@ export default function QualityGradingTab() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {recentRecords.map((record) => (
+                  {recordControls.items.map((record) => (
                     <TableRow
                       key={record.id}
                       className={cn(

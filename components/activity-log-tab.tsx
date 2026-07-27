@@ -1,16 +1,17 @@
 "use client"
 
-import { useCallback, useEffect, useMemo, useState } from "react"
+import { useCallback, useEffect, useState } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
-import { History, Loader2, RefreshCw, Search } from "lucide-react"
+import { History, Loader2, RefreshCw } from "lucide-react"
 import { formatDateForDisplay } from "@/lib/date-utils"
 import { cn } from "@/lib/utils"
+import FilterBar from "@/components/filter-bar"
+import { useListControls } from "@/hooks/use-list-controls"
 
 type ActivitySource = "labour" | "expense" | "inventory"
 
@@ -66,7 +67,6 @@ export default function ActivityLogTab({ tenantId }: ActivityLogTabProps) {
   const [isLoadingMore, setIsLoadingMore] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [sourceFilter, setSourceFilter] = useState("all")
-  const [searchTerm, setSearchTerm] = useState("")
 
   const fetchRecords = useCallback(
     async (pageIndex = 0, append = false) => {
@@ -130,21 +130,17 @@ export default function ActivityLogTab({ tenantId }: ActivityLogTabProps) {
     fetchRecords(0, false)
   }, [fetchRecords])
 
-  const filteredRecords = useMemo(() => {
-    const normalizedSearch = searchTerm.trim().toLowerCase()
-    if (!normalizedSearch) return records
-    return records.filter((rec) => {
-      const haystack = [
-        String(rec.title || ""),
-        String(rec.subtitle || ""),
-        formatSourceLabel(rec.source),
-        String(rec.username || ""),
-      ]
-        .join(" ")
-        .toLowerCase()
-      return haystack.includes(normalizedSearch)
-    })
-  }, [records, searchTerm])
+  const recordControls = useListControls(records, {
+    searchFields: (rec) => [rec.title, rec.subtitle, formatSourceLabel(rec.source), rec.username, rec.event_date],
+    sorters: {
+      date: (rec) => String(rec.event_date || "").slice(0, 10),
+      amount: (rec) => Number(rec.amount) || 0,
+      source: (rec) => formatSourceLabel(rec.source),
+      user: (rec) => String(rec.username || ""),
+    },
+    defaultSort: "date",
+  })
+  const filteredRecords = recordControls.items
 
   const resolvedCountLabel =
     totalCount > records.length ? `Showing ${records.length} of ${totalCount}` : `${records.length} record(s)`
@@ -162,18 +158,23 @@ export default function ActivityLogTab({ tenantId }: ActivityLogTabProps) {
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
-          <div className="flex flex-col gap-3 lg:flex-row lg:items-center">
-            <div className="relative flex-1">
-              <Search className="pointer-events-none absolute left-3 top-3 h-4 w-4 text-muted-foreground/70" />
-              <Input
-                value={searchTerm}
-                onChange={(event) => setSearchTerm(event.target.value)}
-                placeholder="Search by activity, item, or notes"
-                className="pl-10"
-              />
-            </div>
+          <FilterBar
+            search={recordControls.search}
+            onSearchChange={recordControls.setSearch}
+            searchPlaceholder="Search by activity, item, or notes"
+            sortOptions={[
+              { value: "date", label: "Date" },
+              { value: "amount", label: "Amount" },
+              { value: "source", label: "Source" },
+              { value: "user", label: "User" },
+            ]}
+            sortValue={recordControls.sortValue}
+            onSortChange={recordControls.setSortValue}
+            sortDirection={recordControls.sortDirection}
+            onSortDirectionChange={recordControls.setSortDirection}
+          >
             <Select value={sourceFilter} onValueChange={setSourceFilter}>
-              <SelectTrigger className="w-full bg-white lg:w-[200px]">
+              <SelectTrigger className="h-11 w-full shrink-0 rounded-xl bg-white lg:w-[200px]" aria-label="Filter by source">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -184,11 +185,11 @@ export default function ActivityLogTab({ tenantId }: ActivityLogTabProps) {
                 ))}
               </SelectContent>
             </Select>
-            <Button variant="outline" className="bg-white" onClick={() => fetchRecords(0, false)} disabled={isLoading}>
+            <Button variant="outline" className="h-11 shrink-0 rounded-xl bg-white" onClick={() => fetchRecords(0, false)} disabled={isLoading}>
               <RefreshCw className={cn("mr-2 h-4 w-4", isLoading ? "animate-spin" : "")} />
               Refresh
             </Button>
-          </div>
+          </FilterBar>
 
           <p className="text-xs text-muted-foreground">{resolvedCountLabel}</p>
 

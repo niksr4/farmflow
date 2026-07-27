@@ -11,6 +11,9 @@ import { Calendar } from "@/components/ui/calendar"
 import { formatDateOnly, todayIso, toLocalIso } from "@/lib/date-utils"
 import { useToast } from "@/hooks/use-toast"
 import WorkflowEmptyState from "@/components/workflow-empty-state"
+import { formatLocationLabel } from "@/lib/location-label"
+import FilterBar from "@/components/filter-bar"
+import { useListControls } from "@/hooks/use-list-controls"
 
 interface JournalEntry {
   id: string
@@ -50,6 +53,17 @@ const resolveLocationLabel = (entry: JournalEntry) => {
 export default function JournalTab() {
   const { toast } = useToast()
   const [entries, setEntries] = useState<JournalEntry[]>([])
+  // Sort only: journal search is served by the API (`?q=`), so the hook must not
+  // filter again on top of it.
+  const entryControls = useListControls(entries, {
+    sorters: {
+      date: (e) => String(e.entry_date || "").slice(0, 10),
+      title: (e) => String(e.title || ""),
+      location: (e) => String(e.location_name || e.location_code || ""),
+      fertilizer: (e) => String(e.fertilizer_name || ""),
+    },
+    defaultSort: "date",
+  })
   const [totalCount, setTotalCount] = useState(0)
   const [loading, setLoading] = useState(false)
   const [searchTerm, setSearchTerm] = useState("")
@@ -262,7 +276,7 @@ export default function JournalTab() {
                 <SelectItem value={LOCATION_ALL}>All locations</SelectItem>
                 {locations.map((location) => (
                   <SelectItem key={location.id} value={location.id}>
-                    {location.name}
+                    {formatLocationLabel(location, locations)}
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -303,7 +317,7 @@ export default function JournalTab() {
                     <SelectItem value={LOCATION_NONE}>No location</SelectItem>
                     {locations.map((location) => (
                       <SelectItem key={location.id} value={location.id}>
-                        {location.name}
+                        {formatLocationLabel(location, locations)}
                       </SelectItem>
                     ))}
                   </SelectContent>
@@ -399,16 +413,21 @@ export default function JournalTab() {
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
-            <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-              <Input
-                placeholder="Search fertilizer, spray, irrigation, notes..."
-                value={searchTerm}
-                onChange={(event) => setSearchTerm(event.target.value)}
-              />
-              <Button variant="outline" onClick={() => setSearchTerm("")}>
-                Clear Search
-              </Button>
-            </div>
+            <FilterBar
+              search={searchTerm}
+              onSearchChange={setSearchTerm}
+              searchPlaceholder="Search fertilizer, spray, irrigation, notes…"
+              sortOptions={[
+                { value: "date", label: "Date" },
+                { value: "title", label: "Title" },
+                { value: "location", label: "Location" },
+                { value: "fertilizer", label: "Fertilizer" },
+              ]}
+              sortValue={entryControls.sortValue}
+              onSortChange={entryControls.setSortValue}
+              sortDirection={entryControls.sortDirection}
+              onSortDirectionChange={entryControls.setSortDirection}
+            />
             {entries.length < totalCount && (
               <p className="text-xs text-muted-foreground">
                 Showing {entries.length} of {totalCount} entries.
@@ -431,7 +450,7 @@ export default function JournalTab() {
               />
             ) : (
               <div className="rounded-lg border divide-y">
-                {entries.map((entry) => (
+                {entryControls.items.map((entry) => (
                   <div key={entry.id} className="p-4 space-y-2">
                     <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
                       <div>

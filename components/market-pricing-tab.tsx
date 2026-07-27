@@ -13,6 +13,8 @@ import { Skeleton } from "@/components/ui/skeleton"
 import { Dialog, DialogContent, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
 import { TrendingUp, TrendingDown, Users, Plus, Phone, Mail, IndianRupee, Bell, BellOff } from "lucide-react"
 import { formatDateOnly } from "@/lib/date-utils"
+import FilterBar from "@/components/filter-bar"
+import { useListControls } from "@/hooks/use-list-controls"
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, ReferenceLine } from "recharts"
 
 interface Buyer {
@@ -56,6 +58,17 @@ const BUYER_TYPE_COLORS: Record<string, string> = {
 export default function MarketPricingTab() {
   const [buyers, setBuyers] = useState<Buyer[]>([])
   const [priceRecords, setPriceRecords] = useState<PriceRecord[]>([])
+  const priceControls = useListControls(priceRecords, {
+    searchFields: (r) => [r.record_date, r.buyer_name, r.grade, r.variety, r.notes],
+    sorters: {
+      date: (r) => String(r.record_date || "").slice(0, 10),
+      price: (r) => parseFloat(r.price_per_kg) || 0,
+      quantity: (r) => parseFloat(r.quantity_kg || "0") || 0,
+      buyer: (r) => String(r.buyer_name || ""),
+      grade: (r) => String(r.grade || ""),
+    },
+    defaultSort: "date",
+  })
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
@@ -648,10 +661,31 @@ export default function MarketPricingTab() {
           </Dialog>
         </CardHeader>
         <CardContent>
+          {priceRecords.length > 0 && (
+            <FilterBar
+              className="mb-4"
+              search={priceControls.search}
+              onSearchChange={priceControls.setSearch}
+              searchPlaceholder="Search buyer, grade, variety…"
+              sortOptions={[
+                { value: "date", label: "Date" },
+                { value: "price", label: "₹/kg" },
+                { value: "quantity", label: "Qty (kg)" },
+                { value: "buyer", label: "Buyer" },
+                { value: "grade", label: "Grade" },
+              ]}
+              sortValue={priceControls.sortValue}
+              onSortChange={priceControls.setSortValue}
+              sortDirection={priceControls.sortDirection}
+              onSortDirectionChange={priceControls.setSortDirection}
+            />
+          )}
           {priceRecords.length === 0 ? (
             <p className="py-6 text-center text-sm text-muted-foreground">
               No price records yet. Log prices quoted by buyers to track trends over time.
             </p>
+          ) : priceControls.isFiltering && priceControls.items.length === 0 ? (
+            <p className="py-6 text-center text-sm text-muted-foreground">No price records match your search.</p>
           ) : (
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
@@ -665,7 +699,7 @@ export default function MarketPricingTab() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-border/40">
-                  {priceRecords.map((r) => (
+                  {priceControls.items.map((r) => (
                     <tr key={r.id} className="hover:bg-muted/30 transition-colors">
                       <td className="py-2.5 text-muted-foreground">{formatDateOnly(r.record_date)}</td>
                       <td className="py-2.5 font-medium">{r.buyer_name ?? <span className="text-muted-foreground">—</span>}</td>
@@ -682,9 +716,9 @@ export default function MarketPricingTab() {
                   ))}
                 </tbody>
               </table>
-              {priceRecords.length > 5 && (
+              {priceControls.items.length > 5 && (
                 <p className="mt-3 text-center text-xs text-muted-foreground">
-                  Showing {priceRecords.length} records
+                  Showing {priceControls.items.length} records
                 </p>
               )}
             </div>

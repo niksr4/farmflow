@@ -9,6 +9,9 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Textarea } from "@/components/ui/textarea"
+import { formatLocationLabel } from "@/lib/location-label"
+import FilterBar from "@/components/filter-bar"
+import { useListControls } from "@/hooks/use-list-controls"
 
 const MAX_FILE_BYTES = 10 * 1024 * 1024
 
@@ -68,6 +71,17 @@ const formatBytes = (bytes: number) => {
 export default function DocumentsTab() {
   const [locations, setLocations] = useState<LocationOption[]>([])
   const [records, setRecords] = useState<DocumentRecord[]>([])
+  const recordControls = useListControls(records, {
+    searchFields: (r) => [r.title, r.file_name, r.document_type, r.buyer_name, r.lot_id, r.notes, r.uploaded_by, r.location_name, r.location_code],
+    sorters: {
+      date: (r) => String(r.document_date || r.created_at || "").slice(0, 10),
+      title: (r) => String(r.title || r.file_name || ""),
+      type: (r) => String(r.document_type || ""),
+      size: (r) => Number(r.file_size_bytes) || 0,
+      buyer: (r) => String(r.buyer_name || ""),
+    },
+    defaultSort: "date",
+  })
   const [isLoading, setIsLoading] = useState(false)
   const [loadError, setLoadError] = useState("")
 
@@ -252,7 +266,7 @@ export default function DocumentsTab() {
                   <SelectItem value="all">Tenant-wide / Unassigned</SelectItem>
                   {locations.map((location) => (
                     <SelectItem key={location.id} value={location.id}>
-                      {location.name}
+                      {formatLocationLabel(location, locations)}
                       {location.code ? ` (${location.code})` : ""}
                     </SelectItem>
                   ))}
@@ -373,7 +387,7 @@ export default function DocumentsTab() {
                 <SelectItem value="all">All locations</SelectItem>
                 {locations.map((location) => (
                   <SelectItem key={location.id} value={location.id}>
-                    {location.name}
+                    {formatLocationLabel(location, locations)}
                     {location.code ? ` (${location.code})` : ""}
                   </SelectItem>
                 ))}
@@ -383,13 +397,34 @@ export default function DocumentsTab() {
 
           {loadError && <p className="text-sm text-rose-600">{loadError}</p>}
 
+          {records.length > 0 && (
+            <FilterBar
+              search={recordControls.search}
+              onSearchChange={recordControls.setSearch}
+              searchPlaceholder="Search title, file, buyer, lot…"
+              sortOptions={[
+                { value: "date", label: "Date" },
+                { value: "title", label: "Title" },
+                { value: "type", label: "Type" },
+                { value: "size", label: "File Size" },
+                { value: "buyer", label: "Buyer" },
+              ]}
+              sortValue={recordControls.sortValue}
+              onSortChange={recordControls.setSortValue}
+              sortDirection={recordControls.sortDirection}
+              onSortDirectionChange={recordControls.setSortDirection}
+            />
+          )}
+
           {isLoading ? (
             <div className="rounded-xl border border-border/60 bg-muted/20 p-6 text-sm text-muted-foreground">Loading documents...</div>
           ) : records.length === 0 ? (
             <div className="rounded-xl border border-border/60 bg-muted/20 p-6 text-sm text-muted-foreground">No documents found for current filters.</div>
+          ) : recordControls.isFiltering && recordControls.items.length === 0 ? (
+            <div className="rounded-xl border border-border/60 bg-muted/20 p-6 text-sm text-muted-foreground">No documents match your search.</div>
           ) : (
             <div className="space-y-3">
-              {records.map((record) => (
+              {recordControls.items.map((record) => (
                 <div key={record.id} className="rounded-xl border border-border/60 bg-white/80 p-4">
                   <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
                     <div className="space-y-2">

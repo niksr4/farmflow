@@ -32,6 +32,7 @@ import { deleteWithUndo } from "@/lib/undo-delete"
 import { useMediaQuery } from "@/hooks/use-media-query"
 import { resolveActivityFromQuery } from "@/lib/activity-code-match"
 import ActivitySuggestList, { filterActivitySuggestions } from "@/components/activity-suggest-list"
+import { formatLocationLabel } from "@/lib/location-label"
 
 interface ActivityCode {
   code: string
@@ -458,7 +459,7 @@ export default function OtherExpensesTab({
                       <SelectContent>
                         {locations.map((loc) => (
                           <SelectItem key={loc.id} value={loc.id}>
-                            {loc.name || loc.code}
+                            {formatLocationLabel(loc, locations)}
                           </SelectItem>
                         ))}
                       </SelectContent>
