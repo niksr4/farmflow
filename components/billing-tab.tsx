@@ -17,6 +17,7 @@ import { useListControls } from "@/hooks/use-list-controls"
 import { useAuth } from "@/hooks/use-auth"
 import TaskGuideCard from "@/components/task-guide-card"
 import { toast } from "@/components/ui/use-toast"
+import { numericInputValue } from "@/lib/number-input"
 
 type LineItem = {
   description: string
@@ -356,14 +357,14 @@ export default function BillingTab({ showDataToolsControls = false }: BillingTab
                       <TableCell>
                         <Input
                           type="number" inputMode="decimal"
-                          value={item.quantity}
+                          value={numericInputValue(item.quantity)}
                           onChange={(event) => updateItem(index, { quantity: Number(event.target.value) })}
                         />
                       </TableCell>
                       <TableCell>
                         <Input
                           type="number" inputMode="decimal"
-                          value={item.unitPrice}
+                          value={numericInputValue(item.unitPrice)}
                           onChange={(event) => updateItem(index, { unitPrice: Number(event.target.value) })}
                         />
                       </TableCell>

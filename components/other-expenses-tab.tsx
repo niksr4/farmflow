@@ -33,6 +33,7 @@ import { useMediaQuery } from "@/hooks/use-media-query"
 import { resolveActivityFromQuery } from "@/lib/activity-code-match"
 import ActivitySuggestList, { filterActivitySuggestions } from "@/components/activity-suggest-list"
 import { formatLocationLabel } from "@/lib/location-label"
+import { numericInputValue } from "@/lib/number-input"
 
 interface ActivityCode {
   code: string
@@ -476,7 +477,7 @@ export default function OtherExpensesTab({
                     type="number" inputMode="decimal"
                     min="0"
                     step="0.01"
-                    value={formData.amount}
+                    value={numericInputValue(formData.amount)}
                     onChange={(e) =>
                       setFormData((prev) => ({ ...prev, amount: Number.parseFloat(e.target.value) || 0 }))
                     }

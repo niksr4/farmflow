@@ -17,6 +17,7 @@ import { canWriteModule, type UserRole } from "@/lib/permissions"
 import { useAuth } from "@/hooks/use-auth"
 import FilterBar from "@/components/filter-bar"
 import { useListControls } from "@/hooks/use-list-controls"
+import { numericInputValue } from "@/lib/number-input"
 
 type WorkerType = "permanent" | "seasonal" | "contractor"
 
@@ -241,7 +242,7 @@ export default function WorkerProfilesTab() {
                 <Input
                   type="number" inputMode="decimal"
                   min={0}
-                  value={form.dailyRate}
+                  value={numericInputValue(form.dailyRate)}
                   onChange={(e) => setForm((f) => ({ ...f, dailyRate: e.target.value }))}
                   placeholder="500"
                 />
@@ -325,7 +326,7 @@ export default function WorkerProfilesTab() {
                         <TableCell>
                           <Input
                             type="number" inputMode="decimal"
-                            value={editForm.dailyRate}
+                            value={numericInputValue(editForm.dailyRate)}
                             onChange={(e) => setEditForm((f) => ({ ...f, dailyRate: e.target.value }))}
                             className="h-8 w-24"
                             placeholder="₹/day"

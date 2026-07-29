@@ -18,6 +18,7 @@ import WorkflowEmptyState from "@/components/workflow-empty-state"
 import { formatLocationLabel } from "@/lib/location-label"
 import FilterBar from "@/components/filter-bar"
 import { useListControls } from "@/hooks/use-list-controls"
+import { numericInputValue } from "@/lib/number-input"
 
 const STATUS_OPTIONS = [
   { value: "unpaid", label: "Unpaid" },
@@ -457,7 +458,7 @@ export default function ReceivablesTab() {
             </div>
             <div className="space-y-2">
               <Label>Amount</Label>
-              <Input type="number" inputMode="decimal" min="0" value={form.amount} onChange={handleChange("amount")} placeholder="0" />
+              <Input type="number" inputMode="decimal" min="0" value={numericInputValue(form.amount)} onChange={handleChange("amount")} placeholder="0" />
             </div>
             <div className="space-y-2">
               <Label>Status</Label>

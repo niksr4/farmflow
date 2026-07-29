@@ -22,6 +22,7 @@ import type { LocationOption } from "@/components/inventory-system/types"
 import { formatLocationLabel } from "@/lib/location-label"
 import FilterBar from "@/components/filter-bar"
 import { useListControls } from "@/hooks/use-list-controls"
+import { numericInputValue } from "@/lib/number-input"
 
 type Worker = { id: string; name: string }
 
@@ -299,7 +300,7 @@ export default function PickingLogTab() {
                   />
                   <Input
                     type="number" inputMode="decimal" min={0} step={0.1}
-                    value={form.kgPicked}
+                    value={numericInputValue(form.kgPicked)}
                     onChange={(e) => setForm((f) => ({ ...f, kgPicked: e.target.value }))}
                     placeholder="48.5"
                   />
@@ -311,7 +312,7 @@ export default function PickingLogTab() {
                   />
                   <Input
                     type="number" inputMode="decimal" min={0} step={0.5}
-                    value={form.ratePerKg}
+                    value={numericInputValue(form.ratePerKg)}
                     onChange={(e) => setForm((f) => ({ ...f, ratePerKg: e.target.value }))}
                     placeholder="4.00"
                   />
@@ -389,8 +390,8 @@ export default function PickingLogTab() {
                       <TableRow key={r.id} className="bg-muted/20">
                         <TableCell><Input type="date" value={editForm.pickDate} onChange={(e) => setEditForm((f) => ({ ...f, pickDate: e.target.value }))} className="h-8 w-36" /></TableCell>
                         <TableCell className="text-sm text-muted-foreground">{r.workerName}</TableCell>
-                        <TableCell><Input type="number" inputMode="decimal" min={0} step={0.1} value={editForm.kgPicked} onChange={(e) => setEditForm((f) => ({ ...f, kgPicked: e.target.value }))} className="h-8 w-24 text-right" /></TableCell>
-                        <TableCell><Input type="number" inputMode="decimal" min={0} step={0.5} value={editForm.ratePerKg} onChange={(e) => setEditForm((f) => ({ ...f, ratePerKg: e.target.value }))} className="h-8 w-24 text-right" /></TableCell>
+                        <TableCell><Input type="number" inputMode="decimal" min={0} step={0.1} value={numericInputValue(editForm.kgPicked)} onChange={(e) => setEditForm((f) => ({ ...f, kgPicked: e.target.value }))} className="h-8 w-24 text-right" /></TableCell>
+                        <TableCell><Input type="number" inputMode="decimal" min={0} step={0.5} value={numericInputValue(editForm.ratePerKg)} onChange={(e) => setEditForm((f) => ({ ...f, ratePerKg: e.target.value }))} className="h-8 w-24 text-right" /></TableCell>
                         <TableCell className="text-right text-sm">{editForm.kgPicked && editForm.ratePerKg ? formatCurrency(Number(editForm.kgPicked) * Number(editForm.ratePerKg)) : "—"}</TableCell>
                         <TableCell className="hidden md:table-cell">
                           <Select value={editForm.locationId} onValueChange={(v) => setEditForm((f) => ({ ...f, locationId: v }))}>

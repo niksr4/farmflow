@@ -36,6 +36,7 @@ import QuickLogPanel from "@/components/quick-log-panel"
 import { trackClick, reportActionFailure, reportActionError } from "@/lib/track-action"
 import { deleteWithUndo } from "@/lib/undo-delete"
 import { formatLocationLabel } from "@/lib/location-label"
+import { numericInputValue } from "@/lib/number-input"
 
 
 interface ActivityCode {
@@ -845,7 +846,7 @@ export default function LaborDeploymentTab({
                               type="number" inputMode="decimal"
                               min="0"
                               step="0.5"
-                              value={set.laborers}
+                              value={numericInputValue(set.laborers)}
                               onChange={(e) => updateSet(i, "laborers", Number.parseFloat(e.target.value) || 0)}
                               className="h-11"
                             />
@@ -857,7 +858,7 @@ export default function LaborDeploymentTab({
                             type="number" inputMode="decimal"
                             min="0"
                             step="0.01"
-                            value={set.costPerLaborer}
+                            value={numericInputValue(set.costPerLaborer)}
                             onChange={(e) => updateSet(i, "costPerLaborer", Number.parseFloat(e.target.value) || 0)}
                             className="h-11"
                           />

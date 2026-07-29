@@ -12,7 +12,7 @@ import { useToast } from "@/hooks/use-toast"
 import { useAuth } from "@/hooks/use-auth"
 import { formatCurrency, formatNumber } from "@/lib/format"
 import { formatDateOnly, todayIso } from "@/lib/date-utils"
-import { canAcceptNonNegative, isBlockedNumericKey } from "@/lib/number-input"
+import { canAcceptNonNegative, isBlockedNumericKey, numericInputValue } from "@/lib/number-input"
 import { Pencil, Save, Trash2 } from "lucide-react"
 import { formatLocationLabel } from "@/lib/location-label"
 import FilterBar from "@/components/filter-bar"
@@ -483,7 +483,7 @@ export default function OtherSalesTab({
                   type="number" inputMode="decimal"
                   min={0}
                   step="0.01"
-                  value={form.kgs_sold}
+                  value={numericInputValue(form.kgs_sold)}
                   onKeyDown={blockInvalidNumberKey}
                   onChange={handleNonNegativeChange("kgs_sold")}
                   placeholder="Enter KGs sold"
@@ -495,7 +495,7 @@ export default function OtherSalesTab({
                   type="number" inputMode="decimal"
                   min={0}
                   step="0.01"
-                  value={form.rate_per_kg}
+                  value={numericInputValue(form.rate_per_kg)}
                   onKeyDown={blockInvalidNumberKey}
                   onChange={handleNonNegativeChange("rate_per_kg")}
                   placeholder="Enter rate per KG"
@@ -509,7 +509,7 @@ export default function OtherSalesTab({
                 type="number" inputMode="decimal"
                 min={0}
                 step="0.01"
-                value={form.contract_amount}
+                value={numericInputValue(form.contract_amount)}
                 onKeyDown={blockInvalidNumberKey}
                 onChange={handleNonNegativeChange("contract_amount")}
                 placeholder="Enter contract value"

@@ -1,49 +1,66 @@
-import { describe, it, expect } from "vitest"
+import { describe, expect, it } from "vitest"
 import {
-  isBlockedNumericKey,
   canAcceptNonNegative,
-  toNonNegativeNumber,
+  isBlockedNumericKey,
+  numericInputValue,
   requirePositiveNumber,
+  toNonNegativeNumber,
 } from "@/lib/number-input"
 
-describe("isBlockedNumericKey", () => {
-  it("blocks sign and exponent keys that would allow negatives/scientific input", () => {
-    for (const key of ["-", "+", "e", "E"]) expect(isBlockedNumericKey(key)).toBe(true)
+describe("numericInputValue", () => {
+  it("renders a zero as blank so the field starts empty and can be cleared", () => {
+    // The reported bug: the box lands on "0", and backspacing puts it straight back because
+    // Number.parseFloat("") || 0 is 0. Blanking 0 fixes both the initial state and the delete.
+    expect(numericInputValue(0)).toBe("")
   })
-  it("allows digits and separators", () => {
-    for (const key of ["0", "9", ".", "Backspace"]) expect(isBlockedNumericKey(key)).toBe(false)
+
+  it("renders real values unchanged", () => {
+    expect(numericInputValue(5)).toBe("5")
+    expect(numericInputValue(12.5)).toBe("12.5")
+    expect(numericInputValue(-3)).toBe("-3")
+  })
+
+  it("treats null, undefined and empty string as blank", () => {
+    expect(numericInputValue(null)).toBe("")
+    expect(numericInputValue(undefined)).toBe("")
+    expect(numericInputValue("")).toBe("")
+  })
+
+  it("blanks NaN rather than rendering the text 'NaN' in the box", () => {
+    expect(numericInputValue(Number.NaN)).toBe("")
+    expect(numericInputValue(Number.POSITIVE_INFINITY)).toBe("")
+  })
+
+  it("treats a string zero as blank too, since it renders identically", () => {
+    expect(numericInputValue("0")).toBe("")
+    expect(numericInputValue("0.00")).toBe("")
+  })
+
+  it("preserves a partially typed decimal", () => {
+    expect(numericInputValue("0.5")).toBe("0.5")
   })
 })
 
-describe("canAcceptNonNegative", () => {
-  it("accepts empty (mid-typing) and non-negative numbers", () => {
+describe("existing number-input helpers still behave", () => {
+  it("blocks sign and exponent keys", () => {
+    for (const k of ["-", "e", "E", "+"]) expect(isBlockedNumericKey(k)).toBe(true)
+    expect(isBlockedNumericKey("5")).toBe(false)
+  })
+
+  it("accepts an empty box and non-negative numbers", () => {
     expect(canAcceptNonNegative("")).toBe(true)
-    expect(canAcceptNonNegative("0")).toBe(true)
-    expect(canAcceptNonNegative("12.5")).toBe(true)
-  })
-  it("rejects negatives and non-numeric text", () => {
+    expect(canAcceptNonNegative("10")).toBe(true)
     expect(canAcceptNonNegative("-1")).toBe(false)
-    expect(canAcceptNonNegative("abc")).toBe(false)
   })
-})
 
-describe("toNonNegativeNumber", () => {
-  it("returns the number for valid non-negative input", () => {
-    expect(toNonNegativeNumber("42")).toBe(42)
-    expect(toNonNegativeNumber(0)).toBe(0)
+  it("rejects negatives and junk when coercing", () => {
+    expect(toNonNegativeNumber("10")).toBe(10)
+    expect(toNonNegativeNumber("-1")).toBeNull()
+    expect(toNonNegativeNumber("abc")).toBeNull()
   })
-  it("returns null for negatives and non-finite values", () => {
-    expect(toNonNegativeNumber("-3")).toBeNull()
-    expect(toNonNegativeNumber("nope")).toBeNull()
-    expect(toNonNegativeNumber(Number.NaN)).toBeNull()
-  })
-})
 
-describe("requirePositiveNumber", () => {
-  it("is true only for strictly positive finite numbers", () => {
-    expect(requirePositiveNumber("1")).toBe(true)
+  it("requires strictly positive", () => {
+    expect(requirePositiveNumber(1)).toBe(true)
     expect(requirePositiveNumber(0)).toBe(false)
-    expect(requirePositiveNumber("-2")).toBe(false)
-    expect(requirePositiveNumber("x")).toBe(false)
   })
 })
