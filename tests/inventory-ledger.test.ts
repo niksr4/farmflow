@@ -4,6 +4,7 @@ import {
   isRestockTransaction,
   replayInventoryLedger,
   replayLedgerBySlot,
+  summariseLedgerDrift,
 } from "@/lib/inventory-ledger"
 
 const restock = (quantity: number, total_cost = 0) => ({ transaction_type: "restock", quantity, total_cost })
@@ -166,5 +167,81 @@ describe("classifySlotDrift", () => {
   it("prefers 'consistent' when both orderings match the stored balance", () => {
     const rows = [dated("restock", 5)]
     expect(classifySlotDrift({ byDate: rows, byInsertion: rows, storedQuantity: 5 }).cause).toBe("consistent")
+  })
+})
+
+describe("summariseLedgerDrift", () => {
+  const tx = (item: string, type: string, quantity: number, id: number, date: string) => ({
+    item_type: item, location_id: null, transaction_type: type, quantity, total_cost: 0,
+    transaction_date: date, id,
+  })
+
+  it("sums per slot instead of netting slots against each other", () => {
+    // One slot 100 over, another 100 under. Comparing totals gives 0 drift and reports "clean"
+    // while both items are wrong — the bug this replaces.
+    const result = summariseLedgerDrift({
+      slots: [
+        { item_type: "A", location_id: null, quantity: 200 },
+        { item_type: "B", location_id: null, quantity: 0 },
+      ],
+      transactions: [
+        tx("A", "restock", 100, 1, "2026-01-01"),
+        tx("B", "restock", 100, 2, "2026-01-01"),
+      ],
+    })
+    expect(result.totalAbsDrift).toBe(200)
+    expect(result.unexplainedSlots).toBe(2)
+  })
+
+  it("separates back-dated drift from genuinely missing history", () => {
+    const result = summariseLedgerDrift({
+      slots: [
+        { item_type: "Backdated", location_id: null, quantity: 0 },
+        { item_type: "Missing", location_id: null, quantity: 500 },
+      ],
+      transactions: [
+        // entered restock-first, then a depletion back-dated before it
+        tx("Backdated", "restock", 1, 10, "2026-05-24"),
+        tx("Backdated", "deplete", 1, 11, "2026-05-21"),
+        tx("Missing", "restock", 10500, 12, "2026-01-01"),
+      ],
+    })
+    expect(result.backdatedSlots).toBe(1)
+    expect(result.unexplainedSlots).toBe(1)
+    expect(result.unexplainedDrift).toBe(10000)
+  })
+
+  it("counts a ledger slot with no inventory row at all", () => {
+    const result = summariseLedgerDrift({
+      slots: [],
+      transactions: [tx("Ghost", "restock", 40, 1, "2026-01-01")],
+    })
+    expect(result.unexplainedSlots).toBe(1)
+    expect(result.totalAbsDrift).toBe(40)
+  })
+
+  it("reports nothing when every slot reconciles", () => {
+    const result = summariseLedgerDrift({
+      slots: [{ item_type: "A", location_id: null, quantity: 60 }],
+      transactions: [tx("A", "restock", 100, 1, "2026-01-01"), tx("A", "deplete", 40, 2, "2026-01-02")],
+    })
+    expect(result.totalAbsDrift).toBe(0)
+    expect(result.unexplainedSlots).toBe(0)
+  })
+
+  it("repairing a slot can only ever reduce the total", () => {
+    const slots = [
+      { item_type: "Over", location_id: null, quantity: 0 },
+      { item_type: "Under", location_id: null, quantity: 100 },
+    ]
+    const before = summariseLedgerDrift({
+      slots,
+      transactions: [tx("Over", "restock", 100, 1, "2026-01-01"), tx("Under", "restock", 50, 2, "2026-01-01")],
+    })
+    const after = summariseLedgerDrift({
+      slots,
+      transactions: [tx("Over", "restock", 100, 1, "2026-01-01"), tx("Under", "restock", 100, 2, "2026-01-01")],
+    })
+    expect(after.totalAbsDrift).toBeLessThan(before.totalAbsDrift)
   })
 })

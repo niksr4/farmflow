@@ -4,7 +4,7 @@ import { requireModuleAccess, isModuleAccessError } from "@/lib/server/module-ac
 import { normalizeTenantContext, runTenantQueries, runTenantQuery } from "@/lib/server/tenant-db"
 import { sanitizeRouteError } from "@/lib/server/sanitize-route-error"
 import { evaluateLabourGaps } from "@/lib/reconciliation-checks"
-import { classifySlotDrift, replayLedgerBySlot } from "@/lib/inventory-ledger"
+import { summariseLedgerDrift } from "@/lib/inventory-ledger"
 
 export const dynamic = "force-dynamic"
 export const revalidate = 0
@@ -23,65 +23,6 @@ export type ReconciliationResponse = {
   checkedAt: string
   hasErrors: boolean
   hasWarnings: boolean
-}
-
-/**
- * How many (item, location) slots have drift that is fully explained by back-dated entry.
- *
- * Replays each slot in date order and again in insertion order; when the insertion-order
- * result matches the stored balance but the date-order one does not, the trigger applied the
- * transaction against real stock and only the replay's date ordering disagrees.
- */
-async function countBackdatedSlots(
-  client: typeof sql,
-  tenantContext: ReturnType<typeof normalizeTenantContext>,
-  tenantId: string,
-): Promise<number> {
-  const [slotRows, ledgerRows] = await runTenantQueries(client, tenantContext, [
-    client.query(
-      `SELECT item_type, location_id, COALESCE(quantity, 0) AS quantity
-       FROM current_inventory WHERE tenant_id = $1`,
-      [tenantId],
-    ),
-    // transaction_date::text is deliberate. Neon returns a timestamp column as a JS Date, and
-    // String(date) gives "Thu May 21 2026 …" — sorting that lexically orders by weekday name,
-    // so "Sun May 24" lands before "Thu May 21" and the date ordering silently becomes garbage.
-    client.query(
-      `SELECT item_type, location_id, transaction_type, quantity, total_cost,
-              transaction_date::text AS transaction_date, id
-       FROM transaction_history WHERE tenant_id = $1`,
-      [tenantId],
-    ),
-  ])
-
-  const key = (item: unknown, location: unknown) => `${item ?? ""}::${location ?? "null"}`
-  const bySlot = new Map<string, any[]>()
-  for (const row of ledgerRows as any[]) {
-    const k = key(row.item_type, row.location_id)
-    const bucket = bySlot.get(k)
-    if (bucket) bucket.push(row)
-    else bySlot.set(k, [row])
-  }
-
-  let backdated = 0
-  for (const slot of slotRows as any[]) {
-    const rows = bySlot.get(key(slot.item_type, slot.location_id)) ?? []
-    if (!rows.length) continue
-
-    const byDate = [...rows].sort(
-      (a, b) =>
-        String(a.transaction_date).localeCompare(String(b.transaction_date)) || Number(a.id) - Number(b.id),
-    )
-    const byInsertion = [...rows].sort((a, b) => Number(a.id) - Number(b.id))
-
-    const verdict = classifySlotDrift({
-      byDate,
-      byInsertion,
-      storedQuantity: Number(slot.quantity) || 0,
-    })
-    if (verdict.cause === "backdated-entry") backdated += 1
-  }
-  return backdated
 }
 
 export async function GET(request: NextRequest) {
@@ -138,50 +79,56 @@ export async function GET(request: NextRequest) {
 
     // ── 2. Inventory ledger consistency: current_inventory vs transaction_history ──
     try {
-      // Replay the ledger the way recalculateInventoryForItem does — per (item, location) slot,
-      // in date order, clamping at zero — rather than SUM(restock − deplete).
+      // Drift is summed PER SLOT in absolute terms. Comparing SUM(inventory) to SUM(ledger)
+      // nets slots against each other, so one item 10,000 over hides six that are under — and
+      // repairing those six makes the headline number go up. Per-slot means a fix can only ever
+      // reduce it.
       //
-      // The plain sum lets a depletion larger than the stock on hand drive the running balance
-      // negative, which the replay never does. On one real tenant that gap was 4x: the sum said
-      // 37,697 units of drift where the app's own model says 9,853. The check was measuring
-      // something the system never computes, so it reported alarming drift that no recalculation
-      // would ever reproduce — and "correcting" data to satisfy it would have broken real stock.
-      const [currentRow, ledgerRows] = await runTenantQueries(sql, tenantContext, [
+      // The replay itself matches recalculateInventoryForItem (date order, clamped at zero)
+      // rather than SUM(restock − deplete); those disagreed 4x on real data, and the check was
+      // auditing arithmetic the system never performs.
+      //
+      // transaction_date::text is deliberate — Neon returns timestamps as JS Dates, and
+      // String(date) sorts by weekday name, putting "Sun May 24" before "Thu May 21".
+      const [slotRows, ledgerRows] = await runTenantQueries(sql, tenantContext, [
         sql.query(
-          `SELECT COALESCE(SUM(quantity), 0) AS qty, COALESCE(SUM(total_cost), 0) AS cost
+          `SELECT item_type, location_id, COALESCE(quantity, 0) AS quantity
            FROM current_inventory WHERE tenant_id = $1`,
           [tenantId],
         ),
         sql.query(
-          `SELECT item_type, location_id, transaction_type, quantity, total_cost
-           FROM transaction_history
-           WHERE tenant_id = $1
-           ORDER BY transaction_date ASC, id ASC`,
+          `SELECT item_type, location_id, transaction_type, quantity, total_cost,
+                  transaction_date::text AS transaction_date, id
+           FROM transaction_history WHERE tenant_id = $1`,
           [tenantId],
         ),
       ])
-      const currentQty = Number(currentRow[0]?.qty ?? 0)
-      const historyQty = replayLedgerBySlot(ledgerRows as Parameters<typeof replayLedgerBySlot>[0]).quantity
-      const qtyDiff = Math.abs(currentQty - historyQty)
 
-      if (qtyDiff < 0.5) {
-        checks.push({ id: "inventory_ledger", label: "Inventory ledger consistency", status: "ok", detail: `current_inventory qty matches transaction_history (${currentQty.toFixed(1)} units).` })
+      const drift = summariseLedgerDrift({
+        slots: slotRows as Parameters<typeof summariseLedgerDrift>[0]["slots"],
+        transactions: ledgerRows as Parameters<typeof summariseLedgerDrift>[0]["transactions"],
+      })
+
+      if (drift.totalAbsDrift < 0.5) {
+        checks.push({ id: "inventory_ledger", label: "Inventory ledger consistency", status: "ok", detail: "Every item's balance matches its transaction history." })
+      } else if (drift.unexplainedSlots === 0) {
+        // Only back-dating. The balances are right; saying so plainly stops an estate chasing it.
+        checks.push({
+          id: "inventory_ledger",
+          label: "Inventory ledger consistency",
+          status: "ok",
+          detail: `${drift.backdatedSlots} item${drift.backdatedSlots > 1 ? "s" : ""} shows a difference only because something was entered dated earlier than the stock covering it (e.g. logging usage a few days late). Those balances are correct as shown — nothing to fix.`,
+        })
       } else {
-        // Separate drift caused by back-dated entry from drift that means real history is
-        // missing. The first is benign and self-explanatory once named; reporting the two
-        // together makes an estate chase a discrepancy that is only an artefact of when they
-        // typed something in.
-        const backdatedSlots = await countBackdatedSlots(sql, tenantContext, tenantId)
-        const backdatedNote = backdatedSlots > 0
-          ? ` ${backdatedSlots} item${backdatedSlots > 1 ? "s" : ""} of this is explained by entries dated earlier than the stock covering them (e.g. logging usage a few days late) — those balances are correct as shown.`
-          : " No part of this is explained by back-dated entries, so history has most likely been deleted or altered."
-
         checks.push({
           id: "inventory_ledger",
           label: "Inventory ledger consistency",
           status: "warning",
-          detail: `current_inventory shows ${currentQty.toFixed(1)} units but replaying transaction_history gives ${historyQty.toFixed(1)} — a difference of ${qtyDiff.toFixed(1)} units.${backdatedNote}`,
-          value: `${qtyDiff.toFixed(1)} unit drift`,
+          detail: `${drift.unexplainedSlots} item${drift.unexplainedSlots > 1 ? "s" : ""} (${drift.unexplainedDrift.toFixed(1)} units) do not reconcile with their transaction history — most likely deleted or missing entries.` +
+            (drift.backdatedSlots > 0
+              ? ` A further ${drift.backdatedSlots} differ only through back-dated entry and are correct as shown.`
+              : ""),
+          value: `${drift.unexplainedDrift.toFixed(1)} unit drift`,
         })
       }
     } catch {

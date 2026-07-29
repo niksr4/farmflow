@@ -74,6 +74,91 @@ export function replayInventoryLedger(transactions: readonly LedgerTransaction[]
   }
 }
 
+export type LedgerDriftSummary = {
+  /** Sum of |stored − replayed| across slots. Never nets one slot's error against another's. */
+  totalAbsDrift: number
+  /** Drift from slots where the stored balance is correct and only date-ordering disagrees. */
+  backdatedDrift: number
+  /** Drift that no ordering explains — genuinely missing or altered history. */
+  unexplainedDrift: number
+  backdatedSlots: number
+  unexplainedSlots: number
+}
+
+/**
+ * Total the drift **per slot**, in absolute terms.
+ *
+ * Comparing `SUM(current_inventory)` against `SUM(replayed ledger)` is wrong: a slot that is
+ * 10,000 over and six that are collectively 150 under partly cancel, so the headline number
+ * moves in the wrong direction when you fix something. Summing per-slot absolute differences
+ * means every repair can only ever reduce it.
+ */
+export function summariseLedgerDrift(params: {
+  slots: readonly { item_type?: string | null; location_id?: string | null; quantity?: number | string | null }[]
+  /** Every transaction for the tenant; grouped and ordered internally. */
+  transactions: readonly (LedgerTransaction & {
+    item_type?: string | null
+    location_id?: string | null
+    transaction_date?: string | null
+    id?: number | string | null
+  })[]
+  tolerance?: number
+}): LedgerDriftSummary {
+  const tolerance = params.tolerance ?? 0.5
+  const key = (item: unknown, location: unknown) => `${item ?? ""}::${location ?? "null"}`
+
+  const bySlot = new Map<string, typeof params.transactions[number][]>()
+  for (const row of params.transactions) {
+    const k = key(row?.item_type, row?.location_id)
+    const bucket = bySlot.get(k)
+    if (bucket) bucket.push(row)
+    else bySlot.set(k, [row])
+  }
+
+  const summary: LedgerDriftSummary = {
+    totalAbsDrift: 0,
+    backdatedDrift: 0,
+    unexplainedDrift: 0,
+    backdatedSlots: 0,
+    unexplainedSlots: 0,
+  }
+
+  const seen = new Set<string>()
+  const consider = (k: string, stored: number) => {
+    seen.add(k)
+    const rows = bySlot.get(k) ?? []
+    const byDate = [...rows].sort(
+      (a, b) =>
+        String(a?.transaction_date ?? "").localeCompare(String(b?.transaction_date ?? "")) ||
+        Number(a?.id ?? 0) - Number(b?.id ?? 0),
+    )
+    const byInsertion = [...rows].sort((a, b) => Number(a?.id ?? 0) - Number(b?.id ?? 0))
+    const verdict = classifySlotDrift({ byDate, byInsertion, storedQuantity: stored, tolerance })
+    const drift = Math.abs(stored - verdict.byDateQuantity)
+    if (verdict.cause === "consistent") return
+
+    summary.totalAbsDrift += drift
+    if (verdict.cause === "backdated-entry") {
+      summary.backdatedDrift += drift
+      summary.backdatedSlots += 1
+    } else {
+      summary.unexplainedDrift += drift
+      summary.unexplainedSlots += 1
+    }
+  }
+
+  for (const slot of params.slots) consider(key(slot?.item_type, slot?.location_id), Number(slot?.quantity) || 0)
+  // Ledger slots with no inventory row at all still count — that is stock the ledger believes
+  // in and the balance has never heard of.
+  for (const k of bySlot.keys()) if (!seen.has(k)) consider(k, 0)
+
+  const round = (n: number) => Math.round(n * 10000) / 10000
+  summary.totalAbsDrift = round(summary.totalAbsDrift)
+  summary.backdatedDrift = round(summary.backdatedDrift)
+  summary.unexplainedDrift = round(summary.unexplainedDrift)
+  return summary
+}
+
 export type SlotDriftCause = "consistent" | "backdated-entry" | "unexplained"
 
 /**
