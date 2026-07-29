@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server"
 import { sql, isDbConfigured } from "@/lib/server/db"
 import { requireSessionUser } from "@/lib/server/auth"
-import { normalizeTenantContext } from "@/lib/server/tenant-db"
+import { normalizeTenantContext, runTenantQueries } from "@/lib/server/tenant-db"
 import { getCurrentFiscalYear } from "@/lib/fiscal-year-utils"
 import { buildErrorResponse, databaseNotConfiguredResponse } from "@/lib/server/route-utils"
 
@@ -26,7 +26,7 @@ export async function GET() {
     const missingRelation = (err: Error) =>
       err.message?.includes('relation "processing_records" does not exist')
 
-    const [totalsRows, recentRows] = await Promise.all([
+    const [totalsRows, recentRows] = await runTenantQueries(sql!, context, [
       sql!.query(
         `
         SELECT
@@ -38,7 +38,7 @@ export async function GET() {
           AND process_date <= CURRENT_DATE
         `,
         [context.tenantId, fy.startDate],
-      ).catch((err: Error) => { if (missingRelation(err)) return []; throw err }),
+      ),
       sql!.query(
         `
         SELECT
@@ -52,8 +52,11 @@ export async function GET() {
         ORDER BY process_date ASC
         `,
         [context.tenantId, LOOKBACK_DAYS],
-      ).catch((err: Error) => { if (missingRelation(err)) return []; throw err }),
-    ])
+      ),
+    ]).catch((err: Error) => {
+      if (missingRelation(err)) return [[], []]
+      throw err
+    })
 
     const totals = totalsRows as Array<{ season_total_kg: string; season_days: string }>
     const recent = recentRows as Array<{ process_date: string; daily_kg: string }>

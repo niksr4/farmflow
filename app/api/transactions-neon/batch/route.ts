@@ -1,7 +1,7 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { accountsSql } from "@/lib/server/db"
 import { requireModuleAccess, isModuleAccessError } from "@/lib/server/module-access"
-import { normalizeTenantContext, runTenantQuery } from "@/lib/server/tenant-db"
+import { normalizeTenantContext, runTenantQuery, runTenantTransaction } from "@/lib/server/tenant-db"
 import { canDeleteModule } from "@/lib/permissions"
 import { logAuditEvent } from "@/lib/server/audit-log"
 import { repairCurrentInventoryUpsertConstraints } from "@/lib/server/current-inventory-constraints"
@@ -9,6 +9,9 @@ import { logRouteMutationFailure } from "@/lib/server/route-error-events"
 import { resolveTenantUserUuid } from "@/lib/server/tenant-user"
 
 export const dynamic = "force-dynamic"
+
+// The whole replace ships as one transaction, so the batch has to fit in a single request.
+const MAX_BATCH_TRANSACTIONS = 5000
 
 export async function POST(request: NextRequest) {
   let tenantId: string | null = null
@@ -54,64 +57,69 @@ export async function POST(request: NextRequest) {
     )
     const existingCount = Number((existingCountRows as Array<{ count: number }>)?.[0]?.count) || 0
 
-    // Delete all existing transactions and reset inventory before re-insert
-    await runTenantQuery(
-      accountsSql,
-      tenantContext,
-      accountsSql`
-        DELETE FROM transaction_history
-        WHERE tenant_id = ${tenantContext.tenantId}
-      `,
-    )
+    if (transactions.length > MAX_BATCH_TRANSACTIONS) {
+      return NextResponse.json(
+        {
+          success: false,
+          message: `Refusing to replace ${transactions.length} transactions in one request (limit ${MAX_BATCH_TRANSACTIONS}). The replace runs as a single transaction so a failure cannot leave the ledger half-written, and a batch this large risks exceeding the request size limit. Split the import into smaller batches.`,
+        },
+        { status: 413 },
+      )
+    }
 
-    await runTenantQuery(
-      accountsSql,
-      tenantContext,
-      accountsSql`
-        DELETE FROM current_inventory
-        WHERE tenant_id = ${tenantContext.tenantId}
-      `,
-    )
-
+    // Global DDL self-healing on the shared current_inventory constraints. Runs on adminSql and
+    // must sit outside the data transaction below; hoisted above the delete so the ON CONFLICT
+    // upsert in the AFTER INSERT trigger has the constraint it needs.
     await repairCurrentInventoryUpsertConstraints(tenantContext)
-    
+
     const sortedTransactions = [...transactions].sort((a, b) => {
       const dateA = a?.transaction_date ? new Date(a.transaction_date).getTime() : 0
       const dateB = b?.transaction_date ? new Date(b.transaction_date).getTime() : 0
       return dateA - dateB
     })
 
-    // Insert all transactions (ascending by date to keep average-cost math stable)
-    for (const txn of sortedTransactions) {
-      const resolvedLocationId = typeof txn.location_id === "string" ? txn.location_id.trim() : ""
-      const locationValue = resolvedLocationId && resolvedLocationId !== "unassigned" ? resolvedLocationId : null
+    // Wipe-and-replace in ONE transaction. Previously the two deletes and every insert ran as
+    // separate transactions, so a failure partway through the insert loop committed the delete
+    // and only some of the rows — permanent, unrecoverable partial loss of the tenant's whole
+    // inventory ledger. Inserts stay ordered by date so the average-cost trigger math replays
+    // the same way it did originally.
+    await runTenantTransaction(accountsSql, tenantContext, (txn) => [
+      txn`
+        DELETE FROM transaction_history
+        WHERE tenant_id = ${tenantContext.tenantId}
+      `,
+      txn`
+        DELETE FROM current_inventory
+        WHERE tenant_id = ${tenantContext.tenantId}
+      `,
+      ...sortedTransactions.map((t) => {
+        const resolvedLocationId = typeof t.location_id === "string" ? t.location_id.trim() : ""
+        const locationValue =
+          resolvedLocationId && resolvedLocationId !== "unassigned" ? resolvedLocationId : null
 
-      await runTenantQuery(
-        accountsSql,
-        tenantContext,
-        accountsSql`
+        return txn`
           INSERT INTO transaction_history (
             item_type, quantity, transaction_type, notes,
             transaction_date, user_id, user_uuid, price, total_cost,
             tenant_id, location_id, unit
           )
           VALUES (
-            ${txn.item_type},
-            ${txn.quantity},
-            ${txn.transaction_type},
-            ${txn.notes || ""},
-            ${txn.transaction_date || new Date().toISOString()},
-            ${txn.user_id || "system"},
+            ${t.item_type},
+            ${t.quantity},
+            ${t.transaction_type},
+            ${t.notes || ""},
+            ${t.transaction_date || new Date().toISOString()},
+            ${t.user_id || "system"},
             ${tenantUserUuid},
-            ${txn.price || 0},
-            ${txn.total_cost || 0},
+            ${t.price || 0},
+            ${t.total_cost || 0},
             ${tenantContext.tenantId},
             ${locationValue},
-            ${txn.unit || "kg"}
+            ${t.unit || "kg"}
           )
-        `,
-      )
-    }
+        `
+      }),
+    ])
 
     // Fetch updated transactions
     const updatedTransactions = await runTenantQuery(

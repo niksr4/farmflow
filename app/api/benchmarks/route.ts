@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server"
-import { sql } from "@/lib/server/db"
+import { sql, adminSql } from "@/lib/server/db"
 import { requireSessionUser } from "@/lib/server/auth"
 import { resolveScopedSessionUser } from "@/lib/server/module-access"
 import { getFiscalYearDateRange, getCurrentFiscalYear } from "@/lib/fiscal-year-utils"
@@ -71,12 +71,19 @@ export async function GET(request: Request) {
 
     const { startDate, endDate } = getFiscalYearDateRange(getCurrentFiscalYear())
 
-    // --- Cross-tenant aggregate query (global, no RLS) ---
+    // --- Cross-tenant aggregate query (global, deliberately not tenant-scoped) ---
     // We join tenants to processing_records and sales_records and aggregate
     // KPIs per tenant, filtering to the same crop family via JSONB.
-    // All returned values are per-tenant averages — no individual record detail.
+    // All returned values are per-tenant averages — no individual record detail, and
+    // tenant_id is only used below to locate the caller's own row before the response
+    // is reduced to anonymous aggregates.
+    //
+    // This must run on adminSql (owner role). The runtime connection enforces RLS, and
+    // a cross-tenant aggregate cannot set a single app.tenant_id — on `sql` every row is
+    // filtered out and the endpoint silently reports "not enough estates yet" forever.
+    // runTenantQuery is NOT the fix here: scoping it to one tenant defeats the benchmark.
     const kpiRows = toRows<any>(
-      await sql.query(
+      await adminSql.query(
         `
         SELECT
           t.id AS tenant_id,

@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server"
 import { sql, isDbConfigured } from "@/lib/server/db"
 import { requireSessionUser } from "@/lib/server/auth"
-import { normalizeTenantContext } from "@/lib/server/tenant-db"
+import { normalizeTenantContext, runTenantQuery } from "@/lib/server/tenant-db"
 import { getCurrentFiscalYear } from "@/lib/fiscal-year-utils"
 import { buildErrorResponse, databaseNotConfiguredResponse } from "@/lib/server/route-utils"
 
@@ -23,7 +23,7 @@ export async function GET() {
     const prevFyStart = fy.startDate.replace(/^(\d{4})/, (y) => String(Number(y) - 1))
     const prevFyEnd = fy.endDate.replace(/^(\d{4})/, (y) => String(Number(y) - 1))
 
-    const rows = await sql!.query(
+    const rows = await runTenantQuery(sql!, context, sql!.query(
       `
       SELECT
         fy,
@@ -59,7 +59,7 @@ export async function GET() {
       ORDER BY fy, week_num
       `,
       [context.tenantId, fy.startDate, fy.endDate, prevFyStart, prevFyEnd],
-    ).catch((err: Error) => {
+    )).catch((err: Error) => {
       if (err.message?.includes('relation "processing_records" does not exist')) return []
       throw err
     })

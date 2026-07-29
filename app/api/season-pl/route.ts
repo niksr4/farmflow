@@ -188,20 +188,22 @@ export async function GET(request: NextRequest) {
     const totalDryCherryKg = Number(procData.total_dry_cherry_kg ?? 0)
     const processingDays = Number(procData.processing_days ?? 0)
 
-    // Reconciliation — run separately with fallback to avoid TS type conflicts
-    const [dispatchRows, inventoryValueRows] = await Promise.all([
+    // Reconciliation — tenant-scoped like every other query here. Running these outside
+    // runTenantQueries left app.tenant_id unset, so under RLS both came back empty and
+    // balanceOk always read false.
+    const [dispatchRows, inventoryValueRows] = await runTenantQueries(sql, tenantContext, [
       sql.query(
         `SELECT COALESCE(SUM(NULLIF(kgs_received, 0)), 0) AS total_kg_received
          FROM dispatch_records
          WHERE tenant_id = $1 AND dispatch_date >= $2::date AND dispatch_date <= $3::date`,
         [tenantId, start, end],
-      ).catch(() => [{ total_kg_received: 0 }]),
+      ),
       sql.query(
         `SELECT COALESCE(SUM(total_cost), 0) AS total_inventory_value
          FROM current_inventory WHERE tenant_id = $1`,
         [tenantId],
-      ).catch(() => [{ total_inventory_value: 0 }]),
-    ])
+      ),
+    ]).catch(() => [[{ total_kg_received: 0 }], [{ total_inventory_value: 0 }]])
     const dispatchData = toRows(dispatchRows)[0] ?? {}
     const inventoryValueData = toRows(inventoryValueRows)[0] ?? {}
     const dispatchKgReceived = Number(dispatchData.total_kg_received ?? 0)

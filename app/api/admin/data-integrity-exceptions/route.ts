@@ -2,6 +2,7 @@ import { NextResponse } from "next/server"
 import { sql } from "@/lib/server/db"
 import { requireOwnerRole } from "@/lib/tenant"
 import { requireAdminSession } from "@/lib/server/mfa"
+import { normalizeTenantContext, runTenantQuery } from "@/lib/server/tenant-db"
 import { buildAdminErrorResponse, databaseNotConfiguredResponse } from "@/lib/server/route-utils"
 
 const isMissingRelation = (error: unknown, relation: string) => {
@@ -13,6 +14,11 @@ export async function GET(request: Request) {
   try {
     const sessionUser = await requireAdminSession()
     requireOwnerRole(sessionUser.role)
+    // Owner-only, deliberately cross-tenant. The RLS policy has an explicit
+    // `current_setting('app.role') = 'owner'` branch, so scoping with the owner's context
+    // returns every tenant's rows while staying on the least-privilege runtime connection.
+    // Left unwrapped, app.tenant_id is never set and the console shows an empty list.
+    const tenantContext = normalizeTenantContext(sessionUser.tenantId, sessionUser.role)
 
     if (!sql) {
       return databaseNotConfiguredResponse()
@@ -26,7 +32,7 @@ export async function GET(request: Request) {
     const normalizedStatus = statusFilter === "resolved" ? "resolved" : "open"
 
     const rowsResult = tenantId
-      ? await sql.query(
+      ? await runTenantQuery(sql, tenantContext, sql.query(
           `
             SELECT
               die.id,
@@ -51,8 +57,8 @@ export async function GET(request: Request) {
             LIMIT $3
           `,
           [normalizedStatus, tenantId, limit],
-        )
-      : await sql.query(
+        ))
+      : await runTenantQuery(sql, tenantContext, sql.query(
           `
             SELECT
               die.id,
@@ -76,7 +82,7 @@ export async function GET(request: Request) {
             LIMIT $2
           `,
           [normalizedStatus, limit],
-        )
+        ))
 
     const rows = Array.isArray(rowsResult)
       ? rowsResult

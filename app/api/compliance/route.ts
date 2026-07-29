@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server"
 import { sql } from "@/lib/server/db"
 import { requireModuleAccess, isModuleAccessError } from "@/lib/server/module-access"
+import { canWriteModule } from "@/lib/permissions"
 import { normalizeTenantContext, runTenantQuery } from "@/lib/server/tenant-db"
 
 export async function GET() {
@@ -54,6 +55,12 @@ export async function GET() {
 export async function POST(request: Request) {
   try {
     const sessionUser = await requireModuleAccess("compliance")
+    // requireModuleAccess only proves the module is enabled for this user — it says nothing
+    // about whether their role may write. Without this, any role that can see the tab could
+    // create records that are meant to be admin-only.
+    if (!canWriteModule(sessionUser.role, "compliance")) {
+      return NextResponse.json({ success: false, error: "Insufficient role" }, { status: 403 })
+    }
     const tenantContext = normalizeTenantContext(sessionUser.tenantId, sessionUser.role)
     const payload = await request.json()
 

@@ -2,6 +2,7 @@ import "server-only"
 
 import type { NeonQueryFunction } from "@neondatabase/serverless"
 import { runTenantQuery } from "@/lib/server/tenant-db"
+import { replayInventoryLedger, type LedgerTransaction } from "@/lib/inventory-ledger"
 
 type TenantContext = {
   tenantId: string
@@ -10,10 +11,8 @@ type TenantContext = {
 
 type LocationScope = string | null
 
-const isRestockType = (value: string) => {
-  const normalized = value.toLowerCase()
-  return normalized === "restock" || normalized === "restocking"
-}
+// The replay maths lives in lib/inventory-ledger.ts so the Accounts reconciliation check can
+// measure the ledger the same way this function rebuilds it. They used to disagree.
 
 async function recalculateInventoryForLocation(
   sql: NeonQueryFunction<any, any>,
@@ -34,32 +33,10 @@ async function recalculateInventoryForLocation(
     `,
   )
 
-  let runningQty = 0
-  let runningCost = 0
-
-  for (const row of transactions || []) {
-    const qty = Number(row.quantity) || 0
-    const totalCost = Number(row.total_cost) || 0
-    const type = String(row.transaction_type || "")
-
-    if (isRestockType(type)) {
-      runningQty += qty
-      runningCost += totalCost
-      continue
-    }
-
-    const avgCost = runningQty > 0 ? runningCost / runningQty : 0
-    const depletionCost = avgCost * qty
-    runningQty = Math.max(0, runningQty - qty)
-    runningCost = Math.max(0, runningCost - depletionCost)
-  }
-
-  // Clamp IEEE-754 floating-point residuals that should be exactly zero
-  const clampFloat = (n: number) => (Math.abs(n) < 1e-6 ? 0 : Math.round(n * 10000) / 10000)
-  runningQty = clampFloat(runningQty)
-  runningCost = clampFloat(runningCost)
-
-  const avgPrice = runningQty > 0 ? clampFloat(runningCost / runningQty) : 0
+  const replayed = replayInventoryLedger((transactions || []) as LedgerTransaction[])
+  const runningQty = replayed.quantity
+  const runningCost = replayed.totalCost
+  const avgPrice = replayed.avgPrice
   const unitRow = await runTenantQuery(
     sql,
     tenantContext,

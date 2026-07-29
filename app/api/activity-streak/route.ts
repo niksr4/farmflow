@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server"
 import { sql, accountsSql } from "@/lib/server/db"
 import { requireAnyModuleAccess } from "@/lib/server/module-access"
-import { normalizeTenantContext } from "@/lib/server/tenant-db"
+import { normalizeTenantContext, runTenantQueries } from "@/lib/server/tenant-db"
 
 export const dynamic = "force-dynamic"
 export const revalidate = 0
@@ -12,17 +12,16 @@ export async function GET() {
   try {
     const sessionUser = await requireAnyModuleAccess(["inventory", "accounts", "processing"])
     const tenantId = sessionUser.tenantId
-    normalizeTenantContext(tenantId, sessionUser.role)
+    const tenantContext = normalizeTenantContext(tenantId, sessionUser.role)
 
     // Collect distinct IST calendar days that have at least one logged record
     // across all operational tables. UNION ALL is intentional — we only need the day.
     // Tables that may not exist are wrapped in individual try/catch via UNION handling.
     const tz = "Asia/Kolkata"
 
-    const [opsRows, accountsRows] = await Promise.all([
-      sql
-        ? sql.query(
-            `
+    const [opsRows, accountsRows] = await runTenantQueries(sql, tenantContext, [
+      sql.query(
+        `
             SELECT DISTINCT (recorded_at AT TIME ZONE $2)::date::text AS day
             FROM (
               SELECT created_at AS recorded_at FROM processing_records WHERE tenant_id = $1
@@ -38,10 +37,8 @@ export async function GET() {
             WHERE recorded_at >= NOW() - INTERVAL '90 days'
             `,
             [tenantId, tz],
-          ).catch(() => [])
-        : [],
-      accountsSql
-        ? accountsSql.query(
+          ),
+          accountsSql.query(
             `
             SELECT DISTINCT (recorded_at AT TIME ZONE $2)::date::text AS day
             FROM (
@@ -52,9 +49,8 @@ export async function GET() {
             WHERE recorded_at >= NOW() - INTERVAL '90 days'
             `,
             [tenantId, tz],
-          ).catch(() => [])
-        : [],
-    ])
+          ),
+    ]).catch(() => [[], []])
 
     // Merge distinct days from both DB connections
     const daySet = new Set<string>()

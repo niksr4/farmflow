@@ -3,7 +3,7 @@ import { inventorySql } from "@/lib/server/db"
 import { requireModuleAccess, isModuleAccessError } from "@/lib/server/module-access"
 import { canDeleteModule, canWriteModule } from "@/lib/permissions"
 import { logAuditEvent } from "@/lib/server/audit-log"
-import { normalizeTenantContext, runTenantQueries, runTenantQuery } from "@/lib/server/tenant-db"
+import { normalizeTenantContext, runTenantQueries, runTenantQuery, runTenantTransaction } from "@/lib/server/tenant-db"
 import { resolveTenantUserUuid } from "@/lib/server/tenant-user"
 import { logRouteMutationFailure } from "@/lib/server/route-error-events"
 import { normalizeInventoryItemType } from "@/lib/inventory-item-type"
@@ -300,28 +300,35 @@ export async function POST(request: NextRequest) {
     const resolvedLocationId = typeof location_id === "string" ? location_id.trim() : ""
     const locationValue = resolvedLocationId && resolvedLocationId !== "unassigned" ? resolvedLocationId : null
 
-    // Ensure the item exists with the correct unit without double-counting inventory.
-    // Fallback handles older tenant schemas that are missing the expected unique constraints.
-    await ensureInventorySlotExists(tenantContext, itemType, unitValue, locationValue)
+    // Creating the inventory slot and inserting the opening transaction are one unit of work.
+    // Run separately, a failure between them leaves an item whose balance no ledger entry
+    // accounts for, which later shows up as an untraceable drift in the Accounts reconciliation
+    // panel — Laxmi has one such orphaned row (see scripts/103, cause never established).
+    // Fallback handles older tenant schemas missing the expected unique constraints.
+    const slotUpsert = (txn: Parameters<Parameters<typeof runTenantTransaction>[2]>[0]) =>
+      locationValue
+        ? txn`
+            INSERT INTO current_inventory (item_type, quantity, unit, avg_price, total_cost, tenant_id, location_id)
+            VALUES (${itemType}, 0, ${unitValue}, 0, 0, ${tenantContext.tenantId}, ${locationValue})
+            ON CONFLICT (item_type, tenant_id, location_id)
+            DO UPDATE SET unit = EXCLUDED.unit
+          `
+        : txn`
+            INSERT INTO current_inventory (item_type, quantity, unit, avg_price, total_cost, tenant_id, location_id)
+            VALUES (${itemType}, 0, ${unitValue}, 0, 0, ${tenantContext.tenantId}, NULL)
+            ON CONFLICT (item_type, tenant_id) WHERE location_id IS NULL
+            DO UPDATE SET unit = EXCLUDED.unit
+          `
 
-
-    const insertInitialTransaction = async () =>
-      runTenantQuery(
-        inventorySql,
-        tenantContext,
-        inventorySql`
+    // Slot + opening transaction together: either both land or neither does. The AFTER INSERT
+    // trigger on transaction_history moves the slot from 0 to the real quantity.
+    const createItemWithOpeningStock = async () =>
+      runTenantTransaction(inventorySql, tenantContext, (txn) => [
+        slotUpsert(txn),
+        txn`
           INSERT INTO transaction_history (
-            item_type,
-            quantity,
-            transaction_type,
-            notes,
-            user_id,
-            user_uuid,
-            price,
-            total_cost,
-            tenant_id,
-            location_id,
-            unit
+            item_type, quantity, transaction_type, notes, user_id, user_uuid,
+            price, total_cost, tenant_id, location_id, unit
           )
           VALUES (
             ${itemType},
@@ -337,19 +344,21 @@ export async function POST(request: NextRequest) {
             ${unitValue}
           )
         `,
-      )
+      ])
 
-    // Add initial transaction if quantity > 0 (trigger updates current_inventory)
     if (quantityValue > 0) {
       try {
-        await insertInitialTransaction()
+        await createItemWithOpeningStock()
       } catch (error) {
         if (!isMissingCurrentInventoryUpsertConstraintError(error)) {
           throw error
         }
         await repairCurrentInventoryUpsertConstraints(tenantContext)
-        await insertInitialTransaction()
+        await createItemWithOpeningStock()
       }
+    } else {
+      // No opening stock, so there is no ledger entry to keep in step with.
+      await ensureInventorySlotExists(tenantContext, itemType, unitValue, locationValue)
     }
 
     await logAuditEvent(inventorySql, sessionUser, {

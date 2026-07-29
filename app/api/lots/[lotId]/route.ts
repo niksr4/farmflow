@@ -9,6 +9,22 @@ const getIp = (req: NextRequest) =>
   (req.headers.get("x-forwarded-for") || req.headers.get("x-real-ip") || "").split(",")[0]?.trim() || "unknown"
 
 // Public endpoint — no auth required. Returns only non-sensitive trace data for a lot.
+//
+// NOTE (2026-07-28): this endpoint currently 404s for every input, and deliberately so.
+// It queries processing_records by lot_id, and there are ZERO lot_ids in processing_records
+// across every production tenant — lot traceability is built but unadopted. It also runs on
+// the RLS-enforcing runtime connection with no session, so app.tenant_id is never set and
+// RLS filters every row anyway.
+//
+// Moving it to adminSql would make it work, and was tried and reverted: that turns a public,
+// unauthenticated route into one that can read any tenant's records by guessing a lot_id —
+// exactly what RLS was enabled to prevent — to serve a feature nobody uses yet.
+//
+// WHEN LOT TRACEABILITY IS ACTUALLY ADOPTED, this needs a deliberate decision, because it will
+// not start working on its own. Either scope it (require a session and use runTenantQuery, so
+// it stops being public), or keep it public on adminSql having accepted that any lot_id is
+// world-readable and hardened the rate limiting accordingly. Do not switch to adminSql without
+// making that call explicitly.
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ lotId: string }> },

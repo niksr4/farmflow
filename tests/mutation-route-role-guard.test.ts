@@ -23,7 +23,11 @@ import { canWriteModule } from "../lib/permissions"
  *
  * This list must only ever shrink. If a fix adds the missing role check, delete the entry here too.
  */
-const KNOWN_MISSING_WRITE_GUARD = ["app/api/compliance/route.ts", "app/api/market-pricing/route.ts"].sort()
+// Emptied 2026-07-29: both entries were fixed. compliance and market-pricing gated their POST
+// handlers on requireModuleAccess alone, which proves the module is enabled for the user but says
+// nothing about whether their role may write — so any role that could see the tab could create
+// records meant to be admin-only. Both now call canWriteModule before touching anything.
+const KNOWN_MISSING_WRITE_GUARD: string[] = [].sort()
 
 // Modules a "user" role account may already mutate under the app's own permission model
 // (lib/permissions.ts USER_MUTATION_MODULES) — a route gated only on one of these doesn't need an

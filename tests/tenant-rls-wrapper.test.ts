@@ -1,5 +1,6 @@
 import { readFileSync, readdirSync, statSync } from "node:fs"
 import { join, relative, resolve } from "node:path"
+import ts from "typescript"
 import { describe, expect, it } from "vitest"
 
 /**
@@ -15,27 +16,32 @@ import { describe, expect, it } from "vitest"
  * back ZERO rows — silently. It does not error, and an explicit `WHERE tenant_id = $1` filter does
  * not help: the filter makes the query correct, not visible. The failure looks exactly like "this
  * tenant has no data yet", so it hides behind empty-state UI and never reaches monitoring.
+ *
+ * Detection works per CALL SITE, via the TypeScript AST. An earlier file-level version asked only
+ * "does this file mention a wrapper anywhere", which passed any route that wrapped most of its
+ * queries and missed one — exactly how app/api/season-pl (a Promise.all pair outside the wrapped
+ * batch) and app/api/ai-validate (six bare `await sql\`` baselines) stayed hidden while the file
+ * looked scoped.
  */
 
+// Tables with a tenant_id column, i.e. everything scripts/98-enable-rls-all-tenant-tables.sql
+// turns RLS on for. Tables without tenant_id (tenants, agent_runs, api_response_cache,
+// schema_migrations, signup_requests…) are deliberately absent — querying those unwrapped
+// is correct, and flagging them produced false positives in earlier sweeps.
 const TENANT_TABLES = [
-  "processing_records",
-  "dispatch_records",
-  "sales_records",
-  "other_sales_records",
-  "labor_transactions",
-  "expense_transactions",
-  "account_activities",
-  "current_inventory",
-  "attendance_records",
-  "attendance_workers",
-  "pepper_records",
-  "rubber_records",
-  "curing_records",
-  "billing_invoices",
-  "receivables",
-  "compliance_records",
-  "locations",
+  "account_activities", "agent_run_findings", "app_error_events", "attendance_records",
+  "attendance_workers", "audit_logs", "billing_invoice_items", "billing_invoices",
+  "buyer_price_records", "buyers", "certifications", "compliance_checklist_items",
+  "curing_records", "current_inventory", "data_integrity_exceptions", "digest_feedback",
+  "dispatch_records", "document_records", "expense_inventory_links", "expense_transactions",
+  "import_jobs", "journal_entries", "labor_transactions", "locations", "other_sales_records",
+  "pepper_records", "picking_records", "privacy_requests", "processing_records",
+  "quality_grading_records", "rainfall_records", "receivables", "rubber_records",
+  "sales_records", "security_events", "tenant_modules", "tenant_weekly_metrics",
+  "transaction_history", "user_modules", "worker_ledger",
 ]
+
+const TENANT_WRAPPERS = ["runTenantQuery", "runTenantQueries", "runTenantTransaction"]
 
 const TENANT_TABLE_RE = new RegExp(`\\b(?:FROM|INTO|UPDATE|JOIN)\\s+(?:${TENANT_TABLES.join("|")})\\b`, "i")
 
@@ -49,12 +55,12 @@ const TENANT_TABLE_RE = new RegExp(`\\b(?:FROM|INTO|UPDATE|JOIN)\\s+(?:${TENANT_
  *
  * This list must only ever shrink. If a fix removes a route from it, delete the entry here too.
  */
-const KNOWN_UNWRAPPED = [
-  "app/api/activity-streak/route.ts", // pending confirmation — streak likely always 0
-  "app/api/benchmarks/route.ts", // CONFIRMED — peer benchmarks always "not enough estates"
-  "app/api/dashboard/season-pace/route.ts", // CONFIRMED — pace chart always empty
-  "app/api/dashboard/season-projection/route.ts", // CONFIRMED — projection always hasData:false
-  "app/api/reconciliation/route.ts", // pending confirmation
+const KNOWN_UNWRAPPED: string[] = [
+  // Emptied 2026-07-28: activity-streak, benchmarks, dashboard/season-pace,
+  // dashboard/season-projection and reconciliation were all fixed, along with season-pl and
+  // ai-validate, which the file-level detector could not see. benchmarks moved to adminSql
+  // because its read is cross-tenant by design; the rest now use the wrappers. lots stays
+  // unwrapped on purpose — see PUBLIC_NO_TENANT_CONTEXT_ROUTES below.
 ].sort()
 
 /**
@@ -81,6 +87,104 @@ const collectRouteFiles = (dir: string): string[] => {
   return out
 }
 
+const RUNTIME_CLIENTS = new Set(["sql", "accountsSql", "inventorySql"])
+
+/** Unwrap `sql!` / `(sql)` so the underlying identifier is visible. */
+function baseIdentifier(node: ts.Node): ts.Node {
+  let current = node
+  while (ts.isNonNullExpression(current) || ts.isParenthesizedExpression(current)) {
+    current = current.expression
+  }
+  return current
+}
+
+/**
+ * Query call sites on a runtime client that are not enclosed in a tenant wrapper.
+ *
+ * Uses the AST rather than text matching: a wrapped call is `runTenantQuery(sql, ctx,
+ * sql.query(…))`, so the query node has a wrapper CallExpression among its ancestors.
+ * An unwrapped one — `await sql.query(…)`, or one buried in `await Promise.all([sql.query(…)])`,
+ * the shape that made season-pl look scoped while part of it silently was not — does not.
+ */
+function unwrappedClientCalls(src: string, fileName: string): string[] {
+  const source = ts.createSourceFile(fileName, src, ts.ScriptTarget.ESNext, true)
+  const found: string[] = []
+
+  const isRuntimeClientQuery = (node: ts.Node): boolean => {
+    // sql`…` / accountsSql`…`
+    if (ts.isTaggedTemplateExpression(node)) {
+      const tag = baseIdentifier(node.tag)
+      return ts.isIdentifier(tag) && RUNTIME_CLIENTS.has(tag.text)
+    }
+    // sql.query(…)
+    if (ts.isCallExpression(node) && ts.isPropertyAccessExpression(node.expression)) {
+      const obj = baseIdentifier(node.expression.expression)
+      return (
+        node.expression.name.text === "query" &&
+        ts.isIdentifier(obj) &&
+        RUNTIME_CLIENTS.has(obj.text)
+      )
+    }
+    return false
+  }
+
+  /**
+   * Walk outward from a query node to decide whether it is executed unscoped.
+   *
+   * - a wrapper CallExpression first  → scoped, fine
+   * - an `await` first               → executed directly on the runtime client, unscoped
+   * - neither, up to the function     → not an execution site. This is the common shape for
+   *   composable `sql\`\`` clause fragments and for helpers that *return* a query for a caller
+   *   to wrap; flagging those would be noise.
+   */
+  const classify = (node: ts.Node): "scoped" | "unscoped" | "not-executed" => {
+    for (let p = node.parent; p; p = p.parent) {
+      if (ts.isCallExpression(p)) {
+        const callee = p.expression
+        if (ts.isIdentifier(callee) && TENANT_WRAPPERS.includes(callee.text)) return "scoped"
+        // Promise.all([...]) is transparent — the queries inside it are still executed
+        // directly, which is exactly how season-pl's unscoped pair hid in plain sight.
+        const isPromiseCombinator =
+          ts.isPropertyAccessExpression(callee) &&
+          ts.isIdentifier(callee.expression) &&
+          callee.expression.text === "Promise"
+        if (isPromiseCombinator) continue
+        // Any other call means the query is an argument handed to a helper, which may do
+        // the wrapping itself (finance-balance-sheet's runOptionalQuery does). Deciding
+        // that needs call-graph analysis, so treat it as out of scope for this guard
+        // rather than reporting a false positive.
+        return "not-executed"
+      }
+      if (ts.isAwaitExpression(p)) return "unscoped"
+      if (ts.isFunctionDeclaration(p) || ts.isArrowFunction(p) || ts.isFunctionExpression(p)) break
+    }
+    return "not-executed"
+  }
+
+  /**
+   * Only queries that actually read a tenant-scoped table matter. Tables without a
+   * tenant_id column (tenants, agent_runs, signup_tokens…) have no RLS policy, so querying
+   * them unwrapped is correct and must not be flagged.
+   */
+  const touchesTenantTable = (node: ts.Node): boolean => {
+    const text = node.getText(source)
+    return TENANT_TABLES.some((table) =>
+      new RegExp(`\\b(FROM|JOIN|INTO|UPDATE)\\s+${table}\\b`, "i").test(text),
+    )
+  }
+
+  const visit = (node: ts.Node) => {
+    if (isRuntimeClientQuery(node) && touchesTenantTable(node) && classify(node) === "unscoped") {
+      const { line } = source.getLineAndCharacterOfPosition(node.getStart(source))
+      found.push(`line ${line + 1}`)
+    }
+    ts.forEachChild(node, visit)
+  }
+  visit(source)
+
+  return [...new Set(found)]
+}
+
 const findUnwrappedRoutes = () => {
   const root = process.cwd()
   const apiDir = resolve(root, "app/api")
@@ -89,14 +193,74 @@ const findUnwrappedRoutes = () => {
   for (const file of collectRouteFiles(apiDir)) {
     const src = readFileSync(file, "utf8")
     if (!TENANT_TABLE_RE.test(src)) continue
-    // adminSql is the deliberate owner-connection escape hatch and bypasses RLS by design.
-    if (src.includes("adminSql")) continue
-    if (src.includes("runTenantQuer")) continue
-    unwrapped.push(relative(root, file).split("\\").join("/"))
+    if (unwrappedClientCalls(src, file).length > 0) {
+      unwrapped.push(relative(root, file).split("\\").join("/"))
+    }
   }
 
   return unwrapped.sort()
 }
+
+describe("unwrappedClientCalls detector", () => {
+  const detect = (src: string) => unwrappedClientCalls(src, "sample.ts")
+
+  it("flags a directly awaited query", () => {
+    expect(detect("async function f(){ await sql`SELECT 1 FROM sales_records` }")).toHaveLength(1)
+  })
+
+  it("flags queries hidden inside Promise.all — the season-pl shape", () => {
+    const src = `async function f(){
+      const [a, b] = await Promise.all([
+        sql.query(\`SELECT 1 FROM dispatch_records WHERE tenant_id = $1\`, [t]),
+        sql.query(\`SELECT 1 FROM current_inventory WHERE tenant_id = $1\`, [t]),
+      ])
+    }`
+    expect(detect(src)).toHaveLength(2)
+  })
+
+  it("accepts a query wrapped in runTenantQuery", () => {
+    expect(
+      detect("async function f(){ await runTenantQuery(sql, ctx, sql`SELECT 1 FROM sales_records`) }"),
+    ).toEqual([])
+  })
+
+  it("accepts queries wrapped in runTenantQueries", () => {
+    const src = `async function f(){
+      await runTenantQueries(sql, ctx, [
+        sql.query(\`SELECT 1 FROM dispatch_records\`, [t]),
+        sql.query(\`SELECT 1 FROM current_inventory\`, [t]),
+      ])
+    }`
+    expect(detect(src)).toEqual([])
+  })
+
+  it("ignores composable sql`` clause fragments — the dispatch shape", () => {
+    const src = "async function f(){ const clause = id ? sql` AND location_id = ${id}` : sql``; return clause }"
+    expect(detect(src)).toEqual([])
+  })
+
+  it("ignores a query handed to a wrapping helper — the finance-balance-sheet shape", () => {
+    const src = `async function f(){
+      const r = await Promise.all([
+        runOptionalQuery(ctx, sql\`SELECT 1 FROM sales_records\`, ["sales_records"]),
+      ])
+    }`
+    expect(detect(src)).toEqual([])
+  })
+
+  it("ignores queries against tables that have no RLS policy", () => {
+    expect(detect("async function f(){ await sql`SELECT 1 FROM tenants WHERE id = $1` }")).toEqual([])
+    expect(detect("async function f(){ await sql`SELECT 1 FROM agent_runs` }")).toEqual([])
+  })
+
+  it("ignores a helper that returns a query for its caller to wrap", () => {
+    expect(detect("function build(){ return sql.query(`SELECT 1 FROM sales_records`, []) }")).toEqual([])
+  })
+
+  it("sees through sql! non-null assertions", () => {
+    expect(detect("async function f(){ await sql!.query(`SELECT 1 FROM processing_records`, []) }")).toHaveLength(1)
+  })
+})
 
 describe("tenant RLS wrapper guard", () => {
   it("does not add any new route that queries tenant tables without a tenant wrapper", () => {
@@ -137,11 +301,18 @@ describe("tenant RLS wrapper guard", () => {
     expect(unwrapped).not.toContain("app/api/exception-alerts/route.ts")
   })
 
-  it("keeps app/api/lots/[lotId]/route.ts on the public-no-tenant-context list, not the bug list", () => {
-    // If this route ever starts requiring a session (requireSessionUser/requireModuleAccess) it
-    // should move to using runTenantQuery like everything else, and drop off both lists.
-    const unwrapped = findUnwrappedRoutes()
-    expect(unwrapped).toContain("app/api/lots/[lotId]/route.ts")
+  it("keeps the public lot lookup unwrapped and OFF adminSql, by deliberate choice", () => {
+    // app/api/lots/[lotId] is public and unauthenticated, so there is no session and no
+    // app.tenant_id to set — RLS filters every row and it 404s. That is accepted for now:
+    // there are zero lot_ids in processing_records in production, so the feature is unadopted,
+    // and adminSql would make a public route able to read any tenant's data by guessing an id.
+    // This asserts the *code* still uses the runtime client; the route's header comment
+    // explains what to decide when lot traceability is actually adopted.
+    const src = readFileSync(resolve(process.cwd(), "app/api/lots/[lotId]/route.ts"), "utf8")
+    const importsAdminSql = /^import\s*\{[^}]*\badminSql\b[^}]*\}\s*from\s*"@\/lib\/server\/db"/m.test(src)
+    expect(importsAdminSql, "lots must not silently gain an RLS bypass").toBe(false)
+
+    expect(findUnwrappedRoutes()).toContain("app/api/lots/[lotId]/route.ts")
     expect(KNOWN_UNWRAPPED).not.toContain("app/api/lots/[lotId]/route.ts")
     expect(PUBLIC_NO_TENANT_CONTEXT_ROUTES).toContain("app/api/lots/[lotId]/route.ts")
   })

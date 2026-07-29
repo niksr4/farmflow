@@ -2,6 +2,7 @@ import { NextResponse } from "next/server"
 import { sql } from "@/lib/server/db"
 import { requireOwnerRole } from "@/lib/tenant"
 import { requireAdminSession } from "@/lib/server/mfa"
+import { normalizeTenantContext, runTenantQuery } from "@/lib/server/tenant-db"
 import { buildAdminErrorResponse, databaseNotConfiguredResponse } from "@/lib/server/route-utils"
 
 const AGENT_NAME = "tenant-smoke-agent"
@@ -15,6 +16,11 @@ export async function GET(request: Request) {
   try {
     const sessionUser = await requireAdminSession()
     requireOwnerRole(sessionUser.role)
+    // agent_runs has no tenant_id and no RLS, but agent_run_findings does. Owner-only and
+    // deliberately cross-tenant, so scope with the owner context: the policy's
+    // `app.role = 'owner'` branch returns every tenant's findings. Unwrapped, the console
+    // silently showed zero findings for every smoke run.
+    const tenantContext = normalizeTenantContext(sessionUser.tenantId, sessionUser.role)
 
     if (!sql) {
       return databaseNotConfiguredResponse()
@@ -43,7 +49,7 @@ export async function GET(request: Request) {
     const latestRunId = runs[0]?.id ? String(runs[0].id) : null
     let findings: any[] = []
     if (latestRunId) {
-      const findingsResult = await sql.query(
+      const findingsResult = await runTenantQuery(sql, tenantContext, sql.query(
         `
           SELECT
             tenant_id::text AS tenant_id,
@@ -60,7 +66,7 @@ export async function GET(request: Request) {
           LIMIT 100
         `,
         [latestRunId],
-      )
+      ))
       findings = Array.isArray(findingsResult)
         ? findingsResult
         : Array.isArray((findingsResult as any)?.rows)

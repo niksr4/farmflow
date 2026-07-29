@@ -113,10 +113,15 @@ Billing code is committed and deployed; it's just not wired into an enforcement 
 - `lib/server/billing/razorpay.ts` + `checkout/`, `invoices/`, `subscription/`, `webhooks/`
 - `app/api/billing/checkout/`, `app/api/billing/subscription/`, `app/api/billing/webhooks/`
 - `lib/commercial-access.ts` — canonical resolver (trial/paid/grace/inactive)
-- `lib/server/tenant-commercial-access.ts` — DB layer; `initializeTenantTrialAccess()` now runs
-  on every self-serve signup (`lib/server/onboarding/provision-tenant.ts`), so `tenant_commercial_access`
-  has accurate trial data ready for whenever enforcement is turned on
-- `scripts/74-tenant-commercial-access.sql` — already applied
+- `lib/server/tenant-commercial-access.ts` — DB layer; `initializeTenantTrialAccess()` runs
+  on every self-serve signup (`lib/server/onboarding/provision-tenant.ts`)
+- ⚠️ **`scripts/74-tenant-commercial-access.sql` is NOT applied on prod.** Verified 2026-07-28:
+  the `tenant_commercial_access` table does not exist there and `74-*` is absent from
+  `schema_migrations`. This doc previously claimed it was applied and that trial data was
+  "ready for whenever enforcement is turned on" — it is not. There is **no trial data for any
+  tenant**, and `initializeTenantTrialAccess()` has had nothing to write to. Apply migration 74
+  to prod *before* doing any of the remaining billing work below, or the access gate will
+  resolve every tenant as legacy/always-active.
 
 **Remaining billing work when ready:**
 1. Set Razorpay env vars in production
@@ -213,7 +218,12 @@ CI runs automatically on every push to main via `.github/workflows/ci.yml`.
 ## Database Migrations
 
 Sequential SQL files in `scripts/`. Highest numbered = latest schema state.
-As of 2026-07-22: up to `101-password-reset-tokens.sql`, both dev and prod fully migrated.
+As of 2026-07-28: up to `102-laxmi-restock-type-repair.sql`, applied to both dev and prod.
+
+"Fully migrated" is not quite true and never was: `74-tenant-commercial-access.sql` was never
+applied to prod (see the Razorpay Billing section). Verify against `schema_migrations` rather
+than trusting this line — and sort numerically when you do, because `"100-…" < "87-…"` as
+strings and a plain `ORDER BY version` hides the newest files in the middle of the list.
 
 Apply with the migration runner (preferred): `pnpm migrate` (dev) / `pnpm migrate:prod`.
 It records applied files in `schema_migrations`, is dollar-quote-aware (handles `DO $$ … $$`
@@ -327,6 +337,40 @@ This needs zero dashboard/plan changes and works today via the authenticated CLI
 behavior on `main` keeps working exactly as before for anyone who pushes without using this flow —
 so the actual discipline is: **stop pushing straight to `main` for anything you want gated, build and
 alias deliberately instead using the sequence above.**
+
+---
+
+## Built But Unadopted (check adoption before ranking a bug here)
+
+A coherent slice of the product is fully built, shipped, and used by **nobody**. It is kept
+deliberately — every part of it is optional and nullable, nothing breaks with it empty, and
+deleting it would cost a multi-table migration to reclaim no runtime cost.
+
+**Verified against production 2026-07-28:**
+
+| Surface | Adoption |
+|---|---|
+| Lot traceability (`lot_id` on processing/dispatch/sales/curing/quality/documents, `app/lot/[lotId]`, `app/api/lots/[lotId]`) | **0** lot_ids in `processing_records` across all tenants; 1 stray on a dispatch row |
+| `curing`, `quality`, `receivables`, `billing` modules | enterprise-only; **0** tenants on the `enterprise` plan — all 6 are `core` |
+| `compliance`, `documents`, `market-pricing`, `plant-health`, `yield-forecast` | same — enterprise-only, no tenant has them |
+
+**Why this matters when triaging:** an endpoint here returning nothing is almost always
+"no data exists" rather than "broken." A 2026-07-28 QA cycle raised `app/api/lots/[lotId]`
+as a red finding; it was fixed, then reverted, once the data showed the endpoint 404s for
+every possible input regardless. **Ask whether a feature has any rows before ranking a
+finding on it** — the difference between a live customer-facing break and dormant code is
+one query, and severity is meaningless without it.
+
+Lot traceability is the spine of the enterprise tier (curing + quality + documents all key
+off `lot_id`), so this is really one dormant *product tier*, not eight separate features.
+The current tenants are commodity growers selling bulk parchment to curing works — their own
+sales data shows buyers like TATA Coffee, VSSSN and Allanasons — and lot identity dissolves
+at the curer, so traceability is the curer's problem, not the estate's. Estates that need
+lot IDs sell micro-lots direct at a premium. None do yet.
+
+**Don't invest here until a customer asks.** Export-side traceability requirements are the
+plausible future trigger. If lot traceability is adopted, `app/api/lots/[lotId]` will not
+start working on its own — see the decision recorded in that route's header comment.
 
 ---
 

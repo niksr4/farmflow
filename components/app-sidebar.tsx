@@ -151,7 +151,10 @@ export default function AppSidebar({
         </div>
 
         {/* Nav */}
-        <nav className="flex flex-1 flex-col gap-px overflow-y-auto overflow-x-hidden px-2 py-2 no-scrollbar">
+        {/* min-h-0 is load-bearing — see mobile-sidebar-drawer. Without it `flex-1` cannot
+            shrink below its content, so this never scrolls and tabs past the fold are
+            unreachable on any short viewport (laptop windows, tablets, landscape phones). */}
+        <nav className="flex min-h-0 flex-1 flex-col gap-px overflow-y-auto overflow-x-hidden px-2 py-2 no-scrollbar">
           {NAV_GROUPS.map((group, groupIdx) => {
             const groupItems = group.items.filter(
               (itemId) => (visibleTabs.includes(itemId) || itemId === "home") && tabMeta[itemId],

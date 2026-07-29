@@ -65,7 +65,7 @@ export default function MobileSidebarDrawer({
           isOpen ? "translate-x-0" : "-translate-x-full",
         )}
       >
-        <div className="flex items-center justify-between border-b border-stone-200 px-4 py-3">
+        <div className="flex shrink-0 items-center justify-between border-b border-stone-200 px-4 py-3">
           <div className="flex items-center gap-2.5">
             <Image src="/icon.svg" alt="FarmFlow" width={28} height={28} className="rounded-lg" />
             <div className="min-w-0">
@@ -84,7 +84,14 @@ export default function MobileSidebarDrawer({
           </button>
         </div>
 
-        <nav className="flex-1 overflow-y-auto py-3">
+        {/*
+          min-h-0 is load-bearing. A flex item's min-height defaults to `auto`, so `flex-1`
+          alone will not let this nav shrink below its content — it grows past the drawer and
+          overflow-y-auto never activates, leaving every item below the fold unreachable with
+          no way to scroll to it. overscroll-contain stops a scroll that hits the end of the
+          list from chaining to the page behind the drawer.
+        */}
+        <nav className="min-h-0 flex-1 overflow-y-auto overscroll-contain py-3">
           <button
             type="button"
             onClick={() => { onNavigateDashboard(); onClose() }}
@@ -134,7 +141,9 @@ export default function MobileSidebarDrawer({
           ))}
         </nav>
 
-        <div className="border-t border-stone-200 px-3 py-3 space-y-1">
+        {/* shrink-0 so the footer keeps its height and the nav above it is what scrolls.
+            pb keeps Sign out clear of the iOS home indicator. */}
+        <div className="shrink-0 border-t border-stone-200 px-3 py-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] space-y-1">
           <Link
             href={buildWorkspaceHref("/manuals")}
             onClick={onClose}
