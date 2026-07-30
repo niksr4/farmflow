@@ -114,14 +114,15 @@ describe("buildSmartNextSteps", () => {
   // the universal "stuck-help" safety net silently never renders — this asserts today's
   // actual behavior so a future fix to addStep()'s dedup rule is a deliberate, visible
   // change to this test rather than a silent regression either way.
-  it("[known issue] silently drops the 'stuck-help' fallback when an earlier step also resolves to the home tab", () => {
+  it("keeps the 'stuck-help' fallback even when an earlier step resolves to the same home tab", () => {
+    // Regression test for NIK-7. addStep used to reject a candidate whose actionTab matched an
+    // earlier step's, which silently ate the designed universal fallback: first-live-record also
+    // resolves to "home" for a barely-configured tenant — exactly the tenant that needs the
+    // "ask FarmFlow where to go" card most. Dedupe is now by id alone.
     const steps = buildSmartNextSteps({ ...baseInput, recentActivity: [] })
     const firstLiveRecord = steps.find((s) => s.id === "first-live-record")
     expect(firstLiveRecord?.actionTab).toBe("home")
-    // "stuck-help" is the designed universal fallback, but it collides on actionTab with
-    // first-live-record above and gets deduped away as a side effect.
-    expect(steps.some((s) => s.id === "stuck-help")).toBe(false)
-    expect(steps).toHaveLength(1)
+    expect(steps.some((s) => s.id === "stuck-help")).toBe(true)
   })
 
   it("does dedupe two candidate steps that would point at the exact same actionTab", () => {
@@ -131,8 +132,12 @@ describe("buildSmartNextSteps", () => {
       recentActivity: [{ module: "processing", label: "Logged pulping output", detail: "", date: "2026-07-20" }],
       intelligenceActions: [{ label: "Reconcile dispatch", tab: "dispatch" }],
     })
-    // after-processing already claims "dispatch" as its actionTab, so the intelligence
-    // action pointing at the same tab should not also be added as a separate card.
-    expect(steps.filter((s) => s.actionTab === "dispatch")).toHaveLength(1)
+    // after-processing already claims "dispatch", so the intelligence action pointing at the
+    // same tab must not be added as a separate card. That is enforced by the explicit
+    // tab-uniqueness filter on suggestedIntelligenceAction, not by addStep — which dedupes on
+    // id only, so unrelated cards (e.g. an onboarding card whose fallback tab also resolves to
+    // "dispatch") are free to coexist.
+    expect(steps.some((s) => s.id.startsWith("intelligence-"))).toBe(false)
+    expect(steps.some((s) => s.id === "after-processing" && s.actionTab === "dispatch")).toBe(true)
   })
 })

@@ -118,7 +118,15 @@ export function buildSmartNextSteps(input: SmartNextStepsInput): SmartNextStep[]
 
   const addStep = (step: SmartNextStep | null) => {
     if (!step) return
-    if (steps.some((existing) => existing.id === step.id || existing.actionTab === step.actionTab)) {
+    // Dedupe on id only. Also rejecting a step because an earlier one happened to share its
+    // destination tab silently dropped genuinely different advice: with only Dispatch enabled,
+    // the "add your locations" onboarding card resolves to actionTab "dispatch", which then ate
+    // the "you logged pulping — record the dispatch" card. It could equally eat the guaranteed
+    // "stuck-help" fallback, whose tab is "home", for a barely-configured tenant — precisely the
+    // tenant that needs it most. Two cards pointing at the same tab is normal and fine; the
+    // callers that genuinely need tab-uniqueness (suggestedIntelligenceAction below) filter for
+    // it themselves.
+    if (steps.some((existing) => existing.id === step.id)) {
       return
     }
     steps.push(step)
