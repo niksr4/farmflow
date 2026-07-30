@@ -20,6 +20,7 @@ import { cn } from "@/lib/utils"
 import { toast } from "sonner"
 import { Skeleton } from "@/components/ui/skeleton"
 import { EmptyState } from "@/components/ui/empty-state"
+import { trackRecordCreated } from "@/lib/track-action"
 
 type AttendanceWorker = { id: string; name: string; dailyRate: number | null }
 type AttendanceSummaryRow = { workerId: string; name: string; daysPresent: number }
@@ -123,6 +124,7 @@ export default function AttendanceTab() {
       })
       const data = await res.json().catch(() => ({}))
       if (!res.ok || !data?.success) throw new Error(data?.error || "Failed to save")
+      trackRecordCreated("attendance", { present_count: presentCount, date: selectedDate })
       toast.success(`Saved — ${presentCount} present`)
       await loadSnapshot(selectedDate)
     } catch (e: unknown) {

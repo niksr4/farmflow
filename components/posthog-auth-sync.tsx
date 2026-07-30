@@ -7,70 +7,29 @@ import { usePathname } from "next/navigation"
 
 const posthogKey = process.env.NEXT_PUBLIC_POSTHOG_KEY
 const posthogHost = process.env.NEXT_PUBLIC_POSTHOG_HOST
-const posthogDebug = process.env.NEXT_PUBLIC_POSTHOG_DEBUG === "true"
 const posthogAllowLocal = process.env.NEXT_PUBLIC_POSTHOG_ALLOW_LOCAL === "true"
-let posthogInitialized = false
-let posthogEnabled = false
 
 function isLocalHost(hostname: string) {
   const normalized = String(hostname || "").toLowerCase()
   return normalized === "localhost" || normalized === "127.0.0.1" || normalized === "[::1]" || normalized.endsWith(".local")
 }
 
-function resolveUiHost(host: string) {
-  return host.includes("eu.") ? "https://eu.posthog.com" : "https://app.posthog.com"
-}
-
-function resolveApiHost(host: string) {
-  if (typeof window !== "undefined" && isLocalHost(window.location.hostname)) {
-    return host
-  }
-  return "/ingest"
-}
-
-function ensurePosthogInitialized() {
-  if (posthogInitialized) return posthogEnabled
-  posthogInitialized = true
-
-  if (!posthogKey || !posthogHost) {
-    posthogEnabled = false
-    return false
-  }
-
-  if (typeof window !== "undefined" && isLocalHost(window.location.hostname) && !posthogAllowLocal) {
-    posthogEnabled = false
-    return false
-  }
-
-  const loaded = Boolean((posthog as any).__loaded)
-  if (!loaded) {
-    posthog.init(posthogKey, {
-      api_host: resolveApiHost(posthogHost),
-      ui_host: resolveUiHost(posthogHost),
-      defaults: "2026-01-30",
-      capture_pageview: false,
-      capture_pageleave: "if_capture_pageview",
-      autocapture: true,
-      capture_exceptions: true,
-      person_profiles: "identified_only",
-      session_recording: {
-        maskAllInputs: true,
-        maskInputOptions: {
-          password: true,
-        },
-        maskTextClass: "ph-mask",
-        blockClass: "ph-no-capture",
-      },
-      debug: posthogDebug,
-    })
-  }
-
-  posthogEnabled = true
-  return true
+/**
+ * PostHog is initialised in instrumentation-client.ts — the Next.js 15.3+ client hook, which runs
+ * before this component mounts. This file used to call posthog.init() again with a near-identical
+ * config; the __loaded guard stopped a double-init, but the two copies could drift, and the copy
+ * here was already missing the before_send filter that drops known-noisy browser exceptions.
+ * So this only reports whether the real init took effect.
+ */
+function isPosthogConfigured() {
+  if (!posthogKey || !posthogHost) return false
+  if (typeof window === "undefined") return false
+  if (isLocalHost(window.location.hostname) && !posthogAllowLocal) return false
+  return Boolean((posthog as any).__loaded)
 }
 
 function isPosthogActive() {
-  return posthogEnabled
+  return isPosthogConfigured()
 }
 
 function getDistinctId(username: string, tenantId: string) {
@@ -82,10 +41,6 @@ export default function PostHogAuthSync() {
   const pathname = usePathname()
   const lastDistinctIdRef = useRef<string | null>(null)
   const lastPageviewUrlRef = useRef<string | null>(null)
-
-  useEffect(() => {
-    ensurePosthogInitialized()
-  }, [])
 
   useEffect(() => {
     if (!isPosthogActive()) return

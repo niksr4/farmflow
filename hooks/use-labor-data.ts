@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react"
 import { useAuth } from "@/hooks/use-auth"
+import { trackRecordCreated } from "@/lib/track-action"
 
 export interface LaborEntry {
   name?: string
@@ -193,6 +194,11 @@ export function useLaborData(locationId?: string, options: LaborDataOptions = {}
       const data = await response.json()
 
       if (data.success) {
+        trackRecordCreated("labour", {
+          tenant_id: user?.tenantId,
+          code: deployment.code,
+          location_id: deployment.locationId ?? locationId ?? null,
+        })
         await fetchDeployments(0, false)
         setError(null)
         return { ok: true }

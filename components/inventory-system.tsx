@@ -192,6 +192,7 @@ import {
 
 import posthog from "posthog-js"
 import { formatLocationLabel } from "@/lib/location-label"
+import { trackRecordCreated } from "@/lib/track-action"
 
 const WRITE_QUEUE_STATUS_EVENT = "farmflow:write-queue-status"
 
@@ -2276,6 +2277,11 @@ export default function InventorySystem() {
       if (!res.ok || !json.success) {
         throw new Error(json.message || "Failed to record transaction")
       }
+      trackRecordCreated("inventory", {
+        transaction_type: tx.transaction_type,
+        item_type: tx.item_type,
+        location_id: locationOverride ?? tx.location_id ?? null,
+      })
       toast({ title: "Transaction recorded", description: "Transaction saved successfully.", variant: "default" })
       // refresh after adding
       await refreshData(true)
@@ -3314,21 +3320,33 @@ export default function InventorySystem() {
       return acc
     }, {})
 
-    const signature = JSON.stringify({
-      tenantId: user.tenantId,
-      statusById,
-      metricById,
-    })
+    // Signature deliberately excludes the metric strings. They carry live numbers ("₹587,390",
+    // "3 days ago") that change on almost every data settle, so including them made this fire
+    // several times per page load — 4,375 events against 1,941 pageviews in the first 90 days,
+    // the second-noisiest event in the project. The scorecard's *statuses* are the signal; the
+    // metric text is only payload.
+    const signature = JSON.stringify({ tenantId: user.tenantId, statusById })
 
-    if (signature === lastExecutionOutcomeSignatureRef.current) {
+    // Held in sessionStorage as well as a ref: the ref resets on every remount, so navigating
+    // back to the dashboard re-sent an identical snapshot.
+    const storageKey = `ff:scorecard-signature:${user.tenantId}`
+    const previous =
+      lastExecutionOutcomeSignatureRef.current ??
+      (typeof window !== "undefined" ? window.sessionStorage?.getItem(storageKey) : null)
+
+    if (signature === previous) {
       return
     }
     lastExecutionOutcomeSignatureRef.current = signature
+    try {
+      if (typeof window !== "undefined") window.sessionStorage?.setItem(storageKey, signature)
+    } catch {
+      // Private browsing / storage disabled — the ref still de-dupes within this mount.
+    }
 
     posthog.capture("execution_scorecard_snapshot", {
       tenant_id: user.tenantId,
       role: user.role,
-      active_tab: activeTab,
       checks: executionOutcomeChecks.length,
       strong_count: executionOutcomeChecks.filter((check) => check.status === "good").length,
       attention_count: executionOutcomeChecks.filter((check) => check.status === "attention").length,
@@ -3336,7 +3354,7 @@ export default function InventorySystem() {
       status_by_id: statusById,
       metric_by_id: metricById,
     })
-  }, [activeTab, executionOutcomeChecks, user?.role, user?.tenantId])
+  }, [executionOutcomeChecks, user?.role, user?.tenantId])
 
   const smartNextSteps = useMemo<SmartNextStep[]>(
     () =>
@@ -3547,9 +3565,13 @@ export default function InventorySystem() {
       } else if (value === "sales") {
         setSalesWorkspaceView(canShowSales ? "coffee" : "other-sales")
       }
+      // The Feature adoption dashboard's "Module usage by role" tile queries viewed_module and had
+      // never received one. Captured in the handler rather than an effect on activeTab so it
+      // reflects a deliberate navigation, not every re-render that happens to change the tab.
+      posthog.capture("viewed_module", { module: nextTab, requested: value, role: user?.role })
       openDrilldown({ tab: nextTab })
     },
-    [canShowInventory, canShowSales, openDrilldown],
+    [canShowInventory, canShowSales, openDrilldown, user?.role],
   )
 
   const handleSubNavClick = useCallback(

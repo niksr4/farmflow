@@ -20,6 +20,7 @@ import { formatDateOnly } from "@/lib/date-utils"
 import { formatNumber } from "@/lib/format"
 import FilterBar from "@/components/filter-bar"
 import { useListControls } from "@/hooks/use-list-controls"
+import { trackRecordCreated } from "@/lib/track-action"
 import { Minus, Plus } from "lucide-react"
 
 type RainfallRecord = {
@@ -285,6 +286,7 @@ export default function RainfallTab({ username, showDataToolsControls = false }:
 
       const data = await response.json()
       if (data.success) {
+        if (!editingId) trackRecordCreated("rainfall", { inches: inchesNum, cents: centsNum })
         toast({
           title: editingId ? "Record updated" : "Record saved",
           description: editingId

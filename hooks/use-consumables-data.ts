@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react"
 import { useAuth } from "@/hooks/use-auth"
+import { trackRecordCreated } from "@/lib/track-action"
 
 export interface ConsumableDeployment {
   id: number
@@ -156,6 +157,10 @@ export function useConsumablesData(locationId?: string, options: ConsumablesData
       const data = await response.json()
 
       if (data.success) {
+        trackRecordCreated("expense", {
+          tenant_id: user?.tenantId,
+          code: (deployment as { code?: string }).code,
+        })
         await fetchDeployments(0, false) // Refresh the list
         return { ok: true }
       } else {
