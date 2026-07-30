@@ -148,6 +148,7 @@ export default function DispatchTab({ showDataToolsControls = false }: DispatchT
   const [showStockBreakdown, setShowStockBreakdown] = useState(false)
   const [dispatchTotalCount, setDispatchTotalCount] = useState(0)
   const [dispatchPage, setDispatchPage] = useState(0)
+  const [dispatchAllLoaded, setDispatchAllLoaded] = useState(false)
   const [dispatchHasMore, setDispatchHasMore] = useState(false)
   const [selectedDispatchRecord, setSelectedDispatchRecord] = useState<DispatchRecord | null>(null)
   const [editingRecord, setEditingRecord] = useState<DispatchRecord | null>(null)
@@ -440,19 +441,25 @@ export default function DispatchTab({ showDataToolsControls = false }: DispatchT
   )
 
   // Fetch dispatch records
-  const fetchDispatchRecords = useCallback(async (pageIndex = 0, append = false) => {
+  const fetchDispatchRecords = useCallback(async (pageIndex = 0, append = false, fetchAll = false) => {
     if (append) {
       setIsLoadingMore(true)
     } else {
       setIsLoading(true)
     }
     try {
-      const params = new URLSearchParams({
-        limit: dispatchPageSize.toString(),
-        offset: String(pageIndex * dispatchPageSize),
-        startDate: fyStartDate,
-        endDate: fyEndDate,
-      })
+      // all=true makes the API ignore limit/offset. Needed before a client-side search, which
+      // otherwise filters only the loaded page and reports "no matches" for real records.
+      const params = new URLSearchParams(
+        fetchAll
+          ? { all: "true", startDate: fyStartDate, endDate: fyEndDate }
+          : {
+              limit: dispatchPageSize.toString(),
+              offset: String(pageIndex * dispatchPageSize),
+              startDate: fyStartDate,
+              endDate: fyEndDate,
+            },
+      )
       const response = await fetch(`/api/dispatch?${params.toString()}`)
       const data = await response.json()
 
@@ -464,6 +471,7 @@ export default function DispatchTab({ showDataToolsControls = false }: DispatchT
         const resolvedCount = append ? pageIndex * dispatchPageSize + nextRecords.length : nextRecords.length
         setDispatchHasMore(nextTotalCount ? resolvedCount < nextTotalCount : nextRecords.length === dispatchPageSize)
         setDispatchPage(pageIndex)
+        setDispatchAllLoaded(fetchAll)
       } else {
         console.error("Error fetching dispatch records:", data.error)
       }
@@ -1372,7 +1380,10 @@ export default function DispatchTab({ showDataToolsControls = false }: DispatchT
           <FilterBar
             className="mt-3"
             search={recordControls.search}
-            onSearchChange={recordControls.setSearch}
+            onSearchChange={(value) => {
+              recordControls.setSearch(value)
+              if (value.trim() && !dispatchAllLoaded && !isLoadingMore) void fetchDispatchRecords(0, false, true)
+            }}
             searchPlaceholder="Search location, coffee, buyer, notes…"
             sortOptions={[
               { value: "date", label: "Date" },

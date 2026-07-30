@@ -39,12 +39,13 @@ export function useLaborData(locationId?: string, options: LaborDataOptions = {}
   const [totalCost, setTotalCost] = useState(0)
   const [hasMore, setHasMore] = useState(false)
   const [page, setPage] = useState(0)
+  const [allLoaded, setAllLoaded] = useState(false)
   const pageSize = options.pageSize ?? 50
   const startDate = options.startDate
   const endDate = options.endDate
 
   const fetchDeployments = useCallback(
-    async (pageIndex = 0, append = false) => {
+    async (pageIndex = 0, append = false, fetchAll = false) => {
       if (status === "loading") {
         return
       }
@@ -68,8 +69,15 @@ export function useLaborData(locationId?: string, options: LaborDataOptions = {}
         setError(null)
 
         const query = new URLSearchParams()
-        query.set("limit", pageSize.toString())
-        query.set("offset", String(pageIndex * pageSize))
+        if (fetchAll) {
+          // all=true makes the API ignore limit/offset and return every row. Used when a search
+          // is active: filtering happens client-side, so anything still behind "Load more" is
+          // invisible to it and the user gets "no entries match" for codes that plainly exist.
+          query.set("all", "true")
+        } else {
+          query.set("limit", pageSize.toString())
+          query.set("offset", String(pageIndex * pageSize))
+        }
         if (locationId) {
           query.set("locationId", locationId)
         }
@@ -106,8 +114,10 @@ export function useLaborData(locationId?: string, options: LaborDataOptions = {}
           const nextTotalCost = Number(data.totalCost) || 0
           setTotalCount(nextTotalCount)
           setTotalCost(nextTotalCost)
+          let nextDeploymentsLength = 0
           setDeployments((prev) => {
             const nextDeployments = append ? [...prev, ...data.deployments] : data.deployments
+            nextDeploymentsLength = nextDeployments.length
             const canPaginate = pageSize > 0
             const hasNextPage = canPaginate
               ? nextTotalCount
@@ -118,6 +128,7 @@ export function useLaborData(locationId?: string, options: LaborDataOptions = {}
             return nextDeployments
           })
           setPage(pageIndex)
+          setAllLoaded(fetchAll || (nextTotalCount > 0 && nextDeploymentsLength >= nextTotalCount))
           setError(null)
         } else if (data.success && Array.isArray(data.transactions)) {
           // Backward-compat for older response shape.
@@ -260,6 +271,9 @@ export function useLaborData(locationId?: string, options: LaborDataOptions = {}
     totalCost,
     hasMore,
     loadMore,
+    allLoaded,
+    /** Pull the full history in one request — needed before any client-side search is meaningful. */
+    loadAll: () => fetchDeployments(0, false, true),
     addDeployment,
     updateDeployment,
     deleteDeployment,

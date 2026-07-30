@@ -228,6 +228,7 @@ export default function SalesTab({
   const [saveFeedback, setSaveFeedback] = useState<{ type: "success" | "error"; message: string } | null>(null)
   const { toast } = useToast()
   const salesPageSize = 25
+  const [salesAllLoaded, setSalesAllLoaded] = useState(false)
   const currentWorkspaceView = otherSalesEnabled ? activeWorkspaceView || internalWorkspaceView : "coffee"
   const resolvedWorkspaceView: SalesWorkspaceView =
     !coffeeSalesEnabled && otherSalesEnabled ? "other-sales" : currentWorkspaceView
@@ -324,7 +325,7 @@ export default function SalesTab({
   }, [bagWeightKg, salesRecords])
 
   // Fetch sales records
-  const fetchSalesRecords = useCallback(async (pageIndex = 0, append = false) => {
+  const fetchSalesRecords = useCallback(async (pageIndex = 0, append = false, fetchAll = false) => {
     if (!coffeeSalesEnabled) {
       setSalesRecords([])
       setSalesTotals({ totalBagsSold: 0, totalKgsSold: 0, totalRevenue: 0 })
@@ -339,12 +340,18 @@ export default function SalesTab({
       setIsLoading(true)
     }
     try {
-      const params = new URLSearchParams({
-        limit: salesPageSize.toString(),
-        offset: String(pageIndex * salesPageSize),
-        startDate: fyStartDate,
-        endDate: fyEndDate,
-      })
+      // all=true bypasses limit/offset — required before client-side search, which otherwise
+      // only sees the loaded page and wrongly reports no matches.
+      const params = new URLSearchParams(
+        fetchAll
+          ? { all: "true", startDate: fyStartDate, endDate: fyEndDate }
+          : {
+              limit: salesPageSize.toString(),
+              offset: String(pageIndex * salesPageSize),
+              startDate: fyStartDate,
+              endDate: fyEndDate,
+            },
+      )
       if (salesFilterLocationId && salesFilterLocationId !== LOCATION_ALL) {
         params.set("locationId", salesFilterLocationId)
       }
@@ -364,6 +371,7 @@ export default function SalesTab({
         const resolvedCount = append ? pageIndex * salesPageSize + nextRecords.length : nextRecords.length
         setSalesHasMore(nextTotalCount ? resolvedCount < nextTotalCount : nextRecords.length === salesPageSize)
         setSalesPage(pageIndex)
+        setSalesAllLoaded(fetchAll)
       } else {
         console.error("Error fetching sales records:", data.error)
       }
@@ -1869,7 +1877,10 @@ export default function SalesTab({
           <FilterBar
             className="px-5 pb-4"
             search={recordControls.search}
-            onSearchChange={recordControls.setSearch}
+            onSearchChange={(value) => {
+              recordControls.setSearch(value)
+              if (value.trim() && !salesAllLoaded && !isLoadingMore) void fetchSalesRecords(0, false, true)
+            }}
             searchPlaceholder="Search buyer, location, coffee, batch…"
             sortOptions={[
               { value: "date", label: "Date" },

@@ -7,6 +7,11 @@ import { isForbiddenTenantAccess, resolveRequestedTenantId } from "@/lib/permiss
 
 // Maps a source name to a SQL fragment for the UNION.
 // Returns null if the source is unknown (for safety).
+// Upper bound for an `all=true` fetch. Generous enough that the activity log's client-side
+// search sees a tenant's whole history in practice, low enough that the query stays cheap and
+// an audit table can never be read unbounded.
+const SEARCH_FETCH_CEILING = 2000
+
 const VALID_SOURCES = ["labor", "expense", "inventory"] as const
 type ActivitySource = (typeof VALID_SOURCES)[number]
 
@@ -29,7 +34,13 @@ export async function GET(request: Request) {
     const sourceFilter = searchParams.get("source") || "all"
     const limitParam = searchParams.get("limit")
     const offsetParam = searchParams.get("offset")
-    const limit = Math.min(Math.max(Number.parseInt(limitParam || "50", 10) || 50, 1), 200)
+    // The activity log's search filters client-side, so it can only match what has been
+    // fetched — with a 50-row page it silently reported "no results" for entries that exist.
+    // `all=true` raises the ceiling enough to cover any realistic tenant's history while
+    // staying bounded, rather than allowing an unbounded read of the audit tables.
+    const fetchAll = searchParams.get("all") === "true"
+    const maxLimit = fetchAll ? SEARCH_FETCH_CEILING : 200
+    const limit = Math.min(Math.max(Number.parseInt(limitParam || "50", 10) || 50, 1), maxLimit)
     const offset = Math.max(Number.parseInt(offsetParam || "0", 10) || 0, 0)
 
     if (!tenantId) {

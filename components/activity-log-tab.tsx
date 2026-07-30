@@ -67,9 +67,10 @@ export default function ActivityLogTab({ tenantId }: ActivityLogTabProps) {
   const [isLoadingMore, setIsLoadingMore] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [sourceFilter, setSourceFilter] = useState("all")
+  const [allLoaded, setAllLoaded] = useState(false)
 
   const fetchRecords = useCallback(
-    async (pageIndex = 0, append = false) => {
+    async (pageIndex = 0, append = false, fetchAll = false) => {
       if (!tenantId) {
         setRecords([])
         setTotalCount(0)
@@ -85,11 +86,11 @@ export default function ActivityLogTab({ tenantId }: ActivityLogTabProps) {
       }
 
       try {
-        const params = new URLSearchParams({
-          tenantId,
-          limit: String(PAGE_SIZE),
-          offset: String(pageIndex * PAGE_SIZE),
-        })
+        const params = new URLSearchParams(
+          fetchAll
+            ? { tenantId, all: "true", limit: "2000", offset: "0" }
+            : { tenantId, limit: String(PAGE_SIZE), offset: String(pageIndex * PAGE_SIZE) },
+        )
         if (sourceFilter !== "all") {
           params.set("source", sourceFilter)
         }
@@ -107,6 +108,7 @@ export default function ActivityLogTab({ tenantId }: ActivityLogTabProps) {
         const resolvedCount = append ? pageIndex * PAGE_SIZE + nextRecords.length : nextRecords.length
         setHasMore(nextTotalCount ? resolvedCount < nextTotalCount : nextRecords.length === PAGE_SIZE)
         setPage(pageIndex)
+        setAllLoaded(fetchAll)
         setError(null)
       } catch (loadError: any) {
         setError(loadError?.message || "Failed to load activity")
@@ -160,7 +162,11 @@ export default function ActivityLogTab({ tenantId }: ActivityLogTabProps) {
         <CardContent className="space-y-4">
           <FilterBar
             search={recordControls.search}
-            onSearchChange={recordControls.setSearch}
+            onSearchChange={(value) => {
+              recordControls.setSearch(value)
+              // Client-side filtering only sees loaded rows; pull the history before matching.
+              if (value.trim() && !allLoaded && !isLoadingMore) void fetchRecords(0, false, true)
+            }}
             searchPlaceholder="Search by activity, item, or notes"
             sortOptions={[
               { value: "date", label: "Date" },

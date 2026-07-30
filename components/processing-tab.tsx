@@ -174,6 +174,7 @@ export default function ProcessingTab({ showDataToolsControls = false }: Process
   const [isLoadingDashboard, setIsLoadingDashboard] = useState(false)
   const { toast } = useToast()
   const recordsPageSize = 25
+  const [recordsAllLoaded, setRecordsAllLoaded] = useState(false)
 
   const selectedLocation = locations.find((loc) => loc.id === selectedLocationId) || null
 
@@ -291,7 +292,7 @@ export default function ProcessingTab({ showDataToolsControls = false }: Process
     })
   }, [bagWeightKg, previousRecord])
 
-  const loadRecentRecords = useCallback(async (pageIndex = 0, append = false) => {
+  const loadRecentRecords = useCallback(async (pageIndex = 0, append = false, fetchAll = false) => {
     if (!selectedLocationId) {
       return
     }
@@ -301,12 +302,18 @@ export default function ProcessingTab({ showDataToolsControls = false }: Process
       setIsLoadingRecords(true)
     }
     try {
-      const params = new URLSearchParams({
-        locationId: selectedLocationId,
-        coffeeType,
-        limit: recordsPageSize.toString(),
-        offset: String(pageIndex * recordsPageSize),
-      })
+      // all=true bypasses limit/offset — needed before client-side search, which otherwise
+      // filters only the loaded page and reports no matches for records that exist.
+      const params = new URLSearchParams(
+        fetchAll
+          ? { locationId: selectedLocationId, coffeeType, all: "true" }
+          : {
+              locationId: selectedLocationId,
+              coffeeType,
+              limit: recordsPageSize.toString(),
+              offset: String(pageIndex * recordsPageSize),
+            },
+      )
       const url = `/api/processing-records?${params.toString()}`
 
       const response = await fetch(url)
@@ -341,6 +348,7 @@ export default function ProcessingTab({ showDataToolsControls = false }: Process
             return nextRecords
           })
           setRecordsPage(pageIndex)
+          setRecordsAllLoaded(fetchAll)
         } else {
           console.warn("data.records is not an array:", data.records)
           setRecentRecords([])
@@ -1572,7 +1580,10 @@ export default function ProcessingTab({ showDataToolsControls = false }: Process
           <FilterBar
             className="mt-3"
             search={recentControls.search}
-            onSearchChange={recentControls.setSearch}
+            onSearchChange={(value) => {
+              recentControls.setSearch(value)
+              if (value.trim() && !recordsAllLoaded && !isLoadingMoreRecords) void loadRecentRecords(0, false, true)
+            }}
             searchPlaceholder="Search date, lot, grade…"
             sortOptions={[
               { value: "date", label: "Date" },

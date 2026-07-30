@@ -103,6 +103,8 @@ export default function LaborDeploymentTab({
     totalCount,
     hasMore,
     loadMore,
+    allLoaded,
+    loadAll,
     addDeployment,
     updateDeployment,
     deleteDeployment,
@@ -964,7 +966,14 @@ export default function LaborDeploymentTab({
             <FilterBar
               className="mt-3"
               search={historyControls.search}
-              onSearchChange={historyControls.setSearch}
+              onSearchChange={(value) => {
+                historyControls.setSearch(value)
+                // Filtering is client-side, so it can only see what has been loaded. Without
+                // this, searching a code whose entries sit behind "Load more" reports "no
+                // entries match" — HoneyFarm's most-used code first appears at row 140 of 50-row
+                // pages, so search missed nearly everything that mattered.
+                if (value.trim() && !allLoaded && !loadingMore) void loadAll()
+              }}
               searchPlaceholder="Search code, activity, notes…"
               sortOptions={[
                 { value: "date", label: "Date" },
@@ -979,7 +988,13 @@ export default function LaborDeploymentTab({
           </CardHeader>
           <CardContent className="p-0">
             {historyControls.isFiltering && historyControls.items.length === 0 && (
-              <p className="px-4 py-6 text-center text-sm text-stone-400">No entries match your search.</p>
+              <p className="px-4 py-6 text-center text-sm text-stone-400">
+                {loadingMore || loading
+                  ? "Searching all entries…"
+                  : allLoaded
+                    ? `No labour entries match “${historyControls.search.trim()}”. The code may be valid but never used in this period.`
+                    : "No entries match your search."}
+              </p>
             )}
             {/* Mobile View */}
             <div className="block sm:hidden divide-y divide-stone-50">

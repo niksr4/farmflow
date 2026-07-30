@@ -32,12 +32,13 @@ export function useConsumablesData(locationId?: string, options: ConsumablesData
   const [totalAmount, setTotalAmount] = useState(0)
   const [hasMore, setHasMore] = useState(false)
   const [page, setPage] = useState(0)
+  const [allLoaded, setAllLoaded] = useState(false)
   const pageSize = options.pageSize ?? 50
   const startDate = options.startDate
   const endDate = options.endDate
 
   const fetchDeployments = useCallback(
-    async (pageIndex = 0, append = false) => {
+    async (pageIndex = 0, append = false, fetchAll = false) => {
       try {
         if (!user?.tenantId) {
           setDeployments([])
@@ -56,8 +57,14 @@ export function useConsumablesData(locationId?: string, options: ConsumablesData
         }
 
         const query = new URLSearchParams()
-        query.set("limit", pageSize.toString())
-        query.set("offset", String(pageIndex * pageSize))
+        if (fetchAll) {
+          // Client-side search can only filter what is loaded, so a search over a paginated
+          // subset silently reports "no matches" for rows sitting behind "Load more".
+          query.set("all", "true")
+        } else {
+          query.set("limit", pageSize.toString())
+          query.set("offset", String(pageIndex * pageSize))
+        }
         if (locationId) {
           query.set("locationId", locationId)
         }
@@ -86,8 +93,10 @@ export function useConsumablesData(locationId?: string, options: ConsumablesData
           const nextTotalAmount = Number(data.totalAmount) || 0
           setTotalCount(nextTotalCount)
           setTotalAmount(nextTotalAmount)
+          let nextDeploymentsLength = 0
           setDeployments((prev) => {
             const nextDeployments = append ? [...prev, ...data.deployments] : data.deployments
+            nextDeploymentsLength = nextDeployments.length
             const canPaginate = pageSize > 0
             const hasNextPage = canPaginate
               ? nextTotalCount
@@ -98,6 +107,7 @@ export function useConsumablesData(locationId?: string, options: ConsumablesData
             return nextDeployments
           })
           setPage(pageIndex)
+          setAllLoaded(fetchAll || (nextTotalCount > 0 && nextDeploymentsLength >= nextTotalCount))
         } else {
           console.error("❌ Failed to load deployments:", data)
           setDeployments([])
@@ -210,6 +220,9 @@ export function useConsumablesData(locationId?: string, options: ConsumablesData
     totalAmount,
     hasMore,
     loadMore,
+    allLoaded,
+    /** Fetch the whole list — required before a client-side search is trustworthy. */
+    loadAll: () => fetchDeployments(0, false, true),
     addDeployment,
     updateDeployment,
     deleteDeployment,

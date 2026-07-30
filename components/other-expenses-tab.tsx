@@ -80,6 +80,8 @@ export default function OtherExpensesTab({
     totalCount,
     hasMore,
     loadMore,
+    allLoaded,
+    loadAll,
     addDeployment,
     updateDeployment,
     deleteDeployment,
@@ -755,7 +757,12 @@ export default function OtherExpensesTab({
             <FilterBar
               className="mt-3"
               search={historyControls.search}
-              onSearchChange={historyControls.setSearch}
+              onSearchChange={(value) => {
+                historyControls.setSearch(value)
+                // Filtering is client-side; without pulling the full list first, a search over
+                // a paginated page reports "no matches" for entries that plainly exist.
+                if (value.trim() && !allLoaded && !loadingMore) void loadAll()
+              }}
               searchPlaceholder="Search code, reference, notes…"
               sortOptions={[
                 { value: "date", label: "Date" },
@@ -770,7 +777,13 @@ export default function OtherExpensesTab({
           </CardHeader>
           <CardContent className="p-0">
             {historyControls.isFiltering && historyControls.items.length === 0 && (
-              <p className="px-4 py-6 text-center text-sm text-stone-400">No entries match your search.</p>
+              <p className="px-4 py-6 text-center text-sm text-stone-400">
+                {loadingMore || loading
+                  ? "Searching all entries…"
+                  : allLoaded
+                    ? `No expenses match “${historyControls.search.trim()}”.`
+                    : "No entries match your search."}
+              </p>
             )}
             {/* Mobile View */}
             <div className="block sm:hidden divide-y divide-stone-50">
