@@ -21,6 +21,7 @@ import { formatNumber } from "@/lib/format"
 import FilterBar from "@/components/filter-bar"
 import { useListControls } from "@/hooks/use-list-controls"
 import { trackRecordCreated } from "@/lib/track-action"
+import { useSingleFlight } from "@/hooks/use-single-flight"
 import { Minus, Plus } from "lucide-react"
 
 type RainfallRecord = {
@@ -238,7 +239,7 @@ export default function RainfallTab({ username, showDataToolsControls = false }:
     if (isMobile) setMobileSection("log")
   }
 
-  const handleSaveRecord = async () => {
+  const handleSaveRecordUnguarded = async () => {
     const inchesNum = inches === "" ? 0 : Number(inches)
     const centsNum = cents === "" ? 0 : Number(cents)
 
@@ -312,6 +313,10 @@ export default function RainfallTab({ username, showDataToolsControls = false }:
       setLoading(false)
     }
   }
+
+  // Mobile double-tap guard: `disabled` only applies after a re-render, so two fast
+  // taps both entered this handler and saved twice. See lib/single-flight.ts.
+  const handleSaveRecord = useSingleFlight(handleSaveRecordUnguarded)
 
   const handleDeleteRecord = async (id: number) => {
     if (!window.confirm("Are you sure you want to delete this record?")) return

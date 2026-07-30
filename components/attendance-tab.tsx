@@ -21,6 +21,7 @@ import { toast } from "sonner"
 import { Skeleton } from "@/components/ui/skeleton"
 import { EmptyState } from "@/components/ui/empty-state"
 import { trackRecordCreated } from "@/lib/track-action"
+import { useSingleFlight } from "@/hooks/use-single-flight"
 
 type AttendanceWorker = { id: string; name: string; dailyRate: number | null }
 type AttendanceSummaryRow = { workerId: string; name: string; daysPresent: number }
@@ -114,7 +115,7 @@ export default function AttendanceTab() {
     })
   }
 
-  const handleSave = async () => {
+  const handleSaveUnguarded = async () => {
     setIsSaving(true)
     try {
       const res = await fetch("/api/attendance", {
@@ -133,6 +134,10 @@ export default function AttendanceTab() {
       setIsSaving(false)
     }
   }
+
+  // Mobile double-tap guard: `disabled` only applies after a re-render, so two fast
+  // taps both entered this handler and saved twice. See lib/single-flight.ts.
+  const handleSave = useSingleFlight(handleSaveUnguarded)
 
   const exportWeeklySummaryToCSV = () => {
     const weekLabel = dateToStr(weekDays[0])

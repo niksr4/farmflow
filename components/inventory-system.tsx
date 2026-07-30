@@ -193,6 +193,7 @@ import {
 import posthog from "posthog-js"
 import { formatLocationLabel } from "@/lib/location-label"
 import { trackRecordCreated } from "@/lib/track-action"
+import { useSingleFlight } from "@/hooks/use-single-flight"
 
 const WRITE_QUEUE_STATUS_EVENT = "farmflow:write-queue-status"
 
@@ -2301,10 +2302,14 @@ export default function InventorySystem() {
     }
   }
 
-  const handleRecordTransaction = async () => {
+  const handleRecordTransactionUnguarded = async () => {
     const tx = ensureTransactionSafety(newTransaction)
     await submitTransaction(tx)
   }
+
+  // Mobile double-tap guard. A duplicate here is worse than elsewhere: two identical restocks
+  // both post, and the trigger applies both, so the stock balance silently doubles.
+  const handleRecordTransaction = useSingleFlight(handleRecordTransactionUnguarded)
 
   const handleRetryTransactionWrite = () => {
     if (!lastTransactionWriteFailure) return
