@@ -1,4 +1,5 @@
 import { withSentryConfig } from "@sentry/nextjs";
+import { CONTENT_SECURITY_POLICY } from "./lib/csp.mjs";
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   distDir: process.env.NEXT_DIST_DIR || ".next",
@@ -31,20 +32,9 @@ const nextConfig = {
           { key: "Permissions-Policy", value: "camera=(), microphone=(), geolocation=()" },
           { key: "Cross-Origin-Opener-Policy", value: "same-origin" },
           { key: "Cross-Origin-Resource-Policy", value: "same-site" },
-          {
-            key: "Content-Security-Policy",
-            value: [
-              "default-src 'self'",
-              "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://www.googletagmanager.com",
-              "style-src 'self' 'unsafe-inline'",
-              "img-src 'self' data: blob: https://cdn.weatherapi.com",
-              "font-src 'self' data:",
-              "connect-src 'self' https://eu.i.posthog.com https://eu-assets.i.posthog.com https://ingest.sentry.io https://o*.ingest.sentry.io https://www.google-analytics.com https://www.googletagmanager.com",
-              "frame-ancestors 'none'",
-              "base-uri 'self'",
-              "form-action 'self'",
-            ].join("; "),
-          },
+          // Defined in lib/csp.mjs so tests/csp.test.ts can verify the policy actually
+          // permits the endpoints the client depends on. See that file for why.
+          { key: "Content-Security-Policy", value: CONTENT_SECURITY_POLICY },
         ],
       },
       // Static images in /public — no content hash so use SWR rather than immutable

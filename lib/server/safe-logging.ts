@@ -2,76 +2,56 @@ import "server-only"
 
 import * as Sentry from "@sentry/nextjs"
 
-const EMAIL_PATTERN = /\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/gi
-const BEARER_PATTERN = /\bBearer\s+[A-Za-z0-9._~+/-]+\b/gi
-const BASIC_PATTERN = /\bBasic\s+[A-Za-z0-9+/=]+\b/gi
-const SECRET_QUERY_PATTERN = /\b([a-z0-9_-]*(?:token|secret|password|api[_-]?key|authorization)[a-z0-9_-]*)=([^&\s]+)/gi
-const SENSITIVE_KEY_PATTERN =
-  /authorization|cookie|token|secret|password|api[_-]?key|email|phone|file_data_base64|normalized_email|twilio_auth_token/i
+import { redactText, redactValue, serializeError } from "@/lib/redaction"
+import { fingerprintForException, fingerprintForMessage } from "@/lib/observability"
 
-const MAX_DEPTH = 4
-
-export const redactText = (value: string) =>
-  String(value || "")
-    .replace(BEARER_PATTERN, "Bearer [REDACTED]")
-    .replace(BASIC_PATTERN, "Basic [REDACTED]")
-    .replace(SECRET_QUERY_PATTERN, "$1=[REDACTED]")
-    .replace(EMAIL_PATTERN, "[REDACTED_EMAIL]")
-
-export const redactForLogs = (value: unknown, depth = 0): unknown => {
-  if (value === null || value === undefined) return value
-  if (depth > MAX_DEPTH) return "[Truncated]"
-  if (typeof value === "string") return redactText(value)
-  if (typeof value === "number" || typeof value === "boolean") return value
-  if (value instanceof Error) {
-    return serializeErrorForLogs(value)
-  }
-  if (Array.isArray(value)) {
-    return value.map((item) => redactForLogs(item, depth + 1))
-  }
-  if (typeof value === "object") {
-    return Object.fromEntries(
-      Object.entries(value as Record<string, unknown>).map(([key, entryValue]) => [
-        key,
-        SENSITIVE_KEY_PATTERN.test(key) ? "[REDACTED]" : redactForLogs(entryValue, depth + 1),
-      ]),
-    )
-  }
-  return String(value)
-}
-
-export const serializeErrorForLogs = (error: unknown) => {
-  if (error instanceof Error) {
-    return {
-      name: error.name,
-      message: redactText(error.message),
-      stack: process.env.NODE_ENV === "production" ? undefined : redactText(error.stack || ""),
-    }
-  }
-  return redactForLogs(error)
-}
+// Redaction rules live in lib/redaction.ts so the Sentry config files can scrub with the same
+// rules without importing this module (which imports Sentry, and would cycle). Re-exported
+// here under their historic names so existing callers keep working.
+export const redactForLogs = redactValue
+export const serializeErrorForLogs = serializeError
+export { redactText }
 
 export const logServerWarning = (message: string, details?: unknown) => {
   if (details === undefined) {
     console.warn(message)
     return
   }
-  console.warn(message, redactForLogs(details))
+  console.warn(message, redactValue(details))
 }
 
 export const logServerError = (message: string, details?: unknown) => {
   if (details === undefined) {
     console.error(message)
   } else {
-    console.error(message, redactForLogs(details))
+    console.error(message, redactValue(details))
   }
+
   // Forward to Sentry so server-side errors appear in the issues dashboard.
-  // Wrap in try/catch so a Sentry failure never breaks the caller.
+  // Wrapped in try/catch so a Sentry failure never breaks the caller.
   try {
-    const error = details instanceof Error ? details : new Error(message)
-    Sentry.captureException(error, { extra: { message } })
+    const safeMessage = redactText(message)
+    const extra = details === undefined ? undefined : { details: redactValue(details) }
+
+    if (details instanceof Error) {
+      // Capture the real Error so Sentry gets the stack from where it was actually thrown.
+      // Synthesising a new Error here (the previous behaviour) stamped every server error
+      // with this file's stack, so unrelated failures grouped together and the trace pointed
+      // at the logger instead of the bug.
+      Sentry.captureException(details, {
+        extra: { logMessage: safeMessage, ...(extra ?? {}) },
+        fingerprint: fingerprintForException(safeMessage),
+      })
+      return
+    }
+
+    // No Error to attach — there is no useful stack, so group on the normalised message.
+    Sentry.captureMessage(safeMessage, {
+      level: "error",
+      extra,
+      fingerprint: fingerprintForMessage(safeMessage),
+    })
   } catch {
     // non-fatal
   }
 }
-

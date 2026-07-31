@@ -13,7 +13,9 @@ import FeedbackWidget from "@/components/feedback-widget"
 import { Toaster } from "@/components/ui/toaster"
 import { Toaster as SonnerToaster } from "sonner"
 import PwaRegister from "@/components/pwa-register"
+import CrashBeacon from "@/components/crash-beacon"
 import PostHogAuthSync from "@/components/posthog-auth-sync"
+import SentryAuthSync from "@/components/sentry-auth-sync"
 import WebVitals from "@/components/web-vitals"
 import { LocaleProvider } from "@/components/locale-provider"
 import { LOCALE_COOKIE_KEY, normalizeAppLocale } from "@/lib/i18n"
@@ -95,7 +97,9 @@ export default async function RootLayout({
         {/* Warm up connections to third-party origins used on every page */}
         <link rel="preconnect" href="https://www.googletagmanager.com" />
         <link rel="dns-prefetch" href="https://www.googletagmanager.com" />
-        <link rel="dns-prefetch" href="https://ingest.sentry.io" />
+        {/* Must be the DSN's real host — the region-less `ingest.sentry.io` this used to
+            point at is never contacted, so the prefetch warmed the wrong connection. */}
+        <link rel="dns-prefetch" href="https://o4511210874339328.ingest.de.sentry.io" />
         <link rel="dns-prefetch" href="https://cdn.weatherapi.com" />
       </head>
       <body className={`${bodyFont.variable} ${displayFont.variable} font-body`} suppressHydrationWarning>
@@ -128,6 +132,10 @@ gtag('config', 'G-X0RB06WXE9');`}
               {/* Several components toast via sonner — without this mount those messages never render */}
               <SonnerToaster position="top-center" richColors closeButton />
               <PwaRegister />
+              {/* Detects sessions killed by the OS — see lib/crash-beacon.ts */}
+              <CrashBeacon />
+              {/* Tags Sentry issues with tenant/user so they can be triaged */}
+              <SentryAuthSync />
               <Suspense fallback={null}>
                 <WebVitals />
               </Suspense>

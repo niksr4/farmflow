@@ -1,5 +1,6 @@
 import "server-only"
 
+import * as Sentry from "@sentry/nextjs"
 import { getServerSession } from "next-auth/next"
 import { authOptions } from "@/lib/auth"
 import { DEFAULT_APP_LOCALE, normalizeAppLocale } from "@/lib/i18n"
@@ -66,17 +67,33 @@ const toSessionUser = (input: {
   preferredLocale?: unknown
   setupCompleted?: unknown
   requiresGuidedSetup?: unknown
-}): SessionUser => ({
-  id: String(input.id || ""),
-  username: String(input.username || ""),
-  role: normalizeRole(input.role),
-  tenantId: String(input.tenantId || ""),
-  sessionMode: input.sessionMode === "app" ? "app" : input.sessionMode === "web" ? "web" : undefined,
-  passwordResetRequired: Boolean(input.passwordResetRequired),
-  preferredLocale: normalizeAppLocale(input.preferredLocale || DEFAULT_APP_LOCALE),
-  setupCompleted: Boolean(input.setupCompleted),
-  requiresGuidedSetup: Boolean(input.requiresGuidedSetup),
-})
+}): SessionUser => {
+  const sessionUser: SessionUser = {
+    id: String(input.id || ""),
+    username: String(input.username || ""),
+    role: normalizeRole(input.role),
+    tenantId: String(input.tenantId || ""),
+    sessionMode: input.sessionMode === "app" ? "app" : input.sessionMode === "web" ? "web" : undefined,
+    passwordResetRequired: Boolean(input.passwordResetRequired),
+    preferredLocale: normalizeAppLocale(input.preferredLocale || DEFAULT_APP_LOCALE),
+    setupCompleted: Boolean(input.setupCompleted),
+    requiresGuidedSetup: Boolean(input.requiresGuidedSetup),
+  }
+
+  // Tag the request's Sentry scope with who it belongs to. This is the one place every
+  // resolution path funnels through, so tagging here covers all of them. Without it a
+  // server issue gives no clue which estate is affected — the difference between one
+  // tenant's bad data and an outage for everyone. No email or personal detail is attached.
+  try {
+    Sentry.setUser({ id: sessionUser.id, username: sessionUser.username })
+    Sentry.setTag("tenant_id", sessionUser.tenantId || "global")
+    Sentry.setTag("user_role", sessionUser.role)
+  } catch {
+    // Observability must never be able to fail a request.
+  }
+
+  return sessionUser
+}
 
 export async function requireSessionUser(): Promise<SessionUser> {
   const session = await getServerSession(authOptions)
