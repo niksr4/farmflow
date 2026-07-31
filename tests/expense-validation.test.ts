@@ -1,6 +1,17 @@
 import { describe, expect, it } from "vitest"
 
-// Mirrors the validation logic from other-expenses-tab.tsx handleSubmit
+// Mirrors the validation this form SHOULD apply before calling addDeployment/updateDeployment.
+// NOTE (2026-07-31 code scan): as of this scan, components/other-expenses-tab.tsx's
+// handleSubmitUnguarded does NOT actually run this check — it only guards on `formLocationId`
+// before submitting, so the amount/code/reference/date checks below are not currently wired into
+// the real component. Unlike labor-deployment-tab.tsx (blocks on zero workers) and
+// other-sales-tab.tsx (blocks on kgs<=0), the expense form's <Input type="number" min="0"> for
+// Amount accepts a typed "0", which satisfies both `required` and `min=0`, and the value is passed
+// straight through to POST /api/expenses-neon, which also does not validate `amount` server-side
+// (see app/api/expenses-neon/route.ts POST/PUT — no findInvalidNumericField-style guard, unlike
+// app/api/quality-grading-records/route.ts). Net effect: a ₹0 non-labour expense can be saved with
+// no error. Filed as a Linear issue; these tests intentionally keep asserting the *intended*
+// validation contract so a future fix that wires this into the component doesn't regress it.
 function validateExpenseForm(data: {
   code: string
   reference: string
