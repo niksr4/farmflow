@@ -19,6 +19,7 @@ import { getCoffeePriceAnalysis, estimateSellableStock, buildMarketTimingSection
 import { getCurrentFiscalYear } from "@/lib/fiscal-year-utils"
 import { createDigestFeedbackLinks, type DigestFeedbackLinks } from "@/lib/server/digest-feedback"
 import { fetchTenantOwnersWithVerifiedEmail, fetchRecentRainfallSummary, type TenantDigestRow } from "@/lib/server/agents/digest-shared"
+import { fetchTenantActivitySignals, evaluateDigestDormancy } from "@/lib/server/agents/tenant-dormancy"
 
 type DigestResult = {
   tenantId: string
@@ -561,10 +562,13 @@ export async function runWeeklyDigestAgent(input?: {
   triggerSource?: string
   dryRun?: boolean
   tenantId?: string
+  /** Bypass the dormancy gate — for manually re-sending to a tenant that has gone quiet. */
+  includeDormant?: boolean
 }): Promise<{
   tenantsProcessed: number
   sent: number
   skipped: number
+  dormantSkipped: number
   failed: number
   results: DigestResult[]
   dryRun: boolean
@@ -594,13 +598,44 @@ export async function runWeeklyDigestAgent(input?: {
     ? allTenants.filter((t) => t.tenantId === input.tenantId)
     : allTenants
 
+  // Dormancy gate — shared with the dormancy probe agent (lib/server/agents/tenant-dormancy.ts).
+  // A tenant that has neither logged in nor recorded anything for weeks gets the probe's
+  // "haven't seen you" email instead of a digest reporting on an estate with no data.
+  // Fails OPEN: if the signal query breaks we send as before rather than silently going dark.
+  const results: DigestResult[] = []
+  let activeTenants = tenants
+
+  if (!input?.includeDormant) {
+    try {
+      const signals = await fetchTenantActivitySignals()
+      activeTenants = tenants.filter((tenant) => {
+        const signal = signals.get(tenant.tenantId)
+        if (!signal) return true
+        const { dormant, reason } = evaluateDigestDormancy(signal)
+        if (!dormant) return true
+        results.push({
+          tenantId: tenant.tenantId,
+          tenantName: tenant.tenantName,
+          ownerEmail: tenant.ownerEmail,
+          status: "skipped",
+          reason: `dormant — ${reason}`,
+        })
+        return false
+      })
+    } catch (error) {
+      logServerWarning("Weekly digest dormancy gate failed — sending to all recipients", error)
+      activeTenants = tenants
+    }
+  }
+
+  const dormantSkipped = results.length
+
   // Process tenants in parallel batches of 3 — avoids serial bottleneck with 5-10 tenants
   // while staying within Anthropic and Resend concurrency limits.
   const BATCH_SIZE = 3
-  const results: DigestResult[] = []
 
-  for (let i = 0; i < tenants.length; i += BATCH_SIZE) {
-    const batch = tenants.slice(i, i + BATCH_SIZE)
+  for (let i = 0; i < activeTenants.length; i += BATCH_SIZE) {
+    const batch = activeTenants.slice(i, i + BATCH_SIZE)
     const batchResults = await Promise.allSettled(
       batch.map(async (tenant): Promise<DigestResult> => {
         const generated = await generateWeeklyDigestText(tenant)
@@ -650,6 +685,7 @@ export async function runWeeklyDigestAgent(input?: {
     tenantsProcessed: tenants.length,
     sent: results.filter((r) => r.status === "sent").length,
     skipped: results.filter((r) => r.status === "skipped").length,
+    dormantSkipped,
     failed: results.filter((r) => r.status === "failed").length,
     dryRun,
   }

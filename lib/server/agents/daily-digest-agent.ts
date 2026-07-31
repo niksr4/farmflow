@@ -16,6 +16,7 @@ import {
   type TenantDigestRow,
   type RecentRainfallSummary,
 } from "@/lib/server/agents/digest-shared"
+import { fetchTenantActivitySignals, evaluateDigestDormancy } from "@/lib/server/agents/tenant-dormancy"
 
 type DigestResult = {
   tenantId: string
@@ -342,10 +343,13 @@ export async function runDailyDigestAgent(input?: {
   triggerSource?: string
   dryRun?: boolean
   tenantId?: string
+  /** Bypass the dormancy gate — for manually re-sending to a tenant that has gone quiet. */
+  includeDormant?: boolean
 }): Promise<{
   tenantsProcessed: number
   sent: number
   skipped: number
+  dormantSkipped: number
   failed: number
   results: DigestResult[]
   dryRun: boolean
@@ -371,6 +375,38 @@ export async function runDailyDigestAgent(input?: {
     ? allTenants.filter((t) => t.tenantId === input.tenantId)
     : allTenants
 
+  // Dormancy gate — the same shared signal the weekly digest and dormancy probe read
+  // (lib/server/agents/tenant-dormancy.ts). This runs every single day, so an unactivated
+  // or long-quiet tenant accumulates email here faster than anywhere else in the product.
+  // Fails OPEN: if the signal query breaks we send as before rather than silently going dark.
+  const results: DigestResult[] = []
+  let activeTenants = tenants
+
+  if (!input?.includeDormant) {
+    try {
+      const signals = await fetchTenantActivitySignals()
+      activeTenants = tenants.filter((tenant) => {
+        const signal = signals.get(tenant.tenantId)
+        if (!signal) return true
+        const { dormant, reason } = evaluateDigestDormancy(signal)
+        if (!dormant) return true
+        results.push({
+          tenantId: tenant.tenantId,
+          tenantName: tenant.tenantName,
+          ownerEmail: tenant.ownerEmail,
+          status: "skipped",
+          reason: `dormant — ${reason}`,
+        })
+        return false
+      })
+    } catch (error) {
+      logServerWarning("Daily digest dormancy gate failed — sending to all recipients", error)
+      activeTenants = tenants
+    }
+  }
+
+  const dormantSkipped = results.length
+
   const now = new Date()
   const todayDate = istDateString(now)
   const yesterdayDate = istDateString(new Date(now.getTime() - 24 * 60 * 60 * 1000))
@@ -379,10 +415,9 @@ export async function runDailyDigestAgent(input?: {
 
   // Small batches — no Claude calls here, so the bottleneck is just Resend/WeatherAPI concurrency.
   const BATCH_SIZE = 3
-  const results: DigestResult[] = []
 
-  for (let i = 0; i < tenants.length; i += BATCH_SIZE) {
-    const batch = tenants.slice(i, i + BATCH_SIZE)
+  for (let i = 0; i < activeTenants.length; i += BATCH_SIZE) {
+    const batch = activeTenants.slice(i, i + BATCH_SIZE)
     const batchResults = await Promise.allSettled(
       batch.map(async (tenant): Promise<DigestResult> => {
         try {
@@ -437,6 +472,7 @@ export async function runDailyDigestAgent(input?: {
     tenantsProcessed: tenants.length,
     sent: results.filter((r) => r.status === "sent").length,
     skipped: results.filter((r) => r.status === "skipped").length,
+    dormantSkipped,
     failed: results.filter((r) => r.status === "failed").length,
     dryRun,
   }

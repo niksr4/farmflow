@@ -14,6 +14,8 @@ const parseRequestBody = async (request: Request) => {
     return {
       dryRun: searchParams.get("dryRun") === "1" || searchParams.get("dryRun") === "true",
       tenantId: searchParams.get("tenantId") || undefined,
+      includeDormant:
+        searchParams.get("includeDormant") === "1" || searchParams.get("includeDormant") === "true",
     }
   }
   return await request.json().catch(() => ({}))
@@ -35,6 +37,7 @@ async function handleCronInvocation(request: Request) {
       triggerSource: "cron",
       dryRun: Boolean(body?.dryRun),
       tenantId: typeof body?.tenantId === "string" ? body.tenantId : undefined,
+      includeDormant: Boolean(body?.includeDormant),
     })
 
     return NextResponse.json({ success: true, ...result })

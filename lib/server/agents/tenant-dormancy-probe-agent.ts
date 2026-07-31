@@ -7,9 +7,10 @@ import { DEFAULT_AUTH_EMAIL_FROM, EMAIL_BCC_MONITORING } from "@/lib/email-addre
 import { adminSql as sql } from "@/lib/server/db"
 import { fetchWithTimeout } from "@/lib/server/http"
 import { logServerError, logServerWarning } from "@/lib/server/safe-logging"
+import { fetchTenantActivitySignals, evaluateProbeDormancy } from "@/lib/server/agents/tenant-dormancy"
 
 // Dormancy probe — sent to a tenant's admin when NOBODY in that tenant has
-// logged in for DORMANCY_THRESHOLD_DAYS. Login (not transaction volume) is
+// logged in for DORMANCY_PROBE_THRESHOLD_DAYS. Login (not transaction volume) is
 // the signal: a quiet week of data entry can just mean off-season, but if
 // no one from the estate has even opened the app, that's worth checking in on.
 //
@@ -19,9 +20,11 @@ import { logServerError, logServerWarning } from "@/lib/server/safe-logging"
 // tenantsmoke_* username on the login itself, only on the throwaway user it
 // creates/deletes), so its logins are excluded via security_events.source =
 // 'tenant-smoke-agent' (set in lib/auth.ts), not by username pattern alone.
+//
+// The dormancy signal itself now lives in lib/server/agents/tenant-dormancy.ts so the
+// weekly digest reads the same state and stands down for tenants this agent is probing.
 
 const APP_URL = process.env.NEXT_PUBLIC_APP_URL || "https://thefarmflow.in"
-const DORMANCY_THRESHOLD_DAYS = 4
 
 const toRows = <T = any>(value: unknown): T[] => {
   if (Array.isArray(value)) return value as T[]
@@ -41,73 +44,58 @@ type DormantCandidate = {
 async function fetchDormantCandidates(): Promise<DormantCandidate[]> {
   if (!sql) return []
 
-  const result = await sql.query(`
-    SELECT
-      t.id AS tenant_id,
-      t.name AS tenant_name,
-      t.created_at,
-      login.last_login_at,
-      probe.last_known_activity_at AS probe_last_known_activity_at,
-      COALESCE(
-        NULLIF(BTRIM(recipient.digest_email), ''),
-        CASE WHEN recipient.email_verified_at IS NOT NULL THEN NULLIF(BTRIM(recipient.email), '') END
-      ) AS recipient_email,
-      COALESCE(recipient.username, recipient.email) AS recipient_name
-    FROM tenants t
-    LEFT JOIN (
-      SELECT tenant_id, MAX(created_at) AS last_login_at
-      FROM security_events
-      WHERE event_type = 'auth_login_success'
-        AND actor_username NOT LIKE 'tenantsmoke_%'
-        AND source IS DISTINCT FROM 'tenant-smoke-agent'
-      GROUP BY tenant_id
-    ) login ON login.tenant_id = t.id
-    LEFT JOIN tenant_dormancy_probes probe ON probe.tenant_id = t.id
-    LEFT JOIN LATERAL (
-      SELECT u.username, u.email, u.digest_email, u.email_verified_at
-      FROM users u
-      WHERE u.tenant_id = t.id
-        AND u.role = 'admin'
-        AND COALESCE(
-          NULLIF(BTRIM(u.digest_email), ''),
-          CASE WHEN u.email_verified_at IS NOT NULL THEN NULLIF(BTRIM(u.email), '') END
-        ) IS NOT NULL
-      ORDER BY u.created_at ASC
-      LIMIT 1
-    ) recipient ON TRUE
-    WHERE t.parent_tenant_id IS NULL
-      AND EXTRACT(EPOCH FROM (NOW() - t.created_at)) / 86400 >= $1
-  `, [DORMANCY_THRESHOLD_DAYS])
+  // Activity/episode state comes from the shared module; this query only resolves who to
+  // write to. Note the recipient here is the tenant's admin, which is deliberately narrower
+  // than the digest's owner-or-admin lookup — a re-engagement nudge goes to the estate's
+  // own admin, not to an owner account that may sit above several tenants.
+  const [signals, recipientResult] = await Promise.all([
+    fetchTenantActivitySignals(),
+    sql.query(`
+      SELECT
+        t.id AS tenant_id,
+        t.name AS tenant_name,
+        COALESCE(
+          NULLIF(BTRIM(recipient.digest_email), ''),
+          CASE WHEN recipient.email_verified_at IS NOT NULL THEN NULLIF(BTRIM(recipient.email), '') END
+        ) AS recipient_email,
+        COALESCE(recipient.username, recipient.email) AS recipient_name
+      FROM tenants t
+      LEFT JOIN LATERAL (
+        SELECT u.username, u.email, u.digest_email, u.email_verified_at
+        FROM users u
+        WHERE u.tenant_id = t.id
+          AND u.role = 'admin'
+          AND COALESCE(
+            NULLIF(BTRIM(u.digest_email), ''),
+            CASE WHEN u.email_verified_at IS NOT NULL THEN NULLIF(BTRIM(u.email), '') END
+          ) IS NOT NULL
+        ORDER BY u.created_at ASC
+        LIMIT 1
+      ) recipient ON TRUE
+      WHERE t.parent_tenant_id IS NULL
+    `),
+  ])
 
   const candidates: DormantCandidate[] = []
 
-  for (const row of toRows<any>(result)) {
+  for (const row of toRows<any>(recipientResult)) {
     const recipientEmail = row.recipient_email ? String(row.recipient_email) : null
     if (!recipientEmail) continue // no verified admin email to notify — skip
 
-    const lastLoginAt: Date | null = row.last_login_at ? new Date(row.last_login_at) : null
-    const referenceAt: Date = lastLoginAt ?? new Date(row.created_at)
-    const daysSinceLastLogin = Math.floor((Date.now() - referenceAt.getTime()) / 86_400_000)
-    if (daysSinceLastLogin < DORMANCY_THRESHOLD_DAYS) continue // not dormant
+    const signal = signals.get(String(row.tenant_id))
+    if (!signal) continue
 
-    const probeLastKnownActivityAt: Date | null = row.probe_last_known_activity_at
-      ? new Date(row.probe_last_known_activity_at)
-      : null
-
-    // Already probed for this exact dormancy episode (no login since last probe).
-    const sameEpisode =
-      probeLastKnownActivityAt &&
-      ((lastLoginAt === null && probeLastKnownActivityAt === null) ||
-        (lastLoginAt !== null && probeLastKnownActivityAt.getTime() === lastLoginAt.getTime()))
-    if (sameEpisode) continue
+    const { dormant, daysSinceLastLogin, alreadyProbedThisEpisode } = evaluateProbeDormancy(signal)
+    if (!dormant) continue
+    if (alreadyProbedThisEpisode) continue
 
     candidates.push({
-      tenantId: String(row.tenant_id),
+      tenantId: signal.tenantId,
       tenantName: String(row.tenant_name || "your estate"),
       recipientEmail,
       recipientName: String(row.recipient_name || "there"),
       daysSinceLastLogin,
-      lastLoginAt,
+      lastLoginAt: signal.lastLoginAt,
     })
   }
 
