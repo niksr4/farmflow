@@ -304,6 +304,18 @@ const normalizeLocationId = (value: unknown) => {
   return UUID_PATTERN.test(normalized) ? normalized : "invalid"
 }
 
+// An expense with no rupee value isn't a record of anything, so a non-positive or
+// non-numeric amount is rejected rather than coerced. The UI's <Input type="number"
+// min="0" required> lets a typed "0" through (it satisfies both `required` and `min`),
+// and a direct API call bypasses the form entirely, so this is the real gate.
+const normalizeExpenseAmount = (value: unknown): number | null => {
+  const amount = typeof value === "number" ? value : Number.parseFloat(String(value ?? "").trim())
+  if (!Number.isFinite(amount) || amount <= 0) return null
+  return amount
+}
+
+const INVALID_AMOUNT_ERROR = "Amount must be a number greater than zero"
+
 async function tableHasLocationColumn(tableName: string) {
   const rows = await accountsSql`
     SELECT 1
@@ -1205,7 +1217,11 @@ export async function POST(request: Request) {
     const tenantContext = normalizeTenantContext(sessionUser.tenantId, sessionUser.role)
     const tenantUserUuid = await resolveTenantUserUuid(sessionUser)
     const body = await request.json()
-    const { date, code, amount, notes } = body
+    const { date, code, amount: rawAmount, notes } = body
+    const amount = normalizeExpenseAmount(rawAmount)
+    if (amount === null) {
+      return NextResponse.json({ success: false, error: INVALID_AMOUNT_ERROR }, { status: 400 })
+    }
     const normalizedNotes = String(notes || "")
     const requestedLocationId = normalizeLocationId(body?.locationId)
     if (requestedLocationId === "invalid") {
@@ -1353,7 +1369,11 @@ export async function PUT(request: Request) {
     const tenantContext = normalizeTenantContext(sessionUser.tenantId, sessionUser.role)
     const tenantUserUuid = await resolveTenantUserUuid(sessionUser)
     const body = await request.json()
-    const { id, date, code, amount, notes } = body
+    const { id, date, code, amount: rawAmount, notes } = body
+    const amount = normalizeExpenseAmount(rawAmount)
+    if (amount === null) {
+      return NextResponse.json({ success: false, error: INVALID_AMOUNT_ERROR }, { status: 400 })
+    }
     const normalizedNotes = String(notes || "")
     const rawInventoryItems = parseExpenseInventoryItems(body)
     const inventoryItemType = rawInventoryItems[0]?.itemType ?? null

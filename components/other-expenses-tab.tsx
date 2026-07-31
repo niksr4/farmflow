@@ -225,6 +225,14 @@ export default function OtherExpensesTab({
       toast.error("Select a location before saving.")
       return
     }
+    // The Amount field is `required` with `min="0"`, but a typed "0" satisfies both, so
+    // native validation lets an empty-value expense through. Check it here the way the
+    // labour and sales forms do. `!(x > 0)` also catches the NaN the field can't produce
+    // today but would if numericInputValue ever stopped coercing.
+    if (!(formData.amount > 0)) {
+      toast.error("Enter an amount greater than zero.")
+      return
+    }
     trackClick(editingId ? "expense_update" : "expense_save")
     setIsSubmitting(true)
 

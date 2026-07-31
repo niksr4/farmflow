@@ -1,28 +1,32 @@
 import { describe, expect, it } from "vitest"
 
-// Mirrors the validation this form SHOULD apply before calling addDeployment/updateDeployment.
-// NOTE (2026-07-31 code scan): as of this scan, components/other-expenses-tab.tsx's
-// handleSubmitUnguarded does NOT actually run this check — it only guards on `formLocationId`
-// before submitting, so the amount/code/reference/date checks below are not currently wired into
-// the real component. Unlike labor-deployment-tab.tsx (blocks on zero workers) and
-// other-sales-tab.tsx (blocks on kgs<=0), the expense form's <Input type="number" min="0"> for
-// Amount accepts a typed "0", which satisfies both `required` and `min=0`, and the value is passed
-// straight through to POST /api/expenses-neon, which also does not validate `amount` server-side
-// (see app/api/expenses-neon/route.ts POST/PUT — no findInvalidNumericField-style guard, unlike
-// app/api/quality-grading-records/route.ts). Net effect: a ₹0 non-labour expense can be saved with
-// no error. Filed as a Linear issue; these tests intentionally keep asserting the *intended*
-// validation contract so a future fix that wires this into the component doesn't regress it.
+// Mirrors the validation a non-labour expense passes before it can be stored (NIK-8).
+// `code` and `date` are enforced by the form's HTML `required`; `amount` is checked twice —
+// in other-expenses-tab.tsx's handleSubmitUnguarded, because <Input type="number" min="0"
+// required> accepts a typed "0" and native validation waves it through, and again in
+// app/api/expenses-neon/route.ts (normalizeExpenseAmount, on both POST and PUT) because a
+// direct API call skips the form entirely and can send a negative or non-numeric value.
+//
+// `reference` is deliberately NOT required: expenses allow ad-hoc cost types that aren't in
+// the saved activity list, so a typed code with no resolved reference is a valid entry.
 function validateExpenseForm(data: {
   code: string
-  reference: string
+  reference?: string
   amount: number
   date: string
 }): { valid: boolean; error?: string } {
   if (!data.code.trim()) return { valid: false, error: "Select a valid activity from the list before saving." }
-  if (!data.reference.trim()) return { valid: false, error: "Cost name is required." }
-  if (!data.amount || data.amount <= 0) return { valid: false, error: "Enter a valid amount greater than zero." }
+  if (!(data.amount > 0)) return { valid: false, error: "Enter an amount greater than zero." }
   if (!data.date) return { valid: false, error: "Date is required." }
   return { valid: true }
+}
+
+// Mirrors normalizeExpenseAmount in app/api/expenses-neon/route.ts — the server-side gate
+// that a caller bypassing the form hits. Returns null when the amount is unusable.
+function normalizeExpenseAmount(value: unknown): number | null {
+  const amount = typeof value === "number" ? value : Number.parseFloat(String(value ?? "").trim())
+  if (!Number.isFinite(amount) || amount <= 0) return null
+  return amount
 }
 
 // Tracks-inventory detection logic
@@ -49,9 +53,10 @@ describe("expense form validation", () => {
     expect(result.error).toContain("activity")
   })
 
-  it("fails when reference is empty", () => {
-    const result = validateExpenseForm({ code: "155", reference: "", amount: 1000, date: "2026-06-05" })
-    expect(result.valid).toBe(false)
+  it("allows an ad-hoc cost type with no resolved reference", () => {
+    // Typing "Fuel" without picking a saved activity is a supported entry, not an error.
+    const result = validateExpenseForm({ code: "Fuel", reference: "", amount: 1000, date: "2026-06-05" })
+    expect(result.valid).toBe(true)
   })
 
   it("fails when amount is zero", () => {
@@ -67,6 +72,43 @@ describe("expense form validation", () => {
   it("fails when date is missing", () => {
     const result = validateExpenseForm({ code: "155", reference: "Lime", amount: 1000, date: "" })
     expect(result.valid).toBe(false)
+  })
+})
+
+describe("server-side amount gate (direct API calls bypass the form)", () => {
+  it("accepts a positive number", () => {
+    expect(normalizeExpenseAmount(8550)).toBe(8550)
+    expect(normalizeExpenseAmount(0.5)).toBe(0.5)
+  })
+
+  it("accepts a numeric string, trimmed", () => {
+    expect(normalizeExpenseAmount("8550")).toBe(8550)
+    expect(normalizeExpenseAmount("  500  ")).toBe(500)
+  })
+
+  it("rejects zero and negative amounts", () => {
+    expect(normalizeExpenseAmount(0)).toBeNull()
+    expect(normalizeExpenseAmount(-500)).toBeNull()
+    expect(normalizeExpenseAmount("-500")).toBeNull()
+  })
+
+  it("rejects non-numeric input", () => {
+    expect(normalizeExpenseAmount("abc")).toBeNull()
+    expect(normalizeExpenseAmount("")).toBeNull()
+    expect(normalizeExpenseAmount("   ")).toBeNull()
+    expect(normalizeExpenseAmount({})).toBeNull()
+    expect(normalizeExpenseAmount([])).toBeNull()
+  })
+
+  it("rejects a missing amount", () => {
+    expect(normalizeExpenseAmount(null)).toBeNull()
+    expect(normalizeExpenseAmount(undefined)).toBeNull()
+  })
+
+  it("rejects NaN and Infinity", () => {
+    expect(normalizeExpenseAmount(Number.NaN)).toBeNull()
+    expect(normalizeExpenseAmount(Number.POSITIVE_INFINITY)).toBeNull()
+    expect(normalizeExpenseAmount(Number.NEGATIVE_INFINITY)).toBeNull()
   })
 })
 
