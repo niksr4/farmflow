@@ -92,12 +92,12 @@ export function useHeroTotals({
     if (!tenantId || !canShowProcessing) return
     if (!shouldLoadHomeMetrics) return
     if (processingLoadedRef.current === tenantId) return
-    let ignore = false
+    const controller = new AbortController()
     const load = async () => {
       setProcessingTotals((prev) => ({ ...prev, loading: true, error: null }))
       try {
         const params = new URLSearchParams({ summary: "dashboard", fiscalYearStart: currentFiscalYear.startDate, fiscalYearEnd: currentFiscalYear.endDate })
-        const res = await fetch(`/api/processing-records?${params.toString()}`)
+        const res = await fetch(`/api/processing-records?${params.toString()}`, { signal: controller.signal })
         const json = await res.json().catch(() => ({}))
         if (!res.ok || !json?.success) throw new Error(json?.error || "Failed to load processing totals")
         const records = Array.isArray(json.records) ? json.records : []
@@ -112,25 +112,25 @@ export function useHeroTotals({
           },
           { arabicaKg: 0, arabicaBags: 0, robustaKg: 0, robustaBags: 0 },
         )
-        if (!ignore) { setProcessingTotals({ ...totals, loading: false, error: null }); processingLoadedRef.current = tenantId }
+        if (!controller.signal.aborted) { setProcessingTotals({ ...totals, loading: false, error: null }); processingLoadedRef.current = tenantId }
       } catch (error: any) {
-        if (!ignore) setProcessingTotals((prev) => ({ ...prev, loading: false, error: error?.message || "Failed to load processing totals" }))
+        if (!controller.signal.aborted) setProcessingTotals((prev) => ({ ...prev, loading: false, error: error?.message || "Failed to load processing totals" }))
       }
     }
     load()
-    return () => { ignore = true }
+    return () => controller.abort()
   }, [tenantId, canShowProcessing, shouldLoadHomeMetrics])
 
   useEffect(() => {
     if (!tenantId || !canShowDispatch) return
     if (!shouldLoadHomeMetrics) return
     if (dispatchLoadedRef.current === tenantId) return
-    let ignore = false
+    const controller = new AbortController()
     const load = async () => {
       setDispatchHeroTotals((prev) => ({ ...prev, loading: true, error: null }))
       try {
         const params = new URLSearchParams({ summaryOnly: "true", startDate: currentFiscalYear.startDate, endDate: currentFiscalYear.endDate })
-        const res = await fetch(`/api/dispatch?${params.toString()}`)
+        const res = await fetch(`/api/dispatch?${params.toString()}`, { signal: controller.signal })
         const json = await res.json().catch(() => ({}))
         if (!res.ok || !json?.success) throw new Error(json?.error || "Failed to load dispatch totals")
         const totalsByType = Array.isArray(json?.totalsByType) ? json.totalsByType : []
@@ -145,25 +145,25 @@ export function useHeroTotals({
           },
           { arabicaBags: 0, arabicaKgs: 0, robustaBags: 0, robustaKgs: 0 },
         )
-        if (!ignore) { setDispatchHeroTotals({ ...totals, totalDispatches: Number(json?.totalCount) || 0, loading: false, error: null }); dispatchLoadedRef.current = tenantId }
+        if (!controller.signal.aborted) { setDispatchHeroTotals({ ...totals, totalDispatches: Number(json?.totalCount) || 0, loading: false, error: null }); dispatchLoadedRef.current = tenantId }
       } catch (error: any) {
-        if (!ignore) setDispatchHeroTotals((prev) => ({ ...prev, loading: false, error: error?.message || "Failed to load dispatch totals" }))
+        if (!controller.signal.aborted) setDispatchHeroTotals((prev) => ({ ...prev, loading: false, error: error?.message || "Failed to load dispatch totals" }))
       }
     }
     load()
-    return () => { ignore = true }
+    return () => controller.abort()
   }, [tenantId, canShowDispatch, shouldLoadHomeMetrics])
 
   useEffect(() => {
     if (!tenantId || !canShowSales) return
     if (!shouldLoadHomeMetrics) return
     if (salesLoadedRef.current === tenantId) return
-    let ignore = false
+    const controller = new AbortController()
     const load = async () => {
       setSalesHeroTotals((prev) => ({ ...prev, loading: true, error: null }))
       try {
         const params = new URLSearchParams({ summaryOnly: "true", startDate: currentFiscalYear.startDate, endDate: currentFiscalYear.endDate })
-        const res = await fetch(`/api/sales?${params.toString()}`)
+        const res = await fetch(`/api/sales?${params.toString()}`, { signal: controller.signal })
         const json = await res.json().catch(() => ({}))
         if (!res.ok || !json?.success) throw new Error(json?.error || "Failed to load sales totals")
         const totalsByType = Array.isArray(json?.totalsByType) ? json.totalsByType : []
@@ -178,13 +178,13 @@ export function useHeroTotals({
           },
           { arabicaBags: 0, arabicaKgs: 0, robustaBags: 0, robustaKgs: 0 },
         )
-        if (!ignore) { setSalesHeroTotals({ ...totals, totalSales: Number(json?.totalCount) || 0, totalRevenue: Number(json?.totalRevenue) || 0, loading: false, error: null }); salesLoadedRef.current = tenantId }
+        if (!controller.signal.aborted) { setSalesHeroTotals({ ...totals, totalSales: Number(json?.totalCount) || 0, totalRevenue: Number(json?.totalRevenue) || 0, loading: false, error: null }); salesLoadedRef.current = tenantId }
       } catch (error: any) {
-        if (!ignore) setSalesHeroTotals((prev) => ({ ...prev, loading: false, error: error?.message || "Failed to load sales totals" }))
+        if (!controller.signal.aborted) setSalesHeroTotals((prev) => ({ ...prev, loading: false, error: error?.message || "Failed to load sales totals" }))
       }
     }
     load()
-    return () => { ignore = true }
+    return () => controller.abort()
   }, [tenantId, canShowSales, shouldLoadHomeMetrics])
 
   useEffect(() => {
@@ -194,39 +194,39 @@ export function useHeroTotals({
     }
     if (!shouldLoadHomeMetrics) return
     if (otherSalesLoadedRef.current === tenantId) return
-    let ignore = false
+    const controller = new AbortController()
     const load = async () => {
       setOtherSalesHeroTotals((prev) => ({ ...prev, loading: true, error: null }))
       try {
         const params = new URLSearchParams({ all: "true", startDate: currentFiscalYear.startDate, endDate: currentFiscalYear.endDate })
-        const res = await fetch(`/api/other-sales?${params.toString()}`, { cache: "no-store" })
+        const res = await fetch(`/api/other-sales?${params.toString()}`, { cache: "no-store", signal: controller.signal })
         const json = await res.json().catch(() => ({}))
         if (!res.ok || !json?.success) throw new Error(json?.error || "Failed to load other sales totals")
-        if (!ignore) { setOtherSalesHeroTotals({ totalRevenue: Number(json?.totals?.totalRevenue) || 0, totalCount: Number(json?.totalCount) || 0, loading: false, error: null }); otherSalesLoadedRef.current = tenantId }
+        if (!controller.signal.aborted) { setOtherSalesHeroTotals({ totalRevenue: Number(json?.totals?.totalRevenue) || 0, totalCount: Number(json?.totalCount) || 0, loading: false, error: null }); otherSalesLoadedRef.current = tenantId }
       } catch (error: any) {
-        if (!ignore) setOtherSalesHeroTotals((prev) => ({ ...prev, loading: false, error: error?.message || "Failed to load other sales totals" }))
+        if (!controller.signal.aborted) setOtherSalesHeroTotals((prev) => ({ ...prev, loading: false, error: error?.message || "Failed to load other sales totals" }))
       }
     }
     load()
-    return () => { ignore = true }
+    return () => controller.abort()
   }, [tenantId, canShowOtherSales, shouldLoadHomeMetrics])
 
   useEffect(() => {
     if (!tenantId || !canShowReceivables) return
     if (!shouldLoadHomeMetrics) return
     if (receivablesLoadedRef.current === tenantId) return
-    let ignore = false
+    const controller = new AbortController()
     const load = async () => {
       setReceivablesHeroTotals((prev) => ({ ...prev, loading: true, error: null }))
       try {
         const params = new URLSearchParams()
         if (isPreviewMode && previewTenantId) params.set("tenantId", previewTenantId)
         const endpoint = params.toString() ? `/api/receivables?${params.toString()}` : "/api/receivables"
-        const res = await fetch(endpoint, { cache: "no-store" })
+        const res = await fetch(endpoint, { cache: "no-store", signal: controller.signal })
         const json = await res.json().catch(() => ({}))
         if (!res.ok || !json?.success) throw new Error(json?.error || "Failed to load receivables totals")
         const payload = json?.summary || {}
-        if (!ignore) {
+        if (!controller.signal.aborted) {
           setReceivablesHeroTotals({
             totalInvoiced: Number(payload.totalInvoiced) || 0,
             totalOutstanding: Number(payload.totalOutstanding) || 0,
@@ -238,23 +238,23 @@ export function useHeroTotals({
           receivablesLoadedRef.current = tenantId
         }
       } catch (error: any) {
-        if (!ignore) setReceivablesHeroTotals((prev) => ({ ...prev, loading: false, error: error?.message || "Failed to load receivables totals" }))
+        if (!controller.signal.aborted) setReceivablesHeroTotals((prev) => ({ ...prev, loading: false, error: error?.message || "Failed to load receivables totals" }))
       }
     }
     load()
-    return () => { ignore = true }
+    return () => controller.abort()
   }, [canShowReceivables, isPreviewMode, previewTenantId, shouldLoadHomeMetrics, tenantId])
 
   useEffect(() => {
     if (!tenantId || !canShowCuring) return
     if (!shouldLoadHomeMetrics) return
     if (curingLoadedRef.current === tenantId) return
-    let ignore = false
+    const controller = new AbortController()
     const load = async () => {
       setCuringHeroTotals((prev) => ({ ...prev, loading: true, error: null }))
       try {
         const params = new URLSearchParams({ fiscalYearStart: currentFiscalYear.startDate, fiscalYearEnd: currentFiscalYear.endDate, all: "true" })
-        const res = await fetch(`/api/curing-records?${params.toString()}`)
+        const res = await fetch(`/api/curing-records?${params.toString()}`, { signal: controller.signal })
         const json = await res.json().catch(() => ({}))
         if (!res.ok || !json?.success) throw new Error(json?.error || "Failed to load curing totals")
         const records = Array.isArray(json.records) ? json.records : []
@@ -271,7 +271,7 @@ export function useHeroTotals({
           },
           { outputKg: 0, dryingDaysTotal: 0, dryingDaysCount: 0, moistureDropTotal: 0, moistureDropCount: 0 },
         )
-        if (!ignore) {
+        if (!controller.signal.aborted) {
           setCuringHeroTotals({
             totalRecords: records.length,
             totalOutputKg: totals.outputKg,
@@ -282,23 +282,23 @@ export function useHeroTotals({
           curingLoadedRef.current = tenantId
         }
       } catch (error: any) {
-        if (!ignore) setCuringHeroTotals((prev) => ({ ...prev, loading: false, error: error?.message || "Failed to load curing totals" }))
+        if (!controller.signal.aborted) setCuringHeroTotals((prev) => ({ ...prev, loading: false, error: error?.message || "Failed to load curing totals" }))
       }
     }
     load()
-    return () => { ignore = true }
+    return () => controller.abort()
   }, [tenantId, canShowCuring, currentFiscalYear.endDate, currentFiscalYear.startDate, shouldLoadHomeMetrics])
 
   useEffect(() => {
     if (!tenantId || !canShowQuality) return
     if (!shouldLoadHomeMetrics) return
     if (qualityLoadedRef.current === tenantId) return
-    let ignore = false
+    const controller = new AbortController()
     const load = async () => {
       setQualityHeroTotals((prev) => ({ ...prev, loading: true, error: null }))
       try {
         const params = new URLSearchParams({ fiscalYearStart: currentFiscalYear.startDate, fiscalYearEnd: currentFiscalYear.endDate, all: "true" })
-        const res = await fetch(`/api/quality-grading-records?${params.toString()}`)
+        const res = await fetch(`/api/quality-grading-records?${params.toString()}`, { signal: controller.signal })
         const json = await res.json().catch(() => ({}))
         if (!res.ok || !json?.success) throw new Error(json?.error || "Failed to load quality totals")
         const records = Array.isArray(json.records) ? json.records : []
@@ -314,7 +314,7 @@ export function useHeroTotals({
           },
           { cupScoreTotal: 0, cupScoreCount: 0, outturnTotal: 0, outturnCount: 0, defectsTotal: 0, defectsCount: 0 },
         )
-        if (!ignore) {
+        if (!controller.signal.aborted) {
           setQualityHeroTotals({
             totalRecords: records.length,
             avgCupScore: totals.cupScoreCount ? totals.cupScoreTotal / totals.cupScoreCount : 0,
@@ -325,23 +325,23 @@ export function useHeroTotals({
           qualityLoadedRef.current = tenantId
         }
       } catch (error: any) {
-        if (!ignore) setQualityHeroTotals((prev) => ({ ...prev, loading: false, error: error?.message || "Failed to load quality totals" }))
+        if (!controller.signal.aborted) setQualityHeroTotals((prev) => ({ ...prev, loading: false, error: error?.message || "Failed to load quality totals" }))
       }
     }
     load()
-    return () => { ignore = true }
+    return () => controller.abort()
   }, [tenantId, canShowQuality, currentFiscalYear.endDate, currentFiscalYear.startDate, shouldLoadHomeMetrics])
 
   useEffect(() => {
     if (!tenantId || !canShowPepper) return
     if (!shouldLoadHomeMetrics) return
     if (pepperLoadedRef.current === tenantId) return
-    let ignore = false
+    const controller = new AbortController()
     const load = async () => {
       setPepperHeroTotals((prev) => ({ ...prev, loading: true, error: null }))
       try {
         const params = new URLSearchParams({ fiscalYearStart: currentFiscalYear.startDate, fiscalYearEnd: currentFiscalYear.endDate })
-        const res = await fetch(`/api/pepper-records?${params.toString()}`)
+        const res = await fetch(`/api/pepper-records?${params.toString()}`, { signal: controller.signal })
         const json = await res.json().catch(() => ({}))
         if (!res.ok || !json?.success) throw new Error(json?.error || "Failed to load pepper totals")
         const records = Array.isArray(json.records) ? json.records : []
@@ -357,7 +357,7 @@ export function useHeroTotals({
           },
           { picked: 0, dry: 0, dryPctTotal: 0, dryPctCount: 0 },
         )
-        if (!ignore) {
+        if (!controller.signal.aborted) {
           setPepperHeroTotals({
             totalRecords: records.length, totalPickedKg: totals.picked, totalDryKg: totals.dry,
             avgDryPercent: totals.dryPctCount ? totals.dryPctTotal / totals.dryPctCount : 0,
@@ -366,23 +366,23 @@ export function useHeroTotals({
           pepperLoadedRef.current = tenantId
         }
       } catch (error: any) {
-        if (!ignore) setPepperHeroTotals((prev) => ({ ...prev, loading: false, error: error?.message || "Failed to load pepper totals" }))
+        if (!controller.signal.aborted) setPepperHeroTotals((prev) => ({ ...prev, loading: false, error: error?.message || "Failed to load pepper totals" }))
       }
     }
     load()
-    return () => { ignore = true }
+    return () => controller.abort()
   }, [tenantId, canShowPepper, currentFiscalYear.endDate, currentFiscalYear.startDate, shouldLoadHomeMetrics])
 
   useEffect(() => {
     if (!tenantId || !canShowRubber) return
     if (!shouldLoadHomeMetrics) return
     if (rubberLoadedRef.current === tenantId) return
-    let ignore = false
+    const controller = new AbortController()
     const load = async () => {
       setRubberHeroTotals((prev) => ({ ...prev, loading: true, error: null }))
       try {
         const params = new URLSearchParams({ fiscalYearStart: currentFiscalYear.startDate, fiscalYearEnd: currentFiscalYear.endDate })
-        const res = await fetch(`/api/rubber-records?${params.toString()}`)
+        const res = await fetch(`/api/rubber-records?${params.toString()}`, { signal: controller.signal })
         const json = await res.json().catch(() => ({}))
         if (!res.ok || !json?.success) throw new Error(json?.error || "Failed to load rubber totals")
         const records = Array.isArray(json.records) ? json.records : []
@@ -398,7 +398,7 @@ export function useHeroTotals({
           },
           { latex: 0, sheets: 0, drcTotal: 0, drcCount: 0 },
         )
-        if (!ignore) {
+        if (!controller.signal.aborted) {
           setRubberHeroTotals({
             totalRecords: records.length, totalLatexKg: totals.latex, totalSheetsKg: totals.sheets,
             avgDrcPct: totals.drcCount ? totals.drcTotal / totals.drcCount : 0,
@@ -407,22 +407,22 @@ export function useHeroTotals({
           rubberLoadedRef.current = tenantId
         }
       } catch (error: any) {
-        if (!ignore) setRubberHeroTotals((prev) => ({ ...prev, loading: false, error: error?.message || "Failed to load rubber totals" }))
+        if (!controller.signal.aborted) setRubberHeroTotals((prev) => ({ ...prev, loading: false, error: error?.message || "Failed to load rubber totals" }))
       }
     }
     load()
-    return () => { ignore = true }
+    return () => controller.abort()
   }, [tenantId, canShowRubber, currentFiscalYear.endDate, currentFiscalYear.startDate, shouldLoadHomeMetrics])
 
   useEffect(() => {
     if (!tenantId || !canShowRainfall) return
     if (!shouldLoadHomeMetrics) return
     if (rainfallLoadedRef.current === tenantId) return
-    let ignore = false
+    const controller = new AbortController()
     const load = async () => {
       setRainfallHeroTotals((prev) => ({ ...prev, loading: true, error: null }))
       try {
-        const res = await fetch("/api/rainfall")
+        const res = await fetch("/api/rainfall", { signal: controller.signal })
         const json = await res.json().catch(() => ({}))
         if (!res.ok || !json?.success) throw new Error(json?.error || "Failed to load rainfall totals")
         const records = Array.isArray(json.records) ? json.records : []
@@ -438,24 +438,25 @@ export function useHeroTotals({
           totalRecords += 1
           if (!latestDate || recordDateStr > String(latestDate).slice(0, 10)) latestDate = String(record?.record_date || "")
         }
-        if (!ignore) { setRainfallHeroTotals({ totalRecords, totalInches, latestDate, loading: false, error: null }); rainfallLoadedRef.current = tenantId }
+        if (!controller.signal.aborted) { setRainfallHeroTotals({ totalRecords, totalInches, latestDate, loading: false, error: null }); rainfallLoadedRef.current = tenantId }
       } catch (error: any) {
-        if (!ignore) setRainfallHeroTotals((prev) => ({ ...prev, loading: false, error: error?.message || "Failed to load rainfall totals" }))
+        if (!controller.signal.aborted) setRainfallHeroTotals((prev) => ({ ...prev, loading: false, error: error?.message || "Failed to load rainfall totals" }))
       }
     }
     load()
-    return () => { ignore = true }
+    return () => controller.abort()
   }, [tenantId, canShowRainfall, shouldLoadHomeMetrics])
 
   useEffect(() => {
     if (!canShowSeason || !shouldLoadExceptionSummary) return
     if (exceptionsLoadedRef.current === tenantId) return
-    let isActive = true
+    const controller = new AbortController()
+    const isActive = () => !controller.signal.aborted
     const load = async () => {
       setExceptionsLoading(true)
       setExceptionsError(null)
       try {
-        const response = await fetch("/api/exception-alerts")
+        const response = await fetch("/api/exception-alerts", { signal: controller.signal })
         const data = await response.json()
         if (!response.ok || !data.success) throw new Error(data.error || "Failed to load exceptions")
         const alerts = Array.isArray(data.alerts) ? data.alerts : []
@@ -466,7 +467,7 @@ export function useHeroTotals({
           const context = [alert.location, alert.coffeeType].filter(Boolean).join(" • ")
           return context ? `${context}: ${alert.title}` : alert.title
         })
-        if (!isActive) return
+        if (!isActive()) return
         setExceptionsSummary({
           count: alerts.length,
           highlights,
@@ -480,18 +481,18 @@ export function useHeroTotals({
           })),
         })
       } catch (error: any) {
-        if (!isActive) return
+        if (!isActive()) return
         setExceptionsSummary({ count: 0, highlights: [], alerts: [] })
         setExceptionsError(error.message || "Failed to load exceptions")
       } finally {
-        if (isActive) {
+        if (isActive()) {
           setExceptionsLoading(false)
           exceptionsLoadedRef.current = tenantId
         }
       }
     }
     load()
-    return () => { isActive = false }
+    return () => controller.abort()
   }, [canShowSeason, shouldLoadExceptionSummary, tenantId])
 
   return {

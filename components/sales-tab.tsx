@@ -498,7 +498,7 @@ export default function SalesTab({
       return
     }
 
-    let ignore = false
+    const controller = new AbortController()
     const params = new URLSearchParams({
       all: "true",
     })
@@ -510,9 +510,9 @@ export default function SalesTab({
 
     const loadOtherSalesTotals = async () => {
       try {
-        const response = await fetch(`/api/other-sales?${params.toString()}`, { cache: "no-store" })
+        const response = await fetch(`/api/other-sales?${params.toString()}`, { cache: "no-store", signal: controller.signal })
         const data = await response.json()
-        if (ignore) return
+        if (controller.signal.aborted) return
         if (!response.ok || !data.success) {
           setOtherSalesTotals({ totalRevenue: 0, totalCount: 0 })
           return
@@ -522,16 +522,14 @@ export default function SalesTab({
           totalCount: Number(data.totalCount) || 0,
         })
       } catch (error) {
-        if (!ignore) {
+        if (!controller.signal.aborted) {
           setOtherSalesTotals({ totalRevenue: 0, totalCount: 0 })
         }
       }
     }
 
     void loadOtherSalesTotals()
-    return () => {
-      ignore = true
-    }
+    return () => controller.abort()
   }, [otherSalesEnabled, salesFilterLocationId, fyStartDate, fyEndDate])
 
   useEffect(() => {

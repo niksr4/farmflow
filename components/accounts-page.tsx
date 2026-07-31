@@ -274,7 +274,7 @@ export default function AccountsPage({
       return
     }
 
-    let ignore = false
+    const controller = new AbortController()
     const fetchIntelligence = async () => {
       setAccountsIntelligenceLoading(true)
       setAccountsIntelligenceError(null)
@@ -283,33 +283,31 @@ export default function AccountsPage({
           startDate: fiscalYearStartDate,
           endDate: fiscalYearEndDate,
         })
-        const response = await fetch(`/api/intelligence-brief?${params.toString()}`, { cache: "no-store" })
+        const response = await fetch(`/api/intelligence-brief?${params.toString()}`, { cache: "no-store", signal: controller.signal })
         const data = await response.json().catch(() => ({}))
         if (!response.ok || !data?.success) {
           throw new Error(data?.error || "Failed to load accounts intelligence")
         }
-        if (!ignore) {
+        if (!controller.signal.aborted) {
           setAccountsIntelligence({
             accountsPatterns: data.accountsPatterns || null,
             highlights: Array.isArray(data.highlights) ? data.highlights : [],
           })
         }
       } catch (error: any) {
-        if (!ignore) {
+        if (!controller.signal.aborted) {
           setAccountsIntelligence(null)
           setAccountsIntelligenceError(error?.message || "Failed to load accounts intelligence")
         }
       } finally {
-        if (!ignore) {
+        if (!controller.signal.aborted) {
           setAccountsIntelligenceLoading(false)
         }
       }
     }
 
     fetchIntelligence()
-    return () => {
-      ignore = true
-    }
+    return () => controller.abort()
   }, [fiscalYearEndDate, fiscalYearStartDate, user?.tenantId])
 
   const fetchAllActivities = async () => {

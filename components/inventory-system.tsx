@@ -194,121 +194,40 @@ import posthog from "posthog-js"
 import { formatLocationLabel } from "@/lib/location-label"
 import { trackRecordCreated } from "@/lib/track-action"
 import { useSingleFlight } from "@/hooks/use-single-flight"
+import { isAbortError } from "@/lib/abortable"
+import { useWriteQueue } from "@/hooks/use-write-queue"
+import type { WriteQueueBlockedEntry } from "@/lib/write-queue"
+import {
+  AiAnalysisCharts,
+  AccountsPage,
+  AttendanceWorkspace,
+  ActivityLogTab,
+  DispatchTab,
+  ProcessingTab,
+  RainfallWeatherTab,
+  SalesTab,
+  NewsTab,
+  MarketPricingTab,
+  ComplianceTab,
+  SeasonDashboard,
+  CuringTab,
+  QualityGradingTab,
+  BillingTab,
+  ReceivablesTab,
+  BalanceSheetTab,
+  SeasonPlTab,
+  JournalTab,
+  ResourcesTab,
+  PlantHealthTab,
+  DocumentsTab,
+  YieldForecastTab,
+  PepperTab,
+  RubberTab,
+  MorningBriefCard,
+  WorkspaceLauncher,
+  InventoryDialogs,
+} from "@/components/inventory-system/lazy-tabs"
 
-const WRITE_QUEUE_STATUS_EVENT = "farmflow:write-queue-status"
-
-function TabPanelLoading({ label: _label }: { label: string }) {
-  return (
-    <div className="space-y-4">
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-        <SkeletonCard />
-        <SkeletonCard />
-        <SkeletonCard />
-      </div>
-      <SkeletonTable rows={6} cols={4} className="rounded-2xl border border-stone-100 bg-white" />
-    </div>
-  )
-}
-
-const AiAnalysisCharts = dynamic(() => import("@/components/ai-analysis-charts"), {
-  loading: () => <TabPanelLoading label="AI analysis" />,
-})
-const AccountsPage = dynamic(() => import("@/components/accounts-page"), {
-  loading: () => <TabPanelLoading label="Accounts" />,
-})
-const AttendanceWorkspace = dynamic(() => import("@/components/attendance-workspace"), {
-  loading: () => <TabPanelLoading label="Attendance" />,
-})
-const ActivityLogTab = dynamic(() => import("@/components/activity-log-tab"), {
-  loading: () => <TabPanelLoading label="Activity log" />,
-})
-const DispatchTab = dynamic(() => import("@/components/dispatch-tab"), {
-  loading: () => <TabPanelLoading label="Dispatch" />,
-})
-const ProcessingTab = dynamic(() => import("@/components/processing-tab"), {
-  loading: () => <TabPanelLoading label="Pulping" />,
-})
-const RainfallWeatherTab = dynamic(() => import("@/components/rainfall-weather-tab"), {
-  loading: () => <TabPanelLoading label="Rainfall and weather" />,
-})
-const SalesTab = dynamic(() => import("@/components/sales-tab"), {
-  loading: () => <TabPanelLoading label="Sales" />,
-})
-const NewsTab = dynamic(() => import("@/components/news-tab"), {
-  loading: () => <TabPanelLoading label="News" />,
-})
-const MarketPricingTab = dynamic(() => import("@/components/market-pricing-tab"), {
-  loading: () => <TabPanelLoading label="Market pricing" />,
-})
-const ComplianceTab = dynamic(() => import("@/components/compliance-tab"), {
-  loading: () => <TabPanelLoading label="Compliance" />,
-})
-const SeasonDashboard = dynamic(() => import("@/components/season-dashboard"), {
-  loading: () => <TabPanelLoading label="Season view" />,
-})
-const CuringTab = dynamic(() => import("@/components/curing-tab"), {
-  loading: () => <TabPanelLoading label="Curing" />,
-})
-const QualityGradingTab = dynamic(() => import("@/components/quality-grading-tab"), {
-  loading: () => <TabPanelLoading label="Quality" />,
-})
-const BillingTab = dynamic(() => import("@/components/billing-tab"), {
-  loading: () => <TabPanelLoading label="Billing" />,
-})
-const ReceivablesTab = dynamic(() => import("@/components/receivables-tab"), {
-  loading: () => <TabPanelLoading label="Receivables" />,
-})
-const BalanceSheetTab = dynamic(() => import("@/components/balance-sheet-tab"), {
-  loading: () => <TabPanelLoading label="Balance sheet" />,
-})
-const SeasonPlTab = dynamic(() => import("@/components/season-pl-tab"), {
-  loading: () => <TabPanelLoading label="P&L" />,
-})
-const JournalTab = dynamic(() => import("@/components/journal-tab"), {
-  loading: () => <TabPanelLoading label="Journal" />,
-})
-const ResourcesTab = dynamic(() => import("@/components/resources-tab"), {
-  loading: () => <TabPanelLoading label="Resources" />,
-})
-const PlantHealthTab = dynamic(() => import("@/components/plant-health-tab"), {
-  loading: () => <TabPanelLoading label="Plant health" />,
-})
-const DocumentsTab = dynamic(() => import("@/components/documents-tab"), {
-  loading: () => <TabPanelLoading label="Documents" />,
-})
-const YieldForecastTab = dynamic(() => import("@/components/yield-forecast-tab"), {
-  loading: () => <TabPanelLoading label="Yield forecast" />,
-})
-const PepperTab = dynamic(() => import("./pepper-tab").then((module) => module.PepperTab), {
-  loading: () => <TabPanelLoading label="Pepper processing" />,
-})
-const RubberTab = dynamic(() => import("./rubber-tab").then((module) => module.RubberTab), {
-  loading: () => <TabPanelLoading label="Rubber tapping" />,
-})
-const MorningBriefCard = dynamic(() => import("@/components/morning-brief-card"), { ssr: false })
-const WorkspaceLauncher = dynamic(() => import("@/components/workspace-launcher"), { ssr: false })
-const InventoryDialogs = dynamic(() => import("@/components/inventory-dialogs"), { ssr: false })
-
-type WriteQueueBlockedEntry = {
-  id: number
-  method: string
-  pathname: string
-  url: string
-  queuedAt: number
-  attempts: number
-  lastError?: string
-  lastStatus?: number | null
-  blockedReason?: string
-}
-
-type WriteQueueStatusSnapshot = {
-  pendingCount: number
-  blockedAuthCount: number
-  blockedReviewCount: number
-  blockedAuthEntries: WriteQueueBlockedEntry[]
-  blockedReviewEntries: WriteQueueBlockedEntry[]
-  updatedAt: number | null
-}
 
 type OpsExportFailureSnapshot = {
   dataset: ExportDatasetId
@@ -431,15 +350,7 @@ export default function InventorySystem() {
   const [isSyncing, setIsSyncing] = useState(false)
   const [syncError, setSyncError] = useState<string | null>(null)
   const [lastSync, setLastSync] = useState<Date | null>(null)
-  const [writeQueueStatus, setWriteQueueStatus] = useState<WriteQueueStatusSnapshot>({
-    pendingCount: 0,
-    blockedAuthCount: 0,
-    blockedReviewCount: 0,
-    blockedAuthEntries: [],
-    blockedReviewEntries: [],
-    updatedAt: null,
-  })
-  const [isRequestingQueueRetry, setIsRequestingQueueRetry] = useState(false)
+  const writeQueue = useWriteQueue()
   const [accountsExportRequest, setAccountsExportRequest] = useState<{
     requestId: number
     format: AccountsExportFormat
@@ -897,7 +808,8 @@ export default function InventorySystem() {
       return
     }
 
-    let isActive = true
+    const controller = new AbortController()
+    const isActive = () => !controller.signal.aborted
     const fetchAccountsTotals = async () => {
       try {
         setAccountsTotalsLoading(true)
@@ -905,18 +817,18 @@ export default function InventorySystem() {
           startDate: currentFiscalYear.startDate,
           endDate: currentFiscalYear.endDate,
         })
-        const response = await fetch(`/api/accounts-totals?${params.toString()}`)
+        const response = await fetch(`/api/accounts-totals?${params.toString()}`, { signal: controller.signal })
         const data = await response.json()
 
         if (!response.ok || !data.success) {
           console.error("Failed to load accounts totals:", data)
-          if (isActive) {
+          if (isActive()) {
             setAccountsTotals({ laborTotal: 0, otherTotal: 0, grandTotal: 0 })
           }
           return
         }
 
-        if (isActive) {
+        if (isActive()) {
           setAccountsTotals({
             laborTotal: Number(data.laborTotal) || 0,
             otherTotal: Number(data.otherTotal) || 0,
@@ -924,12 +836,14 @@ export default function InventorySystem() {
           })
         }
       } catch (error) {
+        // Cancelled by a tab switch — not a failure worth logging or zeroing totals for.
+        if (isAbortError(error)) return
         console.error("Error loading accounts totals:", error)
-        if (isActive) {
+        if (isActive()) {
           setAccountsTotals({ laborTotal: 0, otherTotal: 0, grandTotal: 0 })
         }
       } finally {
-        if (isActive) {
+        if (isActive()) {
           setAccountsTotalsLoading(false)
         }
       }
@@ -937,14 +851,12 @@ export default function InventorySystem() {
 
     fetchAccountsTotals()
 
-    return () => {
-      isActive = false
-    }
+    return () => controller.abort()
   }, [activeTab, currentFiscalYear.endDate, currentFiscalYear.startDate, tenantId])
 
   useEffect(() => {
     if (!tenantId || activeTab !== "home") return
-    let active = true
+    const controller = new AbortController()
 
     const fetchIntelligence = async () => {
       setCostPerKgData((p) => ({ ...p, loading: true }))
@@ -952,12 +864,12 @@ export default function InventorySystem() {
       setEstatePulseData((p) => ({ ...p, loading: true }))
 
       const [cpkRes, projRes, pulseRes] = await Promise.allSettled([
-        fetch("/api/dashboard/cost-per-kg").then((r) => r.json()),
-        fetch("/api/dashboard/season-projection").then((r) => r.json()),
-        fetch("/api/dashboard/estate-pulse").then((r) => r.json()),
+        fetch("/api/dashboard/cost-per-kg", { signal: controller.signal }).then((r) => r.json()),
+        fetch("/api/dashboard/season-projection", { signal: controller.signal }).then((r) => r.json()),
+        fetch("/api/dashboard/estate-pulse", { signal: controller.signal }).then((r) => r.json()),
       ])
 
-      if (!active) return
+      if (controller.signal.aborted) return
 
       if (cpkRes.status === "fulfilled" && cpkRes.value?.success) {
         const d = cpkRes.value
@@ -1004,7 +916,7 @@ export default function InventorySystem() {
     }
 
     void fetchIntelligence()
-    return () => { active = false }
+    return () => controller.abort()
   }, [activeTab, tenantId])
 
   useEffect(() => {
@@ -1377,99 +1289,6 @@ export default function InventorySystem() {
     return resolveLocationLabel(selectedLocationId)
   }, [selectedLocationId, resolveLocationLabel])
 
-  const postMessageToServiceWorker = useCallback((payload: Record<string, unknown>) => {
-    if (typeof window === "undefined" || !("serviceWorker" in navigator)) return
-    if (navigator.serviceWorker.controller) {
-      navigator.serviceWorker.controller.postMessage(payload)
-    }
-    void navigator.serviceWorker.getRegistration()
-      .then((registration) => {
-        if (!registration) return
-        registration.active?.postMessage(payload)
-        registration.waiting?.postMessage(payload)
-        registration.installing?.postMessage(payload)
-      })
-      .catch(() => undefined)
-  }, [])
-
-  const requestWriteQueueStatus = useCallback(() => {
-    postMessageToServiceWorker({ type: "GET_WRITE_QUEUE_STATUS" })
-  }, [postMessageToServiceWorker])
-
-  const handleRetryWriteQueue = useCallback(() => {
-    setIsRequestingQueueRetry(true)
-    postMessageToServiceWorker({ type: "FLUSH_WRITE_QUEUE" })
-    posthog.capture("offline_queue_retry_requested", {
-      pending_count: writeQueueStatus.pendingCount,
-      blocked_auth_count: writeQueueStatus.blockedAuthCount,
-      blocked_review_count: writeQueueStatus.blockedReviewCount,
-    })
-    window.setTimeout(() => {
-      requestWriteQueueStatus()
-      setIsRequestingQueueRetry(false)
-    }, 900)
-  }, [
-    postMessageToServiceWorker,
-    requestWriteQueueStatus,
-    writeQueueStatus.blockedAuthCount,
-    writeQueueStatus.blockedReviewCount,
-    writeQueueStatus.pendingCount,
-  ])
-
-  const handleRemoveQueuedEntry = useCallback(
-    (entryId: number) => {
-      if (!entryId) return
-      postMessageToServiceWorker({ type: "DELETE_QUEUED_REQUEST", id: entryId })
-      posthog.capture("offline_queue_entry_removed", { queue_entry_id: entryId })
-      window.setTimeout(() => {
-        requestWriteQueueStatus()
-      }, 250)
-    },
-    [postMessageToServiceWorker, requestWriteQueueStatus],
-  )
-
-  useEffect(() => {
-    if (typeof window === "undefined") return
-
-    const toQueueEntryArray = (value: unknown): WriteQueueBlockedEntry[] => {
-      if (!Array.isArray(value)) return []
-      return value
-        .map((entry) => {
-          const source = entry && typeof entry === "object" ? (entry as Record<string, unknown>) : {}
-          return {
-            id: Number(source.id || 0),
-            method: String(source.method || "POST").toUpperCase(),
-            pathname: String(source.pathname || ""),
-            url: String(source.url || ""),
-            queuedAt: Number(source.queuedAt || 0),
-            attempts: Number(source.attempts || 0),
-            lastError: String(source.lastError || ""),
-            lastStatus: source.lastStatus == null ? null : Number(source.lastStatus || 0),
-            blockedReason: String(source.blockedReason || ""),
-          }
-        })
-        .filter((entry) => entry.id > 0)
-    }
-
-    const handleQueueStatusEvent = (rawEvent: Event) => {
-      const detail = (rawEvent as CustomEvent<Record<string, unknown>>).detail || {}
-      setWriteQueueStatus({
-        pendingCount: Number(detail.pendingCount || 0),
-        blockedAuthCount: Number(detail.blockedAuthCount || detail.blockedCount || 0),
-        blockedReviewCount: Number(detail.blockedReviewCount || detail.reviewCount || 0),
-        blockedAuthEntries: toQueueEntryArray(detail.blockedAuthEntries),
-        blockedReviewEntries: toQueueEntryArray(detail.blockedReviewEntries),
-        updatedAt: Number(detail.updatedAt || Date.now()),
-      })
-    }
-
-    window.addEventListener(WRITE_QUEUE_STATUS_EVENT, handleQueueStatusEvent as EventListener)
-    requestWriteQueueStatus()
-
-    return () => {
-      window.removeEventListener(WRITE_QUEUE_STATUS_EVENT, handleQueueStatusEvent as EventListener)
-    }
-  }, [requestWriteQueueStatus])
 
   // computed lists
   const allItemTypesForDropdown = Array.from(
@@ -4338,13 +4157,13 @@ export default function InventorySystem() {
           </div>
         </div>}
 
-        {writeQueueStatus.pendingCount > 0 && (
+        {writeQueue.status.pendingCount > 0 && (
           <WriteQueueCard
-            status={writeQueueStatus}
-            isRetrying={isRequestingQueueRetry}
-            onRetry={handleRetryWriteQueue}
+            status={writeQueue.status}
+            isRetrying={writeQueue.isRetrying}
+            onRetry={writeQueue.retry}
             onOpenFix={handleOpenWriteQueueFix}
-            onRemoveEntry={handleRemoveQueuedEntry}
+            onRemoveEntry={writeQueue.removeEntry}
             onLogout={handleLogout}
           />
         )}

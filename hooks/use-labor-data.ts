@@ -3,6 +3,8 @@
 import { useState, useEffect, useCallback } from "react"
 import { useAuth } from "@/hooks/use-auth"
 import { trackRecordCreated } from "@/lib/track-action"
+import { useAbortableRequests } from "@/hooks/use-abortable"
+import { isAbortError } from "@/lib/abortable"
 
 export interface LaborEntry {
   name?: string
@@ -45,6 +47,13 @@ export function useLaborData(locationId?: string, options: LaborDataOptions = {}
   const startDate = options.startDate
   const endDate = options.endDate
 
+  // Reads only. This hook's list load is fired from an effect, from "load more", from
+  // "load all", and again after every mutation — without cancellation a burst of those
+  // leaves several full history downloads racing, and whichever lands last wins regardless
+  // of which was asked for most recently. The mutations below are deliberately NOT routed
+  // through this: aborting a write does not un-commit it on the server.
+  const listRequests = useAbortableRequests()
+
   const fetchDeployments = useCallback(
     async (pageIndex = 0, append = false, fetchAll = false) => {
       if (status === "loading") {
@@ -61,6 +70,9 @@ export function useLaborData(locationId?: string, options: LaborDataOptions = {}
         setError(null)
         return
       }
+      // Issued before the try so the catch/finally can tell "we cancelled this" apart from
+      // "this failed", and leave the state owned by whichever request superseded it.
+      const signal = listRequests.next()
       try {
         if (append) {
           setLoadingMore(true)
@@ -90,6 +102,7 @@ export function useLaborData(locationId?: string, options: LaborDataOptions = {}
         const response = await fetch(`/api/labor-neon?${query.toString()}`, {
           method: "GET",
           cache: "no-store",
+          signal,
         })
 
         const responseText = await response.text()
@@ -153,6 +166,9 @@ export function useLaborData(locationId?: string, options: LaborDataOptions = {}
           setTotalCost(0)
         }
       } catch (err: any) {
+        // A superseded or unmounted request is not a failure — blanking the list and showing
+        // an error here would make fast navigation look like the app breaking.
+        if (isAbortError(err)) return
         console.error("❌ Error fetching labour deployments:", err)
         setError(err.message || "Failed to fetch deployments")
         setDeployments([])
@@ -160,14 +176,18 @@ export function useLaborData(locationId?: string, options: LaborDataOptions = {}
         setTotalCount(0)
         setTotalCost(0)
       } finally {
-        if (append) {
-          setLoadingMore(false)
-        } else {
-          setLoading(false)
+        // Only the request that still owns the slot may clear the spinner; otherwise a
+        // cancelled request turns off the loading state the live one is relying on.
+        if (!signal.aborted) {
+          if (append) {
+            setLoadingMore(false)
+          } else {
+            setLoading(false)
+          }
         }
       }
     },
-    [endDate, locationId, pageSize, startDate, status, user?.tenantId],
+    [endDate, listRequests, locationId, pageSize, startDate, status, user?.tenantId],
   )
 
   useEffect(() => {

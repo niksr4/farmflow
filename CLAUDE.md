@@ -260,10 +260,103 @@ bottom of that file. Don't try to force it through.
 
 ---
 
+## Client Reliability
+
+### CSP is testable — keep it that way
+
+Directives live in `lib/csp.mjs` (imported by `next.config.mjs`), verified by `tests/csp.test.ts`.
+A CSP mistake fails **silently**: the browser drops the request and nothing is logged anywhere.
+`connect-src` once read `https://o*.ingest.sentry.io`, which is not valid CSP host syntax (a
+wildcard is only legal as the entire leftmost label) and would not have matched the EU region
+host `o<org>.ingest.de.sentry.io` regardless. **Client-side Sentry reported nothing for months.**
+Server-side Sentry was unaffected, which is why the project didn't look dead. If you add a
+third-party endpoint the browser talks to, add it to `CONNECT_SRC` and a case to that test.
+
+### Sentry wiring
+
+- `instrumentation-client.ts` is the **only** browser entry point on SDK v10. The legacy
+  `sentry.client.config.ts` was deleted — it was not loaded, so edits to it did nothing.
+- `instrumentation.ts` exports `onRequestError = Sentry.captureRequestError`. **Do not remove
+  it.** Without it, errors thrown out of route handlers, server actions and RSC renders are
+  never reported; for a long time the only server errors reaching Sentry were those passed
+  explicitly to `logServerError`.
+- All three runtimes set `release` (`lib/observability.ts` → `resolveRelease()`), which is what
+  makes "first seen in this release" and regression detection work.
+- `beforeSend` on every runtime scrubs via `lib/redaction.ts`. Redaction rules live there,
+  **not** in `lib/server/safe-logging.ts`, because that module imports Sentry and the config
+  files would cycle.
+- **Fingerprints are normalised** (`lib/observability.ts`). Log messages embed tenant ids and
+  dates, so grouping on the raw message mints one issue per tenant. `normalizeForFingerprint`
+  collapses uuids/dates/hex/numbers first. Note it avoids regex lookbehind — Safari only
+  supports that from 16.4 and this module ships to the browser.
+- Tenant/user context is attached client-side by `components/sentry-auth-sync.tsx` and
+  server-side inside `toSessionUser` in `lib/auth-server.ts` (the one chokepoint every auth
+  path funnels through). `tenant_id` is a **tag**, so it is searchable and alertable.
+- `tracesSampleRate` only samples performance traces. Errors are never sampled.
+
+### Crash beacon
+
+`lib/crash-beacon.ts` + `components/crash-beacon.tsx`. When iOS kills the WebKit content process
+under memory pressure, JS stops mid-instruction — no error, no handler, no request. **A process
+kill is unobservable from inside the process**, so no in-page reporter can ever catch one. The
+beacon heartbeats to `localStorage` and reports on the *next* load. Reports via Sentry *and*
+PostHog deliberately: a single blocked transport is what hid the original problem.
+
+Only a session that went stale **while visible** with no `pagehide` is reported as a crash — a
+stale *hidden* session is a routine iOS background reclaim and alerting on it would bury the signal.
+
+### Request cancellation
+
+`lib/abortable.ts` + `hooks/use-abortable.ts`.
+
+- **Reads only. Never abort a mutation.** Aborting a POST/PUT/DELETE does not roll back the
+  server; the client reports failure for a write that committed, the user retries, and you get
+  duplicate records — the exact damage `lib/single-flight.ts` exists to prevent. Mutations get
+  single-flight and are allowed to finish.
+- The old pattern was `let ignore = false` flipped in effect cleanup. That stops the stale
+  `setState` but **not** the request: the response still downloads in full and still gets
+  JSON-parsed before being discarded. Several dashboard endpoints are `all=true` full-table
+  reads, so burst tab-switching on a phone stacked up whole record sets. Use an AbortController.
+- Two sites intentionally still use a stale flag: `verify-email-page.tsx` (a POST — must not be
+  aborted) and the workspace-bootstrap effect in `inventory-system.tsx` (fires on tenant change,
+  not on interaction; cancelling it means threading signals through three separate useCallbacks).
+
 ## Cron Jobs
 
 - Vercel cron: `GET /api/cron/orchestrator` runs daily at 02:00 UTC
 - Weekly digest agent runs Monday mornings; includes market timing section when `ALPHAVANTAGE_API_KEY` is set
+
+### Dormancy gate (shared by the digest and probe agents)
+
+`lib/server/agents/tenant-dormancy.ts` is the single source of truth for "has this estate gone
+quiet?". The **weekly digest, daily digest, and dormancy probe** all read it, so **a tenant not
+receiving mail is usually policy, not a bug** — check `agent_runs.summary.dormantSkipped` and
+the per-tenant `skipped` results before chasing a delivery failure.
+
+Three lifecycle states, not two:
+
+- **Unactivated** — never logged in *and* never wrote a row. Gets **no automated email at all**:
+  no daily digest, no weekly digest, no dormancy probe. An operations report about an estate
+  nobody has opened is nonsense, and "haven't seen you in a few days" implies a lapse that never
+  happened. Both conditions are required — a tenant with data but no login event is an older
+  account whose logins predate the `security_events` trail, not a fresh one.
+- **Dormant** — activated, then went quiet. Probe fires after 4 quiet days (login only), once per
+  dormancy episode. Digests stand down after `DIGEST_QUIET_DAYS` (14) with no activity of either
+  kind, and never before `DIGEST_MIN_TENANT_AGE_DAYS` (14). Tune those two constants.
+- **Active** — normal sending.
+
+- Activity = last login **OR** last data write, whichever is newer. Both matter: sessions are
+  30 days, so an actively-used tenant can show a three-week-old `auth_login_success` event.
+  Gating on login alone would silence digests for the most engaged users.
+- Both digest gates **fail open** — if the signal query errors, everyone gets a digest as before.
+- Force a send to a quiet tenant: `?includeDormant=1` on `/api/cron/weekly-digest` or
+  `/api/cron/daily-digest`.
+- ⚠️ **Manually-created tenants have no `signup_requests` row**, so the onboarding nudge agent
+  (which keys off that table) never picks them up. Combined with the unactivated rule they
+  receive *nothing* — onboarding them is a human job. Check this before assuming a new tenant
+  is in an automated nurture sequence.
+- Digest bodies are not persisted anywhere (`digest_feedback` stores only ratings). The only
+  archive of what was actually sent is the BCC to `support@thefarmflow.in` and Resend's logs.
 
 ---
 

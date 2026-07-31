@@ -7,24 +7,12 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { cn } from "@/lib/utils"
 
-type BlockedEntry = {
-  id: number
-  method: string
-  pathname: string
-  url: string
-  queuedAt: number
-  attempts: number
-  lastError?: string
-  lastStatus?: number | null
-}
-
-type WriteQueueStatus = {
-  pendingCount: number
-  blockedAuthCount: number
-  blockedReviewCount: number
-  blockedAuthEntries: BlockedEntry[]
-  blockedReviewEntries: BlockedEntry[]
-}
+// Shared with the hook that produces them (lib/write-queue.ts). These were previously
+// redeclared here, and had already drifted — the local copy was missing `blockedReason`.
+import type {
+  WriteQueueBlockedEntry as BlockedEntry,
+  WriteQueueStatusSnapshot as WriteQueueStatus,
+} from "@/lib/write-queue"
 
 type Props = {
   status: WriteQueueStatus

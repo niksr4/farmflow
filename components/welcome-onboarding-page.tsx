@@ -79,27 +79,25 @@ export default function WelcomeOnboardingPage() {
     name.trim().toUpperCase().replace(/\s+/g, "-").replace(/[^A-Z0-9-]/g, "").slice(0, 20)
 
   useEffect(() => {
-    let cancelled = false
+    const controller = new AbortController()
     const load = async () => {
       try {
-        const data = await apiRequest<OnboardingResponse>("/api/onboarding/setup")
-        if (cancelled) return
+        const data = await apiRequest<OnboardingResponse>("/api/onboarding/setup", { signal: controller.signal })
+        if (controller.signal.aborted) return
         setSetup(data.setup)
         setModuleBundles(data.moduleBundles || [])
         setDraft(data.setup)
         setLocale(data.setup.preferredLocale)
       } catch (loadError: any) {
-        if (cancelled) return
+        if (controller.signal.aborted) return
         setError(loadError?.message || "Failed to load onboarding setup")
       } finally {
-        if (!cancelled) setLoading(false)
+        if (!controller.signal.aborted) setLoading(false)
       }
     }
 
     void load()
-    return () => {
-      cancelled = true
-    }
+    return () => controller.abort()
   }, [setLocale])
 
   const selectedBundle = useMemo(

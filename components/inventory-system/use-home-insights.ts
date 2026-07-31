@@ -59,7 +59,7 @@ export function useHomeInsights(input: UseHomeInsightsInput) {
     }
     if (!shouldLoadHomeMetrics) return
     if (intelligenceBriefLoadedRef.current === tenantId) return
-    let ignore = false
+    const controller = new AbortController()
 
     const loadIntelligenceBrief = async () => {
       setIntelligenceLoading(true)
@@ -69,12 +69,12 @@ export function useHomeInsights(input: UseHomeInsightsInput) {
           startDate: currentFiscalYear.startDate,
           endDate: currentFiscalYear.endDate,
         })
-        const response = await fetch(`/api/intelligence-brief?${params.toString()}`, { cache: "no-store" })
+        const response = await fetch(`/api/intelligence-brief?${params.toString()}`, { cache: "no-store", signal: controller.signal })
         const data = await response.json().catch(() => ({}))
         if (!response.ok || !data?.success) {
           throw new Error(data?.error || "Failed to load intelligence brief")
         }
-        if (!ignore) {
+        if (!controller.signal.aborted) {
           const brief = data as IntelligenceBrief
           setIntelligenceBrief(brief)
           const highlightCount = Array.isArray(brief.highlights) ? brief.highlights.length : 0
@@ -95,12 +95,12 @@ export function useHomeInsights(input: UseHomeInsightsInput) {
           }
         }
       } catch (error: any) {
-        if (!ignore) {
+        if (!controller.signal.aborted) {
           setIntelligenceBrief(null)
           setIntelligenceError(error?.message || "Failed to load intelligence brief")
         }
       } finally {
-        if (!ignore) {
+        if (!controller.signal.aborted) {
           setIntelligenceLoading(false)
           intelligenceBriefLoadedRef.current = tenantId
         }
@@ -108,111 +108,106 @@ export function useHomeInsights(input: UseHomeInsightsInput) {
     }
 
     loadIntelligenceBrief()
-    return () => {
-      ignore = true
-    }
+    return () => controller.abort()
   }, [canShowIntelligence, currentFiscalYear.endDate, currentFiscalYear.startDate, effectiveRole, shouldLoadHomeMetrics, tenantId])
 
   useEffect(() => {
     if (!tenantId || !shouldLoadHomeMetrics) return
     if (activityStreakLoadedRef.current === tenantId) return
     activityStreakLoadedRef.current = tenantId
-    fetch("/api/activity-streak", { cache: "no-store" })
+    const controller = new AbortController()
+    fetch("/api/activity-streak", { cache: "no-store", signal: controller.signal })
       .then((r) => r.json())
       .then((d) => {
+        if (controller.signal.aborted) return
         if (d.success && d.streak > 0) setActivityStreak(d.streak)
       })
       .catch(() => {})
+    return () => controller.abort()
   }, [shouldLoadHomeMetrics, tenantId])
 
   useEffect(() => {
     if (!canShowAiAnalysis || !shouldLoadHomeMetrics) return
     if (proactiveInsightsLoadedRef.current === tenantId) return
-    let ignore = false
+    const controller = new AbortController()
     const loadProactiveInsights = async () => {
       setProactiveInsightsLoading(true)
       setProactiveInsightsError(null)
       try {
-        const response = await fetch("/api/ai-proactive-insights", { cache: "no-store" })
+        const response = await fetch("/api/ai-proactive-insights", { cache: "no-store", signal: controller.signal })
         const data = await response.json().catch(() => ({}))
         if (!response.ok || !data?.success) throw new Error(data?.error || "Failed to load insights")
-        if (!ignore) setProactiveInsights(Array.isArray(data.insights) ? data.insights : [])
+        if (!controller.signal.aborted) setProactiveInsights(Array.isArray(data.insights) ? data.insights : [])
       } catch (error: any) {
-        if (!ignore) setProactiveInsightsError(error?.message || "Failed to load insights")
+        if (!controller.signal.aborted) setProactiveInsightsError(error?.message || "Failed to load insights")
       } finally {
-        if (!ignore) {
+        if (!controller.signal.aborted) {
           setProactiveInsightsLoading(false)
           proactiveInsightsLoadedRef.current = tenantId
         }
       }
     }
     loadProactiveInsights()
-    return () => {
-      ignore = true
-    }
+    return () => controller.abort()
   }, [canShowAiAnalysis, shouldLoadHomeMetrics, tenantId])
 
   useEffect(() => {
     if (!canShowAiAnalysis || !shouldLoadHomeMetrics) return
     if (seasonCompareLoadedRef.current === tenantId) return
-    let ignore = false
+    const controller = new AbortController()
     const loadSeasonCompare = async () => {
       setSeasonCompareLoading(true)
       setSeasonCompareError(null)
       try {
-        const response = await fetch("/api/ai-season-compare", { cache: "no-store" })
+        const response = await fetch("/api/ai-season-compare", { cache: "no-store", signal: controller.signal })
         const { json, text } = await parseJsonResponse(response)
         if (!response.ok || !json?.success) {
           throw new Error(json?.error || json?.message || text || "Season comparison is temporarily unavailable.")
         }
-        if (!ignore) {
+        if (!controller.signal.aborted) {
           setSeasonCompareNarrative(json.narrative || null)
           setSeasonCompareFYLabels(json.currentFY && json.prevFY ? { curr: json.currentFY, prev: json.prevFY } : null)
         }
       } catch (error: any) {
-        if (!ignore) {
+        if (!controller.signal.aborted) {
           setSeasonCompareNarrative(null)
           setSeasonCompareFYLabels(null)
           setSeasonCompareError(error?.message || "Season comparison is temporarily unavailable.")
         }
       } finally {
-        if (!ignore) {
+        if (!controller.signal.aborted) {
           setSeasonCompareLoading(false)
           seasonCompareLoadedRef.current = tenantId
         }
       }
     }
     loadSeasonCompare()
-    return () => {
-      ignore = true
-    }
+    return () => controller.abort()
   }, [canShowAiAnalysis, shouldLoadHomeMetrics, tenantId])
 
   useEffect(() => {
     if (!shouldLoadHomeMetrics) return
     if (recentActivityLoadedRef.current === tenantId) return
-    let ignore = false
+    const controller = new AbortController()
     const load = async () => {
       setRecentActivityLoading(true)
       try {
-        const res = await fetch("/api/recent-activity", { cache: "no-store" })
+        const res = await fetch("/api/recent-activity", { cache: "no-store", signal: controller.signal })
         const data = await res.json().catch(() => ({}))
-        if (!ignore && data?.success && Array.isArray(data.entries)) {
+        if (!controller.signal.aborted && data?.success && Array.isArray(data.entries)) {
           setRecentActivity(data.entries)
         }
       } catch {
         // silent — feed just stays hidden
       } finally {
-        if (!ignore) {
+        if (!controller.signal.aborted) {
           setRecentActivityLoading(false)
           recentActivityLoadedRef.current = tenantId
         }
       }
     }
     load()
-    return () => {
-      ignore = true
-    }
+    return () => controller.abort()
   }, [shouldLoadHomeMetrics, tenantId])
 
   return {

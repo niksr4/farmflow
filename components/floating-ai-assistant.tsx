@@ -143,11 +143,11 @@ export default function FloatingAiAssistant() {
   }, [isEnabled])
 
   useEffect(() => {
-    let cancelled = false
+    const controller = new AbortController()
 
     const resolveVisibility = async () => {
       if (status !== "authenticated" || !user || !isAppPage) {
-        if (!cancelled) {
+        if (!controller.signal.aborted) {
           setIsEnabled(false)
           setAvailableWorkspaces([])
           setWorkspaceHints([])
@@ -158,7 +158,7 @@ export default function FloatingAiAssistant() {
 
       const isOwnerPreview = user.role === "owner" && Boolean(ownerPreviewContext)
       if (user.role === "owner" && !isOwnerPreview) {
-        if (!cancelled) {
+        if (!controller.signal.aborted) {
           setIsEnabled(false)
           setAvailableWorkspaces([])
           setWorkspaceHints([])
@@ -172,32 +172,30 @@ export default function FloatingAiAssistant() {
           isOwnerPreview && ownerPreviewContext
             ? `/api/admin/tenant-modules?tenantId=${encodeURIComponent(ownerPreviewContext.previewTenantId)}`
             : "/api/tenant-modules",
-          { cache: "no-store" },
+          { cache: "no-store", signal: controller.signal },
         )
         const data = await response.json().catch(() => null)
-        if (cancelled) return
+        if (controller.signal.aborted) return
         const modules = normalizeModuleIds(data?.modules)
         const assistantContext = buildAssistantWorkspaceContextFromModules(modules, effectiveAssistantRole)
         setAvailableWorkspaces(assistantContext.availableWorkspaces)
         setWorkspaceHints(assistantContext.workspaceHints)
         setIsEnabled(Boolean(response.ok && data?.success))
       } catch {
-        if (!cancelled) {
+        if (!controller.signal.aborted) {
           setIsEnabled(false)
           setAvailableWorkspaces([])
           setWorkspaceHints([])
         }
       } finally {
-        if (!cancelled) {
+        if (!controller.signal.aborted) {
           setHasResolvedVisibility(true)
         }
       }
     }
 
     void resolveVisibility()
-    return () => {
-      cancelled = true
-    }
+    return () => controller.abort()
   }, [effectiveAssistantRole, isAppPage, ownerPreviewContext, status, user])
 
   const submitPrompt = async (prompt: string) => {

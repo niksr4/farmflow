@@ -1,6 +1,8 @@
 "use client"
 
 import { useState, useEffect, useCallback } from "react"
+import { useAbortableRequests } from "@/hooks/use-abortable"
+import { isAbortError } from "@/lib/abortable"
 import { useAuth } from "@/hooks/use-auth"
 import { trackRecordCreated } from "@/lib/track-action"
 
@@ -38,8 +40,13 @@ export function useConsumablesData(locationId?: string, options: ConsumablesData
   const startDate = options.startDate
   const endDate = options.endDate
 
+  // Reads only — see hooks/use-labor-data.ts for the same reasoning. Mutations below are
+  // intentionally left uncancellable: aborting a write does not un-commit it server-side.
+  const listRequests = useAbortableRequests()
+
   const fetchDeployments = useCallback(
     async (pageIndex = 0, append = false, fetchAll = false) => {
+      const signal = listRequests.next()
       try {
         if (!user?.tenantId) {
           setDeployments([])
@@ -77,6 +84,7 @@ export function useConsumablesData(locationId?: string, options: ConsumablesData
         const response = await fetch(`/api/expenses-neon?${query.toString()}`, {
           method: "GET",
           cache: "no-store",
+          signal,
         })
         if (!response.ok) {
           const errorText = await response.text()
@@ -117,20 +125,26 @@ export function useConsumablesData(locationId?: string, options: ConsumablesData
           setTotalAmount(0)
         }
       } catch (error) {
+        // Cancelled by a newer request or by unmount — not a failure, and blanking the list
+        // here would make fast navigation look like the data disappeared.
+        if (isAbortError(error)) return
         console.error("❌ Error fetching deployments:", error)
         setDeployments([])
         setHasMore(false)
         setTotalCount(0)
         setTotalAmount(0)
       } finally {
-        if (append) {
-          setLoadingMore(false)
-        } else {
-          setLoading(false)
+        // Only the request still owning the slot may clear the spinner.
+        if (!signal.aborted) {
+          if (append) {
+            setLoadingMore(false)
+          } else {
+            setLoading(false)
+          }
         }
       }
     },
-    [endDate, locationId, pageSize, startDate, user?.tenantId],
+    [endDate, listRequests, locationId, pageSize, startDate, user?.tenantId],
   )
 
   useEffect(() => {
