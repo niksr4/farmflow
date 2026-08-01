@@ -9,9 +9,11 @@
  * of the week. Fill in worker counts, submit once, creates N labour entries.
  */
 
-import { useState, useCallback, useEffect } from "react"
+import { useState, useCallback, useEffect, useMemo } from "react"
+import { useSingleFlight } from "@/hooks/use-single-flight"
 import { Check, ChevronDown, ChevronUp, Loader2, Plus, Trash2 } from "lucide-react"
 import { cn } from "@/lib/utils"
+import { buildBatchEntries, normalizeDayCount, totalCostForEntries } from "@/lib/week-batch-entry"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { useToast } from "@/hooks/use-toast"
@@ -83,7 +85,7 @@ export default function WeekBatchEntry({ locationId, defaultWage = 0, onSuccess,
   }, [weekDays, defaultWage])
 
   const updateCount = (rowIdx: number, dayIso: string, value: string) => {
-    const num = Number(value) || 0
+    const num = normalizeDayCount(value)
     setRows(prev => prev.map((r, i) => i === rowIdx ? { ...r, dayCounts: { ...r.dayCounts, [dayIso]: num } } : r))
   }
 
@@ -100,24 +102,14 @@ export default function WeekBatchEntry({ locationId, defaultWage = 0, onSuccess,
     setRows(prev => prev.filter((_, i) => i !== rowIdx))
   }
 
-  const totalCost = rows.reduce((total, row) => {
-    const rowTotal = Object.values(row.dayCounts).reduce((s, c) => s + c * row.costPerWorker, 0)
-    return total + rowTotal
-  }, 0)
+  // One derivation for the payload, the count and the total, so the figure on the button is
+  // by construction the figure that gets written. See lib/week-batch-entry.ts.
+  const pendingEntries = useMemo(() => buildBatchEntries(rows), [rows])
+  const totalCost = useMemo(() => totalCostForEntries(pendingEntries), [pendingEntries])
+  const entryCount = pendingEntries.length
 
-  const entryCount = rows.reduce((total, row) => {
-    return total + Object.values(row.dayCounts).filter(c => c > 0).length
-  }, 0)
-
-  const handleSubmit = async () => {
-    const entries: { date: string; code: string; reference: string; workers: number; costPerWorker: number; notes: string }[] = []
-    for (const row of rows) {
-      for (const [date, count] of Object.entries(row.dayCounts)) {
-        if (count > 0) {
-          entries.push({ date, code: row.code, reference: row.reference, workers: count, costPerWorker: row.costPerWorker, notes: row.notes })
-        }
-      }
-    }
+  const handleSubmitUnguarded = async () => {
+    const entries = pendingEntries
 
     if (entries.length === 0) {
       toast({ title: "Nothing to save", description: "Enter at least one worker count.", variant: "destructive" })
@@ -159,6 +151,10 @@ export default function WeekBatchEntry({ locationId, defaultWage = 0, onSuccess,
       setSubmitting(false)
     }
   }
+
+  // Mobile double-tap guard: `disabled` only applies after a re-render, so two fast
+  // taps both entered this handler and wrote the batch of labour entries twice. See lib/single-flight.ts.
+  const handleSubmit = useSingleFlight(handleSubmitUnguarded)
 
   const sortedActivities = [...activities].sort(
     (a, b) => ((b.labor_count ?? 0) + (b.expense_count ?? 0)) - ((a.labor_count ?? 0) + (a.expense_count ?? 0))

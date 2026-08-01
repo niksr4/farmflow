@@ -15,6 +15,7 @@ import { FieldLabel } from "@/components/ui/field-label"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import { toast } from "sonner"
 import { canWriteModule, canDeleteModule, type UserRole } from "@/lib/permissions"
+import { isWorkerLedgerDraftValid, validateWorkerLedgerDraft } from "@/lib/worker-ledger-validation"
 import { useAuth } from "@/hooks/use-auth"
 import { formatCurrency } from "@/lib/format"
 import FilterBar from "@/components/filter-bar"
@@ -110,7 +111,7 @@ export default function WorkerLedgerTab() {
   useEffect(() => { fetchEntries() }, [fetchEntries])
 
   const handleAdd = async () => {
-    if (!form.workerId || !form.entryType || !form.amount) return
+    if (!isWorkerLedgerDraftValid(form)) return
     setSaving(true)
     try {
       const res = await fetch("/api/worker-ledger", {
@@ -143,6 +144,13 @@ export default function WorkerLedgerTab() {
   }
 
   const handleSaveEdit = async (id: string) => {
+    // Guarded like the add form. Without this an emptied amount saved as 0 and a
+    // non-numeric one saved as null, silently corrupting the worker's payable balance.
+    const validation = validateWorkerLedgerDraft(editForm, { requireWorker: false })
+    if (!validation.valid) {
+      toast.error(validation.reason || "Check the entry before saving.")
+      return
+    }
     setSaving(true)
     try {
       const res = await fetch(`/api/worker-ledger/${id}`, {
@@ -180,7 +188,7 @@ export default function WorkerLedgerTab() {
     }
   }
 
-  const canSaveForm = form.workerId && form.entryType && Number(form.amount) > 0
+  const canSaveForm = isWorkerLedgerDraftValid(form)
 
   return (
     <div className="space-y-4">
@@ -342,7 +350,7 @@ export default function WorkerLedgerTab() {
                         <TableCell className="hidden sm:table-cell"><Input value={editForm.description} onChange={(ev) => setEditForm((f) => ({ ...f, description: ev.target.value }))} className="h-8 w-48" placeholder="Description" /></TableCell>
                         <TableCell>
                           <div className="flex gap-1">
-                            <Button size="icon" variant="ghost" className="h-7 w-7" disabled={saving} onClick={() => handleSaveEdit(e.id)}>
+                            <Button size="icon" variant="ghost" className="h-7 w-7" disabled={saving || !isWorkerLedgerDraftValid(editForm, { requireWorker: false })} onClick={() => handleSaveEdit(e.id)}>
                               {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5 text-emerald-500" />}
                             </Button>
                             <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => setEditingId(null)}><X className="h-3.5 w-3.5" /></Button>

@@ -1,6 +1,7 @@
 "use client"
 
 import { useCallback, useEffect, useState, useRef, type ChangeEvent, type KeyboardEvent } from "react"
+import { useSingleFlight } from "@/hooks/use-single-flight"
 import InPageNav from "@/components/in-page-nav"
 import FilterBar from "@/components/filter-bar"
 import { useListControls } from "@/hooks/use-list-controls"
@@ -610,7 +611,7 @@ export default function ProcessingTab({ showDataToolsControls = false }: Process
     autoCalculateFields,
   ])
 
-  const handleSave = async () => {
+  const handleSaveUnguarded = async () => {
     trackClick("processing_save")
     if (!selectedLocationId) {
       toast({
@@ -696,6 +697,10 @@ export default function ProcessingTab({ showDataToolsControls = false }: Process
       setIsSaving(false)
     }
   }
+
+  // Mobile double-tap guard: `disabled` only applies after a re-render, so two fast
+  // taps both entered this handler and wrote the processing record twice. See lib/single-flight.ts.
+  const handleSave = useSingleFlight(handleSaveUnguarded)
 
   const handleDelete = async () => {
     trackClick("processing_delete")

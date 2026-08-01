@@ -1,6 +1,7 @@
 "use client"
 
 import { useCallback, useEffect, useState } from "react"
+import { useSingleFlight } from "@/hooks/use-single-flight"
 import Link from "next/link"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -209,7 +210,7 @@ export function RubberTab() {
   }, [recentRecords])
   useEffect(() => { fetchRecordForDate(selectedDate) }, [selectedDate, fetchRecordForDate])
 
-  const handleSave = async () => {
+  const handleSaveUnguarded = async () => {
     if (!selectedLocationId || selectedLocationId === LOCATION_ALL || selectedLocationId === LOCATION_UNASSIGNED) {
       setMessage({ type: "error", text: "Select a specific location to save a record" })
       return
@@ -253,6 +254,10 @@ export function RubberTab() {
       setSaving(false)
     }
   }
+
+  // Mobile double-tap guard: `disabled` only applies after a re-render, so two fast
+  // taps both entered this handler and wrote the rubber record twice. See lib/single-flight.ts.
+  const handleSave = useSingleFlight(handleSaveUnguarded)
 
   const loadRecord = (record: RubberRecord) => {
     setSelectedRecord(record)

@@ -1,6 +1,7 @@
 "use client"
 
 import { useCallback, useEffect, useMemo, useState, type ChangeEvent, type KeyboardEvent } from "react"
+import { useSingleFlight } from "@/hooks/use-single-flight"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -215,7 +216,7 @@ export default function CuringTab() {
     fetchRecordForDate(selectedDate)
   }, [fetchRecordForDate, selectedDate])
 
-  const handleSave = async () => {
+  const handleSaveUnguarded = async () => {
     if (!selectedLocationId) {
       toast({ title: "Location required", description: "Select a location before saving.", variant: "destructive" })
       return
@@ -258,6 +259,10 @@ export default function CuringTab() {
       setSaving(false)
     }
   }
+
+  // Mobile double-tap guard: `disabled` only applies after a re-render, so two fast
+  // taps both entered this handler and wrote the curing record twice. See lib/single-flight.ts.
+  const handleSave = useSingleFlight(handleSaveUnguarded)
 
   const handleDelete = async (recordId: number) => {
     if (!confirm("Delete this curing record?")) return

@@ -12,6 +12,8 @@
  */
 
 import { useCallback, useEffect, useState } from "react"
+import { useAbortableRequests } from "@/hooks/use-abortable"
+import { isAbortError } from "@/lib/abortable"
 import { addDays, format, isToday, startOfWeek } from "date-fns"
 import { reportActionError } from "@/lib/track-action"
 import { AlertTriangle, ArrowRight, Check, CloudRain, Droplets, Loader2, Users } from "lucide-react"
@@ -45,13 +47,19 @@ export default function TodayGapsCard({ onNavigate, className }: Props) {
   const [loading, setLoading] = useState(true)
   const seasonBadge = getSeasonBadge()
 
+  // Refetches fire on every farmflow:record-saved event, so a burst of saves can leave
+  // several of these in flight at once; without cancellation the last one to RESOLVE wins
+  // rather than the last one triggered, and the card can settle on pre-save numbers.
+  const requests = useAbortableRequests()
+
   const fetchData = useCallback(async () => {
     const { startDate, endDate, days } = getWeekRange()
+    const signal = requests.next()
     try {
       const [laborRes, expenseRes, rainRes] = await Promise.all([
-        fetch(`/api/labor-neon?startDate=${startDate}&endDate=${endDate}&limit=200`),
-        fetch(`/api/expenses-neon?startDate=${startDate}&endDate=${endDate}&limit=200`),
-        fetch("/api/rainfall"),
+        fetch(`/api/labor-neon?startDate=${startDate}&endDate=${endDate}&limit=200`, { signal }),
+        fetch(`/api/expenses-neon?startDate=${startDate}&endDate=${endDate}&limit=200`, { signal }),
+        fetch("/api/rainfall", { signal }),
       ])
       const [laborData, expenseData, rainData] = await Promise.all([
         laborRes.json(), expenseRes.json(), rainRes.json(),
@@ -96,13 +104,17 @@ export default function TodayGapsCard({ onNavigate, className }: Props) {
 
       setGaps(gapDays)
     } catch (err) {
+      // Superseded by a newer refetch, or unmounted — not a failure. Reporting it would
+      // put noise in Sentry and blank a card that is about to be repopulated.
+      if (isAbortError(err)) return
       reportActionError("today_gaps_load", err)
       setGaps([])
       setStats(null)
     } finally {
-      setLoading(false)
+      // Only the request still owning the slot may clear the spinner.
+      if (!signal.aborted) setLoading(false)
     }
-  }, [])
+  }, [requests])
 
   useEffect(() => {
     fetchData()

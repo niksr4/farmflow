@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useEffect, useCallback } from "react"
+import { useSingleFlight } from "@/hooks/use-single-flight"
 import { todayIso } from "@/lib/date-utils"
 import { Plus, Pencil, Trash2, Check, X, Loader2, Wheat } from "lucide-react"
 import { Button } from "@/components/ui/button"
@@ -125,7 +126,7 @@ export default function PickingLogTab() {
   useEffect(() => { fetchLocations() }, [fetchLocations])
   useEffect(() => { fetchRecords() }, [fetchRecords])
 
-  const handleAdd = async () => {
+  const handleAddUnguarded = async () => {
     if (!form.workerId || !form.kgPicked || !form.ratePerKg) return
     if (locations.length > 0 && !form.locationId) {
       toast.error("Select a location before saving.")
@@ -158,6 +159,10 @@ export default function PickingLogTab() {
       setSaving(false)
     }
   }
+
+  // Mobile double-tap guard: `disabled` only applies after a re-render, so two fast
+  // taps both entered this handler and wrote the picking entry twice. See lib/single-flight.ts.
+  const handleAdd = useSingleFlight(handleAddUnguarded)
 
   const startEdit = (r: PickingRecord) => {
     setEditingId(r.id)

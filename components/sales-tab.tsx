@@ -36,6 +36,7 @@ import { useFiscalYearSelection } from "@/hooks/use-fiscal-year-selection"
 import { FiscalYearSelect } from "@/components/ui/fiscal-year-select"
 import posthog from "posthog-js"
 import { trackClick, reportActionFailure, reportActionError } from "@/lib/track-action"
+import { useSingleFlight } from "@/hooks/use-single-flight"
 import { formatLocationLabel, resolveLocationIdFromLabel as resolveLocationIdFromLabelValue } from "@/lib/location-label"
 
 interface SalesRecord {
@@ -729,7 +730,7 @@ export default function SalesTab({
     return { allowanceKgs: 0, matchesSelection: false }
   }, [bagType, bagWeightKg, coffeeType, editingRecord])
 
-  const handleSave = async () => {
+  const handleSaveUnguarded = async () => {
     trackClick(editingRecord ? "sales_update" : "sales_save")
     const wasEditing = Boolean(editingRecord)
     const editingRecordId = editingRecord?.id
@@ -929,6 +930,11 @@ export default function SalesTab({
     setBankAccount(record.bank_account || "")
     setNotes(record.notes || "")
   }
+
+  // Mobile double-tap guard. `disabled={isSaving}` only applies after a re-render, so two taps
+  // ~80ms apart both entered this handler and POSTed twice — two sales records, revenue counted
+  // twice and inventory deducted twice. Same fix as efe4f9c applied to the other write forms.
+  const handleSave = useSingleFlight(handleSaveUnguarded)
 
   const handleDelete = async (id: number) => {
     trackClick("sales_delete", { id })
