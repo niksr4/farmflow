@@ -54,7 +54,10 @@ describe("formatAuditPayload", () => {
     circular.self = circular
     expect(formatAuditPayload(circular)).toBe(String(circular))
 
-    const withBigInt = { amount: 10n }
+    // BigInt(10), not the `10n` literal: tsconfig targets ES6, where TS rejects BigInt
+    // literals outright (TS2737). Same runtime value, same JSON.stringify failure — which
+    // is the whole point of the case — and it typechecks.
+    const withBigInt = { amount: BigInt(10) }
     expect(formatAuditPayload(withBigInt)).toBe(String(withBigInt))
   })
 })
