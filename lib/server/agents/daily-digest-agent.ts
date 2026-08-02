@@ -5,6 +5,7 @@ import { DEFAULT_DAILY_DIGEST_EMAIL_FROM, EMAIL_BCC_MONITORING } from "@/lib/ema
 // the RLS-bypassing owner connection rather than app_runtime, which requires a per-request
 // app.tenant_id session context this code never has.
 import { adminSql as sql } from "@/lib/server/db"
+import { escapeHtml as htmlEscape } from "@/lib/html-escape"
 import { fetchWithTimeout } from "@/lib/server/http"
 import { logServerError, logServerWarning } from "@/lib/server/safe-logging"
 import { DEFAULT_WEATHER_QUERY } from "@/lib/weather-config"
@@ -35,8 +36,6 @@ const toRows = <T = any>(value: unknown): T[] => {
 const IST_OFFSET_MS = 5.5 * 60 * 60 * 1000
 const istDateString = (date: Date): string => new Date(date.getTime() + IST_OFFSET_MS).toISOString().split("T")[0]
 
-const htmlEscape = (value: string): string =>
-  value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
 
 // ---------------------------------------------------------------------------
 // Yesterday's activity

@@ -2,6 +2,7 @@ import { NextResponse } from "next/server"
 import { z } from "zod"
 import { DEFAULT_SUPPORT_EMAIL, DEFAULT_SUPPORT_EMAIL_FROM } from "@/lib/email-addresses"
 import { checkRateLimit, buildRateLimitHeaders, isRateLimitUnavailableError } from "@/lib/rate-limit"
+import { escapeHtml, escapeHtmlAttributeUrl, sanitizeEmailHeaderValue } from "@/lib/html-escape"
 
 const contactBodySchema = z.object({
   name: z.string().trim().min(1, "Name is required").max(120, "Name is too long"),
@@ -61,7 +62,7 @@ export async function POST(request: Request) {
 
   const { name, email, message, inquiryType } = parsed.data
   const inquiryLabel = INQUIRY_LABELS[inquiryType] ?? "General enquiry"
-  const subject = `[FarmFlow Contact] ${name} — ${inquiryLabel}`
+  const subject = sanitizeEmailHeaderValue(`[FarmFlow Contact] ${name} — ${inquiryLabel}`)
   const text = [
     `Name: ${name}`,
     `Email: ${email}`,
@@ -75,14 +76,14 @@ export async function POST(request: Request) {
     <div style="font-family: Arial, sans-serif; line-height: 1.6; color: #122018; max-width: 600px;">
       <div style="background: #052e16; border-radius: 8px; padding: 16px 20px; margin-bottom: 20px;">
         <p style="color: #6ee7b7; margin: 0; font-size: 13px; font-weight: 600; letter-spacing: 0.05em;">FARMFLOW CONTACT</p>
-        <p style="color: #fff; margin: 4px 0 0; font-size: 18px; font-weight: 600;">${name}</p>
-        <p style="color: #a7f3d0; margin: 2px 0 0; font-size: 13px;">${inquiryLabel}</p>
+        <p style="color: #fff; margin: 4px 0 0; font-size: 18px; font-weight: 600;">${escapeHtml(name)}</p>
+        <p style="color: #a7f3d0; margin: 2px 0 0; font-size: 13px;">${escapeHtml(inquiryLabel)}</p>
       </div>
       <table style="font-size: 14px; margin-bottom: 16px; border-collapse: collapse;">
-        <tr><td style="color: #6b7280; padding: 3px 12px 3px 0; white-space: nowrap;">Reply to</td><td><a href="mailto:${email}" style="color: #059669;">${email}</a></td></tr>
-        <tr><td style="color: #6b7280; padding: 3px 12px 3px 0; white-space: nowrap;">IP</td><td style="color: #374151;">${ipAddress}</td></tr>
+        <tr><td style="color: #6b7280; padding: 3px 12px 3px 0; white-space: nowrap;">Reply to</td><td><a href="mailto:${escapeHtmlAttributeUrl(email)}" style="color: #059669;">${escapeHtml(email)}</a></td></tr>
+        <tr><td style="color: #6b7280; padding: 3px 12px 3px 0; white-space: nowrap;">IP</td><td style="color: #374151;">${escapeHtml(ipAddress)}</td></tr>
       </table>
-      <div style="background: #f9fafb; border-left: 3px solid #059669; border-radius: 4px; padding: 14px 16px; font-size: 14px; color: #111827; white-space: pre-wrap;">${message.replace(/</g, "&lt;").replace(/>/g, "&gt;")}</div>
+      <div style="background: #f9fafb; border-left: 3px solid #059669; border-radius: 4px; padding: 14px 16px; font-size: 14px; color: #111827; white-space: pre-wrap;">${escapeHtml(message)}</div>
     </div>
   `
 

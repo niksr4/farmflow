@@ -2,6 +2,7 @@ import { NextResponse } from "next/server"
 import { requireModuleAccess } from "@/lib/server/module-access"
 import { checkRateLimit, buildRateLimitHeaders, isRateLimitUnavailableError } from "@/lib/rate-limit"
 import { DEFAULT_SUPPORT_EMAIL, DEFAULT_ALERT_EMAIL_FROM } from "@/lib/email-addresses"
+import { escapeHtml, sanitizeEmailHeaderValue } from "@/lib/html-escape"
 import { fetchWithTimeout } from "@/lib/server/http"
 
 export const dynamic = "force-dynamic"
@@ -49,13 +50,13 @@ export async function POST(request: Request) {
       const html = `
         <h2 style="margin:0 0 16px;font-size:18px;color:#111">${typeLabel}</h2>
         <table style="font-size:14px;border-collapse:collapse;width:100%;margin-bottom:16px">
-          <tr><td style="padding:6px 0;color:#666;width:140px">User</td><td style="padding:6px 0;font-weight:600">${sessionUser.username}</td></tr>
-          <tr><td style="padding:6px 0;color:#666">Tenant ID</td><td style="padding:6px 0;font-family:monospace;font-size:12px">${sessionUser.tenantId}</td></tr>
-          <tr><td style="padding:6px 0;color:#666">Role</td><td style="padding:6px 0">${sessionUser.role}</td></tr>
-          ${pageContext ? `<tr><td style="padding:6px 0;color:#666">Current tab</td><td style="padding:6px 0">${pageContext}</td></tr>` : ""}
+          <tr><td style="padding:6px 0;color:#666;width:140px">User</td><td style="padding:6px 0;font-weight:600">${escapeHtml(sessionUser.username)}</td></tr>
+          <tr><td style="padding:6px 0;color:#666">Tenant ID</td><td style="padding:6px 0;font-family:monospace;font-size:12px">${escapeHtml(sessionUser.tenantId)}</td></tr>
+          <tr><td style="padding:6px 0;color:#666">Role</td><td style="padding:6px 0">${escapeHtml(sessionUser.role)}</td></tr>
+          ${pageContext ? `<tr><td style="padding:6px 0;color:#666">Current tab</td><td style="padding:6px 0">${escapeHtml(pageContext)}</td></tr>` : ""}
           <tr><td style="padding:6px 0;color:#666">Submitted</td><td style="padding:6px 0">${new Date().toISOString()}</td></tr>
         </table>
-        <div style="background:#f6f8fa;border-radius:8px;padding:16px;font-size:14px;line-height:1.6;color:#222;white-space:pre-wrap">${message.replace(/</g, "&lt;").replace(/>/g, "&gt;")}</div>
+        <div style="background:#f6f8fa;border-radius:8px;padding:16px;font-size:14px;line-height:1.6;color:#222;white-space:pre-wrap">${escapeHtml(message)}</div>
       `
 
       await fetchWithTimeout("https://api.resend.com/emails", {
@@ -67,7 +68,7 @@ export async function POST(request: Request) {
         body: JSON.stringify({
           from,
           to: [to],
-          subject: `[FarmFlow Feedback] ${typeLabel} — ${sessionUser.username}`,
+          subject: sanitizeEmailHeaderValue(`[FarmFlow Feedback] ${typeLabel} — ${sessionUser.username}`),
           html,
         }),
         timeoutMs: 8_000,
