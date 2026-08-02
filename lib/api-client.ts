@@ -6,7 +6,7 @@ export type ApiErrorShape = {
 
 export async function apiRequest<T>(
   url: string,
-  options: RequestInit & { parseText?: boolean } = {},
+  options: RequestInit = {},
 ): Promise<T> {
   const headers = new Headers(options.headers || {})
   if (!headers.has("Accept")) {
@@ -23,12 +23,35 @@ export async function apiRequest<T>(
   })
 
   const text = await response.text()
-  const data = text ? JSON.parse(text) : null
 
-  if (!response.ok || (data && data.success === false)) {
+  // Parsed defensively. A gateway error, an auth redirect or a Vercel error page all return
+  // HTML, and an unguarded JSON.parse turned those into "Unexpected token '<' is not valid
+  // JSON" — thrown BEFORE the status was ever inspected, so the real failure (a 502, a 401)
+  // was replaced by a message that tells the caller nothing. lib/abortable.ts's fetchJson
+  // already guarded this exact case; this brings the two into line.
+  let data: unknown = null
+  let bodyWasUnparseable = false
+  if (text) {
+    try {
+      data = JSON.parse(text)
+    } catch {
+      bodyWasUnparseable = true
+    }
+  }
+
+  const payload = data as ApiErrorShape | null
+
+  if (!response.ok || payload?.success === false) {
     const errorMessage =
-      (data as ApiErrorShape)?.error || (data as ApiErrorShape)?.message || response.statusText || "Request failed"
+      payload?.error || payload?.message || response.statusText || "Request failed"
     throw new Error(errorMessage)
+  }
+
+  // A 2xx carrying a non-JSON body must still fail. Returning null here would hand the caller
+  // an object whose every field is undefined instead of an error — quieter than the old
+  // SyntaxError, and considerably worse.
+  if (bodyWasUnparseable) {
+    throw new Error("The server returned an unexpected response. Please try again.")
   }
 
   return data as T

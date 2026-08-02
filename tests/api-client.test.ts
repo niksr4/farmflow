@@ -99,13 +99,28 @@ describe("apiRequest", () => {
     expect(fetchMock.mock.calls[1][1].credentials).toBe("include")
   })
 
-  // Known gap, filed as NIK-17: unlike lib/abortable.ts's fetchJson (which guards this exact
-  // case with response.json().catch(() => null)), apiRequest's JSON.parse is unguarded, so a
-  // non-JSON body (e.g. an HTML gateway-error page) throws a raw SyntaxError instead of a clean
-  // "Request failed" message. This test pins the current (buggy) behavior so a fix is visible as
-  // an intentional test change, not a silent regression.
-  it("currently throws a raw parse error for a non-JSON body (see NIK-17)", async () => {
-    mockFetch("<html>502 Bad Gateway</html>", { ok: false, status: 502 })
-    await expect(apiRequest("/api/x")).rejects.toThrow(SyntaxError)
+  // NIK-17, fixed. Previously JSON.parse ran unguarded and before the status check, so an
+  // HTML gateway page threw "Unexpected token '<'" and the real 502 never surfaced.
+  it("reports the HTTP status, not a parse error, for a non-JSON error body", async () => {
+    mockFetch("<html>502 Bad Gateway</html>", { ok: false, status: 502, statusText: "Bad Gateway" })
+    await expect(apiRequest("/api/x")).rejects.toThrow("Bad Gateway")
+    await expect(apiRequest("/api/x")).rejects.not.toThrow(SyntaxError)
+  })
+
+  it("falls back to a generic message when a non-JSON error body has no statusText", async () => {
+    mockFetch("<html>oh no</html>", { ok: false, status: 500, statusText: "" })
+    await expect(apiRequest("/api/x")).rejects.toThrow("Request failed")
+  })
+
+  it("rejects a 2xx whose body is not JSON rather than resolving null", async () => {
+    // Resolving would hand the caller an object with every field undefined — quieter than
+    // the old SyntaxError and considerably worse.
+    mockFetch("<html>login</html>", { ok: true, status: 200 })
+    await expect(apiRequest("/api/x")).rejects.toThrow(/unexpected response/i)
+  })
+
+  it("still resolves null for a genuinely empty body", async () => {
+    mockFetch("", { ok: true, status: 204 })
+    await expect(apiRequest("/api/x")).resolves.toBeNull()
   })
 })

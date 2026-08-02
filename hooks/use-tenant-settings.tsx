@@ -4,6 +4,8 @@ import { useCallback, useEffect, useState } from "react"
 import { useSearchParams } from "next/navigation"
 import { useAuth } from "@/hooks/use-auth"
 import { apiRequest } from "@/lib/api-client"
+import { useAbortableRequests } from "@/hooks/use-abortable"
+import { isAbortError } from "@/lib/abortable"
 import {
   DEFAULT_TENANT_ESTATE_PROFILE,
   mergeTenantEstateProfile,
@@ -98,8 +100,16 @@ export function useTenantSettings() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
+  // loadSettings re-fires whenever the previewed tenant changes. Without cancellation an
+  // owner clicking through preview tenants leaves several loads racing, and the last to
+  // RESOLVE wins rather than the last selected — so the panel can settle on a different
+  // tenant's estate name, bag weight and wage table. Reads only; the save path below is
+  // deliberately left uncancellable.
+  const settingsRequests = useAbortableRequests()
+
   const loadSettings = useCallback(async () => {
     if (!user?.tenantId) return
+    const signal = settingsRequests.next()
     setLoading(true)
     setError(null)
     try {
@@ -108,7 +118,7 @@ export function useTenantSettings() {
         params.set("tenantId", previewTenantId)
       }
       const endpoint = params.toString() ? `/api/tenant-settings?${params.toString()}` : "/api/tenant-settings"
-      const data = await apiRequest<{ success: boolean; settings: TenantSettings }>(endpoint)
+      const data = await apiRequest<{ success: boolean; settings: TenantSettings }>(endpoint, { signal })
       const bagWeightKg = Number(data.settings?.bagWeightKg) || DEFAULT_BAG_WEIGHT_KG
       const estateName = typeof data.settings?.estateName === "string" ? data.settings.estateName : ""
       const estateProfile = mergeTenantEstateProfile(data.settings?.estateProfile)
@@ -136,14 +146,18 @@ export function useTenantSettings() {
         data.settings?.laborWages && typeof data.settings.laborWages === "object"
           ? { ...DEFAULT_LABOR_WAGES, ...data.settings.laborWages }
           : DEFAULT_LABOR_WAGES
+      if (signal.aborted) return
       setSettings({ bagWeightKg, estateName, estateProfile, alertThresholds, uiPreferences, uiVariant, featureFlags, laborWages })
     } catch (err: any) {
+      // Superseded by a newer tenant selection, or unmounted — not a failure to show.
+      if (isAbortError(err)) return
       console.error("Error loading tenant settings:", err)
       setError(err.message || "Failed to load tenant settings")
     } finally {
-      setLoading(false)
+      // Only the load that still owns the slot may clear the spinner.
+      if (!signal.aborted) setLoading(false)
     }
-  }, [isPreviewMode, previewTenantId, user?.tenantId])
+  }, [isPreviewMode, previewTenantId, settingsRequests, user?.tenantId])
 
   useEffect(() => {
     loadSettings()
