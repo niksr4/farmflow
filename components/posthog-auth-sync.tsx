@@ -66,6 +66,14 @@ export default function PostHogAuthSync() {
     })
     posthog.group("tenant", tenantId, { tenant_id: tenantId })
 
+    // Super properties: attached to EVERY subsequent event on this device, not just the ones
+    // that pass tenant_id explicitly. Only $pageview and the hand-written track-action events
+    // were setting it, so autocapture, $web_vitals, $rageclick and app_crash_detected — the
+    // majority of traffic — arrived with tenant_id null. Measured 2026-08-03: 2471 of 3491
+    // events over 7 days had no tenant_id, which makes per-tenant filtering and alerting
+    // (the stated reason tenant_id is a searchable tag in Sentry) unusable on this side.
+    posthog.register({ tenant_id: tenantId, role: user.role })
+
     lastDistinctIdRef.current = distinctId
   }, [status, user])
 

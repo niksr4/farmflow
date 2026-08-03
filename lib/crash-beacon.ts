@@ -53,6 +53,16 @@ export type SessionRecord = {
   usedHeapMb: number | null
   heapLimitMb: number | null
   appVersion: string | null
+  /**
+   * Who was using the app when it died. Captured from the LIVE session, because the report is
+   * emitted on the next load — which is frequently the logged-out landing page (proxy.ts
+   * redirects a session-less request to "/"), by which point Sentry has already been told
+   * setUser(null). Without this, every crash report arrives with Users: 0 and there is no way
+   * to tell one struggling device apart from a fleet-wide regression, which is the only
+   * question that matters when triaging one.
+   */
+  tenantId: string | null
+  username: string | null
 }
 
 export type SessionOutcome =
@@ -135,6 +145,12 @@ function isSessionRecord(value: unknown): value is SessionRecord {
 export function buildCrashReport(record: SessionRecord, now: number) {
   return {
     sessionId: record.id,
+    // `?? null` rather than a bare read: records written by a previous deploy are already in
+    // localStorage without these fields, and they survive isSessionRecord (which only validates
+    // the fields classification depends on). Normalising here keeps `undefined` out of the
+    // outbound payload on the first load after this ships.
+    tenantId: record.tenantId ?? null,
+    username: record.username ?? null,
     durationSeconds: sessionDurationSeconds(record),
     secondsSinceLastHeartbeat: Math.round((now - record.lastSeenAt) / 1000),
     interactions: record.interactions,

@@ -24,6 +24,8 @@ const record = (overrides: Partial<SessionRecord> = {}): SessionRecord => ({
   usedHeapMb: null,
   heapLimitMb: null,
   appVersion: null,
+  tenantId: null,
+  username: null,
   ...overrides,
 })
 
@@ -111,6 +113,31 @@ describe("buildCrashReport", () => {
     )
     expect(report.durationSeconds).toBe(60)
     expect(report.secondsSinceLastHeartbeat).toBe(60)
+  })
+
+  it("carries the dead session's tenant and user so the report is attributable", () => {
+    // The whole point: this report is emitted on the NEXT load, which is usually the
+    // logged-out landing page. Attribution has to travel with the record or the issue
+    // arrives with Users: 0 and cannot be told apart from a fleet-wide regression.
+    const report = buildCrashReport(
+      record({ tenantId: "41b4b10c-428c-4155-882f-1cc7f6e89a78", username: "KAB123" }),
+      NOW,
+    )
+    expect(report.tenantId).toBe("41b4b10c-428c-4155-882f-1cc7f6e89a78")
+    expect(report.username).toBe("KAB123")
+  })
+
+  it("normalises attribution to null for records written by an earlier deploy", () => {
+    // Records already sitting in localStorage predate these fields and still pass
+    // isSessionRecord, which only validates what classification needs. They must not put
+    // `undefined` on the wire on the first load after this ships.
+    const legacy = record()
+    delete (legacy as Partial<SessionRecord>).tenantId
+    delete (legacy as Partial<SessionRecord>).username
+
+    const report = buildCrashReport(legacy, NOW)
+    expect(report.tenantId).toBeNull()
+    expect(report.username).toBeNull()
   })
 
   it("flags a burst when many taps land right before the session dies", () => {

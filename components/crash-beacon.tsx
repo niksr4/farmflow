@@ -1,8 +1,10 @@
 "use client"
 
-import { useEffect } from "react"
+import { useEffect, useRef } from "react"
 import * as Sentry from "@sentry/nextjs"
 import posthog from "posthog-js"
+
+import { useAuth } from "@/hooks/use-auth"
 
 import {
   CRASH_BEACON_STORAGE_KEY,
@@ -91,7 +93,16 @@ function reportCrashedSessions(current: SessionRecord, now: number): SessionReco
           tags: {
             crash_beacon: "true",
             burst_suspected: String(report.burstSuspected),
+            // A tag, not just context, so crashes are searchable and alertable per tenant —
+            // the same reason toSessionUser tags tenant_id server-side. Taken from the DEAD
+            // session, never the current one: this fires on the next load, which is usually
+            // the logged-out landing page, and on a shared device would otherwise attribute
+            // the crash to whoever logged in next.
+            tenant_id: report.tenantId ?? "unknown",
           },
+          user: report.username
+            ? { id: `${report.tenantId ?? "global"}:${report.username}`, username: report.username }
+            : undefined,
           contexts: { crash_beacon: report },
         })
       } catch {
@@ -115,6 +126,30 @@ function reportCrashedSessions(current: SessionRecord, now: number): SessionReco
 }
 
 export default function CrashBeacon() {
+  const { user } = useAuth()
+
+  /**
+   * Auth is read through a ref, never through the lifecycle effect's dependency array.
+   *
+   * That effect must keep `[]` deps: its cleanup marks the session `closedAt` (a clean
+   * teardown). If it re-ran whenever auth resolved — which it does on every single load, a
+   * moment after mount — each session would be closed and replaced within the first second,
+   * so no session would ever be left open long enough to look stale. That would silently
+   * disable crash detection altogether, which is a strictly worse outcome than the missing
+   * attribution this change exists to fix.
+   */
+  const authRef = useRef<{ tenantId: string | null; username: string | null }>({
+    tenantId: null,
+    username: null,
+  })
+
+  useEffect(() => {
+    authRef.current = {
+      tenantId: user?.tenantId || null,
+      username: user?.username || null,
+    }
+  }, [user])
+
   useEffect(() => {
     if (typeof window === "undefined") return
 
@@ -130,6 +165,10 @@ export default function CrashBeacon() {
       lastInteractionAt: null,
       ...readMemory(),
       appVersion: APP_VERSION,
+      // Null at mount — the session hook has not resolved yet. Every flush refreshes these, so
+      // a session is attributed within a heartbeat of login and long before it could go stale.
+      tenantId: authRef.current.tenantId,
+      username: authRef.current.username,
     }
 
     // Report anything left over from a previous session before we start our own.
@@ -144,6 +183,8 @@ export default function CrashBeacon() {
       session.usedHeapMb = memory.usedHeapMb
       session.heapLimitMb = memory.heapLimitMb
       session.url = window.location.pathname
+      session.tenantId = authRef.current.tenantId
+      session.username = authRef.current.username
 
       const others = safeRead().filter((record) => record.id !== session.id)
       safeWrite(pruneRecords([...others, { ...session }], session.lastSeenAt))
