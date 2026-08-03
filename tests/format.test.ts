@@ -37,3 +37,19 @@ describe("formatCurrency", () => {
     expect(formatCurrency(0)).toBe("₹0")
   })
 })
+
+describe("formatCurrency / formatNumber — negative values (NIK-21)", () => {
+  // Characterization tests for a known display bug (Linear NIK-21), not the desired behavior.
+  // formatCurrency places the ₹ sign before the minus instead of after it, and formatNumber
+  // can render a lone "-0" for very small negative inputs that round to zero. Update these
+  // once NIK-21 is fixed to assert the corrected output ("-₹1,500", "0", etc).
+
+  it("currently glues the rupee sign in front of the minus sign (bug, tracked as NIK-21)", () => {
+    expect(formatCurrency(-1500)).toBe("₹-1,500")
+    expect(formatCurrency(-1500.5)).toBe("₹-1,500.50")
+  })
+
+  it("currently renders a very small negative value as \"-0\" instead of \"0\" (bug, tracked as NIK-21)", () => {
+    expect(formatNumber(-0.001)).toBe("-0")
+  })
+})
