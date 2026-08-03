@@ -87,7 +87,43 @@ const collectRouteFiles = (dir: string): string[] => {
   return out
 }
 
-const RUNTIME_CLIENTS = new Set(["sql", "accountsSql", "inventorySql"])
+const RUNTIME_CLIENTS = new Set(["sql", "accountsSql", "inventorySql", "processingSql"])
+
+/**
+ * Local names in this file that refer to an RLS-enforced client.
+ *
+ * Import-aware on purpose. `lib/server/` is full of `import { adminSql as sql }` — the owner
+ * connection, which is BYPASSRLS and therefore correct to use unwrapped for the deliberately
+ * cross-tenant cron/agent reads. Matching on the local identifier alone reports every one of
+ * those as a bug (agent-store and data-integrity-agent both look exactly like the real
+ * error-events defect until you read the import), so the alias has to be resolved.
+ *
+ * Falls back to the default set when the file has no import from lib/server/db — that is the
+ * shape of the detector's own unit-test snippets, and of helpers that receive a client as a
+ * parameter (lib/server/biometric-attendance.ts).
+ */
+function runtimeClientNames(source: ts.SourceFile): Set<string> {
+  const names = new Set<string>()
+  let sawDbImport = false
+
+  for (const statement of source.statements) {
+    if (!ts.isImportDeclaration(statement)) continue
+    if (!ts.isStringLiteral(statement.moduleSpecifier)) continue
+    if (statement.moduleSpecifier.text !== "@/lib/server/db") continue
+
+    const bindings = statement.importClause?.namedBindings
+    if (!bindings || !ts.isNamedImports(bindings)) continue
+    sawDbImport = true
+
+    for (const element of bindings.elements) {
+      // `propertyName` is the exported name when aliased (`adminSql as sql`), else undefined.
+      const exported = (element.propertyName ?? element.name).text
+      if (RUNTIME_CLIENTS.has(exported)) names.add(element.name.text)
+    }
+  }
+
+  return sawDbImport ? names : RUNTIME_CLIENTS
+}
 
 /** Unwrap `sql!` / `(sql)` so the underlying identifier is visible. */
 function baseIdentifier(node: ts.Node): ts.Node {
@@ -109,12 +145,13 @@ function baseIdentifier(node: ts.Node): ts.Node {
 function unwrappedClientCalls(src: string, fileName: string): string[] {
   const source = ts.createSourceFile(fileName, src, ts.ScriptTarget.ESNext, true)
   const found: string[] = []
+  const clients = runtimeClientNames(source)
 
   const isRuntimeClientQuery = (node: ts.Node): boolean => {
     // sql`…` / accountsSql`…`
     if (ts.isTaggedTemplateExpression(node)) {
       const tag = baseIdentifier(node.tag)
-      return ts.isIdentifier(tag) && RUNTIME_CLIENTS.has(tag.text)
+      return ts.isIdentifier(tag) && clients.has(tag.text)
     }
     // sql.query(…)
     if (ts.isCallExpression(node) && ts.isPropertyAccessExpression(node.expression)) {
@@ -122,7 +159,7 @@ function unwrappedClientCalls(src: string, fileName: string): string[] {
       return (
         node.expression.name.text === "query" &&
         ts.isIdentifier(obj) &&
-        RUNTIME_CLIENTS.has(obj.text)
+        clients.has(obj.text)
       )
     }
     return false
@@ -185,12 +222,34 @@ function unwrappedClientCalls(src: string, fileName: string): string[] {
   return [...new Set(found)]
 }
 
+/**
+ * Server-side modules outside app/api that talk to the database directly.
+ *
+ * These were not scanned until 2026-08-02, and lib/server/error-events.ts sat here writing
+ * app_error_events through the bare runtime client. Its INSERT was rejected by the RLS WITH
+ * CHECK predicate on every call, the catch swallowed the rejection, and production recorded
+ * ZERO error events for roughly three months against a prior baseline of 10-21/month. Writes
+ * fail loudly at the database and still vanish, so route-only coverage was never enough.
+ */
+const collectServerLibFiles = (dir: string): string[] => {
+  const out: string[] = []
+  for (const entry of readdirSync(dir)) {
+    const full = join(dir, entry)
+    if (statSync(full).isDirectory()) out.push(...collectServerLibFiles(full))
+    else if (entry.endsWith(".ts") && !entry.endsWith(".d.ts")) out.push(full)
+  }
+  return out
+}
+
 const findUnwrappedRoutes = () => {
   const root = process.cwd()
-  const apiDir = resolve(root, "app/api")
+  const files = [
+    ...collectRouteFiles(resolve(root, "app/api")),
+    ...collectServerLibFiles(resolve(root, "lib/server")),
+  ]
   const unwrapped: string[] = []
 
-  for (const file of collectRouteFiles(apiDir)) {
+  for (const file of files) {
     const src = readFileSync(file, "utf8")
     if (!TENANT_TABLE_RE.test(src)) continue
     if (unwrappedClientCalls(src, file).length > 0) {
@@ -259,6 +318,40 @@ describe("unwrappedClientCalls detector", () => {
 
   it("sees through sql! non-null assertions", () => {
     expect(detect("async function f(){ await sql!.query(`SELECT 1 FROM processing_records`, []) }")).toHaveLength(1)
+  })
+
+  it("flags the pre-fix lib/server/error-events.ts shape — an unwrapped WRITE", () => {
+    // The exact defect this guard was extended for. Reads fail silently; this one failed loudly
+    // at the database and was still invisible, because the caller swallowed the rejection.
+    const src = `
+      import { sql } from "@/lib/server/db"
+      export async function logAppErrorEvent(input) {
+        try {
+          await sql\`INSERT INTO app_error_events (tenant_id, source) VALUES (\${input.tenantId}::uuid, 'x')\`
+        } catch (error) { /* swallowed */ }
+      }`
+    expect(detect(src)).toHaveLength(1)
+  })
+
+  it("does not flag adminSql aliased to sql — the agent/cron shape", () => {
+    // lib/server/agents/* deliberately read across tenants on the BYPASSRLS owner connection.
+    // Matching the local identifier alone made every one of these look like the defect above.
+    const src = `
+      import { adminSql as sql } from "@/lib/server/db"
+      export async function agentRead() {
+        return await sql\`SELECT tenant_id FROM sales_records\`
+      }`
+    expect(detect(src)).toEqual([])
+  })
+
+  it("still flags the runtime client when a file imports both clients", () => {
+    const src = `
+      import { adminSql, sql } from "@/lib/server/db"
+      export async function mixed() {
+        await adminSql\`SELECT 1 FROM sales_records\`
+        await sql\`SELECT 1 FROM current_inventory\`
+      }`
+    expect(detect(src)).toHaveLength(1)
   })
 })
 

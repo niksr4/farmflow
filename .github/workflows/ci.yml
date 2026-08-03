@@ -97,6 +97,21 @@ jobs:
       - name: Install Playwright browser
         run: pnpm exec playwright install --with-deps chromium
 
+      # Tenant isolation is enforced by RLS policies in the database, not by application code,
+      # so nothing in lint/typecheck/unit/build can observe it drifting. It did drift:
+      # scripts/104 created transaction_history_archive (tenant_id, 38 rows of real ledger data
+      # on prod) six migrations after script 98's discovery sweep had already run, so it shipped
+      # to dev AND prod with no policy at all. schema:rls existed and would have caught it on day
+      # one — it just was not wired into CI, so it only got run by hand on 2026-08-02, long after.
+      #
+      # Runs against the dev DB, which is the one CI has credentials for. Prod is deliberately not
+      # reachable from CI; verify it with `pnpm schema:rls:prod` when applying migrations there.
+      - name: Tenant isolation guard (RLS coverage + cross-tenant read proof)
+        if: ${{ env.DATABASE_URL_DEV != '' }}
+        run: |
+          pnpm schema:rls
+          pnpm schema:isolation
+
       # These specs self-skip when creds are absent; the guard avoids even starting the dev
       # server (which needs a real DB) on secretless runs.
       - name: Authenticated E2E smoke (dashboard tabs + labour form persistence)

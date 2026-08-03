@@ -3,6 +3,7 @@ import "server-only"
 import { sql } from "@/lib/server/db"
 import { buildErrorFingerprint } from "@/lib/server/agents/utils"
 import { logServerWarning } from "@/lib/server/safe-logging"
+import { normalizeTenantContext, runTenantQuery } from "@/lib/server/tenant-db"
 
 type ErrorEventInput = {
   tenantId?: string | null
@@ -37,29 +38,45 @@ export async function logAppErrorEvent(input: ErrorEventInput) {
       message,
     })
 
+  const tenantId = input.tenantId || null
+  // app_error_events carries tenant_id, so RLS is enabled + FORCED on it (script 98). Writing
+  // through the bare client leaves app.tenant_id unset, the WITH CHECK predicate evaluates to
+  // NULL, and every insert is rejected — silently, because the catch below swallows it. That is
+  // exactly what happened in production: error events stopped being recorded entirely.
+  //
+  // Role "owner" here is the app.role GUC the policy reads, not a Postgres role — it satisfies
+  // the policy without needing a BYPASSRLS connection, and it is what lets genuinely
+  // platform-level errors (tenantId === null) be recorded at all. Same shape as
+  // lib/server/security-events.ts, which is why that table kept writing when this one didn't.
+  const tenantContext = normalizeTenantContext(tenantId ?? undefined, "owner")
+
   try {
-    await sql`
-      INSERT INTO app_error_events (
-        tenant_id,
-        source,
-        endpoint,
-        error_code,
-        severity,
-        message,
-        fingerprint,
-        metadata
-      )
-      VALUES (
-        ${input.tenantId || null}::uuid,
-        ${source},
-        ${endpoint},
-        ${errorCode},
-        ${severity},
-        ${message},
-        ${fingerprint},
-        ${JSON.stringify(input.metadata || {})}::jsonb
-      )
-    `
+    await runTenantQuery(
+      sql,
+      tenantContext,
+      sql`
+        INSERT INTO app_error_events (
+          tenant_id,
+          source,
+          endpoint,
+          error_code,
+          severity,
+          message,
+          fingerprint,
+          metadata
+        )
+        VALUES (
+          ${tenantId}::uuid,
+          ${source},
+          ${endpoint},
+          ${errorCode},
+          ${severity},
+          ${message},
+          ${fingerprint},
+          ${JSON.stringify(input.metadata || {})}::jsonb
+        )
+      `,
+    )
   } catch (error) {
     if (!isMissingRelation(error, "app_error_events")) {
       logServerWarning("Error event write failed", error)
