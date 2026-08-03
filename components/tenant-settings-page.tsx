@@ -1182,6 +1182,18 @@ export default function TenantSettingsPage() {
                   <Link href="/settings/reset-password">Change password</Link>
                 </Button>
               </div>
+
+              <div className="flex flex-col gap-3 rounded-2xl border border-border/60 bg-white/90 p-4 shadow-sm sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  <p className="text-sm font-medium text-foreground">Email address</p>
+                  <p className="text-xs text-muted-foreground">
+                    This is your sign-in address and where password resets are sent.
+                  </p>
+                </div>
+                <Button asChild variant="outline" className="bg-white shrink-0">
+                  <Link href="/settings/email">Change email</Link>
+                </Button>
+              </div>
             </CardContent>
           </Card>
         </SettingsGroup>
