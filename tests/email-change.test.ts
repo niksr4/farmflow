@@ -61,6 +61,19 @@ describe("email change tokens", () => {
     expect(getEmailChangeStateError({ consumedAt: null, expiresAt: "2100-01-01T00:00:00Z", nowMs: NOW })).toBeNull()
   })
 
+  it("does not treat a missing or malformed expires_at as expired (known edge case)", () => {
+    // new Date("").getTime() and new Date(undefined).getTime() are both NaN, so
+    // Number.isFinite(expiresAt) is false and the expiry check is skipped entirely — a token
+    // row with a null/malformed expires_at is treated as never expiring rather than rejected.
+    // In practice expires_at is always set by resolveEmailChangeExpiry() at insert time, so this
+    // is currently unreachable via the app's own write path, but it's a silent fail-open if that
+    // ever changes (e.g. a manual DB edit, a future code path that inserts without it). Worth
+    // deciding whether this should fail closed instead. See findings_log.md, files 428-442/729.
+    expect(getEmailChangeStateError({ consumedAt: null, expiresAt: undefined, nowMs: NOW })).toBeNull()
+    expect(getEmailChangeStateError({ consumedAt: null, expiresAt: "", nowMs: NOW })).toBeNull()
+    expect(getEmailChangeStateError({ consumedAt: null, expiresAt: "not-a-date", nowMs: NOW })).toBeNull()
+  })
+
   it("url-encodes the token into the confirmation link", () => {
     expect(buildEmailChangeLink("a b+c")).toContain("token=a%20b%2Bc")
   })

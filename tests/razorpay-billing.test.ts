@@ -126,3 +126,20 @@ describe("razorpay billing helpers", () => {
     })
   })
 })
+
+describe("razorpay billing helpers — known limitations", () => {
+  it("resolves the same plan id regardless of billing cycle (characterisation test)", () => {
+    // resolveRazorpayPlanId's `cycle` ternary is `billingCycle === "monthly" ? "MONTHLY" : "MONTHLY"`
+    // — both branches are identical, so a non-"monthly" cycle silently resolves the same env var
+    // as "monthly" instead of throwing or looking up a distinct *_YEARLY_ID key. Harmless today
+    // because RazorpayBillingCycle only has one member ("monthly"), but it's dead code that would
+    // misroute plan ids the moment a second cycle (e.g. "yearly") is added without also fixing this
+    // ternary. See findings_log.md, files 428-442/729.
+    const env = {
+      RAZORPAY_PLAN_CORE_MONTHLY_ID: "plan_core_monthly_123",
+    }
+    expect(resolveRazorpayPlanId("core", "monthly", env)).toBe("plan_core_monthly_123")
+    // Casting past the type system to simulate a hypothetical future cycle value.
+    expect(resolveRazorpayPlanId("core", "yearly" as unknown as "monthly", env)).toBe("plan_core_monthly_123")
+  })
+})
