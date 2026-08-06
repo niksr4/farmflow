@@ -2,6 +2,7 @@ import { NextResponse } from "next/server"
 import { requireSessionUser } from "@/lib/server/auth"
 import { acceptPrivacyNotice, ensurePrivacySchema } from "@/lib/server/privacy"
 import { getPostHogClient } from "@/lib/posthog-server"
+import { sanitizeRouteError } from "@/lib/server/sanitize-route-error"
 
 export const dynamic = "force-dynamic"
 
@@ -35,7 +36,7 @@ export async function POST() {
     return NextResponse.json({ success: true })
   } catch (error: any) {
     return NextResponse.json(
-      { success: false, error: error.message || "Failed to record privacy notice acceptance" },
+      { success: false, error: sanitizeRouteError(error, "Failed to record privacy notice acceptance") },
       { status: 500 },
     )
   }

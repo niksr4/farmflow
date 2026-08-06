@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server"
 import { requireSessionUser } from "@/lib/server/auth"
 import { ensurePrivacySchema, listImpactUsers } from "@/lib/server/privacy"
+import { sanitizeRouteError } from "@/lib/server/sanitize-route-error"
 
 export const dynamic = "force-dynamic"
 
@@ -30,7 +31,7 @@ export async function GET(request: Request) {
     return NextResponse.json({ success: true, impacted })
   } catch (error: any) {
     return NextResponse.json(
-      { success: false, error: error.message || "Failed to determine impacted users" },
+      { success: false, error: sanitizeRouteError(error, "Failed to determine impacted users") },
       { status: 500 },
     )
   }

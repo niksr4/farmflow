@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server"
 import { requireSessionUser } from "@/lib/server/auth"
 import { ensurePrivacySchema, exportPersonalData } from "@/lib/server/privacy"
+import { sanitizeRouteError } from "@/lib/server/sanitize-route-error"
 
 export const dynamic = "force-dynamic"
 
@@ -22,6 +23,6 @@ export async function GET() {
     const payload = await exportPersonalData(sessionUser)
     return NextResponse.json({ success: true, payload })
   } catch (error: any) {
-    return NextResponse.json({ success: false, error: error.message || "Failed to export data" }, { status: 500 })
+    return NextResponse.json({ success: false, error: sanitizeRouteError(error, "Failed to export data") }, { status: 500 })
   }
 }

@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server"
 import { requireSessionUser } from "@/lib/server/auth"
 import { ensurePrivacySchema, requestDeletion } from "@/lib/server/privacy"
+import { sanitizeRouteError } from "@/lib/server/sanitize-route-error"
 
 export const dynamic = "force-dynamic"
 
@@ -24,6 +25,6 @@ export async function POST(request: Request) {
     await requestDeletion(sessionUser, reason)
     return NextResponse.json({ success: true })
   } catch (error: any) {
-    return NextResponse.json({ success: false, error: error.message || "Failed to request deletion" }, { status: 500 })
+    return NextResponse.json({ success: false, error: sanitizeRouteError(error, "Failed to request deletion") }, { status: 500 })
   }
 }

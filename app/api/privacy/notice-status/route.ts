@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server"
 import { requireSessionUser } from "@/lib/server/auth"
 import { ensurePrivacySchema, getPrivacyStatus } from "@/lib/server/privacy"
+import { sanitizeRouteError } from "@/lib/server/sanitize-route-error"
 
 export const dynamic = "force-dynamic"
 
@@ -19,6 +20,6 @@ export async function GET() {
     const status = await getPrivacyStatus(sessionUser)
     return NextResponse.json({ success: true, status })
   } catch (error: any) {
-    return NextResponse.json({ success: false, error: error.message || "Failed to load privacy status" }, { status: 500 })
+    return NextResponse.json({ success: false, error: sanitizeRouteError(error, "Failed to load privacy status") }, { status: 500 })
   }
 }
