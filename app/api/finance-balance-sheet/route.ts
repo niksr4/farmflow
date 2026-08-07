@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server"
+import { cookies } from "next/headers"
 import { sql } from "@/lib/server/db"
 import { requireModuleAccess, isModuleAccessError } from "@/lib/server/module-access"
 import { normalizeTenantContext, runTenantQuery } from "@/lib/server/tenant-db"
@@ -6,6 +7,10 @@ import { computeNetPnl } from "@/lib/server/pnl"
 
 export const dynamic = "force-dynamic"
 export const revalidate = 0
+
+// Same cookie the header estate selector writes (see /api/locations) -- keeps this view in
+// sync with whatever estate the viewer currently has selected, without a separate control.
+const SELECTED_ESTATE_COOKIE = "farmflow_selected_estate"
 
 const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/
 
@@ -52,6 +57,11 @@ export async function GET(request: Request) {
     const { searchParams } = new URL(request.url)
     const startDateRaw = searchParams.get("startDate")?.trim() || null
     const endDateRaw = searchParams.get("endDate")?.trim() || null
+    const requestedEstate = searchParams.get("estate")?.trim() || null
+    const estate =
+      requestedEstate === null
+        ? (await cookies()).get(SELECTED_ESTATE_COOKIE)?.value || null
+        : requestedEstate || null
 
     if (startDateRaw && !DATE_PATTERN.test(startDateRaw)) {
       return NextResponse.json({ success: false, error: "startDate must be YYYY-MM-DD" }, { status: 400 })
@@ -133,6 +143,12 @@ export async function GET(request: Request) {
             ? sql` AND pick_date <= ${endDate}::date`
             : sql``
 
+    // Reused across every table below that carries location_id -- billing_invoices is the one
+    // exception (no location granularity there) and stays tenant-wide regardless of this filter.
+    const estateClause = estate
+      ? sql` AND location_id IN (SELECT id FROM locations WHERE tenant_id = ${tenantContext.tenantId} AND estate = ${estate})`
+      : sql``
+
     const [
       salesResult,
       otherSalesResult,
@@ -153,6 +169,7 @@ export async function GET(request: Request) {
           FROM sales_records
           WHERE tenant_id = ${tenantContext.tenantId}
             ${salesDateClause}
+            ${estateClause}
         `,
         ["sales_records"],
       ),
@@ -165,6 +182,7 @@ export async function GET(request: Request) {
           FROM other_sales_records
           WHERE tenant_id = ${tenantContext.tenantId}
             ${salesDateClause}
+            ${estateClause}
         `,
         ["other_sales_records"],
       ),
@@ -177,6 +195,7 @@ export async function GET(request: Request) {
           FROM labor_transactions
           WHERE tenant_id = ${tenantContext.tenantId}
             ${laborDateClause}
+            ${estateClause}
         `,
         ["labor_transactions"],
       ),
@@ -189,6 +208,7 @@ export async function GET(request: Request) {
           FROM expense_transactions
           WHERE tenant_id = ${tenantContext.tenantId}
             ${expenseDateClause}
+            ${estateClause}
         `,
         ["expense_transactions"],
       ),
@@ -201,6 +221,7 @@ export async function GET(request: Request) {
           FROM picking_records
           WHERE tenant_id = ${tenantContext.tenantId}
             ${pickingDateClause}
+            ${estateClause}
         `,
         ["picking_records"],
       ),
@@ -232,6 +253,7 @@ export async function GET(request: Request) {
           FROM transaction_history
           WHERE tenant_id = ${tenantContext.tenantId}
             ${inventoryDateClause}
+            ${estateClause}
         `,
         ["transaction_history"],
       ),
@@ -263,6 +285,7 @@ export async function GET(request: Request) {
           FROM receivables
           WHERE tenant_id = ${tenantContext.tenantId}
             ${receivablesDateClause}
+            ${estateClause}
         `,
         ["receivables"],
       ),
@@ -285,6 +308,7 @@ export async function GET(request: Request) {
             COUNT(*)::int AS total_count
           FROM receivables
           WHERE tenant_id = ${tenantContext.tenantId}
+            ${estateClause}
         `,
         ["receivables"],
       ),
@@ -433,6 +457,7 @@ export async function GET(request: Request) {
         endDate,
         isFiltered: Boolean(startDate || endDate),
       },
+      estate,
       totals: {
         inflowBooked: totalRevenueBooked,
         outflowBooked: totalOutflow,

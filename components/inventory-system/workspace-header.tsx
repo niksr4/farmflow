@@ -26,6 +26,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { cn } from "@/lib/utils"
 import { DASHBOARD_LAUNCHER_TAB } from "@/components/inventory-system/constants"
 
@@ -48,7 +49,13 @@ type Props = {
   onToggleTheme: () => void
   onOpenSearch: () => void
   onOpenSidebar: () => void
+  /** Only tenants running multiple estates under one account ever have more than one entry. */
+  availableEstates: string[]
+  selectedEstate: string | null
+  onEstateChange: (estate: string | null) => void
 }
+
+const ALL_ESTATES_VALUE = "__all__"
 
 export default function WorkspaceHeader({
   isMobile,
@@ -67,8 +74,33 @@ export default function WorkspaceHeader({
   onToggleTheme,
   onOpenSearch,
   onOpenSidebar,
+  availableEstates,
+  selectedEstate,
+  onEstateChange,
 }: Props) {
   const isAdminOrOwner = isAdmin || isOwner
+  const showEstateSelector = availableEstates.length > 1
+  const estateSelector = showEstateSelector ? (
+    <Select
+      value={selectedEstate || ALL_ESTATES_VALUE}
+      onValueChange={(value) => onEstateChange(value === ALL_ESTATES_VALUE ? null : value)}
+    >
+      <SelectTrigger
+        className="h-8 w-auto min-w-[9rem] gap-1.5 border-emerald-200 bg-emerald-50/60 px-2.5 text-xs font-medium text-emerald-800 dark:border-emerald-500/25 dark:bg-emerald-500/10 dark:text-emerald-300"
+        aria-label="Select estate"
+      >
+        <SelectValue placeholder="All estates" />
+      </SelectTrigger>
+      <SelectContent>
+        <SelectItem value={ALL_ESTATES_VALUE}>All estates</SelectItem>
+        {availableEstates.map((estateOption) => (
+          <SelectItem key={estateOption} value={estateOption}>
+            {estateOption}
+          </SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
+  ) : null
   return (
     <header className={cn(
       "relative mb-4 overflow-hidden",
@@ -152,6 +184,15 @@ export default function WorkspaceHeader({
                 <div className="px-2 pb-2">
                   <Badge variant="outline" className="text-[11px] font-medium">{roleBadgeLabel}</Badge>
                 </div>
+                {showEstateSelector && (
+                  <>
+                    <DropdownMenuSeparator />
+                    <div className="px-2 py-2">
+                      <p className="mb-1.5 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Estate</p>
+                      {estateSelector}
+                    </div>
+                  </>
+                )}
                 <DropdownMenuSeparator />
                 {isAdminOrOwner && (
                   <DropdownMenuItem asChild>
@@ -196,6 +237,7 @@ export default function WorkspaceHeader({
                 Preview
               </Badge>
             )}
+            {showEstateSelector && <div className="ml-1">{estateSelector}</div>}
           </div>
           <div className="flex items-center gap-1 shrink-0">
             <Button

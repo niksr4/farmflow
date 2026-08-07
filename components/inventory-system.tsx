@@ -114,6 +114,7 @@ import {
   LOCATION_ALL,
   LOCATION_UNASSIGNED,
   PREVIEW_TENANT_COOKIE,
+  SELECTED_ESTATE_COOKIE,
   UNASSIGNED_LABEL,
 } from "@/components/inventory-system/constants"
 import type {
@@ -343,6 +344,32 @@ export default function InventorySystem() {
     loading: false,
   })
   const [locations, setLocations] = useState<LocationOption[]>([])
+  const [selectedEstate, setSelectedEstate] = useState<string | null>(() => {
+    if (typeof document === "undefined") return null
+    const match = document.cookie.match(new RegExp(`(?:^|; )${SELECTED_ESTATE_COOKIE}=([^;]*)`))
+    return match ? decodeURIComponent(match[1]) : null
+  })
+  // Distinct, non-null estate tags -- only tenants running multiple estates under one
+  // account (e.g. Medappa Estates: Tirtha + Citrus Grove) ever have more than one, so this
+  // stays empty (and the selector stays hidden) for every other tenant with zero code changes.
+  const availableEstates = useMemo(
+    () => Array.from(new Set(locations.map((loc) => loc.estate).filter((value): value is string => Boolean(value)))),
+    [locations],
+  )
+  const canSelectEstate = availableEstates.length > 1
+  // Narrows every location dropdown across the app (processing, dispatch, labour, expenses,
+  // inventory, sales) to just the current estate's blocks -- a convenience filter, not a
+  // server-enforced restriction. Falls back to the full list whenever nothing is selected or
+  // the tenant only has one estate.
+  const estateFilteredLocations = useMemo(
+    () => (canSelectEstate && selectedEstate ? locations.filter((loc) => loc.estate === selectedEstate) : locations),
+    [canSelectEstate, selectedEstate, locations],
+  )
+  useEffect(() => {
+    if (selectedEstate && locations.length > 0 && !availableEstates.includes(selectedEstate)) {
+      setSelectedEstate(null)
+    }
+  }, [selectedEstate, availableEstates, locations.length])
   const [selectedLocationId, setSelectedLocationId] = useState<string>(LOCATION_ALL)
   const [transactionLocationId, setTransactionLocationId] = useState<string>(LOCATION_UNASSIGNED)
   const [inventoryEditLocationId, setInventoryEditLocationId] = useState<string>(LOCATION_UNASSIGNED)
@@ -665,6 +692,18 @@ export default function InventorySystem() {
     }
     document.cookie = `${PREVIEW_TENANT_COOKIE}=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT; SameSite=Lax`
   }, [isPreviewMode, previewTenantId])
+
+  // Server-side switch for the ~12 tabs that fetch /api/locations independently rather than
+  // through the shared `locations` state below -- see that route for the read side. 180 days
+  // so a field device holds its estate across normal day-to-day use.
+  useEffect(() => {
+    if (typeof document === "undefined") return
+    if (selectedEstate) {
+      document.cookie = `${SELECTED_ESTATE_COOKIE}=${encodeURIComponent(selectedEstate)}; path=/; max-age=${180 * 24 * 60 * 60}; SameSite=Lax`
+      return
+    }
+    document.cookie = `${SELECTED_ESTATE_COOKIE}=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT; SameSite=Lax`
+  }, [selectedEstate])
 
   const loadWorkspaceBootstrap = useCallback(async () => {
     if (!tenantId || isOwner || isPreviewMode) {
@@ -3956,7 +3995,7 @@ export default function InventorySystem() {
       hasMovementItemTypes={hasMovementItemTypes}
       allItemTypesForDropdown={allItemTypesForDropdown}
       selectedMovementUnit={selectedMovementUnit}
-      locations={locations}
+      locations={estateFilteredLocations}
       canShowAccounts={canShowAccounts}
       onClose={() => setIsMovementDrawerOpen(false)}
       onFieldChange={handleFieldChange}
@@ -4057,6 +4096,9 @@ export default function InventorySystem() {
           onToggleTheme={() => setTheme(theme === "dark" ? "light" : "dark")}
           onOpenSearch={() => setSearchOpen(true)}
           onOpenSidebar={() => setIsMobileSidebarOpen(true)}
+          availableEstates={availableEstates}
+          selectedEstate={selectedEstate}
+          onEstateChange={setSelectedEstate}
         />
         {/* ── Mobile sidebar drawer ── */}
         {isMobile && (
@@ -4991,7 +5033,7 @@ export default function InventorySystem() {
         )}
         <InventoryDialogs
           isMobile={isMobile}
-          locations={locations}
+          locations={estateFilteredLocations}
           preventNegativeKey={preventNegativeKey}
           preventNumberScrollChange={preventNumberScrollChange}
           coerceNonNegativeNumber={coerceNonNegativeNumber}

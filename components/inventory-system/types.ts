@@ -12,6 +12,7 @@ export interface LocationOption {
   id: string
   name: string
   code?: string | null
+  estate?: string | null
 }
 
 export interface WorkspaceBootstrapPayload {

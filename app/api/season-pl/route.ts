@@ -1,4 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server"
+import { cookies } from "next/headers"
 import { sql, accountsSql } from "@/lib/server/db"
 import { requireModuleAccess, isModuleAccessError } from "@/lib/server/module-access"
 import { normalizeTenantContext, runTenantQueries } from "@/lib/server/tenant-db"
@@ -6,11 +7,16 @@ import { normalizeTenantContext, runTenantQueries } from "@/lib/server/tenant-db
 export const dynamic = "force-dynamic"
 export const revalidate = 0
 
+// Same cookie the header estate selector writes (see /api/locations) -- keeps this view in
+// sync with whatever estate the viewer currently has selected, without a separate control.
+const SELECTED_ESTATE_COOKIE = "farmflow_selected_estate"
+
 const toRows = (r: unknown): any[] => (Array.isArray(r) ? r : (r as any)?.rows ?? [])
 
 export type SeasonPLResponse = {
   success: boolean
   period: { start: string; end: string }
+  estate: string | null
   revenue: {
     totalSalesInr: number
     totalKgSold: number
@@ -60,12 +66,22 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url)
     const start = searchParams.get("start")
     const end = searchParams.get("end")
+    const requestedEstateParam = searchParams.get("estate")?.trim() || null
+    const estate =
+      requestedEstateParam === null
+        ? (await cookies()).get(SELECTED_ESTATE_COOKIE)?.value || null
+        : requestedEstateParam || null
 
     if (!start || !end) {
       return NextResponse.json({ success: false, error: "start and end date params required" }, { status: 400 })
     }
 
     const tenantId = tenantContext.tenantId
+    // paramIndex is the placeholder number `estate` lands on in that specific query's params
+    // array -- varies per query since not all of them already use $2/$3. column lets the
+    // expense_transactions join qualify it as et.location_id instead of a bare reference.
+    const estateFilter = (paramIndex: number, column = "location_id") =>
+      estate ? ` AND ${column} IN (SELECT id FROM locations WHERE tenant_id = $1 AND estate = $${paramIndex})` : ""
 
     const tenantRow = toRows(await sql.query(
       `SELECT COALESCE(bag_weight_kg, 50) AS bag_weight_kg FROM tenants WHERE id = $1 LIMIT 1`,
@@ -89,9 +105,10 @@ export async function GET(request: NextRequest) {
          WHERE tenant_id = $1
            AND sale_date >= $2::date
            AND sale_date <= $3::date
+           ${estateFilter(4)}
          GROUP BY buyer_name
          ORDER BY total_inr DESC`,
-        [tenantId, start, end],
+        estate ? [tenantId, start, end, estate] : [tenantId, start, end],
       ),
 
       // Labour costs
@@ -102,8 +119,9 @@ export async function GET(request: NextRequest) {
          FROM labor_transactions
          WHERE tenant_id = $1
            AND deployment_date >= $2::date
-           AND deployment_date <= $3::date`,
-        [tenantId, start, end],
+           AND deployment_date <= $3::date
+           ${estateFilter(4)}`,
+        estate ? [tenantId, start, end, estate] : [tenantId, start, end],
       ),
 
       // Other expenses (grouped by code for category breakdown)
@@ -118,9 +136,10 @@ export async function GET(request: NextRequest) {
          WHERE et.tenant_id = $1
            AND et.entry_date >= $2::date
            AND et.entry_date <= $3::date
+           ${estateFilter(4, "et.location_id")}
          GROUP BY et.code, aa.activity
          ORDER BY total_amount DESC`,
-        [tenantId, start, end],
+        estate ? [tenantId, start, end, estate] : [tenantId, start, end],
       ),
 
       // Processing summary (cherry → dry parchment)
@@ -133,8 +152,9 @@ export async function GET(request: NextRequest) {
          FROM processing_records
          WHERE tenant_id = $1
            AND process_date >= $2::date
-           AND process_date <= $3::date`,
-        [tenantId, start, end],
+           AND process_date <= $3::date
+           ${estateFilter(4)}`,
+        estate ? [tenantId, start, end, estate] : [tenantId, start, end],
       ),
 
     ])
@@ -195,13 +215,15 @@ export async function GET(request: NextRequest) {
       sql.query(
         `SELECT COALESCE(SUM(NULLIF(kgs_received, 0)), 0) AS total_kg_received
          FROM dispatch_records
-         WHERE tenant_id = $1 AND dispatch_date >= $2::date AND dispatch_date <= $3::date`,
-        [tenantId, start, end],
+         WHERE tenant_id = $1 AND dispatch_date >= $2::date AND dispatch_date <= $3::date
+           ${estateFilter(4)}`,
+        estate ? [tenantId, start, end, estate] : [tenantId, start, end],
       ),
       sql.query(
         `SELECT COALESCE(SUM(total_cost), 0) AS total_inventory_value
-         FROM current_inventory WHERE tenant_id = $1`,
-        [tenantId],
+         FROM current_inventory WHERE tenant_id = $1
+           ${estateFilter(2)}`,
+        estate ? [tenantId, estate] : [tenantId],
       ),
     ]).catch(() => [[{ total_kg_received: 0 }], [{ total_inventory_value: 0 }]])
     const dispatchData = toRows(dispatchRows)[0] ?? {}
@@ -221,6 +243,7 @@ export async function GET(request: NextRequest) {
     const response: SeasonPLResponse = {
       success: true,
       period: { start, end },
+      estate,
       revenue: {
         totalSalesInr,
         totalKgSold,

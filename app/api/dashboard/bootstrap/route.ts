@@ -13,6 +13,7 @@ const serializeLocation = (row: Record<string, unknown>) => ({
   id: String(row.id || ""),
   name: String(row.name || ""),
   code: row.code ? String(row.code) : null,
+  estate: row.estate ? String(row.estate) : null,
 })
 
 // Billing enforcement is intentionally deferred (see CLAUDE.md "Razorpay Billing").
@@ -43,7 +44,7 @@ export async function GET() {
         WHERE tenant_id = ${tenantId}
       `,
       sql`
-        SELECT id, name, code
+        SELECT id, name, code, estate
         FROM locations
         WHERE tenant_id = ${tenantId}
         ORDER BY name ASC

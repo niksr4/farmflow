@@ -31,6 +31,7 @@ export interface LocationRow {
   id: string
   name: string
   code: string
+  estate?: string | null
 }
 
 export interface PrivacyStatus {

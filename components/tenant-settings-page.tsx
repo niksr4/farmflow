@@ -510,7 +510,9 @@ export default function TenantSettingsPage() {
   const loadLocations = useCallback(async () => {
     if (!tenantId) return
     try {
-      const response = await fetch("/api/locations")
+      // scope=all: this settings page manages every block, regardless of the estate
+      // selector's current value elsewhere in the app.
+      const response = await fetch("/api/locations?scope=all")
       const data = await response.json()
       if (!response.ok || !data.success) {
         throw new Error(data.error || "Failed to load locations")
@@ -520,6 +522,7 @@ export default function TenantSettingsPage() {
             id: String(location?.id || ""),
             name: String(location?.name || ""),
             code: String(location?.code || ""),
+            estate: location?.estate ? String(location.estate) : null,
           }))
         : []
       setLocations(nextLocations)

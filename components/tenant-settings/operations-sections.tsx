@@ -166,13 +166,14 @@ export function LocationsSection({
               <TableRow>
                 <TableHead>Name</TableHead>
                 <TableHead>Code</TableHead>
+                <TableHead>Estate</TableHead>
                 <TableHead>Actions</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {locations.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={3} className="text-center text-muted-foreground">
+                  <TableCell colSpan={4} className="text-center text-muted-foreground">
                     No locations found.
                   </TableCell>
                 </TableRow>
@@ -199,6 +200,7 @@ export function LocationsSection({
                         location.code || "-"
                       )}
                     </TableCell>
+                    <TableCell className="text-muted-foreground">{location.estate || "-"}</TableCell>
                     <TableCell>
                       {editingLocationId === location.id ? (
                         <div className="flex gap-2">

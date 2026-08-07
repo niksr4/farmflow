@@ -11,6 +11,9 @@ export const UNASSIGNED_LABEL = "Unassigned (legacy)"
 // Used in transaction creation pickers — avoids "legacy" language for new entries
 export const UNASSIGNED_LABEL_PICKER = "No location"
 export const PREVIEW_TENANT_COOKIE = "farmflow_preview_tenant"
+// Read server-side by /api/locations and /api/dashboard/bootstrap to narrow the location list
+// to one estate for tenants running multiple under one account (see LocationOption.estate).
+export const SELECTED_ESTATE_COOKIE = "farmflow_selected_estate"
 export const DASHBOARD_LAUNCHER_TAB = "launcher"
 export const DRILLDOWN_TXN_SEARCH_PARAM = "txnSearch"
 export const DRILLDOWN_ITEM_PARAM = "itemType"
