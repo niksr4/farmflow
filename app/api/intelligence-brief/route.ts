@@ -510,7 +510,11 @@ export async function GET(request: Request) {
     const highlights: string[] = []
     const actions: ModuleAction[] = []
 
-    if (reconciliation) {
+    // Only surface reconciliation highlights/actions once there is actual dispatch or sales
+    // movement in the window — with both tables empty every figure is a real zero, and telling
+    // a brand-new tenant to "reconcile dispatch" before they have logged any processing is noise,
+    // not guidance.
+    if (reconciliation && (reconciliation.totalReceivedKgs > 0 || reconciliation.totalSoldKgs > 0)) {
       if (reconciliation.overdrawnKgs > 0) {
         highlights.push(
           `Overdrawn by ${Math.round(reconciliation.overdrawnKgs).toLocaleString()} KGs across ${reconciliation.overdrawnSlots.length} coffee slots.`,
