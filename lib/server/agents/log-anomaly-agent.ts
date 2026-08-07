@@ -100,7 +100,50 @@ const isOperationalPermissionChange = (cluster: Pick<EventCluster, "source" | "c
   return code === "permission_change" && source.startsWith("admin/")
 }
 
-const inferLikelyCause = (cluster: {
+/**
+ * Events emitted when a user recovers their own account. Not faults — this is the auth system
+ * working as designed.
+ */
+const AUTH_RECOVERY_CODES = new Set([
+  "auth_login_failure",
+  "auth_password_reset_requested",
+  "auth_password_reset_completed",
+  "auth_email_change_requested",
+  "auth_email_change_completed",
+])
+
+/**
+ * A handful of these is one person who forgot a password; a flood is credential stuffing.
+ * Volume is the only discriminator available here, and deliberately so: auth_login_failure
+ * carries NO tenant_id (the login failed, so no tenant ever resolved — verified against
+ * production, 0 of 5 rows over three days), which rules out tenant-spread as a signal.
+ *
+ * Sized against a 6-tenant, 11-user install where a confused admin generated 4 failures across
+ * two sittings. An actual attack on an install this size produces far more than this and still
+ * alerts.
+ */
+const ROUTINE_AUTH_RECOVERY_MAX_EVENTS = 12
+
+export const isRoutineAuthRecovery = (cluster: Pick<EventCluster, "code" | "currentCount" | "severity">) => {
+  if (!AUTH_RECOVERY_CODES.has(String(cluster.code || "").trim().toLowerCase())) return false
+  if (cluster.severity === "critical" || cluster.severity === "high") return false
+  return cluster.currentCount <= ROUTINE_AUTH_RECOVERY_MAX_EVENTS
+}
+
+/**
+ * Known-benign clusters: still recorded and still counted, just not worth waking anyone for.
+ *
+ * The cost of getting this wrong in the lenient direction is alert fatigue, and that is not a
+ * cosmetic problem here — a routine password reset and the opening phase of a credential
+ * stuffing run produce the same event codes. If the routine case pages every time, the alert
+ * stops being read, and the real one arrives looking exactly like the noise that has been
+ * ignored for weeks.
+ */
+export const isKnownBenignCluster = (
+  cluster: Pick<EventCluster, "source" | "code" | "currentCount" | "severity">,
+) => isOperationalPermissionChange(cluster) || isRoutineAuthRecovery(cluster)
+
+export const inferLikelyCause = (cluster: {
   code: string
   message: string
   endpoint: string
@@ -108,6 +151,13 @@ const inferLikelyCause = (cluster: {
   severity: AnomalySeverity
 }) => {
   const text = `${cluster.code} ${cluster.message} ${cluster.endpoint} ${cluster.source}`.toLowerCase()
+  // Checked before the keyword cascade: these codes match none of the branches below and were
+  // falling through to the catch-all, which told the reader a forgotten password was "likely an
+  // application logic regression". It is not a regression, it is not unhandled input, and saying
+  // so sends whoever reads the alert looking for a bug that does not exist.
+  if (AUTH_RECOVERY_CODES.has(String(cluster.code || "").trim().toLowerCase())) {
+    return "Account recovery activity (failed sign-in, password reset or email change). Normal at low volume; investigate as credential stuffing only if the count is high or spread across many accounts."
+  }
   if (text.includes("does not exist") || text.includes("42p01")) {
     return "Likely missing migration or schema drift between environments."
   }
@@ -378,12 +428,10 @@ export async function runLogAnomalyAgent(input?: {
     const clusters = buildClusters(events)
     const aiBrief = await buildAiDailyBrief(clusters)
     const suppressedOperationalAlertCandidates = clusters.filter(
-      (cluster) =>
-        (cluster.isNewSinceYesterday || cluster.severity === "critical") && isOperationalPermissionChange(cluster),
+      (cluster) => (cluster.isNewSinceYesterday || cluster.severity === "critical") && isKnownBenignCluster(cluster),
     )
     const alertClusters = clusters.filter(
-      (cluster) =>
-        (cluster.isNewSinceYesterday || cluster.severity === "critical") && !isOperationalPermissionChange(cluster),
+      (cluster) => (cluster.isNewSinceYesterday || cluster.severity === "critical") && !isKnownBenignCluster(cluster),
     )
 
     const summary = {

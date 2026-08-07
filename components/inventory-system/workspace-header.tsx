@@ -80,15 +80,12 @@ export default function WorkspaceHeader({
 }: Props) {
   const isAdminOrOwner = isAdmin || isOwner
   const showEstateSelector = availableEstates.length > 1
-  const estateSelector = showEstateSelector ? (
+  const renderEstateSelector = (triggerClassName: string) => (
     <Select
       value={selectedEstate || ALL_ESTATES_VALUE}
       onValueChange={(value) => onEstateChange(value === ALL_ESTATES_VALUE ? null : value)}
     >
-      <SelectTrigger
-        className="h-8 w-auto min-w-[9rem] gap-1.5 border-emerald-200 bg-emerald-50/60 px-2.5 text-xs font-medium text-emerald-800 dark:border-emerald-500/25 dark:bg-emerald-500/10 dark:text-emerald-300"
-        aria-label="Select estate"
-      >
+      <SelectTrigger className={triggerClassName} aria-label="Select estate">
         <SelectValue placeholder="All estates" />
       </SelectTrigger>
       <SelectContent>
@@ -100,7 +97,19 @@ export default function WorkspaceHeader({
         ))}
       </SelectContent>
     </Select>
-  ) : null
+  )
+  const estateSelector = showEstateSelector
+    ? renderEstateSelector(
+        "h-8 w-auto min-w-[9rem] gap-1.5 border-emerald-200 bg-emerald-50/60 px-2.5 text-xs font-medium text-emerald-800 dark:border-emerald-500/25 dark:bg-emerald-500/10 dark:text-emerald-300",
+      )
+    : null
+  // Tighter than the desktop trigger -- no min-width, smaller text, truncates -- since this one
+  // sits in a ~40px-tall mobile bar alongside the logo, not a spacious breadcrumb row.
+  const compactEstateSelector = showEstateSelector
+    ? renderEstateSelector(
+        "h-8 w-auto max-w-[128px] gap-1 border-emerald-200 bg-emerald-50/60 px-2 text-[11px] font-medium text-emerald-800 dark:border-emerald-500/25 dark:bg-emerald-500/10 dark:text-emerald-300 [&>span]:truncate",
+      )
+    : null
   return (
     <header className={cn(
       "relative mb-4 overflow-hidden",
@@ -140,14 +149,15 @@ export default function WorkspaceHeader({
                   className="h-7 w-auto"
                 />
               </button>
-              {!isPreviewMode && estateName && (
+              {!isPreviewMode && estateName && !showEstateSelector && (
                 <span className="hidden text-sm font-semibold text-emerald-700 sm:block truncate max-w-[140px]">
                   {estateName}
                 </span>
               )}
             </div>
           </div>
-          <div className="flex items-center gap-1">
+          <div className="flex min-w-0 items-center gap-1.5">
+            {compactEstateSelector}
             <Button
               variant="ghost"
               size="sm"
@@ -184,15 +194,6 @@ export default function WorkspaceHeader({
                 <div className="px-2 pb-2">
                   <Badge variant="outline" className="text-[11px] font-medium">{roleBadgeLabel}</Badge>
                 </div>
-                {showEstateSelector && (
-                  <>
-                    <DropdownMenuSeparator />
-                    <div className="px-2 py-2">
-                      <p className="mb-1.5 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Estate</p>
-                      {estateSelector}
-                    </div>
-                  </>
-                )}
                 <DropdownMenuSeparator />
                 {isAdminOrOwner && (
                   <DropdownMenuItem asChild>

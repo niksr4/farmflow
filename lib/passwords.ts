@@ -71,9 +71,18 @@ export function verifyPassword(password: string, storedHash: string): VerifyResu
   }
 
   if (storedScheme === "legacy_sha256") {
-    const normalizedStored = String(storedHash).trim()
+    const normalizedStored = String(storedHash).trim().toLowerCase()
     const legacyHash = createHash("sha256").update(password).digest("hex")
-    return { matches: normalizedStored.toLowerCase() === legacyHash, needsRehash: true }
+    // Constant-time, like the scrypt branch above. `===` on strings short-circuits at the first
+    // differing character, so comparison time leaks how many leading hex digits a guess got
+    // right — enough, in principle, to reconstruct the stored digest byte by byte without ever
+    // guessing the password. Both operands reach here as 64 hex chars (classifyStoredPasswordHash
+    // only returns legacy_sha256 for SHA256_HEX_PATTERN), so both decode to 32 bytes and
+    // safeEqual's length guard is never the thing doing the rejecting.
+    return {
+      matches: safeEqual(Buffer.from(normalizedStored, "hex"), Buffer.from(legacyHash, "hex")),
+      needsRehash: true,
+    }
   }
 
   // Plaintext-stored passwords are never accepted for login. Production has none (verified),
