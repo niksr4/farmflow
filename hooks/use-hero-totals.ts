@@ -20,7 +20,6 @@ type Params = {
   canShowCuring: boolean
   canShowQuality: boolean
   canShowPepper: boolean
-  canShowRubber: boolean
   canShowRainfall: boolean
   canShowSeason: boolean
 }
@@ -33,7 +32,6 @@ export type HeroTotals = {
   curingHeroTotals: { totalRecords: number; totalOutputKg: number; avgDryingDays: number; avgMoistureDrop: number; loading: boolean; error: string | null }
   qualityHeroTotals: { totalRecords: number; avgCupScore: number; avgOutturnPct: number; avgDefects: number; loading: boolean; error: string | null }
   pepperHeroTotals: { totalRecords: number; totalPickedKg: number; totalDryKg: number; avgDryPercent: number; loading: boolean; error: string | null }
-  rubberHeroTotals: { totalRecords: number; totalLatexKg: number; totalSheetsKg: number; avgDrcPct: number; loading: boolean; error: string | null }
   rainfallHeroTotals: { totalRecords: number; totalInches: number; latestDate: string | null; loading: boolean; error: string | null }
   receivablesHeroTotals: { totalInvoiced: number; totalOutstanding: number; totalOverdue: number; totalPaid: number; totalCount: number; loading: boolean; error: string | null }
   exceptionsSummary: { count: number; highlights: string[]; alerts: ExceptionSummaryAlert[] }
@@ -56,7 +54,6 @@ export function useHeroTotals({
   canShowCuring,
   canShowQuality,
   canShowPepper,
-  canShowRubber,
   canShowRainfall,
   canShowSeason,
 }: Params): HeroTotals {
@@ -67,7 +64,6 @@ export function useHeroTotals({
   const [curingHeroTotals, setCuringHeroTotals] = useState({ totalRecords: 0, totalOutputKg: 0, avgDryingDays: 0, avgMoistureDrop: 0, loading: false, error: null as string | null })
   const [qualityHeroTotals, setQualityHeroTotals] = useState({ totalRecords: 0, avgCupScore: 0, avgOutturnPct: 0, avgDefects: 0, loading: false, error: null as string | null })
   const [pepperHeroTotals, setPepperHeroTotals] = useState({ totalRecords: 0, totalPickedKg: 0, totalDryKg: 0, avgDryPercent: 0, loading: false, error: null as string | null })
-  const [rubberHeroTotals, setRubberHeroTotals] = useState({ totalRecords: 0, totalLatexKg: 0, totalSheetsKg: 0, avgDrcPct: 0, loading: false, error: null as string | null })
   const [rainfallHeroTotals, setRainfallHeroTotals] = useState({ totalRecords: 0, totalInches: 0, latestDate: null as string | null, loading: false, error: null as string | null })
   const [receivablesHeroTotals, setReceivablesHeroTotals] = useState({ totalInvoiced: 0, totalOutstanding: 0, totalOverdue: 0, totalPaid: 0, totalCount: 0, loading: false, error: null as string | null })
   const [exceptionsSummary, setExceptionsSummary] = useState<{ count: number; highlights: string[]; alerts: ExceptionSummaryAlert[] }>({ count: 0, highlights: [], alerts: [] })
@@ -84,7 +80,6 @@ export function useHeroTotals({
   const curingLoadedRef = useRef<string | null>(null)
   const qualityLoadedRef = useRef<string | null>(null)
   const pepperLoadedRef = useRef<string | null>(null)
-  const rubberLoadedRef = useRef<string | null>(null)
   const rainfallLoadedRef = useRef<string | null>(null)
   const exceptionsLoadedRef = useRef<string | null>(null)
 
@@ -374,47 +369,6 @@ export function useHeroTotals({
   }, [tenantId, canShowPepper, currentFiscalYear.endDate, currentFiscalYear.startDate, shouldLoadHomeMetrics])
 
   useEffect(() => {
-    if (!tenantId || !canShowRubber) return
-    if (!shouldLoadHomeMetrics) return
-    if (rubberLoadedRef.current === tenantId) return
-    const controller = new AbortController()
-    const load = async () => {
-      setRubberHeroTotals((prev) => ({ ...prev, loading: true, error: null }))
-      try {
-        const params = new URLSearchParams({ fiscalYearStart: currentFiscalYear.startDate, fiscalYearEnd: currentFiscalYear.endDate })
-        const res = await fetch(`/api/rubber-records?${params.toString()}`, { signal: controller.signal })
-        const json = await res.json().catch(() => ({}))
-        if (!res.ok || !json?.success) throw new Error(json?.error || "Failed to load rubber totals")
-        const records = Array.isArray(json.records) ? json.records : []
-        const totals = records.reduce(
-          (acc: { latex: number; sheets: number; drcTotal: number; drcCount: number }, record: any) => {
-            const latexKg = Number(record?.latex_kg)
-            if (Number.isFinite(latexKg)) acc.latex += latexKg
-            const sheetsKg = Number(record?.sheets_kg)
-            if (Number.isFinite(sheetsKg)) acc.sheets += sheetsKg
-            const drcPct = Number(record?.drc_pct)
-            if (Number.isFinite(drcPct) && drcPct > 0) { acc.drcTotal += drcPct; acc.drcCount += 1 }
-            return acc
-          },
-          { latex: 0, sheets: 0, drcTotal: 0, drcCount: 0 },
-        )
-        if (!controller.signal.aborted) {
-          setRubberHeroTotals({
-            totalRecords: records.length, totalLatexKg: totals.latex, totalSheetsKg: totals.sheets,
-            avgDrcPct: totals.drcCount ? totals.drcTotal / totals.drcCount : 0,
-            loading: false, error: null,
-          })
-          rubberLoadedRef.current = tenantId
-        }
-      } catch (error: any) {
-        if (!controller.signal.aborted) setRubberHeroTotals((prev) => ({ ...prev, loading: false, error: error?.message || "Failed to load rubber totals" }))
-      }
-    }
-    load()
-    return () => controller.abort()
-  }, [tenantId, canShowRubber, currentFiscalYear.endDate, currentFiscalYear.startDate, shouldLoadHomeMetrics])
-
-  useEffect(() => {
     if (!tenantId || !canShowRainfall) return
     if (!shouldLoadHomeMetrics) return
     if (rainfallLoadedRef.current === tenantId) return
@@ -497,7 +451,7 @@ export function useHeroTotals({
 
   return {
     processingTotals, dispatchHeroTotals, salesHeroTotals, otherSalesHeroTotals,
-    curingHeroTotals, qualityHeroTotals, pepperHeroTotals, rubberHeroTotals,
+    curingHeroTotals, qualityHeroTotals, pepperHeroTotals,
     rainfallHeroTotals, receivablesHeroTotals,
     exceptionsSummary, exceptionsLoading, exceptionsError,
   }

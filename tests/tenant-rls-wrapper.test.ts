@@ -36,7 +36,7 @@ const TENANT_TABLES = [
   "dispatch_records", "document_records", "expense_inventory_links", "expense_transactions",
   "import_jobs", "journal_entries", "labor_transactions", "locations", "other_sales_records",
   "pepper_records", "picking_records", "privacy_requests", "processing_records",
-  "quality_grading_records", "rainfall_records", "receivables", "rubber_records",
+  "quality_grading_records", "rainfall_records", "receivables",
   "sales_records", "security_events", "tenant_modules", "tenant_weekly_metrics",
   "transaction_history", "user_modules", "worker_ledger",
 ]

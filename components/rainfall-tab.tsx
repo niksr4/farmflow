@@ -1,6 +1,7 @@
 "use client"
 
 import { useEffect, useMemo, useState, type ChangeEvent } from "react"
+import Link from "next/link"
 import { Bar, BarChart, CartesianGrid, Line, LineChart, XAxis, YAxis } from "recharts"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -11,7 +12,7 @@ import { FieldLabel } from "@/components/ui/field-label"
 import { Calendar } from "@/components/ui/calendar"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { toast } from "@/components/ui/use-toast"
-import { CalendarIcon, ChevronLeft, ChevronRight, CloudRain, Download, Pencil, Trash2 } from "lucide-react"
+import { CalendarIcon, ChevronLeft, ChevronRight, CloudRain, Download, Pencil, Trash2, Upload } from "lucide-react"
 import { addYears, format, subYears } from "date-fns"
 import { useAuth } from "@/hooks/use-auth"
 import { useLocale } from "@/components/locale-provider"
@@ -1058,10 +1059,18 @@ export default function RainfallTab({ username, showDataToolsControls = false }:
               <p className="text-xs text-stone-400 dark:text-stone-500">Pattern intelligence from rainfall logs and rolling trend signals.</p>
             </div>
             {showDataToolsControls && (
-              <Button onClick={exportToCSV} variant="outline" size="sm" className="gap-2 bg-transparent">
-                <Download className="h-3.5 w-3.5" />
-                Export CSV
-              </Button>
+              <div className="flex gap-2">
+                <Button asChild variant="outline" size="sm" className="gap-2 bg-transparent">
+                  <Link href="/settings/import?dataset=rainfall">
+                    <Upload className="h-3.5 w-3.5" />
+                    Upload records
+                  </Link>
+                </Button>
+                <Button onClick={exportToCSV} variant="outline" size="sm" className="gap-2 bg-transparent">
+                  <Download className="h-3.5 w-3.5" />
+                  Export CSV
+                </Button>
+              </div>
             )}
           </div>
         </div>

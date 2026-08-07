@@ -11,7 +11,7 @@
 
 import {
   Leaf, History, AlertTriangle, TrendingUp, Receipt, Factory,
-  CheckCircle2, CloudRain, Truck, Users, NotebookPen, Droplets,
+  CheckCircle2, CloudRain, Truck, Users, NotebookPen,
 } from "lucide-react"
 import { formatCurrency, formatNumber } from "@/lib/format"
 import { formatDate } from "@/components/inventory-system/utils"
@@ -56,11 +56,6 @@ type PepperTotals = ModuleTotals & {
   avgDryPercent: number; totalRecords: number
 }
 
-type RubberTotals = ModuleTotals & {
-  totalLatexKg: number; totalSheetsKg: number
-  avgDrcPct: number; totalRecords: number
-}
-
 type RainfallTotals = ModuleTotals & {
   totalInches: number; totalRecords: number; latestDate: string | null
 }
@@ -81,7 +76,6 @@ export type BuildHeroContentParams = {
   resolvedInventoryValue: number
   resolvedProcessingWorkspaceView: string
   canShowPepper: boolean
-  canShowRubber: boolean
   /** Set of currently enabled module IDs — replaces the isModuleEnabled callback. */
   enabledModuleIds: Set<string>
   currentFiscalYearLabel: string
@@ -104,7 +98,6 @@ export type BuildHeroContentParams = {
   curingHeroTotals: CuringTotals
   qualityHeroTotals: QualityTotals
   pepperHeroTotals: PepperTotals
-  rubberHeroTotals: RubberTotals
   rainfallHeroTotals: RainfallTotals
   receivablesHeroTotals: ReceivablesTotals
 }
@@ -119,12 +112,12 @@ const fmtCount = (n: number) => formatNumber(n, 0)
 export function buildHeroContent(p: BuildHeroContentParams): HeroContent {
   const {
     activeTab, resolvedInventoryValue, resolvedProcessingWorkspaceView,
-    canShowPepper, canShowRubber, enabledModuleIds, currentFiscalYearLabel,
+    canShowPepper, enabledModuleIds, currentFiscalYearLabel,
     bagWeightLabel, recentActivityLabel, unassignedLabel, loading,
     accountsTotalsLoading, estateMetrics, unassignedTransactions, totalTransactions,
     exceptionsSummary, filteredInventoryTotals, accountsTotals, processingTotals,
     dispatchHeroTotals, salesHeroTotals, otherSalesHeroTotals, curingHeroTotals,
-    qualityHeroTotals, pepperHeroTotals, rubberHeroTotals, rainfallHeroTotals,
+    qualityHeroTotals, pepperHeroTotals, rainfallHeroTotals,
     receivablesHeroTotals,
   } = p
 
@@ -212,16 +205,6 @@ export function buildHeroContent(p: BuildHeroContentParams): HeroContent {
     { label: "Picked weight", value: pepErr ? (pepperHeroTotals.loading ? "Loading..." : "Unavailable") : `${fmt(pepperHeroTotals.totalPickedKg, 0)} kg`, metricValue: pepErr ? null : pepperHeroTotals.totalPickedKg },
     { label: "Dry pepper", value: pepErr ? (pepperHeroTotals.loading ? "Loading..." : "Unavailable") : `${fmt(pepperHeroTotals.totalDryKg, 0)} kg`, metricValue: pepErr ? null : pepperHeroTotals.totalDryKg },
     { label: "Dry conversion", value: pepErr ? (pepperHeroTotals.loading ? "Loading..." : "Unavailable") : `${fmt(pepperDryPercent, 1)}%`, metricValue: pepErr ? null : pepperDryPercent },
-  ]
-
-  // ── Rubber stats ──────────────────────────────────────────────────────────
-  const rubErr = rubberHeroTotals.loading || rubberHeroTotals.error
-  const rubberSheetYieldPct = rubberHeroTotals.totalLatexKg > 0
-    ? (rubberHeroTotals.totalSheetsKg / rubberHeroTotals.totalLatexKg) * 100 : 0
-  const rubberStats: HeroStat[] = [
-    { label: "Latex collected", value: rubErr ? (rubberHeroTotals.loading ? "Loading..." : "Unavailable") : `${fmt(rubberHeroTotals.totalLatexKg, 0)} kg`, metricValue: rubErr ? null : rubberHeroTotals.totalLatexKg },
-    { label: "Sheets produced", value: rubErr ? (rubberHeroTotals.loading ? "Loading..." : "Unavailable") : `${fmt(rubberHeroTotals.totalSheetsKg, 0)} kg`, metricValue: rubErr ? null : rubberHeroTotals.totalSheetsKg },
-    { label: "Sheet yield", value: rubErr ? (rubberHeroTotals.loading ? "Loading..." : "Unavailable") : `${fmt(rubberSheetYieldPct, 1)}%`, metricValue: rubErr ? null : rubberSheetYieldPct },
   ]
 
   // ── Rainfall stats ────────────────────────────────────────────────────────
@@ -409,9 +392,7 @@ export function buildHeroContent(p: BuildHeroContentParams): HeroContent {
     case "processing":
       if (resolvedProcessingWorkspaceView === "pepper")
         return { badge: "Pepper Flow", title: "Pepper harvest and conversion", description: "Keep pepper close to coffee work without crowding the main Operations rail.", chips: chipsPepper, stats: pepperStats }
-      if (resolvedProcessingWorkspaceView === "rubber")
-        return { badge: "Rubber Tapping", title: "Daily latex, cup lump, and sheet production", description: "Track tapping output and RSS sheet grades in one place.", chips: [{ icon: Droplets, label: "Latex → Cup Lump → RSS sheet workflow", metricValue: null }, { icon: Leaf, label: "Grades RSS1–RSS5 and cup lump supported", metricValue: null }], stats: rubberStats }
-      return { badge: "Coffee Pulping", title: "Daily coffee pulping, yield, and conversion", description: canShowPepper || canShowRubber ? "Keep all post-harvest crop records in one workspace." : "Keep dispatch and sales aligned with real coffee output.", chips: chipsProcessing, stats: processingTotalsStats }
+      return { badge: "Coffee Pulping", title: "Daily coffee pulping, yield, and conversion", description: canShowPepper ? "Keep all post-harvest crop records in one workspace." : "Keep dispatch and sales aligned with real coffee output.", chips: chipsProcessing, stats: processingTotalsStats }
     case "dispatch":
       return { badge: "Dispatch Highlights", title: "Outbound bags and reconciliations", description: "Track what leaves the estate and what remains.", chips: chipsDispatch, stats: dispatchStats }
     case "sales":
@@ -439,8 +420,6 @@ export function buildHeroContent(p: BuildHeroContentParams): HeroContent {
       return { badge: showRainfallMetrics ? "Rainfall Signals" : "Weather Signals", title: showRainfallMetrics ? "Weather context for yield swings" : "Forecast context for field planning", description: showRainfallMetrics ? "Link rainfall to processing and drying outcomes." : "Use short-term forecast context to plan drying and field operations.", chips: chipsRainfall, stats: rainfallStats }
     case "pepper":
       return { badge: "Pepper Notes", title: "Pepper harvest and conversion", description: "Track green-to-dry conversion by location.", chips: chipsPepper, stats: pepperStats }
-    case "rubber":
-      return { badge: "Rubber Tapping", title: "Latex, cup lump, and sheet production", description: "Track daily tapping output and RSS sheet grades by location.", chips: [{ icon: Droplets, label: "Latex → Cup Lump → RSS sheet workflow", metricValue: null }, { icon: Leaf, label: "Grades RSS1–RSS5 and cup lump supported", metricValue: null }], stats: rubberStats }
     case "journal":
       return { badge: "Estate Journal", title: "Daily notes, searchable anytime", description: "Log fertilizers, sprays, irrigation, and observations.", chips: chipsJournal, stats: journalStats }
     case "plant-health":

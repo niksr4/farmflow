@@ -223,7 +223,6 @@ import {
   DocumentsTab,
   YieldForecastTab,
   PepperTab,
-  RubberTab,
   MorningBriefCard,
   WorkspaceLauncher,
   InventoryDialogs,
@@ -258,7 +257,7 @@ const isAccountsWorkspaceTab = (value: string | null | undefined): value is Acco
 export default function InventorySystem() {
   type InventoryWorkspaceView = "inventory" | "transactions"
   type SalesWorkspaceView = "coffee" | "other-sales"
-  type ProcessingWorkspaceView = "coffee" | "pepper" | "rubber"
+  type ProcessingWorkspaceView = "coffee" | "pepper"
   // UI / paging
   const [currentPage, setCurrentPage] = useState(1)
   const itemsPerPage = 10
@@ -559,7 +558,6 @@ export default function InventorySystem() {
   const canShowQuality = isModuleEnabled("quality")
   const canShowRainfall = isModuleEnabled("rainfall")
   const canShowPepper = isModuleEnabled("pepper")
-  const canShowRubber = isModuleEnabled("rubber")
   const canShowAiAnalysis = isModuleEnabled("ai-analysis")
   const canLaunchAssistant = !isOwner || isPreviewMode
   const canShowNews = isModuleEnabled("news")
@@ -580,8 +578,8 @@ export default function InventorySystem() {
   const canShowWelcomeCard = isFeatureEnabled("showWelcomeCard")
   const canShowRainfallSection = canShowRainfall || canShowWeather
   const canShowIntelligence = !isScopedUser && (canShowDispatch || canShowSalesWorkspace || canShowAccounts || canShowSeason)
-  const canShowProcessingWorkspace = canShowProcessing || canShowPepper || canShowRubber
-  const processingWorkspaceLabel = canShowProcessing ? "Pulping" : canShowPepper ? "Pepper Processing" : "Rubber"
+  const canShowProcessingWorkspace = canShowProcessing || canShowPepper
+  const processingWorkspaceLabel = canShowProcessing ? "Pulping" : "Pepper Processing"
   const processingWorkspaceIcon = canShowProcessing ? Factory : Leaf
   const shouldLoadHomeMetrics = activeTab === "home"
   const shouldLoadExceptionSummary = activeTab === "home" || activeTab === "season"
@@ -594,7 +592,6 @@ export default function InventorySystem() {
     curingHeroTotals,
     qualityHeroTotals,
     pepperHeroTotals,
-    rubberHeroTotals,
     rainfallHeroTotals,
     receivablesHeroTotals,
     exceptionsSummary,
@@ -615,7 +612,6 @@ export default function InventorySystem() {
     canShowCuring,
     canShowQuality,
     canShowPepper,
-    canShowRubber,
     canShowRainfall,
     canShowSeason,
   })
@@ -623,15 +619,11 @@ export default function InventorySystem() {
   const resolvedProcessingWorkspaceView: ProcessingWorkspaceView =
     processingWorkspaceView === "pepper" && canShowPepper
       ? "pepper"
-      : processingWorkspaceView === "rubber" && canShowRubber
-        ? "rubber"
-        : canShowProcessing
-          ? "coffee"
-          : canShowPepper
-            ? "pepper"
-            : canShowRubber
-              ? "rubber"
-              : "coffee"
+      : canShowProcessing
+        ? "coffee"
+        : canShowPepper
+          ? "pepper"
+          : "coffee"
   const estateMetrics = useMemo(() => {
     const inventoryCount = inventory.length
     const locationCount = locations.length
@@ -660,13 +652,11 @@ export default function InventorySystem() {
   useEffect(() => {
     setProcessingWorkspaceView((currentView) => {
       if (currentView === "pepper" && canShowPepper) return currentView
-      if (currentView === "rubber" && canShowRubber) return currentView
       if (canShowProcessing) return "coffee"
       if (canShowPepper) return "pepper"
-      if (canShowRubber) return "rubber"
       return "coffee"
     })
-  }, [canShowPepper, canShowRubber, canShowProcessing])
+  }, [canShowPepper, canShowProcessing])
 
   useEffect(() => {
     setOnboardingEstateName(String(tenantSettings.estateName || ""))
@@ -1517,7 +1507,6 @@ export default function InventorySystem() {
     resolvedInventoryValue,
     resolvedProcessingWorkspaceView,
     canShowPepper,
-    canShowRubber,
     enabledModuleIds: new Set(enabledModules ?? []),
     currentFiscalYearLabel: currentFiscalYear.label,
     bagWeightLabel,
@@ -1539,7 +1528,6 @@ export default function InventorySystem() {
     curingHeroTotals,
     qualityHeroTotals,
     pepperHeroTotals,
-    rubberHeroTotals,
     rainfallHeroTotals,
     receivablesHeroTotals,
   // eslint-disable-next-line react-hooks/exhaustive-deps -- intentional: deps list individual object properties (e.g. accountsTotals.grandTotal) not whole objects, to avoid recomputing hero content when unrelated fields change
@@ -1552,7 +1540,6 @@ export default function InventorySystem() {
     bagWeightLabel,
     bagWeightValue,
     canShowPepper,
-    canShowRubber,
     currentFiscalYear.label,
     curingHeroTotals.avgDryingDays,
     curingHeroTotals.avgMoistureDrop,
@@ -1585,12 +1572,6 @@ export default function InventorySystem() {
     pepperHeroTotals.totalDryKg,
     pepperHeroTotals.totalPickedKg,
     pepperHeroTotals.totalRecords,
-    rubberHeroTotals.avgDrcPct,
-    rubberHeroTotals.error,
-    rubberHeroTotals.loading,
-    rubberHeroTotals.totalLatexKg,
-    rubberHeroTotals.totalSheetsKg,
-    rubberHeroTotals.totalRecords,
     qualityHeroTotals.avgCupScore,
     qualityHeroTotals.avgDefects,
     qualityHeroTotals.avgOutturnPct,
@@ -2809,7 +2790,6 @@ export default function InventorySystem() {
           processingWorkspaceIcon,
           canShowProcessing,
           canShowPepper,
-          canShowRubber,
           canShowCuring,
           canShowQuality,
           canShowDispatch,
@@ -2843,7 +2823,6 @@ export default function InventorySystem() {
         processingWorkspaceIcon,
         canShowProcessing,
         canShowPepper,
-        canShowRubber,
         canShowCuring,
         canShowQuality,
         canShowDispatch,
@@ -3066,7 +3045,6 @@ export default function InventorySystem() {
         dispatch: { label: "Dispatch", icon: Truck },
         sales: { label: "Sales", icon: TrendingUp },
         pepper: { label: "Pepper", icon: Leaf },
-        rubber: { label: "Rubber", icon: Leaf },
         accounts: { label: "Labour & Costs", icon: Users },
         "balance-sheet": { label: "Financial Summary", icon: Scale },
         "season-pl": { label: "Profit & Loss", icon: TrendingUp },
@@ -3738,11 +3716,6 @@ export default function InventorySystem() {
     }
     if (activeTab === "pepper") {
       setProcessingWorkspaceView("pepper")
-      setActiveTab("processing")
-      return
-    }
-    if (activeTab === "rubber") {
-      setProcessingWorkspaceView("rubber")
       setActiveTab("processing")
       return
     }
@@ -4896,13 +4869,11 @@ export default function InventorySystem() {
               <ProcessingWorkspace
                 canShowProcessing={canShowProcessing}
                 canShowPepper={canShowPepper}
-                canShowRubber={canShowRubber}
                 resolvedView={resolvedProcessingWorkspaceView}
                 showDataToolsControls={showDataToolsControls}
                 onViewChange={setProcessingWorkspaceView}
                 ProcessingTab={ProcessingTab as any}
                 PepperTab={PepperTab as any}
-                RubberTab={RubberTab as any}
               />
             </TabsContent>
           )}

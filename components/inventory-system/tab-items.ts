@@ -35,7 +35,6 @@ export type DashboardTabItemsInput = {
   processingWorkspaceIcon: React.ComponentType<{ className?: string }>
   canShowProcessing: boolean
   canShowPepper: boolean
-  canShowRubber: boolean
   canShowCuring: boolean
   canShowQuality: boolean
   canShowDispatch: boolean
@@ -91,7 +90,6 @@ export function buildDashboardTabItems(input: DashboardTabItemsInput): {
           subtabs: [
             input.canShowProcessing && "Coffee Pulping",
             input.canShowPepper && "Pepper Processing",
-            input.canShowRubber && "Rubber Tapping",
           ].filter(Boolean) as string[],
         }
       : null,

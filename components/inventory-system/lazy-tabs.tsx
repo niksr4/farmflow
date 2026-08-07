@@ -102,9 +102,6 @@ const YieldForecastTab = dynamic(() => import("@/components/yield-forecast-tab")
 const PepperTab = dynamic(() => import("@/components/pepper-tab").then((module) => module.PepperTab), {
   loading: () => <TabPanelLoading label="Pepper processing" />,
 })
-const RubberTab = dynamic(() => import("@/components/rubber-tab").then((module) => module.RubberTab), {
-  loading: () => <TabPanelLoading label="Rubber tapping" />,
-})
 const MorningBriefCard = dynamic(() => import("@/components/morning-brief-card"), { ssr: false })
 const WorkspaceLauncher = dynamic(() => import("@/components/workspace-launcher"), { ssr: false })
 const InventoryDialogs = dynamic(() => import("@/components/inventory-dialogs"), { ssr: false })
@@ -134,7 +131,6 @@ export {
   DocumentsTab,
   YieldForecastTab,
   PepperTab,
-  RubberTab,
   MorningBriefCard,
   WorkspaceLauncher,
   InventoryDialogs,

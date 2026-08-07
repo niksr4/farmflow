@@ -63,8 +63,8 @@ const NAV_GROUPS: Array<{ id: string; label?: string; items: string[] }> = [
   {
     id: "operations",
     label: "Operations",
-    // "picking" lives inside the Accounts workspace and "pepper"/"rubber" are Processing
-    // sub-views (see AccountsWorkspaceTab / ProcessingWorkspaceView in inventory-system.tsx)
+    // "picking" lives inside the Accounts workspace and "pepper" is a Processing
+    // sub-view (see AccountsWorkspaceTab / ProcessingWorkspaceView in inventory-system.tsx)
     // — none of them are ever pushed into visibleTabs as standalone tabs, so they don't belong here.
     // "attendance" leads the group — a daily headcount check before anything else.
     // "accounts" (Labour & Costs) is the daily data-entry workspace, so it lives here too;

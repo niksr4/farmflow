@@ -11,7 +11,6 @@ const baseInput: DashboardTabItemsInput = {
   processingWorkspaceIcon: DummyIcon,
   canShowProcessing: false,
   canShowPepper: false,
-  canShowRubber: false,
   canShowCuring: false,
   canShowQuality: false,
   canShowDispatch: false,
@@ -69,10 +68,9 @@ describe("buildDashboardTabItems", () => {
       ...baseInput,
       canShowProcessingWorkspace: true,
       canShowProcessing: true,
-      canShowPepper: false,
-      canShowRubber: true,
+      canShowPepper: true,
     })
-    expect(operations.find((t) => t.value === "processing")?.subtabs).toEqual(["Coffee Pulping", "Rubber Tapping"])
+    expect(operations.find((t) => t.value === "processing")?.subtabs).toEqual(["Coffee Pulping", "Pepper Processing"])
   })
 
   it("resolves the rainfall subtabs across all three rainfall/weather combinations", () => {

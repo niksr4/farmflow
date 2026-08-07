@@ -175,7 +175,6 @@ const getOperationsOverviewLabels = (enabledModules: string[]) =>
     hasModule(enabledModules, "sales") ? "Sales" : null,
     hasModule(enabledModules, "other-sales") ? "Other Sales" : null,
     hasModule(enabledModules, "pepper") ? "Pepper Processing" : null,
-    hasModule(enabledModules, "rubber") ? "Rubber Tapping" : null,
     hasModule(enabledModules, "curing") ? "Curing & Drying" : null,
     hasModule(enabledModules, "quality") ? "Quality Grading" : null,
   ])
@@ -321,7 +320,6 @@ const buildDailyRoutines = (
   const supervisorActions = compact([
     hasModule(enabledModules, "processing") ? "Pulping" : null,
     hasModule(enabledModules, "pepper") ? "Pepper Processing" : null,
-    hasModule(enabledModules, "rubber") ? "Rubber Tapping" : null,
     hasModule(enabledModules, "curing") ? "Curing & Drying" : null,
     hasModule(enabledModules, "quality") ? "Quality Grading" : null,
     hasModule(enabledModules, "dispatch") ? "Dispatch" : null,
@@ -426,7 +424,7 @@ const buildManualGroups = (
     hasModule(enabledModules, "processing")
       ? {
           name: "Pulping",
-          whatItIs: "The coffee post-harvest tab for cherry intake, pulping, and output tracking. When Pepper or Rubber are enabled, they share this same tab as extra subtabs (Pepper Processing, Rubber Tapping) instead of opening separate tabs.",
+          whatItIs: "The coffee post-harvest tab for cherry intake, pulping, and output tracking. When Pepper is enabled, it shares this same tab as an extra subtab (Pepper Processing) instead of opening a separate tab.",
           openItWhen: "Cherry intake, pulping, fermentation, drying progress, or output lot creation happens.",
           doneLooksLike: "Each coffee lot has date, quantity, location, and traceable output.",
         }
@@ -469,14 +467,6 @@ const buildManualGroups = (
           whatItIs: "A subtab inside Pulping for pepper picking and green-to-dry conversion.",
           openItWhen: "Pepper harvest and drying need tracking without opening a separate main tab.",
           doneLooksLike: "Pepper stays visible for the team without mixing into coffee pulping records.",
-        }
-      : null,
-    hasModule(enabledModules, "rubber")
-      ? {
-          name: "Rubber Tapping",
-          whatItIs: "A subtab inside Pulping for latex collection, coagulation, and RSS sheet production and grading.",
-          openItWhen: "Tapping season is active and rubber output needs its own trail.",
-          doneLooksLike: "Rubber output is traceable without mixing into coffee or pepper records.",
         }
       : null,
     buildClimateManualItem(enabledModules),
