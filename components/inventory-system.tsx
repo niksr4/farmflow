@@ -687,7 +687,12 @@ export default function InventorySystem() {
   useEffect(() => {
     if (typeof document === "undefined") return
     if (isPreviewMode && previewTenantId) {
-      document.cookie = `${PREVIEW_TENANT_COOKIE}=${encodeURIComponent(previewTenantId)}; path=/; SameSite=Lax`
+      // Bounded on purpose: lib/module-access.ts's resolveScopedSessionUser applies this
+      // cookie server-side to every owner request, with no other reliable clear point once
+      // you leave InventorySystem for a different part of the app (e.g. straight to
+      // /admin/tenants). Without an expiry a stale preview from days ago silently keeps
+      // re-scoping the owner's session to that tenant. 8h covers a single working session.
+      document.cookie = `${PREVIEW_TENANT_COOKIE}=${encodeURIComponent(previewTenantId)}; path=/; max-age=${8 * 60 * 60}; SameSite=Lax`
       return
     }
     document.cookie = `${PREVIEW_TENANT_COOKIE}=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT; SameSite=Lax`

@@ -65,6 +65,16 @@ export default function AdminPage() {
   const { user, isOwner, logout } = useAuth()
   const { toast } = useToast()
 
+  // The dashboard's owner-preview cookie (see lib/module-access.ts's resolveScopedSessionUser)
+  // has no expiry and is only ever cleared from inside the InventorySystem component itself --
+  // never here. Landing on the actual admin console is the one place that should always mean
+  // "neutral owner view," so clear it unconditionally on mount rather than trusting it's already
+  // gone; otherwise a stale preview from a past session silently keeps scoping every owner
+  // request server-side to whatever tenant was last previewed.
+  useEffect(() => {
+    document.cookie = "farmflow_preview_tenant=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT; SameSite=Lax"
+  }, [])
+
   const [tenants, setTenants] = useState<Tenant[]>([])
   const [selectedTenantId, setSelectedTenantId] = useState<string>("")
   const [previewRole, setPreviewRole] = useState<"admin" | "user">("admin")
