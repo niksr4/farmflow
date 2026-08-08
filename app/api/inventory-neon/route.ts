@@ -1,6 +1,9 @@
 import { type NextRequest, NextResponse } from "next/server"
+import { cookies } from "next/headers"
 import { inventorySql } from "@/lib/server/db"
 import { requireModuleAccess, isModuleAccessError } from "@/lib/server/module-access"
+import { resolveActiveEstate } from "@/lib/server/estate-filter"
+import { SELECTED_ESTATE_COOKIE } from "@/lib/server/estate-cookie"
 import { canDeleteModule, canWriteModule } from "@/lib/permissions"
 import { logAuditEvent } from "@/lib/server/audit-log"
 import { normalizeTenantContext, runTenantQueries, runTenantQuery, runTenantTransaction } from "@/lib/server/tenant-db"
@@ -127,12 +130,46 @@ export async function GET(request: NextRequest) {
     const locationParam = searchParams.get("locationId")
     const locationFilter = locationParam ? locationParam.trim() : ""
 
+    // No explicit locationId/"unassigned" choice was made -- fall back to the active estate
+    // filter. Items with location_id IS NULL are already the global/shared pool, visible
+    // regardless of location filter (see the pool-merge branch below), so the same
+    // `OR location_id IS NULL` shape applies here too -- it's the estate-filter version of the
+    // same "the shared pool is always visible" rule this file already follows.
+    const cookieEstate = !locationFilter ? (await cookies()).get(SELECTED_ESTATE_COOKIE)?.value || null : null
+    const activeEstate = !locationFilter ? resolveActiveEstate(searchParams, cookieEstate) : null
+
     let inventoryQuery
     let summaryQuery
 
-    if (!locationFilter) {
+    if (activeEstate) {
       inventoryQuery = inventorySql`
-        SELECT 
+        SELECT
+          item_type,
+          COALESCE(unit, 'kg') as unit,
+          COALESCE(SUM(quantity), 0) as quantity,
+          COALESCE(SUM(total_cost), 0) as total_cost,
+          CASE
+            WHEN COALESCE(SUM(quantity), 0) > 0 THEN COALESCE(SUM(total_cost), 0) / COALESCE(SUM(quantity), 0)
+            ELSE 0
+          END as avg_price
+        FROM current_inventory
+        WHERE tenant_id = ${tenantContext.tenantId}
+          AND (location_id IS NULL OR location_id IN (SELECT id FROM locations WHERE tenant_id = ${tenantContext.tenantId} AND estate = ${activeEstate}))
+        GROUP BY item_type, unit
+        ORDER BY item_type
+      `
+      summaryQuery = inventorySql`
+        SELECT
+          COALESCE(SUM(total_cost), 0) as total_inventory_value,
+          COUNT(DISTINCT item_type) as total_items,
+          COALESCE(SUM(quantity), 0) as total_quantity
+        FROM current_inventory
+        WHERE tenant_id = ${tenantContext.tenantId}
+          AND (location_id IS NULL OR location_id IN (SELECT id FROM locations WHERE tenant_id = ${tenantContext.tenantId} AND estate = ${activeEstate}))
+      `
+    } else if (!locationFilter) {
+      inventoryQuery = inventorySql`
+        SELECT
           item_type,
           COALESCE(unit, 'kg') as unit,
           COALESCE(SUM(quantity), 0) as quantity,
@@ -147,7 +184,7 @@ export async function GET(request: NextRequest) {
         ORDER BY item_type
       `
       summaryQuery = inventorySql`
-        SELECT 
+        SELECT
           COALESCE(SUM(total_cost), 0) as total_inventory_value,
           COUNT(DISTINCT item_type) as total_items,
           COALESCE(SUM(quantity), 0) as total_quantity

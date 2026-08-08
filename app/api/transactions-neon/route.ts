@@ -1,6 +1,9 @@
 import { type NextRequest, NextResponse } from "next/server"
+import { cookies } from "next/headers"
 import { inventorySql } from "@/lib/server/db"
 import { requireAnyModuleAccess, requireModuleAccess, isModuleAccessError } from "@/lib/server/module-access"
+import { resolveActiveEstate } from "@/lib/server/estate-filter"
+import { SELECTED_ESTATE_COOKIE } from "@/lib/server/estate-cookie"
 import { normalizeTenantContext, runTenantQuery } from "@/lib/server/tenant-db"
 import { resolveLocationCompatibility } from "@/lib/server/location-compatibility"
 import { canWriteModule } from "@/lib/permissions"
@@ -153,6 +156,19 @@ export async function GET(request: NextRequest) {
     const locationParam = searchParams.get("locationId")
     const locationFilter = locationParam ? locationParam.trim() : ""
 
+    // Only applies to the "no explicit locationId" branches below -- "unassigned" and a specific
+    // locationId are both deliberate choices that already bypass estate filtering elsewhere in
+    // this file (same pattern as the pooled-stock/usage_location handling). A NULL location_id
+    // is never "the other estate's" -- it must still show up regardless of which estate is active.
+    let estateClause = inventorySql``
+    if (!locationFilter) {
+      const cookieEstate = (await cookies()).get(SELECTED_ESTATE_COOKIE)?.value || null
+      const activeEstate = resolveActiveEstate(searchParams, cookieEstate)
+      if (activeEstate) {
+        estateClause = inventorySql` AND (th.location_id IS NULL OR th.location_id IN (SELECT id FROM locations WHERE tenant_id = ${tenantContext.tenantId} AND estate = ${activeEstate}))`
+      }
+    }
+
     let query
     if (itemType) {
       if (!locationFilter) {
@@ -183,6 +199,7 @@ export async function GET(request: NextRequest) {
             ON l.id = th.location_id
           WHERE th.item_type = ${itemType}
             AND th.tenant_id = ${tenantContext.tenantId}
+            ${estateClause}
           ORDER BY th.transaction_date DESC
         `,
         )
@@ -291,6 +308,7 @@ export async function GET(request: NextRequest) {
           LEFT JOIN locations l
             ON l.id = th.location_id
           WHERE th.tenant_id = ${tenantContext.tenantId}
+            ${estateClause}
           ORDER BY th.transaction_date DESC
           LIMIT ${limitValue}
         `,

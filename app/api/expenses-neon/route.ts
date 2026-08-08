@@ -1,8 +1,11 @@
 import { NextResponse } from "next/server"
+import { cookies } from "next/headers"
 import { accountsSql } from "@/lib/server/db"
 import { requireModuleAccess, isModuleAccessError } from "@/lib/server/module-access"
 import { isLocationAccessError } from "@/lib/server/location-access"
 import { validateLocationForTenant } from "@/lib/server/location-utils"
+import { resolveActiveEstate } from "@/lib/server/estate-filter"
+import { SELECTED_ESTATE_COOKIE } from "@/lib/server/estate-cookie"
 import { normalizeTenantContext, runTenantQueries, runTenantQuery, runTenantTransaction } from "@/lib/server/tenant-db"
 import { resolveTenantUserUuid } from "@/lib/server/tenant-user"
 import { canDeleteModule, canWriteModule } from "@/lib/permissions"
@@ -980,8 +983,17 @@ export async function GET(request: Request) {
     if (supportsLocation && requestedLocationId && !validLocationId) {
       return NextResponse.json({ success: false, error: "Selected location is invalid for this tenant" }, { status: 400 })
     }
+    // An explicit ?locationId= is already inside whichever estate it belongs to, so it wins
+    // outright; otherwise fall back to the active estate filter. A NULL location_id is never
+    // "the other estate's" -- it must still show up regardless of which estate is active.
+    const cookieEstate = (await cookies()).get(SELECTED_ESTATE_COOKIE)?.value || null
+    const activeEstate = resolveActiveEstate(searchParams, cookieEstate)
     const locationFilterClause =
-      supportsLocation && validLocationId ? accountsSql` AND et.location_id = ${validLocationId}::uuid` : accountsSql``
+      supportsLocation && validLocationId
+        ? accountsSql` AND et.location_id = ${validLocationId}::uuid`
+        : supportsLocation && activeEstate
+          ? accountsSql` AND (et.location_id IS NULL OR et.location_id IN (SELECT id FROM locations WHERE tenant_id = ${tenantContext.tenantId} AND estate = ${activeEstate}))`
+          : accountsSql``
     const all = searchParams.get("all") === "true"
     const limitParam = searchParams.get("limit")
     const offsetParam = searchParams.get("offset")

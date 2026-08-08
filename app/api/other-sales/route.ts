@@ -1,10 +1,13 @@
 import { NextResponse } from "next/server"
+import { cookies } from "next/headers"
 import { sql } from "@/lib/server/db"
 import { requireModuleAccess, isModuleAccessError } from "@/lib/server/module-access"
 import { canDeleteModule, canWriteModule } from "@/lib/permissions"
 import { normalizeTenantContext, runTenantQueries, runTenantQuery } from "@/lib/server/tenant-db"
 import { resolveLocationInfo } from "@/lib/server/location-utils"
 import { isLocationAccessError } from "@/lib/server/location-access"
+import { resolveActiveEstate } from "@/lib/server/estate-filter"
+import { SELECTED_ESTATE_COOKIE } from "@/lib/server/estate-cookie"
 import { logAuditEvent } from "@/lib/server/audit-log"
 import { logRouteMutationFailure } from "@/lib/server/route-error-events"
 import { sanitizeRouteError } from "@/lib/server/sanitize-route-error"
@@ -164,7 +167,17 @@ export async function GET(request: Request) {
           : endDate
             ? sql` AND os.sale_date <= ${endDate}::date`
             : sql``
-    const locationClause = locationId ? sql` AND os.location_id = ${locationId}` : sql``
+    // An explicit ?locationId= is already inside whichever estate it belongs to, so it wins
+    // outright; only fall back to the active estate filter when no explicit location was asked
+    // for. A NULL location_id is never "the other estate's" -- it must still show up regardless
+    // of which estate is active.
+    const cookieEstate = !locationId ? (await cookies()).get(SELECTED_ESTATE_COOKIE)?.value || null : null
+    const activeEstate = !locationId ? resolveActiveEstate(searchParams, cookieEstate) : null
+    const locationClause = locationId
+      ? sql` AND os.location_id = ${locationId}`
+      : activeEstate
+        ? sql` AND (os.location_id IS NULL OR os.location_id IN (SELECT id FROM locations WHERE tenant_id = ${tenantContext.tenantId} AND estate = ${activeEstate}))`
+        : sql``
     const modeClause = saleMode ? sql` AND os.sale_mode = ${saleMode}` : sql``
     const assetClause = assetType ? sql` AND os.asset_type = ${assetType}` : sql``
 
