@@ -348,7 +348,7 @@ export async function POST(request: Request) {
             ${tenantId},
             ${tx.locationId}
           )
-          ON CONFLICT (item_type, tenant_id, location_id)
+          ON CONFLICT (item_type, tenant_id, location_id) WHERE location_id IS NOT NULL
           DO UPDATE SET
             unit = EXCLUDED.unit
         `,

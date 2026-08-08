@@ -1065,7 +1065,7 @@ export async function POST(request: Request) {
               sql`
                 INSERT INTO current_inventory (item_type, quantity, unit, avg_price, total_cost, tenant_id, location_id)
                 VALUES (${itemType}, 0, ${unit}, 0, 0, ${tenantContext.tenantId}, ${locationId})
-                ON CONFLICT (item_type, tenant_id, location_id)
+                ON CONFLICT (item_type, tenant_id, location_id) WHERE location_id IS NOT NULL
                 DO UPDATE SET unit = EXCLUDED.unit
               `,
             )
@@ -1186,7 +1186,7 @@ export async function POST(request: Request) {
             sql`
               INSERT INTO current_inventory (item_type, quantity, unit, avg_price, total_cost, tenant_id, location_id)
               VALUES (${itemType}, 0, ${unit}, 0, 0, ${tenantContext.tenantId}, ${locationId})
-              ON CONFLICT (item_type, tenant_id, location_id)
+              ON CONFLICT (item_type, tenant_id, location_id) WHERE location_id IS NOT NULL
               DO UPDATE SET unit = EXCLUDED.unit
             `,
           )
