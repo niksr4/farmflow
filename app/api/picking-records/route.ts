@@ -1,7 +1,10 @@
 import { NextResponse } from "next/server"
+import { cookies } from "next/headers"
 import { z } from "zod"
 import { accountsSql } from "@/lib/server/db"
 import { requireModuleAccess, isModuleAccessError } from "@/lib/server/module-access"
+import { resolveActiveEstate } from "@/lib/server/estate-filter"
+import { SELECTED_ESTATE_COOKIE } from "@/lib/server/estate-cookie"
 import { canWriteModule } from "@/lib/permissions"
 import { logAuditEvent } from "@/lib/server/audit-log"
 import { normalizeTenantContext, runTenantQuery } from "@/lib/server/tenant-db"
@@ -39,6 +42,14 @@ export async function GET(request: Request) {
     const workerFilter = workerId ? accountsSql` AND pr.worker_id = ${workerId}::uuid` : accountsSql``
     const startFilter = startDate ? accountsSql` AND pr.pick_date >= ${startDate}::date` : accountsSql``
     const endFilter = endDate ? accountsSql` AND pr.pick_date <= ${endDate}::date` : accountsSql``
+    // No explicit per-location filter exists on this route today, so the estate filter is
+    // unconditional here (nothing for it to defer to). A NULL location_id is never "the other
+    // estate's" -- it must still count regardless of which estate is active.
+    const cookieEstate = (await cookies()).get(SELECTED_ESTATE_COOKIE)?.value || null
+    const activeEstate = resolveActiveEstate(searchParams, cookieEstate)
+    const estateFilter = activeEstate
+      ? accountsSql` AND (pr.location_id IS NULL OR pr.location_id IN (SELECT id FROM locations WHERE tenant_id = ${tenantContext.tenantId} AND estate = ${activeEstate}))`
+      : accountsSql``
 
     const [countRows, rows, summaryRows] = await Promise.all([
       runTenantQuery(
@@ -48,7 +59,7 @@ export async function GET(request: Request) {
           SELECT COUNT(*)::int AS count
           FROM picking_records pr
           WHERE pr.tenant_id = ${tenantContext.tenantId}
-            ${workerFilter} ${startFilter} ${endFilter}
+            ${workerFilter} ${startFilter} ${endFilter} ${estateFilter}
         `,
       ),
       runTenantQuery(
@@ -69,7 +80,7 @@ export async function GET(request: Request) {
           FROM picking_records pr
           JOIN attendance_workers aw ON aw.id = pr.worker_id
           WHERE pr.tenant_id = ${tenantContext.tenantId}
-            ${workerFilter} ${startFilter} ${endFilter}
+            ${workerFilter} ${startFilter} ${endFilter} ${estateFilter}
           ORDER BY pr.pick_date DESC, aw.full_name ASC
           LIMIT ${limit} OFFSET ${offset}
         `,
@@ -83,7 +94,7 @@ export async function GET(request: Request) {
             COALESCE(SUM(kg_picked * rate_per_kg), 0) AS total_amount
           FROM picking_records pr
           WHERE pr.tenant_id = ${tenantContext.tenantId}
-            ${workerFilter} ${startFilter} ${endFilter}
+            ${workerFilter} ${startFilter} ${endFilter} ${estateFilter}
         `,
       ),
     ])

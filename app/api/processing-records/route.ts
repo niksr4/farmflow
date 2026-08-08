@@ -1,7 +1,10 @@
 import { type NextRequest, NextResponse } from "next/server"
+import { cookies } from "next/headers"
 import { sql } from "@/lib/server/db"
 import { requireModuleAccess, isModuleAccessError } from "@/lib/server/module-access"
 import { canDeleteModule, canWriteModule } from "@/lib/permissions"
+import { resolveActiveEstate } from "@/lib/server/estate-filter"
+import { SELECTED_ESTATE_COOKIE } from "@/lib/server/estate-cookie"
 import { normalizeTenantContext, runTenantQuery, runTenantQueries } from "@/lib/server/tenant-db"
 import { logAuditEvent } from "@/lib/server/audit-log"
 import { recomputeProcessingTotals } from "@/lib/server/processing-utils"
@@ -95,6 +98,23 @@ const appendProcessingLocationClause = (
   return `${whereClause} AND (pr.location_id = $${locationParam} OR pr.created_at < $${cutoverParam}::timestamptz)`
 }
 
+// Only called where no explicit locationId is already narrowing the query -- an explicit
+// locationId is already inside whichever estate it belongs to, so it wins outright. A NULL
+// location_id is never "the other estate's" -- it must still count regardless of which estate
+// is active.
+const appendEstateClause = (
+  params: any[],
+  whereClause: string,
+  tenantId: string,
+  activeEstate: string | null,
+) => {
+  if (!activeEstate) return whereClause
+  params.push(tenantId, activeEstate)
+  const tenantParam = params.length - 1
+  const estateParam = params.length
+  return `${whereClause} AND (pr.location_id IS NULL OR pr.location_id IN (SELECT id FROM locations WHERE tenant_id = $${tenantParam} AND estate = $${estateParam}))`
+}
+
 
 export async function GET(request: NextRequest) {
   try {
@@ -130,6 +150,10 @@ export async function GET(request: NextRequest) {
         ? locationCompatibility.firstLocationCreatedAt
         : null
 
+    const activeEstate = locationId
+      ? null
+      : resolveActiveEstate(searchParams, (await cookies()).get(SELECTED_ESTATE_COOKIE)?.value || null)
+
     if (summary) {
       const params: any[] = [tenantContext.tenantId]
       let whereClause = `pr.tenant_id = $1`
@@ -147,6 +171,8 @@ export async function GET(request: NextRequest) {
 
       if (locationId && !isLegacyPooledScope) {
         whereClause = appendProcessingLocationClause(params, whereClause, locationId, legacyLocationCutover)
+      } else if (activeEstate) {
+        whereClause = appendEstateClause(params, whereClause, tenantContext.tenantId, activeEstate)
       }
 
       if (coffeeType) {
@@ -294,6 +320,8 @@ export async function GET(request: NextRequest) {
 
     if (locationId) {
       whereClause = appendProcessingLocationClause(params, whereClause, locationId, legacyLocationCutover)
+    } else if (activeEstate) {
+      whereClause = appendEstateClause(params, whereClause, tenantContext.tenantId, activeEstate)
     }
 
     if (coffeeType) {

@@ -1,6 +1,9 @@
 import { NextResponse } from "next/server"
+import { cookies } from "next/headers"
 import { sql } from "@/lib/server/db"
 import { requireModuleAccess, isModuleAccessError } from "@/lib/server/module-access"
+import { resolveActiveEstate } from "@/lib/server/estate-filter"
+import { SELECTED_ESTATE_COOKIE } from "@/lib/server/estate-cookie"
 import { normalizeTenantContext, runTenantQuery } from "@/lib/server/tenant-db"
 import { canDeleteModule, canWriteModule } from "@/lib/permissions"
 import { logAuditEvent } from "@/lib/server/audit-log"
@@ -94,6 +97,15 @@ export async function GET(request: Request) {
     if (locationId) {
       params.push(locationId)
       whereClause += ` AND cr.location_id = $${params.length}`
+    } else {
+      // An explicit ?locationId= is already inside whichever estate it belongs to, so it wins
+      // outright; only fall back to the active estate filter otherwise. A NULL location_id is
+      // never "the other estate's" -- it must still show up regardless of which estate is active.
+      const activeEstate = resolveActiveEstate(searchParams, (await cookies()).get(SELECTED_ESTATE_COOKIE)?.value || null)
+      if (activeEstate) {
+        params.push(tenantContext.tenantId, activeEstate)
+        whereClause += ` AND (cr.location_id IS NULL OR cr.location_id IN (SELECT id FROM locations WHERE tenant_id = $${params.length - 1} AND estate = $${params.length}))`
+      }
     }
 
     if (lotId) {

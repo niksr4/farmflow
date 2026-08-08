@@ -1,8 +1,11 @@
 import { NextResponse } from "next/server"
+import { cookies } from "next/headers"
 import { sql } from "@/lib/server/db"
 import { requireModuleAccess, isModuleAccessError } from "@/lib/server/module-access"
 import { isLocationAccessError } from "@/lib/server/location-access"
 import { validateLocationForTenant } from "@/lib/server/location-utils"
+import { resolveActiveEstate } from "@/lib/server/estate-filter"
+import { SELECTED_ESTATE_COOKIE } from "@/lib/server/estate-cookie"
 import { normalizeTenantContext, runTenantQuery } from "@/lib/server/tenant-db"
 import { canDeleteModule, canWriteModule, resolveRequestedTenantId } from "@/lib/permissions"
 import { logAuditEvent } from "@/lib/server/audit-log"
@@ -65,6 +68,22 @@ export async function GET(request: Request) {
     const todayIso = new Date().toISOString().slice(0, 10)
     const dueSoonCutoffIso = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10)
 
+    // An explicit ?locationId= is already inside whichever estate it belongs to, so it wins
+    // outright; only fall back to the active estate filter when no explicit location was asked
+    // for. A NULL location_id is never "the other estate's" -- it must still count regardless
+    // of which estate is active. Applies to both queries below: a tenant owner treating each
+    // estate as its own profitability center needs the summary totals scoped too, not just the
+    // list -- "ALL rows" in the comment below means unaffected by pagination/search, not by
+    // which estate is selected.
+    const cookieEstate = !locationFilter ? (await cookies()).get(SELECTED_ESTATE_COOKIE)?.value || null : null
+    const activeEstate = !locationFilter ? resolveActiveEstate(searchParams, cookieEstate) : null
+    const estateClause = activeEstate
+      ? sql`AND (location_id IS NULL OR location_id IN (SELECT id FROM locations WHERE tenant_id = ${tenantId} AND estate = ${activeEstate}))`
+      : sql``
+    const estateClauseAliased = activeEstate
+      ? sql`AND (r.location_id IS NULL OR r.location_id IN (SELECT id FROM locations WHERE tenant_id = ${tenantId} AND estate = ${activeEstate}))`
+      : sql``
+
     // Summary is computed against ALL rows (no LIMIT) so totals are always accurate
     const summaryRows = await runTenantQuery(
       sql,
@@ -73,6 +92,7 @@ export async function GET(request: Request) {
         SELECT amount, status, due_date::text AS due_date
         FROM receivables
         WHERE tenant_id = ${tenantId}
+          ${estateClause}
       `,
     )
 
@@ -97,6 +117,7 @@ export async function GET(request: Request) {
         LEFT JOIN locations l ON l.id = r.location_id
         WHERE r.tenant_id = ${tenantId}
           ${locationFilter ? sql`AND r.location_id = ${locationFilter}::uuid` : sql``}
+          ${estateClauseAliased}
           ${searchQuery ? sql`AND (
             lower(r.buyer_name) LIKE ${'%' + searchQuery + '%'}
             OR lower(r.invoice_no) LIKE ${'%' + searchQuery + '%'}

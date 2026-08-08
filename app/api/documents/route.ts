@@ -1,5 +1,6 @@
 import { createHash } from "crypto"
 import { NextResponse } from "next/server"
+import { cookies } from "next/headers"
 import { requireAdminRole } from "@/lib/permissions"
 import { logAuditEvent } from "@/lib/server/audit-log"
 import { sql } from "@/lib/server/db"
@@ -7,6 +8,8 @@ import { encryptSensitiveText } from "@/lib/server/field-encryption"
 import { isModuleAccessError, requireModuleAccess } from "@/lib/server/module-access"
 import { isLocationAccessError } from "@/lib/server/location-access"
 import { validateLocationForTenant } from "@/lib/server/location-utils"
+import { resolveActiveEstate } from "@/lib/server/estate-filter"
+import { SELECTED_ESTATE_COOKIE } from "@/lib/server/estate-cookie"
 import { logServerError } from "@/lib/server/safe-logging"
 import { normalizeTenantContext, runTenantQuery } from "@/lib/server/tenant-db"
 
@@ -147,6 +150,16 @@ export async function GET(request: Request) {
       ? Math.max(1, Math.min(MAX_LIMIT, Math.round(requestedLimit)))
       : 50
 
+    // An explicit ?locationId= is already inside whichever estate it belongs to, so it wins
+    // outright; only fall back to the active estate filter when no explicit location was asked
+    // for. A NULL location_id is never "the other estate's" -- it must still show up regardless
+    // of which estate is active.
+    const cookieEstate = !locationFilterRaw ? (await cookies()).get(SELECTED_ESTATE_COOKIE)?.value || null : null
+    const activeEstate = !locationFilterRaw ? resolveActiveEstate(searchParams, cookieEstate) : null
+    const estateClause = activeEstate
+      ? sql`AND (d.location_id IS NULL OR d.location_id IN (SELECT id FROM locations WHERE tenant_id = ${tenantId}::uuid AND estate = ${activeEstate}))`
+      : sql``
+
     const rows = await runTenantQuery(
       sql,
       tenantContext,
@@ -178,6 +191,7 @@ export async function GET(request: Request) {
         WHERE d.tenant_id = ${tenantId}::uuid
           AND (${typeFilter}::text IS NULL OR lower(d.document_type) = ${typeFilter})
           AND (${locationFilterRaw}::uuid IS NULL OR d.location_id = ${locationFilterRaw}::uuid)
+          ${estateClause}
           AND (
             ${queryText} = ''
             OR lower(
