@@ -1,7 +1,10 @@
 import { NextResponse } from "next/server"
+import { cookies } from "next/headers"
 import { sql, isDbConfigured } from "@/lib/server/db"
 import { requireSessionUser } from "@/lib/server/auth"
 import { resolveScopedSessionUser } from "@/lib/server/module-access"
+import { resolveActiveEstate } from "@/lib/server/estate-filter"
+import { SELECTED_ESTATE_COOKIE } from "@/lib/server/estate-cookie"
 import { normalizeTenantContext, runTenantQuery } from "@/lib/server/tenant-db"
 import { getCurrentFiscalYear } from "@/lib/fiscal-year-utils"
 import { buildErrorResponse, databaseNotConfiguredResponse } from "@/lib/server/route-utils"
@@ -28,7 +31,7 @@ async function tryQuery<T>(
   }
 }
 
-export async function GET() {
+export async function GET(request: Request) {
   if (!isDbConfigured) return databaseNotConfiguredResponse()
 
   try {
@@ -38,6 +41,17 @@ export async function GET() {
     const sessionUser = await resolveScopedSessionUser(await requireSessionUser())
     const context = normalizeTenantContext(sessionUser.tenantId, sessionUser.role)
     const fy = getCurrentFiscalYear()
+
+    // A tenant owner running multiple estates needs each one to read as its own profitability
+    // center -- this dashboard is exactly that view, so it must respect the same estate filter
+    // as everywhere else. A NULL location_id is never "the other estate's" -- it must still
+    // count regardless of which estate is active.
+    const { searchParams } = new URL(request.url)
+    const cookieEstate = (await cookies()).get(SELECTED_ESTATE_COOKIE)?.value || null
+    const activeEstate = resolveActiveEstate(searchParams, cookieEstate)
+    const estateClause = activeEstate
+      ? sql!` AND (location_id IS NULL OR location_id IN (SELECT id FROM locations WHERE tenant_id = ${context.tenantId} AND estate = ${activeEstate}))`
+      : sql!``
 
     // Fetch bag weight for kg resolution on sales
     const bagWeightRows = await runTenantQuery<{ bag_weight_kg: number }>(
@@ -56,6 +70,7 @@ export async function GET() {
           WHERE tenant_id = ${context.tenantId}
             AND deployment_date >= ${fy.startDate}::date
             AND deployment_date <= ${fy.endDate}::date
+            ${estateClause}
         `,
         ["labor_transactions"],
       ),
@@ -67,6 +82,7 @@ export async function GET() {
           WHERE tenant_id = ${context.tenantId}
             AND entry_date >= ${fy.startDate}::date
             AND entry_date <= ${fy.endDate}::date
+            ${estateClause}
         `,
         ["expense_transactions"],
       ),
@@ -80,6 +96,7 @@ export async function GET() {
           WHERE tenant_id = ${context.tenantId}
             AND process_date >= ${fy.startDate}::date
             AND process_date <= ${fy.endDate}::date
+            ${estateClause}
         `,
         ["processing_records"],
       ),
@@ -95,6 +112,7 @@ export async function GET() {
           WHERE tenant_id = ${context.tenantId}
             AND sale_date >= ${fy.startDate}::date
             AND sale_date <= ${fy.endDate}::date
+            ${estateClause}
         `,
         ["sales_records"],
       ),

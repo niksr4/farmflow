@@ -1,7 +1,10 @@
 import { NextResponse } from "next/server"
+import { cookies } from "next/headers"
 import { sql, isDbConfigured } from "@/lib/server/db"
 import { requireSessionUser } from "@/lib/server/auth"
 import { resolveScopedSessionUser } from "@/lib/server/module-access"
+import { resolveActiveEstate } from "@/lib/server/estate-filter"
+import { SELECTED_ESTATE_COOKIE } from "@/lib/server/estate-cookie"
 import { normalizeTenantContext, runTenantQuery } from "@/lib/server/tenant-db"
 import { getCurrentFiscalYear } from "@/lib/fiscal-year-utils"
 import { buildErrorResponse, databaseNotConfiguredResponse } from "@/lib/server/route-utils"
@@ -13,7 +16,7 @@ export const revalidate = 0
  * Returns weekly cumulative cherry intake for the current and prior fiscal year.
  * week_num is 1-indexed from the FY start (April 1).
  */
-export async function GET() {
+export async function GET(request: Request) {
   if (!isDbConfigured) return databaseNotConfiguredResponse()
 
   try {
@@ -26,6 +29,20 @@ export async function GET() {
 
     const prevFyStart = fy.startDate.replace(/^(\d{4})/, (y) => String(Number(y) - 1))
     const prevFyEnd = fy.endDate.replace(/^(\d{4})/, (y) => String(Number(y) - 1))
+
+    // A tenant owner running multiple estates needs each one to read as its own profitability
+    // center -- this feeds the season-pace chart, so it must respect the same estate filter as
+    // everywhere else. A NULL location_id is never "the other estate's" -- it must still count
+    // regardless of which estate is active. $1 is already context.tenantId.
+    const { searchParams } = new URL(request.url)
+    const cookieEstate = (await cookies()).get(SELECTED_ESTATE_COOKIE)?.value || null
+    const activeEstate = resolveActiveEstate(searchParams, cookieEstate)
+    const params = [context.tenantId, fy.startDate, fy.endDate, prevFyStart, prevFyEnd]
+    let estateClause = ""
+    if (activeEstate) {
+      params.push(activeEstate)
+      estateClause = ` AND (location_id IS NULL OR location_id IN (SELECT id FROM locations WHERE tenant_id = $1 AND estate = $${params.length}))`
+    }
 
     const rows = await runTenantQuery(sql!, context, sql!.query(
       `
@@ -44,6 +61,7 @@ export async function GET() {
         WHERE tenant_id = $1
           AND process_date >= $2::date
           AND process_date <= $3::date
+          ${estateClause}
         GROUP BY week_num
 
         UNION ALL
@@ -58,11 +76,12 @@ export async function GET() {
         WHERE tenant_id = $1
           AND process_date >= $4::date
           AND process_date <= $5::date
+          ${estateClause}
         GROUP BY week_num
       ) weekly
       ORDER BY fy, week_num
       `,
-      [context.tenantId, fy.startDate, fy.endDate, prevFyStart, prevFyEnd],
+      params,
     )).catch((err: Error) => {
       if (err.message?.includes('relation "processing_records" does not exist')) return []
       throw err

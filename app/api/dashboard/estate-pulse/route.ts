@@ -1,7 +1,10 @@
 import { NextResponse } from "next/server"
+import { cookies } from "next/headers"
 import { sql, isDbConfigured } from "@/lib/server/db"
 import { requireSessionUser } from "@/lib/server/auth"
 import { resolveScopedSessionUser } from "@/lib/server/module-access"
+import { resolveActiveEstate } from "@/lib/server/estate-filter"
+import { SELECTED_ESTATE_COOKIE } from "@/lib/server/estate-cookie"
 import { normalizeTenantContext, runTenantQuery } from "@/lib/server/tenant-db"
 import { getCurrentFiscalYear } from "@/lib/fiscal-year-utils"
 import { buildErrorResponse, databaseNotConfiguredResponse } from "@/lib/server/route-utils"
@@ -36,7 +39,7 @@ async function tryQuery<T>(
 
 const isoDate = (d: Date) => d.toISOString().slice(0, 10)
 
-export async function GET() {
+export async function GET(request: Request) {
   if (!isDbConfigured) return databaseNotConfiguredResponse()
 
   try {
@@ -46,6 +49,24 @@ export async function GET() {
     const sessionUser = await resolveScopedSessionUser(await requireSessionUser())
     const context = normalizeTenantContext(sessionUser.tenantId, sessionUser.role)
     const fy = getCurrentFiscalYear()
+
+    // A tenant owner running multiple estates needs each one to read as its own profitability
+    // center -- this is exactly that view (production, cost breakdown, top locations), so it
+    // must respect the same estate filter as everywhere else. A NULL location_id is never "the
+    // other estate's" -- it must still count regardless of which estate is active.
+    //
+    // Not filtered here, deliberately: rainfall_records has no location_id at all (one gauge
+    // reading is tenant-wide, not per-block); the activity heatmap UNIONs 7 tables including
+    // attendance_records, which has no location_id either (attendance_workers has no estate
+    // association yet -- separate gap); estimateSellableStock() is a tenant-wide market-timing
+    // figure and would need its own signature change to take an estate.
+    const { searchParams } = new URL(request.url)
+    const cookieEstate = (await cookies()).get(SELECTED_ESTATE_COOKIE)?.value || null
+    const activeEstate = resolveActiveEstate(searchParams, cookieEstate)
+    const estateClause = (column = "location_id") =>
+      activeEstate
+        ? sql!` AND (${sql!.unsafe(column)} IS NULL OR ${sql!.unsafe(column)} IN (SELECT id FROM locations WHERE tenant_id = ${context.tenantId} AND estate = ${activeEstate}))`
+        : sql!``
 
     const fyStartYear = Number(fy.startDate.slice(0, 4))
     const prevFyStart = `${fyStartYear - 1}-04-01`
@@ -75,6 +96,7 @@ export async function GET() {
           WHERE tenant_id = ${context.tenantId}
             AND process_date >= ${fy.startDate}::date
             AND process_date <= ${fy.endDate}::date
+            ${estateClause()}
           GROUP BY week_idx
           ORDER BY week_idx
         `,
@@ -89,6 +111,7 @@ export async function GET() {
           WHERE tenant_id = ${context.tenantId}
             AND process_date >= ${prevFyStart}::date
             AND process_date <= ${prevFyEnd}::date
+            ${estateClause()}
           GROUP BY week_idx
           ORDER BY week_idx
         `,
@@ -103,6 +126,7 @@ export async function GET() {
           WHERE et.tenant_id = ${context.tenantId}
             AND et.entry_date >= ${fy.startDate}::date
             AND et.entry_date <= ${fy.endDate}::date
+            ${estateClause("et.location_id")}
           GROUP BY aa.activity
           ORDER BY amount DESC
         `,
@@ -116,6 +140,7 @@ export async function GET() {
           WHERE tenant_id = ${context.tenantId}
             AND deployment_date >= ${fy.startDate}::date
             AND deployment_date <= ${fy.endDate}::date
+            ${estateClause()}
         `,
         ["labor_transactions"],
       ),
@@ -129,6 +154,7 @@ export async function GET() {
           WHERE pr.tenant_id = ${context.tenantId}
             AND pr.process_date >= ${fy.startDate}::date
             AND pr.process_date <= ${fy.endDate}::date
+            ${estateClause("pr.location_id")}
           GROUP BY l.name
           HAVING COALESCE(SUM(pr.dry_parch), 0) + COALESCE(SUM(pr.dry_cherry), 0) > 0
           ORDER BY output_kg DESC

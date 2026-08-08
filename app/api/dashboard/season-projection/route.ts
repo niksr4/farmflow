@@ -1,7 +1,10 @@
 import { NextResponse } from "next/server"
+import { cookies } from "next/headers"
 import { sql, isDbConfigured } from "@/lib/server/db"
 import { requireSessionUser } from "@/lib/server/auth"
 import { resolveScopedSessionUser } from "@/lib/server/module-access"
+import { resolveActiveEstate } from "@/lib/server/estate-filter"
+import { SELECTED_ESTATE_COOKIE } from "@/lib/server/estate-cookie"
 import { normalizeTenantContext, runTenantQueries } from "@/lib/server/tenant-db"
 import { getCurrentFiscalYear } from "@/lib/fiscal-year-utils"
 import { buildErrorResponse, databaseNotConfiguredResponse } from "@/lib/server/route-utils"
@@ -16,7 +19,7 @@ const MIN_DAYS_FOR_PROJECTION = 7
  * Uses the last LOOKBACK_DAYS of cherry intake to project the season-end total
  * via simple linear regression on recent daily intake.
  */
-export async function GET() {
+export async function GET(request: Request) {
   if (!isDbConfigured) return databaseNotConfiguredResponse()
 
   try {
@@ -30,6 +33,23 @@ export async function GET() {
     const missingRelation = (err: Error) =>
       err.message?.includes('relation "processing_records" does not exist')
 
+    // A tenant owner running multiple estates needs each one to read as its own profitability
+    // center -- this feeds the season projection, so it must respect the same estate filter as
+    // everywhere else. A NULL location_id is never "the other estate's" -- it must still count
+    // regardless of which estate is active. Both queries already have exactly 2 base params, so
+    // the estate value (when active) always lands on $3 in both.
+    const { searchParams } = new URL(request.url)
+    const cookieEstate = (await cookies()).get(SELECTED_ESTATE_COOKIE)?.value || null
+    const activeEstate = resolveActiveEstate(searchParams, cookieEstate)
+    const totalsParams: Array<string | number> = [context.tenantId, fy.startDate]
+    const recentParams: Array<string | number> = [context.tenantId, LOOKBACK_DAYS]
+    let estateClause = ""
+    if (activeEstate) {
+      totalsParams.push(activeEstate)
+      recentParams.push(activeEstate)
+      estateClause = ` AND (location_id IS NULL OR location_id IN (SELECT id FROM locations WHERE tenant_id = $1 AND estate = $3))`
+    }
+
     const [totalsRows, recentRows] = await runTenantQueries(sql!, context, [
       sql!.query(
         `
@@ -40,8 +60,9 @@ export async function GET() {
         WHERE tenant_id = $1
           AND process_date >= $2::date
           AND process_date <= CURRENT_DATE
+          ${estateClause}
         `,
-        [context.tenantId, fy.startDate],
+        totalsParams,
       ),
       sql!.query(
         `
@@ -52,10 +73,11 @@ export async function GET() {
         WHERE tenant_id = $1
           AND process_date >= (CURRENT_DATE - $2::int)::date
           AND process_date <= CURRENT_DATE
+          ${estateClause}
         GROUP BY process_date
         ORDER BY process_date ASC
         `,
-        [context.tenantId, LOOKBACK_DAYS],
+        recentParams,
       ),
     ]).catch((err: Error) => {
       if (missingRelation(err)) return [[], []]
