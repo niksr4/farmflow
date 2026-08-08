@@ -1,10 +1,13 @@
 import { NextResponse } from "next/server"
+import { cookies } from "next/headers"
 import { sql } from "@/lib/server/db"
 import { requireModuleAccess, isModuleAccessError } from "@/lib/server/module-access"
 import { canDeleteModule, canWriteModule } from "@/lib/permissions"
 import { normalizeTenantContext, runTenantQueries, runTenantQuery } from "@/lib/server/tenant-db"
 import { resolveLocationInfo } from "@/lib/server/location-utils"
 import { isLocationAccessError } from "@/lib/server/location-access"
+import { resolveActiveEstate } from "@/lib/server/estate-filter"
+import { SELECTED_ESTATE_COOKIE } from "@/lib/server/estate-cookie"
 import { logAuditEvent } from "@/lib/server/audit-log"
 import { requirePositiveNumber, toNonNegativeNumber } from "@/lib/number-input"
 import { resolveLocationCompatibility } from "@/lib/server/location-compatibility"
@@ -53,15 +56,25 @@ export async function GET(request: Request) {
         : null
     const isLegacyPooledScope = Boolean(locationId && legacyLocationCutover)
     const locationScope = isLegacyPooledScope ? "legacy_pool" : locationId ? "location" : "all"
+    // An explicit ?locationId= is already inside whichever estate it belongs to, so it wins
+    // outright; only fall back to the active estate filter when no explicit location was asked
+    // for. A NULL location_id is never "the other estate's" -- it must still show up regardless
+    // of which estate is active.
+    const cookieEstate = !locationId ? (await cookies()).get(SELECTED_ESTATE_COOKIE)?.value || null : null
+    const activeEstate = !locationId ? resolveActiveEstate(searchParams, cookieEstate) : null
     const locationClause =
       !locationId
-        ? sql``
+        ? activeEstate
+          ? sql` AND (location_id IS NULL OR location_id IN (SELECT id FROM locations WHERE tenant_id = ${tenantContext.tenantId} AND estate = ${activeEstate}))`
+          : sql``
         : isLegacyPooledScope
           ? sql` AND (location_id = ${locationId} OR created_at < ${legacyLocationCutover}::timestamptz)`
           : sql` AND location_id = ${locationId}`
     const recordsLocationClause =
       !locationId
-        ? sql``
+        ? activeEstate
+          ? sql` AND (dr.location_id IS NULL OR dr.location_id IN (SELECT id FROM locations WHERE tenant_id = ${tenantContext.tenantId} AND estate = ${activeEstate}))`
+          : sql``
         : isLegacyPooledScope
           ? sql` AND (dr.location_id = ${locationId} OR dr.created_at < ${legacyLocationCutover}::timestamptz)`
           : sql` AND dr.location_id = ${locationId}`

@@ -4,6 +4,8 @@ import { sql } from "@/lib/server/db"
 import { requireSessionUser } from "@/lib/server/auth"
 import { requireAnyModuleAccess, isModuleAccessError } from "@/lib/server/module-access"
 import { getAccessibleLocationIds } from "@/lib/server/location-access"
+import { resolveActiveEstate } from "@/lib/server/estate-filter"
+import { SELECTED_ESTATE_COOKIE } from "@/lib/server/estate-cookie"
 import { normalizeTenantContext, runTenantQuery } from "@/lib/server/tenant-db"
 import { requireAdminRole, resolveRequestedTenantId } from "@/lib/permissions"
 import { logAuditEvent } from "@/lib/server/audit-log"
@@ -13,11 +15,6 @@ import { assertValidModuleIds } from "@/lib/modules"
 
 export const dynamic = "force-dynamic"
 export const revalidate = 0
-
-// Kept as a local literal (matches lib/module-access.ts's PREVIEW_TENANT_COOKIE) rather than
-// importing from components/inventory-system/constants.ts, to avoid pulling a client-facing
-// constants module into a server route for a single string.
-const SELECTED_ESTATE_COOKIE = "farmflow_selected_estate"
 
 const LOCATION_MODULES = [
   "inventory",
@@ -81,18 +78,15 @@ export async function GET(request: Request) {
       serialized = serialized.filter((loc) => allowed.has(loc.id))
     }
 
-    // Estate narrowing: explicit ?estate= wins, ?scope=all opts out entirely (the admin
-    // Locations settings page needs the full list to manage every block regardless of the
-    // viewer's current selection), otherwise fall back to the cookie the selector writes.
-    const scope = searchParams.get("scope")
-    if (scope !== "all") {
-      const requestedEstate = searchParams.get("estate")
-      const cookieEstate = requestedEstate === null ? (await cookies()).get(SELECTED_ESTATE_COOKIE)?.value || null : null
-      const activeEstate = requestedEstate || cookieEstate
-      const distinctEstates = new Set(serialized.map((loc) => loc.estate).filter(Boolean))
-      if (activeEstate && distinctEstates.size > 1) {
-        serialized = serialized.filter((loc) => loc.estate === activeEstate)
-      }
+    // Estate narrowing: ?scope=all opts out entirely (the admin Locations settings page needs
+    // the full list to manage every block regardless of the viewer's current selection),
+    // otherwise ?estate= or the cookie the selector writes narrows the list. See
+    // lib/estate-filter.ts for the shared decision logic every estate-aware route uses.
+    const cookieEstate = (await cookies()).get(SELECTED_ESTATE_COOKIE)?.value || null
+    const activeEstate = resolveActiveEstate(searchParams, cookieEstate)
+    const distinctEstates = new Set(serialized.map((loc) => loc.estate).filter(Boolean))
+    if (activeEstate && distinctEstates.size > 1) {
+      serialized = serialized.filter((loc) => loc.estate === activeEstate)
     }
 
     return NextResponse.json({ success: true, locations: serialized })

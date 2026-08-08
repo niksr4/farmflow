@@ -2,14 +2,12 @@ import { NextResponse, type NextRequest } from "next/server"
 import { cookies } from "next/headers"
 import { sql, accountsSql } from "@/lib/server/db"
 import { requireModuleAccess, isModuleAccessError } from "@/lib/server/module-access"
+import { resolveActiveEstate } from "@/lib/server/estate-filter"
+import { SELECTED_ESTATE_COOKIE } from "@/lib/server/estate-cookie"
 import { normalizeTenantContext, runTenantQueries } from "@/lib/server/tenant-db"
 
 export const dynamic = "force-dynamic"
 export const revalidate = 0
-
-// Same cookie the header estate selector writes (see /api/locations) -- keeps this view in
-// sync with whatever estate the viewer currently has selected, without a separate control.
-const SELECTED_ESTATE_COOKIE = "farmflow_selected_estate"
 
 const toRows = (r: unknown): any[] => (Array.isArray(r) ? r : (r as any)?.rows ?? [])
 
@@ -66,11 +64,8 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url)
     const start = searchParams.get("start")
     const end = searchParams.get("end")
-    const requestedEstateParam = searchParams.get("estate")?.trim() || null
-    const estate =
-      requestedEstateParam === null
-        ? (await cookies()).get(SELECTED_ESTATE_COOKIE)?.value || null
-        : requestedEstateParam || null
+    const cookieEstate = (await cookies()).get(SELECTED_ESTATE_COOKIE)?.value || null
+    const estate = resolveActiveEstate(searchParams, cookieEstate)
 
     if (!start || !end) {
       return NextResponse.json({ success: false, error: "start and end date params required" }, { status: 400 })
@@ -80,8 +75,12 @@ export async function GET(request: NextRequest) {
     // paramIndex is the placeholder number `estate` lands on in that specific query's params
     // array -- varies per query since not all of them already use $2/$3. column lets the
     // expense_transactions join qualify it as et.location_id instead of a bare reference.
+    // A NULL location_id is never "the other estate's" -- a record predating location tracking,
+    // or one that's genuinely unscoped, must still show up regardless of which estate is active.
     const estateFilter = (paramIndex: number, column = "location_id") =>
-      estate ? ` AND ${column} IN (SELECT id FROM locations WHERE tenant_id = $1 AND estate = $${paramIndex})` : ""
+      estate
+        ? ` AND (${column} IS NULL OR ${column} IN (SELECT id FROM locations WHERE tenant_id = $1 AND estate = $${paramIndex}))`
+        : ""
 
     const tenantRow = toRows(await sql.query(
       `SELECT COALESCE(bag_weight_kg, 50) AS bag_weight_kg FROM tenants WHERE id = $1 LIMIT 1`,

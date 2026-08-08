@@ -149,6 +149,7 @@ import { useHomeInsights } from "@/components/inventory-system/use-home-insights
 import RecordMovementPanel from "@/components/inventory-system/record-movement-panel"
 import MobileSidebarDrawer from "@/components/inventory-system/mobile-sidebar-drawer"
 import PreviewModeBanner from "@/components/inventory-system/preview-mode-banner"
+import EstateFilterBanner from "@/components/inventory-system/estate-filter-banner"
 import WelcomeCard from "@/components/inventory-system/welcome-card"
 import DataToolsPanel from "@/components/inventory-system/data-tools-panel"
 import WriteQueueCard from "@/components/inventory-system/write-queue-card"
@@ -4102,6 +4103,10 @@ export default function InventorySystem() {
             effectiveRole={effectiveRole}
             onExit={exitPreviewMode}
           />
+        )}
+
+        {canSelectEstate && selectedEstate && (
+          <EstateFilterBanner estate={selectedEstate} onShowAll={() => setSelectedEstate(null)} />
         )}
 
         {showWelcome && (

@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server"
 import { sql, isDbConfigured } from "@/lib/server/db"
 import { requireSessionUser } from "@/lib/server/auth"
+import { getAccessibleLocationIds } from "@/lib/server/location-access"
 import { MODULE_BUNDLES, resolveTenantEnabledModules } from "@/lib/modules"
 import { resolveTenantPlanId } from "@/lib/server/tenant-subscriptions"
 import { normalizeTenantContext, runTenantQueries } from "@/lib/server/tenant-db"
@@ -76,10 +77,21 @@ export async function GET() {
         ? cappedTenantEnabled.filter((moduleId) => (userMap.has(moduleId) ? Boolean(userMap.get(moduleId)) : true))
         : cappedTenantEnabled
 
+    // Same per-user location restriction /api/locations applies (lib/location-access.ts) --
+    // this is the primary source of the client's `locations` state on a normal page load
+    // (loadWorkspaceBootstrap() in inventory-system.tsx), so leaving it unfiltered here let a
+    // restricted user's location pickers/estate list show locations outside their allow-list,
+    // even though writes against them were still correctly blocked server-side.
+    const accessibleLocationIds = await getAccessibleLocationIds(sessionUser)
+    const visibleLocationRows =
+      accessibleLocationIds === null
+        ? locationRows || []
+        : (locationRows || []).filter((row: any) => accessibleLocationIds.includes(String(row.id)))
+
     return NextResponse.json({
       success: true,
       modules: effectiveModules,
-      locations: (locationRows || []).map((row) => serializeLocation(row as Record<string, unknown>)),
+      locations: visibleLocationRows.map((row) => serializeLocation(row as Record<string, unknown>)),
       planId,
       plans: MODULE_BUNDLES,
       trialDaysRemaining,
