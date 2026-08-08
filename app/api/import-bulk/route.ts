@@ -10,6 +10,7 @@ import { logRouteMutationFailure } from "@/lib/server/route-error-events"
 import { logAuditEvent } from "@/lib/server/audit-log"
 import { csvToObjects } from "@/lib/csv"
 import { resolveLocationInfo } from "@/lib/server/location-utils"
+import { isLocationAccessError } from "@/lib/server/location-access"
 import { recalculateInventoryForItem } from "@/lib/server/inventory-recalc"
 import { sanitizeRouteError } from "@/lib/server/sanitize-route-error"
 import { recomputeProcessingTotals, resolveBagWeightKg } from "@/lib/server/processing-utils"
@@ -533,7 +534,7 @@ export async function POST(request: Request) {
     const resolveLocationDisplay = async (locationId: string, fallback: string) => {
       let info = locationDisplayCache.get(locationId)
       if (!info) {
-        const resolved = await resolveLocationInfo(sql, tenantContext, { locationId })
+        const resolved = await resolveLocationInfo(sql, tenantContext, { locationId }, sessionUser)
         info = { name: resolved?.name, code: resolved?.code }
         locationDisplayCache.set(locationId, info)
       }
@@ -566,7 +567,7 @@ export async function POST(request: Request) {
       const cached = locationCache.get(raw.toLowerCase())
       if (cached) return cached
 
-      const resolved = await resolveLocationInfo(sql, tenantContext, { estate: raw })
+      const resolved = await resolveLocationInfo(sql, tenantContext, { estate: raw }, sessionUser)
       if (resolved?.id) {
         locationCache.set(raw.toLowerCase(), resolved.id)
         return resolved.id
@@ -1366,6 +1367,9 @@ export async function POST(request: Request) {
     }
     if (isModuleAccessError(error)) {
       return NextResponse.json({ success: false, error: "Module access disabled" }, { status: 403 })
+    }
+    if (isLocationAccessError(error)) {
+      return NextResponse.json({ success: false, error: "You don't have access to this location" }, { status: 403 })
     }
     await logRouteMutationFailure({
       tenantId: activeTenantContext?.tenantId || null,

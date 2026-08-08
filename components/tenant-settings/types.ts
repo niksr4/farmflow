@@ -55,3 +55,15 @@ export type SectionLink = {
 export type RoleOption = "admin" | "user"
 
 export type UserModuleSource = "user" | "tenant" | "default" | ""
+
+export interface LocationPermission {
+  id: string
+  name: string
+  code: string
+  estate: string | null
+  enabled: boolean
+}
+
+// No "tenant" tier here (unlike UserModuleSource) -- there's no tenant-level location default to
+// fall back to, only "does this user have an explicit assignment or not."
+export type UserLocationSource = "user" | "default" | ""

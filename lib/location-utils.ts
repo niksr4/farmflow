@@ -2,6 +2,8 @@ import "server-only"
 
 import type { NeonQueryFunction } from "@neondatabase/serverless"
 import { runTenantQuery } from "@/lib/server/tenant-db"
+import { requireLocationAccess } from "@/lib/server/location-access"
+import type { SessionUser } from "@/lib/server/auth"
 
 type NeonSql = NeonQueryFunction<any, any>
 
@@ -11,6 +13,7 @@ export async function resolveLocationInfo(
   sql: NeonSql,
   tenantContext: { tenantId: string; role: string },
   input: { locationId?: string | null; estate?: string | null },
+  sessionUser: SessionUser,
 ): Promise<LocationInfo | null> {
   const locationId = String(input.locationId || "").trim()
   if (locationId) {
@@ -26,11 +29,13 @@ export async function resolveLocationInfo(
       `,
     )
     if (rows?.length) {
-      return {
+      const info: LocationInfo = {
         id: String(rows[0].id),
         name: String(rows[0].name || ""),
         code: String(rows[0].code || ""),
       }
+      await requireLocationAccess(info.id, sessionUser)
+      return info
     }
   }
 
@@ -55,11 +60,45 @@ export async function resolveLocationInfo(
     `,
   )
   if (rows?.length) {
-    return {
+    const info: LocationInfo = {
       id: String(rows[0].id),
       name: String(rows[0].name || ""),
       code: String(rows[0].code || ""),
     }
+    await requireLocationAccess(info.id, sessionUser)
+    return info
   }
   return null
+}
+
+/**
+ * Shared replacement for the `validateLocationForTenant` helper that used to be copy-pasted
+ * (with minor drift) into receivables, labor-neon, expenses-neon and documents routes. Confirms
+ * `locationId` belongs to the tenant, then enforces the requesting user's per-user location
+ * restriction (see lib/location-access.ts) -- throws LocationAccessError, doesn't just return
+ * null, so callers can tell "invalid for this tenant" (400) apart from "valid but not yours"
+ * (403) the same way resolveLocationInfo above does.
+ */
+export async function validateLocationForTenant(
+  sql: NeonSql,
+  tenantContext: { tenantId: string; role: string },
+  sessionUser: SessionUser,
+  locationId: string | null,
+): Promise<string | null> {
+  if (!locationId) return null
+  const rows = await runTenantQuery(
+    sql,
+    tenantContext,
+    sql`
+      SELECT id
+      FROM locations
+      WHERE id = ${locationId}::uuid
+        AND tenant_id = ${tenantContext.tenantId}
+      LIMIT 1
+    `,
+  )
+  if (!rows?.length) return null
+  const id = String(rows[0].id)
+  await requireLocationAccess(id, sessionUser)
+  return id
 }

@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server"
 import { accountsSql } from "@/lib/server/db"
 import { requireModuleAccess, isModuleAccessError } from "@/lib/server/module-access"
+import { isLocationAccessError } from "@/lib/server/location-access"
+import { validateLocationForTenant } from "@/lib/server/location-utils"
 import { normalizeTenantContext, runTenantQueries, runTenantQuery, runTenantTransaction } from "@/lib/server/tenant-db"
 import { resolveTenantUserUuid } from "@/lib/server/tenant-user"
 import { canDeleteModule, canWriteModule } from "@/lib/permissions"
@@ -372,25 +374,6 @@ async function fetchInventoryItemsForTenant(tenantContext: TenantContext): Promi
   } catch {
     return []
   }
-}
-
-async function validateLocationForTenant(
-  tenantContext: { tenantId: string; role: string },
-  locationId: string | null,
-) {
-  if (!locationId) return null
-  const rows = await runTenantQuery(
-    accountsSql,
-    tenantContext,
-    accountsSql`
-      SELECT id
-      FROM locations
-      WHERE id = ${locationId}::uuid
-        AND tenant_id = ${tenantContext.tenantId}
-      LIMIT 1
-    `,
-  )
-  return rows?.length ? locationId : null
 }
 
 async function loadExpenseInventoryLinks(
@@ -992,7 +975,7 @@ export async function GET(request: Request) {
       tableHasExpenseInventoryLinksTable(),
     ])
     const validLocationId = supportsLocation
-      ? await validateLocationForTenant(tenantContext, requestedLocationId)
+      ? await validateLocationForTenant(accountsSql, tenantContext, sessionUser, requestedLocationId)
       : null
     if (supportsLocation && requestedLocationId && !validLocationId) {
       return NextResponse.json({ success: false, error: "Selected location is invalid for this tenant" }, { status: 400 })
@@ -1192,6 +1175,9 @@ export async function GET(request: Request) {
     })
   } catch (error: any) {
     console.error("❌ Error fetching expenses:", error.message)
+    if (isLocationAccessError(error)) {
+      return NextResponse.json({ success: false, error: "You don't have access to this location" }, { status: 403 })
+    }
     if (isModuleAccessError(error)) {
       return NextResponse.json({ success: false, error: "Module access disabled", deployments: [] }, { status: 403 })
     }
@@ -1237,7 +1223,7 @@ export async function POST(request: Request) {
       tableHasExpenseInventoryLinksTable(),
     ])
     const validLocationId = supportsLocation
-      ? await validateLocationForTenant(tenantContext, requestedLocationId)
+      ? await validateLocationForTenant(accountsSql, tenantContext, sessionUser, requestedLocationId)
       : null
     if (supportsLocation && requestedLocationId && !validLocationId) {
       return NextResponse.json({ success: false, error: "Selected location is invalid for this tenant" }, { status: 400 })
@@ -1329,6 +1315,9 @@ export async function POST(request: Request) {
     })
   } catch (error: any) {
     console.error("❌ Error adding expense:", error.message)
+    if (isLocationAccessError(error)) {
+      return NextResponse.json({ success: false, error: "You don't have access to this location" }, { status: 403 })
+    }
     if (isModuleAccessError(error)) {
       return NextResponse.json({ success: false, error: "Module access disabled" }, { status: 403 })
     }
@@ -1388,7 +1377,7 @@ export async function PUT(request: Request) {
       tableHasExpenseInventoryLinksTable(),
     ])
     const validLocationId = supportsLocation
-      ? await validateLocationForTenant(tenantContext, requestedLocationId)
+      ? await validateLocationForTenant(accountsSql, tenantContext, sessionUser, requestedLocationId)
       : null
     if (supportsLocation && requestedLocationId && !validLocationId) {
       return NextResponse.json({ success: false, error: "Selected location is invalid for this tenant" }, { status: 400 })
@@ -1517,6 +1506,9 @@ export async function PUT(request: Request) {
     })
   } catch (error: any) {
     console.error("❌ Error updating expense:", error.message)
+    if (isLocationAccessError(error)) {
+      return NextResponse.json({ success: false, error: "You don't have access to this location" }, { status: 403 })
+    }
     if (isModuleAccessError(error)) {
       return NextResponse.json({ success: false, error: "Module access disabled" }, { status: 403 })
     }

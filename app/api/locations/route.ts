@@ -3,6 +3,7 @@ import { cookies } from "next/headers"
 import { sql } from "@/lib/server/db"
 import { requireSessionUser } from "@/lib/server/auth"
 import { requireAnyModuleAccess, isModuleAccessError } from "@/lib/server/module-access"
+import { getAccessibleLocationIds } from "@/lib/server/location-access"
 import { normalizeTenantContext, runTenantQuery } from "@/lib/server/tenant-db"
 import { requireAdminRole, resolveRequestedTenantId } from "@/lib/permissions"
 import { logAuditEvent } from "@/lib/server/audit-log"
@@ -69,6 +70,16 @@ export async function GET(request: Request) {
     )
 
     let serialized = locations.map((row) => serializeLocation(row as Record<string, unknown>))
+
+    // Per-user location restriction: null = unrestricted (owner/admin, or a `user` with no
+    // assignment yet). A non-null array is a hard allow-list -- restricted locations are
+    // dropped from the list entirely (not just deprioritized), so a restricted user's dropdown
+    // can never even offer a block they aren't allowed to write to. See lib/location-access.ts.
+    const accessibleLocationIds = await getAccessibleLocationIds(sessionUser)
+    if (accessibleLocationIds !== null) {
+      const allowed = new Set(accessibleLocationIds)
+      serialized = serialized.filter((loc) => allowed.has(loc.id))
+    }
 
     // Estate narrowing: explicit ?estate= wins, ?scope=all opts out entirely (the admin
     // Locations settings page needs the full list to manage every block regardless of the

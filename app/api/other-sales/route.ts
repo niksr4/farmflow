@@ -4,6 +4,7 @@ import { requireModuleAccess, isModuleAccessError } from "@/lib/server/module-ac
 import { canDeleteModule, canWriteModule } from "@/lib/permissions"
 import { normalizeTenantContext, runTenantQueries, runTenantQuery } from "@/lib/server/tenant-db"
 import { resolveLocationInfo } from "@/lib/server/location-utils"
+import { isLocationAccessError } from "@/lib/server/location-access"
 import { logAuditEvent } from "@/lib/server/audit-log"
 import { logRouteMutationFailure } from "@/lib/server/route-error-events"
 import { sanitizeRouteError } from "@/lib/server/sanitize-route-error"
@@ -291,10 +292,12 @@ export async function POST(request: Request) {
     }
 
     const tenantContext = normalizeTenantContext(sessionUser.tenantId, sessionUser.role)
-    const locationInfo = await resolveLocationInfo(sql, tenantContext, {
-      locationId: parsed.data.locationId,
-      estate: parsed.data.estate,
-    })
+    const locationInfo = await resolveLocationInfo(
+      sql,
+      tenantContext,
+      { locationId: parsed.data.locationId, estate: parsed.data.estate },
+      sessionUser,
+    )
     if (!locationInfo) {
       return NextResponse.json({ success: false, error: "Estate/location is required." }, { status: 400 })
     }
@@ -349,6 +352,9 @@ export async function POST(request: Request) {
     if (isModuleAccessError(error)) {
       return NextResponse.json({ success: false, error: "Module access disabled" }, { status: 403 })
     }
+    if (isLocationAccessError(error)) {
+      return NextResponse.json({ success: false, error: "You don't have access to this location" }, { status: 403 })
+    }
     console.error("Error creating other sale record:", error)
     await logRouteMutationFailure({
       tenantId,
@@ -397,10 +403,12 @@ export async function PUT(request: Request) {
       return NextResponse.json({ success: false, error: "Record not found." }, { status: 404 })
     }
 
-    const locationInfo = await resolveLocationInfo(sql, tenantContext, {
-      locationId: parsed.data.locationId,
-      estate: parsed.data.estate,
-    })
+    const locationInfo = await resolveLocationInfo(
+      sql,
+      tenantContext,
+      { locationId: parsed.data.locationId, estate: parsed.data.estate },
+      sessionUser,
+    )
     if (!locationInfo) {
       return NextResponse.json({ success: false, error: "Estate/location is required." }, { status: 400 })
     }
@@ -441,6 +449,9 @@ export async function PUT(request: Request) {
   } catch (error: any) {
     if (isModuleAccessError(error)) {
       return NextResponse.json({ success: false, error: "Module access disabled" }, { status: 403 })
+    }
+    if (isLocationAccessError(error)) {
+      return NextResponse.json({ success: false, error: "You don't have access to this location" }, { status: 403 })
     }
     console.error("Error updating other sale record:", error)
     await logRouteMutationFailure({

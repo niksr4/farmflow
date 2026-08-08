@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server"
 import { accountsSql } from "@/lib/server/db"
 import { requireModuleAccess, isModuleAccessError } from "@/lib/server/module-access"
+import { isLocationAccessError } from "@/lib/server/location-access"
+import { validateLocationForTenant } from "@/lib/server/location-utils"
 import { normalizeTenantContext, runTenantQueries, runTenantQuery } from "@/lib/server/tenant-db"
 import { canDeleteModule, canWriteModule } from "@/lib/permissions"
 import { logAuditEvent } from "@/lib/server/audit-log"
@@ -79,25 +81,6 @@ async function validateActivityCodeForTenant(
   return Boolean(rows?.length)
 }
 
-async function validateLocationForTenant(
-  tenantContext: { tenantId: string; role: string },
-  locationId: string | null,
-) {
-  if (!locationId) return null
-  const rows = await runTenantQuery(
-    accountsSql,
-    tenantContext,
-    accountsSql`
-      SELECT id
-      FROM locations
-      WHERE id = ${locationId}::uuid
-        AND tenant_id = ${tenantContext.tenantId}
-      LIMIT 1
-    `,
-  )
-  return rows?.length ? locationId : null
-}
-
 export async function GET(request: Request) {
   try {
     const sessionUser = await requireModuleAccess("accounts")
@@ -109,7 +92,7 @@ export async function GET(request: Request) {
     }
     const supportsLocation = await tableHasLocationColumn("labor_transactions")
     const validLocationId = supportsLocation
-      ? await validateLocationForTenant(tenantContext, requestedLocationId)
+      ? await validateLocationForTenant(accountsSql, tenantContext, sessionUser, requestedLocationId)
       : null
     if (supportsLocation && requestedLocationId && !validLocationId) {
       return NextResponse.json({ success: false, error: "Selected location is invalid for this tenant" }, { status: 400 })
@@ -319,6 +302,9 @@ export async function GET(request: Request) {
     })
   } catch (error: any) {
     console.error("❌ Error fetching labour deployments:", error.message)
+    if (isLocationAccessError(error)) {
+      return NextResponse.json({ success: false, error: "You don't have access to this location" }, { status: 403 })
+    }
     if (isModuleAccessError(error)) {
       return NextResponse.json({ success: false, error: "Module access disabled", deployments: [] }, { status: 403 })
     }
@@ -365,7 +351,7 @@ export async function POST(request: Request) {
     }
     const supportsLocation = await tableHasLocationColumn("labor_transactions")
     const validLocationId = supportsLocation
-      ? await validateLocationForTenant(tenantContext, requestedLocationId)
+      ? await validateLocationForTenant(accountsSql, tenantContext, sessionUser, requestedLocationId)
       : null
     if (supportsLocation && requestedLocationId && !validLocationId) {
       return NextResponse.json({ success: false, error: "Selected location is invalid for this tenant" }, { status: 400 })
@@ -533,6 +519,9 @@ export async function POST(request: Request) {
     })
   } catch (error: any) {
     console.error("❌ Error adding labour deployment:", error.message)
+    if (isLocationAccessError(error)) {
+      return NextResponse.json({ success: false, error: "You don't have access to this location" }, { status: 403 })
+    }
     if (isModuleAccessError(error)) {
       return NextResponse.json({ success: false, error: "Module access disabled" }, { status: 403 })
     }
@@ -582,7 +571,7 @@ export async function PUT(request: Request) {
     }
     const supportsLocation = await tableHasLocationColumn("labor_transactions")
     const validLocationId = supportsLocation
-      ? await validateLocationForTenant(tenantContext, requestedLocationId)
+      ? await validateLocationForTenant(accountsSql, tenantContext, sessionUser, requestedLocationId)
       : null
     if (supportsLocation && requestedLocationId && !validLocationId) {
       return NextResponse.json({ success: false, error: "Selected location is invalid for this tenant" }, { status: 400 })
@@ -673,6 +662,9 @@ export async function PUT(request: Request) {
     })
   } catch (error: any) {
     console.error("❌ Error updating labour deployment:", error.message)
+    if (isLocationAccessError(error)) {
+      return NextResponse.json({ success: false, error: "You don't have access to this location" }, { status: 403 })
+    }
     if (isModuleAccessError(error)) {
       return NextResponse.json({ success: false, error: "Module access disabled" }, { status: 403 })
     }

@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server"
 import { sql } from "@/lib/server/db"
 import { requireModuleAccess, isModuleAccessError } from "@/lib/server/module-access"
+import { isLocationAccessError } from "@/lib/server/location-access"
+import { validateLocationForTenant } from "@/lib/server/location-utils"
 import { normalizeTenantContext, runTenantQuery } from "@/lib/server/tenant-db"
 import { canDeleteModule, canWriteModule, resolveRequestedTenantId } from "@/lib/permissions"
 import { logAuditEvent } from "@/lib/server/audit-log"
@@ -43,25 +45,6 @@ const resolveEffectiveStatus = (statusValue: string | null | undefined, dueDate:
     return "overdue"
   }
   return normalized
-}
-
-async function validateLocationForTenant(
-  tenantContext: { tenantId: string; role: string },
-  locationId: string | null,
-) {
-  if (!locationId) return null
-  const rows = await runTenantQuery(
-    sql,
-    tenantContext,
-    sql`
-      SELECT id
-      FROM locations
-      WHERE id = ${locationId}
-        AND tenant_id = ${tenantContext.tenantId}
-      LIMIT 1
-    `,
-  )
-  return rows?.length ? locationId : null
 }
 
 export async function GET(request: Request) {
@@ -256,7 +239,7 @@ export async function POST(request: Request) {
     const status = VALID_STATUSES.has(statusInput) ? statusInput : "unpaid"
 
     const tenantContext = normalizeTenantContext(sessionUser.tenantId, sessionUser.role)
-    const validLocationId = await validateLocationForTenant(tenantContext, locationId)
+    const validLocationId = await validateLocationForTenant(sql, tenantContext, sessionUser, locationId)
     if (locationId && !validLocationId) {
       return NextResponse.json({ success: false, error: "Selected location is invalid for this tenant" }, { status: 400 })
     }
@@ -300,6 +283,9 @@ export async function POST(request: Request) {
     return NextResponse.json({ success: true, record: rows?.[0] })
   } catch (error: any) {
     console.error("Error creating receivable:", error)
+    if (isLocationAccessError(error)) {
+      return NextResponse.json({ success: false, error: "You don't have access to this location" }, { status: 403 })
+    }
     if (isModuleAccessError(error)) {
       return NextResponse.json({ success: false, error: "Module access disabled" }, { status: 403 })
     }
@@ -356,7 +342,7 @@ export async function PUT(request: Request) {
 
     const status = VALID_STATUSES.has(statusInput) ? statusInput : "unpaid"
     const tenantContext = normalizeTenantContext(sessionUser.tenantId, sessionUser.role)
-    const validLocationId = await validateLocationForTenant(tenantContext, locationId)
+    const validLocationId = await validateLocationForTenant(sql, tenantContext, sessionUser, locationId)
     if (locationId && !validLocationId) {
       return NextResponse.json({ success: false, error: "Selected location is invalid for this tenant" }, { status: 400 })
     }
@@ -408,6 +394,9 @@ export async function PUT(request: Request) {
     return NextResponse.json({ success: true, record: rows?.[0] })
   } catch (error: any) {
     console.error("Error updating receivable:", error)
+    if (isLocationAccessError(error)) {
+      return NextResponse.json({ success: false, error: "You don't have access to this location" }, { status: 403 })
+    }
     if (isModuleAccessError(error)) {
       return NextResponse.json({ success: false, error: "Module access disabled" }, { status: 403 })
     }

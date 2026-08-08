@@ -48,11 +48,13 @@ import {
   LaborDefaultsSection,
   TenantModulesSection,
   TenantUsersSection,
+  UserLocationOverridesSection,
   UserModuleOverridesSection,
 } from "@/components/tenant-settings/operations-sections"
 import { ThresholdsSection } from "@/components/tenant-settings/thresholds-section"
 import type {
   AuditLog,
+  LocationPermission,
   LocationRow,
   ModulePermission,
   PrivacyStatus,
@@ -60,6 +62,7 @@ import type {
   SectionLink,
   UiPreferencesDraft,
   User,
+  UserLocationSource,
   UserModuleSource,
 } from "@/components/tenant-settings/types"
 
@@ -198,6 +201,10 @@ export default function TenantSettingsPage() {
   const [userModuleSource, setUserModuleSource] = useState<UserModuleSource>("")
   const [isUserModulesLoading, setIsUserModulesLoading] = useState(false)
   const [isSavingUserModules, setIsSavingUserModules] = useState(false)
+  const [userLocationPermissions, setUserLocationPermissions] = useState<LocationPermission[]>([])
+  const [userLocationSource, setUserLocationSource] = useState<UserLocationSource>("")
+  const [isUserLocationsLoading, setIsUserLocationsLoading] = useState(false)
+  const [isSavingUserLocations, setIsSavingUserLocations] = useState(false)
 
   const [auditLogs, setAuditLogs] = useState<AuditLog[]>([])
   const [auditTotalCount, setAuditTotalCount] = useState(0)
@@ -483,6 +490,31 @@ export default function TenantSettingsPage() {
     }
   }, [toast])
 
+  const loadUserLocations = useCallback(async (userId: string) => {
+    if (!userId) {
+      setUserLocationPermissions([])
+      setUserLocationSource("default")
+      return
+    }
+
+    setIsUserLocationsLoading(true)
+    try {
+      const response = await fetch(`/api/admin/user-locations?userId=${userId}`)
+      const data = await response.json()
+      if (!response.ok || !data.success) {
+        throw new Error(data.error || "Failed to load user locations")
+      }
+      setUserLocationPermissions(data.locations || [])
+      setUserLocationSource(data.source || "default")
+    } catch (error: any) {
+      toast({ title: "Error", description: error.message || "Failed to load user locations", variant: "destructive" })
+      setUserLocationPermissions([])
+      setUserLocationSource("default")
+    } finally {
+      setIsUserLocationsLoading(false)
+    }
+  }, [toast])
+
   const loadAuditLogs = useCallback(async () => {
     if (!tenantId || !isOwner) return
     setIsAuditLoading(true)
@@ -568,6 +600,18 @@ export default function TenantSettingsPage() {
     setUserModulePermissions(MODULES.map((module) => ({ ...module, enabled: module.defaultEnabled !== false })))
     setUserModuleSource("default")
   }, [selectedUserId, loadUserModules, isAdminOrOwner])
+
+  useEffect(() => {
+    if (!isAdminOrOwner) {
+      return
+    }
+    if (selectedUserId) {
+      loadUserLocations(selectedUserId)
+      return
+    }
+    setUserLocationPermissions([])
+    setUserLocationSource("default")
+  }, [selectedUserId, loadUserLocations, isAdminOrOwner])
 
   const handleCreateUser = async () => {
     if (!tenantId) {
@@ -687,6 +731,12 @@ export default function TenantSettingsPage() {
   const toggleUserModule = (moduleId: string) => {
     setUserModulePermissions((prev) =>
       prev.map((module) => (module.id === moduleId ? { ...module, enabled: !module.enabled } : module)),
+    )
+  }
+
+  const toggleUserLocation = (locationId: string) => {
+    setUserLocationPermissions((prev) =>
+      prev.map((location) => (location.id === locationId ? { ...location, enabled: !location.enabled } : location)),
     )
   }
 
@@ -820,6 +870,45 @@ export default function TenantSettingsPage() {
       await loadUserModules(selectedUserId)
     } catch (error: any) {
       toast({ title: "Error", description: error.message || "Failed to reset user modules", variant: "destructive" })
+    }
+  }
+
+  const handleSaveUserLocations = async () => {
+    if (!selectedUserId) return
+    setIsSavingUserLocations(true)
+    try {
+      const response = await fetch("/api/admin/user-locations", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ userId: selectedUserId, locations: userLocationPermissions }),
+      })
+      const data = await response.json()
+      if (!response.ok || !data.success) {
+        throw new Error(data.error || "Failed to update user locations")
+      }
+      toast({ title: "User access updated", description: "Location access saved for this user." })
+      await loadUserLocations(selectedUserId)
+    } catch (error: any) {
+      toast({ title: "Error", description: error.message || "Failed to update user locations", variant: "destructive" })
+    } finally {
+      setIsSavingUserLocations(false)
+    }
+  }
+
+  const handleResetUserLocations = async () => {
+    if (!selectedUserId) return
+    try {
+      const response = await fetch(`/api/admin/user-locations?userId=${selectedUserId}`, {
+        method: "DELETE",
+      })
+      const data = await response.json()
+      if (!response.ok || !data.success) {
+        throw new Error(data.error || "Failed to reset user locations")
+      }
+      toast({ title: "User reset", description: "User can access every location again." })
+      await loadUserLocations(selectedUserId)
+    } catch (error: any) {
+      toast({ title: "Error", description: error.message || "Failed to reset user locations", variant: "destructive" })
     }
   }
 
@@ -1326,6 +1415,21 @@ export default function TenantSettingsPage() {
               onToggleUserModule={toggleUserModule}
               onSaveUserModules={handleSaveUserModules}
               onResetUserModules={handleResetUserModules}
+            />
+          )}
+          {isAdminOrOwner && (
+            <UserLocationOverridesSection
+              tenantId={tenantId}
+              users={users}
+              selectedUserId={selectedUserId}
+              userLocationSource={userLocationSource}
+              userLocationPermissions={userLocationPermissions}
+              isUserLocationsLoading={isUserLocationsLoading}
+              isSavingUserLocations={isSavingUserLocations}
+              onSelectedUserIdChange={setSelectedUserId}
+              onToggleUserLocation={toggleUserLocation}
+              onSaveUserLocations={handleSaveUserLocations}
+              onResetUserLocations={handleResetUserLocations}
             />
           )}
           {isOwner && (

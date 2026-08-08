@@ -12,7 +12,15 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/comp
 import { MODULE_BUNDLES, filterPlanVisibleModules, type ModuleBundle } from "@/lib/modules"
 import { formatDateOnly } from "@/lib/date-utils"
 import { roleLabel } from "@/lib/roles"
-import type { LocationRow, ModulePermission, RoleOption, User, UserModuleSource } from "@/components/tenant-settings/types"
+import type {
+  LocationPermission,
+  LocationRow,
+  ModulePermission,
+  RoleOption,
+  User,
+  UserLocationSource,
+  UserModuleSource,
+} from "@/components/tenant-settings/types"
 import { formatUserModuleSource } from "@/components/tenant-settings/utils"
 
 type HelpLabelProps = {
@@ -643,6 +651,134 @@ export function UserModuleOverridesSection({
             {isSavingUserModules ? "Saving..." : "Save User Access"}
           </Button>
           <Button variant="outline" onClick={onResetUserModules} disabled={!selectedUserId || isUserModulesLoading}>
+            Reset to Tenant Defaults
+          </Button>
+        </div>
+      </CardContent>
+    </Card>
+  )
+}
+
+type UserLocationOverridesSectionProps = {
+  tenantId: string
+  users: User[]
+  selectedUserId: string
+  userLocationSource: UserLocationSource
+  userLocationPermissions: LocationPermission[]
+  isUserLocationsLoading: boolean
+  isSavingUserLocations: boolean
+  onSelectedUserIdChange: (value: string) => void
+  onToggleUserLocation: (locationId: string) => void
+  onSaveUserLocations: () => void
+  onResetUserLocations: () => void
+}
+
+export function UserLocationOverridesSection({
+  tenantId,
+  users,
+  selectedUserId,
+  userLocationSource,
+  userLocationPermissions,
+  isUserLocationsLoading,
+  isSavingUserLocations,
+  onSelectedUserIdChange,
+  onToggleUserLocation,
+  onSaveUserLocations,
+  onResetUserLocations,
+}: UserLocationOverridesSectionProps) {
+  const enabledCount = userLocationPermissions.filter((location) => location.enabled).length
+  const isRestricted = userLocationSource === "user"
+
+  // Group by estate for tenants that tag locations that way (see locations.estate); tenants
+  // without it, or with everything under one estate, fall back to a single flat list.
+  const groups: Array<{ estate: string | null; locations: LocationPermission[] }> = []
+  for (const location of userLocationPermissions) {
+    const estate = location.estate || null
+    let group = groups.find((candidate) => candidate.estate === estate)
+    if (!group) {
+      group = { estate, locations: [] }
+      groups.push(group)
+    }
+    group.locations.push(location)
+  }
+  const showGroupLabels = groups.length > 1
+
+  return (
+    <Card id="user-location-overrides" className="scroll-mt-24 border-border/70 bg-white/85">
+      <CardHeader>
+        <CardTitle>Per-User Location Access</CardTitle>
+        <CardDescription>
+          Step 4. Restrict which estate locations a user can view and write records against. Leave
+          a user unrestricted unless they should only touch specific blocks.
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        <div className="rounded-2xl border border-amber-100 bg-amber-50/70 p-4 text-sm shadow-sm">
+          <p className="font-medium text-amber-950">Enforced, not just a default.</p>
+          <p className="mt-1 text-xs leading-5 text-amber-900/80">
+            Once a user has any location checked here, they can only read or write records for
+            checked locations everywhere in the app -- not just this dropdown. Covering for a
+            colleague? Temporarily check their location here, then uncheck it after.
+          </p>
+        </div>
+        <div className="space-y-2">
+          <Label>Select User</Label>
+          <Select value={selectedUserId} onValueChange={onSelectedUserIdChange} disabled={!tenantId || users.length === 0}>
+            <SelectTrigger>
+              <SelectValue placeholder={users.length ? "Choose a user" : "No users available"} />
+            </SelectTrigger>
+            <SelectContent>
+              {users.map((user) => (
+                <SelectItem key={user.id} value={user.id}>
+                  {user.username} ({roleLabel(user.role)})
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <Badge variant="outline" className="border-slate-200 bg-slate-50 text-slate-700">
+            {isRestricted
+              ? `Restricted to ${enabledCount} location${enabledCount === 1 ? "" : "s"}`
+              : "Unrestricted (all locations)"}
+          </Badge>
+        </div>
+
+        {userLocationPermissions.length === 0 ? (
+          <p className="text-xs text-muted-foreground">No locations exist for this estate yet.</p>
+        ) : (
+          <div className="space-y-4">
+            {groups.map((group) => (
+              <div key={group.estate || "__ungrouped__"} className="space-y-2">
+                {showGroupLabels ? (
+                  <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                    {group.estate || "Other locations"}
+                  </p>
+                ) : null}
+                <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+                  {group.locations.map((location) => (
+                    <label
+                      key={location.id}
+                      className="flex items-center gap-2 rounded-lg border border-border/60 bg-white/80 p-3"
+                    >
+                      <input
+                        type="checkbox"
+                        checked={location.enabled}
+                        onChange={() => onToggleUserLocation(location.id)}
+                        disabled={isUserLocationsLoading}
+                      />
+                      <span>{location.name}</span>
+                    </label>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+
+        <div className="flex flex-col gap-2 sm:flex-row">
+          <Button onClick={onSaveUserLocations} disabled={!selectedUserId || isUserLocationsLoading || isSavingUserLocations}>
+            {isSavingUserLocations ? "Saving..." : "Save User Access"}
+          </Button>
+          <Button variant="outline" onClick={onResetUserLocations} disabled={!selectedUserId || isUserLocationsLoading}>
             Reset to Tenant Defaults
           </Button>
         </div>

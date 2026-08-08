@@ -5,6 +5,7 @@ import { requireModuleAccess, isModuleAccessError } from "@/lib/server/module-ac
 import { canDeleteModule, canWriteModule } from "@/lib/permissions"
 import { normalizeTenantContext, runTenantQueries, runTenantQuery } from "@/lib/server/tenant-db"
 import { resolveLocationInfo } from "@/lib/server/location-utils"
+import { isLocationAccessError } from "@/lib/server/location-access"
 import { logAuditEvent } from "@/lib/server/audit-log"
 import { resolveLocationCompatibility } from "@/lib/server/location-compatibility"
 import { STOCK_EPSILON_KGS, computeRemainingKgs } from "@/lib/sales-math"
@@ -421,10 +422,12 @@ export async function POST(request: Request) {
     const kgsSold = resolveKgsSold(bagsSold, bagWeightKg, payload.kgs_sold)
     const computedRevenue = Number((bagsSold * payload.price_per_bag).toFixed(2))
     const computedPricePerKg = resolvePricePerKg(computedRevenue, kgsSold)
-    const locationInfo = await resolveLocationInfo(sql, tenantContext, {
-      locationId: payload.locationId,
-      estate: payload.estate,
-    })
+    const locationInfo = await resolveLocationInfo(
+      sql,
+      tenantContext,
+      { locationId: payload.locationId, estate: payload.estate },
+      sessionUser,
+    )
 
     if (!locationInfo) {
       return NextResponse.json(
@@ -556,6 +559,9 @@ export async function POST(request: Request) {
     if (isModuleAccessError(error)) {
       return NextResponse.json({ success: false, error: "Module access disabled" }, { status: 403 })
     }
+    if (isLocationAccessError(error)) {
+      return NextResponse.json({ success: false, error: "You don't have access to this location" }, { status: 403 })
+    }
     await logRouteMutationFailure({
       tenantId,
       source: "sales-api",
@@ -623,10 +629,12 @@ export async function PUT(request: Request) {
     const kgsSold = resolveKgsSold(bagsSold, bagWeightKg, payload.kgs_sold)
     const computedRevenue = Number((bagsSold * payload.price_per_bag).toFixed(2))
     const computedPricePerKg = resolvePricePerKg(computedRevenue, kgsSold)
-    const locationInfo = await resolveLocationInfo(sql, tenantContext, {
-      locationId: payload.locationId,
-      estate: payload.estate,
-    })
+    const locationInfo = await resolveLocationInfo(
+      sql,
+      tenantContext,
+      { locationId: payload.locationId, estate: payload.estate },
+      sessionUser,
+    )
 
     if (!locationInfo) {
       return NextResponse.json(
@@ -732,6 +740,9 @@ export async function PUT(request: Request) {
     console.error("Error updating sales record:", error)
     if (isModuleAccessError(error)) {
       return NextResponse.json({ success: false, error: "Module access disabled" }, { status: 403 })
+    }
+    if (isLocationAccessError(error)) {
+      return NextResponse.json({ success: false, error: "You don't have access to this location" }, { status: 403 })
     }
     await logRouteMutationFailure({
       tenantId,

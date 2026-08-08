@@ -38,7 +38,7 @@ const TENANT_TABLES = [
   "pepper_records", "picking_records", "privacy_requests", "processing_records",
   "quality_grading_records", "rainfall_records", "receivables",
   "sales_records", "security_events", "tenant_modules", "tenant_weekly_metrics",
-  "transaction_history", "user_modules", "worker_ledger",
+  "transaction_history", "user_locations", "user_modules", "worker_ledger",
 ]
 
 const TENANT_WRAPPERS = ["runTenantQuery", "runTenantQueries", "runTenantTransaction"]

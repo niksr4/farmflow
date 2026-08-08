@@ -5,6 +5,8 @@ import { logAuditEvent } from "@/lib/server/audit-log"
 import { sql } from "@/lib/server/db"
 import { encryptSensitiveText } from "@/lib/server/field-encryption"
 import { isModuleAccessError, requireModuleAccess } from "@/lib/server/module-access"
+import { isLocationAccessError } from "@/lib/server/location-access"
+import { validateLocationForTenant } from "@/lib/server/location-utils"
 import { logServerError } from "@/lib/server/safe-logging"
 import { normalizeTenantContext, runTenantQuery } from "@/lib/server/tenant-db"
 
@@ -95,25 +97,6 @@ const formatDocumentRow = (row: any) => ({
   created_at: row.created_at,
   updated_at: row.updated_at,
 })
-
-async function validateLocationForTenant(
-  tenantContext: { tenantId: string; role: string },
-  locationId: string | null,
-) {
-  if (!locationId) return null
-  const rows = await runTenantQuery(
-    sql,
-    tenantContext,
-    sql`
-      SELECT id
-      FROM locations
-      WHERE id = ${locationId}::uuid
-        AND tenant_id = ${tenantContext.tenantId}
-      LIMIT 1
-    `,
-  )
-  return rows?.length ? locationId : null
-}
 
 async function validateScopedRecord(
   tenantContext: { tenantId: string; role: string },
@@ -310,7 +293,7 @@ export async function POST(request: Request) {
     const tenantId = normalizeTenantId(toTrimmed(formData.get("tenantId"), 80), sessionUser.tenantId, sessionUser.role)
     const tenantContext = normalizeTenantContext(tenantId, sessionUser.role)
 
-    const validLocationId = await validateLocationForTenant(tenantContext, locationInput)
+    const validLocationId = await validateLocationForTenant(sql, tenantContext, sessionUser, locationInput)
     if (locationInput && !validLocationId) {
       return NextResponse.json({ success: false, error: "Selected location is invalid for this tenant" }, { status: 400 })
     }
@@ -412,6 +395,9 @@ export async function POST(request: Request) {
     return NextResponse.json({ success: true, record: rows?.[0] ? formatDocumentRow(rows[0]) : null })
   } catch (error: any) {
     logServerError("Error creating document record", error)
+    if (isLocationAccessError(error)) {
+      return NextResponse.json({ success: false, error: "You don't have access to this location" }, { status: 403 })
+    }
     if (isModuleAccessError(error)) {
       return NextResponse.json({ success: false, error: "Module access disabled" }, { status: 403 })
     }
