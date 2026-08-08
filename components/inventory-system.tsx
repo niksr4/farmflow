@@ -370,6 +370,14 @@ export default function InventorySystem() {
       setSelectedEstate(null)
     }
   }, [selectedEstate, availableEstates, locations.length])
+  // Tab components below own their data fetching internally (their own useEffect + fetch,
+  // reading whichever estate the server resolves from the cookie) and are kept alive forever
+  // via TabsContent's forceMount once first loaded -- switching the estate selector while
+  // already sitting on one of these tabs would otherwise never re-trigger their fetch, leaving
+  // every figure pinned to whichever estate was active the first time that tab was opened.
+  // Keying each one on this value forces a clean remount (and therefore a fresh fetch) the
+  // moment the selector changes, without having to audit every tab's internal effect deps.
+  const estateRemountKey = selectedEstate ?? "__all_estates__"
   const [selectedLocationId, setSelectedLocationId] = useState<string>(LOCATION_ALL)
   const [transactionLocationId, setTransactionLocationId] = useState<string>(LOCATION_UNASSIGNED)
   const [inventoryEditLocationId, setInventoryEditLocationId] = useState<string>(LOCATION_UNASSIGNED)
@@ -896,7 +904,11 @@ export default function InventorySystem() {
     fetchAccountsTotals()
 
     return () => controller.abort()
-  }, [activeTab, currentFiscalYear.endDate, currentFiscalYear.startDate, tenantId])
+    // selectedEstate: this reads the estate cookie server-side, not a query param -- it has to
+    // be a dependency purely to make the effect refire when the estate toggles. Otherwise the
+    // "Labour Tracked"/"Total" figures stayed frozen at whichever estate was active when the
+    // Home/Accounts tab first loaded.
+  }, [activeTab, currentFiscalYear.endDate, currentFiscalYear.startDate, selectedEstate, tenantId])
 
   useEffect(() => {
     if (!tenantId || activeTab !== "home") return
@@ -961,7 +973,13 @@ export default function InventorySystem() {
 
     void fetchIntelligence()
     return () => controller.abort()
-  }, [activeTab, tenantId])
+    // selectedEstate: same reasoning as the accounts-totals effect above -- estate-pulse,
+    // cost-per-kg and season-projection all read the estate cookie server-side, so this is the
+    // only way to make the effect refire when the selector changes. This is the "estate command
+    // center" (EstatePulseSection) staleness -- without it, its labour figure stayed pinned to
+    // whichever estate was active on first load of the Home tab, same for every estate selected
+    // afterward.
+  }, [activeTab, selectedEstate, tenantId])
 
   useEffect(() => {
     if (selectedLocationId !== LOCATION_ALL) {
@@ -1037,7 +1055,13 @@ export default function InventorySystem() {
       setSyncError(error.message || "Unexpected error during sync")
       console.error("refreshData error:", error)
     }
-  }, [enabledModules, isOwner, selectedLocationId, tenantId])
+    // selectedEstate isn't threaded into the query string here (inventory/transactions rely on
+    // the farmflow_selected_estate cookie the server reads directly) -- it's a dependency purely
+    // so this callback's identity changes and the effect below refires when the estate toggles.
+    // Without it, switching estates while already on the inventory/home/ai-analysis tabs left
+    // this data silently stale until the next full page load.
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- selectedEstate intentionally unused in the body, see comment above
+  }, [enabledModules, isOwner, selectedLocationId, selectedEstate, tenantId])
 
   useEffect(() => {
     if (!tenantId) return
@@ -4843,13 +4867,14 @@ export default function InventorySystem() {
 
           {canShowAttendance && (
             <TabsContent value="attendance" className="space-y-6" forceMount={isTabLoaded("attendance") ? true : undefined}>
-              <AttendanceWorkspace showLaborManagement={canShowLaborManagement} />
+              <AttendanceWorkspace key={estateRemountKey} showLaborManagement={canShowLaborManagement} />
             </TabsContent>
           )}
 
           {canShowAccounts && (
             <TabsContent value="accounts" className="space-y-6" forceMount={isTabLoaded("accounts") ? true : undefined}>
               <AccountsPage
+                key={estateRemountKey}
                 showDataToolsControls={showDataToolsControls}
                 requestedExport={accountsExportRequest}
                 onRequestedExportHandled={handleAccountsExportRequestHandled}
@@ -4862,25 +4887,26 @@ export default function InventorySystem() {
 
           {canShowBalanceSheet && (
             <TabsContent value="balance-sheet" className="space-y-6" forceMount={isTabLoaded("balance-sheet") ? true : undefined}>
-              <BalanceSheetTab />
+              <BalanceSheetTab key={estateRemountKey} />
             </TabsContent>
           )}
 
           {canShowSeasonPl && (
             <TabsContent value="season-pl" className="space-y-6" forceMount={isTabLoaded("season-pl") ? true : undefined}>
-              <SeasonPlTab />
+              <SeasonPlTab key={estateRemountKey} />
             </TabsContent>
           )}
 
           {canShowReceivables && (
             <TabsContent value="receivables" className="space-y-6" forceMount={isTabLoaded("receivables") ? true : undefined}>
-              <ReceivablesTab />
+              <ReceivablesTab key={estateRemountKey} />
             </TabsContent>
           )}
 
           {canShowProcessingWorkspace && (
             <TabsContent value="processing" className="space-y-6" forceMount={isTabLoaded("processing") ? true : undefined}>
               <ProcessingWorkspace
+                key={estateRemountKey}
                 canShowProcessing={canShowProcessing}
                 canShowPepper={canShowPepper}
                 resolvedView={resolvedProcessingWorkspaceView}
@@ -4893,12 +4919,13 @@ export default function InventorySystem() {
           )}
           {canShowDispatch && (
             <TabsContent value="dispatch" className="space-y-6" forceMount={isTabLoaded("dispatch") ? true : undefined}>
-              <DispatchTab showDataToolsControls={showDataToolsControls} />
+              <DispatchTab key={estateRemountKey} showDataToolsControls={showDataToolsControls} />
             </TabsContent>
           )}
           {canShowSalesWorkspace && (
             <TabsContent value="sales" className="space-y-6" forceMount={isTabLoaded("sales") ? true : undefined}>
               <SalesTab
+                key={estateRemountKey}
                 showDataToolsControls={showDataToolsControls}
                 coffeeSalesEnabled={canShowSales}
                 otherSalesEnabled={canShowOtherSales}
@@ -4909,17 +4936,17 @@ export default function InventorySystem() {
           )}
           {canShowCuring && (
             <TabsContent value="curing" className="space-y-6" forceMount={isTabLoaded("curing") ? true : undefined}>
-              <CuringTab />
+              <CuringTab key={estateRemountKey} />
             </TabsContent>
           )}
           {canShowQuality && (
             <TabsContent value="quality" className="space-y-6" forceMount={isTabLoaded("quality") ? true : undefined}>
-              <QualityGradingTab />
+              <QualityGradingTab key={estateRemountKey} />
             </TabsContent>
           )}
           {canShowSeason && (
             <TabsContent value="season" className="space-y-6" forceMount={isTabLoaded("season") ? true : undefined}>
-              <SeasonDashboard />
+              <SeasonDashboard key={estateRemountKey} />
             </TabsContent>
           )}
           {canShowYieldForecast && (
@@ -4944,12 +4971,12 @@ export default function InventorySystem() {
           )}
           {canShowDocuments && (
             <TabsContent value="documents" className="space-y-6" forceMount={isTabLoaded("documents") ? true : undefined}>
-              <DocumentsTab />
+              <DocumentsTab key={estateRemountKey} />
             </TabsContent>
           )}
           {canShowJournal && (
             <TabsContent value="journal" className="space-y-6" forceMount={isTabLoaded("journal") ? true : undefined}>
-              <JournalTab />
+              <JournalTab key={estateRemountKey} />
             </TabsContent>
           )}
           {canShowResources && (
