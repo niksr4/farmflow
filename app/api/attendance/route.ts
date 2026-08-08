@@ -1,6 +1,9 @@
 import { NextResponse } from "next/server"
+import { cookies } from "next/headers"
 import { accountsSql } from "@/lib/server/db"
 import { requireModuleAccess, isModuleAccessError } from "@/lib/server/module-access"
+import { resolveActiveEstate } from "@/lib/server/estate-filter"
+import { SELECTED_ESTATE_COOKIE } from "@/lib/server/estate-cookie"
 import { canWriteModule } from "@/lib/permissions"
 import { logAuditEvent } from "@/lib/server/audit-log"
 import { normalizeTenantContext, runTenantQueries, runTenantQuery } from "@/lib/server/tenant-db"
@@ -35,16 +38,28 @@ export async function GET(request: Request) {
     const date = normalizeAttendanceDate(searchParams.get("date"), getTodayAttendanceDate())
     const { startDate, endDate } = getAttendanceWeekWindow(date)
 
+    // Workers added before the estate selector existed (script 109) have no location_id at all,
+    // so they must always show regardless of which estate is active -- see the always-NULL-shows
+    // convention in lib/estate-filter.ts. A worker's weekly summary is derived from the same
+    // roster, so it gets the identical filter to stay in sync with what's on screen.
+    const cookieEstate = (await cookies()).get(SELECTED_ESTATE_COOKIE)?.value || null
+    const activeEstate = resolveActiveEstate(searchParams, cookieEstate)
+    const estateClause = (column = "location_id") =>
+      activeEstate
+        ? accountsSql` AND (${accountsSql.unsafe(column)} IS NULL OR ${accountsSql.unsafe(column)} IN (SELECT id FROM locations WHERE tenant_id = ${tenantContext.tenantId} AND estate = ${activeEstate}))`
+        : accountsSql``
+
     const [workersRows, presentRows, weeklyRows] = await runTenantQueries(accountsSql, tenantContext, [
       accountsSql`
-        SELECT id, full_name, daily_rate, created_at
+        SELECT id, full_name, daily_rate, device_user_code, location_id, created_at
         FROM attendance_workers
         WHERE tenant_id = ${tenantContext.tenantId}
           AND active = TRUE
+          ${estateClause()}
         ORDER BY LOWER(full_name), created_at ASC
       `,
       accountsSql`
-        SELECT worker_id
+        SELECT worker_id, check_in_time, check_out_time, source
         FROM attendance_records
         WHERE tenant_id = ${tenantContext.tenantId}
           AND attendance_date = ${date}
@@ -61,6 +76,7 @@ export async function GET(request: Request) {
          AND ar.attendance_date BETWEEN ${startDate} AND ${endDate}
         WHERE w.tenant_id = ${tenantContext.tenantId}
           AND w.active = TRUE
+          ${estateClause("w.location_id")}
         GROUP BY w.id, w.full_name, w.created_at
         ORDER BY LOWER(w.full_name), w.created_at ASC
       `,
@@ -75,8 +91,16 @@ export async function GET(request: Request) {
         id: String(row.id),
         name: String(row.full_name || ""),
         dailyRate: row.daily_rate != null ? Number(row.daily_rate) : null,
+        deviceUserCode: row.device_user_code ? String(row.device_user_code) : null,
+        locationId: row.location_id ? String(row.location_id) : null,
       })),
       presentWorkerIds: presentRows.map((row: any) => String(row.worker_id)).filter(Boolean),
+      presentRecords: presentRows.map((row: any) => ({
+        workerId: String(row.worker_id),
+        checkInTime: row.check_in_time ? String(row.check_in_time) : null,
+        checkOutTime: row.check_out_time ? String(row.check_out_time) : null,
+        source: row.source === "biometric" ? "biometric" : "manual",
+      })),
       weeklySummary: weeklyRows.map((row: any) => ({
         workerId: String(row.id),
         name: String(row.full_name || ""),
@@ -133,11 +157,16 @@ export async function PUT(request: Request) {
       }
     }
 
+    // Diff, not replace: only remove rows for workers no longer present, and insert new
+    // present workers with ON CONFLICT DO NOTHING. A blanket delete-then-reinsert would
+    // silently wipe check_in_time/check_out_time/source on any row a biometric device
+    // already wrote for this date whenever a manager re-saves the manual muster sheet.
     const attendanceQueries = [
       accountsSql`
         DELETE FROM attendance_records
         WHERE tenant_id = ${tenantContext.tenantId}
           AND attendance_date = ${date}
+          AND NOT (worker_id = ANY(${presentWorkerIds}))
       `,
     ]
 
@@ -147,17 +176,20 @@ export async function PUT(request: Request) {
           tenant_id,
           worker_id,
           attendance_date,
-          marked_by
+          marked_by,
+          source
         )
         SELECT
           ${tenantContext.tenantId},
           w.id,
           ${date},
-          ${sessionUser.username || "system"}
+          ${sessionUser.username || "system"},
+          'manual'
         FROM attendance_workers w
         WHERE w.tenant_id = ${tenantContext.tenantId}
           AND w.active = TRUE
           AND w.id = ANY(${presentWorkerIds})
+        ON CONFLICT (tenant_id, worker_id, attendance_date) DO NOTHING
       `)
     }
 

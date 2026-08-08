@@ -18,6 +18,7 @@ import { useAuth } from "@/hooks/use-auth"
 import FilterBar from "@/components/filter-bar"
 import { useListControls } from "@/hooks/use-list-controls"
 import { numericInputValue } from "@/lib/number-input"
+import type { LocationOption } from "@/components/inventory-system/types"
 
 type WorkerType = "permanent" | "seasonal" | "contractor"
 
@@ -30,8 +31,11 @@ type Worker = {
   bankName: string | null
   bankAccount: string | null
   bankIfsc: string | null
+  locationId: string | null
   active: boolean
 }
+
+const UNASSIGNED_LOCATION = "__unassigned__"
 
 const WORKER_TYPE_LABELS: Record<WorkerType, string> = {
   permanent: "Permanent",
@@ -53,6 +57,7 @@ const EMPTY_FORM = {
   bankName: "",
   bankAccount: "",
   bankIfsc: "",
+  locationId: UNASSIGNED_LOCATION,
 }
 
 export default function WorkerProfilesTab() {
@@ -76,10 +81,32 @@ export default function WorkerProfilesTab() {
   const [saving, setSaving] = useState(false)
   const [form, setForm] = useState(EMPTY_FORM)
   const [editForm, setEditForm] = useState(EMPTY_FORM)
+  const [locations, setLocations] = useState<LocationOption[]>([])
+  const locationById = new Map(locations.map((loc) => [loc.id, loc]))
+  // Same "only show the estate picker for genuinely multi-estate tenants" convention as the
+  // header estate selector (components/inventory-system.tsx's canSelectEstate) -- two locations
+  // under the same single estate shouldn't surface this field.
+  const showEstateField =
+    new Set(locations.map((loc) => loc.estate).filter((value): value is string => Boolean(value))).size > 1
+
+  // The roster endpoint (GET /api/attendance) applies the header estate filter, so it's not a
+  // reliable source for "every location this worker could be assigned to" -- always show the
+  // full unfiltered list here regardless of which estate is currently selected up top.
+  const fetchLocations = useCallback(async () => {
+    try {
+      const res = await fetch("/api/locations?scope=all")
+      const data = await res.json()
+      if (data.success) {
+        setLocations(data.locations || [])
+      }
+    } catch {
+      // Non-fatal -- the location field just won't offer options; existing assignments still load.
+    }
+  }, [])
 
   const fetchWorkers = useCallback(async () => {
     try {
-      const res = await fetch("/api/attendance?date=" + todayIso())
+      const res = await fetch("/api/attendance?date=" + todayIso() + "&scope=all")
       const data = await res.json()
       if (data.success) {
         setWorkers(
@@ -92,6 +119,7 @@ export default function WorkerProfilesTab() {
             bankName: w.bankName || null,
             bankAccount: w.bankAccount || null,
             bankIfsc: w.bankIfsc || null,
+            locationId: w.locationId || null,
             active: true,
           })),
         )
@@ -105,7 +133,8 @@ export default function WorkerProfilesTab() {
 
   useEffect(() => {
     fetchWorkers()
-  }, [fetchWorkers])
+    fetchLocations()
+  }, [fetchWorkers, fetchLocations])
 
   const handleAdd = async () => {
     if (!form.name.trim()) return
@@ -118,6 +147,7 @@ export default function WorkerProfilesTab() {
           name: form.name.trim(),
           workerType: form.workerType || null,
           dailyRate: form.dailyRate ? Number(form.dailyRate) : null,
+          locationId: form.locationId === UNASSIGNED_LOCATION ? null : form.locationId,
         }),
       })
       const data = await res.json()
@@ -143,6 +173,7 @@ export default function WorkerProfilesTab() {
       bankName: worker.bankName || "",
       bankAccount: worker.bankAccount || "",
       bankIfsc: worker.bankIfsc || "",
+      locationId: worker.locationId || UNASSIGNED_LOCATION,
     })
   }
 
@@ -160,6 +191,7 @@ export default function WorkerProfilesTab() {
           bankName: editForm.bankName.trim() || null,
           bankAccount: editForm.bankAccount.trim() || null,
           bankIfsc: editForm.bankIfsc.trim() || null,
+          locationId: editForm.locationId === UNASSIGNED_LOCATION ? null : editForm.locationId,
         }),
       })
       const data = await res.json()
@@ -247,6 +279,28 @@ export default function WorkerProfilesTab() {
                   placeholder="500"
                 />
               </div>
+              {showEstateField && (
+                <div className="space-y-1.5">
+                  <FieldLabel
+                    label="Estate"
+                    tooltip="Which estate this worker belongs to. Leave unassigned to have them show up under every estate until you assign one."
+                  />
+                  <Select
+                    value={form.locationId}
+                    onValueChange={(v) => setForm((f) => ({ ...f, locationId: v }))}
+                  >
+                    <SelectTrigger><SelectValue placeholder="Unassigned" /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value={UNASSIGNED_LOCATION}>Unassigned</SelectItem>
+                      {locations.map((loc) => (
+                        <SelectItem key={loc.id} value={loc.id}>
+                          {loc.estate ? `${loc.estate} — ${loc.name}` : loc.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
             </div>
             <div className="mt-3 flex justify-end gap-2">
               <Button variant="ghost" size="sm" onClick={() => { setIsAdding(false); setForm(EMPTY_FORM) }}>
@@ -293,6 +347,7 @@ export default function WorkerProfilesTab() {
                   <TableRow>
                     <TableHead>Name</TableHead>
                     <TableHead>Type</TableHead>
+                    {showEstateField && <TableHead>Estate</TableHead>}
                     <TableHead>Daily Rate</TableHead>
                     <TableHead className="hidden sm:table-cell">Phone</TableHead>
                     <TableHead className="hidden md:table-cell">Bank</TableHead>
@@ -323,6 +378,24 @@ export default function WorkerProfilesTab() {
                             </SelectContent>
                           </Select>
                         </TableCell>
+                        {showEstateField && (
+                          <TableCell>
+                            <Select
+                              value={editForm.locationId}
+                              onValueChange={(v) => setEditForm((f) => ({ ...f, locationId: v }))}
+                            >
+                              <SelectTrigger className="h-8 w-32"><SelectValue placeholder="Unassigned" /></SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value={UNASSIGNED_LOCATION}>Unassigned</SelectItem>
+                                {locations.map((loc) => (
+                                  <SelectItem key={loc.id} value={loc.id}>
+                                    {loc.estate ? `${loc.estate} — ${loc.name}` : loc.name}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          </TableCell>
+                        )}
                         <TableCell>
                           <Input
                             type="number" inputMode="decimal"
@@ -385,6 +458,17 @@ export default function WorkerProfilesTab() {
                             <span className="text-xs text-muted-foreground">—</span>
                           )}
                         </TableCell>
+                        {showEstateField && (
+                          <TableCell>
+                            {w.locationId && locationById.get(w.locationId) ? (
+                              <Badge variant="outline" className="text-xs">
+                                {locationById.get(w.locationId)?.estate || locationById.get(w.locationId)?.name}
+                              </Badge>
+                            ) : (
+                              <span className="text-xs text-muted-foreground">Unassigned</span>
+                            )}
+                          </TableCell>
+                        )}
                         <TableCell className="text-sm">
                           {w.dailyRate != null ? `₹${w.dailyRate.toLocaleString("en-IN")}` : <span className="text-xs text-muted-foreground">—</span>}
                         </TableCell>

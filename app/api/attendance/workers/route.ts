@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server"
 import { accountsSql } from "@/lib/server/db"
 import { requireModuleAccess, isModuleAccessError } from "@/lib/server/module-access"
+import { isLocationAccessError } from "@/lib/server/location-access"
+import { validateLocationForTenant } from "@/lib/server/location-utils"
 import { canWriteModule } from "@/lib/permissions"
 import { logAuditEvent } from "@/lib/server/audit-log"
 import { normalizeTenantContext, runTenantQuery } from "@/lib/server/tenant-db"
@@ -53,6 +55,12 @@ export async function POST(request: Request) {
       : null
     const dailyRate = body?.dailyRate != null && !Number.isNaN(Number(body.dailyRate)) ? Number(body.dailyRate) : null
 
+    const requestedLocationId = body?.locationId ? String(body.locationId).trim() : null
+    const locationId = await validateLocationForTenant(accountsSql, tenantContext, sessionUser, requestedLocationId)
+    if (requestedLocationId && !locationId) {
+      return NextResponse.json({ success: false, error: "Selected location is invalid for this tenant" }, { status: 400 })
+    }
+
     const insertedRows = await runTenantQuery(
       accountsSql,
       tenantContext,
@@ -61,15 +69,17 @@ export async function POST(request: Request) {
           tenant_id,
           full_name,
           worker_type,
-          daily_rate
+          daily_rate,
+          location_id
         )
         VALUES (
           ${tenantContext.tenantId},
           ${name},
           ${workerType},
-          ${dailyRate}
+          ${dailyRate},
+          ${locationId}
         )
-        RETURNING id, full_name, worker_type, daily_rate, created_at
+        RETURNING id, full_name, worker_type, daily_rate, location_id, created_at
       `,
     )
 
@@ -90,6 +100,7 @@ export async function POST(request: Request) {
             name: String(worker.full_name || ""),
             workerType: worker.worker_type ? String(worker.worker_type) : null,
             dailyRate: worker.daily_rate != null ? Number(worker.daily_rate) : null,
+            locationId: worker.location_id ? String(worker.location_id) : null,
             createdAt: worker.created_at ? String(worker.created_at) : null,
           }
         : null,
@@ -97,6 +108,9 @@ export async function POST(request: Request) {
   } catch (error) {
     if (isModuleAccessError(error)) {
       return NextResponse.json({ success: false, error: "Module access disabled" }, { status: 403 })
+    }
+    if (isLocationAccessError(error)) {
+      return NextResponse.json({ success: false, error: "You don't have access to this location" }, { status: 403 })
     }
 
     const normalizedError = normalizeAttendanceSchemaError(error)

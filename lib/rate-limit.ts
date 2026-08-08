@@ -20,6 +20,10 @@ type RateLimitKey =
   | "authForgotPasswordIp"
   | "authResetPassword"
   | "opsErrorIngest"
+  | "biometricPunch"
+  | "biometricHeartbeat"
+  | "biometricIp"
+  | "biometricUnknownSerial"
 
 type RateLimitResult = {
   success: boolean
@@ -78,6 +82,21 @@ const LIMITS: Record<RateLimitKey, { limit: number; windowMs: number }> = {
   authForgotPasswordIp:  { limit: 15, windowMs: 60 * 60_000 },
   authResetPassword:     { limit: 20, windowMs: 10 * 60_000 },
   opsErrorIngest:        { limit: 20, windowMs: 60_000 },
+  biometricPunch:        { limit: 120, windowMs: 5 * 60_000 },
+  biometricHeartbeat:    { limit: 20, windowMs: 60_000 },
+  // Per-IP ceiling for the whole /iclock surface. The two limits above are keyed by serial
+  // number, which an attacker supplies — rotating it mints a fresh bucket every request, so
+  // per-serial limiting alone bounds nothing. Generous, because a single estate can legitimately
+  // run several terminals behind one NAT address: heartbeats are ~2/min per device, so this
+  // leaves room for roughly 20 devices before a real farm would notice.
+  biometricIp:           { limit: 300, windowMs: 5 * 60_000 },
+  // The actual anti-enumeration control, keyed by IP and charged ONLY when a serial fails to
+  // resolve. Serials are guessable — AMDB25062800863 is a vendor prefix, a 2025-06-28
+  // manufacture date and a batch sequence — so an attacker can walk AMDB2506280XXXX. A
+  // registered device never charges this bucket, so tightening it cannot lock out a real
+  // terminal. It also bounds the security_events row written per rejection, which was
+  // otherwise unbounded, attacker-controlled table growth.
+  biometricUnknownSerial: { limit: 20, windowMs: 60 * 60_000 },
 }
 
 export async function checkRateLimit(key: RateLimitKey, identifier: string): Promise<RateLimitResult> {

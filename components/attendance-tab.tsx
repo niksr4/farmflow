@@ -13,7 +13,18 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react"
 import { addDays, format, isToday, isFuture, startOfWeek } from "date-fns"
-import { Check, ChevronLeft, ChevronRight, Download, IndianRupee, Loader2, PlusCircle, Trash2, Users } from "lucide-react"
+import {
+  Check,
+  ChevronLeft,
+  ChevronRight,
+  Download,
+  Fingerprint,
+  IndianRupee,
+  Loader2,
+  PlusCircle,
+  Trash2,
+  Users,
+} from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { cn } from "@/lib/utils"
@@ -22,9 +33,33 @@ import { Skeleton } from "@/components/ui/skeleton"
 import { EmptyState } from "@/components/ui/empty-state"
 import { trackRecordCreated } from "@/lib/track-action"
 import { useSingleFlight } from "@/hooks/use-single-flight"
+import AttendanceDeviceSettings from "@/components/attendance-device-settings"
 
-type AttendanceWorker = { id: string; name: string; dailyRate: number | null }
+type AttendanceWorker = { id: string; name: string; dailyRate: number | null; deviceUserCode: string | null }
 type AttendanceSummaryRow = { workerId: string; name: string; daysPresent: number }
+type AttendanceRecordDetail = {
+  workerId: string
+  checkInTime: string | null
+  checkOutTime: string | null
+  source: "manual" | "biometric"
+}
+
+const formatPunchTime = (iso: string | null) => {
+  if (!iso) return "--:--"
+  const parsed = new Date(iso)
+  return Number.isNaN(parsed.getTime()) ? "--:--" : format(parsed, "HH:mm")
+}
+
+const formatDurationHours = (checkInIso: string | null, checkOutIso: string | null) => {
+  if (!checkInIso || !checkOutIso) return ""
+  const start = new Date(checkInIso).getTime()
+  const end = new Date(checkOutIso).getTime()
+  if (Number.isNaN(start) || Number.isNaN(end) || end <= start) return ""
+  const totalMinutes = Math.round((end - start) / 60_000)
+  const hours = String(Math.floor(totalMinutes / 60)).padStart(2, "0")
+  const minutes = String(totalMinutes % 60).padStart(2, "0")
+  return `${hours}:${minutes}`
+}
 
 function dateToStr(d: Date): string { return format(d, "yyyy-MM-dd") }
 
@@ -39,11 +74,14 @@ export default function AttendanceTab() {
   const [workers, setWorkers] = useState<AttendanceWorker[]>([])
   const [presentWorkerIds, setPresentWorkerIds] = useState<string[]>([])
   const [weeklySummary, setWeeklySummary] = useState<AttendanceSummaryRow[]>([])
+  const [presentRecords, setPresentRecords] = useState<AttendanceRecordDetail[]>([])
+  const [showDeviceSettings, setShowDeviceSettings] = useState(false)
   const [loading, setLoading] = useState(true)
   const [isSaving, setIsSaving] = useState(false)
   const [isAddingWorker, setIsAddingWorker] = useState(false)
   const [removingWorkerId, setRemovingWorkerId] = useState<string | null>(null)
   const [newWorkerName, setNewWorkerName] = useState("")
+  const [newWorkerRate, setNewWorkerRate] = useState("")
   const [showAddWorker, setShowAddWorker] = useState(false)
   const [showSummary, setShowSummary] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -69,6 +107,7 @@ export default function AttendanceTab() {
 
         setWorkers(fetchedWorkers)
         setWeeklySummary(Array.isArray(data.weeklySummary) ? data.weeklySummary : [])
+        setPresentRecords(Array.isArray(data.presentRecords) ? data.presentRecords : [])
         setError(null)
 
         if (fetchedPresent.length === 0 && fetchedWorkers.length > 0 && autoSelectedDate !== date) {
@@ -91,6 +130,10 @@ export default function AttendanceTab() {
   useEffect(() => { void loadSnapshot(selectedDate) }, [selectedDate]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const presentSet = useMemo(() => new Set(presentWorkerIds), [presentWorkerIds])
+  const recordByWorkerId = useMemo(
+    () => new Map(presentRecords.map((record) => [record.workerId, record])),
+    [presentRecords],
+  )
   const presentCount = presentWorkerIds.length
   const absentCount = workers.length - presentCount
   const noRateWorkers = workers.filter((w) => w.dailyRate === null)
@@ -139,6 +182,30 @@ export default function AttendanceTab() {
   // taps both entered this handler and saved twice. See lib/single-flight.ts.
   const handleSave = useSingleFlight(handleSaveUnguarded)
 
+  const exportDailyReportToCSV = () => {
+    const headers = ["EmployeeCode", "Name", "InTime", "OutTime", "Duration", "Status"]
+    const rows = workers.map((worker) => {
+      const record = recordByWorkerId.get(worker.id)
+      const isPresentRow = presentSet.has(worker.id)
+      return [
+        worker.deviceUserCode || "",
+        worker.name,
+        isPresentRow ? formatPunchTime(record?.checkInTime ?? null) : "00:00",
+        isPresentRow ? formatPunchTime(record?.checkOutTime ?? null) : "00:00",
+        isPresentRow ? formatDurationHours(record?.checkInTime ?? null, record?.checkOutTime ?? null) : "00:00",
+        isPresentRow ? "P" : "A",
+      ]
+    })
+    const csvContent = [headers.join(","), ...rows.map((r) => r.join(","))].join("\n")
+    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" })
+    const link = document.createElement("a")
+    link.href = URL.createObjectURL(blob)
+    link.download = `attendance-daily-${selectedDate}.csv`
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+  }
+
   const exportWeeklySummaryToCSV = () => {
     const weekLabel = dateToStr(weekDays[0])
     const headers = ["Worker", "Days Present", "Daily Rate", "Wage Total"]
@@ -169,12 +236,16 @@ export default function AttendanceTab() {
       const res = await fetch("/api/attendance/workers", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name: newWorkerName }),
+        body: JSON.stringify({
+          name: newWorkerName,
+          dailyRate: newWorkerRate.trim() ? Number(newWorkerRate) : undefined,
+        }),
       })
       const data = await res.json().catch(() => ({}))
       if (!res.ok || !data?.success) throw new Error(data?.error || "Failed to add")
       toast.success(`${data.worker?.name || "Employee"} added`)
       setNewWorkerName("")
+      setNewWorkerRate("")
       setShowAddWorker(false)
       setAutoSelectedDate(null)
       await loadSnapshot(selectedDate)
@@ -273,6 +344,14 @@ export default function AttendanceTab() {
               {absentCount > 0 && (
                 <span className="text-sm font-bold text-stone-400">{absentCount} out</span>
               )}
+              <button
+                type="button"
+                aria-label="Export day's attendance report"
+                onClick={exportDailyReportToCSV}
+                className="flex h-7 w-7 items-center justify-center rounded-lg text-stone-400 active:bg-stone-100"
+              >
+                <Download className="h-3.5 w-3.5" />
+              </button>
             </div>
           </div>
         )}
@@ -304,6 +383,8 @@ export default function AttendanceTab() {
           workers.map((worker) => {
             const isPresent = presentSet.has(worker.id)
             const isRemoving = removingWorkerId === worker.id
+            const record = recordByWorkerId.get(worker.id)
+            const isBiometric = isPresent && record?.source === "biometric"
             return (
               <div
                 key={worker.id}
@@ -332,10 +413,19 @@ export default function AttendanceTab() {
                     {worker.name}
                   </p>
                   <p className={cn(
-                    "text-xs font-medium mt-0.5",
+                    "flex items-center gap-1 text-xs font-medium mt-0.5",
                     isPresent ? "text-emerald-200" : "text-stone-400",
                   )}>
-                    {worker.dailyRate !== null ? `₹${worker.dailyRate}/day` : "No rate"}
+                    {isBiometric ? (
+                      <>
+                        <Fingerprint className="h-3 w-3 shrink-0" />
+                        {formatPunchTime(record?.checkInTime ?? null)} – {formatPunchTime(record?.checkOutTime ?? null)}
+                      </>
+                    ) : worker.dailyRate !== null ? (
+                      `₹${worker.dailyRate}/day`
+                    ) : (
+                      "No rate"
+                    )}
                   </p>
                 </div>
                 <div className="flex shrink-0 items-center gap-1">
@@ -401,26 +491,38 @@ export default function AttendanceTab() {
         ) : (
           <form
             onSubmit={handleAddWorker}
-            className="flex items-center gap-2 rounded-2xl border border-stone-200 bg-white px-3 py-2.5"
+            className="space-y-2 rounded-2xl border border-stone-200 bg-white px-3 py-2.5"
           >
             <Input
               value={newWorkerName}
               onChange={(e) => setNewWorkerName(e.target.value)}
               placeholder="Employee name"
-              className="flex-1 h-9 text-base border-0 bg-transparent p-0 focus-visible:ring-0"
+              className="h-9 text-base border-0 bg-transparent p-0 focus-visible:ring-0"
               autoFocus
               disabled={isAddingWorker}
             />
-            <Button
-              type="submit"
-              size="sm"
-              className="h-9 rounded-xl bg-emerald-700 hover:bg-emerald-800"
-              disabled={isAddingWorker || !newWorkerName.trim()}
-            >
-              {isAddingWorker ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : "Add"}
-            </Button>
-            <button type="button" onClick={() => { setShowAddWorker(false); setNewWorkerName("") }}
-              className="text-xs text-stone-400 px-1">Cancel</button>
+            <div className="flex items-center gap-2">
+              <Input
+                value={newWorkerRate}
+                onChange={(e) => setNewWorkerRate(e.target.value)}
+                placeholder="Rate/day ₹ (optional)"
+                inputMode="decimal"
+                type="number"
+                min={0}
+                className="flex-1 h-9 text-base"
+                disabled={isAddingWorker}
+              />
+              <Button
+                type="submit"
+                size="sm"
+                className="h-9 rounded-xl bg-emerald-700 hover:bg-emerald-800"
+                disabled={isAddingWorker || !newWorkerName.trim()}
+              >
+                {isAddingWorker ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : "Add"}
+              </Button>
+              <button type="button" onClick={() => { setShowAddWorker(false); setNewWorkerName(""); setNewWorkerRate("") }}
+                className="text-xs text-stone-400 px-1 shrink-0">Cancel</button>
+            </div>
           </form>
         )}
 
@@ -463,6 +565,26 @@ export default function AttendanceTab() {
             )}
           </div>
         )}
+
+        {/* Fingerprint devices */}
+        <div className="pt-1">
+          <button
+            type="button"
+            onClick={() => setShowDeviceSettings(!showDeviceSettings)}
+            className="flex w-full items-center justify-between py-1.5 text-xs font-bold uppercase tracking-widest text-stone-400"
+          >
+            <span className="flex items-center gap-1.5">
+              <Fingerprint className="h-3.5 w-3.5" />
+              Fingerprint devices
+            </span>
+            <span>{showDeviceSettings ? "▲" : "▼"}</span>
+          </button>
+          {showDeviceSettings && (
+            <div className="pt-2">
+              <AttendanceDeviceSettings workers={workers.map((w) => ({ id: w.id, name: w.name }))} />
+            </div>
+          )}
+        </div>
       </div>
 
       {/* Sticky save bar */}
