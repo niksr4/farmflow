@@ -1,6 +1,9 @@
 import { NextResponse } from "next/server"
+import { cookies } from "next/headers"
 import { accountsSql } from "@/lib/server/db"
 import { requireModuleAccess, isModuleAccessError } from "@/lib/server/module-access"
+import { resolveActiveEstate } from "@/lib/server/estate-filter"
+import { SELECTED_ESTATE_COOKIE } from "@/lib/server/estate-cookie"
 import { normalizeTenantContext, runTenantQuery } from "@/lib/server/tenant-db"
 import { logServerError } from "@/lib/server/safe-logging"
 
@@ -27,6 +30,16 @@ export async function GET(request: Request) {
     if (startDate > endDate) {
       return NextResponse.json({ success: false, error: "startDate must be on or before endDate" }, { status: 400 })
     }
+
+    // Workers, not their individual transaction rows, are the join key here -- filter on the
+    // worker's own estate assignment (scripts/112-attendance-workers-location.sql). A worker
+    // with no estate assigned yet must still show regardless of which estate is active, same
+    // convention as everywhere else the estate filter is wired in.
+    const cookieEstate = (await cookies()).get(SELECTED_ESTATE_COOKIE)?.value || null
+    const activeEstate = resolveActiveEstate(searchParams, cookieEstate)
+    const estateFilter = activeEstate
+      ? accountsSql` AND (w.location_id IS NULL OR w.location_id IN (SELECT id FROM locations WHERE tenant_id = ${tenantContext.tenantId} AND estate = ${activeEstate}))`
+      : accountsSql``
 
     const rows = await runTenantQuery(
       accountsSql,
@@ -80,6 +93,7 @@ export async function GET(request: Request) {
         LEFT JOIN ledger_totals    l ON l.worker_id = w.id
         WHERE w.tenant_id = ${tenantContext.tenantId}
           AND w.active = TRUE
+          ${estateFilter}
           AND (
             COALESCE(a.days_present, 0) > 0
             OR COALESCE(p.picking_total, 0) > 0

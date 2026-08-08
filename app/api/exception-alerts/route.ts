@@ -1,6 +1,9 @@
 import { NextResponse } from "next/server"
+import { cookies } from "next/headers"
 import { sql } from "@/lib/server/db"
 import { requireModuleAccess, isModuleAccessError } from "@/lib/server/module-access"
+import { resolveActiveEstate } from "@/lib/server/estate-filter"
+import { SELECTED_ESTATE_COOKIE } from "@/lib/server/estate-cookie"
 import { normalizeTenantContext, runTenantQueries, runTenantQuery } from "@/lib/server/tenant-db"
 
 export const dynamic = "force-dynamic"
@@ -81,7 +84,7 @@ const mergeThresholds = (override: any) => {
   return merged
 }
 
-export async function GET() {
+export async function GET(request: Request) {
   const today = new Date()
   const windowEnd = new Date(today)
   const windowStart = new Date(today)
@@ -99,6 +102,9 @@ export async function GET() {
 
     const sessionUser = await requireModuleAccess("season")
     const tenantContext = normalizeTenantContext(sessionUser.tenantId, sessionUser.role)
+    const { searchParams } = new URL(request.url)
+    const cookieEstate = (await cookies()).get(SELECTED_ESTATE_COOKIE)?.value || null
+    const activeEstate = resolveActiveEstate(searchParams, cookieEstate)
 
     const tenantRows = await runTenantQuery(
       sql,
@@ -933,6 +939,32 @@ export async function GET() {
       .sort((a, b) => a.yieldDelta - b.yieldDelta)
       .slice(0, 5)
 
+    // Each alert/comparison already carries a display location string (locations.name or
+    // .code, set when the underlying detection queries ran) rather than a location_id, so this
+    // has to be a post-filter by label instead of a WHERE clause -- narrowing the detection
+    // queries themselves would change the population each anomaly's baseline is computed
+    // against, which is a bigger change than "which estate is the viewer looking at" should
+    // make. An alert with no location at all is tenant-wide (e.g. pending-dispatch reminders)
+    // and must still show regardless of which estate is active.
+    let filteredAlerts = alerts
+    let filteredLocationComparisons = locationComparisons
+    if (activeEstate) {
+      const estateLocationRows = await runTenantQuery(
+        sql,
+        tenantContext,
+        sql`SELECT name, code FROM locations WHERE tenant_id = ${tenantContext.tenantId} AND estate = ${activeEstate}`,
+      )
+      const estateLabels = new Set<string>()
+      for (const row of (estateLocationRows as any[]) || []) {
+        if (row.name) estateLabels.add(String(row.name))
+        if (row.code) estateLabels.add(String(row.code))
+      }
+      filteredAlerts = alerts.filter((alert) => !alert.location || estateLabels.has(alert.location))
+      filteredLocationComparisons = locationComparisons.filter(
+        (comparison) => !comparison.location || estateLabels.has(comparison.location),
+      )
+    }
+
     return NextResponse.json({
       success: true,
       window: {
@@ -944,8 +976,8 @@ export async function GET() {
       thresholds,
       benchmarks,
       sparklines,
-      locationComparisons,
-      alerts,
+      locationComparisons: filteredLocationComparisons,
+      alerts: filteredAlerts,
     })
   } catch (error: any) {
     console.error("Error fetching exception alerts:", error)

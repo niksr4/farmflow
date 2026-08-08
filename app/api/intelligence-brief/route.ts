@@ -1,5 +1,8 @@
 import { NextResponse } from "next/server"
+import { cookies } from "next/headers"
 import { sql } from "@/lib/server/db"
+import { resolveActiveEstate } from "@/lib/server/estate-filter"
+import { SELECTED_ESTATE_COOKIE } from "@/lib/server/estate-cookie"
 import { getCurrentFiscalYear } from "@/lib/fiscal-year-utils"
 import { normalizeTenantContext, runTenantQueries, runTenantQuery } from "@/lib/server/tenant-db"
 import { getEnabledModules, isModuleAccessError, requireAnyModuleAccess } from "@/lib/server/module-access"
@@ -102,7 +105,15 @@ export async function GET(request: Request) {
     const startDateIso = toIsoDate(safeStart)
     const endDateIso = toIsoDate(safeEnd)
 
-    const cacheKey = `intelligence-brief:${scopedUser.tenantId}:${startDateIso}:${endDateIso}`
+    // A tenant owner running multiple estates needs this brief to read as each estate's own
+    // profitability center, same as everywhere else the estate filter is wired in. The cache
+    // key must include it too -- otherwise whichever estate loaded the brief first "poisons"
+    // the shared 2-hour cache entry for every other estate/scope=all view of the same tenant
+    // and date range.
+    const cookieEstate = (await cookies()).get(SELECTED_ESTATE_COOKIE)?.value || null
+    const activeEstate = resolveActiveEstate(searchParams, cookieEstate)
+
+    const cacheKey = `intelligence-brief:${scopedUser.tenantId}:${startDateIso}:${endDateIso}:${activeEstate || "all"}`
     const cachedBrief = await readResponseCache(cacheKey, 2 * 60 * 60)
     if (cachedBrief !== null) {
       return NextResponse.json({ success: true, ...(cachedBrief as Record<string, unknown>) })
@@ -137,6 +148,9 @@ export async function GET(request: Request) {
     const canAnalyzeDispatchSales = !isScopedUser && (enabledModules.includes("dispatch") || enabledModules.includes("sales"))
     if (canAnalyzeDispatchSales) {
       try {
+        const dispatchEstateFilter = activeEstate
+          ? sql` AND (location_id IS NULL OR location_id IN (SELECT id FROM locations WHERE tenant_id = ${tenantContext.tenantId} AND estate = ${activeEstate}))`
+          : sql``
         const [dispatchRows, salesRows] = await runTenantQueries(sql, tenantContext, [
           sql`
             SELECT
@@ -147,6 +161,7 @@ export async function GET(request: Request) {
             WHERE tenant_id = ${tenantContext.tenantId}
               AND dispatch_date >= ${startDateIso}::date
               AND dispatch_date <= ${endDateIso}::date
+              ${dispatchEstateFilter}
             GROUP BY 1, 2
           `,
           sql`
@@ -169,6 +184,7 @@ export async function GET(request: Request) {
             WHERE tenant_id = ${tenantContext.tenantId}
               AND sale_date >= ${startDateIso}::date
               AND sale_date <= ${endDateIso}::date
+              ${dispatchEstateFilter}
             GROUP BY 1, 2
           `,
         ])
@@ -257,6 +273,27 @@ export async function GET(request: Request) {
         const previousStartIso = toIsoDate(new Date(safeEnd.getTime() - 59 * DAY_MS))
         const previousEndIso = toIsoDate(new Date(safeEnd.getTime() - 30 * DAY_MS))
 
+        const [laborSupportsLocation, expenseSupportsLocation] = await Promise.all([
+          sql`
+            SELECT 1 FROM information_schema.columns
+            WHERE table_schema = 'public' AND table_name = 'labor_transactions' AND column_name = 'location_id'
+            LIMIT 1
+          `.then((rows) => Array.isArray(rows) && rows.length > 0),
+          sql`
+            SELECT 1 FROM information_schema.columns
+            WHERE table_schema = 'public' AND table_name = 'expense_transactions' AND column_name = 'location_id'
+            LIMIT 1
+          `.then((rows) => Array.isArray(rows) && rows.length > 0),
+        ])
+        const laborEstateFilter =
+          laborSupportsLocation && activeEstate
+            ? sql` AND (location_id IS NULL OR location_id IN (SELECT id FROM locations WHERE tenant_id = ${tenantContext.tenantId} AND estate = ${activeEstate}))`
+            : sql``
+        const expenseEstateFilter =
+          expenseSupportsLocation && activeEstate
+            ? sql` AND (location_id IS NULL OR location_id IN (SELECT id FROM locations WHERE tenant_id = ${tenantContext.tenantId} AND estate = ${activeEstate}))`
+            : sql``
+
         const [
           laborByCodeRows,
           expenseByCodeRows,
@@ -277,6 +314,7 @@ export async function GET(request: Request) {
             WHERE tenant_id = ${tenantContext.tenantId}
               AND deployment_date >= ${startDateIso}::date
               AND deployment_date <= ${endDateIso}::date
+              ${laborEstateFilter}
             GROUP BY code
           `,
           sql`
@@ -288,6 +326,7 @@ export async function GET(request: Request) {
             WHERE tenant_id = ${tenantContext.tenantId}
               AND entry_date >= ${startDateIso}::date
               AND entry_date <= ${endDateIso}::date
+              ${expenseEstateFilter}
             GROUP BY code
           `,
           sql`
@@ -304,6 +343,7 @@ export async function GET(request: Request) {
             WHERE tenant_id = ${tenantContext.tenantId}
               AND deployment_date >= ${startDateIso}::date
               AND deployment_date <= ${endDateIso}::date
+              ${laborEstateFilter}
             GROUP BY deployment_date::date
             ORDER BY total_amount DESC
             LIMIT 3
@@ -317,6 +357,7 @@ export async function GET(request: Request) {
             WHERE tenant_id = ${tenantContext.tenantId}
               AND entry_date >= ${startDateIso}::date
               AND entry_date <= ${endDateIso}::date
+              ${expenseEstateFilter}
             GROUP BY entry_date::date
             ORDER BY total_amount DESC
             LIMIT 3
@@ -345,6 +386,7 @@ export async function GET(request: Request) {
               ) AS previous_total
             FROM labor_transactions
             WHERE tenant_id = ${tenantContext.tenantId}
+              ${laborEstateFilter}
           `,
           sql`
             SELECT
@@ -370,6 +412,7 @@ export async function GET(request: Request) {
               ) AS previous_total
             FROM expense_transactions
             WHERE tenant_id = ${tenantContext.tenantId}
+              ${expenseEstateFilter}
           `,
           sql`
             SELECT deployment_date::date AS day, code, total_cost, notes
@@ -377,6 +420,7 @@ export async function GET(request: Request) {
             WHERE tenant_id = ${tenantContext.tenantId}
               AND deployment_date >= ${startDateIso}::date
               AND deployment_date <= ${endDateIso}::date
+              ${laborEstateFilter}
             ORDER BY total_cost DESC
             LIMIT 1
           `,
@@ -386,6 +430,7 @@ export async function GET(request: Request) {
             WHERE tenant_id = ${tenantContext.tenantId}
               AND entry_date >= ${startDateIso}::date
               AND entry_date <= ${endDateIso}::date
+              ${expenseEstateFilter}
             ORDER BY total_amount DESC
             LIMIT 1
           `,

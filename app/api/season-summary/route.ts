@@ -1,6 +1,9 @@
 import { NextResponse, type NextRequest } from "next/server"
+import { cookies } from "next/headers"
 import { sql } from "@/lib/server/db"
 import { requireModuleAccess, isModuleAccessError } from "@/lib/server/module-access"
+import { resolveActiveEstate } from "@/lib/server/estate-filter"
+import { SELECTED_ESTATE_COOKIE } from "@/lib/server/estate-cookie"
 import { normalizeTenantContext, runTenantQueries, runTenantQuery } from "@/lib/server/tenant-db"
 import { computeProcessingKpis, safeDivide } from "@/lib/kpi"
 import {
@@ -62,6 +65,36 @@ export async function GET(request: NextRequest) {
 
     const bagWeightKg = Number(tenantRows?.[0]?.bag_weight_kg) || DEFAULT_BAG_WEIGHT_KG
 
+    // A tenant owner running multiple estates needs this season view to read as each estate's
+    // own profitability center, same as everywhere else the estate filter is wired in. Every
+    // query below shares $1 = tenantContext.tenantId, so the estate subquery always reuses it.
+    // A NULL location_id is never "the other estate's" -- it must still count regardless of
+    // which estate is active. Lot-level breakdowns (processingLotRows/dispatchLotRows/
+    // salesLotRows) and curing/quality/receivables KPIs are deliberately left unfiltered here --
+    // lot traceability has zero adoption and curing/quality/receivables are enterprise-only
+    // modules with zero tenants on that plan (see CLAUDE.md "Built But Unadopted"), so there's
+    // no live data for the filter to ever act on.
+    const cookieEstate = (await cookies()).get(SELECTED_ESTATE_COOKIE)?.value || null
+    const activeEstate = resolveActiveEstate(searchParams, cookieEstate)
+    const estateFilterSql = (paramIndex: number, column = "location_id") =>
+      activeEstate
+        ? ` AND (${column} IS NULL OR ${column} IN (SELECT id FROM locations WHERE tenant_id = $1 AND estate = $${paramIndex}))`
+        : ""
+    const [laborSupportsLocation, expenseSupportsLocation] = await Promise.all([
+      sql`
+        SELECT 1 FROM information_schema.columns
+        WHERE table_schema = 'public' AND table_name = 'labor_transactions' AND column_name = 'location_id'
+        LIMIT 1
+      `.then((rows) => Array.isArray(rows) && rows.length > 0),
+      sql`
+        SELECT 1 FROM information_schema.columns
+        WHERE table_schema = 'public' AND table_name = 'expense_transactions' AND column_name = 'location_id'
+        LIMIT 1
+      `.then((rows) => Array.isArray(rows) && rows.length > 0),
+    ])
+    const laborEstateSql = laborSupportsLocation ? estateFilterSql(4) : ""
+    const expenseEstateSql = expenseSupportsLocation ? estateFilterSql(4) : ""
+
     const [
       processingRows,
       dispatchRows,
@@ -94,10 +127,11 @@ export async function GET(request: NextRequest) {
         WHERE tenant_id = $1
           AND process_date >= $2::date
           AND process_date <= $3::date
+          ${estateFilterSql(4)}
         GROUP BY coffee_type
         ORDER BY coffee_type
         `,
-        [tenantContext.tenantId, fiscalYearStart, fiscalYearEnd],
+        activeEstate ? [tenantContext.tenantId, fiscalYearStart, fiscalYearEnd, activeEstate] : [tenantContext.tenantId, fiscalYearStart, fiscalYearEnd],
       ),
       sql.query(
         `
@@ -110,10 +144,11 @@ export async function GET(request: NextRequest) {
         WHERE tenant_id = $1
           AND dispatch_date >= $2::date
           AND dispatch_date <= $3::date
+          ${estateFilterSql(4)}
         GROUP BY coffee_type, bag_type
         ORDER BY coffee_type, bag_type
         `,
-        [tenantContext.tenantId, fiscalYearStart, fiscalYearEnd],
+        activeEstate ? [tenantContext.tenantId, fiscalYearStart, fiscalYearEnd, activeEstate] : [tenantContext.tenantId, fiscalYearStart, fiscalYearEnd],
       ),
       sql.query(
         `
@@ -130,10 +165,11 @@ export async function GET(request: NextRequest) {
         WHERE tenant_id = $1
           AND sale_date >= $2::date
           AND sale_date <= $3::date
+          ${estateFilterSql(4)}
         GROUP BY coffee_type, bag_type
         ORDER BY coffee_type, bag_type
         `,
-        [tenantContext.tenantId, fiscalYearStart, fiscalYearEnd],
+        activeEstate ? [tenantContext.tenantId, fiscalYearStart, fiscalYearEnd, activeEstate] : [tenantContext.tenantId, fiscalYearStart, fiscalYearEnd],
       ),
       sql.query(
         `
@@ -142,8 +178,9 @@ export async function GET(request: NextRequest) {
         WHERE tenant_id = $1
           AND deployment_date >= $2::date
           AND deployment_date <= $3::date
+          ${laborEstateSql}
         `,
-        [tenantContext.tenantId, fiscalYearStart, fiscalYearEnd],
+        laborEstateSql ? [tenantContext.tenantId, fiscalYearStart, fiscalYearEnd, activeEstate] : [tenantContext.tenantId, fiscalYearStart, fiscalYearEnd],
       ),
       sql.query(
         `
@@ -152,8 +189,9 @@ export async function GET(request: NextRequest) {
         WHERE tenant_id = $1
           AND entry_date >= $2::date
           AND entry_date <= $3::date
+          ${expenseEstateSql}
         `,
-        [tenantContext.tenantId, fiscalYearStart, fiscalYearEnd],
+        expenseEstateSql ? [tenantContext.tenantId, fiscalYearStart, fiscalYearEnd, activeEstate] : [tenantContext.tenantId, fiscalYearStart, fiscalYearEnd],
       ),
       sql.query(
         `
@@ -163,8 +201,9 @@ export async function GET(request: NextRequest) {
           AND LOWER(transaction_type) IN ('restock', 'restocking')
           AND transaction_date >= $2::date
           AND transaction_date <= $3::date
+          ${estateFilterSql(4)}
         `,
-        [tenantContext.tenantId, fiscalYearStart, fiscalYearEnd],
+        activeEstate ? [tenantContext.tenantId, fiscalYearStart, fiscalYearEnd, activeEstate] : [tenantContext.tenantId, fiscalYearStart, fiscalYearEnd],
       ),
       sql.query(
         `
@@ -173,8 +212,9 @@ export async function GET(request: NextRequest) {
         WHERE tenant_id = $1
           AND deployment_date >= $2::date
           AND deployment_date <= $3::date
+          ${laborEstateSql}
         `,
-        [tenantContext.tenantId, recentStartDate, fiscalYearEnd],
+        laborEstateSql ? [tenantContext.tenantId, recentStartDate, fiscalYearEnd, activeEstate] : [tenantContext.tenantId, recentStartDate, fiscalYearEnd],
       ),
       sql.query(
         `
@@ -183,8 +223,9 @@ export async function GET(request: NextRequest) {
         WHERE tenant_id = $1
           AND entry_date >= $2::date
           AND entry_date <= $3::date
+          ${expenseEstateSql}
         `,
-        [tenantContext.tenantId, recentStartDate, fiscalYearEnd],
+        expenseEstateSql ? [tenantContext.tenantId, recentStartDate, fiscalYearEnd, activeEstate] : [tenantContext.tenantId, recentStartDate, fiscalYearEnd],
       ),
       sql.query(
         `
@@ -194,8 +235,9 @@ export async function GET(request: NextRequest) {
           AND LOWER(transaction_type) IN ('restock', 'restocking')
           AND transaction_date >= $2::date
           AND transaction_date <= $3::date
+          ${estateFilterSql(4)}
         `,
-        [tenantContext.tenantId, recentStartDate, fiscalYearEnd],
+        activeEstate ? [tenantContext.tenantId, recentStartDate, fiscalYearEnd, activeEstate] : [tenantContext.tenantId, recentStartDate, fiscalYearEnd],
       ),
       sql.query(
         `
@@ -270,10 +312,11 @@ export async function GET(request: NextRequest) {
         WHERE pr.tenant_id = $1
           AND pr.process_date >= $2::date
           AND pr.process_date <= $3::date
+          ${activeEstate ? "AND l.estate = $4" : ""}
         GROUP BY l.name, l.code
         ORDER BY l.name
         `,
-        [tenantContext.tenantId, fiscalYearStart, fiscalYearEnd],
+        activeEstate ? [tenantContext.tenantId, fiscalYearStart, fiscalYearEnd, activeEstate] : [tenantContext.tenantId, fiscalYearStart, fiscalYearEnd],
       ),
       sql.query(
         `
@@ -287,10 +330,11 @@ export async function GET(request: NextRequest) {
         WHERE dr.tenant_id = $1
           AND dr.dispatch_date >= $2::date
           AND dr.dispatch_date <= $3::date
+          ${activeEstate ? "AND (l.id IS NULL OR l.estate = $4)" : ""}
         GROUP BY 1, 2
         ORDER BY 1
         `,
-        [tenantContext.tenantId, fiscalYearStart, fiscalYearEnd],
+        activeEstate ? [tenantContext.tenantId, fiscalYearStart, fiscalYearEnd, activeEstate] : [tenantContext.tenantId, fiscalYearStart, fiscalYearEnd],
       ),
       sql.query(
         `
@@ -308,10 +352,11 @@ export async function GET(request: NextRequest) {
         WHERE sr.tenant_id = $1
           AND sr.sale_date >= $2::date
           AND sr.sale_date <= $3::date
+          ${activeEstate ? "AND (l.id IS NULL OR l.estate = $4)" : ""}
         GROUP BY 1, 2
         ORDER BY 1
         `,
-        [tenantContext.tenantId, fiscalYearStart, fiscalYearEnd],
+        activeEstate ? [tenantContext.tenantId, fiscalYearStart, fiscalYearEnd, activeEstate] : [tenantContext.tenantId, fiscalYearStart, fiscalYearEnd],
       ),
     ])
 
@@ -450,6 +495,9 @@ export async function GET(request: NextRequest) {
 
     let journalKpis = { ...defaultJournalKpis }
     try {
+      const journalEstateFilter = activeEstate
+        ? sql` AND (location_id IS NULL OR location_id IN (SELECT id FROM locations WHERE tenant_id = ${tenantContext.tenantId} AND estate = ${activeEstate}))`
+        : sql``
       const journalRows = await runTenantQuery(
         sql,
         tenantContext,
@@ -462,6 +510,7 @@ export async function GET(request: NextRequest) {
           WHERE tenant_id = ${tenantContext.tenantId}
             AND entry_date >= ${fiscalYearStart}::date
             AND entry_date <= ${fiscalYearEnd}::date
+            ${journalEstateFilter}
         `,
       )
       journalKpis = {

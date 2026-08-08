@@ -1,7 +1,10 @@
 import { NextResponse } from "next/server"
+import { cookies } from "next/headers"
 import { z } from "zod"
 import { accountsSql } from "@/lib/server/db"
 import { requireModuleAccess, isModuleAccessError } from "@/lib/server/module-access"
+import { resolveActiveEstate } from "@/lib/server/estate-filter"
+import { SELECTED_ESTATE_COOKIE } from "@/lib/server/estate-cookie"
 import { canWriteModule } from "@/lib/permissions"
 import { logAuditEvent } from "@/lib/server/audit-log"
 import { normalizeTenantContext, runTenantQuery } from "@/lib/server/tenant-db"
@@ -36,13 +39,28 @@ export async function GET(request: Request) {
     const workerFilter = workerId ? accountsSql` AND wl.worker_id = ${workerId}::uuid` : accountsSql``
     const startFilter = startDate ? accountsSql` AND wl.entry_date >= ${startDate}::date` : accountsSql``
     const endFilter = endDate ? accountsSql` AND wl.entry_date <= ${endDate}::date` : accountsSql``
+    // An explicit ?workerId= already picks out one worker (whichever estate they belong to),
+    // so it wins outright, same convention as every other route here -- only narrow by estate
+    // when listing across all workers. Ledger rows have no location of their own; the worker's
+    // own estate assignment (scripts/112-attendance-workers-location.sql) is the join key, and
+    // an unassigned worker must still show regardless of which estate is active.
+    const cookieEstate = (await cookies()).get(SELECTED_ESTATE_COOKIE)?.value || null
+    const activeEstate = resolveActiveEstate(searchParams, cookieEstate)
+    const estateFilter =
+      !workerId && activeEstate
+        ? accountsSql` AND wl.worker_id IN (
+            SELECT id FROM attendance_workers
+            WHERE tenant_id = ${tenantContext.tenantId}
+              AND (location_id IS NULL OR location_id IN (SELECT id FROM locations WHERE tenant_id = ${tenantContext.tenantId} AND estate = ${activeEstate}))
+          )`
+        : accountsSql``
 
     const [countRows, rows, balanceRows] = await Promise.all([
       runTenantQuery(
         accountsSql, tenantContext,
         accountsSql`
           SELECT COUNT(*)::int AS count FROM worker_ledger wl
-          WHERE wl.tenant_id = ${tenantContext.tenantId} ${workerFilter} ${startFilter} ${endFilter}
+          WHERE wl.tenant_id = ${tenantContext.tenantId} ${workerFilter} ${startFilter} ${endFilter} ${estateFilter}
         `,
       ),
       runTenantQuery(
@@ -53,7 +71,7 @@ export async function GET(request: Request) {
             wl.entry_date, wl.entry_type, wl.amount, wl.description, wl.created_at
           FROM worker_ledger wl
           JOIN attendance_workers aw ON aw.id = wl.worker_id
-          WHERE wl.tenant_id = ${tenantContext.tenantId} ${workerFilter} ${startFilter} ${endFilter}
+          WHERE wl.tenant_id = ${tenantContext.tenantId} ${workerFilter} ${startFilter} ${endFilter} ${estateFilter}
           ORDER BY wl.entry_date DESC, wl.created_at DESC
           LIMIT ${limit} OFFSET ${offset}
         `,

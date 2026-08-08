@@ -1,7 +1,10 @@
+import { cookies } from "next/headers"
 import { buildRateLimitHeaders, checkRateLimit } from "@/lib/rate-limit"
 import { getCurrentFiscalYear } from "@/lib/fiscal-year-utils"
 import { buildClaudeRouteErrorResponse, classifyClaudeRouteError } from "@/lib/server/claude-errors"
 import { requireModuleAccess, isModuleAccessError } from "@/lib/server/module-access"
+import { resolveActiveEstate } from "@/lib/server/estate-filter"
+import { SELECTED_ESTATE_COOKIE } from "@/lib/server/estate-cookie"
 import { logServerError, logServerWarning } from "@/lib/server/safe-logging"
 import { sql } from "@/lib/server/db"
 import { normalizeTenantContext, runTenantQuery } from "@/lib/server/tenant-db"
@@ -26,8 +29,31 @@ async function fetchSeasonAggregates(
   tenantContext: ReturnType<typeof normalizeTenantContext>,
   startDate: string,
   endDate: string,
+  activeEstate: string | null,
 ): Promise<SeasonMetrics> {
   if (!sql) return { pulpingKg: 0, dispatchBags: 0, salesKg: 0, salesRevenue: 0, laborCost: 0, expenseCost: 0 }
+
+  const [laborSupportsLocation, expenseSupportsLocation] = await Promise.all([
+    sql`
+      SELECT 1 FROM information_schema.columns
+      WHERE table_schema = 'public' AND table_name = 'labor_transactions' AND column_name = 'location_id'
+      LIMIT 1
+    `.then((rows) => Array.isArray(rows) && rows.length > 0),
+    sql`
+      SELECT 1 FROM information_schema.columns
+      WHERE table_schema = 'public' AND table_name = 'expense_transactions' AND column_name = 'location_id'
+      LIMIT 1
+    `.then((rows) => Array.isArray(rows) && rows.length > 0),
+  ])
+  // A tenant owner running multiple estates needs this comparison to read as each estate's own
+  // profitability center, same as everywhere else the estate filter is wired in. A NULL
+  // location_id is never "the other estate's" -- it must still count regardless of which
+  // estate is active.
+  const estateClause = activeEstate
+    ? sql` AND (location_id IS NULL OR location_id IN (SELECT id FROM locations WHERE tenant_id = ${tenantContext.tenantId} AND estate = ${activeEstate}))`
+    : sql``
+  const laborEstateClause = laborSupportsLocation ? estateClause : sql``
+  const expenseEstateClause = expenseSupportsLocation ? estateClause : sql``
 
   const [processing, dispatch, sales, labor, expenses] = await Promise.all([
     runTenantQuery(sql, tenantContext, sql`
@@ -35,30 +61,35 @@ async function fetchSeasonAggregates(
       FROM processing_records
       WHERE process_date >= ${startDate}::date AND process_date <= ${endDate}::date
         AND tenant_id = ${tenantContext.tenantId}
+        ${estateClause}
     `).catch(() => []),
     runTenantQuery(sql, tenantContext, sql`
       SELECT COALESCE(SUM(bags_dispatched), 0) AS total_bags
       FROM dispatch_records
       WHERE dispatch_date >= ${startDate} AND dispatch_date <= ${endDate}
         AND tenant_id = ${tenantContext.tenantId}
+        ${estateClause}
     `).catch(() => []),
     runTenantQuery(sql, tenantContext, sql`
       SELECT COALESCE(SUM(kgs), 0) AS total_kgs, COALESCE(SUM(revenue), 0) AS total_revenue
       FROM sales_records
       WHERE sale_date >= ${startDate} AND sale_date <= ${endDate}
         AND tenant_id = ${tenantContext.tenantId}
+        ${estateClause}
     `).catch(() => []),
     runTenantQuery(sql, tenantContext, sql`
       SELECT COALESCE(SUM(total_cost), 0) AS total_cost
       FROM labor_transactions
       WHERE deployment_date >= ${startDate} AND deployment_date <= ${endDate}
         AND tenant_id = ${tenantContext.tenantId}
+        ${laborEstateClause}
     `).catch(() => []),
     runTenantQuery(sql, tenantContext, sql`
       SELECT COALESCE(SUM(total_amount), 0) AS total_amount
       FROM expense_transactions
       WHERE entry_date >= ${startDate} AND entry_date <= ${endDate}
         AND tenant_id = ${tenantContext.tenantId}
+        ${expenseEstateClause}
     `).catch(() => []),
   ])
 
@@ -81,12 +112,17 @@ function pctChange(curr: number, prev: number): string {
   return `${pct >= 0 ? "+" : ""}${pct.toFixed(1)}%`
 }
 
-export async function GET() {
+export async function GET(request: Request) {
   let rateHeaders: Record<string, string> = {}
   try {
     const sessionUser = await requireModuleAccess("ai-analysis")
+    const { searchParams } = new URL(request.url)
+    const cookieEstate = (await cookies()).get(SELECTED_ESTATE_COOKIE)?.value || null
+    const activeEstate = resolveActiveEstate(searchParams, cookieEstate)
 
-    const cacheKey = `ai-season-compare:${sessionUser.tenantId}`
+    // Cache key must include the active estate -- otherwise whichever estate loads this first
+    // "poisons" the shared 4-hour cache entry for every other estate/scope=all view.
+    const cacheKey = `ai-season-compare:${sessionUser.tenantId}:${activeEstate || "all"}`
     const cachedCompare = await readResponseCache(cacheKey, 4 * 60 * 60)
     if (cachedCompare !== null) {
       return Response.json({ success: true, ...(cachedCompare as Record<string, unknown>) })
@@ -131,8 +167,8 @@ export async function GET() {
     const tenantContext = normalizeTenantContext(sessionUser.tenantId, sessionUser.role)
 
     const [curr, prev] = await Promise.all([
-      fetchSeasonAggregates(tenantContext, currentFY.startDate, todayStr),
-      fetchSeasonAggregates(tenantContext, prevFY.startDate, prevEndDate),
+      fetchSeasonAggregates(tenantContext, currentFY.startDate, todayStr, activeEstate),
+      fetchSeasonAggregates(tenantContext, prevFY.startDate, prevEndDate, activeEstate),
     ])
 
     // Check if there's enough data to compare

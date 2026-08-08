@@ -1,10 +1,25 @@
 import { NextResponse } from "next/server"
+import { cookies } from "next/headers"
 import { accountsSql } from "@/lib/server/db"
 import { requireModuleAccess, isModuleAccessError } from "@/lib/server/module-access"
+import { resolveActiveEstate } from "@/lib/server/estate-filter"
+import { SELECTED_ESTATE_COOKIE } from "@/lib/server/estate-cookie"
 import { normalizeTenantContext, runTenantQueries, runTenantQuery } from "@/lib/server/tenant-db"
 
 export const dynamic = "force-dynamic"
 export const revalidate = 0
+
+async function tableHasLocationColumn(tableName: string) {
+  const rows = await accountsSql`
+    SELECT 1
+    FROM information_schema.columns
+    WHERE table_schema = 'public'
+      AND table_name = ${tableName}
+      AND column_name = 'location_id'
+    LIMIT 1
+  `
+  return Array.isArray(rows) && rows.length > 0
+}
 
 export async function GET(request: Request) {
   try {
@@ -18,6 +33,21 @@ export async function GET(request: Request) {
 
     // Grouped by-code summary with date range — for the accounts summary card
     if (grouped && startDate && endDate) {
+      const cookieEstate = (await cookies()).get(SELECTED_ESTATE_COOKIE)?.value || null
+      const activeEstate = resolveActiveEstate(searchParams, cookieEstate)
+      const [laborSupportsLocation, expenseSupportsLocation] = await Promise.all([
+        tableHasLocationColumn("labor_transactions"),
+        tableHasLocationColumn("expense_transactions"),
+      ])
+      const laborEstateFilter =
+        laborSupportsLocation && activeEstate
+          ? accountsSql` AND (lt.location_id IS NULL OR lt.location_id IN (SELECT id FROM locations WHERE tenant_id = ${tenantContext.tenantId} AND estate = ${activeEstate}))`
+          : accountsSql``
+      const expenseEstateFilter =
+        expenseSupportsLocation && activeEstate
+          ? accountsSql` AND (et.location_id IS NULL OR et.location_id IN (SELECT id FROM locations WHERE tenant_id = ${tenantContext.tenantId} AND estate = ${activeEstate}))`
+          : accountsSql``
+
       const [laborRows, expenseRows] = await runTenantQueries(accountsSql, tenantContext, [
         accountsSql`
           SELECT lt.code,
@@ -30,6 +60,7 @@ export async function GET(request: Request) {
             AND lt.deployment_date >= ${startDate}::date
             AND lt.deployment_date <= ${endDate}::date
             AND lt.code IS NOT NULL AND lt.code != ''
+            ${laborEstateFilter}
           GROUP BY lt.code
         `,
         accountsSql`
@@ -43,6 +74,7 @@ export async function GET(request: Request) {
             AND et.entry_date >= ${startDate}::date
             AND et.entry_date <= ${endDate}::date
             AND et.code IS NOT NULL AND et.code != ''
+            ${expenseEstateFilter}
           GROUP BY et.code
         `,
       ])
