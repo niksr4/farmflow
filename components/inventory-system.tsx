@@ -800,10 +800,19 @@ export default function InventorySystem() {
   const loadLocations = useCallback(async () => {
     if (!tenantId) return
     try {
+      // This populates the master `locations` state that availableEstates/canSelectEstate are
+      // derived from above -- it must always be the tenant's FULL location list. estateFilteredLocations
+      // is the separate, client-side narrowing already used for actual location pickers. Without
+      // ?scope=all, /api/locations applies its own farmflow_selected_estate cookie narrowing
+      // server-side (intentional for picker-only callers) -- that cookie isn't tenant- or
+      // preview-scoped, so any prior estate selection anywhere carries over here, silently
+      // shrinking `locations` to one estate and making canSelectEstate false even for a
+      // genuinely multi-estate tenant. Bootstrap (the non-preview, non-fallback path) never
+      // had this problem since it has no estate-cookie narrowing at all.
       const endpoint =
         isPreviewMode && previewTenantId
-          ? `/api/locations?tenantId=${encodeURIComponent(previewTenantId)}`
-          : "/api/locations"
+          ? `/api/locations?tenantId=${encodeURIComponent(previewTenantId)}&scope=all`
+          : "/api/locations?scope=all"
       const response = await fetch(endpoint)
       const data = await response.json()
       const loaded = Array.isArray(data.locations) ? data.locations : []
