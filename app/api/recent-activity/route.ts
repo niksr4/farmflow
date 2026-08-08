@@ -1,4 +1,5 @@
 import { requireSessionUser } from "@/lib/auth-server"
+import { resolveScopedSessionUser } from "@/lib/server/module-access"
 import { logServerError } from "@/lib/server/safe-logging"
 import { sql } from "@/lib/server/db"
 import { normalizeTenantContext, runTenantQuery } from "@/lib/server/tenant-db"
@@ -15,7 +16,10 @@ export type ActivityEntry = {
 
 export async function GET() {
   try {
-    const sessionUser = await requireSessionUser()
+    // resolveScopedSessionUser translates an owner's session into whichever tenant they're
+    // currently previewing (farmflow_preview_tenant cookie) -- without it, an owner in preview
+    // mode sees their own real tenant's data here regardless of which tenant they're viewing.
+    const sessionUser = await resolveScopedSessionUser(await requireSessionUser())
 
     if (!sql) {
       return Response.json({ success: false, error: "Database not configured" }, { status: 500 })

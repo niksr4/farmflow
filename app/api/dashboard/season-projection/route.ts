@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server"
 import { sql, isDbConfigured } from "@/lib/server/db"
 import { requireSessionUser } from "@/lib/server/auth"
+import { resolveScopedSessionUser } from "@/lib/server/module-access"
 import { normalizeTenantContext, runTenantQueries } from "@/lib/server/tenant-db"
 import { getCurrentFiscalYear } from "@/lib/fiscal-year-utils"
 import { buildErrorResponse, databaseNotConfiguredResponse } from "@/lib/server/route-utils"
@@ -19,7 +20,10 @@ export async function GET() {
   if (!isDbConfigured) return databaseNotConfiguredResponse()
 
   try {
-    const sessionUser = await requireSessionUser()
+    // resolveScopedSessionUser translates an owner's session into whichever tenant they're
+    // currently previewing (farmflow_preview_tenant cookie) -- without it, an owner in preview
+    // mode sees their own real tenant's data here regardless of which tenant they're viewing.
+    const sessionUser = await resolveScopedSessionUser(await requireSessionUser())
     const context = normalizeTenantContext(sessionUser.tenantId, sessionUser.role)
     const fy = getCurrentFiscalYear()
 

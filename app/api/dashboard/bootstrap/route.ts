@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server"
 import { sql, isDbConfigured } from "@/lib/server/db"
 import { requireSessionUser } from "@/lib/server/auth"
+import { resolveScopedSessionUser } from "@/lib/server/module-access"
 import { getAccessibleLocationIds } from "@/lib/server/location-access"
 import { MODULE_BUNDLES, resolveTenantEnabledModules } from "@/lib/modules"
 import { resolveTenantPlanId } from "@/lib/server/tenant-subscriptions"
@@ -30,8 +31,19 @@ export async function GET() {
   }
 
   try {
-    const sessionUser = await requireSessionUser()
-    if (String(sessionUser.role || "").toLowerCase() === "owner") {
+    // resolveScopedSessionUser translates an owner's session into whichever tenant they're
+    // currently previewing (farmflow_preview_tenant cookie). A plain owner request (no active
+    // preview) still gets the short-circuit below -- owner has no "home" tenant of their own to
+    // bootstrap -- but comparing tenantId before/after resolution is what tells the two apart;
+    // checking role alone (the old check) short-circuited BOTH cases identically, which is why
+    // an owner previewing a tenant got a blank dashboard shell instead of that tenant's real
+    // modules/locations, and every other dashboard route with the same bare role check instead
+    // fell through to querying the owner's own real tenant's data.
+    const rawSessionUser = await requireSessionUser()
+    const sessionUser = await resolveScopedSessionUser(rawSessionUser)
+    const isOwnerWithoutActivePreview =
+      String(sessionUser.role || "").toLowerCase() === "owner" && sessionUser.tenantId === rawSessionUser.tenantId
+    if (isOwnerWithoutActivePreview) {
       return NextResponse.json({ success: true, modules: null, locations: [] })
     }
 

@@ -4,6 +4,7 @@ import { sql } from "@/lib/server/db"
 export const dynamic = "force-dynamic"
 export const revalidate = 0
 import { requireSessionUser } from "@/lib/server/auth"
+import { resolveScopedSessionUser } from "@/lib/server/module-access"
 import { MODULE_BUNDLES, resolveTenantEnabledModules } from "@/lib/modules"
 import { resolveTenantPlanId } from "@/lib/server/tenant-subscriptions"
 import { normalizeTenantContext, runTenantQuery } from "@/lib/server/tenant-db"
@@ -14,7 +15,10 @@ export async function GET(_request: Request) {
       return NextResponse.json({ success: false, error: "Database not configured" }, { status: 500 })
     }
 
-    const sessionUser = await requireSessionUser()
+    // resolveScopedSessionUser translates an owner's session into whichever tenant they're
+    // currently previewing (farmflow_preview_tenant cookie) -- without it, an owner in preview
+    // mode sees their own real tenant's data here regardless of which tenant they're viewing.
+    const sessionUser = await resolveScopedSessionUser(await requireSessionUser())
     const tenantId = sessionUser.tenantId
     const tenantContext = normalizeTenantContext(tenantId, sessionUser.role)
 
