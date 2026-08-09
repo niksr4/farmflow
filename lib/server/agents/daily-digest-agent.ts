@@ -5,7 +5,6 @@ import { DEFAULT_DAILY_DIGEST_EMAIL_FROM, EMAIL_BCC_MONITORING } from "@/lib/ema
 // the RLS-bypassing owner connection rather than app_runtime, which requires a per-request
 // app.tenant_id session context this code never has.
 import { adminSql as sql } from "@/lib/server/db"
-import { escapeHtml as htmlEscape } from "@/lib/html-escape"
 import { fetchWithTimeout } from "@/lib/server/http"
 import { logServerError, logServerWarning } from "@/lib/server/safe-logging"
 import { DEFAULT_WEATHER_QUERY } from "@/lib/weather-config"
@@ -18,6 +17,7 @@ import {
   type RecentRainfallSummary,
 } from "@/lib/server/agents/digest-shared"
 import { fetchTenantActivitySignals, evaluateDigestDormancy } from "@/lib/server/agents/tenant-dormancy"
+import { fetchTenantEstateNames, fetchActivityByEstate, buildEstateBreakdownSection } from "@/lib/server/agents/digest-estate-breakdown"
 
 type DigestResult = {
   tenantId: string
@@ -36,6 +36,8 @@ const toRows = <T = any>(value: unknown): T[] => {
 const IST_OFFSET_MS = 5.5 * 60 * 60 * 1000
 const istDateString = (date: Date): string => new Date(date.getTime() + IST_OFFSET_MS).toISOString().split("T")[0]
 
+const htmlEscape = (value: string): string =>
+  value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
 
 // ---------------------------------------------------------------------------
 // Yesterday's activity
@@ -421,16 +423,26 @@ export async function runDailyDigestAgent(input?: {
       batch.map(async (tenant): Promise<DigestResult> => {
         try {
           const locationQuery = tenant.weatherLocationQuery ?? DEFAULT_WEATHER_QUERY
-          const [activity, rainfall, weather] = await Promise.all([
+          const [activity, rainfall, weather, estateNames] = await Promise.all([
             fetchYesterdayActivity(tenant.tenantId, yesterdayDate),
             fetchRecentRainfallSummary(tenant.tenantId),
             fetchTodayWeather(locationQuery),
+            fetchTenantEstateNames(tenant.tenantId),
           ])
+
+          // Same reasoning as the weekly digest: no browser session/cookie in a cron context to
+          // read a "selected estate" from, so a multi-estate tenant gets an explicit per-estate
+          // breakdown of yesterday's activity instead of one blended figure. Single-estate
+          // tenants (everyone but Medappa today) see zero change -- the section is just absent.
+          const estateBreakdown =
+            estateNames.length > 1 ? await fetchActivityByEstate(tenant.tenantId, estateNames, yesterdayDate, yesterdayDate) : []
+          const estateBreakdownSection = buildEstateBreakdownSection("Yesterday — By Estate", estateBreakdown)
 
           const sections = [
             buildTodayWeatherSection(weather),
             buildAdviceSection({ rainfall, weather }),
             buildYesterdaySection(activity, yesterdayLabel),
+            ...(estateBreakdownSection ? [estateBreakdownSection] : []),
           ]
 
           if (dryRun) {

@@ -20,6 +20,7 @@ import { getCurrentFiscalYear } from "@/lib/fiscal-year-utils"
 import { createDigestFeedbackLinks, type DigestFeedbackLinks } from "@/lib/server/digest-feedback"
 import { fetchTenantOwnersWithVerifiedEmail, fetchRecentRainfallSummary, type TenantDigestRow } from "@/lib/server/agents/digest-shared"
 import { fetchTenantActivitySignals, evaluateDigestDormancy } from "@/lib/server/agents/tenant-dormancy"
+import { fetchTenantEstateNames, fetchActivityByEstate, buildEstateBreakdownSection } from "@/lib/server/agents/digest-estate-breakdown"
 
 type DigestResult = {
   tenantId: string
@@ -38,6 +39,7 @@ const toRows = <T = any>(value: unknown): T[] => {
 type LastWeekActivity = {
   weekLabel: string   // e.g. "31 Mar – 6 Apr 2026"
   weekStart: string   // YYYY-MM-DD (ISO Monday)
+  weekEnd: string      // YYYY-MM-DD (ISO Sunday)
   processingKg: number
   processingDays: number
   laborEntries: number
@@ -70,7 +72,7 @@ async function fetchLastWeekActivity(tenantId: string): Promise<LastWeekActivity
 
   const weekLabel = `${lastMonday.toLocaleDateString("en-IN", { day: "numeric", month: "short" })} – ${lastSunday.toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })}`
 
-  const empty: LastWeekActivity = { weekLabel, weekStart: startDate, processingKg: 0, processingDays: 0, laborEntries: 0, laborCost: 0, laborWorkers: 0, expenseTotal: 0, expenseEntries: 0, salesRevenue: 0, dispatchBags: 0, rainfallInches: 0, pickingEntries: 0 }
+  const empty: LastWeekActivity = { weekLabel, weekStart: startDate, weekEnd: endDate, processingKg: 0, processingDays: 0, laborEntries: 0, laborCost: 0, laborWorkers: 0, expenseTotal: 0, expenseEntries: 0, salesRevenue: 0, dispatchBags: 0, rainfallInches: 0, pickingEntries: 0 }
   if (!sql) return empty
 
   try {
@@ -104,6 +106,7 @@ async function fetchLastWeekActivity(tenantId: string): Promise<LastWeekActivity
     return {
       weekLabel,
       weekStart: startDate,
+      weekEnd: endDate,
       processingKg: Number(row.proc_kg) || 0,
       processingDays: Number(row.proc_days) || 0,
       laborEntries: Number(row.labor_entries) || 0,
@@ -307,7 +310,7 @@ async function generateWeeklyDigestText(
 ): Promise<{ text: string; weekStart: string; error?: undefined } | { text: null; weekStart?: undefined; error: string }> {
   try {
     const locationQuery = tenant.weatherLocationQuery ?? DEFAULT_WEATHER_QUERY
-    const [{ dataSummary, fiscalYearLabel }, lastWeek, rainfall, forecastJson, coffeePrices, sellableStock, seasonCostBasis] = await Promise.all([
+    const [{ dataSummary, fiscalYearLabel }, lastWeek, rainfall, forecastJson, coffeePrices, sellableStock, seasonCostBasis, estateNames] = await Promise.all([
       buildTenantAiDataSummary({ tenantId: tenant.tenantId, role: "owner" }),
       fetchLastWeekActivity(tenant.tenantId),
       fetchRecentRainfallSummary(tenant.tenantId),
@@ -315,7 +318,17 @@ async function generateWeeklyDigestText(
       getCoffeePriceAnalysis(),
       estimateSellableStock(tenant.tenantId),
       fetchSeasonCostBasis(tenant.tenantId),
+      fetchTenantEstateNames(tenant.tenantId),
     ])
+
+    // Cron context has no "currently selected estate" the way a browser session does -- a
+    // multi-estate tenant (today, only Medappa Estates: Tirtha Estate + Citrus Grove) gets an
+    // explicit per-estate breakdown instead, so the digest doesn't quietly blend two properties'
+    // numbers into one figure. Single-estate tenants get zero change: the section is simply
+    // absent when there's nothing to break down.
+    const estateBreakdown =
+      estateNames.length > 1 ? await fetchActivityByEstate(tenant.tenantId, estateNames, lastWeek.weekStart, lastWeek.weekEnd) : []
+    const estateBreakdownSection = buildEstateBreakdownSection("Last Week — By Estate", estateBreakdown)
 
     // Persist this week's metrics, then load historical baselines in parallel
     await upsertWeeklyMetrics({
@@ -392,7 +405,7 @@ Rules:
           content: `Generate a weekly operations digest for ${tenant.tenantName}.
 
 ${lastWeekSection}
-
+${estateBreakdownSection ? `\n${estateBreakdownSection}\n` : ""}
 ${historySection}
 
 ## Season-to-Date Context (FY ${fiscalYearLabel})
@@ -402,12 +415,12 @@ ${costBasisSection ? `\n${costBasisSection}\n` : ""}
 ${weatherContext}
 ${marketTimingSection ? `\n${marketTimingSection}` : ""}
 
-Structure your digest in exactly ${marketTimingSection ? "five" : "four"} sections:
+${estateBreakdownSection ? `This tenant runs more than one estate under one account (see "Last Week — By Estate" above). Treat every figure below as spanning all of them combined unless the By Estate section is what you're describing — when you reference labour, expenses, processing, dispatch, or sales, name the specific estate driving it wherever the By Estate breakdown makes that clear (e.g. "Tirtha Estate accounted for all of last week's labour spend, Citrus Grove logged no activity"). Never describe combined figures as if they came from a single, undifferentiated estate.\n\n` : ""}Structure your digest in exactly ${marketTimingSection ? "five" : "four"} sections:
 
-1. Last Week at a Glance — 2-3 sentences summarising what actually happened last week using exact figures from the data above.
+1. Last Week at a Glance — 2-3 sentences summarising what actually happened last week using exact figures from the data above.${estateBreakdownSection ? " If activity was concentrated in one estate or split unevenly, say so by name." : ""}
 
 2. Business Snapshot — three specific financial signals the owner needs to see:
-   (a) Labour cost as a percentage of total spend this week. Flag if it is above 70% (typical healthy range is 50-65% for harvest season, lower off-season).
+   (a) Labour cost as a percentage of total spend this week. Flag if it is above 70% (typical healthy range is 50-65% for harvest season, lower off-season).${estateBreakdownSection ? " If one estate's labour spend dominates, name it." : ""}
    (b) Season cost basis from the Season Cost Basis section above: state the cost per kg of output if production has started, OR the total maintenance cost accumulated so far if it is off-season. If cost per kg is above the recent selling price, flag this clearly — the estate is selling below cost.
    (c) Revenue-to-cost trend: is the estate earning more than it is spending YTD, or is there a deficit building? Be direct — if margins look thin or costs are running ahead of revenue, say so clearly.
    If data is insufficient for any signal, say "Insufficient data this week" rather than guessing.
