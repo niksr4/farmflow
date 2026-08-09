@@ -447,6 +447,7 @@ export default function InventorySystem() {
   const [onboardingError, setOnboardingError] = useState<string | null>(null)
   const [newLocationName, setNewLocationName] = useState("")
   const [newLocationCode, setNewLocationCode] = useState("")
+  const [newLocationEstate, setNewLocationEstate] = useState("")
   const hasLoadedOnboardingOnce = useRef(false)
   const [isCreatingLocation, setIsCreatingLocation] = useState(false)
   const [isAddingStarterCodes, setIsAddingStarterCodes] = useState(false)
@@ -1206,6 +1207,7 @@ export default function InventorySystem() {
         body: JSON.stringify({
           name: newLocationName.trim(),
           code: newLocationCode.trim() || undefined,
+          estate: newLocationEstate.trim() || null,
         }),
       })
       const data = await response.json()
@@ -1219,6 +1221,7 @@ export default function InventorySystem() {
       })
       setNewLocationName("")
       setNewLocationCode("")
+      setNewLocationEstate("")
       loadLocations()
       loadOnboardingStatus()
     } catch (error: any) {
@@ -4275,8 +4278,11 @@ export default function InventorySystem() {
               canCreateLocation={isAdmin && !isPreviewMode}
               locationName={newLocationName}
               locationCode={newLocationCode}
+              locationEstate={newLocationEstate}
+              existingEstates={availableEstates}
               onLocationNameChange={setNewLocationName}
               onLocationCodeChange={setNewLocationCode}
+              onLocationEstateChange={setNewLocationEstate}
               onCreateLocation={handleCreateLocation}
               isCreatingLocation={isCreatingLocation}
               isExpanded={isOnboardingExpanded}

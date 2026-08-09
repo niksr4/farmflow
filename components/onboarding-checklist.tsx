@@ -43,8 +43,11 @@ type OnboardingChecklistProps = {
   canCreateLocation: boolean
   locationName: string
   locationCode: string
+  locationEstate: string
+  existingEstates: string[]
   onLocationNameChange: (value: string) => void
   onLocationCodeChange: (value: string) => void
+  onLocationEstateChange: (value: string) => void
   onCreateLocation: () => void
   isCreatingLocation: boolean
   isExpanded: boolean
@@ -71,8 +74,11 @@ export default function OnboardingChecklist({
   canCreateLocation,
   locationName,
   locationCode,
+  locationEstate,
+  existingEstates,
   onLocationNameChange,
   onLocationCodeChange,
+  onLocationEstateChange,
   onCreateLocation,
   isCreatingLocation,
   isExpanded,
@@ -331,7 +337,7 @@ export default function OnboardingChecklist({
                     Locations unlock processing, dispatch, and season reporting.
                   </p>
                 </div>
-                <div className="grid gap-3 md:grid-cols-[2fr_1fr_auto]">
+                <div className="grid gap-3 md:grid-cols-[2fr_1fr_1fr_auto]">
                   <div className="space-y-2">
                     <div className="flex items-center gap-2">
                       <Label htmlFor="onboarding-location-name">Location name</Label>
@@ -391,6 +397,37 @@ export default function OnboardingChecklist({
                       }}
                     />
                   </div>
+                  <div className="space-y-2">
+                    <div className="flex items-center gap-2">
+                      <Label htmlFor="onboarding-location-estate">Estate (optional)</Label>
+                      <TooltipProvider>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                          <button
+                            type="button"
+                            aria-label="Estate help"
+                            className="inline-flex h-5 w-5 items-center justify-center rounded-full border border-stone-200 text-stone-500 hover:text-stone-700"
+                          >
+                            <Info className="h-3 w-3" />
+                          </button>
+                          </TooltipTrigger>
+                          <TooltipContent>Only needed if you manage more than one estate under this account. Leave blank for a single estate.</TooltipContent>
+                        </Tooltip>
+                      </TooltipProvider>
+                    </div>
+                    <Input
+                      id="onboarding-location-estate"
+                      list="onboarding-estate-suggestions"
+                      placeholder="Leave blank, or e.g. Tirtha Estate"
+                      value={locationEstate}
+                      onChange={(event) => onLocationEstateChange(event.target.value)}
+                    />
+                    <datalist id="onboarding-estate-suggestions">
+                      {existingEstates.map((estate) => (
+                        <option key={estate} value={estate} />
+                      ))}
+                    </datalist>
+                  </div>
                   <div className="flex items-end">
                     <Button
                       onClick={onCreateLocation}
@@ -402,7 +439,8 @@ export default function OnboardingChecklist({
                   </div>
                 </div>
                 <p className="text-xs text-muted-foreground">
-                  Keep names consistent with estate signage so traceability reports stay clean.
+                  Keep names consistent with estate signage so traceability reports stay clean. Only set Estate if you manage more
+                  than one — it groups locations together everywhere in the app, including the estate switcher at the top.
                 </p>
               </div>
             )}

@@ -1,5 +1,6 @@
 "use client"
 
+import { Fragment } from "react"
 import { Info } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -55,16 +56,20 @@ type LocationsSectionProps = {
   locations: LocationRow[]
   newLocationName: string
   newLocationCode: string
+  newLocationEstate: string
   isCreatingLocation: boolean
   editingLocationId: string | null
   editingLocationName: string
   editingLocationCode: string
+  editingLocationEstate: string
   isUpdatingLocationId: string | null
   onNewLocationNameChange: (value: string) => void
   onNewLocationCodeChange: (value: string) => void
+  onNewLocationEstateChange: (value: string) => void
   onCreateLocation: () => void
   onEditingLocationNameChange: (value: string) => void
   onEditingLocationCodeChange: (value: string) => void
+  onEditingLocationEstateChange: (value: string) => void
   onUpdateLocation: () => void
   onStartEditLocation: (location: LocationRow) => void
   onCancelEditLocation: () => void
@@ -74,20 +79,47 @@ export function LocationsSection({
   locations,
   newLocationName,
   newLocationCode,
+  newLocationEstate,
   isCreatingLocation,
   editingLocationId,
   editingLocationName,
   editingLocationCode,
+  editingLocationEstate,
   isUpdatingLocationId,
   onNewLocationNameChange,
   onNewLocationCodeChange,
+  onNewLocationEstateChange,
   onCreateLocation,
   onEditingLocationNameChange,
   onEditingLocationCodeChange,
+  onEditingLocationEstateChange,
   onUpdateLocation,
   onStartEditLocation,
   onCancelEditLocation,
 }: LocationsSectionProps) {
+  // Estates aren't a separate table -- they're just whatever distinct, non-blank values exist
+  // in locations.estate for this tenant. Offered as autocomplete suggestions so a second block
+  // on an existing estate reuses the exact same spelling instead of minting "Tirtha" vs
+  // "Tirtha Estate" as two different estates by typo.
+  const estateSuggestions = Array.from(
+    new Set(locations.map((location) => location.estate).filter((value): value is string => Boolean(value))),
+  ).sort()
+
+  // Group locations under their estate for display -- only when there's more than one estate to
+  // tell apart. A tenant with zero or one estate tagged sees the exact same flat table as
+  // before this feature existed.
+  const locationGroups: Array<{ estate: string | null; locations: LocationRow[] }> = []
+  for (const location of locations) {
+    const estate = location.estate || null
+    let group = locationGroups.find((candidate) => candidate.estate === estate)
+    if (!group) {
+      group = { estate, locations: [] }
+      locationGroups.push(group)
+    }
+    group.locations.push(location)
+  }
+  const showLocationGroupLabels = locationGroups.filter((g) => g.estate).length > 1
+
   return (
     <Card id="locations" className="scroll-mt-24 overflow-hidden border-border/70 bg-white/85">
       <CardHeader>
@@ -111,8 +143,14 @@ export function LocationsSection({
           </div>
         </div>
 
+        <datalist id="estate-suggestions">
+          {estateSuggestions.map((estate) => (
+            <option key={estate} value={estate} />
+          ))}
+        </datalist>
+
         <div className="rounded-2xl border border-border/60 bg-white/90 p-4 shadow-sm">
-          <div className="grid grid-cols-1 gap-3 md:grid-cols-[2fr_1fr_auto]">
+          <div className="grid grid-cols-1 gap-3 md:grid-cols-[2fr_1fr_1fr_auto]">
             <div className="space-y-2">
               <HelpLabel
                 htmlFor="location-name"
@@ -143,6 +181,22 @@ export function LocationsSection({
               />
             </div>
 
+            <div className="space-y-2">
+              <HelpLabel
+                htmlFor="location-estate"
+                label="Estate (optional)"
+                help="Only needed if you run more than one estate under this account. Leave blank if you have just one — locations without an estate are grouped together automatically. Use the same spelling every time, e.g. always 'Tirtha Estate', never 'Tirtha' half the time."
+              />
+              <Input
+                id="location-estate"
+                list="estate-suggestions"
+                placeholder="Leave blank, or e.g. Tirtha Estate"
+                value={newLocationEstate}
+                onChange={(event) => onNewLocationEstateChange(event.target.value)}
+                onKeyDown={(event) => { if (event.key === "Enter") onCreateLocation() }}
+              />
+            </div>
+
             <div className="flex items-end">
               <Button onClick={onCreateLocation} disabled={isCreatingLocation} className="w-full">
                 {isCreatingLocation ? "Adding..." : "Add Location"}
@@ -158,7 +212,8 @@ export function LocationsSection({
           {" "}
           only for the short shorthand, such as <span className="font-medium text-foreground">A</span> or
           {" "}
-          <span className="font-medium text-foreground">SG-A</span>.
+          <span className="font-medium text-foreground">SG-A</span>. Only set <span className="font-medium text-foreground">Estate</span> if you
+          manage more than one estate — each block/location you add under the same estate name groups together everywhere in the app.
         </p>
 
         <div className="flex items-center justify-between">
@@ -186,46 +241,68 @@ export function LocationsSection({
                   </TableCell>
                 </TableRow>
               ) : (
-                locations.map((location) => (
-                  <TableRow key={location.id}>
-                    <TableCell className="font-medium">
-                      {editingLocationId === location.id ? (
-                        <Input
-                          value={editingLocationName}
-                          onChange={(event) => onEditingLocationNameChange(event.target.value)}
-                        />
-                      ) : (
-                        location.name
-                      )}
-                    </TableCell>
-                    <TableCell className="font-medium text-muted-foreground">
-                      {editingLocationId === location.id ? (
-                        <Input
-                          value={editingLocationCode}
-                          onChange={(event) => onEditingLocationCodeChange(event.target.value)}
-                        />
-                      ) : (
-                        location.code || "-"
-                      )}
-                    </TableCell>
-                    <TableCell className="text-muted-foreground">{location.estate || "-"}</TableCell>
-                    <TableCell>
-                      {editingLocationId === location.id ? (
-                        <div className="flex gap-2">
-                          <Button size="sm" onClick={onUpdateLocation} disabled={isUpdatingLocationId === location.id}>
-                            {isUpdatingLocationId === location.id ? "Saving..." : "Save"}
-                          </Button>
-                          <Button size="sm" variant="outline" onClick={onCancelEditLocation}>
-                            Cancel
-                          </Button>
-                        </div>
-                      ) : (
-                        <Button size="sm" variant="outline" onClick={() => onStartEditLocation(location)}>
-                          Edit
-                        </Button>
-                      )}
-                    </TableCell>
-                  </TableRow>
+                locationGroups.map((group) => (
+                  <Fragment key={`group-${group.estate || "__ungrouped__"}`}>
+                    {showLocationGroupLabels && (
+                      <TableRow key={`group-${group.estate || "__ungrouped__"}`} className="bg-muted/40 hover:bg-muted/40">
+                        <TableCell colSpan={4} className="py-1.5 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                          {group.estate || "No estate set"}
+                        </TableCell>
+                      </TableRow>
+                    )}
+                    {group.locations.map((location) => (
+                      <TableRow key={location.id}>
+                        <TableCell className="font-medium">
+                          {editingLocationId === location.id ? (
+                            <Input
+                              value={editingLocationName}
+                              onChange={(event) => onEditingLocationNameChange(event.target.value)}
+                            />
+                          ) : (
+                            location.name
+                          )}
+                        </TableCell>
+                        <TableCell className="font-medium text-muted-foreground">
+                          {editingLocationId === location.id ? (
+                            <Input
+                              value={editingLocationCode}
+                              onChange={(event) => onEditingLocationCodeChange(event.target.value)}
+                            />
+                          ) : (
+                            location.code || "-"
+                          )}
+                        </TableCell>
+                        <TableCell className="text-muted-foreground">
+                          {editingLocationId === location.id ? (
+                            <Input
+                              list="estate-suggestions"
+                              placeholder="No estate"
+                              value={editingLocationEstate}
+                              onChange={(event) => onEditingLocationEstateChange(event.target.value)}
+                            />
+                          ) : (
+                            location.estate || "-"
+                          )}
+                        </TableCell>
+                        <TableCell>
+                          {editingLocationId === location.id ? (
+                            <div className="flex gap-2">
+                              <Button size="sm" onClick={onUpdateLocation} disabled={isUpdatingLocationId === location.id}>
+                                {isUpdatingLocationId === location.id ? "Saving..." : "Save"}
+                              </Button>
+                              <Button size="sm" variant="outline" onClick={onCancelEditLocation}>
+                                Cancel
+                              </Button>
+                            </div>
+                          ) : (
+                            <Button size="sm" variant="outline" onClick={() => onStartEditLocation(location)}>
+                              Edit
+                            </Button>
+                          )}
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </Fragment>
                 ))
               )}
             </TableBody>

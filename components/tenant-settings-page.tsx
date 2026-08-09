@@ -214,10 +214,12 @@ export default function TenantSettingsPage() {
   const [locations, setLocations] = useState<LocationRow[]>([])
   const [newLocationName, setNewLocationName] = useState("")
   const [newLocationCode, setNewLocationCode] = useState("")
+  const [newLocationEstate, setNewLocationEstate] = useState("")
   const [isCreatingLocation, setIsCreatingLocation] = useState(false)
   const [editingLocationId, setEditingLocationId] = useState<string | null>(null)
   const [editingLocationName, setEditingLocationName] = useState("")
   const [editingLocationCode, setEditingLocationCode] = useState("")
+  const [editingLocationEstate, setEditingLocationEstate] = useState("")
   const [isUpdatingLocationId, setIsUpdatingLocationId] = useState<string | null>(null)
 
   const [privacyStatus, setPrivacyStatus] = useState<PrivacyStatus | null>(null)
@@ -926,6 +928,7 @@ export default function TenantSettingsPage() {
         body: JSON.stringify({
           name: newLocationName.trim(),
           code: String(newLocationCode || "").trim() || undefined,
+          estate: String(newLocationEstate || "").trim() || null,
           tenantId,
         }),
       })
@@ -935,6 +938,7 @@ export default function TenantSettingsPage() {
       }
       setNewLocationName("")
       setNewLocationCode("")
+      setNewLocationEstate("")
       await loadLocations()
       toast({ title: "Location created", description: `${data.location.name} added.` })
     } catch (error: any) {
@@ -948,12 +952,14 @@ export default function TenantSettingsPage() {
     setEditingLocationId(location.id)
     setEditingLocationName(String(location.name || ""))
     setEditingLocationCode(String(location.code || ""))
+    setEditingLocationEstate(String(location.estate || ""))
   }
 
   const cancelEditLocation = () => {
     setEditingLocationId(null)
     setEditingLocationName("")
     setEditingLocationCode("")
+    setEditingLocationEstate("")
   }
 
   const handleUpdateLocation = async () => {
@@ -974,6 +980,11 @@ export default function TenantSettingsPage() {
           id: editingLocationId,
           name: editingLocationName.trim(),
           code: nextCodeInput || fallbackCode || undefined,
+          // Always send estate explicitly (even "") so clearing the field in the UI actually
+          // clears the tag -- the API only preserves the existing value when the key is absent
+          // entirely, which is what every pre-existing caller here relied on before this field
+          // had a UI at all.
+          estate: String(editingLocationEstate || "").trim() || null,
           tenantId,
         }),
       })
@@ -1355,16 +1366,20 @@ export default function TenantSettingsPage() {
             locations={locations}
             newLocationName={newLocationName}
             newLocationCode={newLocationCode}
+            newLocationEstate={newLocationEstate}
             isCreatingLocation={isCreatingLocation}
             editingLocationId={editingLocationId}
             editingLocationName={editingLocationName}
             editingLocationCode={editingLocationCode}
+            editingLocationEstate={editingLocationEstate}
             isUpdatingLocationId={isUpdatingLocationId}
             onNewLocationNameChange={setNewLocationName}
             onNewLocationCodeChange={setNewLocationCode}
+            onNewLocationEstateChange={setNewLocationEstate}
             onCreateLocation={handleCreateLocation}
             onEditingLocationNameChange={setEditingLocationName}
             onEditingLocationCodeChange={setEditingLocationCode}
+            onEditingLocationEstateChange={setEditingLocationEstate}
             onUpdateLocation={handleUpdateLocation}
             onStartEditLocation={startEditLocation}
             onCancelEditLocation={cancelEditLocation}
