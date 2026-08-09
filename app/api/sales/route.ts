@@ -804,6 +804,13 @@ export async function DELETE(request: Request) {
       `,
     )
 
+    // Without this, deleting a nonexistent id (or one belonging to another tenant, which the
+    // WHERE clause below already blocks from ever being touched) silently reported success
+    // either way, masking stale client state or a double-delete race instead of a 404.
+    if (!existing?.length) {
+      return NextResponse.json({ success: false, error: "Record not found" }, { status: 404 })
+    }
+
     await runTenantQuery(
       sql,
       normalizeTenantContext(sessionUser.tenantId, sessionUser.role),

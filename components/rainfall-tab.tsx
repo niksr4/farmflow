@@ -329,6 +329,8 @@ export default function RainfallTab({ username, showDataToolsControls = false }:
         toast({ title: "Record deleted", description: "Rainfall record has been deleted" })
         if (id === editingId) resetForm()
         fetchRecords()
+      } else {
+        toast({ title: "Error", description: data.error || "Failed to delete record", variant: "destructive" })
       }
     } catch {
       toast({ title: "Error", description: "Failed to delete record", variant: "destructive" })

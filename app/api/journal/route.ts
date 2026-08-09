@@ -365,6 +365,14 @@ export async function DELETE(request: Request) {
       `,
     )
 
+    // Same existence check POST/PATCH already require before mutating -- without it, deleting a
+    // nonexistent id (or one belonging to another tenant, which the WHERE clause below already
+    // blocks from ever being touched) silently reported success either way, masking stale
+    // client state or a double-delete race instead of surfacing it as a 404.
+    if (!existing?.length) {
+      return NextResponse.json({ success: false, error: "Entry not found" }, { status: 404 })
+    }
+
     await runTenantQuery(
       sql,
       tenantContext,

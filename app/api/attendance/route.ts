@@ -157,6 +157,25 @@ export async function PUT(request: Request) {
       }
     }
 
+    // The muster sheet this save came from was itself estate-filtered (GET above applies the
+    // same estateClause), so presentWorkerIds can only ever contain workers from the active
+    // estate -- a worker in a *different* estate can never appear in it, present or not. Without
+    // scoping the DELETE below to the same estate, saving Estate A's muster would wipe every
+    // other estate's attendance_records for the date, since their worker_ids are (correctly)
+    // absent from this estate-scoped presentWorkerIds list.
+    const { searchParams } = new URL(request.url)
+    const cookieEstate = (await cookies()).get(SELECTED_ESTATE_COOKIE)?.value || null
+    const activeEstate = resolveActiveEstate(searchParams, cookieEstate)
+    const estateWorkerScopeClause = activeEstate
+      ? accountsSql` AND worker_id IN (
+          SELECT id FROM attendance_workers w
+          WHERE w.tenant_id = ${tenantContext.tenantId}
+            AND (w.location_id IS NULL OR w.location_id IN (
+              SELECT id FROM locations WHERE tenant_id = ${tenantContext.tenantId} AND estate = ${activeEstate}
+            ))
+        )`
+      : accountsSql``
+
     // Diff, not replace: only remove rows for workers no longer present, and insert new
     // present workers with ON CONFLICT DO NOTHING. A blanket delete-then-reinsert would
     // silently wipe check_in_time/check_out_time/source on any row a biometric device
@@ -167,6 +186,7 @@ export async function PUT(request: Request) {
         WHERE tenant_id = ${tenantContext.tenantId}
           AND attendance_date = ${date}
           AND NOT (worker_id = ANY(${presentWorkerIds}))
+          ${estateWorkerScopeClause}
       `,
     ]
 

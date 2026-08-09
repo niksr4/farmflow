@@ -607,6 +607,13 @@ export async function PUT(request: Request) {
       `,
     )
 
+    // Without this, updating a nonexistent id (or one belonging to another tenant, which the
+    // WHERE clause below already blocks from ever being touched) ran an UPDATE matching 0 rows
+    // and still reported success, masking stale client state instead of a 404.
+    if (!existing?.length) {
+      return NextResponse.json({ success: false, error: "Record not found" }, { status: 404 })
+    }
+
     if (supportsLocation) {
       await runTenantQuery(
         accountsSql,

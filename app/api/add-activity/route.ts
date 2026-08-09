@@ -66,10 +66,18 @@ export async function POST(request: Request) {
     })
 
     return NextResponse.json({ success: true, message: "Activity added successfully" })
-  } catch (error) {
+  } catch (error: any) {
     console.error("Error adding activity:", error)
     if (isModuleAccessError(error)) {
       return NextResponse.json({ success: false, error: "Module access disabled" }, { status: 403 })
+    }
+    // Narrow race: two concurrent adds for the same code can both pass the
+    // SELECT check above and then hit account_activities' unique constraint on
+    // the INSERT. Without this, the loser gets a raw Postgres error message
+    // instead of the same friendly conflict message the SELECT check gives the
+    // non-raced case.
+    if (error?.code === "23505") {
+      return NextResponse.json({ success: false, error: "Activity code already exists" }, { status: 400 })
     }
     return NextResponse.json(
       {

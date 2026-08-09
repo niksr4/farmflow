@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server"
 import { accountsSql } from "@/lib/server/db"
 import { requireModuleAccess, isModuleAccessError } from "@/lib/server/module-access"
-import { normalizeTenantContext, runTenantQuery } from "@/lib/server/tenant-db"
+import { normalizeTenantContext, runTenantQuery, runTenantTransaction } from "@/lib/server/tenant-db"
 import { canDeleteModule, canWriteModule } from "@/lib/permissions"
 import { logAuditEvent } from "@/lib/server/audit-log"
 import { buildMissingAccountActivitySuggestions } from "@/lib/account-activity-suggestions"
@@ -223,58 +223,65 @@ export async function PUT(request: Request) {
         return NextResponse.json({ success: false, error: "Activity code already exists" }, { status: 409 })
       }
 
-      await runTenantQuery(
-        accountsSql,
-        tenantContext,
-        accountsSql`
-          INSERT INTO account_activities (code, activity, tenant_id)
-          VALUES (${nextCode}, ${nextReference}, ${tenantContext.tenantId})
-        `,
-      )
-
-      try {
-        await runTenantQuery(
+      // Renaming a code touches 4 statements across 3 tables; each used to run as its own
+      // standalone request, so a failure partway through (e.g. a dropped connection between
+      // the INSERT and the reference updates) left account_activities with both the old and
+      // new code live and labor/expense rows pointing at whichever code the failure landed on
+      // -- a real, silent data-corruption risk for a rename that's supposed to be atomic.
+      // Table existence is still checked up front (not inside the transaction) so a tenant
+      // genuinely missing one of these optional tables degrades the same way it did before,
+      // rather than rolling back the whole rename.
+      const [hasLaborTable, hasExpenseTable] = await Promise.all([
+        runTenantQuery(
           accountsSql,
           tenantContext,
           accountsSql`
+            SELECT 1 FROM information_schema.tables
+            WHERE table_schema = 'public' AND table_name = 'labor_transactions'
+            LIMIT 1
+          `,
+        ).then((rows) => Array.isArray(rows) && rows.length > 0),
+        runTenantQuery(
+          accountsSql,
+          tenantContext,
+          accountsSql`
+            SELECT 1 FROM information_schema.tables
+            WHERE table_schema = 'public' AND table_name = 'expense_transactions'
+            LIMIT 1
+          `,
+        ).then((rows) => Array.isArray(rows) && rows.length > 0),
+      ])
+
+      await runTenantTransaction(accountsSql, tenantContext, (txn) => {
+        const queries = [
+          txn`
+            INSERT INTO account_activities (code, activity, tenant_id)
+            VALUES (${nextCode}, ${nextReference}, ${tenantContext.tenantId})
+          `,
+        ]
+        if (hasLaborTable) {
+          queries.push(txn`
             UPDATE labor_transactions
             SET code = ${nextCode}
             WHERE tenant_id = ${tenantContext.tenantId}
               AND code = ${currentCode}
-          `,
-        )
-      } catch (error) {
-        if (!isMissingRelation(error, "labor_transactions")) {
-          throw error
+          `)
         }
-      }
-
-      try {
-        await runTenantQuery(
-          accountsSql,
-          tenantContext,
-          accountsSql`
+        if (hasExpenseTable) {
+          queries.push(txn`
             UPDATE expense_transactions
             SET code = ${nextCode}
             WHERE tenant_id = ${tenantContext.tenantId}
               AND code = ${currentCode}
-          `,
-        )
-      } catch (error) {
-        if (!isMissingRelation(error, "expense_transactions")) {
-          throw error
+          `)
         }
-      }
-
-      await runTenantQuery(
-        accountsSql,
-        tenantContext,
-        accountsSql`
+        queries.push(txn`
           DELETE FROM account_activities
           WHERE tenant_id = ${tenantContext.tenantId}
             AND code = ${currentCode}
-        `,
-      )
+        `)
+        return queries
+      })
     } else {
       await runTenantQuery(
         accountsSql,
