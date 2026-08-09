@@ -578,6 +578,13 @@ export async function DELETE(request: NextRequest) {
       `,
     )
 
+    // Without this, deleting a date/location/coffee-type combo with no matching record (or one
+    // belonging to another tenant, already blocked by the WHERE clause below) silently reported
+    // success either way, masking stale client state instead of a 404.
+    if (!existing?.length) {
+      return NextResponse.json({ success: false, error: "Record not found" }, { status: 404 })
+    }
+
     await runTenantQuery(
       sql,
       tenantContext,

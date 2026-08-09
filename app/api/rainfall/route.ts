@@ -37,7 +37,7 @@ export async function GET(_request: NextRequest) {
       return NextResponse.json({ success: false, error: "Module access disabled" }, { status: 403 })
     }
     console.error("[v0] Error fetching rainfall records:", error)
-    return NextResponse.json({ success: false, error: sanitizeRouteError(error, "Failed to save rainfall data") }, { status: 500 })
+    return NextResponse.json({ success: false, error: sanitizeRouteError(error, "Failed to fetch rainfall data") }, { status: 500 })
   }
 }
 
@@ -184,12 +184,19 @@ export async function PUT(request: NextRequest) {
       `,
     )
 
+    // Narrow race: the record existed at the SELECT above but was deleted before this UPDATE
+    // ran, so RETURNING produced zero rows. Report it honestly instead of a false "success" with
+    // no actual record — a client polling for the updated row would otherwise never find out.
+    if (!result?.[0]) {
+      return NextResponse.json({ success: false, error: "Record was deleted before the update could be applied" }, { status: 409 })
+    }
+
     await logAuditEvent(sql, sessionUser, {
       action: "update",
       entityType: "rainfall_records",
       entityId: id,
       before: existing[0],
-      after: result?.[0] ?? null,
+      after: result[0],
     })
 
     return NextResponse.json({ success: true, record: result[0] })
@@ -243,6 +250,14 @@ export async function DELETE(request: NextRequest) {
       `,
     )
 
+    // Same existence check POST/PUT already do before mutating -- without it, deleting a
+    // nonexistent id (or one belonging to another tenant, which the WHERE clause below already
+    // blocks from ever being touched) silently reported success either way, masking stale
+    // client state or a double-delete race instead of surfacing it as a 404.
+    if (!existing?.[0]) {
+      return NextResponse.json({ success: false, error: "Record not found" }, { status: 404 })
+    }
+
     await runTenantQuery(
       sql,
       tenantContext,
@@ -252,8 +267,8 @@ export async function DELETE(request: NextRequest) {
     await logAuditEvent(sql, sessionUser, {
       action: "delete",
       entityType: "rainfall_records",
-      entityId: existing?.[0]?.id ?? id,
-      before: existing?.[0] ?? null,
+      entityId: existing[0].id,
+      before: existing[0],
     })
 
     return NextResponse.json({ success: true })
@@ -269,6 +284,6 @@ export async function DELETE(request: NextRequest) {
       action: "delete_rainfall_record",
       error,
     })
-    return NextResponse.json({ success: false, error: sanitizeRouteError(error, "Failed to save rainfall data") }, { status: 500 })
+    return NextResponse.json({ success: false, error: sanitizeRouteError(error, "Failed to delete rainfall data") }, { status: 500 })
   }
 }

@@ -187,11 +187,21 @@ export async function POST(request: Request) {
     })
 
     return NextResponse.json({ success: true, user: result[0] })
-  } catch (error: unknown) {
+  } catch (error: any) {
+    // The pre-check above is best-effort -- two concurrent creates for the same
+    // username can both pass it and then race the DB's unique index
+    // (idx_users_username_normalized_unique, scripts/60-user-identity-hardening.sql).
+    // sanitizeRouteError blocks the raw "duplicate key value violates unique
+    // constraint" message (it matches /constraint/i) before any statusByMessage
+    // lookup runs, and the string that option previously listed here
+    // ("Username already exists") didn't match this route's actual conflict
+    // message ("Username is already in use") anyway -- so the loser of the race
+    // was falling through to a generic 500. Handle the Postgres code directly.
+    if (error?.code === "23505") {
+      return NextResponse.json({ success: false, error: "Username is already in use" }, { status: 409 })
+    }
     logServerError("Error creating user", error)
-    return buildAdminErrorResponse(error, "Failed to create user", {
-      statusByMessage: { "Username already exists": 409 },
-    })
+    return buildAdminErrorResponse(error, "Failed to create user")
   }
 }
 
@@ -296,7 +306,12 @@ export async function PATCH(request: Request) {
     })
 
     return NextResponse.json({ success: true, user: result[0] })
-  } catch (error: unknown) {
+  } catch (error: any) {
+    // Same race as POST's create path: a concurrent rename to the same username
+    // can pass the pre-check and then hit the unique index on the UPDATE below.
+    if (error?.code === "23505") {
+      return NextResponse.json({ success: false, error: "Username is already in use" }, { status: 409 })
+    }
     logServerError("Error updating user", error)
     return buildAdminErrorResponse(error, "Failed to update user")
   }

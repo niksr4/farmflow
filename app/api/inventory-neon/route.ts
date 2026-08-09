@@ -716,21 +716,36 @@ export async function PUT(request: NextRequest) {
     }
 
     const resolvedUnit = String(unit || existing[0]?.unit || "kg").trim() || "kg"
+    const isRename = resolvedName !== item_type
 
-    const result = await runTenantQuery(
-      inventorySql,
-      tenantContext,
-      inventorySql`
-        UPDATE current_inventory
-        SET
-          item_type = ${resolvedName},
-          unit = ${resolvedUnit},
-          tenant_id = ${tenantContext.tenantId}
-        WHERE item_type = ${item_type}
-          AND tenant_id = ${tenantContext.tenantId}
-        RETURNING item_type, quantity, unit, avg_price, total_cost
-      `,
-    )
+    // Same one-unit-of-work concern as the POST handler's comment above: renaming touches both
+    // current_inventory and every transaction_history row under the old name. Run separately, a
+    // failure between the two leaves the live item under the new name while its ledger history
+    // stays under the old one -- silently splitting one item's balance across two names, the
+    // same class of drift already seen once in production (see the POST handler's Laxmi note).
+    const [result] = await runTenantTransaction(inventorySql, tenantContext, (txn) => {
+      const queries = [
+        txn`
+          UPDATE current_inventory
+          SET
+            item_type = ${resolvedName},
+            unit = ${resolvedUnit},
+            tenant_id = ${tenantContext.tenantId}
+          WHERE item_type = ${item_type}
+            AND tenant_id = ${tenantContext.tenantId}
+          RETURNING item_type, quantity, unit, avg_price, total_cost
+        `,
+      ]
+      if (isRename) {
+        queries.push(txn`
+          UPDATE transaction_history
+          SET item_type = ${resolvedName}
+          WHERE item_type = ${item_type}
+            AND tenant_id = ${tenantContext.tenantId}
+        `)
+      }
+      return queries
+    })
 
     await logAuditEvent(inventorySql, sessionUser, {
       action: "update",
@@ -739,19 +754,6 @@ export async function PUT(request: NextRequest) {
       before: existing?.[0] ?? null,
       after: result?.[0] ?? null,
     })
-
-    if (resolvedName !== item_type) {
-      await runTenantQuery(
-        inventorySql,
-        tenantContext,
-        inventorySql`
-          UPDATE transaction_history
-          SET item_type = ${resolvedName}
-          WHERE item_type = ${item_type}
-            AND tenant_id = ${tenantContext.tenantId}
-        `,
-      )
-    }
 
     return NextResponse.json({
       success: true,
