@@ -4403,6 +4403,7 @@ export default function InventorySystem() {
             {/* ── Mobile home: estate header + gaps + quick log ── */}
             {isMobile && (
               <MobileHomeSection
+                key={estateRemountKey}
                 estateName={tenantSettings.estateName || ""}
                 canShowAccounts={canShowAccounts}
                 canShowRainfallSection={canShowRainfallSection}
