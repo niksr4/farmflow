@@ -1,5 +1,8 @@
+import { cookies } from "next/headers"
 import { requireSessionUser } from "@/lib/auth-server"
 import { resolveScopedSessionUser } from "@/lib/server/module-access"
+import { resolveActiveEstate } from "@/lib/server/estate-filter"
+import { SELECTED_ESTATE_COOKIE } from "@/lib/server/estate-cookie"
 import { logServerError } from "@/lib/server/safe-logging"
 import { sql } from "@/lib/server/db"
 import { normalizeTenantContext, runTenantQuery } from "@/lib/server/tenant-db"
@@ -14,7 +17,7 @@ export type ActivityEntry = {
   date: string // ISO date string
 }
 
-export async function GET() {
+export async function GET(request: Request) {
   try {
     // resolveScopedSessionUser translates an owner's session into whichever tenant they're
     // currently previewing (farmflow_preview_tenant cookie) -- without it, an owner in preview
@@ -27,12 +30,35 @@ export async function GET() {
 
     const tenantContext = normalizeTenantContext(sessionUser.tenantId, sessionUser.role)
     const tenantId = tenantContext.tenantId
+    const { searchParams } = new URL(request.url)
+    const cookieEstate = (await cookies()).get(SELECTED_ESTATE_COOKIE)?.value || null
+    const activeEstate = resolveActiveEstate(searchParams, cookieEstate)
+    const estateFilter = activeEstate
+      ? sql` AND (location_id IS NULL OR location_id IN (SELECT id FROM locations WHERE tenant_id = ${tenantId} AND estate = ${activeEstate}))`
+      : sql``
+    const [laborSupportsLocation, expenseSupportsLocation] = activeEstate
+      ? await Promise.all([
+          sql`
+            SELECT 1 FROM information_schema.columns
+            WHERE table_schema = 'public' AND table_name = 'labor_transactions' AND column_name = 'location_id'
+            LIMIT 1
+          `.then((rows) => Array.isArray(rows) && rows.length > 0),
+          sql`
+            SELECT 1 FROM information_schema.columns
+            WHERE table_schema = 'public' AND table_name = 'expense_transactions' AND column_name = 'location_id'
+            LIMIT 1
+          `.then((rows) => Array.isArray(rows) && rows.length > 0),
+        ])
+      : [false, false]
+    const laborEstateFilter = laborSupportsLocation ? estateFilter : sql``
+    const expenseEstateFilter = expenseSupportsLocation ? estateFilter : sql``
 
     const [processing, dispatch, sales, labor, expenses] = await Promise.all([
       runTenantQuery(sql, tenantContext, sql`
         SELECT process_date::text AS date, coffee_type, crop_today, dry_parch
         FROM processing_records
         WHERE tenant_id = ${tenantId}
+          ${estateFilter}
         ORDER BY process_date DESC, id DESC
         LIMIT 3
       `).catch(() => []),
@@ -40,6 +66,7 @@ export async function GET() {
         SELECT dispatch_date::text AS date, coffee_type, bags_dispatched
         FROM dispatch_records
         WHERE tenant_id = ${tenantId}
+          ${estateFilter}
         ORDER BY dispatch_date DESC, id DESC
         LIMIT 3
       `).catch(() => []),
@@ -47,6 +74,7 @@ export async function GET() {
         SELECT sale_date::text AS date, coffee_type, kgs, revenue
         FROM sales_records
         WHERE tenant_id = ${tenantId}
+          ${estateFilter}
         ORDER BY sale_date DESC, id DESC
         LIMIT 3
       `).catch(() => []),
@@ -54,6 +82,7 @@ export async function GET() {
         SELECT (deployment_date AT TIME ZONE 'Asia/Kolkata')::date::text AS date, code, total_cost
         FROM labor_transactions
         WHERE tenant_id = ${tenantId}
+          ${laborEstateFilter}
         ORDER BY deployment_date DESC, id DESC
         LIMIT 2
       `).catch(() => []),
@@ -61,6 +90,7 @@ export async function GET() {
         SELECT (entry_date AT TIME ZONE 'Asia/Kolkata')::date::text AS date, code, total_amount
         FROM expense_transactions
         WHERE tenant_id = ${tenantId}
+          ${expenseEstateFilter}
         ORDER BY entry_date DESC, id DESC
         LIMIT 2
       `).catch(() => []),

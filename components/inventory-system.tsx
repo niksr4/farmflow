@@ -2905,6 +2905,7 @@ export default function InventorySystem() {
     shouldLoadHomeMetrics,
     currentFiscalYear,
     effectiveRole,
+    selectedEstate,
   })
 
   const commandStripItems = useMemo(() => {

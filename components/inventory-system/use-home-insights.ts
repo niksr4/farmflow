@@ -13,17 +13,31 @@ export type UseHomeInsightsInput = {
   shouldLoadHomeMetrics: boolean
   currentFiscalYear: { startDate: string; endDate: string }
   effectiveRole: string | null | undefined
+  // Estate isn't sent to the server explicitly -- each endpoint reads the farmflow_selected_estate
+  // cookie itself -- this is here purely so the loaded-refs below key on it and these effects
+  // refire when the selector changes. Without it, the intelligence brief / season comparison /
+  // recent-activity feed all stayed pinned to whichever estate was active the first time the
+  // Home tab loaded, same bug class as the estate command center staleness.
+  selectedEstate: string | null
 }
 
 /**
  * Owns the Home-tab "insights" data: the cross-module intelligence brief, activity streak,
  * proactive AI insights, season-over-season comparison, and the recent-activity feed. Each is
- * fetched once per tenant per session (guarded by a loaded-ref) when Home metrics should load.
- * Extracted out of the dashboard shell so the shell stays lean; behaviour is unchanged.
+ * fetched once per tenant+estate per session (guarded by a loaded-ref) when Home metrics should
+ * load. Extracted out of the dashboard shell so the shell stays lean; behaviour is unchanged.
+ *
+ * activityStreak and proactiveInsights are deliberately NOT estate-scoped: activityStreak is a
+ * tenant-wide engagement metric (days in a row *someone* logged data anywhere), and scoping it
+ * to one estate would make an actively-used tenant look falsely idle on days its other estate
+ * did the logging. proactiveInsights calls buildTenantAiDataSummary, which is also used by the
+ * weekly digest cron job and other tenant-wide callers -- adding estate scoping there is a
+ * separate, larger change deliberately out of scope here.
  */
 export function useHomeInsights(input: UseHomeInsightsInput) {
-  const { tenantId, canShowIntelligence, canShowAiAnalysis, shouldLoadHomeMetrics, currentFiscalYear, effectiveRole } =
+  const { tenantId, canShowIntelligence, canShowAiAnalysis, shouldLoadHomeMetrics, currentFiscalYear, effectiveRole, selectedEstate } =
     input
+  const estateLoadKey = `${tenantId ?? ""}:${selectedEstate ?? "__all_estates__"}`
 
   const [intelligenceBrief, setIntelligenceBrief] = useState<IntelligenceBrief | null>(null)
   const [intelligenceLoading, setIntelligenceLoading] = useState(false)
@@ -58,7 +72,7 @@ export function useHomeInsights(input: UseHomeInsightsInput) {
       return
     }
     if (!shouldLoadHomeMetrics) return
-    if (intelligenceBriefLoadedRef.current === tenantId) return
+    if (intelligenceBriefLoadedRef.current === estateLoadKey) return
     const controller = new AbortController()
 
     const loadIntelligenceBrief = async () => {
@@ -102,14 +116,14 @@ export function useHomeInsights(input: UseHomeInsightsInput) {
       } finally {
         if (!controller.signal.aborted) {
           setIntelligenceLoading(false)
-          intelligenceBriefLoadedRef.current = tenantId
+          intelligenceBriefLoadedRef.current = estateLoadKey
         }
       }
     }
 
     loadIntelligenceBrief()
     return () => controller.abort()
-  }, [canShowIntelligence, currentFiscalYear.endDate, currentFiscalYear.startDate, effectiveRole, shouldLoadHomeMetrics, tenantId])
+  }, [canShowIntelligence, currentFiscalYear.endDate, currentFiscalYear.startDate, effectiveRole, estateLoadKey, shouldLoadHomeMetrics, tenantId])
 
   useEffect(() => {
     if (!tenantId || !shouldLoadHomeMetrics) return
@@ -153,7 +167,7 @@ export function useHomeInsights(input: UseHomeInsightsInput) {
 
   useEffect(() => {
     if (!canShowAiAnalysis || !shouldLoadHomeMetrics) return
-    if (seasonCompareLoadedRef.current === tenantId) return
+    if (seasonCompareLoadedRef.current === estateLoadKey) return
     const controller = new AbortController()
     const loadSeasonCompare = async () => {
       setSeasonCompareLoading(true)
@@ -177,17 +191,17 @@ export function useHomeInsights(input: UseHomeInsightsInput) {
       } finally {
         if (!controller.signal.aborted) {
           setSeasonCompareLoading(false)
-          seasonCompareLoadedRef.current = tenantId
+          seasonCompareLoadedRef.current = estateLoadKey
         }
       }
     }
     loadSeasonCompare()
     return () => controller.abort()
-  }, [canShowAiAnalysis, shouldLoadHomeMetrics, tenantId])
+  }, [canShowAiAnalysis, estateLoadKey, shouldLoadHomeMetrics, tenantId])
 
   useEffect(() => {
     if (!shouldLoadHomeMetrics) return
-    if (recentActivityLoadedRef.current === tenantId) return
+    if (recentActivityLoadedRef.current === estateLoadKey) return
     const controller = new AbortController()
     const load = async () => {
       setRecentActivityLoading(true)
@@ -202,13 +216,13 @@ export function useHomeInsights(input: UseHomeInsightsInput) {
       } finally {
         if (!controller.signal.aborted) {
           setRecentActivityLoading(false)
-          recentActivityLoadedRef.current = tenantId
+          recentActivityLoadedRef.current = estateLoadKey
         }
       }
     }
     load()
     return () => controller.abort()
-  }, [shouldLoadHomeMetrics, tenantId])
+  }, [estateLoadKey, shouldLoadHomeMetrics, tenantId])
 
   return {
     intelligenceBrief,
