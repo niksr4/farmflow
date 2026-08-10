@@ -178,3 +178,54 @@ describe("hdata route hardening", () => {
     expect(src).toContain("biometricUnknownSerial")
   })
 })
+
+describe("enrolment name capture", () => {
+  const route = readFileSync(resolve(process.cwd(), "app/hdata.aspx/route.ts"), "utf8")
+  const lib = readFileSync(resolve(process.cwd(), "lib/server/biometric-attendance.ts"), "utf8")
+
+  it("records the enrolment instead of discarding it", () => {
+    // The device is the only place a code is human-readable, and it says so exactly once.
+    expect(route).toContain("HDATA_REQUEST_CODES.realtimeEnroll")
+    expect(route).toContain("recordEnrollment")
+  })
+
+  it("still acks an enrolment even if recording it fails", () => {
+    // A device that does not receive response_code: OK re-sends forever. A missing name is a
+    // cosmetic loss; a permanent resend storm is not.
+    const block = route.slice(route.indexOf("realtimeEnroll"), route.indexOf("Only a punch produces"))
+    expect(block).toContain("return ack()")
+    expect(block).toContain(".catch(")
+  })
+
+  it("never overwrites a name already set in FarmFlow", () => {
+    // The device's name is a suggestion. A human-confirmed worker name must win.
+    expect(lib).toContain("COALESCE(EXCLUDED.user_name, biometric_enrollments.user_name)")
+  })
+
+  it("upserts rather than accumulating a row per re-enrolment", () => {
+    // Terminals re-push enrolments after a reboot; unbounded growth is a real risk.
+    expect(lib).toContain("ON CONFLICT (tenant_id, device_user_code) DO UPDATE")
+  })
+
+  it("does not create or rename a worker from an enrolment", () => {
+    // A mistyped or test enrolment must not silently mint a payroll record.
+    const fn = lib.slice(lib.indexOf("export async function recordEnrollment"))
+    expect(fn).not.toContain("attendance_workers")
+  })
+})
+
+describe("migration 113 arms its own RLS", () => {
+  const sqlFile = readFileSync(resolve(process.cwd(), "scripts/113-biometric-enrollments.sql"), "utf8")
+
+  it("does not rely on script 98's one-off discovery sweep", () => {
+    // That sweep is already recorded as applied and will never run again, which is exactly how
+    // transaction_history_archive reached production with no policy at all.
+    expect(sqlFile).toContain("ENABLE ROW LEVEL SECURITY")
+    expect(sqlFile).toContain("FORCE ROW LEVEL SECURITY")
+    expect(sqlFile).toContain("CREATE POLICY tenant_isolation")
+  })
+
+  it("grants the runtime role DML, which a new table does not inherit", () => {
+    expect(sqlFile).toContain("GRANT SELECT, INSERT, UPDATE, DELETE ON biometric_enrollments TO app_runtime")
+  })
+})

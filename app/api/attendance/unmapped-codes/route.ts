@@ -15,15 +15,22 @@ export async function GET() {
       tenantContext,
       accountsSql`
         SELECT
-          device_user_code,
+          p.device_user_code,
           COUNT(*)::int AS punch_count,
-          MIN(punched_at) AS first_seen_at,
-          MAX(punched_at) AS last_seen_at
-        FROM biometric_punches
-        WHERE tenant_id = ${tenantContext.tenantId}
-          AND worker_id IS NULL
-        GROUP BY device_user_code
-        ORDER BY MAX(punched_at) DESC
+          MIN(p.punched_at) AS first_seen_at,
+          MAX(p.punched_at) AS last_seen_at,
+          -- The name typed on the terminal when this finger was enrolled. It is the only
+          -- human-readable form of a device code, so surfacing it turns "map code 5 to
+          -- somebody" into "confirm that code 5 is SUM".
+          MAX(e.user_name) AS enrolled_name
+        FROM biometric_punches p
+        LEFT JOIN biometric_enrollments e
+          ON e.tenant_id = p.tenant_id
+         AND e.device_user_code = p.device_user_code
+        WHERE p.tenant_id = ${tenantContext.tenantId}
+          AND p.worker_id IS NULL
+        GROUP BY p.device_user_code
+        ORDER BY MAX(p.punched_at) DESC
       `,
     )
 

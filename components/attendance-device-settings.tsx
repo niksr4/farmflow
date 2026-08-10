@@ -45,6 +45,8 @@ type UnmappedCode = {
   punchCount: number
   firstSeenAt: string | null
   lastSeenAt: string | null
+  /** Name typed on the terminal at enrolment — the only human-readable form of a device code. */
+  enrolledName: string | null
 }
 
 type WorkerOption = { id: string; name: string }
@@ -294,7 +296,12 @@ export default function AttendanceDeviceSettings({ workers }: { workers: WorkerO
           {unmappedCodes.map((row) => (
             <div key={row.deviceUserCode} className="rounded-2xl bg-amber-50 border border-amber-100 px-4 py-3 space-y-2">
               <div className="flex items-center justify-between">
-                <p className="text-sm font-bold text-amber-800">Code {row.deviceUserCode}</p>
+                <p className="text-sm font-bold text-amber-800">
+                  Code {row.deviceUserCode}
+                  {row.enrolledName ? (
+                    <span className="ml-1.5 font-semibold text-amber-700">— {row.enrolledName}</span>
+                  ) : null}
+                </p>
                 <p className="text-xs text-amber-700/70">{row.punchCount} punch{row.punchCount === 1 ? "" : "es"}</p>
               </div>
               <div className="flex items-center gap-2">

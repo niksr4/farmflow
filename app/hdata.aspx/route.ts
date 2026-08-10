@@ -12,10 +12,12 @@ import {
   HDATA_REQUEST_CODES,
   MAX_HDATA_BODY_BYTES,
   isValidHdataSerial,
+  parseHdataEnrollment,
   parseHdataEnvelope,
   parseHdataPunch,
 } from "@/lib/hdata-protocol"
 import {
+  recordEnrollment,
   recordPunchesAndUpsertAttendance,
   resolveTenantByDeviceSerial,
   touchDeviceLastSeen,
@@ -107,9 +109,39 @@ export async function POST(request: Request) {
   try {
     await touchDeviceLastSeen(accountsSql, tenantContext, resolved.deviceId).catch(() => undefined)
 
-    // Only a punch produces attendance. receive_cmd is an idle poll and realtime_enroll_data
-    // carries a fingerprint template we have no use for — both are acked and dropped, because a
-    // device that does not receive response_code: OK re-sends indefinitely.
+    // An enrolment carries the name typed on the terminal keypad -- the only place a device code
+    // is ever human-readable. Recorded (not acted on) so the mapping panel can suggest it. The
+    // fingerprint template alongside it is still discarded; we have no use for biometric data and
+    // no wish to store it.
+    if (requestCode === HDATA_REQUEST_CODES.realtimeEnroll) {
+      const body = Buffer.from(await request.arrayBuffer())
+      const enrollment = parseHdataEnrollment(parseHdataEnvelope(body).json)
+      if (enrollment) {
+        await recordEnrollment(
+          accountsSql,
+          tenantContext,
+          enrollment.deviceUserCode,
+          enrollment.userName,
+          serialNumber,
+        ).catch((error) => {
+          // Never withhold the ack for this: a device that does not receive response_code: OK
+          // re-sends forever, and an unrecorded name is a cosmetic loss next to a resend storm.
+          logAppErrorEvent({
+            tenantId: resolved.tenantId,
+            source: "hdata",
+            endpoint: "/hdata.aspx",
+            errorCode: "hdata_enrollment_record_failed",
+            severity: "warning",
+            message: error instanceof Error ? error.message : String(error),
+            metadata: { serialNumber, deviceUserCode: enrollment.deviceUserCode },
+          }).catch(() => undefined)
+        })
+      }
+      return ack()
+    }
+
+    // Only a punch produces attendance. receive_cmd is an idle poll -- acked and dropped, because
+    // a device that does not receive response_code: OK re-sends indefinitely.
     if (requestCode !== HDATA_REQUEST_CODES.realtimeGlog) {
       return ack()
     }
