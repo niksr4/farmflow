@@ -194,6 +194,13 @@ function buildActivitySummary(a: YesterdayActivity | undefined): string {
   return parts.length > 0 ? parts.join(" · ") : "No activity"
 }
 
+// tenants.name comes straight from the public, unauthenticated /signup page's estateName field
+// (lib/server/onboarding/provision-tenant.ts) with no character restriction beyond length -- it
+// is attacker-controlled. Every tenantName/flag interpolated into this internal HTML report must
+// be escaped, the same way contact/feedback route emails already are.
+const escapeHtml = (value: string) =>
+  value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;")
+
 function buildAlertHtml(summaries: Array<TenantEngagementRow & TenantGuidanceSummary>, generatedAt: string, yesterdayActivity: Map<string, YesterdayActivity>, estatePhaseLabel: string): string {
   const statusBadge = (status: TenantGuidanceSummary["status"]) => {
     const styles: Record<TenantGuidanceSummary["status"], string> = {
@@ -212,7 +219,7 @@ function buildAlertHtml(summaries: Array<TenantEngagementRow & TenantGuidanceSum
     const activityColor = activityText === "No activity" ? "#9ca3af" : "#374151"
     return `
     <tr style="border-bottom:1px solid #e5e7eb;">
-      <td style="padding:10px 12px;font-size:14px;font-weight:500;color:#111827;">${s.tenantName}</td>
+      <td style="padding:10px 12px;font-size:14px;font-weight:500;color:#111827;">${escapeHtml(s.tenantName)}</td>
       <td style="padding:10px 12px;">${statusBadge(s.status)}</td>
       <td style="padding:10px 12px;font-size:13px;color:${activityColor};">${activityText}</td>
       <td style="padding:10px 12px;font-size:13px;color:#374151;">${s.loginsLast7d} this week</td>
@@ -224,7 +231,7 @@ function buildAlertHtml(summaries: Array<TenantEngagementRow & TenantGuidanceSum
 
   const attentionList = summaries
     .filter((s) => s.status === "stuck" || s.status === "quiet" || s.flags.length > 0)
-    .map((s) => `<li style="margin:6px 0;font-size:14px;color:#374151;"><strong>${s.tenantName}</strong> — ${s.flags.join("; ") || s.status}</li>`)
+    .map((s) => `<li style="margin:6px 0;font-size:14px;color:#374151;"><strong>${escapeHtml(s.tenantName)}</strong> — ${s.flags.join("; ") || s.status}</li>`)
     .join("")
 
   return `<!DOCTYPE html>

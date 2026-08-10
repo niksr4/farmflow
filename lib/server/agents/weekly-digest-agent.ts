@@ -471,12 +471,21 @@ function buildFeedbackHtml(feedbackLinks: DigestFeedbackLinks | null): string {
         </td></tr>`
 }
 
+// tenantName traces to the public, unauthenticated /signup page's estateName field
+// (lib/server/onboarding/provision-tenant.ts) with no character restriction beyond length --
+// it is attacker-controlled. This HTML is BCC'd to EMAIL_BCC_MONITORING on every send (see
+// sendDigestEmail below), so an unescaped payload here would land in a shared inbox every week,
+// not once. digestText is AI-generated but can quote the tenant's own data verbatim (buyer
+// names, notes) which is just as attacker-reachable, so every interpolation here is escaped.
+const escapeHtml = (value: string) =>
+  value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;")
+
 function buildDigestHtml(ownerName: string, tenantName: string, digestText: string, feedbackLinks: DigestFeedbackLinks | null): string {
   // Convert plain-text numbered sections to simple HTML paragraphs
   const lines = digestText.split("\n").filter((l) => l.trim().length > 0)
   const bodyHtml = lines
     .map((line) => {
-      const trimmed = line.trim()
+      const trimmed = escapeHtml(line.trim())
       // Numbered section header e.g. "1. This Week at a Glance"
       if (/^\d+\.\s+[A-Z]/.test(trimmed)) {
         return `<p style="margin:20px 0 4px;font-size:11px;font-weight:600;letter-spacing:0.1em;text-transform:uppercase;color:#6b7280;">${trimmed}</p>`
@@ -504,12 +513,12 @@ function buildDigestHtml(ownerName: string, tenantName: string, digestText: stri
         <!-- Header -->
         <tr><td style="background:#052e16;border-radius:12px 12px 0 0;padding:24px 32px;">
           <p style="margin:0;font-size:11px;font-weight:600;letter-spacing:0.15em;text-transform:uppercase;color:#6ee7b7;">Weekly Digest</p>
-          <p style="margin:6px 0 0;font-size:22px;font-weight:700;color:#f9fafb;">${tenantName}</p>
+          <p style="margin:6px 0 0;font-size:22px;font-weight:700;color:#f9fafb;">${escapeHtml(tenantName)}</p>
         </td></tr>
 
         <!-- Body -->
         <tr><td style="background:#ffffff;padding:28px 32px;border-left:1px solid #e5e7eb;border-right:1px solid #e5e7eb;">
-          <p style="margin:0 0 20px;font-size:14px;color:#6b7280;">Hi ${ownerName}, here is your weekly estate operations digest.</p>
+          <p style="margin:0 0 20px;font-size:14px;color:#6b7280;">Hi ${escapeHtml(ownerName)}, here is your weekly estate operations digest.</p>
           ${bodyHtml}
         </td></tr>
 ${buildFeedbackHtml(feedbackLinks)}
