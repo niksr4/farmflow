@@ -114,7 +114,17 @@ export default function AttendanceTab() {
         setHasBiometricDevices(Boolean(data.hasBiometricDevices))
         setError(null)
 
-        if (fetchedPresent.length === 0 && fetchedWorkers.length > 0 && autoSelectedDate !== date) {
+        // "Everyone present by default" applies to TODAY ONLY.
+        //
+        // It is a real time-saver while taking a live muster — most workers turn up, so marking
+        // the exceptions beats tapping forty names. On a past date it invents history: a day
+        // nobody recorded renders identically to a day everyone attended, so there is no way to
+        // tell "all present" from "never taken". Worse, those pre-ticked rows are one Save away
+        // from becoming real attendance — and therefore real wages — for a day never mustered.
+        //
+        // Past dates now show exactly what is stored: absent unless a record says otherwise.
+        const isTodaysDate = isToday(new Date(`${date}T00:00:00`))
+        if (isTodaysDate && fetchedPresent.length === 0 && fetchedWorkers.length > 0 && autoSelectedDate !== date) {
           setPresentWorkerIds(fetchedWorkers.map((w) => w.id))
           setAutoSelectedDate(date)
         } else {

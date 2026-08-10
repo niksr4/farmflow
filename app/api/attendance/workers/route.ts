@@ -68,6 +68,14 @@ export async function POST(request: Request) {
     // the fact. Same 30-char cap as the PATCH handler.
     const deviceUserCode = String(body?.deviceUserCode || "").trim().slice(0, 30) || null
 
+    // Accepted at creation so the add form can collect everything the table displays. Previously
+    // these were PATCH-only, so adding a worker meant creating them and immediately editing to
+    // fill in details the form had already asked for nowhere. Same caps as the PATCH handler.
+    const phone = String(body?.phone || "").trim().slice(0, 30) || null
+    const bankName = String(body?.bankName || "").trim().slice(0, 120) || null
+    const bankAccount = String(body?.bankAccount || "").trim().slice(0, 60) || null
+    const bankIfsc = String(body?.bankIfsc || "").trim().slice(0, 20) || null
+
     const insertedRows = await runTenantQuery(
       accountsSql,
       tenantContext,
@@ -78,7 +86,11 @@ export async function POST(request: Request) {
           worker_type,
           daily_rate,
           location_id,
-          device_user_code
+          device_user_code,
+          phone,
+          bank_name,
+          bank_account,
+          bank_ifsc
         )
         VALUES (
           ${tenantContext.tenantId},
@@ -86,9 +98,14 @@ export async function POST(request: Request) {
           ${workerType},
           ${dailyRate},
           ${locationId},
-          ${deviceUserCode}
+          ${deviceUserCode},
+          ${phone},
+          ${bankName},
+          ${bankAccount},
+          ${bankIfsc}
         )
-        RETURNING id, full_name, worker_type, daily_rate, location_id, device_user_code, created_at
+        RETURNING id, full_name, worker_type, daily_rate, location_id, device_user_code,
+                  phone, bank_name, bank_account, bank_ifsc, created_at
       `,
     )
 

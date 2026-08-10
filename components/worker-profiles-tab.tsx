@@ -32,6 +32,7 @@ type Worker = {
   bankAccount: string | null
   bankIfsc: string | null
   locationId: string | null
+  deviceUserCode: string | null
   active: boolean
 }
 
@@ -57,6 +58,7 @@ const EMPTY_FORM = {
   bankName: "",
   bankAccount: "",
   bankIfsc: "",
+  deviceUserCode: "",
   locationId: UNASSIGNED_LOCATION,
 }
 
@@ -80,6 +82,9 @@ export default function WorkerProfilesTab() {
   const [editingId, setEditingId] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
   const [form, setForm] = useState(EMPTY_FORM)
+  // Same data-driven gate as the attendance tab: estates without a terminal see no
+  // biometric fields at all.
+  const [hasBiometricDevices, setHasBiometricDevices] = useState(false)
   const [editForm, setEditForm] = useState(EMPTY_FORM)
   const [locations, setLocations] = useState<LocationOption[]>([])
   const locationById = new Map(locations.map((loc) => [loc.id, loc]))
@@ -109,6 +114,7 @@ export default function WorkerProfilesTab() {
       const res = await fetch("/api/attendance?date=" + todayIso() + "&scope=all")
       const data = await res.json()
       if (data.success) {
+        setHasBiometricDevices(Boolean(data.hasBiometricDevices))
         setWorkers(
           (data.workers || []).map((w: any) => ({
             id: String(w.id),
@@ -120,6 +126,7 @@ export default function WorkerProfilesTab() {
             bankAccount: w.bankAccount || null,
             bankIfsc: w.bankIfsc || null,
             locationId: w.locationId || null,
+            deviceUserCode: w.deviceUserCode || null,
             active: true,
           })),
         )
@@ -148,6 +155,11 @@ export default function WorkerProfilesTab() {
           workerType: form.workerType || null,
           dailyRate: form.dailyRate ? Number(form.dailyRate) : null,
           locationId: form.locationId === UNASSIGNED_LOCATION ? null : form.locationId,
+          phone: form.phone.trim() || null,
+          bankName: form.bankName.trim() || null,
+          bankAccount: form.bankAccount.trim() || null,
+          bankIfsc: form.bankIfsc.trim() || null,
+          deviceUserCode: form.deviceUserCode.trim() || null,
         }),
       })
       const data = await res.json()
@@ -172,6 +184,7 @@ export default function WorkerProfilesTab() {
       dailyRate: worker.dailyRate != null ? String(worker.dailyRate) : "",
       bankName: worker.bankName || "",
       bankAccount: worker.bankAccount || "",
+      deviceUserCode: worker.deviceUserCode || "",
       bankIfsc: worker.bankIfsc || "",
       locationId: worker.locationId || UNASSIGNED_LOCATION,
     })
@@ -301,6 +314,58 @@ export default function WorkerProfilesTab() {
                   </Select>
                 </div>
               )}
+              {/* Phone and bank are columns in the table below and are editable inline, but the
+                  add form never collected them — so adding a worker meant saving, then immediately
+                  reopening them to enter details the form had already implied it wanted. */}
+              <div className="space-y-1.5">
+                <FieldLabel label="Phone" tooltip="Contact number for this worker. Optional." />
+                <Input
+                  value={form.phone}
+                  onChange={(e) => setForm((f) => ({ ...f, phone: e.target.value }))}
+                  placeholder="9876543210"
+                  inputMode="tel"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <FieldLabel label="Bank name" tooltip="Used for payroll payouts. Optional." />
+                <Input
+                  value={form.bankName}
+                  onChange={(e) => setForm((f) => ({ ...f, bankName: e.target.value }))}
+                  placeholder="Canara Bank"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <FieldLabel label="Account number" tooltip="Bank account for payroll payouts. Optional." />
+                <Input
+                  value={form.bankAccount}
+                  onChange={(e) => setForm((f) => ({ ...f, bankAccount: e.target.value }))}
+                  placeholder="123456789012"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <FieldLabel label="IFSC" tooltip="Bank branch IFSC code for payroll payouts. Optional." />
+                <Input
+                  value={form.bankIfsc}
+                  onChange={(e) => setForm((f) => ({ ...f, bankIfsc: e.target.value }))}
+                  placeholder="CNRB0001234"
+                />
+              </div>
+              {/* Only for estates that actually have a fingerprint terminal — same gate as the
+                  attendance tab, so nobody else sees a field they cannot use. */}
+              {hasBiometricDevices && (
+                <div className="space-y-1.5">
+                  <FieldLabel
+                    label="Finger ID"
+                    tooltip="The enrol ID shown on the fingerprint terminal for this worker. Punches from that ID are attributed to them. Can also be assigned later from the unmapped-codes panel."
+                  />
+                  <Input
+                    value={form.deviceUserCode}
+                    onChange={(e) => setForm((f) => ({ ...f, deviceUserCode: e.target.value }))}
+                    placeholder="1"
+                    inputMode="numeric"
+                  />
+                </div>
+              )}
             </div>
             <div className="mt-3 flex justify-end gap-2">
               <Button variant="ghost" size="sm" onClick={() => { setIsAdding(false); setForm(EMPTY_FORM) }}>
@@ -351,6 +416,8 @@ export default function WorkerProfilesTab() {
                     <TableHead>Daily Rate</TableHead>
                     <TableHead className="hidden sm:table-cell">Phone</TableHead>
                     <TableHead className="hidden md:table-cell">Bank</TableHead>
+                    {/* Only for estates with a terminal — same gate as everywhere else. */}
+                    {hasBiometricDevices && <TableHead>Finger ID</TableHead>}
                     {canWrite && <TableHead className="w-20" />}
                   </TableRow>
                 </TableHeader>
@@ -435,6 +502,17 @@ export default function WorkerProfilesTab() {
                             />
                           </div>
                         </TableCell>
+                        {hasBiometricDevices && (
+                          <TableCell>
+                            <Input
+                              className="h-8 w-24"
+                              value={editForm.deviceUserCode}
+                              onChange={(e) => setEditForm((f) => ({ ...f, deviceUserCode: e.target.value }))}
+                              placeholder="Finger ID"
+                              inputMode="numeric"
+                            />
+                          </TableCell>
+                        )}
                         <TableCell>
                           <div className="flex gap-1">
                             <Button size="icon" variant="ghost" className="h-7 w-7" disabled={saving} onClick={() => handleSaveEdit(w.id)}>
@@ -478,6 +556,15 @@ export default function WorkerProfilesTab() {
                             <span>{w.bankName}{w.bankAccount ? ` · ${w.bankAccount}` : ""}{w.bankIfsc ? ` (${w.bankIfsc})` : ""}</span>
                           ) : "—"}
                         </TableCell>
+                        {hasBiometricDevices && (
+                          <TableCell className="text-sm">
+                            {w.deviceUserCode ? (
+                              <span className="font-mono">{w.deviceUserCode}</span>
+                            ) : (
+                              <span className="text-muted-foreground">—</span>
+                            )}
+                          </TableCell>
+                        )}
                         {canWrite && (
                           <TableCell>
                             <TooltipProvider>

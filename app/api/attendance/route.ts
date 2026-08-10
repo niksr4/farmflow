@@ -51,7 +51,8 @@ export async function GET(request: Request) {
 
     const [workersRows, presentRows, weeklyRows, deviceRows] = await runTenantQueries(accountsSql, tenantContext, [
       accountsSql`
-        SELECT id, full_name, daily_rate, device_user_code, location_id, created_at
+        SELECT id, full_name, daily_rate, device_user_code, location_id, created_at,
+               worker_type, phone, bank_name, bank_account, bank_ifsc
         FROM attendance_workers
         WHERE tenant_id = ${tenantContext.tenantId}
           AND active = TRUE
@@ -105,6 +106,14 @@ export async function GET(request: Request) {
         dailyRate: row.daily_rate != null ? Number(row.daily_rate) : null,
         deviceUserCode: row.device_user_code ? String(row.device_user_code) : null,
         locationId: row.location_id ? String(row.location_id) : null,
+        // The worker-profiles tab renders Phone and Bank columns and maps them straight off this
+        // response. They were never selected here, so those columns were blank for every tenant
+        // no matter what was stored, and the add form quietly had nowhere to put the values.
+        workerType: row.worker_type ? String(row.worker_type) : null,
+        phone: row.phone ? String(row.phone) : null,
+        bankName: row.bank_name ? String(row.bank_name) : null,
+        bankAccount: row.bank_account ? String(row.bank_account) : null,
+        bankIfsc: row.bank_ifsc ? String(row.bank_ifsc) : null,
       })),
       presentWorkerIds: presentRows.map((row: any) => String(row.worker_id)).filter(Boolean),
       presentRecords: presentRows.map((row: any) => ({
