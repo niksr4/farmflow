@@ -1,0 +1,21 @@
+[Unit]
+Description=FarmFlow biometric ingest relay (plain HTTP -> HTTPS bridge for fingerprint terminals)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+ExecStart=/usr/bin/node /opt/farmflow-relay/relay.mjs
+Environment=PORT=8001
+Environment=TARGET_HOST=www.thefarmflow.in
+Environment=TARGET_PATH=/hdata.aspx
+Restart=always
+RestartSec=5
+User=nobody
+Group=nogroup
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+
+[Install]
+WantedBy=multi-user.target
