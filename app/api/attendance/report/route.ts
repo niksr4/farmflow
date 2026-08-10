@@ -1,8 +1,11 @@
 import { NextResponse } from "next/server"
+import { cookies } from "next/headers"
 
 import { accountsSql, isDbConfigured } from "@/lib/server/db"
 import { isModuleAccessError, requireModuleAccess } from "@/lib/server/module-access"
 import { normalizeTenantContext, runTenantQuery } from "@/lib/server/tenant-db"
+import { resolveActiveEstate } from "@/lib/server/estate-filter"
+import { SELECTED_ESTATE_COOKIE } from "@/lib/server/estate-cookie"
 import { logServerError } from "@/lib/server/safe-logging"
 import { databaseNotConfiguredResponse } from "@/lib/server/route-utils"
 import {
@@ -32,6 +35,17 @@ export async function GET(request: Request) {
 
     const tenantContext = normalizeTenantContext(sessionUser.tenantId, sessionUser.role)
 
+    // Every other attendance endpoint is estate-aware; this one was not, so selecting an estate
+    // in the header and opening the report listed workers from all of them. Workers with no
+    // location always show, per the always-NULL-shows convention in lib/estate-filter.ts.
+    const cookieEstate = (await cookies()).get(SELECTED_ESTATE_COOKIE)?.value || null
+    const activeEstate = resolveActiveEstate(searchParams, cookieEstate)
+    const estateClause = activeEstate
+      ? accountsSql` AND (w.location_id IS NULL OR w.location_id IN (
+          SELECT id FROM locations WHERE tenant_id = ${tenantContext.tenantId} AND estate = ${activeEstate}
+        ))`
+      : accountsSql``
+
     // LEFT JOIN from the roster, not from attendance: a report whose job is spotting absences
     // has to list the people who did NOT turn up. Filtering by date inside the join condition
     // rather than in WHERE is what keeps absentees in the result.
@@ -60,7 +74,12 @@ export async function GET(request: Request) {
          AND r.tenant_id = w.tenant_id
          AND r.attendance_date = (SELECT report_date FROM target)
         WHERE w.tenant_id = ${sessionUser.tenantId}
-          AND w.active = TRUE
+          -- Active workers, PLUS anyone who has a record for this date but has since been
+          -- removed. Filtering on active alone made past reports change retroactively: a worker
+          -- deactivated today vanished from every day they had actually worked, which is wrong
+          -- for a record that feeds payroll.
+          AND (w.active = TRUE OR r.id IS NOT NULL)
+          ${estateClause}
         ORDER BY
           NULLIF(regexp_replace(COALESCE(w.device_user_code, ''), '\\D', '', 'g'), '')::bigint NULLS LAST,
           w.full_name

@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs"
+import { resolve } from "node:path"
 import { describe, expect, it } from "vitest"
 
 import {
@@ -115,5 +117,36 @@ describe("csv export", () => {
       { employeeCode: "9", employeeName: "Rao, Sumant", checkIn: null, checkOut: null },
     ])
     expect(attendanceReportToCsv(rows, "2026-08-04")).toContain('"Rao, Sumant"')
+  })
+})
+
+describe("report route: scoping guards", () => {
+  const src = readFileSync(resolve(process.cwd(), "app/api/attendance/report/route.ts"), "utf8")
+
+  it("keeps a worker who has a record for the date even after being deactivated", () => {
+    // Filtering on active alone made past reports change retroactively. Verified against
+    // production: "Shafeekul A" worked 2026-07-03, was later removed, and had silently vanished
+    // from that day's report (20 rows vs 21 with the fix).
+    expect(src).toContain("w.active = TRUE OR r.id IS NOT NULL")
+  })
+
+  it("applies the estate filter like every other attendance endpoint", () => {
+    // Medappa Estates has two estates; without this the report listed workers from both
+    // regardless of the header selection.
+    expect(src).toContain("resolveActiveEstate")
+    expect(src).toContain("SELECTED_ESTATE_COOKIE")
+    expect(src).toContain("${estateClause}")
+  })
+
+  it("keeps the always-NULL-shows convention for unassigned workers", () => {
+    expect(src).toContain("w.location_id IS NULL OR")
+  })
+})
+
+describe("the report is reachable from the UI", () => {
+  it("is linked from the attendance tab", () => {
+    // It existed for days but only opened if you typed the URL, so in practice it did not exist.
+    const tab = readFileSync(resolve(process.cwd(), "components/attendance-tab.tsx"), "utf8")
+    expect(tab).toContain("/attendance-report?date=")
   })
 })

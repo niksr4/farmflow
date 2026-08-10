@@ -18,6 +18,7 @@ import {
   ChevronLeft,
   ChevronRight,
   Download,
+  FileText,
   Fingerprint,
   IndianRupee,
   Loader2,
@@ -360,6 +361,18 @@ export default function AttendanceTab() {
               {absentCount > 0 && (
                 <span className="text-sm font-bold text-stone-400">{absentCount} out</span>
               )}
+              {/* The full daily report existed but was reachable only by typing its URL, so in
+                  practice it did not exist. Opens in a new tab so a half-taken muster isn't lost
+                  by navigating away. */}
+              <a
+                href={`/attendance-report?date=${selectedDate}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                aria-label="Open the full attendance report for this day"
+                className="flex h-7 w-7 items-center justify-center rounded-lg text-stone-400 active:bg-stone-100"
+              >
+                <FileText className="h-3.5 w-3.5" />
+              </a>
               <button
                 type="button"
                 aria-label="Export day's attendance report"
