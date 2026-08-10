@@ -111,7 +111,9 @@ export default function WorkerProfilesTab() {
 
   const fetchWorkers = useCallback(async () => {
     try {
-      const res = await fetch("/api/attendance?date=" + todayIso() + "&scope=all")
+      // no-store because this reloads immediately after a save; a cached response would show the
+      // pre-edit values and read as "the save silently did nothing".
+      const res = await fetch("/api/attendance?date=" + todayIso() + "&scope=all", { cache: "no-store" })
       const data = await res.json()
       if (data.success) {
         setHasBiometricDevices(Boolean(data.hasBiometricDevices))
@@ -205,6 +207,7 @@ export default function WorkerProfilesTab() {
           bankAccount: editForm.bankAccount.trim() || null,
           bankIfsc: editForm.bankIfsc.trim() || null,
           locationId: editForm.locationId === UNASSIGNED_LOCATION ? null : editForm.locationId,
+          deviceUserCode: editForm.deviceUserCode.trim() || null,
         }),
       })
       const data = await res.json()
