@@ -127,7 +127,7 @@ const benefits = [
   {
     title: "Stop losing money to unrecorded labour",
     description:
-      "Plucker attendance, plucking rates, and daily wages logged by block. At the end of the month, your cost per kg isn't a guess.",
+      "Picker attendance, picking rates, and daily wages logged by block. At the end of the month, your cost per kg isn't a guess.",
     icon: Users,
   },
   {
@@ -188,7 +188,7 @@ const howItWorks = [
     step: "02",
     title: "Log the day's work as it happens",
     detail:
-      "Cherry intake, pulping batches, parchment out, plucker attendance, dispatch — each entry is date-stamped and tied to the block or lot it came from.",
+      "Cherry intake, pulping batches, parchment out, picker attendance, dispatch — each entry is date-stamped and tied to the block or lot it came from.",
   },
   {
     step: "03",
@@ -210,7 +210,7 @@ const outcomeCards = [
     eyebrow: "Labour & costs",
     title: "Know your cost per kg",
     detail:
-      "Plucker wages, fertiliser, and consumables logged against the block they were spent on. Cost per kg of parchment becomes a real number.",
+      "Picker wages, fertiliser, and consumables logged against the block they were spent on. Cost per kg of parchment becomes a real number.",
     icon: Wallet,
   },
   {
