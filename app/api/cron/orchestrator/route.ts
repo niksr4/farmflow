@@ -11,6 +11,7 @@ import { runWeeklyDigestAgent } from "@/lib/server/agents/weekly-digest-agent"
 import { runDailyDigestAgent } from "@/lib/server/agents/daily-digest-agent"
 import { runOnboardingNudgeAgent } from "@/lib/server/agents/onboarding-nudge-agent"
 import { runTenantDormancyProbeAgent } from "@/lib/server/agents/tenant-dormancy-probe-agent"
+import { runBiometricHealthAgent } from "@/lib/server/agents/biometric-health-agent"
 import { sql } from "@/lib/server/db"
 import { extractBearerToken, sharedSecretMatches } from "@/lib/server/request-security"
 import { logServerError } from "@/lib/server/safe-logging"
@@ -80,7 +81,7 @@ async function handleCronInvocation(request: Request) {
       } catch { /* non-critical — allow digest to run if guard fails */ }
     }
 
-    const [dataIntegrity, logAnomaly, retention, tenantSmoke, tenantEngagement, weeklyDigest, dailyDigest, onboardingNudge, tenantDormancyProbe] =
+    const [dataIntegrity, logAnomaly, retention, tenantSmoke, tenantEngagement, weeklyDigest, dailyDigest, onboardingNudge, tenantDormancyProbe, biometricHealth] =
       await Promise.allSettled([
         runDataIntegrityAgent({ triggerSource: "cron" }),
         runLogAnomalyAgent({ triggerSource: "cron" }),
@@ -95,6 +96,11 @@ async function handleCronInvocation(request: Request) {
           : runDailyDigestAgent({ triggerSource: "cron" }),
         runOnboardingNudgeAgent({ triggerSource: "cron" }),
         runTenantDormancyProbeAgent({ triggerSource: "cron" }),
+        // A quiet fingerprint terminal is silent in every direction — no error surfaces
+        // anywhere, and an empty attendance tab looks identical to nobody turning up. This is
+        // the only thing that would tell us the relay host was reclaimed or an estate dropped
+        // offline.
+        runBiometricHealthAgent(),
       ])
 
     const toResult = (r: PromiseSettledResult<unknown>) =>
@@ -110,6 +116,7 @@ async function handleCronInvocation(request: Request) {
       dailyDigest: toResult(dailyDigest),
       onboardingNudge: toResult(onboardingNudge),
       tenantDormancyProbe: toResult(tenantDormancyProbe),
+      biometricHealth: toResult(biometricHealth),
     }
 
     const anyFailed = Object.values(results).some((r) => !r.ok)
