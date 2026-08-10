@@ -81,6 +81,9 @@ export default function AttendanceTab() {
   const [isAddingWorker, setIsAddingWorker] = useState(false)
   const [removingWorkerId, setRemovingWorkerId] = useState<string | null>(null)
   const [newWorkerName, setNewWorkerName] = useState("")
+  const [newWorkerCode, setNewWorkerCode] = useState("")
+  // Tenants without a fingerprint terminal never see any of the biometric UI.
+  const [hasBiometricDevices, setHasBiometricDevices] = useState(false)
   const [newWorkerRate, setNewWorkerRate] = useState("")
   const [showAddWorker, setShowAddWorker] = useState(false)
   const [showSummary, setShowSummary] = useState(false)
@@ -108,6 +111,7 @@ export default function AttendanceTab() {
         setWorkers(fetchedWorkers)
         setWeeklySummary(Array.isArray(data.weeklySummary) ? data.weeklySummary : [])
         setPresentRecords(Array.isArray(data.presentRecords) ? data.presentRecords : [])
+        setHasBiometricDevices(Boolean(data.hasBiometricDevices))
         setError(null)
 
         if (fetchedPresent.length === 0 && fetchedWorkers.length > 0 && autoSelectedDate !== date) {
@@ -239,6 +243,7 @@ export default function AttendanceTab() {
         body: JSON.stringify({
           name: newWorkerName,
           dailyRate: newWorkerRate.trim() ? Number(newWorkerRate) : undefined,
+          deviceUserCode: newWorkerCode.trim() || undefined,
         }),
       })
       const data = await res.json().catch(() => ({}))
@@ -246,6 +251,7 @@ export default function AttendanceTab() {
       toast.success(`${data.worker?.name || "Employee"} added`)
       setNewWorkerName("")
       setNewWorkerRate("")
+      setNewWorkerCode("")
       setShowAddWorker(false)
       setAutoSelectedDate(null)
       await loadSnapshot(selectedDate)
@@ -512,6 +518,19 @@ export default function AttendanceTab() {
                 className="flex-1 h-9 text-base"
                 disabled={isAddingWorker}
               />
+              {/* The enrol ID shown on the fingerprint terminal. Only offered to estates that
+                  actually have one, and optional — a code can still be attached later from the
+                  unmapped-codes panel once that person first punches. */}
+              {hasBiometricDevices && (
+                <Input
+                  value={newWorkerCode}
+                  onChange={(e) => setNewWorkerCode(e.target.value)}
+                  placeholder="Finger ID"
+                  inputMode="numeric"
+                  className="w-24 h-9 text-base"
+                  disabled={isAddingWorker}
+                />
+              )}
               <Button
                 type="submit"
                 size="sm"
@@ -520,7 +539,7 @@ export default function AttendanceTab() {
               >
                 {isAddingWorker ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : "Add"}
               </Button>
-              <button type="button" onClick={() => { setShowAddWorker(false); setNewWorkerName(""); setNewWorkerRate("") }}
+              <button type="button" onClick={() => { setShowAddWorker(false); setNewWorkerName(""); setNewWorkerRate(""); setNewWorkerCode("") }}
                 className="text-xs text-stone-400 px-1 shrink-0">Cancel</button>
             </div>
           </form>
@@ -566,7 +585,8 @@ export default function AttendanceTab() {
           </div>
         )}
 
-        {/* Fingerprint devices */}
+        {/* Fingerprint devices -- hidden entirely for estates with no terminal registered */}
+        {hasBiometricDevices && (
         <div className="pt-1">
           <button
             type="button"
@@ -585,6 +605,7 @@ export default function AttendanceTab() {
             </div>
           )}
         </div>
+        )}
       </div>
 
       {/* Sticky save bar */}

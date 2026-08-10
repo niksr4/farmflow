@@ -6,6 +6,7 @@ import { validateLocationForTenant } from "@/lib/server/location-utils"
 import { canWriteModule } from "@/lib/permissions"
 import { logAuditEvent } from "@/lib/server/audit-log"
 import { normalizeTenantContext, runTenantQuery } from "@/lib/server/tenant-db"
+import { reconcileUnmappedPunches } from "@/lib/server/biometric-attendance"
 import {
   ATTENDANCE_MAX_WORKER_NAME_LENGTH,
   ATTENDANCE_SCHEMA_HELP,
@@ -61,6 +62,12 @@ export async function POST(request: Request) {
       return NextResponse.json({ success: false, error: "Selected location is invalid for this tenant" }, { status: 400 })
     }
 
+    // The fingerprint terminal's enrol ID for this worker. Settable at creation so an estate can
+    // map people up front rather than only after an unrecognised code has already punched --
+    // previously the ONLY route to this column was the unmapped-codes panel, which appears after
+    // the fact. Same 30-char cap as the PATCH handler.
+    const deviceUserCode = String(body?.deviceUserCode || "").trim().slice(0, 30) || null
+
     const insertedRows = await runTenantQuery(
       accountsSql,
       tenantContext,
@@ -70,20 +77,32 @@ export async function POST(request: Request) {
           full_name,
           worker_type,
           daily_rate,
-          location_id
+          location_id,
+          device_user_code
         )
         VALUES (
           ${tenantContext.tenantId},
           ${name},
           ${workerType},
           ${dailyRate},
-          ${locationId}
+          ${locationId},
+          ${deviceUserCode}
         )
-        RETURNING id, full_name, worker_type, daily_rate, location_id, created_at
+        RETURNING id, full_name, worker_type, daily_rate, location_id, device_user_code, created_at
       `,
     )
 
     const worker = insertedRows[0]
+
+    if (deviceUserCode && worker?.id) {
+      // Punches can arrive before the worker exists -- an estate typically enrols fingers on the
+      // terminal first, so code 7 may already have a week of attendance sitting unmapped by the
+      // time someone creates the matching worker. Without this, creating them would only capture
+      // future punches and quietly abandon the history. Mirrors the PATCH handler.
+      await reconcileUnmappedPunches(accountsSql, tenantContext, deviceUserCode, String(worker.id)).catch((error) => {
+        logServerError("Failed to reconcile unmapped biometric punches on worker create", error)
+      })
+    }
 
     await logAuditEvent(accountsSql, sessionUser, {
       action: "create",

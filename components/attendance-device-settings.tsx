@@ -18,6 +18,19 @@ import { EmptyState } from "@/components/ui/empty-state"
 import { StatTile } from "@/components/ui/stat-tile"
 import { useSingleFlight } from "@/hooks/use-single-flight"
 
+/**
+ * Where terminals send their punches.
+ *
+ * NOT the FarmFlow domain. These devices have no TLS stack — verified against a BioMax N-WL20 on
+ * 2026-08-10: every connection was plain HTTP even when pointed at a TLS port — and Vercel serves
+ * HTTPS only, 308-redirecting plain HTTP, which the firmware does not follow. So traffic goes via
+ * a plain-HTTP relay that forwards to FarmFlow over TLS. This panel previously told estates to use
+ * port 443, which cannot work with this hardware.
+ */
+const RELAY_HOST = process.env.NEXT_PUBLIC_BIOMETRIC_RELAY_HOST || "140.245.251.148"
+const RELAY_PORT = process.env.NEXT_PUBLIC_BIOMETRIC_RELAY_PORT || "8001"
+
+
 type BiometricDevice = {
   id: string
   label: string
@@ -152,9 +165,11 @@ export default function AttendanceDeviceSettings({ workers }: { workers: WorkerO
           <p className="text-sm font-bold text-emerald-800 dark:text-emerald-300">Configure your fingerprint terminal</p>
         </div>
         <p className="text-xs text-emerald-700/80 dark:text-emerald-300/70">
-          In the device&apos;s network / cloud server settings, set the server address to{" "}
-          <span className="font-mono font-semibold">{serverOrigin || "https://your-farmflow-domain"}</span>, port 443
-          (HTTPS). The path is fixed by the device firmware — leave it as-is.
+          In the device&apos;s network settings set <span className="font-mono font-semibold">ServerIP</span> to{" "}
+          <span className="font-mono font-semibold">{RELAY_HOST}</span> and{" "}
+          <span className="font-mono font-semibold">ServerPort</span> to{" "}
+          <span className="font-mono font-semibold">{RELAY_PORT}</span>, then reboot the terminal. Leave Cloud ID
+          blank. The path is fixed by the device firmware — leave it as-is.
         </p>
       </div>
 

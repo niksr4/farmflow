@@ -49,7 +49,7 @@ export async function GET(request: Request) {
         ? accountsSql` AND (${accountsSql.unsafe(column)} IS NULL OR ${accountsSql.unsafe(column)} IN (SELECT id FROM locations WHERE tenant_id = ${tenantContext.tenantId} AND estate = ${activeEstate}))`
         : accountsSql``
 
-    const [workersRows, presentRows, weeklyRows] = await runTenantQueries(accountsSql, tenantContext, [
+    const [workersRows, presentRows, weeklyRows, deviceRows] = await runTenantQueries(accountsSql, tenantContext, [
       accountsSql`
         SELECT id, full_name, daily_rate, device_user_code, location_id, created_at
         FROM attendance_workers
@@ -80,6 +80,13 @@ export async function GET(request: Request) {
         GROUP BY w.id, w.full_name, w.created_at
         ORDER BY LOWER(w.full_name), w.created_at ASC
       `,
+      // Existence check only -- drives whether the fingerprint UI appears at all.
+      accountsSql`
+        SELECT 1
+        FROM biometric_devices
+        WHERE tenant_id = ${tenantContext.tenantId}
+        LIMIT 1
+      `,
     ])
 
     return NextResponse.json({
@@ -87,6 +94,11 @@ export async function GET(request: Request) {
       date,
       weekStartDate: startDate,
       weekEndDate: endDate,
+      // Estates without a terminal should see no mention of biometrics: the feature is still in
+      // validation, and a settings panel for hardware they do not own is noise. The owner always
+      // sees it, otherwise registering a tenant's FIRST device is impossible -- no device would
+      // mean no UI would mean no way to add one.
+      hasBiometricDevices: deviceRows.length > 0 || String(sessionUser.role || "").toLowerCase() === "owner",
       workers: workersRows.map((row: any) => ({
         id: String(row.id),
         name: String(row.full_name || ""),
