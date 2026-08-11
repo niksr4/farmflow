@@ -70,3 +70,18 @@ describe("location pickers disambiguate colliding names", () => {
     })
   }
 })
+
+describe("estate discoverability", () => {
+  const src = readFileSync(resolve(process.cwd(), "components/tenant-settings/operations-sections.tsx"), "utf8")
+
+  it("hints that estates exist when a tenant has locations but no grouping", () => {
+    // Estates are a label typed onto a location, not an entity you create -- which is good for
+    // the single-estate majority but leaves no way to discover the feature. Even the product
+    // owner did not know it was there.
+    expect(src).toContain("Run more than one estate?")
+  })
+
+  it("stays hidden once estates are in use, and for trivially small setups", () => {
+    expect(src).toContain("locations.length > 2 && estateSuggestions.length === 0")
+  })
+})

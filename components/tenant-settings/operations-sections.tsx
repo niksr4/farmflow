@@ -144,6 +144,23 @@ export function LocationsSection({
           </div>
         </div>
 
+        {/* Estates are not something you create — they are a label typed onto a location, which
+            keeps single-estate tenants from ever meeting the concept. The cost is that a tenant
+            who acquires a second property has no way to discover it: they add locations, see no
+            grouping, and reasonably conclude the feature does not exist. Shown only once there
+            are several locations and none are grouped, so the tenants who genuinely have one
+            estate never see it. */}
+        {locations.length > 2 && estateSuggestions.length === 0 && (
+          <div className="rounded-2xl border border-sky-100 bg-sky-50/80 p-4 shadow-sm">
+            <p className="text-sm font-semibold text-sky-950">Run more than one estate?</p>
+            <p className="mt-1 text-sm leading-6 text-sky-900/80">
+              Put the estate name in the <span className="font-medium">Estate</span> field on each location and they
+              group under it, with an estate switcher in the header to view one at a time. Leave it blank if
+              everything here is one property.
+            </p>
+          </div>
+        )}
+
         <datalist id="estate-suggestions">
           {estateSuggestions.map((estate) => (
             <option key={estate} value={estate} />
