@@ -23,6 +23,7 @@ import type {
   UserModuleSource,
 } from "@/components/tenant-settings/types"
 import { formatUserModuleSource } from "@/components/tenant-settings/utils"
+import { formatLocationLabel } from "@/lib/location-label"
 
 type HelpLabelProps = {
   htmlFor: string
@@ -842,7 +843,10 @@ export function UserLocationOverridesSection({
                         onChange={() => onToggleUserLocation(location.id)}
                         disabled={isUserLocationsLoading}
                       />
-                      <span>{location.name}</span>
+                      {/* Location names are free text and tenants do reuse them — one estate has
+                          four blocks all named "Laxmi", distinguished only by code. Without this
+                          the grant list is four identical checkboxes. */}
+                      <span>{formatLocationLabel(location, group.locations)}</span>
                     </label>
                   ))}
                 </div>

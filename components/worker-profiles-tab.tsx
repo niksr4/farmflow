@@ -19,6 +19,7 @@ import FilterBar from "@/components/filter-bar"
 import { useListControls } from "@/hooks/use-list-controls"
 import { numericInputValue } from "@/lib/number-input"
 import type { LocationOption } from "@/components/inventory-system/types"
+import { formatLocationLabel } from "@/lib/location-label"
 
 type WorkerType = "permanent" | "seasonal" | "contractor"
 
@@ -310,7 +311,7 @@ export default function WorkerProfilesTab() {
                       <SelectItem value={UNASSIGNED_LOCATION}>Unassigned</SelectItem>
                       {locations.map((loc) => (
                         <SelectItem key={loc.id} value={loc.id}>
-                          {loc.estate ? `${loc.estate} — ${loc.name}` : loc.name}
+                          {formatLocationLabel(loc, locations)}
                         </SelectItem>
                       ))}
                     </SelectContent>
@@ -459,7 +460,7 @@ export default function WorkerProfilesTab() {
                                 <SelectItem value={UNASSIGNED_LOCATION}>Unassigned</SelectItem>
                                 {locations.map((loc) => (
                                   <SelectItem key={loc.id} value={loc.id}>
-                                    {loc.estate ? `${loc.estate} — ${loc.name}` : loc.name}
+                                    {formatLocationLabel(loc, locations)}
                                   </SelectItem>
                                 ))}
                               </SelectContent>

@@ -45,3 +45,28 @@ describe("relay drops non-device traffic", () => {
     expect(guard).toContain("return")
   })
 })
+
+describe("location pickers disambiguate colliding names", () => {
+  // Laxmi named all four of their blocks "Laxmi" and kept the block identity in `code`
+  // (HOUSE-BLOCK, LAXMI-STORE-BLOCK, LAXMI-MEKOOR-BLOCK, GEETHA-BLOCK). Any picker rendering
+  // only `name` shows four identical rows, which is how 42 labour records ended up scattered
+  // across three of them.
+  const pickers = [
+    "components/worker-profiles-tab.tsx",
+    "components/tenant-settings/operations-sections.tsx",
+  ]
+
+  for (const file of pickers) {
+    it(`${file} routes location labels through the shared helper`, () => {
+      const src = readFileSync(resolve(process.cwd(), file), "utf8")
+      expect(src).toContain("formatLocationLabel")
+    })
+
+    it(`${file} does not render a bare location name in a picker`, () => {
+      const src = readFileSync(resolve(process.cwd(), file), "utf8")
+      // The old worker-profiles shape also double-prefixed the estate, giving
+      // "Citrus Grove — Citrus Grove – C1" for a tenant who had named things properly.
+      expect(src).not.toContain("${loc.estate} — ${loc.name}")
+    })
+  }
+})
