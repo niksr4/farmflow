@@ -30,6 +30,8 @@ export function StatTile({
   icon,
   tone = "default",
   className,
+  onClick,
+  selected = false,
 }: {
   label: React.ReactNode
   value: React.ReactNode
@@ -37,15 +39,43 @@ export function StatTile({
   icon?: React.ReactNode
   tone?: StatTileTone
   className?: string
+  /** When provided the tile becomes a button — "24 absent" is a number; the useful action is "who?". */
+  onClick?: () => void
+  /** Only meaningful alongside onClick; renders the pressed state and sets aria-pressed. */
+  selected?: boolean
 }) {
-  return (
-    <div className={cn("rounded-2xl border p-3.5", TILE_TONES[tone], className)}>
+  const body = (
+    <>
       <div className="mb-2 flex items-center gap-1.5">
         {icon}
         <p className={cn("text-[10px] font-bold uppercase tracking-wide", LABEL_TONES[tone])}>{label}</p>
       </div>
       <p className="text-xl font-black tabular-nums text-stone-900 dark:text-white">{value}</p>
       {hint != null && <p className="mt-1 text-[10px] text-stone-400 dark:text-stone-500">{hint}</p>}
-    </div>
+    </>
+  )
+
+  // Stays a plain div unless a handler is passed, so every existing caller is unchanged and no
+  // static tile becomes spuriously focusable.
+  if (!onClick) {
+    return <div className={cn("rounded-2xl border p-3.5", TILE_TONES[tone], className)}>{body}</div>
+  }
+
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-pressed={selected}
+      className={cn(
+        "rounded-2xl border p-3.5 text-left transition-all",
+        "hover:brightness-[0.98] active:scale-[0.98] touch-manipulation",
+        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/50",
+        TILE_TONES[tone],
+        selected && "ring-2 ring-emerald-600/60 shadow-sm",
+        className,
+      )}
+    >
+      {body}
+    </button>
   )
 }

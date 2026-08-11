@@ -3,7 +3,7 @@ import { cookies } from "next/headers"
 
 import { accountsSql, isDbConfigured } from "@/lib/server/db"
 import { isModuleAccessError, requireModuleAccess } from "@/lib/server/module-access"
-import { normalizeTenantContext, runTenantQuery } from "@/lib/server/tenant-db"
+import { normalizeTenantContext, runTenantQueries } from "@/lib/server/tenant-db"
 import { resolveActiveEstate } from "@/lib/server/estate-filter"
 import { SELECTED_ESTATE_COOKIE } from "@/lib/server/estate-cookie"
 import { logServerError } from "@/lib/server/safe-logging"
@@ -52,9 +52,7 @@ export async function GET(request: Request) {
     //
     // The date defaults to the estate's local today rather than the server's — a report run at
     // 01:00 IST would otherwise show the previous day, because the server clock is UTC.
-    const rows = (await runTenantQuery(
-      accountsSql,
-      tenantContext,
+    const [rows, deviceRows] = (await runTenantQueries(accountsSql, tenantContext, [
       accountsSql`
         WITH target AS (
           SELECT COALESCE(
@@ -84,13 +82,26 @@ export async function GET(request: Request) {
           NULLIF(regexp_replace(COALESCE(w.device_user_code, ''), '\\D', '', 'g'), '')::bigint NULLS LAST,
           w.full_name
       `,
-    )) as Array<{
+      // Device health belongs on this page: an estate reading "0 present" needs to know whether
+      // nobody turned up or the terminal simply stopped talking. Those look identical otherwise.
+      accountsSql`
+        SELECT
+          COUNT(*)::int AS total,
+          COUNT(*) FILTER (
+            WHERE last_seen_at IS NOT NULL
+              AND last_seen_at > NOW() - INTERVAL '5 minutes'
+          )::int AS online
+        FROM biometric_devices
+        WHERE tenant_id = ${sessionUser.tenantId}
+          AND active = TRUE
+      `,
+    ])) as [Array<{
       device_user_code: string | null
       full_name: string
       check_in: string | null
       check_out: string | null
       report_date: string
-    }>
+    }>, Array<{ total: number; online: number }>]
 
     const reportDate = rows[0]?.report_date || requested
     const input: AttendanceReportInput[] = rows.map((row) => ({
@@ -117,6 +128,13 @@ export async function GET(request: Request) {
       reportDate,
       rows: report,
       summary: summariseAttendanceReport(report),
+      devices: Number(deviceRows?.[0]?.total ?? 0) > 0
+        ? {
+            total: Number(deviceRows[0].total),
+            online: Number(deviceRows[0].online),
+            offline: Number(deviceRows[0].total) - Number(deviceRows[0].online),
+          }
+        : null,
     })
   } catch (error) {
     if (isModuleAccessError(error)) {

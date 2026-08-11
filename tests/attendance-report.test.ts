@@ -150,3 +150,35 @@ describe("the report is reachable from the UI", () => {
     expect(tab).toContain("/attendance-report?date=")
   })
 })
+
+describe("report tiles drill down", () => {
+  const page = readFileSync(resolve(process.cwd(), "app/attendance-report/page.tsx"), "utf8")
+  const tile = readFileSync(resolve(process.cwd(), "components/ui/stat-tile.tsx"), "utf8")
+
+  it("filters the table rather than only counting", () => {
+    // "24 absent" is a number; the useful action is "who?".
+    expect(page).toContain("const visibleRows = rows.filter")
+    expect(page).toContain("visibleRows.map((row)")
+  })
+
+  it("lets the active tile be tapped again to clear", () => {
+    // Otherwise there is no way back to the full list without reloading.
+    expect(page).toContain("cur === next ? \"all\" : next")
+  })
+
+  it("explains an empty bucket instead of rendering bare headers", () => {
+    expect(page).toContain("No workers in this view")
+  })
+
+  it("shows terminal health so \"0 present\" is not ambiguous", () => {
+    // Nobody turned up and the device stopped talking look identical without this.
+    expect(page).toContain("Fingerprint terminals")
+    expect(page).toContain("buffered on the device")
+  })
+
+  it("keeps StatTile non-interactive unless a handler is passed", () => {
+    // Every other tab uses this component as a static tile; none should become focusable.
+    expect(tile).toContain("if (!onClick)")
+    expect(tile).toContain("aria-pressed")
+  })
+})

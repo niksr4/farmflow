@@ -21,6 +21,9 @@ export default function AttendanceReportPage() {
   const [rows, setRows] = useState<AttendanceReportRow[]>([])
   const [summary, setSummary] = useState<AttendanceReportSummary | null>(null)
   const [reportDate, setReportDate] = useState("")
+  // Which tile is selected. "24 absent" is a number; the useful action is "who?".
+  const [filter, setFilter] = useState<"all" | "present" | "absent" | "noCheckOut">("all")
+  const [devices, setDevices] = useState<{ total: number; online: number; offline: number } | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState("")
 
@@ -41,6 +44,7 @@ export default function AttendanceReportPage() {
       }
       setRows(payload.rows ?? [])
       setSummary(payload.summary ?? null)
+      setDevices(payload.devices ?? null)
       setReportDate(payload.reportDate ?? targetDate)
       if (!targetDate) setDate(payload.reportDate ?? "")
     } catch (err) {
@@ -57,6 +61,17 @@ export default function AttendanceReportPage() {
     void load(date, controller.signal)
     return () => controller.abort()
   }, [date, load])
+
+  const visibleRows = rows.filter((row) => {
+    if (filter === "present") return row.status === "P"
+    if (filter === "absent") return row.status === "A"
+    if (filter === "noCheckOut") return row.missingCheckOut
+    return true
+  })
+
+  // Tapping the active tile again clears the filter — otherwise there is no way back to the
+  // full list without reloading.
+  const toggle = (next: typeof filter) => setFilter((cur) => (cur === next ? "all" : next))
 
   return (
     <div className="mx-auto w-full max-w-5xl px-4 py-8 space-y-4">
@@ -90,10 +105,50 @@ export default function AttendanceReportPage() {
 
           {summary && (
             <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-              <StatTile label="Workers" value={summary.total} />
-              <StatTile label="Present" value={summary.present} tone="emerald" />
-              <StatTile label="Absent" value={summary.absent} tone="rose" />
-              <StatTile label="No punch-out" value={summary.missingCheckOut} />
+              <StatTile
+                label="Workers"
+                value={summary.total}
+                onClick={() => setFilter("all")}
+                selected={filter === "all"}
+              />
+              <StatTile
+                label="Present"
+                value={summary.present}
+                tone="emerald"
+                onClick={() => toggle("present")}
+                selected={filter === "present"}
+              />
+              <StatTile
+                label="Absent"
+                value={summary.absent}
+                tone="rose"
+                onClick={() => toggle("absent")}
+                selected={filter === "absent"}
+              />
+              <StatTile
+                label="No punch-out"
+                value={summary.missingCheckOut}
+                tone="amber"
+                onClick={() => toggle("noCheckOut")}
+                selected={filter === "noCheckOut"}
+              />
+            </div>
+          )}
+
+          {/* Only for estates with a terminal. Without this, "0 present" is ambiguous: nobody
+              turned up, or the device stopped talking hours ago. Those need different responses. */}
+          {devices && (
+            <div className="grid grid-cols-1 gap-2">
+              <StatTile
+                label="Fingerprint terminals"
+                value={`${devices.online}/${devices.total} online`}
+                tone={devices.offline > 0 ? "rose" : "emerald"}
+                hint={
+                  devices.offline > 0
+                    ? `${devices.offline} not reporting — punches are buffered on the device and will arrive once it reconnects`
+                    : "Reporting normally"
+                }
+              />
             </div>
           )}
 
@@ -106,7 +161,18 @@ export default function AttendanceReportPage() {
             </p>
           )}
 
-          {rows.length > 0 && (
+          {/* A filter that matches nothing would otherwise render bare headers over blank space,
+              which reads as broken rather than as "none in this bucket". */}
+          {rows.length > 0 && visibleRows.length === 0 && (
+            <p className="text-sm text-muted-foreground">
+              No workers in this view.{" "}
+              <button type="button" onClick={() => setFilter("all")} className="underline">
+                Show all {rows.length}
+              </button>
+            </p>
+          )}
+
+          {visibleRows.length > 0 && (
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
@@ -121,7 +187,7 @@ export default function AttendanceReportPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {rows.map((row) => (
+                  {visibleRows.map((row) => (
                     <tr key={`${row.employeeCode}-${row.serial}`} className="border-b last:border-0">
                       <td className="py-2 pr-3 tabular-nums text-muted-foreground">{row.serial}</td>
                       <td className="py-2 pr-3 tabular-nums">{row.employeeCode}</td>
