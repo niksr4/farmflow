@@ -182,3 +182,22 @@ describe("report tiles drill down", () => {
     expect(tile).toContain("aria-pressed")
   })
 })
+
+describe("CSV export matches the on-screen filter", () => {
+  const page = readFileSync(resolve(process.cwd(), "app/attendance-report/page.tsx"), "utf8")
+
+  it("exports the visible rows, not the whole day", () => {
+    // Filtering to 24 absentees and downloading all 45 is a silent mismatch between what is on
+    // screen and what gets acted on — the subset IS the point of the filter.
+    expect(page).toContain("attendanceReportToCsv(visibleRows")
+    expect(page).not.toContain("format=csv")
+  })
+
+  it("names the file after the active filter", () => {
+    expect(page).toContain('filter === "all" ? "" : `-${filter}`')
+  })
+
+  it("disables the button when the current view is empty", () => {
+    expect(page).toContain("disabled={!visibleRows.length}")
+  })
+})

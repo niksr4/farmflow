@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { StatTile } from "@/components/ui/stat-tile"
-import type { AttendanceReportRow, AttendanceReportSummary } from "@/lib/attendance-report"
+import { attendanceReportToCsv, type AttendanceReportRow, type AttendanceReportSummary } from "@/lib/attendance-report"
 
 /**
  * Daily attendance report — the FarmFlow replacement for the SmartOffice365 daily report.
@@ -95,9 +95,19 @@ export default function AttendanceReportPage() {
             <Button
               variant="outline"
               onClick={() => {
-                window.location.href = `/api/attendance/report?date=${encodeURIComponent(reportDate || date)}&format=csv`
+                // Built client-side from the VISIBLE rows so the file always matches what is on
+                // screen. Hitting the server's csv format would quietly export all 45 rows while
+                // the table showed the 24 absentees — and the whole point of the filter is that
+                // the subset is what you act on.
+                const csv = attendanceReportToCsv(visibleRows, reportDate || date)
+                const url = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8" }))
+                const a = document.createElement("a")
+                a.href = url
+                a.download = `attendance-${reportDate || date}${filter === "all" ? "" : `-${filter}`}.csv`
+                a.click()
+                URL.revokeObjectURL(url)
               }}
-              disabled={!rows.length}
+              disabled={!visibleRows.length}
             >
               Download CSV
             </Button>
