@@ -82,6 +82,10 @@ export default function AdminPage() {
   const [newTenantPlanId, setNewTenantPlanId] = useState<string>(DEFAULT_TENANT_PLAN_ID)
   const [tenantNameDraft, setTenantNameDraft] = useState("")
   const [isSavingTenantName, setIsSavingTenantName] = useState(false)
+  // `tenants` has no unique constraint on name, so a double-tap here really does create two
+  // identical estates, each with its own provisioned modules and locations to unpick by hand.
+  // Create User next to it is saved by UNIQUE (tenant_id, username); this one has no such net.
+  const [isCreatingTenant, setIsCreatingTenant] = useState(false)
 
   const [users, setUsers] = useState<User[]>([])
   const [newUsername, setNewUsername] = useState("")
@@ -567,6 +571,9 @@ export default function AdminPage() {
       return
     }
 
+    if (isCreatingTenant) return
+
+    setIsCreatingTenant(true)
     try {
       const response = await fetch("/api/admin/tenants", {
         method: "POST",
@@ -583,6 +590,8 @@ export default function AdminPage() {
       toast({ title: "Tenant created", description: `${data.tenant.name} is ready.` })
     } catch (error: any) {
       toast({ title: "Error", description: error.message || "Failed to create tenant", variant: "destructive" })
+    } finally {
+      setIsCreatingTenant(false)
     }
   }
 
@@ -1134,6 +1143,7 @@ export default function AdminPage() {
           onNewTenantNameChange={setNewTenantName}
           onNewTenantPlanIdChange={setNewTenantPlanId}
           onCreateTenant={handleCreateTenant}
+          isCreatingTenant={isCreatingTenant}
           onSelectedTenantIdChange={setSelectedTenantId}
           onTenantNameDraftChange={setTenantNameDraft}
           onPreviewRoleChange={setPreviewRole}

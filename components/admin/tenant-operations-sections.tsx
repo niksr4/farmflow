@@ -30,6 +30,7 @@ type TenantsSectionProps = {
   onNewTenantNameChange: (value: string) => void
   onNewTenantPlanIdChange: (value: string) => void
   onCreateTenant: () => void
+  isCreatingTenant: boolean
   onSelectedTenantIdChange: (value: string) => void
   onTenantNameDraftChange: (value: string) => void
   onPreviewRoleChange: (value: "admin" | "user") => void
@@ -52,6 +53,7 @@ export function TenantsSection({
   onNewTenantNameChange,
   onNewTenantPlanIdChange,
   onCreateTenant,
+  isCreatingTenant,
   onSelectedTenantIdChange,
   onTenantNameDraftChange,
   onPreviewRoleChange,
@@ -92,7 +94,9 @@ export function TenantsSection({
             </Select>
           </div>
           <div className="flex items-end">
-            <Button onClick={onCreateTenant}>Create Tenant</Button>
+            <Button onClick={onCreateTenant} disabled={isCreatingTenant}>
+              {isCreatingTenant ? "Creating..." : "Create Tenant"}
+            </Button>
           </div>
         </div>
 

@@ -1,5 +1,8 @@
 import { type NextRequest, NextResponse } from "next/server"
+import { cookies } from "next/headers"
 import { sql } from "@/lib/server/db"
+import { resolveActiveEstate } from "@/lib/server/estate-filter"
+import { SELECTED_ESTATE_COOKIE } from "@/lib/server/estate-cookie"
 import { getCurrentFiscalYear } from "@/lib/fiscal-year-utils"
 import { isModuleAccessError, requireAnyModuleAccess } from "@/lib/server/module-access"
 import { normalizeTenantContext, runTenantQuery } from "@/lib/server/tenant-db"
@@ -12,6 +15,22 @@ import { assertValidModuleIds } from "@/lib/modules"
 const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/
 const MAX_ROWS = 8000
 const FETCH_LIMIT = MAX_ROWS + 1
+
+/**
+ * Scopes an export to the estate selected in the header (the farmflow_selected_estate cookie).
+ * Without this the export ignored the selector entirely: a tenant with two estates would pick
+ * one, export, and get a file containing both -- every other read endpoint already filters, so
+ * the export silently disagreed with the screen it was launched from.
+ *
+ * Written against the joined `locations l` alias rather than each table's own location_id, so a
+ * single fragment serves all eight location-bearing datasets. It collapses to a no-op when no
+ * estate is selected, which keeps the single-estate path byte-for-byte unchanged.
+ *
+ * `l.id IS NULL` always passes: a record with no location assigned is not "the other estate's",
+ * so it must never be dropped -- the always-NULL-shows convention in lib/estate-filter.ts.
+ */
+const estateScope = (estate: string | null) =>
+  sql`AND (${estate}::text IS NULL OR l.id IS NULL OR l.estate = ${estate})`
 const DEFAULT_BAG_WEIGHT_KG = 50
 
 const DATASET_TO_MODULES: Record<ExportDatasetId, string[]> = {
@@ -259,6 +278,7 @@ const loadProcessingRows = async (
   startDate: string,
   endDate: string,
   tenantContext: ReturnType<typeof normalizeTenantContext>,
+  activeEstate: string | null,
 ) =>
   runTenantQuery(
     sql,
@@ -282,6 +302,7 @@ const loadProcessingRows = async (
       WHERE pr.tenant_id = ${tenantId}
         AND pr.process_date >= ${startDate}::date
         AND pr.process_date <= ${endDate}::date
+        ${estateScope(activeEstate)}
       ORDER BY pr.process_date DESC, location ASC
       LIMIT ${FETCH_LIMIT}
     `,
@@ -292,6 +313,7 @@ const loadDispatchRows = async (
   startDate: string,
   endDate: string,
   tenantContext: ReturnType<typeof normalizeTenantContext>,
+  activeEstate: string | null,
 ) =>
   runTenantQuery(
     sql,
@@ -312,6 +334,7 @@ const loadDispatchRows = async (
       WHERE d.tenant_id = ${tenantId}
         AND d.dispatch_date >= ${startDate}::date
         AND d.dispatch_date <= ${endDate}::date
+        ${estateScope(activeEstate)}
       ORDER BY d.dispatch_date DESC, d.created_at DESC
       LIMIT ${FETCH_LIMIT}
     `,
@@ -322,6 +345,7 @@ const loadSalesRows = async (
   startDate: string,
   endDate: string,
   tenantContext: ReturnType<typeof normalizeTenantContext>,
+  activeEstate: string | null,
 ) =>
   runTenantQuery(
     sql,
@@ -363,6 +387,7 @@ const loadSalesRows = async (
       WHERE s.tenant_id = ${tenantId}
         AND s.sale_date >= ${startDate}::date
         AND s.sale_date <= ${endDate}::date
+        ${estateScope(activeEstate)}
       ORDER BY s.sale_date DESC, s.created_at DESC
       LIMIT ${FETCH_LIMIT}
     `,
@@ -373,6 +398,7 @@ const loadPepperRows = async (
   startDate: string,
   endDate: string,
   tenantContext: ReturnType<typeof normalizeTenantContext>,
+  activeEstate: string | null,
 ) =>
   runTenantQuery(
     sql,
@@ -392,6 +418,7 @@ const loadPepperRows = async (
       WHERE pr.tenant_id = ${tenantId}
         AND pr.process_date >= ${startDate}::date
         AND pr.process_date <= ${endDate}::date
+        ${estateScope(activeEstate)}
       ORDER BY pr.process_date DESC, location ASC
       LIMIT ${FETCH_LIMIT}
     `,
@@ -427,13 +454,14 @@ const loadTransactionRows = async (
   startDate: string,
   endDate: string,
   tenantContext: ReturnType<typeof normalizeTenantContext>,
+  activeEstate: string | null,
 ) =>
   runTenantQuery(
     sql,
     tenantContext,
     sql`
       SELECT
-        th.transaction_date::text AS transaction_date,
+        th.transaction_date::date::text AS transaction_date,
         COALESCE(l.name, l.code, 'Unassigned') AS location,
         COALESCE(th.item_type, 'Unknown') AS item_type,
         COALESCE(th.transaction_type, 'deplete') AS transaction_type,
@@ -448,6 +476,7 @@ const loadTransactionRows = async (
       WHERE th.tenant_id = ${tenantId}
         AND th.transaction_date >= ${startDate}::date
         AND th.transaction_date <= ${endDate}::date
+        ${estateScope(activeEstate)}
       ORDER BY th.transaction_date DESC, th.id DESC
       LIMIT ${FETCH_LIMIT}
     `,
@@ -456,6 +485,7 @@ const loadTransactionRows = async (
 const loadInventoryRows = async (
   tenantId: string,
   tenantContext: ReturnType<typeof normalizeTenantContext>,
+  activeEstate: string | null,
 ) =>
   runTenantQuery(
     sql,
@@ -471,6 +501,7 @@ const loadInventoryRows = async (
       FROM current_inventory ci
       LEFT JOIN locations l ON l.id = ci.location_id
       WHERE ci.tenant_id = ${tenantId}
+        ${estateScope(activeEstate)}
       ORDER BY ci.item_type ASC, location ASC
       LIMIT ${FETCH_LIMIT}
     `,
@@ -481,6 +512,7 @@ const loadLaborRows = async (
   startDate: string,
   endDate: string,
   tenantContext: ReturnType<typeof normalizeTenantContext>,
+  activeEstate: string | null,
 ) => {
   const supportsLocation = await tableHasColumn(tenantContext, "labor_transactions", "location_id")
   return runTenantQuery(
@@ -489,7 +521,7 @@ const loadLaborRows = async (
     supportsLocation
       ? sql`
           SELECT
-            lt.deployment_date::text AS deployment_date,
+            lt.deployment_date::date::text AS deployment_date,
             COALESCE(l.name, l.code, 'Unassigned') AS location,
             COALESCE(lt.code, '') AS code,
             ROUND(COALESCE(lt.hf_laborers, 0)::numeric, 2) AS estate_laborers,
@@ -503,12 +535,16 @@ const loadLaborRows = async (
           WHERE lt.tenant_id = ${tenantId}
             AND lt.deployment_date >= ${startDate}::date
             AND lt.deployment_date <= ${endDate}::date
+            ${estateScope(activeEstate)}
           ORDER BY lt.deployment_date DESC, lt.id DESC
           LIMIT ${FETCH_LIMIT}
         `
-      : sql`
+      : // No location_id column on this tenant's schema, so every row is unassigned and the
+        // always-NULL-shows rule means the estate filter would be a no-op. There is also no
+        // `l` alias to hang it off.
+        sql`
           SELECT
-            lt.deployment_date::text AS deployment_date,
+            lt.deployment_date::date::text AS deployment_date,
             'Unassigned' AS location,
             COALESCE(lt.code, '') AS code,
             ROUND(COALESCE(lt.hf_laborers, 0)::numeric, 2) AS estate_laborers,
@@ -532,6 +568,7 @@ const loadExpenseRows = async (
   startDate: string,
   endDate: string,
   tenantContext: ReturnType<typeof normalizeTenantContext>,
+  activeEstate: string | null,
 ) => {
   const supportsLocation = await tableHasColumn(tenantContext, "expense_transactions", "location_id")
   return runTenantQuery(
@@ -540,7 +577,7 @@ const loadExpenseRows = async (
     supportsLocation
       ? sql`
           SELECT
-            et.entry_date::text AS entry_date,
+            et.entry_date::date::text AS entry_date,
             COALESCE(l.name, l.code, 'Unassigned') AS location,
             COALESCE(et.code, '') AS code,
             ROUND(COALESCE(et.total_amount, 0)::numeric, 2) AS total_amount,
@@ -550,12 +587,14 @@ const loadExpenseRows = async (
           WHERE et.tenant_id = ${tenantId}
             AND et.entry_date >= ${startDate}::date
             AND et.entry_date <= ${endDate}::date
+            ${estateScope(activeEstate)}
           ORDER BY et.entry_date DESC, et.id DESC
           LIMIT ${FETCH_LIMIT}
         `
-      : sql`
+      : // See loadLaborRows -- no location column means no estate scoping is possible or needed.
+        sql`
           SELECT
-            et.entry_date::text AS entry_date,
+            et.entry_date::date::text AS entry_date,
             'Unassigned' AS location,
             COALESCE(et.code, '') AS code,
             ROUND(COALESCE(et.total_amount, 0)::numeric, 2) AS total_amount,
@@ -767,26 +806,28 @@ const loadDatasetRows = async (
   startDate: string,
   endDate: string,
   tenantContext: ReturnType<typeof normalizeTenantContext>,
+  activeEstate: string | null,
 ) => {
   switch (dataset) {
     case "processing":
-      return loadProcessingRows(tenantId, startDate, endDate, tenantContext)
+      return loadProcessingRows(tenantId, startDate, endDate, tenantContext, activeEstate)
     case "dispatch":
-      return loadDispatchRows(tenantId, startDate, endDate, tenantContext)
+      return loadDispatchRows(tenantId, startDate, endDate, tenantContext, activeEstate)
     case "sales":
-      return loadSalesRows(tenantId, startDate, endDate, tenantContext)
+      return loadSalesRows(tenantId, startDate, endDate, tenantContext, activeEstate)
     case "pepper":
-      return loadPepperRows(tenantId, startDate, endDate, tenantContext)
+      return loadPepperRows(tenantId, startDate, endDate, tenantContext, activeEstate)
+    // Rainfall is recorded per estate, not per location -- no location_id to scope by.
     case "rainfall":
       return loadRainfallRows(tenantId, startDate, endDate, tenantContext)
     case "transactions":
-      return loadTransactionRows(tenantId, startDate, endDate, tenantContext)
+      return loadTransactionRows(tenantId, startDate, endDate, tenantContext, activeEstate)
     case "inventory":
-      return loadInventoryRows(tenantId, tenantContext)
+      return loadInventoryRows(tenantId, tenantContext, activeEstate)
     case "labor":
-      return loadLaborRows(tenantId, startDate, endDate, tenantContext)
+      return loadLaborRows(tenantId, startDate, endDate, tenantContext, activeEstate)
     case "expenses":
-      return loadExpenseRows(tenantId, startDate, endDate, tenantContext)
+      return loadExpenseRows(tenantId, startDate, endDate, tenantContext, activeEstate)
     case "reconciliation":
       return loadReconciliationRows(tenantId, startDate, endDate, tenantContext)
     case "receivables-aging":
@@ -837,7 +878,13 @@ export async function GET(request: NextRequest) {
     }
 
     const tenantContext = normalizeTenantContext(tenantId, sessionUser.role)
-    const rows = await loadDatasetRows(dataset, tenantId, startDate, endDate, tenantContext)
+
+    // Honour the header estate selector, same as every other read endpoint. ?scope=all is the
+    // escape hatch for pulling every estate regardless of the current selection.
+    const cookieEstate = (await cookies()).get(SELECTED_ESTATE_COOKIE)?.value || null
+    const activeEstate = resolveActiveEstate(searchParams, cookieEstate)
+
+    const rows = await loadDatasetRows(dataset, tenantId, startDate, endDate, tenantContext, activeEstate)
     const truncated = rows.length > MAX_ROWS
     const exportRows = truncated ? rows.slice(0, MAX_ROWS) : rows
 
