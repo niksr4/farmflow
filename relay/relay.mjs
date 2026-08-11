@@ -31,6 +31,21 @@ const server = http.createServer((req, res) => {
     const devId = req.headers.dev_id || "-"
     const requestCode = req.headers.request_code || "-"
 
+    // Drop anything that is not a terminal before it reaches FarmFlow.
+    //
+    // This port is open to the internet, so it collects the usual background scanning. Every one
+    // of those requests was being forwarded, rejected upstream as an unrecognised device, and
+    // writing a security_events row -- 18 of them in 14 hours on the first day, all with an empty
+    // dev_id, which then tripped the log-anomaly alert. A real terminal ALWAYS sends dev_id (it is
+    // how FarmFlow resolves the estate), so absence of it is a reliable, zero-false-positive
+    // filter. Deliberately not a 404: giving a scanner nothing at all is cheaper and less
+    // interesting than an error page.
+    if (!/^[A-Za-z0-9_-]{1,60}$/.test(String(req.headers.dev_id || ""))) {
+      res.writeHead(400, { "Content-Type": "text/plain" })
+      res.end()
+      return
+    }
+
     // Forward the device's protocol headers verbatim. Drop hop-by-hop headers and let the
     // upstream request set its own host/content-length, or Node will send contradictory ones.
     const forwarded = {}

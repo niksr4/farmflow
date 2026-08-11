@@ -36,7 +36,13 @@ import { trackRecordCreated } from "@/lib/track-action"
 import { useSingleFlight } from "@/hooks/use-single-flight"
 import AttendanceDeviceSettings from "@/components/attendance-device-settings"
 
-type AttendanceWorker = { id: string; name: string; dailyRate: number | null; deviceUserCode: string | null }
+type AttendanceWorker = {
+  id: string
+  name: string
+  dailyRate: number | null
+  deviceUserCode: string | null
+  locationId: string | null
+}
 type AttendanceSummaryRow = { workerId: string; name: string; daysPresent: number }
 type AttendanceRecordDetail = {
   workerId: string
@@ -85,6 +91,7 @@ export default function AttendanceTab() {
   const [newWorkerCode, setNewWorkerCode] = useState("")
   // Tenants without a fingerprint terminal never see any of the biometric UI.
   const [hasBiometricDevices, setHasBiometricDevices] = useState(false)
+  const [isMultiEstate, setIsMultiEstate] = useState(false)
   const [newWorkerRate, setNewWorkerRate] = useState("")
   const [showAddWorker, setShowAddWorker] = useState(false)
   const [showSummary, setShowSummary] = useState(false)
@@ -113,6 +120,7 @@ export default function AttendanceTab() {
         setWeeklySummary(Array.isArray(data.weeklySummary) ? data.weeklySummary : [])
         setPresentRecords(Array.isArray(data.presentRecords) ? data.presentRecords : [])
         setHasBiometricDevices(Boolean(data.hasBiometricDevices))
+        setIsMultiEstate(Boolean(data.isMultiEstate))
         setError(null)
 
         // "Everyone present by default" applies to TODAY ONLY.
@@ -152,6 +160,9 @@ export default function AttendanceTab() {
   const presentCount = presentWorkerIds.length
   const absentCount = workers.length - presentCount
   const noRateWorkers = workers.filter((w) => w.dailyRate === null)
+  // Only meaningful on a multi-estate tenant: an unassigned worker appears under every estate,
+  // so the estate selector silently has no effect on the roster and nothing says why.
+  const unassignedWorkers = isMultiEstate ? workers.filter((w) => !w.locationId) : []
 
   const workersById = useMemo(() => new Map(workers.map((w) => [w.id, w])), [workers])
   const weeklyReportRows = useMemo(
@@ -394,6 +405,19 @@ export default function AttendanceTab() {
             <IndianRupee className="h-4 w-4 shrink-0 text-amber-600" />
             <p className="text-sm font-medium text-amber-800">
               {noRateWorkers.length} worker{noRateWorkers.length > 1 ? "s" : ""} missing daily rate
+            </p>
+          </div>
+        )}
+
+        {/* An unassigned worker shows under every estate, so on a two-estate tenant the selector
+            changes nothing about the roster and there is no hint why. Surfacing it here is the
+            only place a manager would notice. */}
+        {!loading && unassignedWorkers.length > 0 && (
+          <div className="flex items-center gap-3 rounded-2xl bg-amber-50 border border-amber-100 px-4 py-3">
+            <Users className="h-4 w-4 shrink-0 text-amber-600" />
+            <p className="text-sm font-medium text-amber-800">
+              {unassignedWorkers.length} worker{unassignedWorkers.length > 1 ? "s" : ""} not assigned to an estate —
+              they appear under every estate
             </p>
           </div>
         )}

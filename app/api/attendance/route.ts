@@ -49,7 +49,7 @@ export async function GET(request: Request) {
         ? accountsSql` AND (${accountsSql.unsafe(column)} IS NULL OR ${accountsSql.unsafe(column)} IN (SELECT id FROM locations WHERE tenant_id = ${tenantContext.tenantId} AND estate = ${activeEstate}))`
         : accountsSql``
 
-    const [workersRows, presentRows, weeklyRows, deviceRows] = await runTenantQueries(accountsSql, tenantContext, [
+    const [workersRows, presentRows, weeklyRows, deviceRows, estateRows] = await runTenantQueries(accountsSql, tenantContext, [
       accountsSql`
         SELECT id, full_name, daily_rate, device_user_code, location_id, created_at,
                worker_type, phone, bank_name, bank_account, bank_ifsc
@@ -88,6 +88,14 @@ export async function GET(request: Request) {
         WHERE tenant_id = ${tenantContext.tenantId}
         LIMIT 1
       `,
+      // Only genuinely multi-estate tenants need to care that a worker is unassigned; the same
+      // convention the estate picker itself uses.
+      accountsSql`
+        SELECT COUNT(DISTINCT estate)::int AS estate_count
+        FROM locations
+        WHERE tenant_id = ${tenantContext.tenantId}
+          AND estate IS NOT NULL
+      `,
     ])
 
     return NextResponse.json({
@@ -100,6 +108,11 @@ export async function GET(request: Request) {
       // sees it, otherwise registering a tenant's FIRST device is impossible -- no device would
       // mean no UI would mean no way to add one.
       hasBiometricDevices: deviceRows.length > 0 || String(sessionUser.role || "").toLowerCase() === "owner",
+      // Unassigned workers show under EVERY estate (the always-NULL-shows convention in
+      // lib/estate-filter.ts), so on a multi-estate tenant the selector silently does nothing to
+      // the roster. Medappa has 21 locations across two estates and all 24 workers unassigned,
+      // which makes a Citrus Grove muster and a Tirtha muster the same list with no hint why.
+      isMultiEstate: Number((estateRows?.[0] as any)?.estate_count ?? 0) > 1,
       workers: workersRows.map((row: any) => ({
         id: String(row.id),
         name: String(row.full_name || ""),
