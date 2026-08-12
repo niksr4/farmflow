@@ -119,7 +119,9 @@ export default function HomeTab({
                   {stat.value}
                 </p>
                 {stat.subValue && (
-                  <p className="mt-0.5 text-xs text-stone-400 dark:text-stone-500">{stat.subValue}</p>
+                  <p className="mt-0.5 whitespace-pre-line text-xs text-stone-400 dark:text-stone-500">
+                    {stat.subValue}
+                  </p>
                 )}
               </div>
             ))}

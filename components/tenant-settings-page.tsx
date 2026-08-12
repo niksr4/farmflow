@@ -1,16 +1,23 @@
 "use client"
 
-import { useCallback, useEffect, useState } from "react"
+import { useCallback, useEffect, useRef, useState } from "react"
 import { useSession } from "next-auth/react"
 import Link from "next/link"
-import { Building2, ChevronDown, KeyRound, Layers2, Lock, Settings2, UserCircle, Users } from "lucide-react"
+import { Building2, KeyRound, Layers2, Lock, Settings2, UserCircle, Users } from "lucide-react"
 import { cn } from "@/lib/utils"
-import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import {
+  Select,
+  SelectContent,
+  SelectGroup,
+  SelectItem,
+  SelectLabel,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
 import { useToast } from "@/hooks/use-toast"
 import { useAuth } from "@/hooks/use-auth"
 import { AlertThresholds, useTenantSettings } from "@/hooks/use-tenant-settings"
@@ -68,95 +75,77 @@ import type {
 
 type SettingsGroupId = "profile" | "estate" | "operations" | "user-access" | "privacy" | "advanced"
 
-const SETTINGS_SECTION_TO_GROUP: Record<string, SettingsGroupId> = {
-  "account-email": "profile",
-  "account-language": "profile",
-  "account-security": "profile",
-  "estate-identity": "estate",
-  "estate-profile": "estate",
-  "display-preferences": "estate",
-  thresholds: "estate",
-  locations: "operations",
-  "data-import": "operations",
-  "tenant-users": "user-access",
-  "user-module-overrides": "user-access",
-  "tenant-modules": "user-access",
-  "privacy-dpdp": "privacy",
-  "owner-tools": "advanced",
-  "tenant-experience": "advanced",
-  "audit-log": "advanced",
+
+type SettingsSection = {
+  id: string
+  label: string
+  /** Short line under the label in the nav, for sections whose purpose is not obvious. */
+  hint?: string
+  node: React.ReactNode
 }
 
-function SettingsGroup({
-  groupId,
-  title,
-  summary,
-  sectionCountLabel,
-  icon: Icon,
-  open,
-  onOpenChange,
-  children,
-}: {
-  groupId: SettingsGroupId
+type SettingsNavGroup = {
+  id: SettingsGroupId
   title: string
-  summary: string
-  sectionCountLabel: string
-  icon?: React.ComponentType<{ className?: string }>
-  open: boolean
-  onOpenChange: (groupId: SettingsGroupId | null) => void
-  children: React.ReactNode
+  icon: React.ComponentType<{ className?: string }>
+  sections: SettingsSection[]
+}
+
+/**
+ * Persistent section list. Replaces the previous one-at-a-time accordion, where opening a group
+ * collapsed the one above it -- the document lost that height, everything below slid up, and the
+ * viewport landed somewhere inside the newly opened group instead of at its heading.
+ *
+ * Selecting a section here swaps the content pane rather than scrolling the page, so that whole
+ * class of jump cannot happen: there is nothing above the pane to collapse.
+ */
+function SettingsNav({
+  groups,
+  activeSectionId,
+  onSelect,
+}: {
+  groups: SettingsNavGroup[]
+  activeSectionId: string
+  onSelect: (sectionId: string) => void
 }) {
   return (
-    <Collapsible open={open} onOpenChange={(nextOpen) => onOpenChange(nextOpen ? groupId : null)}>
-      <div
-        className={cn(
-          "overflow-hidden rounded-[28px] border bg-white/82 shadow-sm backdrop-blur-sm transition-colors",
-          open
-            ? "border-slate-300/90 shadow-[0_18px_36px_-30px_rgba(15,23,42,0.42)]"
-            : "border-slate-200/80 hover:border-slate-300/80",
-        )}
-      >
-        <CollapsibleTrigger asChild>
-          <button
-            type="button"
-            className="flex w-full items-start justify-between gap-4 px-5 py-4 text-left transition-colors hover:bg-slate-50/70 sm:px-6"
-          >
-            <div className="flex min-w-0 items-start gap-3">
-              {Icon ? (
-                <div className={cn(
-                  "mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border shadow-sm transition-colors",
-                  open ? "border-emerald-200 bg-emerald-50 text-emerald-700" : "border-slate-200 bg-white/80 text-slate-500",
-                )}>
-                  <Icon className="h-4 w-4" />
-                </div>
-              ) : null}
-              <div className="min-w-0 space-y-1.5">
-                <div className="flex flex-wrap items-center gap-2">
-                  <p className="text-sm font-semibold text-slate-900 sm:text-[15px]">{title}</p>
-                  <Badge variant="outline" className="border-slate-200 bg-white/90 text-slate-600">
-                    {sectionCountLabel}
-                  </Badge>
-                </div>
-                <p className="max-w-3xl text-sm leading-6 text-slate-600">{summary}</p>
-              </div>
-            </div>
-            <div className="mt-0.5 flex shrink-0 items-center">
-              <span
+    <nav aria-label="Settings sections" className="space-y-5">
+      {groups.map((group) => (
+        <div key={group.id} className="space-y-1">
+          <div className="flex items-center gap-2 px-3 pb-1">
+            <group.icon className="h-3.5 w-3.5 text-slate-400" />
+            <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">
+              {group.title}
+            </p>
+          </div>
+          {group.sections.map((section) => {
+            const isActive = section.id === activeSectionId
+            return (
+              <button
+                key={section.id}
+                type="button"
+                onClick={() => onSelect(section.id)}
+                aria-current={isActive ? "page" : undefined}
                 className={cn(
-                  "inline-flex h-9 w-9 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-500 transition-transform duration-200",
-                  open ? "rotate-180" : "",
+                  "flex w-full flex-col items-start gap-0.5 rounded-xl px-3 py-2 text-left transition-colors",
+                  "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/40",
+                  isActive
+                    ? "bg-emerald-50 text-emerald-900 ring-1 ring-emerald-200"
+                    : "text-slate-700 hover:bg-slate-100/80",
                 )}
               >
-                <ChevronDown className="h-4 w-4" />
-              </span>
-            </div>
-          </button>
-        </CollapsibleTrigger>
-        <CollapsibleContent>
-          <div className="space-y-4 border-t border-slate-100 px-4 py-4 sm:px-6 sm:py-5">{children}</div>
-        </CollapsibleContent>
-      </div>
-    </Collapsible>
+                <span className={cn("text-sm", isActive ? "font-semibold" : "font-medium")}>
+                  {section.label}
+                </span>
+                {section.hint ? (
+                  <span className="text-[11px] leading-4 text-slate-500">{section.hint}</span>
+                ) : null}
+              </button>
+            )
+          })}
+        </div>
+      ))}
+    </nav>
   )
 }
 
@@ -235,20 +224,23 @@ export default function TenantSettingsPage() {
   const isOwner = user?.role === "owner"
   const canManageTenantExperience = isOwner
   const privacyFeatureEnabled = Boolean(tenantId)
-  const [openGroup, setOpenGroup] = useState<SettingsGroupId | null>("estate")
+  // One section is shown at a time in the content pane. Null means "not chosen yet" and resolves
+  // to the first section the viewer can actually see, which depends on role.
+  const [activeSectionId, setActiveSectionId] = useState<string | null>(null)
+  // Anchor for scrolling to the settings area itself rather than the top of the document.
+  const settingsPaneRef = useRef<HTMLDivElement>(null)
 
-  const syncOpenGroupFromHash = useCallback(() => {
+  /**
+   * Deep links (the overview card's #section anchors, and any bookmarked URL) select a section
+   * rather than scrolling to it. The old accordion had to map section -> group by hand, so the
+   * two sections missing from that table were silently unreachable; here the nav registry is the
+   * only source of truth, so a section cannot exist without being linkable.
+   */
+  const syncActiveSectionFromHash = useCallback(() => {
     if (typeof window === "undefined") return
     const sectionId = decodeURIComponent(window.location.hash.replace(/^#/, "").trim())
     if (!sectionId) return
-    const nextGroup = SETTINGS_SECTION_TO_GROUP[sectionId]
-    if (!nextGroup) return
-    setOpenGroup(nextGroup)
-    window.requestAnimationFrame(() => {
-      window.requestAnimationFrame(() => {
-        document.getElementById(sectionId)?.scrollIntoView({ block: "start", behavior: "smooth" })
-      })
-    })
+    setActiveSectionId(sectionId)
   }, [])
 
   useEffect(() => {
@@ -312,10 +304,10 @@ export default function TenantSettingsPage() {
   }, [loadPrivacyStatus, privacyFeatureEnabled])
 
   useEffect(() => {
-    syncOpenGroupFromHash()
-    window.addEventListener("hashchange", syncOpenGroupFromHash)
-    return () => window.removeEventListener("hashchange", syncOpenGroupFromHash)
-  }, [syncOpenGroupFromHash])
+    syncActiveSectionFromHash()
+    window.addEventListener("hashchange", syncActiveSectionFromHash)
+    return () => window.removeEventListener("hashchange", syncActiveSectionFromHash)
+  }, [syncActiveSectionFromHash])
 
   const handleAcceptNotice = async () => {
     setIsAcceptingNotice(true)
@@ -1197,10 +1189,413 @@ export default function TenantSettingsPage() {
       detail: "Personal settings — email, language, password",
     },
   ]
-  const profileSectionCount = 3
-  const estateSectionCount = isAdminOrOwner ? 4 : 3
-  const userAccessSectionCount = 1 + (isAdminOrOwner ? 1 : 0) + (isOwner ? 1 : 0)
-  const hasAdvancedSection = isOwner
+  /**
+   * The single source of truth for what Settings contains. Nav entries and pane content are built
+   * from the same list, so a section cannot be rendered without also being navigable -- the bug
+   * the old hand-maintained section->group table had, where "Labour defaults" and "Location
+   * exceptions" were reachable by scrolling but invisible to any deep link.
+   *
+   * Only the active section's element is rendered, so the other eighteen sections do not mount:
+   * building this array creates elements but does not run the components.
+   */
+  const navGroups: SettingsNavGroup[] = [
+    {
+      id: "profile",
+      title: "Profile",
+      icon: UserCircle,
+      sections: [
+        {
+          id: "account-email",
+          label: "Digest email",
+          hint: "Where alerts are sent",
+          node: (
+            <Card id="account-email" className="scroll-mt-24 border-border/70 bg-white/85">
+              <CardHeader>
+                <CardTitle>Digest Email</CardTitle>
+                <CardDescription>
+                  The weekly digest and operational alerts go to this address. Updating it takes effect from the next send.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                <div className="flex max-w-sm gap-2">
+                  <Input
+                    type="email"
+                    value={digestEmail}
+                    onChange={(e) => setDigestEmail(e.target.value)}
+                    placeholder="admin@yourestate.com"
+                  />
+                  <Button onClick={handleSaveDigestEmail} disabled={isSavingDigestEmail}>
+                    {isSavingDigestEmail ? "Saving…" : "Save"}
+                  </Button>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  This is your account email — it is not visible to other users.
+                </p>
+              </CardContent>
+            </Card>
+          ),
+        },
+        {
+          id: "account-language",
+          label: "Language",
+          node: (
+            <AccountLanguageSection
+              preferredLocale={accountPreferredLocale}
+              isSaving={isSavingAccountLanguage}
+              onPreferredLocaleChange={setAccountPreferredLocale}
+              onSave={handleSaveAccountLanguage}
+            />
+          ),
+        },
+        {
+          id: "account-security",
+          label: "Security",
+          hint: "Password and sign-in email",
+          node: (
+            <Card id="account-security" className="scroll-mt-24 border-border/70 bg-white/85">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <KeyRound className="h-4 w-4 text-muted-foreground" />
+                  Account Security
+                </CardTitle>
+                <CardDescription>Keep your login credentials up to date.</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                <div className="flex flex-col gap-3 rounded-2xl border border-border/60 bg-white/90 p-4 shadow-sm sm:flex-row sm:items-center sm:justify-between">
+                  <div>
+                    <p className="text-sm font-medium text-foreground">Password</p>
+                    <p className="text-xs text-muted-foreground">Update your account login password at any time.</p>
+                  </div>
+                  <Button asChild variant="outline" className="bg-white shrink-0">
+                    <Link href="/settings/reset-password">Change password</Link>
+                  </Button>
+                </div>
+
+                <div className="flex flex-col gap-3 rounded-2xl border border-border/60 bg-white/90 p-4 shadow-sm sm:flex-row sm:items-center sm:justify-between">
+                  <div>
+                    <p className="text-sm font-medium text-foreground">Email address</p>
+                    <p className="text-xs text-muted-foreground">
+                      This is your sign-in address and where password resets are sent.
+                    </p>
+                  </div>
+                  <Button asChild variant="outline" className="bg-white shrink-0">
+                    <Link href="/settings/email">Change email</Link>
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          ),
+        },
+      ],
+    },
+    ...(isAdminOrOwner
+      ? ([
+          {
+            id: "estate",
+            title: "Estate",
+            icon: Building2,
+            sections: [
+              {
+                id: "estate-identity",
+                label: "Estate identity",
+                node: (
+                  <EstateIdentitySection
+                    estateNameInput={estateNameInput}
+                    savedEstateName={settings.estateName || ""}
+                    isSavingEstateName={isSavingEstateName}
+                    settingsLoading={settingsLoading}
+                    onEstateNameChange={setEstateNameInput}
+                    onSaveEstateName={handleSaveEstateName}
+                  />
+                ),
+              },
+              {
+                id: "estate-profile",
+                label: "Footprint",
+                hint: "Acreage, crops, weather point",
+                node: (
+                  <EstateProfileSection
+                    estateProfileDraft={estateProfileDraft}
+                    isSavingEstateProfile={isSavingEstateProfile}
+                    settingsLoading={settingsLoading}
+                    onEstateProfileChange={handleEstateProfileChange}
+                    onSaveEstateProfile={handleSaveEstateProfile}
+                  />
+                ),
+              },
+              {
+                id: "display-preferences",
+                label: "Display",
+                node: (
+                  <DisplayPreferencesSection
+                    uiPreferencesDraft={uiPreferencesDraft}
+                    isSavingUiPreferences={isSavingUiPreferences}
+                    settingsLoading={settingsLoading}
+                    onHideEmptyMetricsChange={handleHideEmptyMetricsChange}
+                    onSaveUiPreferences={handleSaveUiPreferences}
+                  />
+                ),
+              },
+              {
+                id: "thresholds",
+                label: "Thresholds",
+                hint: "When exceptions are flagged",
+                node: (
+                  <ThresholdsSection
+                    thresholdDraft={thresholdDraft}
+                    isSavingThresholds={isSavingThresholds}
+                    settingsLoading={settingsLoading}
+                    onThresholdFieldChange={updateThresholdField}
+                    onTargetFieldChange={updateTargetField}
+                    onSaveThresholds={handleSaveThresholds}
+                  />
+                ),
+              },
+            ],
+          },
+          {
+            id: "operations",
+            title: "Operations",
+            icon: Settings2,
+            sections: [
+              {
+                id: "locations",
+                label: "Locations",
+                hint: locations.length > 0 ? `${locations.length} configured` : "Blocks and estates",
+                node: (
+                  <LocationsSection
+                    locations={locations}
+                    newLocationName={newLocationName}
+                    newLocationCode={newLocationCode}
+                    newLocationEstate={newLocationEstate}
+                    isCreatingLocation={isCreatingLocation}
+                    editingLocationId={editingLocationId}
+                    editingLocationName={editingLocationName}
+                    editingLocationCode={editingLocationCode}
+                    editingLocationEstate={editingLocationEstate}
+                    isUpdatingLocationId={isUpdatingLocationId}
+                    onNewLocationNameChange={setNewLocationName}
+                    onNewLocationCodeChange={setNewLocationCode}
+                    onNewLocationEstateChange={setNewLocationEstate}
+                    onCreateLocation={handleCreateLocation}
+                    onEditingLocationNameChange={setEditingLocationName}
+                    onEditingLocationCodeChange={setEditingLocationCode}
+                    onEditingLocationEstateChange={setEditingLocationEstate}
+                    onUpdateLocation={handleUpdateLocation}
+                    onStartEditLocation={startEditLocation}
+                    onCancelEditLocation={cancelEditLocation}
+                  />
+                ),
+              },
+              {
+                id: "labour-defaults",
+                label: "Labour defaults",
+                hint: "Default wage rates",
+                node: (
+                  <LaborDefaultsSection
+                    defaultInHouseWage={laborWagesDraft.defaultInHouseWage}
+                    defaultOutsideWage={laborWagesDraft.defaultOutsideWage}
+                    isSaving={isSavingLaborWages}
+                    onInHouseWageChange={(v) => setLaborWagesDraft((prev) => ({ ...prev, defaultInHouseWage: v }))}
+                    onOutsideWageChange={(v) => setLaborWagesDraft((prev) => ({ ...prev, defaultOutsideWage: v }))}
+                    onSave={handleSaveLaborWages}
+                  />
+                ),
+              },
+              { id: "data-import", label: "Import data", node: <DataImportSection /> },
+            ],
+          },
+          {
+            id: "user-access",
+            title: "User access",
+            icon: Users,
+            sections: [
+              {
+                id: "tenant-users",
+                label: "People",
+                hint: users.length > 0 ? `${users.length} account${users.length !== 1 ? "s" : ""}` : "Add your team",
+                node: (
+                  <TenantUsersSection
+                    tenantId={tenantId}
+                    users={users}
+                    newUsername={newUsername}
+                    newPassword={newPassword}
+                    newRole={newRole}
+                    userRoleDrafts={userRoleDrafts}
+                    isUpdatingUserId={isUpdatingUserId}
+                    isDeletingUserId={isDeletingUserId}
+                    onNewUsernameChange={setNewUsername}
+                    onNewPasswordChange={setNewPassword}
+                    onNewRoleChange={setNewRole}
+                    onCreateUser={handleCreateUser}
+                    onRoleDraftChange={handleRoleDraftChange}
+                    onSaveUserRole={handleSaveUserRole}
+                    onDeleteUser={handleDeleteUser}
+                  />
+                ),
+              },
+              {
+                id: "user-module-overrides",
+                label: "Module exceptions",
+                hint: "Per-person overrides",
+                node: (
+                  <UserModuleOverridesSection
+                    tenantId={tenantId}
+                    users={users}
+                    selectedUserId={selectedUserId}
+                    userModuleSource={userModuleSource}
+                    enabledUserModuleCount={enabledUserModuleCount}
+                    userModulePermissions={userModulePermissions}
+                    isSelectedUserRoleScoped={isSelectedUserRoleScoped}
+                    isUserModulesLoading={isUserModulesLoading}
+                    isSavingUserModules={isSavingUserModules}
+                    onSelectedUserIdChange={setSelectedUserId}
+                    onToggleUserModule={toggleUserModule}
+                    onSaveUserModules={handleSaveUserModules}
+                    onResetUserModules={handleResetUserModules}
+                  />
+                ),
+              },
+              {
+                id: "user-location-overrides",
+                label: "Location exceptions",
+                hint: "Restrict who sees which block",
+                node: (
+                  <UserLocationOverridesSection
+                    tenantId={tenantId}
+                    users={users}
+                    selectedUserId={selectedUserId}
+                    userLocationSource={userLocationSource}
+                    userLocationPermissions={userLocationPermissions}
+                    isUserLocationsLoading={isUserLocationsLoading}
+                    isSavingUserLocations={isSavingUserLocations}
+                    onSelectedUserIdChange={setSelectedUserId}
+                    onToggleUserLocation={toggleUserLocation}
+                    onSaveUserLocations={handleSaveUserLocations}
+                    onResetUserLocations={handleResetUserLocations}
+                  />
+                ),
+              },
+              ...(isOwner
+                ? [{
+                    id: "tenant-modules",
+                    label: "Allowed modules",
+                    hint: `${enabledTenantModuleCount} enabled`,
+                    node: (
+                      <TenantModulesSection
+                        modulePermissions={modulePermissions}
+                        tenantId={tenantId}
+                        tenantPlanId={tenantPlanId}
+                        isSavingModules={isSavingModules}
+                        onApplyModuleBundle={applyModuleBundle}
+                        onToggleModule={toggleModule}
+                        onSaveModules={handleSaveModules}
+                      />
+                    ),
+                  }]
+                : []),
+            ],
+          },
+        ] as SettingsNavGroup[])
+      : []),
+    ...(privacyFeatureEnabled
+      ? ([{
+          id: "privacy",
+          title: "Privacy",
+          icon: Lock,
+          sections: [{
+            id: "privacy-dpdp",
+            label: "Privacy & data",
+            hint: "Consent, export, deletion",
+            node: (
+              <PrivacySection
+                tenantId={tenantId}
+                privacyStatus={privacyStatus}
+                privacyError={privacyError}
+                isPrivacyLoading={isPrivacyLoading}
+                isAcceptingNotice={isAcceptingNotice}
+                isExportingPersonalData={isExportingPersonalData}
+                correctionUsername={correctionUsername}
+                isSubmittingCorrection={isSubmittingCorrection}
+                isRequestingDeletion={isRequestingDeletion}
+                isUpdatingConsent={isUpdatingConsent}
+                onCorrectionUsernameChange={setCorrectionUsername}
+                onAcceptNotice={handleAcceptNotice}
+                onExportPersonalData={handleExportPersonalData}
+                onSubmitCorrection={handleSubmitCorrection}
+                onRequestDeletion={handleRequestDeletion}
+                onConsentToggle={handleConsentToggle}
+              />
+            ),
+          }],
+        }] as SettingsNavGroup[])
+      : []),
+    ...(isOwner
+      ? ([{
+          id: "advanced",
+          title: "Advanced",
+          icon: Layers2,
+          sections: [
+            { id: "owner-tools", label: "Owner tools", node: <OwnerToolsSection /> },
+            ...(canManageTenantExperience
+              ? [{
+                  id: "tenant-experience",
+                  label: "Experience",
+                  hint: "Feature flags and variants",
+                  node: (
+                    <TenantExperienceSection
+                      uiVariantDraft={uiVariantDraft}
+                      featureFlagsDraft={featureFlagsDraft}
+                      isSavingTenantExperience={isSavingTenantExperience}
+                      settingsLoading={settingsLoading}
+                      onUiVariantChange={setUiVariantDraft}
+                      onFeatureFlagChange={handleFeatureFlagChange}
+                      onSaveTenantExperience={handleSaveTenantExperience}
+                    />
+                  ),
+                }]
+              : []),
+            {
+              id: "audit-log",
+              label: "Audit log",
+              node: (
+                <AuditLogSection
+                  tenantId={tenantId}
+                  auditEntityType={auditEntityType}
+                  auditLogs={auditLogs}
+                  auditTotalCount={auditTotalCount}
+                  isAuditLoading={isAuditLoading}
+                  onAuditEntityTypeChange={setAuditEntityType}
+                  onRefreshAuditLogs={loadAuditLogs}
+                />
+              ),
+            },
+          ],
+        }] as SettingsNavGroup[])
+      : []),
+  ]
+
+  const allSections = navGroups.flatMap((group) => group.sections)
+  // Falls back to the first section the viewer can see rather than a hardcoded id: a plain `user`
+  // sees only the Profile group, so defaulting to an estate section would render a blank pane.
+  const activeSection =
+    allSections.find((section) => section.id === activeSectionId) ?? allSections[0] ?? null
+
+  const handleSelectSection = (sectionId: string) => {
+    setActiveSectionId(sectionId)
+    // Scroll to the settings area, NOT the document top. Scrolling to 0 puts the page header and
+    // the start-here hint on screen instead of the section you just picked, so switching sections
+    // looked like it did nothing. Only scroll when the pane has actually drifted off screen --
+    // otherwise every click yanks a page that was already in the right place.
+    window.requestAnimationFrame(() => {
+      const pane = settingsPaneRef.current
+      if (!pane) return
+      const { top } = pane.getBoundingClientRect()
+      if (top < 0 || top > window.innerHeight * 0.4) {
+        pane.scrollIntoView({ block: "start", behavior: "smooth" })
+      }
+    })
+  }
 
   return (
     <WorkspacePageShell
@@ -1227,307 +1622,55 @@ export default function TenantSettingsPage() {
         onLogout={logout}
       />
 
-      <div className="space-y-3 pt-2">
-        <SettingsGroup
-          groupId="profile"
-          title="Profile"
-          summary="Digest email, account language, and password — your personal settings separate from estate-wide configuration."
-          sectionCountLabel={`${profileSectionCount} sections`}
-          icon={UserCircle}
-          open={openGroup === "profile"}
-          onOpenChange={setOpenGroup}
-        >
-          <Card id="account-email" className="scroll-mt-24 border-border/70 bg-white/85">
-            <CardHeader>
-              <CardTitle>Digest Email</CardTitle>
-              <CardDescription>
-                The weekly digest and operational alerts go to this address. Updating it takes effect from the next send.
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              <div className="flex max-w-sm gap-2">
-                <Input
-                  type="email"
-                  value={digestEmail}
-                  onChange={(e) => setDigestEmail(e.target.value)}
-                  placeholder="admin@yourestate.com"
-                />
-                <Button onClick={handleSaveDigestEmail} disabled={isSavingDigestEmail}>
-                  {isSavingDigestEmail ? "Saving…" : "Save"}
-                </Button>
-              </div>
-              <p className="text-xs text-muted-foreground">
-                This is your account email — it is not visible to other users.
-              </p>
-            </CardContent>
-          </Card>
-          <AccountLanguageSection
-            preferredLocale={accountPreferredLocale}
-            isSaving={isSavingAccountLanguage}
-            onPreferredLocaleChange={setAccountPreferredLocale}
-            onSave={handleSaveAccountLanguage}
-          />
-          <Card id="account-security" className="scroll-mt-24 border-border/70 bg-white/85">
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <KeyRound className="h-4 w-4 text-muted-foreground" />
-                Account Security
-              </CardTitle>
-              <CardDescription>Keep your login credentials up to date.</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="flex flex-col gap-3 rounded-2xl border border-border/60 bg-white/90 p-4 shadow-sm sm:flex-row sm:items-center sm:justify-between">
-                <div>
-                  <p className="text-sm font-medium text-foreground">Password</p>
-                  <p className="text-xs text-muted-foreground">Update your account login password at any time.</p>
-                </div>
-                <Button asChild variant="outline" className="bg-white shrink-0">
-                  <Link href="/settings/reset-password">Change password</Link>
-                </Button>
-              </div>
+      <div ref={settingsPaneRef} className="scroll-mt-20 pt-4 lg:grid lg:grid-cols-[248px_minmax(0,1fr)] lg:gap-8">
+        {/* Mobile: the nav collapses to a single picker. A 19-item sidebar on a phone would
+            push the actual settings below the fold on every visit. */}
+        <div className="lg:hidden">
+          <Label htmlFor="settings-section-picker" className="text-xs uppercase tracking-[0.16em] text-slate-500">
+            Section
+          </Label>
+          <Select value={activeSection?.id ?? ""} onValueChange={handleSelectSection}>
+            <SelectTrigger id="settings-section-picker" className="mt-1.5 bg-white">
+              <SelectValue placeholder="Choose a section" />
+            </SelectTrigger>
+            <SelectContent>
+              {navGroups.map((group) => (
+                <SelectGroup key={group.id}>
+                  <SelectLabel>{group.title}</SelectLabel>
+                  {group.sections.map((section) => (
+                    <SelectItem key={section.id} value={section.id}>
+                      {section.label}
+                    </SelectItem>
+                  ))}
+                </SelectGroup>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
 
-              <div className="flex flex-col gap-3 rounded-2xl border border-border/60 bg-white/90 p-4 shadow-sm sm:flex-row sm:items-center sm:justify-between">
-                <div>
-                  <p className="text-sm font-medium text-foreground">Email address</p>
-                  <p className="text-xs text-muted-foreground">
-                    This is your sign-in address and where password resets are sent.
-                  </p>
-                </div>
-                <Button asChild variant="outline" className="bg-white shrink-0">
-                  <Link href="/settings/email">Change email</Link>
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
-        </SettingsGroup>
-
-        {isAdminOrOwner && (
-        <SettingsGroup
-          groupId="estate"
-          title="Estate"
-          summary="Set the estate identity, footprint, dashboard defaults, and exception thresholds that shape how the workspace behaves."
-          sectionCountLabel={`${estateSectionCount} sections`}
-          icon={Building2}
-          open={openGroup === "estate"}
-          onOpenChange={setOpenGroup}
-        >
-          <EstateIdentitySection
-            estateNameInput={estateNameInput}
-            savedEstateName={settings.estateName || ""}
-            isSavingEstateName={isSavingEstateName}
-            settingsLoading={settingsLoading}
-            onEstateNameChange={setEstateNameInput}
-            onSaveEstateName={handleSaveEstateName}
-          />
-          <EstateProfileSection
-            estateProfileDraft={estateProfileDraft}
-            isSavingEstateProfile={isSavingEstateProfile}
-            settingsLoading={settingsLoading}
-            onEstateProfileChange={handleEstateProfileChange}
-            onSaveEstateProfile={handleSaveEstateProfile}
-          />
-          <DisplayPreferencesSection
-            uiPreferencesDraft={uiPreferencesDraft}
-            isSavingUiPreferences={isSavingUiPreferences}
-            settingsLoading={settingsLoading}
-            onHideEmptyMetricsChange={handleHideEmptyMetricsChange}
-            onSaveUiPreferences={handleSaveUiPreferences}
-          />
-          <ThresholdsSection
-            thresholdDraft={thresholdDraft}
-            isSavingThresholds={isSavingThresholds}
-            settingsLoading={settingsLoading}
-            onThresholdFieldChange={updateThresholdField}
-            onTargetFieldChange={updateTargetField}
-            onSaveThresholds={handleSaveThresholds}
-          />
-        </SettingsGroup>
-        )}
-
-        {isAdminOrOwner && (
-        <SettingsGroup
-          groupId="operations"
-          title="Operations"
-          summary="Manage the live structures daily work depends on: locations for traceability, labour wage defaults, and import tools for bulk setup."
-          sectionCountLabel={locations.length > 0 ? `${locations.length} location${locations.length !== 1 ? "s" : ""}` : "3 sections"}
-          icon={Settings2}
-          open={openGroup === "operations"}
-          onOpenChange={setOpenGroup}
-        >
-          <LaborDefaultsSection
-            defaultInHouseWage={laborWagesDraft.defaultInHouseWage}
-            defaultOutsideWage={laborWagesDraft.defaultOutsideWage}
-            isSaving={isSavingLaborWages}
-            onInHouseWageChange={(v) => setLaborWagesDraft((prev) => ({ ...prev, defaultInHouseWage: v }))}
-            onOutsideWageChange={(v) => setLaborWagesDraft((prev) => ({ ...prev, defaultOutsideWage: v }))}
-            onSave={handleSaveLaborWages}
-          />
-          <LocationsSection
-            locations={locations}
-            newLocationName={newLocationName}
-            newLocationCode={newLocationCode}
-            newLocationEstate={newLocationEstate}
-            isCreatingLocation={isCreatingLocation}
-            editingLocationId={editingLocationId}
-            editingLocationName={editingLocationName}
-            editingLocationCode={editingLocationCode}
-            editingLocationEstate={editingLocationEstate}
-            isUpdatingLocationId={isUpdatingLocationId}
-            onNewLocationNameChange={setNewLocationName}
-            onNewLocationCodeChange={setNewLocationCode}
-            onNewLocationEstateChange={setNewLocationEstate}
-            onCreateLocation={handleCreateLocation}
-            onEditingLocationNameChange={setEditingLocationName}
-            onEditingLocationCodeChange={setEditingLocationCode}
-            onEditingLocationEstateChange={setEditingLocationEstate}
-            onUpdateLocation={handleUpdateLocation}
-            onStartEditLocation={startEditLocation}
-            onCancelEditLocation={cancelEditLocation}
-          />
-          <DataImportSection />
-        </SettingsGroup>
-        )}
-
-        {isAdminOrOwner && (
-        <SettingsGroup
-          groupId="user-access"
-          title="User Access"
-          summary="Control who can enter data, who gets exceptions from tenant defaults, and which modules the estate is allowed to use."
-          sectionCountLabel={users.length > 0 ? `${users.length} user${users.length !== 1 ? "s" : ""}` : `${userAccessSectionCount} sections`}
-          icon={Users}
-          open={openGroup === "user-access"}
-          onOpenChange={setOpenGroup}
-        >
-          <TenantUsersSection
-            tenantId={tenantId}
-            users={users}
-            newUsername={newUsername}
-            newPassword={newPassword}
-            newRole={newRole}
-            userRoleDrafts={userRoleDrafts}
-            isUpdatingUserId={isUpdatingUserId}
-            isDeletingUserId={isDeletingUserId}
-            onNewUsernameChange={setNewUsername}
-            onNewPasswordChange={setNewPassword}
-            onNewRoleChange={setNewRole}
-            onCreateUser={handleCreateUser}
-            onRoleDraftChange={handleRoleDraftChange}
-            onSaveUserRole={handleSaveUserRole}
-            onDeleteUser={handleDeleteUser}
-          />
-          {isAdminOrOwner && (
-            <UserModuleOverridesSection
-              tenantId={tenantId}
-              users={users}
-              selectedUserId={selectedUserId}
-              userModuleSource={userModuleSource}
-              enabledUserModuleCount={enabledUserModuleCount}
-              userModulePermissions={userModulePermissions}
-              isSelectedUserRoleScoped={isSelectedUserRoleScoped}
-              isUserModulesLoading={isUserModulesLoading}
-              isSavingUserModules={isSavingUserModules}
-              onSelectedUserIdChange={setSelectedUserId}
-              onToggleUserModule={toggleUserModule}
-              onSaveUserModules={handleSaveUserModules}
-              onResetUserModules={handleResetUserModules}
+        {/* Sticky so the section list stays reachable while a long section (People, Audit log)
+            scrolls independently. */}
+        <aside className="hidden lg:block">
+          <div className="sticky top-24 rounded-[22px] border border-slate-200/80 bg-white/80 p-3 shadow-sm backdrop-blur-sm">
+            <SettingsNav
+              groups={navGroups}
+              activeSectionId={activeSection?.id ?? ""}
+              onSelect={handleSelectSection}
             />
+          </div>
+        </aside>
+
+        <div className="mt-5 min-w-0 space-y-4 lg:mt-0">
+          {activeSection ? (
+            activeSection.node
+          ) : (
+            <Card className="border-border/70 bg-white/85">
+              <CardContent className="py-10 text-center text-sm text-muted-foreground">
+                No settings are available for your account.
+              </CardContent>
+            </Card>
           )}
-          {isAdminOrOwner && (
-            <UserLocationOverridesSection
-              tenantId={tenantId}
-              users={users}
-              selectedUserId={selectedUserId}
-              userLocationSource={userLocationSource}
-              userLocationPermissions={userLocationPermissions}
-              isUserLocationsLoading={isUserLocationsLoading}
-              isSavingUserLocations={isSavingUserLocations}
-              onSelectedUserIdChange={setSelectedUserId}
-              onToggleUserLocation={toggleUserLocation}
-              onSaveUserLocations={handleSaveUserLocations}
-              onResetUserLocations={handleResetUserLocations}
-            />
-          )}
-          {isOwner && (
-            <TenantModulesSection
-              modulePermissions={modulePermissions}
-              tenantId={tenantId}
-              tenantPlanId={tenantPlanId}
-              isSavingModules={isSavingModules}
-              onApplyModuleBundle={applyModuleBundle}
-              onToggleModule={toggleModule}
-              onSaveModules={handleSaveModules}
-            />
-          )}
-        </SettingsGroup>
-        )}
-
-        {privacyFeatureEnabled && (
-          <SettingsGroup
-            groupId="privacy"
-            title="Privacy"
-            summary="Handle consent, export, correction, and deletion requests without mixing them into daily estate setup work."
-            sectionCountLabel="1 section"
-            icon={Lock}
-            open={openGroup === "privacy"}
-            onOpenChange={setOpenGroup}
-          >
-            <PrivacySection
-              tenantId={tenantId}
-              privacyStatus={privacyStatus}
-              privacyError={privacyError}
-              isPrivacyLoading={isPrivacyLoading}
-              isAcceptingNotice={isAcceptingNotice}
-              isExportingPersonalData={isExportingPersonalData}
-              correctionUsername={correctionUsername}
-              isSubmittingCorrection={isSubmittingCorrection}
-              isRequestingDeletion={isRequestingDeletion}
-              isUpdatingConsent={isUpdatingConsent}
-              onCorrectionUsernameChange={setCorrectionUsername}
-              onAcceptNotice={handleAcceptNotice}
-              onExportPersonalData={handleExportPersonalData}
-              onSubmitCorrection={handleSubmitCorrection}
-              onRequestDeletion={handleRequestDeletion}
-              onConsentToggle={handleConsentToggle}
-            />
-          </SettingsGroup>
-        )}
-
-        {hasAdvancedSection ? (
-          <SettingsGroup
-            groupId="advanced"
-            title="Advanced"
-            summary="Keep owner-only tools, experience tuning, and audit history tucked away unless you are deliberately changing platform behavior."
-            sectionCountLabel="3 sections"
-            icon={Layers2}
-            open={openGroup === "advanced"}
-            onOpenChange={setOpenGroup}
-          >
-            {isOwner && <OwnerToolsSection />}
-            {canManageTenantExperience && (
-              <TenantExperienceSection
-                uiVariantDraft={uiVariantDraft}
-                featureFlagsDraft={featureFlagsDraft}
-                isSavingTenantExperience={isSavingTenantExperience}
-                settingsLoading={settingsLoading}
-                onUiVariantChange={setUiVariantDraft}
-                onFeatureFlagChange={handleFeatureFlagChange}
-                onSaveTenantExperience={handleSaveTenantExperience}
-              />
-            )}
-
-            {isOwner && (
-              <AuditLogSection
-                tenantId={tenantId}
-                auditEntityType={auditEntityType}
-                auditLogs={auditLogs}
-                auditTotalCount={auditTotalCount}
-                isAuditLoading={isAuditLoading}
-                onAuditEntityTypeChange={setAuditEntityType}
-                onRefreshAuditLogs={loadAuditLogs}
-              />
-            )}
-          </SettingsGroup>
-        ) : null}
+        </div>
       </div>
     </WorkspacePageShell>
   )

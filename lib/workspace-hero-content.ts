@@ -381,8 +381,25 @@ export function buildHeroContent(p: BuildHeroContentParams): HeroContent {
         description: "See key highlights first, then open the module you want to work in.",
         chips: chipsInventory,
         stats: [
-          { label: "Labour this FY", value: accountsTotalsLoading ? "Loading..." : formatCurrency(accountsTotals.laborTotal, 0), metricValue: accountsTotalsLoading ? null : accountsTotals.laborTotal },
-          { label: "Expenses this FY", value: accountsTotalsLoading ? "Loading..." : formatCurrency(accountsTotals.otherTotal, 0), metricValue: accountsTotalsLoading ? null : accountsTotals.otherTotal },
+          // What an estate actually wants off the home screen is "what has this season cost me",
+          // which previously had to be added up in your head from two equally-weighted tiles.
+          // Labour and expenses stay visible underneath, since the split is the first question
+          // anyone asks after seeing the total.
+          {
+            label: "Total costs this FY",
+            value: accountsTotalsLoading
+              ? "Loading..."
+              : formatCurrency(accountsTotals.laborTotal + accountsTotals.otherTotal, 0),
+            // Newline rather than a separator: stacked keeps the rail's column rhythm, and on a
+            // phone a single line would wrap at an arbitrary point mid-figure. The renderer sets
+            // whitespace-pre-line; every other subValue is a single line and is unaffected.
+            subValue: accountsTotalsLoading
+              ? undefined
+              : `Labour ${formatCurrency(accountsTotals.laborTotal, 0)}\nExpenses ${formatCurrency(accountsTotals.otherTotal, 0)}`,
+            metricValue: accountsTotalsLoading
+              ? null
+              : accountsTotals.laborTotal + accountsTotals.otherTotal,
+          },
           homeThirdStat,
         ],
       }

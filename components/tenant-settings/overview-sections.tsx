@@ -1,7 +1,7 @@
 "use client"
 
 import Link from "next/link"
-import { ArrowRight, CloudSun, Compass, Info, LogOut, type LucideIcon, ShieldCheck } from "lucide-react"
+import { Compass, Info, LogOut } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -21,73 +21,7 @@ import {
 import type { TenantEstateProfile } from "@/lib/tenant-estate-profile"
 import type { AppLocale } from "@/lib/i18n"
 import type { SectionLink, UiPreferencesDraft } from "@/components/tenant-settings/types"
-import { cn } from "@/lib/utils"
 import WorkspaceNavigatorBackButton from "@/components/workspace-navigator-back-button"
-
-type SettingsFlowCardProps = {
-  eyebrow: string
-  title: string
-  description: string
-  icon: LucideIcon
-  tone: "emerald" | "cyan" | "slate"
-  sections: SectionLink[]
-}
-
-const flowCardToneStyles: Record<SettingsFlowCardProps["tone"], { card: string; icon: string; badge: string }> = {
-  emerald: {
-    card: "border-emerald-200/80 bg-gradient-to-br from-emerald-50 via-white to-emerald-50/60",
-    icon: "border-emerald-200 bg-white text-emerald-700",
-    badge: "border-emerald-200 bg-white text-emerald-700",
-  },
-  cyan: {
-    card: "border-cyan-200/80 bg-gradient-to-br from-cyan-50 via-white to-sky-50/70",
-    icon: "border-cyan-200 bg-white text-cyan-700",
-    badge: "border-cyan-200 bg-white text-cyan-700",
-  },
-  slate: {
-    card: "border-slate-200/80 bg-gradient-to-br from-slate-50 via-white to-slate-100/70",
-    icon: "border-slate-200 bg-white text-slate-700",
-    badge: "border-slate-200 bg-white text-slate-700",
-  },
-}
-
-function SettingsFlowCard({ eyebrow, title, description, icon: Icon, tone, sections }: SettingsFlowCardProps) {
-  const toneStyles = flowCardToneStyles[tone]
-
-  return (
-    <div className={cn("rounded-2xl border p-4 shadow-sm", toneStyles.card)}>
-      <div className="flex items-start justify-between gap-3">
-        <div className="space-y-1.5">
-          <Badge variant="outline" className={toneStyles.badge}>
-            {eyebrow}
-          </Badge>
-          <p className="text-base font-semibold text-foreground">{title}</p>
-          <p className="text-sm leading-6 text-muted-foreground">{description}</p>
-        </div>
-        <div className={cn("inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl border shadow-sm", toneStyles.icon)}>
-          <Icon className="h-4 w-4" />
-        </div>
-      </div>
-
-      <div className="mt-4 flex flex-wrap gap-2">
-        {sections.length > 0 ? (
-          sections.map((section) => (
-            <a
-              key={section.id}
-              href={`#${section.id}`}
-              className="inline-flex items-center gap-1 rounded-full border border-border/70 bg-white/90 px-3 py-1.5 text-xs font-medium text-foreground transition hover:border-emerald-200 hover:text-emerald-700"
-            >
-              {section.label}
-              <ArrowRight className="h-3 w-3" />
-            </a>
-          ))
-        ) : (
-          <p className="text-xs text-muted-foreground">No sections available for this role.</p>
-        )}
-      </div>
-    </div>
-  )
-}
 
 type TenantSettingsOverviewProps = {
   tenantId: string
@@ -110,10 +44,13 @@ export function TenantSettingsOverview({
   sectionLinks,
   onLogout,
 }: TenantSettingsOverviewProps) {
-  const getSections = (ids: string[]) => sectionLinks.filter((section) => ids.includes(section.id))
-  const startSections = getSections(["estate-identity", "locations", "tenant-users"])
-  const nextSections = getSections(["estate-profile", "data-import", "account-language", "account-security"])
-  const advancedSections = getSections(["thresholds", "display-preferences", "tenant-modules", "user-module-overrides", "tenant-experience", "audit-log"])
+  // Only the "start here" trio survives. The three flow cards and the Quick jump chip wall both
+  // existed to get you to a section -- which is now the sidebar's entire job, permanently on
+  // screen. Keeping them cost roughly a full viewport above the settings themselves, so clicking
+  // a section appeared to do nothing: the pane it swapped was below the fold.
+  const startSections = sectionLinks.filter((section) =>
+    ["estate-identity", "locations", "tenant-users"].includes(section.id),
+  )
 
   return (
     <>
@@ -125,59 +62,30 @@ export function TenantSettingsOverview({
         </Button>
       </div>
 
-      <Card
-        id="settings-overview"
-        className="relative scroll-mt-24 overflow-hidden border-emerald-200/80 bg-gradient-to-br from-emerald-50 via-white to-amber-50"
-      >
-        <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(16,185,129,0.12),transparent_34%),radial-gradient(circle_at_bottom_right,rgba(245,158,11,0.10),transparent_32%)]" />
-        <CardHeader className="relative">
-          <CardTitle>Where to start</CardTitle>
-          <CardDescription>A suggested order — most estates only need the basics.</CardDescription>
-        </CardHeader>
-        <CardContent className="relative space-y-5">
-          <div className="grid gap-3 xl:grid-cols-3">
-            <SettingsFlowCard
-              eyebrow="Start here"
-              title="Set the estate basics first"
-              description="These are the sections most admins should finish before staff begin entering daily work."
-              icon={Compass}
-              tone="emerald"
-              sections={startSections}
-            />
-            <SettingsFlowCard
-              eyebrow="Good next step"
-              title="Add planning context once the basics are in"
-              description="Footprint, import, and language settings add useful reporting and setup context."
-              icon={CloudSun}
-              tone="cyan"
-              sections={nextSections}
-            />
-            <SettingsFlowCard
-              eyebrow="Advanced"
-              title="Tune only when you have a clear reason"
-              description="Thresholds, allowed modules, per-user exceptions, and experience controls are powerful, but they should stay simple by default."
-              icon={ShieldCheck}
-              tone="slate"
-              sections={advancedSections}
-            />
-          </div>
-
-          <div className="space-y-2 rounded-2xl border border-white/70 bg-white/75 p-4 shadow-sm backdrop-blur-sm">
-            <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground">Quick jump</p>
+      {startSections.length > 0 ? (
+        <Card
+          id="settings-overview"
+          className="scroll-mt-24 border-emerald-200/70 bg-emerald-50/50"
+        >
+          <CardContent className="flex flex-wrap items-center gap-x-3 gap-y-2 py-3">
+            <div className="flex items-center gap-2">
+              <Compass className="h-4 w-4 shrink-0 text-emerald-600" />
+              <p className="text-sm font-medium text-emerald-900">Setting up? Start with</p>
+            </div>
             <div className="flex flex-wrap gap-2">
-              {sectionLinks.map((section) => (
+              {startSections.map((section) => (
                 <a
                   key={section.id}
                   href={`#${section.id}`}
-                  className="rounded-full border border-border/70 bg-white/90 px-3 py-1 text-xs text-foreground transition hover:border-emerald-200 hover:text-emerald-700"
+                  className="rounded-full border border-emerald-200 bg-white/90 px-3 py-1 text-xs font-medium text-emerald-800 transition hover:border-emerald-300 hover:bg-white"
                 >
                   {section.label}
                 </a>
               ))}
             </div>
-          </div>
-        </CardContent>
-      </Card>
+          </CardContent>
+        </Card>
+      ) : null}
     </>
   )
 }

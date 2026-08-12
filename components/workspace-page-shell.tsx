@@ -203,7 +203,10 @@ export default function WorkspacePageShell({
           </div>
 
           {hasStats ? (
-            <div className={cn("grid gap-3", stats.length >= 4 ? "sm:grid-cols-2 xl:grid-cols-4" : "sm:grid-cols-2 lg:grid-cols-3")}>
+            // Two columns from the smallest breakpoint, not from sm:. Stacked one-per-row, four
+            // stat cards fill an entire phone viewport, so every page opened on a phone began
+            // with a screenful of summary before any actual content.
+            <div className={cn("grid gap-3 grid-cols-2", stats.length >= 4 ? "xl:grid-cols-4" : "lg:grid-cols-3")}>
               {stats.map((stat) => (
                 <div
                   key={`${stat.label}-${stat.value}`}

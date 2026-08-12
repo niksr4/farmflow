@@ -91,6 +91,17 @@ export async function GET(request: Request) {
     }
 
     const tenantContext = normalizeTenantContext(tenantId, sessionUser.role)
+
+    // The platform owner is the developer's account, not a member of the estate's team. This
+    // endpoint feeds both the admin console and the tenant's own Settings > Current users list,
+    // so without this a tenant admin sharing a tenant with the owner account would see a
+    // "Platform Owner" row among their staff -- confusing at best, and it invites questions
+    // about who else can see their data. Filtered in SQL so the row never reaches the browser.
+    //
+    // Scoped to the viewer rather than the tenant on purpose: the owner still sees every account
+    // in the admin console, and the rule keeps holding if the owner is ever added to a customer
+    // tenant for support.
+    const viewerIsOwner = String(sessionUser.role || "").toLowerCase() === "owner"
     const users = (await runTenantQuery(
       sql,
       tenantContext,
@@ -98,6 +109,7 @@ export async function GET(request: Request) {
         SELECT id, username, role, tenant_id, created_at
         FROM users
         WHERE tenant_id = ${tenantId}
+          AND (${viewerIsOwner}::boolean OR role <> 'owner')
         ORDER BY created_at DESC
       `,
     )) as UserRecord[]
