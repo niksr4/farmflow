@@ -419,16 +419,26 @@ project's plan.** Investigated 2026-07-21:
   (`vercel alias set <deployment-id> www.thefarmflow.in`). **Do not attempt the domain-`gitBranch`
   approach again** — it's a live-outage risk on this plan tier, not a viable gate.
 
-**What actually works — the CLI staged-deploy workflow**, which correctly builds with Production-tier
-classification (no SSO wall) from the start:
+**What actually works — the CLI staged-deploy workflow.** It builds with Production-tier
+classification, so it does not suffer the Preview-tier problem that caused the outage above:
 
 1. `vercel --prod --skip-domain` — builds a real production deployment (production env vars, prod
-   behavior, public URL, no protection wall) but does **not** point thefarmflow.in at it. Safe to
-   build and poke at without any customer seeing it.
-2. Verify it: `vercel inspect <deployment-url>`, `vercel logs --deployment <deployment-url> --level error`,
-   or click around the unique URL it gets — it's genuinely public, no login wall.
+   behavior) but does **not** point thefarmflow.in at it. Safe to build without any customer
+   seeing it.
+2. Verify it: `vercel inspect <deployment-url>` and `vercel logs <deployment-url>`.
+   ⚠️ **You cannot click around this URL.** This doc used to claim the deployment is "genuinely
+   public, no login wall" and told you to browse it before promoting — that is false, and was
+   corrected 2026-08-13 after observing a clean `302 → vercel.com/sso-api` on a fresh
+   `--skip-domain` build. The project sets `ssoProtection.deploymentType =
+   "all_except_custom_domains"`, so *every* URL except the custom domain sits behind Vercel's SSO
+   wall. The deployment becomes browsable at the exact moment it becomes live, so **step 2 buys you
+   build success and logs, not a functional smoke test.** Do your real verification locally
+   (`pnpm test`, `pnpm typecheck`, `pnpm build`, a dev-server browser pass) before step 3, and
+   keep the rollback command ready. To get a genuinely browsable pre-production URL you would
+   have to relax `ssoProtection` to `standard_protection`, which exposes every preview build —
+   don't do that casually.
 3. `vercel alias set <deployment-id> www.thefarmflow.in` (or `vercel promote <deployment-url-or-id>`)
-   — this is the moment it actually goes live.
+   — this is the moment it actually goes live *and* the first moment you can browse it.
 
 Rollback: `vercel alias set <previous-known-good-deployment-id> www.thefarmflow.in`, or
 `vercel rollback`.
