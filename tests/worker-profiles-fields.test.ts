@@ -15,7 +15,7 @@ const src = readFileSync(resolve(process.cwd(), "components/worker-profiles-tab.
 const putBody = src.slice(src.indexOf("method: \"PUT\""), src.indexOf("const data = await res.json()", src.indexOf("method: \"PUT\"")))
 const postBody = src.slice(src.indexOf("/api/attendance/workers\", {"), src.indexOf("const data = await res.json()", src.indexOf("/api/attendance/workers\", {")))
 
-const EDITABLE = ["name", "workerType", "phone", "dailyRate", "bankName", "bankAccount", "bankIfsc", "locationId", "deviceUserCode"]
+const EDITABLE = ["name", "workerType", "phone", "dailyRate", "bankName", "bankAccount", "bankIfsc", "estate", "deviceUserCode"]
 
 describe("worker profiles: edit form round-trips every field", () => {
   for (const field of EDITABLE) {
@@ -30,7 +30,7 @@ describe("worker profiles: edit form round-trips every field", () => {
 })
 
 describe("worker profiles: add form sends what it collects", () => {
-  for (const field of ["name", "workerType", "dailyRate", "locationId", "phone", "bankName", "bankAccount", "bankIfsc", "deviceUserCode"]) {
+  for (const field of ["name", "workerType", "dailyRate", "estate", "phone", "bankName", "bankAccount", "bankIfsc", "deviceUserCode"]) {
     it(`sends ${field} on create`, () => {
       expect(postBody, `${field} is collected but missing from the POST body`).toContain(`${field}:`)
     })

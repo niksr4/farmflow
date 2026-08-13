@@ -2,7 +2,7 @@ import { NextResponse } from "next/server"
 import { accountsSql } from "@/lib/server/db"
 import { requireModuleAccess, isModuleAccessError } from "@/lib/server/module-access"
 import { isLocationAccessError } from "@/lib/server/location-access"
-import { validateLocationForTenant } from "@/lib/server/location-utils"
+import { validateEstateForTenant, validateLocationForTenant } from "@/lib/server/location-utils"
 import { canWriteModule, canDeleteModule } from "@/lib/permissions"
 import { logAuditEvent } from "@/lib/server/audit-log"
 import { normalizeTenantContext, runTenantQuery } from "@/lib/server/tenant-db"
@@ -24,7 +24,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
       accountsSql,
       tenantContext,
       accountsSql`
-        SELECT id, full_name, worker_type, phone, daily_rate, bank_name, bank_account, bank_ifsc, device_user_code, location_id, active, created_at
+        SELECT id, full_name, worker_type, phone, daily_rate, bank_name, bank_account, bank_ifsc, device_user_code, location_id, estate, active, created_at
         FROM attendance_workers
         WHERE id = ${id}::uuid
           AND tenant_id = ${tenantContext.tenantId}
@@ -50,6 +50,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
         bankIfsc: w.bank_ifsc ? String(w.bank_ifsc) : null,
         deviceUserCode: w.device_user_code ? String(w.device_user_code) : null,
         locationId: w.location_id ? String(w.location_id) : null,
+        estate: w.estate ? String(w.estate) : null,
         active: Boolean(w.active),
         createdAt: w.created_at ? String(w.created_at) : null,
       },
@@ -115,6 +116,17 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
     const deviceUserCode =
       body?.deviceUserCode != null ? String(body.deviceUserCode || "").trim().slice(0, 30) || null : undefined
 
+    // A worker belongs to an estate, not a block -- see validateEstateForTenant. location_id is
+    // still accepted and still written so nothing that relied on it breaks mid-rollout, but
+    // `estate` is what the roster filters on now.
+    const estate =
+      body?.estate !== undefined
+        ? await validateEstateForTenant(accountsSql, tenantContext, body.estate ? String(body.estate) : null)
+        : undefined
+    if (body?.estate !== undefined && body.estate && estate === null) {
+      return NextResponse.json({ success: false, error: "That estate does not exist for this tenant" }, { status: 400 })
+    }
+
     const requestedLocationId = body?.locationId !== undefined ? (body.locationId ? String(body.locationId).trim() : null) : undefined
     let locationId: string | null | undefined = undefined
     if (requestedLocationId !== undefined) {
@@ -139,7 +151,8 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
             bank_account     = CASE WHEN ${bankAccount !== undefined} THEN ${bankAccount ?? null} ELSE bank_account END,
             bank_ifsc        = CASE WHEN ${bankIfsc !== undefined} THEN ${bankIfsc ?? null} ELSE bank_ifsc END,
             device_user_code = CASE WHEN ${deviceUserCode !== undefined} THEN ${deviceUserCode ?? null} ELSE device_user_code END,
-            location_id      = CASE WHEN ${locationId !== undefined} THEN ${locationId ?? null} ELSE location_id END
+            location_id      = CASE WHEN ${locationId !== undefined} THEN ${locationId ?? null} ELSE location_id END,
+            estate           = CASE WHEN ${estate !== undefined} THEN ${estate ?? null} ELSE estate END
           WHERE id = ${id}::uuid AND tenant_id = ${tenantContext.tenantId}
         `,
       )

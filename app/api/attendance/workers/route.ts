@@ -2,7 +2,7 @@ import { NextResponse } from "next/server"
 import { accountsSql } from "@/lib/server/db"
 import { requireModuleAccess, isModuleAccessError } from "@/lib/server/module-access"
 import { isLocationAccessError } from "@/lib/server/location-access"
-import { validateLocationForTenant } from "@/lib/server/location-utils"
+import { validateEstateForTenant, validateLocationForTenant } from "@/lib/server/location-utils"
 import { canWriteModule } from "@/lib/permissions"
 import { logAuditEvent } from "@/lib/server/audit-log"
 import { normalizeTenantContext, runTenantQuery } from "@/lib/server/tenant-db"
@@ -56,6 +56,12 @@ export async function POST(request: Request) {
       : null
     const dailyRate = body?.dailyRate != null && !Number.isNaN(Number(body.dailyRate)) ? Number(body.dailyRate) : null
 
+    // Estate is what the roster filters on; location_id stays accepted for the transition.
+    const estate = await validateEstateForTenant(accountsSql, tenantContext, body?.estate ? String(body.estate) : null)
+    if (body?.estate && estate === null) {
+      return NextResponse.json({ success: false, error: "That estate does not exist for this tenant" }, { status: 400 })
+    }
+
     const requestedLocationId = body?.locationId ? String(body.locationId).trim() : null
     const locationId = await validateLocationForTenant(accountsSql, tenantContext, sessionUser, requestedLocationId)
     if (requestedLocationId && !locationId) {
@@ -86,6 +92,7 @@ export async function POST(request: Request) {
           worker_type,
           daily_rate,
           location_id,
+          estate,
           device_user_code,
           phone,
           bank_name,
@@ -98,13 +105,14 @@ export async function POST(request: Request) {
           ${workerType},
           ${dailyRate},
           ${locationId},
+          ${estate},
           ${deviceUserCode},
           ${phone},
           ${bankName},
           ${bankAccount},
           ${bankIfsc}
         )
-        RETURNING id, full_name, worker_type, daily_rate, location_id, device_user_code,
+        RETURNING id, full_name, worker_type, daily_rate, location_id, estate, device_user_code,
                   phone, bank_name, bank_account, bank_ifsc, created_at
       `,
     )
@@ -137,6 +145,7 @@ export async function POST(request: Request) {
             workerType: worker.worker_type ? String(worker.worker_type) : null,
             dailyRate: worker.daily_rate != null ? Number(worker.daily_rate) : null,
             locationId: worker.location_id ? String(worker.location_id) : null,
+            estate: worker.estate ? String(worker.estate) : null,
             createdAt: worker.created_at ? String(worker.created_at) : null,
           }
         : null,

@@ -16,7 +16,7 @@ const route = readFileSync(resolve(process.cwd(), "app/api/attendance/route.ts")
 describe("unassigned-worker nudge", () => {
   it("only counts unassigned workers on a multi-estate tenant", () => {
     // Laxmi has 20 unassigned workers and one estate; telling them would be pure noise.
-    expect(tab).toContain("isMultiEstate ? workers.filter((w) => !w.locationId) : []")
+    expect(tab).toContain("isMultiEstate ? workers.filter((w) => !w.estate) : []")
   })
 
   it("derives multi-estate from distinct estates, not location count", () => {

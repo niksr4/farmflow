@@ -102,3 +102,40 @@ export async function validateLocationForTenant(
   await requireLocationAccess(id, sessionUser)
   return id
 }
+
+/**
+ * Is this the name of an estate this tenant actually has?
+ *
+ * A worker belongs to an *estate*; a deployment happens on a *block*. Script 112 gave workers a
+ * location_id and the estate filter resolved that block's estate, which asks the wrong question --
+ * Medappa's picker offered 21 blocks when the answer was one of 2, and the app then discarded the
+ * block and displayed only the estate.
+ *
+ * Validated against the tenant's own distinct estates rather than accepted as free text, for the
+ * same reason gangs are roster rows: production already contains "Rathi & Team" and
+ * "Rathi &  Team" as two different contractors. Anything you group by later has to be chosen,
+ * not typed.
+ *
+ * Returns the canonical stored spelling, or null when the estate is unknown or blank.
+ */
+export async function validateEstateForTenant(
+  sql: NeonSql,
+  tenantContext: { tenantId: string; role: string },
+  estate: string | null,
+): Promise<string | null> {
+  const wanted = String(estate ?? "").trim()
+  if (!wanted) return null
+  const rows = await runTenantQuery(
+    sql,
+    tenantContext,
+    sql`
+      SELECT DISTINCT estate
+      FROM locations
+      WHERE tenant_id = ${tenantContext.tenantId}
+        AND estate IS NOT NULL
+        AND LOWER(estate) = LOWER(${wanted})
+      LIMIT 1
+    `,
+  )
+  return rows?.length ? String(rows[0].estate) : null
+}

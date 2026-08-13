@@ -46,6 +46,7 @@ type AttendanceWorker = {
   locationId: string | null
   kind?: "individual" | "gang"
   headcount?: number | null
+  estate?: string | null
 }
 /** One row per job, so a worker who split their day appears more than once. */
 type LabourAssignment = {
@@ -272,7 +273,7 @@ export default function AttendanceTab() {
   const noRateWorkers = workers.filter((w) => w.dailyRate === null)
   // Only meaningful on a multi-estate tenant: an unassigned worker appears under every estate,
   // so the estate selector silently has no effect on the roster and nothing says why.
-  const unassignedWorkers = isMultiEstate ? workers.filter((w) => !w.locationId) : []
+  const unassignedWorkers = isMultiEstate ? workers.filter((w) => !w.estate) : []
 
   const workersById = useMemo(() => new Map(workers.map((w) => [w.id, w])), [workers])
   const weeklyReportRows = useMemo(

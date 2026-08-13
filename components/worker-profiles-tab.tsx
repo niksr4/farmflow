@@ -46,11 +46,13 @@ type Worker = {
   bankAccount: string | null
   bankIfsc: string | null
   locationId: string | null
+  estate: string | null
   deviceUserCode: string | null
   active: boolean
 }
 
 const UNASSIGNED_LOCATION = "__unassigned__"
+const UNASSIGNED_ESTATE = "__unassigned_estate__"
 
 const WORKER_TYPE_LABELS: Record<WorkerType, string> = {
   permanent: "Permanent",
@@ -74,6 +76,7 @@ const EMPTY_FORM = {
   bankIfsc: "",
   deviceUserCode: "",
   locationId: UNASSIGNED_LOCATION,
+  estate: UNASSIGNED_ESTATE,
 }
 
 export default function WorkerProfilesTab() {
@@ -109,6 +112,12 @@ export default function WorkerProfilesTab() {
   // Same "only show the estate picker for genuinely multi-estate tenants" convention as the
   // header estate selector (components/inventory-system.tsx's canSelectEstate) -- two locations
   // under the same single estate shouldn't surface this field.
+  // The estates this tenant actually has, taken from the blocks. A worker belongs to an estate;
+  // a deployment happens on a block, which is why this offers 2 options where the old block
+  // picker offered 21.
+  const estates = Array.from(
+    new Set(locations.map((loc) => loc.estate).filter((value): value is string => Boolean(value))),
+  ).sort((a, b) => a.localeCompare(b))
   const showEstateField =
     new Set(locations.map((loc) => loc.estate).filter((value): value is string => Boolean(value))).size > 1
 
@@ -146,6 +155,7 @@ export default function WorkerProfilesTab() {
             bankAccount: w.bankAccount || null,
             bankIfsc: w.bankIfsc || null,
             locationId: w.locationId || null,
+            estate: w.estate || null,
             deviceUserCode: w.deviceUserCode || null,
             active: true,
           })),
@@ -174,7 +184,7 @@ export default function WorkerProfilesTab() {
           name: form.name.trim(),
           workerType: form.workerType || null,
           dailyRate: form.dailyRate ? Number(form.dailyRate) : null,
-          locationId: form.locationId === UNASSIGNED_LOCATION ? null : form.locationId,
+          estate: form.estate === UNASSIGNED_ESTATE ? null : form.estate,
           phone: form.phone.trim() || null,
           bankName: form.bankName.trim() || null,
           bankAccount: form.bankAccount.trim() || null,
@@ -207,6 +217,7 @@ export default function WorkerProfilesTab() {
       deviceUserCode: worker.deviceUserCode || "",
       bankIfsc: worker.bankIfsc || "",
       locationId: worker.locationId || UNASSIGNED_LOCATION,
+      estate: worker.estate || UNASSIGNED_ESTATE,
     })
   }
 
@@ -224,7 +235,7 @@ export default function WorkerProfilesTab() {
           bankName: editForm.bankName.trim() || null,
           bankAccount: editForm.bankAccount.trim() || null,
           bankIfsc: editForm.bankIfsc.trim() || null,
-          locationId: editForm.locationId === UNASSIGNED_LOCATION ? null : editForm.locationId,
+          estate: editForm.estate === UNASSIGNED_ESTATE ? null : editForm.estate,
           deviceUserCode: editForm.deviceUserCode.trim() || null,
         }),
       })
@@ -330,17 +341,15 @@ export default function WorkerProfilesTab() {
                     tooltip="Which estate this worker belongs to. Leave unassigned to have them show up under every estate until you assign one."
                   />
                   <Select
-                    value={form.locationId}
-                    onValueChange={(v) => setForm((f) => ({ ...f, locationId: v }))}
+                    value={form.estate}
+                    onValueChange={(v) => setForm((f) => ({ ...f, estate: v }))}
                   >
                     <SelectTrigger><SelectValue placeholder="Unassigned" /></SelectTrigger>
                     <SelectContent>
-                      <SelectItem value={UNASSIGNED_LOCATION}>Unassigned</SelectItem>
-                      {locations.map((loc) => (
-                        <SelectItem key={loc.id} value={loc.id}>
-                          {formatLocationLabel(loc, locations)}
-                        </SelectItem>
-                      ))}
+                      <SelectItem value={UNASSIGNED_ESTATE}>Unassigned</SelectItem>
+                                {estates.map((name) => (
+                                  <SelectItem key={name} value={name}>{name}</SelectItem>
+                                ))}
                     </SelectContent>
                   </Select>
                 </div>
@@ -444,7 +453,9 @@ export default function WorkerProfilesTab() {
               {workerControls.items.map((w) => {
                 const isExpanded = expandedWorkerId === w.id
                 const isEditing = editingId === w.id
-                const estate = w.locationId ? locationById.get(w.locationId) : null
+                // Reads the worker's own estate now, not the estate of whichever block they were
+                // pointed at. See scripts/115 and validateEstateForTenant.
+                const estate = w.estate
                 return (
                   <Collapsible
                     key={w.id}
@@ -494,16 +505,14 @@ export default function WorkerProfilesTab() {
                           </Select>
                           {showEstateField && (
                             <Select
-                              value={editForm.locationId}
-                              onValueChange={(v) => setEditForm((f) => ({ ...f, locationId: v }))}
+                              value={editForm.estate}
+                              onValueChange={(v) => setEditForm((f) => ({ ...f, estate: v }))}
                             >
                               <SelectTrigger className="h-10"><SelectValue placeholder="Estate / block" /></SelectTrigger>
                               <SelectContent>
-                                <SelectItem value={UNASSIGNED_LOCATION}>Unassigned</SelectItem>
-                                {locations.map((loc) => (
-                                  <SelectItem key={loc.id} value={loc.id}>
-                                    {formatLocationLabel(loc, locations)}
-                                  </SelectItem>
+                                <SelectItem value={UNASSIGNED_ESTATE}>Unassigned</SelectItem>
+                                {estates.map((name) => (
+                                  <SelectItem key={name} value={name}>{name}</SelectItem>
                                 ))}
                               </SelectContent>
                             </Select>
@@ -535,7 +544,7 @@ export default function WorkerProfilesTab() {
                             value={w.bankName ? `${w.bankName}${w.bankAccount ? ` · ${w.bankAccount}` : ""}${w.bankIfsc ? ` (${w.bankIfsc})` : ""}` : "—"}
                           />
                           {showEstateField && (
-                            <MobileField label="Estate" value={estate ? estate.estate || estate.name : "Unassigned"} />
+                            <MobileField label="Estate" value={estate ?? "Unassigned"} />
                           )}
                           {hasBiometricDevices && <MobileField label="Finger ID" value={w.deviceUserCode || "—"} mono />}
                           {canWrite && (
@@ -600,16 +609,14 @@ export default function WorkerProfilesTab() {
                         {showEstateField && (
                           <TableCell>
                             <Select
-                              value={editForm.locationId}
-                              onValueChange={(v) => setEditForm((f) => ({ ...f, locationId: v }))}
+                              value={editForm.estate}
+                              onValueChange={(v) => setEditForm((f) => ({ ...f, estate: v }))}
                             >
                               <SelectTrigger className="h-8 w-32"><SelectValue placeholder="Unassigned" /></SelectTrigger>
                               <SelectContent>
-                                <SelectItem value={UNASSIGNED_LOCATION}>Unassigned</SelectItem>
-                                {locations.map((loc) => (
-                                  <SelectItem key={loc.id} value={loc.id}>
-                                    {formatLocationLabel(loc, locations)}
-                                  </SelectItem>
+                                <SelectItem value={UNASSIGNED_ESTATE}>Unassigned</SelectItem>
+                                {estates.map((name) => (
+                                  <SelectItem key={name} value={name}>{name}</SelectItem>
                                 ))}
                               </SelectContent>
                             </Select>
@@ -690,9 +697,9 @@ export default function WorkerProfilesTab() {
                         </TableCell>
                         {showEstateField && (
                           <TableCell>
-                            {w.locationId && locationById.get(w.locationId) ? (
+                            {w.estate ? (
                               <Badge variant="outline" className="text-xs">
-                                {locationById.get(w.locationId)?.estate || locationById.get(w.locationId)?.name}
+                                {w.estate}
                               </Badge>
                             ) : (
                               <span className="text-xs text-muted-foreground">Unassigned</span>

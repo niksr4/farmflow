@@ -41,9 +41,7 @@ export async function GET(request: Request) {
     const cookieEstate = (await cookies()).get(SELECTED_ESTATE_COOKIE)?.value || null
     const activeEstate = resolveActiveEstate(searchParams, cookieEstate)
     const estateClause = activeEstate
-      ? accountsSql` AND (w.location_id IS NULL OR w.location_id IN (
-          SELECT id FROM locations WHERE tenant_id = ${tenantContext.tenantId} AND estate = ${activeEstate}
-        ))`
+      ? accountsSql` AND (w.estate IS NULL OR w.estate = ${activeEstate})`
       : accountsSql``
 
     // LEFT JOIN from the roster, not from attendance: a report whose job is spotting absences

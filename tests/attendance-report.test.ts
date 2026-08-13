@@ -139,7 +139,7 @@ describe("report route: scoping guards", () => {
   })
 
   it("keeps the always-NULL-shows convention for unassigned workers", () => {
-    expect(src).toContain("w.location_id IS NULL OR")
+    expect(src).toContain("w.estate IS NULL OR")
   })
 })
 
