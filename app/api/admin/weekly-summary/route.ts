@@ -110,10 +110,10 @@ const loadSummaryForRange = async (
       `,
       sql`
         SELECT COALESCE(SUM(total_cost), 0) AS total
-        FROM labor_transactions
+        FROM labour_cost
         WHERE tenant_id = ${tenantId}
-          AND deployment_date >= ${range.startDate}::date
-          AND deployment_date <= ${range.endDate}::date
+          AND work_date >= ${range.startDate}::date
+          AND work_date <= ${range.endDate}::date
       `,
       sql`
         SELECT COALESCE(SUM(total_amount), 0) AS total

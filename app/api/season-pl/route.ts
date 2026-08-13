@@ -115,10 +115,10 @@ export async function GET(request: NextRequest) {
         `SELECT
            COALESCE(SUM(total_cost), 0) AS total_cost,
            COUNT(*) AS record_count
-         FROM labor_transactions
+         FROM labour_cost
          WHERE tenant_id = $1
-           AND deployment_date >= $2::date
-           AND deployment_date <= $3::date
+           AND work_date >= $2::date
+           AND work_date <= $3::date
            ${estateFilter(4)}`,
         estate ? [tenantId, start, end, estate] : [tenantId, start, end],
       ),

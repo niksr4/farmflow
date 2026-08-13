@@ -86,11 +86,11 @@ export async function GET(request: Request) {
 
     const laborDateClause =
       startDate && endDate
-        ? sql` AND deployment_date >= ${startDate}::date AND deployment_date <= ${endDate}::date`
+        ? sql` AND work_date >= ${startDate}::date AND work_date <= ${endDate}::date`
         : startDate
-          ? sql` AND deployment_date >= ${startDate}::date`
+          ? sql` AND work_date >= ${startDate}::date`
           : endDate
-            ? sql` AND deployment_date <= ${endDate}::date`
+            ? sql` AND work_date <= ${endDate}::date`
             : sql``
 
     const expenseDateClause =
@@ -189,12 +189,12 @@ export async function GET(request: Request) {
           SELECT
             COALESCE(SUM(total_cost), 0) AS total_cost,
             COUNT(*)::int AS total_count
-          FROM labor_transactions
+          FROM labour_cost
           WHERE tenant_id = ${tenantContext.tenantId}
             ${laborDateClause}
             ${estateClause}
         `,
-        ["labor_transactions"],
+        ["labour_cost"],
       ),
       runOptionalQuery<{ total_amount: number; total_count: number }>(
         tenantContext,

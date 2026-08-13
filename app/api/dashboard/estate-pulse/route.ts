@@ -136,13 +136,13 @@ export async function GET(request: Request) {
         context,
         sql!`
           SELECT COALESCE(SUM(total_cost), 0) AS total_cost
-          FROM labor_transactions
+          FROM labour_cost
           WHERE tenant_id = ${context.tenantId}
-            AND deployment_date >= ${fy.startDate}::date
-            AND deployment_date <= ${fy.endDate}::date
+            AND work_date >= ${fy.startDate}::date
+            AND work_date <= ${fy.endDate}::date
             ${estateClause()}
         `,
-        ["labor_transactions"],
+        ["labour_cost"],
       ),
       tryQuery<{ location_name: string; output_kg: number }>(
         context,
@@ -189,7 +189,7 @@ export async function GET(request: Request) {
             UNION ALL
             SELECT created_at FROM dispatch_records WHERE tenant_id = ${context.tenantId}
             UNION ALL
-            SELECT deployment_date FROM labor_transactions WHERE tenant_id = ${context.tenantId}
+            SELECT work_date FROM labour_cost WHERE tenant_id = ${context.tenantId}
             UNION ALL
             SELECT entry_date FROM expense_transactions WHERE tenant_id = ${context.tenantId}
           ) t
@@ -202,7 +202,7 @@ export async function GET(request: Request) {
           "attendance_records",
           "sales_records",
           "dispatch_records",
-          "labor_transactions",
+          "labour_cost",
           "expense_transactions",
         ],
       ),

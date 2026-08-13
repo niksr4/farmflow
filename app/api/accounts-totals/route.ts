@@ -38,7 +38,7 @@ export async function GET(request: Request) {
     const cookieEstate = (await cookies()).get(SELECTED_ESTATE_COOKIE)?.value || null
     const activeEstate = resolveActiveEstate(searchParams, cookieEstate)
     const [laborSupportsLocation, expenseSupportsLocation] = await Promise.all([
-      tableHasLocationColumn("labor_transactions"),
+      tableHasLocationColumn("labour_cost"),
       tableHasLocationColumn("expense_transactions"),
     ])
     const laborEstateFilter =
@@ -56,10 +56,10 @@ export async function GET(request: Request) {
           tenantContext,
           accountsSql`
             SELECT COALESCE(SUM(total_cost), 0) as total
-            FROM labor_transactions
+            FROM labour_cost
             WHERE tenant_id = ${tenantId}
-              AND deployment_date >= ${startDate}::date
-              AND deployment_date <= ${endDate}::date
+              AND work_date >= ${startDate}::date
+              AND work_date <= ${endDate}::date
               ${laborEstateFilter}
           `,
         )
@@ -68,7 +68,7 @@ export async function GET(request: Request) {
           tenantContext,
           accountsSql`
             SELECT COALESCE(SUM(total_cost), 0) as total
-            FROM labor_transactions
+            FROM labour_cost
             WHERE tenant_id = ${tenantId}
               ${laborEstateFilter}
           `,

@@ -36,7 +36,7 @@ export async function GET(request: Request) {
       const cookieEstate = (await cookies()).get(SELECTED_ESTATE_COOKIE)?.value || null
       const activeEstate = resolveActiveEstate(searchParams, cookieEstate)
       const [laborSupportsLocation, expenseSupportsLocation] = await Promise.all([
-        tableHasLocationColumn("labor_transactions"),
+        tableHasLocationColumn("labour_cost"),
         tableHasLocationColumn("expense_transactions"),
       ])
       const laborEstateFilter =
@@ -50,18 +50,18 @@ export async function GET(request: Request) {
 
       const [laborRows, expenseRows] = await runTenantQueries(accountsSql, tenantContext, [
         accountsSql`
-          SELECT lt.code,
-            COALESCE(MAX(aa.activity), MAX(NULLIF(lt.task_description, '')), lt.code) AS reference,
+          SELECT lt.activity_code AS code,
+            COALESCE(MAX(aa.activity), MAX(NULLIF(lt.task_description, '')), lt.activity_code) AS reference,
             COALESCE(SUM(lt.total_cost), 0) AS total
-          FROM labor_transactions lt
+          FROM labour_cost lt
           LEFT JOIN account_activities aa
-            ON aa.code = lt.code AND aa.tenant_id = ${tenantContext.tenantId}
+            ON aa.code = lt.activity_code AND aa.tenant_id = ${tenantContext.tenantId}
           WHERE lt.tenant_id = ${tenantContext.tenantId}
-            AND lt.deployment_date >= ${startDate}::date
-            AND lt.deployment_date <= ${endDate}::date
-            AND lt.code IS NOT NULL AND lt.code != ''
+            AND lt.work_date >= ${startDate}::date
+            AND lt.work_date <= ${endDate}::date
+            AND lt.activity_code IS NOT NULL AND lt.activity_code != ''
             ${laborEstateFilter}
-          GROUP BY lt.code
+          GROUP BY lt.activity_code
         `,
         accountsSql`
           SELECT et.code,
@@ -110,13 +110,13 @@ export async function GET(request: Request) {
           `
           WITH labor_summary AS (
             SELECT 
-              code,
+              activity_code AS code,
               SUM(total_cost) as labor_total,
               COUNT(*) as labor_count
-            FROM labor_transactions
+            FROM labour_cost
             WHERE tenant_id = $1
-              AND code = $2
-            GROUP BY code
+              AND activity_code = $2
+            GROUP BY activity_code
           ),
           consumable_summary AS (
             SELECT 
@@ -161,7 +161,7 @@ export async function GET(request: Request) {
           SELECT 
             COALESCE(SUM(total_cost), 0) as total_labor,
             COUNT(*) as labor_count
-          FROM labor_transactions
+          FROM labour_cost
           WHERE tenant_id = ${tenantContext.tenantId}
         `,
         accountsSql`

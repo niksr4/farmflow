@@ -83,7 +83,7 @@ export async function GET(request: NextRequest) {
     const [laborSupportsLocation, expenseSupportsLocation] = await Promise.all([
       sql`
         SELECT 1 FROM information_schema.columns
-        WHERE table_schema = 'public' AND table_name = 'labor_transactions' AND column_name = 'location_id'
+        WHERE table_schema = 'public' AND table_name = 'labour_cost' AND column_name = 'location_id'
         LIMIT 1
       `.then((rows) => Array.isArray(rows) && rows.length > 0),
       sql`
@@ -174,10 +174,10 @@ export async function GET(request: NextRequest) {
       sql.query(
         `
         SELECT COALESCE(SUM(total_cost), 0) AS total_cost
-        FROM labor_transactions
+        FROM labour_cost
         WHERE tenant_id = $1
-          AND deployment_date >= $2::date
-          AND deployment_date <= $3::date
+          AND work_date >= $2::date
+          AND work_date <= $3::date
           ${laborEstateSql}
         `,
         laborEstateSql ? [tenantContext.tenantId, fiscalYearStart, fiscalYearEnd, activeEstate] : [tenantContext.tenantId, fiscalYearStart, fiscalYearEnd],
@@ -208,10 +208,10 @@ export async function GET(request: NextRequest) {
       sql.query(
         `
         SELECT COALESCE(SUM(total_cost), 0) AS total_cost
-        FROM labor_transactions
+        FROM labour_cost
         WHERE tenant_id = $1
-          AND deployment_date >= $2::date
-          AND deployment_date <= $3::date
+          AND work_date >= $2::date
+          AND work_date <= $3::date
           ${laborEstateSql}
         `,
         laborEstateSql ? [tenantContext.tenantId, recentStartDate, fiscalYearEnd, activeEstate] : [tenantContext.tenantId, recentStartDate, fiscalYearEnd],

@@ -82,12 +82,12 @@ async function fetchLastWeekActivity(tenantId: string): Promise<LastWeekActivity
           WHERE tenant_id = $1 AND process_date BETWEEN $2 AND $3)  AS proc_kg,
         (SELECT COUNT(*) FROM processing_records
           WHERE tenant_id = $1 AND process_date BETWEEN $2 AND $3)  AS proc_days,
-        (SELECT COUNT(*) FROM labor_transactions
-          WHERE tenant_id = $1 AND deployment_date BETWEEN $2 AND $3) AS labor_entries,
-        (SELECT COALESCE(SUM(total_cost), 0) FROM labor_transactions
-          WHERE tenant_id = $1 AND deployment_date BETWEEN $2 AND $3) AS labor_cost,
-        (SELECT COALESCE(SUM(hf_laborers + outside_laborers), 0) FROM labor_transactions
-          WHERE tenant_id = $1 AND deployment_date BETWEEN $2 AND $3) AS labor_workers,
+        (SELECT COUNT(*) FROM labour_cost
+          WHERE tenant_id = $1 AND work_date BETWEEN $2 AND $3) AS labor_entries,
+        (SELECT COALESCE(SUM(total_cost), 0) FROM labour_cost
+          WHERE tenant_id = $1 AND work_date BETWEEN $2 AND $3) AS labor_cost,
+        (SELECT COALESCE(SUM(estate_laborers + contract_laborers), 0) FROM labour_cost
+          WHERE tenant_id = $1 AND work_date BETWEEN $2 AND $3) AS labor_workers,
         (SELECT COALESCE(SUM(total_amount), 0) FROM expense_transactions
           WHERE tenant_id = $1 AND entry_date BETWEEN $2 AND $3)    AS expense_total,
         (SELECT COUNT(*) FROM expense_transactions
@@ -234,8 +234,8 @@ async function fetchSeasonCostBasis(tenantId: string): Promise<SeasonCostBasis |
     const rows = await sql.query(`
       WITH fy AS (SELECT $2::date AS s, $3::date AS e)
       SELECT
-        (SELECT COALESCE(SUM(total_cost),0) FROM labor_transactions
-           WHERE tenant_id=$1 AND deployment_date BETWEEN (SELECT s FROM fy) AND (SELECT e FROM fy)) AS labour,
+        (SELECT COALESCE(SUM(total_cost),0) FROM labour_cost
+           WHERE tenant_id=$1 AND work_date BETWEEN (SELECT s FROM fy) AND (SELECT e FROM fy)) AS labour,
         (SELECT COALESCE(SUM(total_amount),0) FROM expense_transactions
            WHERE tenant_id=$1 AND entry_date BETWEEN (SELECT s FROM fy) AND (SELECT e FROM fy)) AS expenses,
         (SELECT COALESCE(SUM(dry_parch+dry_cherry),0) FROM processing_records

@@ -276,7 +276,7 @@ export async function GET(request: Request) {
         const [laborSupportsLocation, expenseSupportsLocation] = await Promise.all([
           sql`
             SELECT 1 FROM information_schema.columns
-            WHERE table_schema = 'public' AND table_name = 'labor_transactions' AND column_name = 'location_id'
+            WHERE table_schema = 'public' AND table_name = 'labour_cost' AND column_name = 'location_id'
             LIMIT 1
           `.then((rows) => Array.isArray(rows) && rows.length > 0),
           sql`
@@ -307,15 +307,15 @@ export async function GET(request: Request) {
         ] = await runTenantQueries(sql, tenantContext, [
           sql`
             SELECT
-              code,
+              activity_code AS code,
               COALESCE(SUM(total_cost), 0) AS total_amount,
               COUNT(*)::int AS entry_count
-            FROM labor_transactions
+            FROM labour_cost
             WHERE tenant_id = ${tenantContext.tenantId}
-              AND deployment_date >= ${startDateIso}::date
-              AND deployment_date <= ${endDateIso}::date
+              AND work_date >= ${startDateIso}::date
+              AND work_date <= ${endDateIso}::date
               ${laborEstateFilter}
-            GROUP BY code
+            GROUP BY activity_code
           `,
           sql`
             SELECT
@@ -336,15 +336,15 @@ export async function GET(request: Request) {
           `,
           sql`
             SELECT
-              deployment_date::date AS day,
+              work_date::date AS day,
               COALESCE(SUM(total_cost), 0) AS total_amount,
               COUNT(*)::int AS entry_count
-            FROM labor_transactions
+            FROM labour_cost
             WHERE tenant_id = ${tenantContext.tenantId}
-              AND deployment_date >= ${startDateIso}::date
-              AND deployment_date <= ${endDateIso}::date
+              AND work_date >= ${startDateIso}::date
+              AND work_date <= ${endDateIso}::date
               ${laborEstateFilter}
-            GROUP BY deployment_date::date
+            GROUP BY work_date::date
             ORDER BY total_amount DESC
             LIMIT 3
           `,
@@ -367,7 +367,7 @@ export async function GET(request: Request) {
               COALESCE(
                 SUM(
                   CASE
-                    WHEN deployment_date >= ${recentStartIso}::date AND deployment_date <= ${endDateIso}::date
+                    WHEN work_date >= ${recentStartIso}::date AND work_date <= ${endDateIso}::date
                       THEN total_cost
                     ELSE 0
                   END
@@ -377,14 +377,14 @@ export async function GET(request: Request) {
               COALESCE(
                 SUM(
                   CASE
-                    WHEN deployment_date >= ${previousStartIso}::date AND deployment_date <= ${previousEndIso}::date
+                    WHEN work_date >= ${previousStartIso}::date AND work_date <= ${previousEndIso}::date
                       THEN total_cost
                     ELSE 0
                   END
                 ),
                 0
               ) AS previous_total
-            FROM labor_transactions
+            FROM labour_cost
             WHERE tenant_id = ${tenantContext.tenantId}
               ${laborEstateFilter}
           `,
@@ -415,11 +415,11 @@ export async function GET(request: Request) {
               ${expenseEstateFilter}
           `,
           sql`
-            SELECT deployment_date::date AS day, code, total_cost, notes
-            FROM labor_transactions
+            SELECT work_date::date AS day, activity_code AS code, total_cost, notes
+            FROM labour_cost
             WHERE tenant_id = ${tenantContext.tenantId}
-              AND deployment_date >= ${startDateIso}::date
-              AND deployment_date <= ${endDateIso}::date
+              AND work_date >= ${startDateIso}::date
+              AND work_date <= ${endDateIso}::date
               ${laborEstateFilter}
             ORDER BY total_cost DESC
             LIMIT 1

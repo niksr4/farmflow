@@ -36,7 +36,7 @@ async function fetchSeasonAggregates(
   const [laborSupportsLocation, expenseSupportsLocation] = await Promise.all([
     sql`
       SELECT 1 FROM information_schema.columns
-      WHERE table_schema = 'public' AND table_name = 'labor_transactions' AND column_name = 'location_id'
+      WHERE table_schema = 'public' AND table_name = 'labour_cost' AND column_name = 'location_id'
       LIMIT 1
     `.then((rows) => Array.isArray(rows) && rows.length > 0),
     sql`
@@ -79,8 +79,8 @@ async function fetchSeasonAggregates(
     `).catch(() => []),
     runTenantQuery(sql, tenantContext, sql`
       SELECT COALESCE(SUM(total_cost), 0) AS total_cost
-      FROM labor_transactions
-      WHERE deployment_date >= ${startDate} AND deployment_date <= ${endDate}
+      FROM labour_cost
+      WHERE work_date >= ${startDate} AND work_date <= ${endDate}
         AND tenant_id = ${tenantContext.tenantId}
         ${laborEstateClause}
     `).catch(() => []),

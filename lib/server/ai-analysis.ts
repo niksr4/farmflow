@@ -175,18 +175,18 @@ async function fetchLaborData(startDate: string, endDate: string, tenantContext:
       tenantContext,
       sql`
         SELECT
-          deployment_date,
-          hf_laborers,
-          hf_cost_per_laborer,
-          outside_laborers,
-          outside_cost_per_laborer,
+          work_date AS deployment_date,
+          estate_laborers   AS hf_laborers,
+          estate_rate       AS hf_cost_per_laborer,
+          contract_laborers AS outside_laborers,
+          contract_rate     AS outside_cost_per_laborer,
           total_cost,
-          code,
+          activity_code AS code,
           notes
-        FROM labor_transactions
-        WHERE deployment_date >= ${startDate} AND deployment_date <= ${endDate}
+        FROM labour_cost
+        WHERE work_date >= ${startDate} AND work_date <= ${endDate}
           AND tenant_id = ${tenantId}
-        ORDER BY deployment_date DESC
+        ORDER BY work_date DESC
         LIMIT 100
       `,
     )

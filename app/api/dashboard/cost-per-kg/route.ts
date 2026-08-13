@@ -66,13 +66,13 @@ export async function GET(request: Request) {
         context,
         sql!`
           SELECT COALESCE(SUM(total_cost), 0) AS total_cost
-          FROM labor_transactions
+          FROM labour_cost
           WHERE tenant_id = ${context.tenantId}
-            AND deployment_date >= ${fy.startDate}::date
-            AND deployment_date <= ${fy.endDate}::date
+            AND work_date >= ${fy.startDate}::date
+            AND work_date <= ${fy.endDate}::date
             ${estateClause}
         `,
-        ["labor_transactions"],
+        ["labour_cost"],
       ),
       tryQuery<{ total_amount: number }>(
         context,

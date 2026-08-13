@@ -6,7 +6,9 @@
 // definition and arithmetic below must stay identical in both places.
 
 export const PNL_REVENUE_TABLES = ["sales_records", "other_sales_records"] as const
-export const PNL_OUTFLOW_TABLES = ["labor_transactions", "expense_transactions"] as const
+// labour_cost, not labor_transactions: labour reaches the P&L through the view that resolves
+// which entry method a tenant is on for a given date. See scripts/117.
+export const PNL_OUTFLOW_TABLES = ["labour_cost", "expense_transactions"] as const
 
 export type PnlTotalsInput = {
   salesRevenue: number

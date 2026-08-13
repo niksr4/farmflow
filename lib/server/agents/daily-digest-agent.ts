@@ -71,12 +71,12 @@ async function fetchYesterdayActivity(tenantId: string, yesterdayDate: string): 
           WHERE tenant_id = $1 AND process_date = $2::date) AS proc_kg,
         (SELECT COUNT(*) FROM processing_records
           WHERE tenant_id = $1 AND process_date = $2::date) AS proc_days,
-        (SELECT COUNT(*) FROM labor_transactions
-          WHERE tenant_id = $1 AND (deployment_date AT TIME ZONE 'Asia/Kolkata')::date = $2::date) AS labor_entries,
-        (SELECT COALESCE(SUM(total_cost), 0) FROM labor_transactions
-          WHERE tenant_id = $1 AND (deployment_date AT TIME ZONE 'Asia/Kolkata')::date = $2::date) AS labor_cost,
-        (SELECT COALESCE(SUM(hf_laborers + outside_laborers), 0) FROM labor_transactions
-          WHERE tenant_id = $1 AND (deployment_date AT TIME ZONE 'Asia/Kolkata')::date = $2::date) AS labor_workers,
+        (SELECT COUNT(*) FROM labour_cost
+          WHERE tenant_id = $1 AND (work_date AT TIME ZONE 'Asia/Kolkata')::date = $2::date) AS labor_entries,
+        (SELECT COALESCE(SUM(total_cost), 0) FROM labour_cost
+          WHERE tenant_id = $1 AND (work_date AT TIME ZONE 'Asia/Kolkata')::date = $2::date) AS labor_cost,
+        (SELECT COALESCE(SUM(estate_laborers + contract_laborers), 0) FROM labour_cost
+          WHERE tenant_id = $1 AND (work_date AT TIME ZONE 'Asia/Kolkata')::date = $2::date) AS labor_workers,
         (SELECT COALESCE(SUM(total_amount), 0) FROM expense_transactions
           WHERE tenant_id = $1 AND (entry_date AT TIME ZONE 'Asia/Kolkata')::date = $2::date) AS expense_total,
         (SELECT COUNT(*) FROM expense_transactions

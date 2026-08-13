@@ -514,29 +514,29 @@ const loadLaborRows = async (
   tenantContext: ReturnType<typeof normalizeTenantContext>,
   activeEstate: string | null,
 ) => {
-  const supportsLocation = await tableHasColumn(tenantContext, "labor_transactions", "location_id")
+  const supportsLocation = await tableHasColumn(tenantContext, "labour_cost", "location_id")
   return runTenantQuery(
     sql,
     tenantContext,
     supportsLocation
       ? sql`
           SELECT
-            lt.deployment_date::date::text AS deployment_date,
+            lt.work_date::date::text AS deployment_date,
             COALESCE(l.name, l.code, 'Unassigned') AS location,
-            COALESCE(lt.code, '') AS code,
-            ROUND(COALESCE(lt.hf_laborers, 0)::numeric, 2) AS estate_laborers,
-            ROUND(COALESCE(lt.hf_cost_per_laborer, 0)::numeric, 2) AS estate_cost_per_laborer,
-            ROUND(COALESCE(lt.outside_laborers, 0)::numeric, 2) AS outside_laborers,
-            ROUND(COALESCE(lt.outside_cost_per_laborer, 0)::numeric, 2) AS outside_cost_per_laborer,
+            COALESCE(lt.activity_code, '') AS code,
+            ROUND(COALESCE(lt.estate_laborers, 0)::numeric, 2) AS estate_laborers,
+            ROUND(COALESCE(lt.estate_rate, 0)::numeric, 2) AS estate_cost_per_laborer,
+            ROUND(COALESCE(lt.contract_laborers, 0)::numeric, 2) AS outside_laborers,
+            ROUND(COALESCE(lt.contract_rate, 0)::numeric, 2) AS outside_cost_per_laborer,
             ROUND(COALESCE(lt.total_cost, 0)::numeric, 2) AS total_cost,
             COALESCE(lt.notes, '') AS notes
-          FROM labor_transactions lt
+          FROM labour_cost lt
           LEFT JOIN locations l ON l.id = lt.location_id
           WHERE lt.tenant_id = ${tenantId}
-            AND lt.deployment_date >= ${startDate}::date
-            AND lt.deployment_date <= ${endDate}::date
+            AND lt.work_date >= ${startDate}::date
+            AND lt.work_date <= ${endDate}::date
             ${estateScope(activeEstate)}
-          ORDER BY lt.deployment_date DESC, lt.id DESC
+          ORDER BY lt.work_date DESC, lt.source_id DESC
           LIMIT ${FETCH_LIMIT}
         `
       : // No location_id column on this tenant's schema, so every row is unassigned and the
@@ -544,20 +544,20 @@ const loadLaborRows = async (
         // `l` alias to hang it off.
         sql`
           SELECT
-            lt.deployment_date::date::text AS deployment_date,
+            lt.work_date::date::text AS deployment_date,
             'Unassigned' AS location,
-            COALESCE(lt.code, '') AS code,
-            ROUND(COALESCE(lt.hf_laborers, 0)::numeric, 2) AS estate_laborers,
-            ROUND(COALESCE(lt.hf_cost_per_laborer, 0)::numeric, 2) AS estate_cost_per_laborer,
-            ROUND(COALESCE(lt.outside_laborers, 0)::numeric, 2) AS outside_laborers,
-            ROUND(COALESCE(lt.outside_cost_per_laborer, 0)::numeric, 2) AS outside_cost_per_laborer,
+            COALESCE(lt.activity_code, '') AS code,
+            ROUND(COALESCE(lt.estate_laborers, 0)::numeric, 2) AS estate_laborers,
+            ROUND(COALESCE(lt.estate_rate, 0)::numeric, 2) AS estate_cost_per_laborer,
+            ROUND(COALESCE(lt.contract_laborers, 0)::numeric, 2) AS outside_laborers,
+            ROUND(COALESCE(lt.contract_rate, 0)::numeric, 2) AS outside_cost_per_laborer,
             ROUND(COALESCE(lt.total_cost, 0)::numeric, 2) AS total_cost,
             COALESCE(lt.notes, '') AS notes
-          FROM labor_transactions lt
+          FROM labour_cost lt
           WHERE lt.tenant_id = ${tenantId}
-            AND lt.deployment_date >= ${startDate}::date
-            AND lt.deployment_date <= ${endDate}::date
-          ORDER BY lt.deployment_date DESC, lt.id DESC
+            AND lt.work_date >= ${startDate}::date
+            AND lt.work_date <= ${endDate}::date
+          ORDER BY lt.work_date DESC, lt.source_id DESC
           LIMIT ${FETCH_LIMIT}
         `,
   )
@@ -747,11 +747,11 @@ const loadPnlRows = async (
         GROUP BY 1
       ),
       labor AS (
-        SELECT date_trunc('month', deployment_date)::date AS month_start, COALESCE(SUM(COALESCE(total_cost, 0)), 0) AS labor_cost
-        FROM labor_transactions
+        SELECT date_trunc('month', work_date)::date AS month_start, COALESCE(SUM(COALESCE(total_cost, 0)), 0) AS labor_cost
+        FROM labour_cost
         WHERE tenant_id = ${tenantId}
-          AND deployment_date >= ${startDate}::date
-          AND deployment_date <= ${endDate}::date
+          AND work_date >= ${startDate}::date
+          AND work_date <= ${endDate}::date
         GROUP BY 1
       ),
       expense AS (
@@ -967,7 +967,7 @@ export async function GET(request: NextRequest) {
       pepper_records: "Pepper table is not available for this tenant database.",
       transaction_history: "Transactions table is not available for this tenant database.",
       current_inventory: "Inventory table is not available for this tenant database.",
-      labor_transactions: "Labour table is not available for this tenant database.",
+      labour_cost: "Labour table is not available for this tenant database.",
       expense_transactions: "Expense table is not available for this tenant database.",
     }
 

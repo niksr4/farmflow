@@ -26,6 +26,14 @@
 -- labor_transactions and labour_assignments still apply to whoever is asking. Requires PG15+;
 -- both Neon instances are on 17.
 --
+-- WORK_DATE IS TIMESTAMPTZ, NOT DATE. labor_transactions.deployment_date is timestamptz and
+-- labour_assignments.work_date is a plain date, so the UNION resolves the column to timestamptz
+-- and promotes every assignment date to midnight in the session timezone. That is deliberate:
+-- it keeps legacy rows behaving exactly as they did before callers were repointed here. Both
+-- sides of any comparison promote the same way, and the digests' (work_date AT TIME ZONE
+-- 'Asia/Kolkata')::date still lands on the right calendar day under either session timezone.
+-- It also means work_date arrives in JS as a Date, not a string -- cast ::text when you need one.
+--
 -- The estate/contract split finally comes out right, as a side effect. Legacy rows carry it as
 -- hf_* versus outside_*, which Medappa fills in wrongly -- every row books as outside labour with
 -- in-house 0, including their own permanent staff. Assignment rows derive it from what the worker

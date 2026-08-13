@@ -139,12 +139,12 @@ export async function GET(request: NextRequest) {
     try {
       const rows = await runTenantQuery(accountsSql, tenantContext, accountsSql.query(
         `SELECT
-           date_trunc('week', deployment_date)::date AS week_start,
+           date_trunc('week', work_date)::date AS week_start,
            COUNT(*) AS entries
-         FROM labor_transactions
+         FROM labour_cost
          WHERE tenant_id = $1
-           AND deployment_date >= $2::date
-           AND deployment_date <= $3::date
+           AND work_date >= $2::date
+           AND work_date <= $3::date
          GROUP BY 1 ORDER BY 1`,
         [tenantId, start, end],
       ))
@@ -218,9 +218,9 @@ export async function GET(request: NextRequest) {
       checks.push({ id: "processing_yield", label: "Processing yield", status: "warning", detail: "Could not check processing yield." })
     }
 
-    // ── 6. Labour cost pipeline overlap — bulk deployment vs payroll/attendance ──
-    // labor_transactions (Labour deployment tab) is the only labour source that
-    // feeds Accounts/P&L (accounts-totals, accounts-summary, finance-balance-sheet).
+    // ── 6. Labour cost pipeline overlap — costed labour vs payroll/attendance ──
+    // labour_cost is what feeds Accounts/P&L, whichever way the tenant enters: typed
+    // into the Labour deployment tab, or allocated per worker off the muster roll.
     // worker_ledger + attendance_records + picking_records (Payroll summary) is a
     // separate, un-reconciled pipeline. Neither side checks the other, so a tenant
     // can double-log the same spend in both, or log real labour cost only in
@@ -229,8 +229,8 @@ export async function GET(request: NextRequest) {
       const [bulkRows, payrollRows] = await runTenantQueries(accountsSql, tenantContext, [
         accountsSql.query(
           `SELECT COALESCE(SUM(total_cost), 0) AS cost, COUNT(*) AS entries
-           FROM labor_transactions
-           WHERE tenant_id = $1 AND deployment_date >= $2::date AND deployment_date <= $3::date`,
+           FROM labour_cost
+           WHERE tenant_id = $1 AND work_date >= $2::date AND work_date <= $3::date`,
           [tenantId, start, end],
         ),
         accountsSql.query(

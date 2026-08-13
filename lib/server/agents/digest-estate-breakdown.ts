@@ -66,8 +66,8 @@ export async function fetchActivityByEstate(
       ),
       sql.query(
         `SELECT COALESCE(l.estate, 'Unassigned') AS estate, COALESCE(SUM(lt.total_cost), 0) AS value
-         FROM labor_transactions lt LEFT JOIN locations l ON l.id = lt.location_id
-         WHERE lt.tenant_id = $1 AND lt.deployment_date BETWEEN $2::date AND $3::date
+         FROM labour_cost lt LEFT JOIN locations l ON l.id = lt.location_id
+         WHERE lt.tenant_id = $1 AND lt.work_date BETWEEN $2::date AND $3::date
          GROUP BY l.estate`,
         [tenantId, startDate, endDate],
       ),
