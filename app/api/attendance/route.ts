@@ -54,7 +54,7 @@ export async function GET(request: Request) {
         ? accountsSql` AND (${accountsSql.unsafe(column)} IS NULL OR ${accountsSql.unsafe(column)} = ${activeEstate})`
         : accountsSql``
 
-    const [workersRows, presentRows, weeklyRows, deviceRows, estateRows, assignmentRows] = await runTenantQueries(accountsSql, tenantContext, [
+    const [workersRows, presentRows, pickingRows, weeklyRows, deviceRows, estateRows, assignmentRows] = await runTenantQueries(accountsSql, tenantContext, [
       accountsSql`
         SELECT id, full_name, daily_rate, device_user_code, location_id, created_at,
                worker_type, phone, bank_name, bank_account, bank_ifsc,
@@ -72,6 +72,16 @@ export async function GET(request: Request) {
         FROM attendance_records
         WHERE tenant_id = ${tenantContext.tenantId}
           AND attendance_date = ${date}
+      `,
+      // Workers who were paid by weight today. Picking is piece-rate labour and lives in its own
+      // table; a day-rate allocation for the same worker on the same day is a second pay basis
+      // for one day's work. Surfaced rather than blocked, because whether an estate pays a base
+      // wage on top of piece rate is their business practice, not something a query can decide.
+      accountsSql`
+        SELECT DISTINCT worker_id
+        FROM picking_records
+        WHERE tenant_id = ${tenantContext.tenantId}
+          AND pick_date = ${date}
       `,
       accountsSql`
         SELECT
@@ -175,6 +185,7 @@ export async function GET(request: Request) {
         totalCost: row.total_cost != null ? Number(row.total_cost) : 0,
         notes: row.notes ? String(row.notes) : null,
       })),
+      pickingWorkerIds: pickingRows.map((row: any) => String(row.worker_id)).filter(Boolean),
       presentWorkerIds: presentRows.map((row: any) => String(row.worker_id)).filter(Boolean),
       presentRecords: presentRows.map((row: any) => ({
         workerId: String(row.worker_id),

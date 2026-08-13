@@ -121,6 +121,9 @@ export default function AttendanceTab() {
   // "present / absent", and giving one gesture two meanings on a screen used with dirty hands
   // in a field is how the wrong thing gets recorded.
   const [assignments, setAssignments] = useState<LabourAssignment[]>([])
+  // Workers paid by weight today. A day-rate allocation on the same day is a second pay basis
+  // for one day, which may or may not be how this estate pays -- flagged, never auto-corrected.
+  const [pickingWorkerIds, setPickingWorkerIds] = useState<string[]>([])
   const [locations, setLocations] = useState<Array<{ id: string; name: string; code?: string | null }>>([])
   const [activities, setActivities] = useState<Array<{ code: string; reference?: string | null }>>([])
   const [selecting, setSelecting] = useState(false)
@@ -150,6 +153,7 @@ export default function AttendanceTab() {
         setWeeklySummary(Array.isArray(data.weeklySummary) ? data.weeklySummary : [])
         setPresentRecords(Array.isArray(data.presentRecords) ? data.presentRecords : [])
         setAssignments(Array.isArray(data.assignments) ? data.assignments : [])
+        setPickingWorkerIds(Array.isArray(data.pickingWorkerIds) ? data.pickingWorkerIds : [])
         setHasBiometricDevices(Boolean(data.hasBiometricDevices))
         setIsMultiEstate(Boolean(data.isMultiEstate))
         setError(null)
@@ -676,6 +680,12 @@ export default function AttendanceTab() {
                   {!isPresent && rows.length > 0 && (
                     <p className="mt-1.5 text-[11px] font-bold text-amber-600">
                       Work recorded but not marked present
+                    </p>
+                  )}
+
+                  {pickingWorkerIds.includes(worker.id) && rows.length > 0 && (
+                    <p className={cn("mt-1.5 text-[11px] font-bold", isPresent ? "text-amber-200" : "text-amber-600")}>
+                      Also picked today — paid by weight and by day
                     </p>
                   )}
                   </div>
