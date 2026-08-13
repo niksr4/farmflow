@@ -466,6 +466,38 @@ export default function WorkerProfilesTab() {
                       {isEditing ? (
                         <div className="space-y-2 bg-stone-50/60 px-1 pb-4 dark:bg-white/[0.02]">
                           <Input value={editForm.name} onChange={(e) => setEditForm((f) => ({ ...f, name: e.target.value }))} placeholder="Name" />
+                          {/* Worker type and estate were desktop-only when this card list was added,
+                              so a phone could read them but never set them. Assigning a worker to an
+                              estate is precisely the job a field writer is asked to do -- and they do
+                              it on a phone -- so leaving it off the small screen made the instruction
+                              impossible to follow. Availability parity, per the table above. */}
+                          <Select
+                            value={editForm.workerType}
+                            onValueChange={(v) => setEditForm((f) => ({ ...f, workerType: v as WorkerType | "" }))}
+                          >
+                            <SelectTrigger className="h-10"><SelectValue placeholder="Worker type" /></SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="permanent">Permanent</SelectItem>
+                              <SelectItem value="seasonal">Seasonal</SelectItem>
+                              <SelectItem value="contractor">Contractor</SelectItem>
+                            </SelectContent>
+                          </Select>
+                          {showEstateField && (
+                            <Select
+                              value={editForm.locationId}
+                              onValueChange={(v) => setEditForm((f) => ({ ...f, locationId: v }))}
+                            >
+                              <SelectTrigger className="h-10"><SelectValue placeholder="Estate / block" /></SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value={UNASSIGNED_LOCATION}>Unassigned</SelectItem>
+                                {locations.map((loc) => (
+                                  <SelectItem key={loc.id} value={loc.id}>
+                                    {formatLocationLabel(loc, locations)}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          )}
                           <Input value={editForm.dailyRate} onChange={(e) => setEditForm((f) => ({ ...f, dailyRate: e.target.value }))} placeholder="Daily rate" inputMode="decimal" />
                           <Input value={editForm.phone} onChange={(e) => setEditForm((f) => ({ ...f, phone: e.target.value }))} placeholder="Phone" inputMode="tel" />
                           <Input value={editForm.bankName} onChange={(e) => setEditForm((f) => ({ ...f, bankName: e.target.value }))} placeholder="Bank name" />
