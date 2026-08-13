@@ -24,6 +24,7 @@ import {
   Loader2,
   PlusCircle,
   Trash2,
+  Briefcase,
   Users,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
@@ -35,6 +36,7 @@ import { EmptyState } from "@/components/ui/empty-state"
 import { trackRecordCreated } from "@/lib/track-action"
 import { useSingleFlight } from "@/hooks/use-single-flight"
 import AttendanceDeviceSettings from "@/components/attendance-device-settings"
+import AssignWorkSheet from "@/components/attendance/assign-work-sheet"
 
 type AttendanceWorker = {
   id: string
@@ -42,6 +44,22 @@ type AttendanceWorker = {
   dailyRate: number | null
   deviceUserCode: string | null
   locationId: string | null
+  kind?: "individual" | "gang"
+  headcount?: number | null
+}
+/** One row per job, so a worker who split their day appears more than once. */
+type LabourAssignment = {
+  id: string
+  workerId: string
+  activityCode: string
+  activityName: string | null
+  locationId: string | null
+  locationName: string | null
+  dayFraction: number
+  rate: number
+  headcount: number
+  lumpSum: number | null
+  totalCost: number
 }
 type AttendanceSummaryRow = { workerId: string; name: string; daysPresent: number }
 type AttendanceRecordDetail = {
@@ -98,6 +116,17 @@ export default function AttendanceTab() {
   const [error, setError] = useState<string | null>(null)
   const [autoSelectedDate, setAutoSelectedDate] = useState<string | null>(null)
 
+  // Work allocation. Selection mode is a separate mode on purpose: a row tap already means
+  // "present / absent", and giving one gesture two meanings on a screen used with dirty hands
+  // in a field is how the wrong thing gets recorded.
+  const [assignments, setAssignments] = useState<LabourAssignment[]>([])
+  const [locations, setLocations] = useState<Array<{ id: string; name: string; code?: string | null }>>([])
+  const [activities, setActivities] = useState<Array<{ code: string; reference?: string | null }>>([])
+  const [selecting, setSelecting] = useState(false)
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
+  const [assignOpen, setAssignOpen] = useState(false)
+  const [assigning, setAssigning] = useState(false)
+
   const weekDays = useMemo(() => getWeekDays(weekOffset), [weekOffset])
 
   useEffect(() => {
@@ -119,6 +148,7 @@ export default function AttendanceTab() {
         setWorkers(fetchedWorkers)
         setWeeklySummary(Array.isArray(data.weeklySummary) ? data.weeklySummary : [])
         setPresentRecords(Array.isArray(data.presentRecords) ? data.presentRecords : [])
+        setAssignments(Array.isArray(data.assignments) ? data.assignments : [])
         setHasBiometricDevices(Boolean(data.hasBiometricDevices))
         setIsMultiEstate(Boolean(data.isMultiEstate))
         setError(null)
@@ -151,6 +181,86 @@ export default function AttendanceTab() {
   )
 
   useEffect(() => { void loadSnapshot(selectedDate) }, [selectedDate]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Blocks and activity codes change rarely, so they load once rather than per date. scope=all is
+  // deliberate on locations: the allocation sheet must offer every block a worker could have been
+  // sent to, not only the estate currently selected in the header.
+  useEffect(() => {
+    let cancelled = false
+    void (async () => {
+      try {
+        const [locRes, actRes] = await Promise.all([
+          fetch("/api/locations?scope=all"),
+          fetch("/api/get-activity"),
+        ])
+        const [locData, actData] = await Promise.all([locRes.json(), actRes.json()])
+        if (cancelled) return
+        if (locData?.success) setLocations(locData.locations || [])
+        if (actData?.success) setActivities(actData.activities || [])
+      } catch {
+        // Non-fatal: the muster still records presence, allocation just has nothing to offer.
+      }
+    })()
+    return () => { cancelled = true }
+  }, [])
+
+  const assignmentsByWorker = useMemo(() => {
+    const map = new Map<string, LabourAssignment[]>()
+    for (const a of assignments) {
+      const list = map.get(a.workerId) || []
+      list.push(a)
+      map.set(a.workerId, list)
+    }
+    return map
+  }, [assignments])
+
+  const toggleSelected = (id: string) =>
+    setSelectedIds((prev) => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+
+  const exitSelecting = () => { setSelecting(false); setSelectedIds(new Set()) }
+
+  const handleAssign = async (payload: {
+    activityCode: string
+    locationId: string | null
+    dayFraction: number
+    rate: number | null
+    lumpSum: number | null
+  }) => {
+    setAssigning(true)
+    try {
+      const res = await fetch("/api/attendance/assignments", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ date: selectedDate, workerIds: Array.from(selectedIds), ...payload }),
+      })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok || !data?.success) throw new Error(data?.error || "Could not save the work allocation")
+      toast.success(`Work set for ${data.assigned} ${data.assigned === 1 ? "worker" : "workers"}`)
+      setAssignOpen(false)
+      exitSelecting()
+      await loadSnapshot(selectedDate)
+    } catch (e: unknown) {
+      toast.error(e instanceof Error ? e.message : "Could not save the work allocation")
+    } finally {
+      setAssigning(false)
+    }
+  }
+
+  const handleRemoveAssignment = async (id: string) => {
+    try {
+      const res = await fetch(`/api/attendance/assignments?id=${encodeURIComponent(id)}`, { method: "DELETE" })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok || !data?.success) throw new Error(data?.error || "Could not remove it")
+      setAssignments((prev) => prev.filter((a) => a.id !== id))
+    } catch (e: unknown) {
+      toast.error(e instanceof Error ? e.message : "Could not remove it")
+    }
+  }
 
   const presentSet = useMemo(() => new Set(presentWorkerIds), [presentWorkerIds])
   const recordByWorkerId = useMemo(
@@ -424,6 +534,35 @@ export default function AttendanceTab() {
 
         {error && <p className="text-sm text-red-600 px-1">{error}</p>}
 
+        {/* Allocation bar. Only meaningful once there are codes to assign, so estates that have
+            not set any up never see it. */}
+        {!loading && workers.length > 0 && activities.length > 0 && (
+          selecting ? (
+            <div className="flex items-center gap-2 rounded-2xl bg-stone-900 px-4 py-3 text-white">
+              <span className="text-sm font-bold">{selectedIds.size} selected</span>
+              <button type="button"
+                      onClick={() => setSelectedIds(new Set(workers.map((w) => w.id)))}
+                      className="rounded-lg bg-white/10 px-3 py-1.5 text-xs font-bold">All</button>
+              <button type="button"
+                      onClick={() => setSelectedIds(new Set(presentWorkerIds))}
+                      className="rounded-lg bg-white/10 px-3 py-1.5 text-xs font-bold">Present</button>
+              <span className="flex-1" />
+              <Button size="sm" disabled={selectedIds.size === 0} onClick={() => setAssignOpen(true)}
+                      className="h-9 bg-emerald-500 font-bold hover:bg-emerald-400">Set work</Button>
+              <button type="button" onClick={exitSelecting}
+                      className="rounded-lg px-2 py-1.5 text-xs font-bold text-white/70">Done</button>
+            </div>
+          ) : (
+            <button type="button" onClick={() => setSelecting(true)}
+                    className="flex w-full items-center justify-center gap-2 rounded-2xl border border-stone-200
+                               bg-white px-4 py-3 text-sm font-bold text-stone-600 touch-manipulation
+                               dark:border-white/[0.08] dark:bg-transparent">
+              <Briefcase className="h-4 w-4" />
+              Allocate work to the crew
+            </button>
+          )
+        )}
+
         {loading ? (
           <div className="space-y-2">
             {[1, 2, 3, 4, 5].map((i) => (
@@ -438,16 +577,19 @@ export default function AttendanceTab() {
             const isRemoving = removingWorkerId === worker.id
             const record = recordByWorkerId.get(worker.id)
             const isBiometric = isPresent && record?.source === "biometric"
+            const rows = assignmentsByWorker.get(worker.id) || []
+            const isSelected = selectedIds.has(worker.id)
+            const act = () => (selecting ? toggleSelected(worker.id) : toggleWorker(worker.id))
             return (
               <div
                 key={worker.id}
                 role="button"
                 tabIndex={0}
-                onClick={() => toggleWorker(worker.id)}
+                onClick={act}
                 onKeyDown={(event) => {
                   if (event.key === "Enter" || event.key === " ") {
                     event.preventDefault()
-                    toggleWorker(worker.id)
+                    act()
                   }
                 }}
                 className={cn(
@@ -456,14 +598,34 @@ export default function AttendanceTab() {
                   isPresent
                     ? "bg-emerald-600 shadow-md shadow-emerald-100"
                     : "bg-white shadow-sm",
+                  selecting && isSelected && "ring-2 ring-offset-2 ring-stone-900",
                 )}
               >
-                <div className="text-left min-w-0">
+                <div className="text-left min-w-0 flex items-start gap-3">
+                  {selecting && (
+                    <span className={cn(
+                      "mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-md border-2 text-[11px] font-black",
+                      isSelected
+                        ? "border-stone-900 bg-stone-900 text-white"
+                        : isPresent ? "border-white/70" : "border-stone-300",
+                    )}>
+                      {isSelected ? "✓" : ""}
+                    </span>
+                  )}
+                  <div className="min-w-0">
                   <p className={cn(
                     "text-base font-bold leading-tight truncate",
                     isPresent ? "text-white" : "text-stone-500",
                   )}>
                     {worker.name}
+                    {worker.kind === "gang" && (
+                      <span className={cn(
+                        "ml-2 rounded-full px-2 py-0.5 text-[10px] font-black uppercase tracking-wide align-middle",
+                        isPresent ? "bg-white/20 text-white" : "bg-stone-100 text-stone-500",
+                      )}>
+                        crew of {worker.headcount ?? 1}
+                      </span>
+                    )}
                   </p>
                   <p className={cn(
                     "flex items-center gap-1 text-xs font-medium mt-0.5",
@@ -480,6 +642,42 @@ export default function AttendanceTab() {
                       "No rate"
                     )}
                   </p>
+
+                  {/* What they actually did. One chip per job, so a split day reads as two. */}
+                  {rows.length > 0 ? (
+                    <div className="mt-1.5 flex flex-wrap gap-1.5">
+                      {rows.map((a) => (
+                        <span key={a.id}
+                              className={cn(
+                                "inline-flex items-center gap-1.5 rounded-lg px-2 py-1 text-[11px] font-semibold",
+                                isPresent ? "bg-white/15 text-white" : "bg-stone-100 text-stone-600",
+                              )}>
+                          <span className="font-mono opacity-70">{a.activityCode}</span>
+                          {a.locationName ?? "no block"}
+                          {a.dayFraction !== 1 && <span className="opacity-70">· {a.dayFraction}d</span>}
+                          <span className="opacity-70">· ₹{a.totalCost.toLocaleString("en-IN")}</span>
+                          <button type="button" aria-label="Remove this allocation"
+                                  onClick={(event) => { event.stopPropagation(); void handleRemoveAssignment(a.id) }}
+                                  className="ml-0.5 opacity-60 hover:opacity-100">×</button>
+                        </span>
+                      ))}
+                    </div>
+                  ) : isPresent ? (
+                    <p className={cn("mt-1.5 text-[11px] font-semibold",
+                                     isPresent ? "text-emerald-100/80" : "text-stone-400")}>
+                      Here, but no work set yet
+                    </p>
+                  ) : null}
+
+                  {/* Work recorded for someone nobody marked present. Surfaced rather than
+                      auto-corrected: the fix is a judgement call, not something a screen
+                      should make silently. */}
+                  {!isPresent && rows.length > 0 && (
+                    <p className="mt-1.5 text-[11px] font-bold text-amber-600">
+                      Work recorded but not marked present
+                    </p>
+                  )}
+                  </div>
                 </div>
                 <div className="flex shrink-0 items-center gap-1">
                   <button
@@ -676,6 +874,18 @@ export default function AttendanceTab() {
           </button>
         </div>
       )}
+
+      <AssignWorkSheet
+        open={assignOpen}
+        saving={assigning}
+        targets={workers
+          .filter((w) => selectedIds.has(w.id))
+          .map((w) => ({ id: w.id, name: w.name, kind: w.kind ?? "individual", headcount: w.headcount ?? null }))}
+        locations={locations}
+        activities={activities}
+        onCancel={() => setAssignOpen(false)}
+        onSubmit={handleAssign}
+      />
     </div>
   )
 }
