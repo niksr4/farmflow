@@ -158,7 +158,7 @@ export default function LaborDeploymentTab({
     taskDescription: "",
   })
 
-  const formRef = useRef<HTMLFormElement>(null)
+  const pendingEditScrollRef = useRef(false)
 
   // Survive app kills / dead network: persist the in-progress new entry
   const { loadDraft, clearDraft } = useFormDraft("labor-form", formData, isAdding && !editingId)
@@ -445,10 +445,22 @@ export default function LaborDeploymentTab({
     setPrefilled(false)
     setEditingId(deployment.id)
     setIsAdding(true)
-    setTimeout(() => {
-      formRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })
-    }, 100)
+    pendingEditScrollRef.current = true
   }
+
+  // Scroll to the form's *header*, not the <form> itself -- the header is what now says "Edit
+  // labour entry", and landing below it put the user among fields identical to a blank entry.
+  //
+  // Driven by an effect rather than the setTimeout this replaced: the card only mounts once
+  // isAdding flips, so scrolling inside startEdit raced the render and, because the call was
+  // optional-chained, losing that race failed silently.
+  useEffect(() => {
+    if (!pendingEditScrollRef.current) return
+    const node = formSectionRef.current
+    if (!isAdding || !node) return
+    pendingEditScrollRef.current = false
+    node.scrollIntoView({ behavior: "smooth", block: "start" })
+  }, [isAdding, editingId])
 
   const toggleRow = (id: string) => {
     setExpandedRows((prev) => {
@@ -570,8 +582,12 @@ export default function LaborDeploymentTab({
           <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
             <div>
               <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-stone-400">Labour</p>
-              <CardTitle className="mt-0.5 text-xl">Log labour entry</CardTitle>
-              <CardDescription>One day · one activity code · in-house and outside workers separately.</CardDescription>
+              <CardTitle className="mt-0.5 text-xl">{editingId ? "Edit labour entry" : "Log labour entry"}</CardTitle>
+              <CardDescription>
+                {editingId
+                  ? "Change what you need, then Update entry to save it."
+                  : "One day · one activity code · in-house and outside workers separately."}
+              </CardDescription>
             </div>
             <div className="rounded-xl border border-stone-100 bg-stone-50 px-5 py-3 text-right dark:border-white/[0.05] dark:bg-white/[0.03]">
               <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-stone-400">FY total</p>
@@ -603,7 +619,7 @@ export default function LaborDeploymentTab({
           )}
 
           {isAdding ? (
-            <form onSubmit={handleSubmit} className="space-y-4 rounded-xl border border-stone-200 p-4 bg-stone-50/40 dark:border-white/[0.06] dark:bg-white/[0.02]" ref={formRef} /* form opens via top-level button */>
+            <form onSubmit={handleSubmit} className="space-y-4 rounded-xl border border-stone-200 p-4 bg-stone-50/40 dark:border-white/[0.06] dark:bg-white/[0.02]" /* form opens via top-level button */>
               {prefilled && (
                 <div className="flex items-center justify-between rounded-xl border border-blue-200 bg-blue-50/80 px-4 py-2.5 text-sm text-blue-800">
                   <span>Prefilled from your last entry — update as needed.</span>
@@ -616,6 +632,27 @@ export default function LaborDeploymentTab({
                     className="ml-3 text-blue-600 underline text-xs hover:text-blue-800"
                   >
                     Clear
+                  </button>
+                </div>
+              )}
+
+              {/* Edit arrives here from a pencil in the History list, which is a long scroll away.
+                  Without this the form looks identical to a blank new entry -- same heading, same
+                  fields -- and the only sign anything happened is the Save button reading "Update",
+                  which is off-screen at the bottom on a phone. Users reasonably concluded the
+                  pencil did nothing and went looking for the form themselves. */}
+              {editingId && (
+                <div className="flex items-center justify-between gap-3 rounded-xl border border-amber-200 bg-amber-50/80 px-4 py-2.5 text-sm text-amber-900 dark:border-amber-500/25 dark:bg-amber-500/10 dark:text-amber-200">
+                  <span>
+                    Editing your entry from <strong>{formatDateOnly(formData.date)}</strong>
+                    {formData.reference ? ` · ${formData.reference}` : ""} — nothing changes until you press Update entry.
+                  </span>
+                  <button
+                    type="button"
+                    onClick={resetForm}
+                    className="shrink-0 text-xs underline text-amber-700 hover:text-amber-900 dark:text-amber-300"
+                  >
+                    Cancel
                   </button>
                 </div>
               )}
