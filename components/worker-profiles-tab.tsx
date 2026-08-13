@@ -261,6 +261,16 @@ export default function WorkerProfilesTab() {
             <CardTitle className="text-base">Worker Roster</CardTitle>
             <CardDescription>
               This shared roster feeds Attendance, Picking, Ledger, and Payroll. Add only the workers you want tracked across those tabs. {workers.length} active worker{workers.length !== 1 ? "s" : ""}.
+              {/* The estate banner promises "every tab is filtered to this estate", and this one
+                  deliberately is not: it fetches with scope=all so a worker assigned to another
+                  estate stays reachable and reassignable. Without saying so, the unfiltered list
+                  reads as the estate filter being broken -- which is exactly how it was reported. */}
+              {showEstateField && (
+                <span className="mt-1 block text-muted-foreground">
+                  Every worker is listed here whichever estate is selected, so you can assign them.
+                  The Attendance tab shows only the selected estate&apos;s crew.
+                </span>
+              )}
             </CardDescription>
           </div>
           {canWrite && !isAdding && (
