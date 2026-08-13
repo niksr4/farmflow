@@ -97,7 +97,17 @@ const SEASON_FIRST_ENTRY_HINT: Record<string, { body: string; action: WorkspaceH
   },
 }
 
-export function buildTenantWorkspaceHints(metrics: TenantGuidanceMetrics): WorkspaceHint[] {
+/**
+ * `now` is injectable purely so this stays testable. Reading the clock inside made the season
+ * branch untestable, and the test that covered it silently asserted the shape of whichever
+ * season happened to be running when it was written — it would have started failing on 1 Sep
+ * with no code change, because pre-harvest's action is an href with no tab and harvest-peak's
+ * tab is "processing", not "accounts". Callers in app code should keep omitting it.
+ */
+export function buildTenantWorkspaceHints(
+  metrics: TenantGuidanceMetrics,
+  now: Date = new Date(),
+): WorkspaceHint[] {
   const totalLogins = Math.max(0, Number(metrics.totalLogins) || 0)
   const operationalDataCount = Math.max(0, Number(metrics.operationalDataCount) || 0)
   const accountCodeGap = hasAccountCodeGap(metrics)
@@ -135,7 +145,7 @@ export function buildTenantWorkspaceHints(metrics: TenantGuidanceMetrics): Works
     return hints
   }
 
-  const phase = getEstatePhaseForMonth(new Date().getMonth() + 1)
+  const phase = getEstatePhaseForMonth(now.getMonth() + 1)
   const seasonHint = SEASON_FIRST_ENTRY_HINT[phase.season]
 
   if (totalLogins >= 1 && totalLogins <= 3) {

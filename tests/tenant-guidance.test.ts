@@ -23,22 +23,50 @@ describe("tenant guidance", () => {
     )
   })
 
-  it("directs early tenants to a simple first action", () => {
-    const hints = buildTenantWorkspaceHints({
-      totalLogins: 1,
-      accountCodesCount: 1,
-      operationalDataCount: 0,
-      locationCount: 1,
-    })
+  // The first-entry hint is chosen by the estate calendar, so its action legitimately differs by
+  // month. This used to assert tab === "accounts" and the presence of a panel, which is true for
+  // only 8 months of the year: pre-harvest (Sep-Oct) points at /settings#locations with no tab at
+  // all, and harvest-peak (Nov-Dec) points at the processing tab with no panel. Written in a
+  // month where it happened to hold, it would have gone red on 1 September with nobody touching
+  // the code. Every case below pins the month, and all twelve are covered.
+  const EARLY_TENANT = {
+    totalLogins: 1,
+    accountCodesCount: 1,
+    operationalDataCount: 0,
+    locationCount: 1,
+  }
 
-    // The specific panel varies by season (labour in harvest, rainfall in off-season, etc.)
-    // so we only assert the stable structural properties here.
-    expect(hints[0]).toMatchObject({
-      id: "welcome-get-started",
-      type: "tip",
-    })
-    expect(hints[0].action).toHaveProperty("tab", "accounts")
-    expect(hints[0].action).toHaveProperty("panel")
+  it.each([
+    [1, "post-harvest-pruning", { label: "Log labor", tab: "accounts", panel: "labor" }],
+    [2, "post-harvest-pruning", { label: "Log labor", tab: "accounts", panel: "labor" }],
+    [3, "blossom", { label: "Log expense", tab: "accounts", panel: "expenses" }],
+    [4, "berry-formation", { label: "Log expense", tab: "accounts", panel: "expenses" }],
+    [5, "berry-formation", { label: "Log expense", tab: "accounts", panel: "expenses" }],
+    [6, "monsoon", { label: "Log rainfall", tab: "accounts", panel: "rainfall" }],
+    [7, "monsoon", { label: "Log rainfall", tab: "accounts", panel: "rainfall" }],
+    [8, "monsoon", { label: "Log rainfall", tab: "accounts", panel: "rainfall" }],
+    [9, "pre-harvest", { label: "Go to Locations", href: "/settings#locations" }],
+    [10, "pre-harvest", { label: "Go to Locations", href: "/settings#locations" }],
+    [11, "harvest-peak", { label: "Log processing", tab: "processing" }],
+    [12, "harvest-peak", { label: "Log processing", tab: "processing" }],
+  ])("directs early tenants to the month-%i (%s) first action", (month, _season, action) => {
+    const hints = buildTenantWorkspaceHints(EARLY_TENANT, new Date(2026, month - 1, 15))
+
+    expect(hints[0]).toMatchObject({ id: "welcome-get-started", type: "tip" })
+    expect(hints[0].action).toEqual(action)
+  })
+
+  it("always gives the early-tenant hint somewhere to go, in every month", () => {
+    // The season table is hand-maintained, so this is the property that must hold no matter what
+    // anyone adds to it: a hint the tenant cannot act on is worse than no hint.
+    for (let month = 1; month <= 12; month++) {
+      const action = buildTenantWorkspaceHints(EARLY_TENANT, new Date(2026, month - 1, 15))[0].action as
+        | { label?: string; tab?: string; href?: string }
+        | undefined
+
+      expect(action?.label, `month ${month} has no label`).toBeTruthy()
+      expect(Boolean(action?.tab || action?.href), `month ${month} has neither a tab nor an href`).toBe(true)
+    }
   })
 
   it("keeps owner-facing status flags aligned with the shared guidance", () => {
