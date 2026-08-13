@@ -122,6 +122,13 @@ describe("assembled policy", () => {
     expect(CONTENT_SECURITY_POLICY).toContain("connect-src")
   })
 
+  it("lets Sentry Replay build its compression worker from a blob", () => {
+    // No worker-src means the browser falls back to script-src, which has no blob:, and the
+    // worker is refused without a word in any log. Same silent-failure shape as the malformed
+    // ingest wildcard that kept client-side Sentry dark for months.
+    expect(CONTENT_SECURITY_POLICY).toMatch(/worker-src [^;]*\bblob:/)
+  })
+
   it("contains no malformed partial-label wildcard in any directive", () => {
     // Catches `o*.host`, `api*.host` etc. anywhere in the policy, not just connect-src.
     expect(CONTENT_SECURITY_POLICY).not.toMatch(/[A-Za-z0-9-]+\*\./)

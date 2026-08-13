@@ -24,7 +24,6 @@ import {
   Loader2,
   PlusCircle,
   Trash2,
-  Briefcase,
   Users,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
@@ -36,7 +35,7 @@ import { EmptyState } from "@/components/ui/empty-state"
 import { trackRecordCreated } from "@/lib/track-action"
 import { useSingleFlight } from "@/hooks/use-single-flight"
 import AttendanceDeviceSettings from "@/components/attendance-device-settings"
-import AssignWorkSheet from "@/components/attendance/assign-work-sheet"
+import WorkerAllocation from "@/components/attendance/worker-allocation"
 
 type AttendanceWorker = {
   id: string
@@ -126,10 +125,7 @@ export default function AttendanceTab() {
   const [pickingWorkerIds, setPickingWorkerIds] = useState<string[]>([])
   const [locations, setLocations] = useState<Array<{ id: string; name: string; code?: string | null }>>([])
   const [activities, setActivities] = useState<Array<{ code: string; reference?: string | null }>>([])
-  const [selecting, setSelecting] = useState(false)
-  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
-  const [assignOpen, setAssignOpen] = useState(false)
-  const [assigning, setAssigning] = useState(false)
+  const [assigningWorkerId, setAssigningWorkerId] = useState<string | null>(null)
 
   const weekDays = useMemo(() => getWeekDays(weekOffset), [weekOffset])
 
@@ -219,40 +215,29 @@ export default function AttendanceTab() {
     return map
   }, [assignments])
 
-  const toggleSelected = (id: string) =>
-    setSelectedIds((prev) => {
-      const next = new Set(prev)
-      if (next.has(id)) next.delete(id)
-      else next.add(id)
-      return next
-    })
-
-  const exitSelecting = () => { setSelecting(false); setSelectedIds(new Set()) }
-
-  const handleAssign = async (payload: {
-    activityCode: string
-    locationId: string | null
-    dayFraction: number
-    rate: number | null
-    lumpSum: number | null
-  }) => {
-    setAssigning(true)
+  // One worker, one job, one deliberate act -- individual rather than bulk, at the estate
+  // owner's request. Returns whether it landed so the row can keep its dropdowns open on failure
+  // instead of silently discarding what was typed.
+  const handleAddAssignment = async (
+    workerId: string,
+    payload: { activityCode: string; locationId: string | null; dayFraction: number },
+  ): Promise<boolean> => {
+    setAssigningWorkerId(workerId)
     try {
       const res = await fetch("/api/attendance/assignments", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ date: selectedDate, workerIds: Array.from(selectedIds), ...payload }),
+        body: JSON.stringify({ date: selectedDate, workerIds: [workerId], ...payload }),
       })
       const data = await res.json().catch(() => ({}))
-      if (!res.ok || !data?.success) throw new Error(data?.error || "Could not save the work allocation")
-      toast.success(`Work set for ${data.assigned} ${data.assigned === 1 ? "worker" : "workers"}`)
-      setAssignOpen(false)
-      exitSelecting()
+      if (!res.ok || !data?.success) throw new Error(data?.error || "Could not save the work")
       await loadSnapshot(selectedDate)
+      return true
     } catch (e: unknown) {
-      toast.error(e instanceof Error ? e.message : "Could not save the work allocation")
+      toast.error(e instanceof Error ? e.message : "Could not save the work")
+      return false
     } finally {
-      setAssigning(false)
+      setAssigningWorkerId(null)
     }
   }
 
@@ -539,35 +524,6 @@ export default function AttendanceTab() {
 
         {error && <p className="text-sm text-red-600 px-1">{error}</p>}
 
-        {/* Allocation bar. Only meaningful once there are codes to assign, so estates that have
-            not set any up never see it. */}
-        {!loading && workers.length > 0 && activities.length > 0 && (
-          selecting ? (
-            <div className="flex items-center gap-2 rounded-2xl bg-stone-900 px-4 py-3 text-white">
-              <span className="text-sm font-bold">{selectedIds.size} selected</span>
-              <button type="button"
-                      onClick={() => setSelectedIds(new Set(workers.map((w) => w.id)))}
-                      className="rounded-lg bg-white/10 px-3 py-1.5 text-xs font-bold">All</button>
-              <button type="button"
-                      onClick={() => setSelectedIds(new Set(presentWorkerIds))}
-                      className="rounded-lg bg-white/10 px-3 py-1.5 text-xs font-bold">Present</button>
-              <span className="flex-1" />
-              <Button size="sm" disabled={selectedIds.size === 0} onClick={() => setAssignOpen(true)}
-                      className="h-9 bg-emerald-500 font-bold hover:bg-emerald-400">Set work</Button>
-              <button type="button" onClick={exitSelecting}
-                      className="rounded-lg px-2 py-1.5 text-xs font-bold text-white/70">Done</button>
-            </div>
-          ) : (
-            <button type="button" onClick={() => setSelecting(true)}
-                    className="flex w-full items-center justify-center gap-2 rounded-2xl border border-stone-200
-                               bg-white px-4 py-3 text-sm font-bold text-stone-600 touch-manipulation
-                               dark:border-white/[0.08] dark:bg-transparent">
-              <Briefcase className="h-4 w-4" />
-              Allocate work to the crew
-            </button>
-          )
-        )}
-
         {loading ? (
           <div className="space-y-2">
             {[1, 2, 3, 4, 5].map((i) => (
@@ -583,40 +539,26 @@ export default function AttendanceTab() {
             const record = recordByWorkerId.get(worker.id)
             const isBiometric = isPresent && record?.source === "biometric"
             const rows = assignmentsByWorker.get(worker.id) || []
-            const isSelected = selectedIds.has(worker.id)
-            const act = () => (selecting ? toggleSelected(worker.id) : toggleWorker(worker.id))
+            const act = () => toggleWorker(worker.id)
             return (
+              // Tapping anywhere on the row still toggles presence -- that is the whole point on a
+              // phone. But the row is not itself a button: it contains a delete button, a dismiss
+              // button per allocation chip, and two dropdowns, and controls nested inside a
+              // role="button" are not reachable by assistive tech, which would also announce the
+              // row as one button named after every word in it. The check circle carries the real
+              // semantics; keyboard users get that.
               <div
                 key={worker.id}
-                role="button"
-                tabIndex={0}
                 onClick={act}
-                onKeyDown={(event) => {
-                  if (event.key === "Enter" || event.key === " ") {
-                    event.preventDefault()
-                    act()
-                  }
-                }}
                 className={cn(
                   "w-full flex items-center justify-between rounded-2xl px-4 py-4 cursor-pointer",
                   "transition-all active:scale-[0.98] touch-manipulation",
                   isPresent
                     ? "bg-emerald-600 shadow-md shadow-emerald-100"
                     : "bg-white shadow-sm",
-                  selecting && isSelected && "ring-2 ring-offset-2 ring-stone-900",
                 )}
               >
                 <div className="text-left min-w-0 flex items-start gap-3">
-                  {selecting && (
-                    <span className={cn(
-                      "mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-md border-2 text-[11px] font-black",
-                      isSelected
-                        ? "border-stone-900 bg-stone-900 text-white"
-                        : isPresent ? "border-white/70" : "border-stone-300",
-                    )}>
-                      {isSelected ? "✓" : ""}
-                    </span>
-                  )}
                   <div className="min-w-0">
                   <p className={cn(
                     "text-base font-bold leading-tight truncate",
@@ -667,12 +609,18 @@ export default function AttendanceTab() {
                         </span>
                       ))}
                     </div>
-                  ) : isPresent ? (
-                    <p className={cn("mt-1.5 text-[11px] font-semibold",
-                                     isPresent ? "text-emerald-100/80" : "text-stone-400")}>
-                      Here, but no work set yet
-                    </p>
                   ) : null}
+
+                  {activities.length > 0 && (
+                    <WorkerAllocation
+                      workerEstate={worker.estate ?? null}
+                      locations={locations}
+                      activities={activities}
+                      saving={assigningWorkerId === worker.id}
+                      present={isPresent}
+                      onAdd={(payload) => handleAddAssignment(worker.id, payload)}
+                    />
+                  )}
 
                   {/* Work recorded for someone nobody marked present. Surfaced rather than
                       auto-corrected: the fix is a judgement call, not something a screen
@@ -706,12 +654,18 @@ export default function AttendanceTab() {
                   >
                     {isRemoving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
                   </button>
-                  <div className={cn(
-                    "flex h-9 w-9 shrink-0 items-center justify-center rounded-xl transition-all",
-                    isPresent ? "bg-white/20" : "border-2 border-stone-200 bg-white",
-                  )}>
+                  <button
+                    type="button"
+                    aria-pressed={isPresent}
+                    aria-label={`${worker.name} present`}
+                    onClick={(event) => { event.stopPropagation(); act() }}
+                    className={cn(
+                      "flex h-9 w-9 shrink-0 items-center justify-center rounded-xl transition-all touch-manipulation",
+                      isPresent ? "bg-white/20" : "border-2 border-stone-200 bg-white",
+                    )}
+                  >
                     {isPresent && <Check className="h-5 w-5 text-white stroke-[3]" />}
-                  </div>
+                  </button>
                 </div>
               </div>
             )
@@ -886,17 +840,6 @@ export default function AttendanceTab() {
         </div>
       )}
 
-      <AssignWorkSheet
-        open={assignOpen}
-        saving={assigning}
-        targets={workers
-          .filter((w) => selectedIds.has(w.id))
-          .map((w) => ({ id: w.id, name: w.name, kind: w.kind ?? "individual", headcount: w.headcount ?? null }))}
-        locations={locations}
-        activities={activities}
-        onCancel={() => setAssignOpen(false)}
-        onSubmit={handleAssign}
-      />
     </div>
   )
 }

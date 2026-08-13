@@ -40,8 +40,14 @@ const SelectContent = React.forwardRef<
   <SelectPrimitive.Content
     ref={ref}
     className={cn(
-      "relative z-50 min-w-[8rem] max-h-[70vh] overflow-hidden rounded-md border-[1.5px] border-border/90 bg-popover text-popover-foreground shadow-[0_18px_32px_-20px_rgba(15,23,42,0.65)] animate-in fade-in-80 backdrop-blur-sm",
-      position === "popper" && "translate-y-1",
+      "relative z-50 min-w-[8rem] overflow-hidden rounded-md border-[1.5px] border-border/90 bg-popover text-popover-foreground shadow-[0_18px_32px_-20px_rgba(15,23,42,0.65)] animate-in fade-in-80 backdrop-blur-sm",
+      // A fixed max height is a height Radix cannot shrink, so a list taller than the space below
+      // the trigger gets flipped bodily above it -- off the top of the screen, unreachable. Real
+      // case: a tenant's 80 activity codes rendered a 980px listbox at y=-279 on a phone. The
+      // popper var is the height that actually fits, so the list scrolls in place instead.
+      position === "popper"
+        ? "max-h-[min(70vh,var(--radix-select-content-available-height))] translate-y-1"
+        : "max-h-[70vh]",
       className,
     )}
     position={position}
