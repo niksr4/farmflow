@@ -360,7 +360,17 @@ export default function WorkerLedgerTab() {
                     ) : (
                       <TableRow key={e.id}>
                         <TableCell className="text-sm">{e.entryDate.slice(0, 10)}</TableCell>
-                        <TableCell className="font-medium text-sm">{e.workerName}</TableCell>
+                        <TableCell className="font-medium text-sm">
+                          {e.workerName}
+                          {/* The Description column is desktop-only, so on a phone the ledger was
+                              a list of amounts with no indication of what any of them were for.
+                              Surfaced here as a sub-line rather than a sixth column. */}
+                          {e.description && (
+                            <span className="mt-0.5 block text-xs font-normal text-muted-foreground sm:hidden">
+                              {e.description}
+                            </span>
+                          )}
+                        </TableCell>
                         <TableCell>
                           <Badge variant="outline" className={`text-xs ${TYPE_COLORS[e.entryType]}`}>
                             {TYPE_LABELS[e.entryType]}

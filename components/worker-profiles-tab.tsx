@@ -2,13 +2,14 @@
 
 import { useState, useEffect, useCallback } from "react"
 import { todayIso } from "@/lib/date-utils"
-import { Plus, Pencil, UserX, Check, X, Loader2 } from "lucide-react"
+import { Plus, Pencil, UserX, Check, X, Loader2, ChevronDown, ChevronUp } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Badge } from "@/components/ui/badge"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
 import { EmptyStateTable } from "@/components/ui/empty-state"
 import { FieldLabel } from "@/components/ui/field-label"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
@@ -22,6 +23,18 @@ import type { LocationOption } from "@/components/inventory-system/types"
 import { formatLocationLabel } from "@/lib/location-label"
 
 type WorkerType = "permanent" | "seasonal" | "contractor"
+
+/** Label/value row used by the mobile card list's expanded section. */
+function MobileField({ label, value, mono = false }: { label: string; value: string; mono?: boolean }) {
+  return (
+    <div className="flex items-baseline justify-between gap-3">
+      <span className="shrink-0 text-xs font-semibold uppercase tracking-wide text-stone-400">{label}</span>
+      <span className={`min-w-0 text-right text-sm text-stone-700 dark:text-stone-300 ${mono ? "font-mono" : ""}`}>
+        {value}
+      </span>
+    </div>
+  )
+}
 
 type Worker = {
   id: string
@@ -81,6 +94,10 @@ export default function WorkerProfilesTab() {
   const [loading, setLoading] = useState(true)
   const [isAdding, setIsAdding] = useState(false)
   const [editingId, setEditingId] = useState<string | null>(null)
+  // Phone and bank details were `hidden sm:table-cell` -- unreachable on a phone, which is
+  // the device you would actually call a worker from. The mobile list shows the essentials
+  // and puts the rest one tap away rather than dropping them or cramming eight columns in.
+  const [expandedWorkerId, setExpandedWorkerId] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
   const [form, setForm] = useState(EMPTY_FORM)
   // Same data-driven gate as the attendance tab: estates without a terminal see no
@@ -410,7 +427,96 @@ export default function WorkerProfilesTab() {
           ) : workerControls.isFiltering && workerControls.items.length === 0 ? (
             <p className="py-8 text-center text-sm text-muted-foreground">No workers match your search.</p>
           ) : (
-            <div className="overflow-x-auto">
+            <>
+            {/* Mobile: card list with progressive disclosure. Same data as the table above,
+                fewer things on screen at once -- the pattern Labour and Other Expenses use. */}
+            <div className="divide-y divide-stone-100 sm:hidden dark:divide-white/[0.06]">
+              {workerControls.items.map((w) => {
+                const isExpanded = expandedWorkerId === w.id
+                const isEditing = editingId === w.id
+                const estate = w.locationId ? locationById.get(w.locationId) : null
+                return (
+                  <Collapsible
+                    key={w.id}
+                    open={isExpanded || isEditing}
+                    onOpenChange={() => setExpandedWorkerId(isExpanded ? null : w.id)}
+                  >
+                    <CollapsibleTrigger className="w-full text-left">
+                      <div className="flex items-center justify-between gap-3 px-1 py-3.5 active:bg-stone-50 touch-manipulation dark:active:bg-white/[0.03]">
+                        <div className="min-w-0 flex-1">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <p className="truncate text-sm font-bold text-stone-800 dark:text-stone-100">{w.name}</p>
+                            {w.workerType && (
+                              <Badge variant="outline" className={`text-[10px] ${WORKER_TYPE_COLORS[w.workerType]}`}>
+                                {WORKER_TYPE_LABELS[w.workerType]}
+                              </Badge>
+                            )}
+                          </div>
+                          <p className="mt-0.5 text-sm font-semibold tabular-nums text-emerald-700 dark:text-emerald-500">
+                            {w.dailyRate != null ? `₹${w.dailyRate.toLocaleString("en-IN")}/day` : "No rate set"}
+                          </p>
+                        </div>
+                        <span className="shrink-0 text-stone-400">
+                          {isExpanded || isEditing ? <ChevronUp className="h-5 w-5" /> : <ChevronDown className="h-5 w-5" />}
+                        </span>
+                      </div>
+                    </CollapsibleTrigger>
+
+                    <CollapsibleContent>
+                      {isEditing ? (
+                        <div className="space-y-2 bg-stone-50/60 px-1 pb-4 dark:bg-white/[0.02]">
+                          <Input value={editForm.name} onChange={(e) => setEditForm((f) => ({ ...f, name: e.target.value }))} placeholder="Name" />
+                          <Input value={editForm.dailyRate} onChange={(e) => setEditForm((f) => ({ ...f, dailyRate: e.target.value }))} placeholder="Daily rate" inputMode="decimal" />
+                          <Input value={editForm.phone} onChange={(e) => setEditForm((f) => ({ ...f, phone: e.target.value }))} placeholder="Phone" inputMode="tel" />
+                          <Input value={editForm.bankName} onChange={(e) => setEditForm((f) => ({ ...f, bankName: e.target.value }))} placeholder="Bank name" />
+                          <Input value={editForm.bankAccount} onChange={(e) => setEditForm((f) => ({ ...f, bankAccount: e.target.value }))} placeholder="Account no." />
+                          <Input value={editForm.bankIfsc} onChange={(e) => setEditForm((f) => ({ ...f, bankIfsc: e.target.value }))} placeholder="IFSC" />
+                          {hasBiometricDevices && (
+                            <Input value={editForm.deviceUserCode} onChange={(e) => setEditForm((f) => ({ ...f, deviceUserCode: e.target.value }))} placeholder="Finger ID" inputMode="numeric" />
+                          )}
+                          <div className="flex gap-2 pt-1">
+                            <Button size="sm" className="flex-1" disabled={saving} onClick={() => handleSaveEdit(w.id)}>
+                              {saving ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <Check className="mr-1.5 h-3.5 w-3.5" />}
+                              Save
+                            </Button>
+                            <Button size="sm" variant="outline" className="flex-1" onClick={() => setEditingId(null)}>
+                              <X className="mr-1.5 h-3.5 w-3.5" />
+                              Cancel
+                            </Button>
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="space-y-1.5 bg-stone-50/60 px-1 pb-4 pt-1 text-sm dark:bg-white/[0.02]">
+                          <MobileField label="Phone" value={w.phone || "—"} />
+                          <MobileField
+                            label="Bank"
+                            value={w.bankName ? `${w.bankName}${w.bankAccount ? ` · ${w.bankAccount}` : ""}${w.bankIfsc ? ` (${w.bankIfsc})` : ""}` : "—"}
+                          />
+                          {showEstateField && (
+                            <MobileField label="Estate" value={estate ? estate.estate || estate.name : "Unassigned"} />
+                          )}
+                          {hasBiometricDevices && <MobileField label="Finger ID" value={w.deviceUserCode || "—"} mono />}
+                          {canWrite && (
+                            <div className="flex gap-2 pt-2">
+                              <Button size="sm" variant="outline" className="flex-1" onClick={() => startEdit(w)}>
+                                <Pencil className="mr-1.5 h-3.5 w-3.5" />
+                                Edit
+                              </Button>
+                              <Button size="sm" variant="outline" className="flex-1 text-destructive" onClick={() => handleDeactivate(w.id, w.name)}>
+                                <UserX className="mr-1.5 h-3.5 w-3.5" />
+                                Deactivate
+                              </Button>
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </CollapsibleContent>
+                  </Collapsible>
+                )
+              })}
+            </div>
+
+            <div className="hidden overflow-x-auto sm:block">
               <Table>
                 <TableHeader>
                   <TableRow>
@@ -599,6 +705,7 @@ export default function WorkerProfilesTab() {
                 </TableBody>
               </Table>
             </div>
+            </>
           )}
         </CardContent>
       </Card>

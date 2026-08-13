@@ -6,6 +6,7 @@ const DummyIcon = () => null
 const baseInput: DashboardTabItemsInput = {
   canShowAttendance: false,
   canShowAccounts: false,
+  canShowPicking: false,
   canShowProcessingWorkspace: false,
   processingWorkspaceLabel: "Pulping",
   processingWorkspaceIcon: DummyIcon,

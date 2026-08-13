@@ -70,7 +70,12 @@ export async function GET(request: Request) {
             pr.id,
             pr.worker_id,
             aw.full_name AS worker_name,
-            pr.pick_date,
+            -- ::text is load-bearing. Without it the Neon driver hands back a JS Date, which
+            -- String()s to "Wed Jan 28 2026 00:00:00 GMT+0530" -- and the client slices the
+            -- first 10 chars, so the tab rendered "Wed Jan 28" and fed that same string into a
+            -- <input type="date"> on edit, which then failed this route's YYYY-MM-DD check on
+            -- save. See the Neon date convention note in CLAUDE.md.
+            pr.pick_date::text AS pick_date,
             pr.kg_picked,
             pr.rate_per_kg,
             (pr.kg_picked * pr.rate_per_kg) AS amount,

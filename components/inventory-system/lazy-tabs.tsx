@@ -39,6 +39,9 @@ const AccountsPage = dynamic(() => import("@/components/accounts-page"), {
 const AttendanceWorkspace = dynamic(() => import("@/components/attendance-workspace"), {
   loading: () => <TabPanelLoading label="Attendance" />,
 })
+const PickingLogTab = dynamic(() => import("@/components/picking-log-tab"), {
+  loading: () => <TabPanelLoading label="Picking Log" />,
+})
 const ActivityLogTab = dynamic(() => import("@/components/activity-log-tab"), {
   loading: () => <TabPanelLoading label="Activity log" />,
 })
@@ -111,6 +114,7 @@ export {
   AccountsPage,
   AttendanceWorkspace,
   ActivityLogTab,
+  PickingLogTab,
   DispatchTab,
   ProcessingTab,
   RainfallWeatherTab,

@@ -1,23 +1,5 @@
 import type React from "react"
-import {
-  BarChart3,
-  BookOpen,
-  Brain,
-  CheckCircle2,
-  CloudRain,
-  FileText,
-  Factory,
-  History,
-  Leaf,
-  List,
-  Newspaper,
-  NotebookPen,
-  Receipt,
-  Scale,
-  TrendingUp,
-  Truck,
-  Users,
-} from "lucide-react"
+import { BarChart3, BookOpen, Brain, Check, CheckCircle2, CloudRain, CreditCard, Factory, FileText, History, Leaf, LineChart, List, Newspaper, NotebookPen, Receipt, Scale, Sprout, TrendingUp, Truck, Users, Wheat } from "lucide-react"
 
 export type DashboardTabItem = {
   value: string
@@ -30,6 +12,7 @@ export type DashboardTabItemsInput = {
   // operations
   canShowAttendance: boolean
   canShowAccounts: boolean
+  canShowPicking: boolean
   canShowProcessingWorkspace: boolean
   processingWorkspaceLabel: string
   processingWorkspaceIcon: React.ComponentType<{ className?: string }>
@@ -73,7 +56,7 @@ export function buildDashboardTabItems(input: DashboardTabItemsInput): {
   const compact = (items: Array<DashboardTabItem | null>) => items.filter(Boolean) as DashboardTabItem[]
 
   const operations = compact([
-    input.canShowAttendance ? { value: "attendance", label: "Attendance", icon: Users } : null,
+    input.canShowAttendance ? { value: "attendance", label: "Attendance", icon: Check } : null,
     input.canShowAccounts
       ? {
           value: "accounts",
@@ -82,6 +65,7 @@ export function buildDashboardTabItems(input: DashboardTabItemsInput): {
           subtabs: ["Daily Labour", "Non-Labour Expenses", "Cost Codes"],
         }
       : null,
+    input.canShowPicking ? { value: "picking", label: "Picking Log", icon: Wheat } : null,
     input.canShowProcessingWorkspace
       ? {
           value: "processing",
@@ -135,11 +119,11 @@ export function buildDashboardTabItems(input: DashboardTabItemsInput): {
 
   const insights = compact([
     input.canShowBalanceSheet ? { value: "balance-sheet", label: "Live Balance", icon: Scale } : null,
-    input.canShowSeasonPl ? { value: "season-pl", label: "P&L Report", icon: TrendingUp } : null,
+    input.canShowSeasonPl ? { value: "season-pl", label: "P&L Report", icon: LineChart } : null,
     input.canShowReceivables ? { value: "receivables", label: "Receivables", icon: Receipt } : null,
-    input.canShowBilling ? { value: "billing", label: "Billing", icon: Receipt } : null,
+    input.canShowBilling ? { value: "billing", label: "Billing", icon: CreditCard } : null,
     input.canShowSeason ? { value: "season", label: "Season Summary", icon: BarChart3 } : null,
-    input.canShowYieldForecast ? { value: "yield-forecast", label: "Harvest Forecast", icon: TrendingUp } : null,
+    input.canShowYieldForecast ? { value: "yield-forecast", label: "Harvest Forecast", icon: Sprout } : null,
     input.canShowPlantHealth ? { value: "plant-health", label: "Crop Health", icon: Leaf } : null,
     input.canShowAiAnalysis ? { value: "ai-analysis", label: "AI Insights", icon: Brain } : null,
     input.canShowNews ? { value: "news", label: "Market News", icon: Newspaper } : null,

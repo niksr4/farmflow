@@ -99,8 +99,10 @@ interface AccountsIntelligence {
 type AccountsTabValue = "labour" | "expenses" | "activities" | "picking"
 type AccountsView = AccountsTabValue | "dashboard" | "export"
 
-// TEMPORARY: Picking crashes for some tenants in production — taken offline until
-// the underlying issue is fixed. Remove this flag to bring it back.
+// Picking is now its own top-level tab (see components/inventory-system/tab-items.ts), so it is
+// no longer offered as an Accounts sub-tab -- one home, not two. The flag stays as a kill switch
+// for the sub-tab path only; the crash it was added for was a date-serialisation bug in
+// app/api/picking-records/route.ts, fixed and covered by tests/date-column-serialisation.test.ts.
 const PICKING_TAB_DISABLED = true
 
 const normalizeAccountsTab = (

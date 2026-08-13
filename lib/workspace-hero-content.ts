@@ -389,16 +389,14 @@ export function buildHeroContent(p: BuildHeroContentParams): HeroContent {
             label: "Total costs this FY",
             value: accountsTotalsLoading
               ? "Loading..."
-              : formatCurrency(accountsTotals.laborTotal + accountsTotals.otherTotal, 0),
+              : formatCurrency(accountsTotals.grandTotal, 0),
             // Newline rather than a separator: stacked keeps the rail's column rhythm, and on a
             // phone a single line would wrap at an arbitrary point mid-figure. The renderer sets
             // whitespace-pre-line; every other subValue is a single line and is unaffected.
             subValue: accountsTotalsLoading
               ? undefined
               : `Labour ${formatCurrency(accountsTotals.laborTotal, 0)}\nExpenses ${formatCurrency(accountsTotals.otherTotal, 0)}`,
-            metricValue: accountsTotalsLoading
-              ? null
-              : accountsTotals.laborTotal + accountsTotals.otherTotal,
+            metricValue: accountsTotalsLoading ? null : accountsTotals.grandTotal,
           },
           homeThirdStat,
         ],

@@ -29,20 +29,23 @@ describe("rate limit policy", () => {
     expect(isSensitiveRateLimitKey("accountPasswordChange")).toBe(true)
   })
 
-  it("classifies the forgot-password IP guard as sensitive but not the signup IP guard", () => {
-    // Characterisation test: documents an inconsistency, not an intended design.
+  it("treats both per-IP auth guards as sensitive", () => {
     // authForgotPasswordIp and authSignupIp are the same kind of control — a per-IP guard on a
-    // public auth endpoint — but only the former fails closed. authSignupIp alone would fail
-    // open if the counter store were unavailable. Not currently reachable, because the signup
-    // route runs the sensitive authSignup check immediately afterwards and that still fails
-    // closed. See findings_log.md, cycle 1 files 31-45.
+    // public auth endpoint, same 15/hour limit — so they must fail the same way. authSignupIp
+    // used to fail *open*, which this test previously recorded as a known inconsistency.
+    //
+    // It was never exploitable: app/api/auth/signup/route.ts runs authSignupIp and then the
+    // fail-closed authSignup on the next line, so an unavailable counter store blocked signup
+    // either way. The fix is defence in depth — it removes a trap for whoever reorders or
+    // removes that second check, since nothing else would have flagged the per-IP cap silently
+    // disappearing. Failing closed costs nothing real: the counter store is the app's own
+    // database, and provisioning a tenant needs it anyway.
     expect(isSensitiveRateLimitKey("authForgotPasswordIp")).toBe(true)
-    expect(isSensitiveRateLimitKey("authSignupIp")).toBe(false)
+    expect(isSensitiveRateLimitKey("authSignupIp")).toBe(true)
 
-    expect(requiresDistributedRateLimit("authForgotPasswordIp", { NODE_ENV: "production" } as NodeJS.ProcessEnv)).toBe(
-      true,
-    )
-    expect(requiresDistributedRateLimit("authSignupIp", { NODE_ENV: "production" } as NodeJS.ProcessEnv)).toBe(false)
+    for (const key of ["authForgotPasswordIp", "authSignupIp"] as const) {
+      expect(requiresDistributedRateLimit(key, { NODE_ENV: "production" } as NodeJS.ProcessEnv)).toBe(true)
+    }
   })
 
   it("never requires distributed rate limiting outside production", () => {

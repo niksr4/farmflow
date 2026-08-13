@@ -68,7 +68,11 @@ export async function GET(request: Request) {
         accountsSql`
           SELECT
             wl.id, wl.worker_id, aw.full_name AS worker_name,
-            wl.entry_date, wl.entry_type, wl.amount, wl.description, wl.created_at
+            -- ::text for the same reason as picking-records: a bare date column comes back as a JS
+            -- Date, String()s to "Wed Jan 28 2026 00:00:00 GMT+0530", and the client slices the
+            -- first 10 characters of that. Both tabs were taken offline in 1272d15 for
+            -- "crashing for some tenants" -- some tenants being the ones with any records.
+            wl.entry_date::text AS entry_date, wl.entry_type, wl.amount, wl.description, wl.created_at
           FROM worker_ledger wl
           JOIN attendance_workers aw ON aw.id = wl.worker_id
           WHERE wl.tenant_id = ${tenantContext.tenantId} ${workerFilter} ${startFilter} ${endFilter} ${estateFilter}

@@ -5,46 +5,52 @@ import { createPortal } from "react-dom"
 import dynamic from "next/dynamic"
 import { useTheme } from "next-themes"
 import {
-  Check,
-  Download,
-  Upload,
-  List,
-  Home,
-  LogOut,
-  Edit,
-  Trash2,
-  Plus,
-  RefreshCw,
-  Search,
-  SortAsc,
-  SortDesc,
-  History,
-  Brain,
-  Loader2,
-  TrendingUp,
-  BarChart3,
   AlertTriangle,
+  BarChart3,
+  BookOpen,
+  Brain,
+  Check,
   CheckCircle2,
   CloudRain,
-  Newspaper,
-  Truck,
-  Users,
-  Factory,
-  Leaf,
-  Droplets,
-  NotebookPen,
-  Receipt,
-  Settings,
-  Info,
-  BookOpen,
-  Scale,
-  FileText,
   Coins,
-  Sun,
-  Moon,
+  CreditCard,
+  Download,
+  Droplets,
+  Edit,
+  Factory,
+  FileText,
+  History,
+  Home,
+  Info,
+  Leaf,
   LifeBuoy,
-  ShieldCheck,
+  LineChart,
+  List,
+  Loader2,
+  LogOut,
   Menu,
+  Moon,
+  Newspaper,
+  NotebookPen,
+  Plus,
+  Receipt,
+  RefreshCw,
+  Scale,
+  Search,
+  Settings,
+  ShieldCheck,
+  SortAsc,
+  SortDesc,
+  Sprout,
+  Stethoscope,
+  Sun,
+  Tag,
+  Trash2,
+  TrendingUp,
+  Truck,
+  Upload,
+  Users,
+  Wheat,
   X,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
@@ -204,6 +210,7 @@ import {
   AccountsPage,
   AttendanceWorkspace,
   ActivityLogTab,
+  PickingLogTab,
   DispatchTab,
   ProcessingTab,
   RainfallWeatherTab,
@@ -2822,6 +2829,7 @@ export default function InventorySystem() {
         buildDashboardTabItems({
           canShowAttendance,
           canShowAccounts,
+          canShowPicking: canShowPickingLog,
           canShowProcessingWorkspace,
           processingWorkspaceLabel,
           processingWorkspaceIcon,
@@ -2855,6 +2863,7 @@ export default function InventorySystem() {
       [
         canShowAttendance,
         canShowAccounts,
+        canShowPickingLog,
         canShowProcessingWorkspace,
         processingWorkspaceLabel,
         processingWorkspaceIcon,
@@ -2991,6 +3000,7 @@ export default function InventorySystem() {
   const visibleTabs = useMemo(() => {
     const tabs: string[] = ["home"]
     if (canShowAttendance) tabs.push("attendance")
+    if (canShowPickingLog) tabs.push("picking")
     if (canShowInventoryWorkspace) tabs.push("inventory")
     if (canShowAccounts) tabs.push("accounts")
     if (canShowBalanceSheet) tabs.push("balance-sheet")
@@ -3025,6 +3035,7 @@ export default function InventorySystem() {
     canShowAccounts,
     canShowAttendance,
     canShowBalanceSheet,
+    canShowPickingLog,
     canShowAiAnalysis,
     canShowBilling,
     canShowDispatch,
@@ -3085,24 +3096,24 @@ export default function InventorySystem() {
         pepper: { label: "Pepper", icon: Leaf },
         accounts: { label: "Labour & Costs", icon: Users },
         "balance-sheet": { label: "Financial Summary", icon: Scale },
-        "season-pl": { label: "Profit & Loss", icon: TrendingUp },
+        "season-pl": { label: "Profit & Loss", icon: LineChart },
         receivables: { label: "Money Owed", icon: Receipt },
-        billing: { label: "Billing", icon: Receipt },
+        billing: { label: "Billing", icon: CreditCard },
         season: { label: "This Season", icon: BarChart3 },
-        "yield-forecast": { label: "Harvest Forecast", icon: TrendingUp },
+        "yield-forecast": { label: "Harvest Forecast", icon: Sprout },
         "activity-log": { label: "Activity Log", icon: History },
         rainfall: { label: "Rain & Weather", icon: CloudRain },
         documents: { label: "Documents", icon: FileText },
         journal: { label: "Journal", icon: NotebookPen },
         resources: { label: "Resources", icon: BookOpen },
-        "plant-health": { label: "Crop Health", icon: Leaf },
+        "plant-health": { label: "Crop Health", icon: Stethoscope },
         "ai-analysis": { label: "AI Insights", icon: Brain },
         news: { label: "Market News", icon: Newspaper },
         curing: { label: "Curing & Drying", icon: Factory },
         quality: { label: "Quality Grading", icon: CheckCircle2 },
-        "market-pricing": { label: "Market Rates", icon: TrendingUp },
+        "market-pricing": { label: "Market Rates", icon: Tag },
         compliance: { label: "Compliance", icon: ShieldCheck },
-        picking: { label: "Picking Log", icon: List },
+        picking: { label: "Picking Log", icon: Wheat },
       }) as Record<string, { label: string; icon: React.ComponentType<{ className?: string }> }>,
     [processingWorkspaceIcon, processingWorkspaceLabel],
   )
@@ -4409,6 +4420,8 @@ export default function InventorySystem() {
             {/* ── Mobile home: estate header + gaps + quick log ── */}
             {isMobile && (
               <MobileHomeSection
+
+                heroStats={visibleHeroContent.stats}
                 key={estateRemountKey}
                 estateName={tenantSettings.estateName || ""}
                 canShowAccounts={canShowAccounts}
@@ -4870,6 +4883,12 @@ export default function InventorySystem() {
                 </div>
               </div>
               )}
+            </TabsContent>
+          )}
+
+          {canShowPickingLog && (
+            <TabsContent value="picking" className="space-y-6" forceMount={isTabLoaded("picking") ? true : undefined}>
+              <PickingLogTab key={estateRemountKey} />
             </TabsContent>
           )}
 

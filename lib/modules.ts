@@ -44,7 +44,7 @@ export const MODULES: ModuleDefinition[] = [
   { id: "season", label: "Season View", defaultEnabled: false },
   { id: "yield-forecast", label: "Harvest Forecast", defaultEnabled: false },
   { id: "labor", label: "Labour Management", defaultEnabled: true },
-  { id: "picking", label: "Picking Log", defaultEnabled: false },
+  { id: "picking", label: "Picking Log", defaultEnabled: true },
   { id: "market-pricing", label: "Market Pricing & Buyers", defaultEnabled: false },
   { id: "compliance", label: "Compliance & Certifications", defaultEnabled: false },
 ]

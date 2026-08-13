@@ -74,7 +74,14 @@ export default function PickingLogTab() {
   const [totalAmount, setTotalAmount] = useState(0)
   const [startDate, setStartDate] = useState(firstOfMonth())
   const [endDate, setEndDate] = useState(today())
-  const [filterWorker, setFilterWorker] = useState("")
+// Radix throws on <SelectItem value="">, which takes the whole tab down via the error boundary.
+// The "all" option therefore needs a real sentinel rather than the empty string that the rest of
+// this component uses for "no filter". This is what crashed the tab in production: the filter only
+// renders once a tenant has workers, so estates with an empty roster never hit it -- hence
+// "crashing for some tenants" in 1272d15.
+const ALL_WORKERS = "all"
+
+  const [filterWorker, setFilterWorker] = useState(ALL_WORKERS)
 
   const [isAdding, setIsAdding] = useState(false)
   const [editingId, setEditingId] = useState<string | null>(null)
@@ -107,7 +114,7 @@ export default function PickingLogTab() {
     setLoading(true)
     try {
       const params = new URLSearchParams({ startDate, endDate })
-      if (filterWorker) params.set("workerId", filterWorker)
+      if (filterWorker && filterWorker !== ALL_WORKERS) params.set("workerId", filterWorker)
       const res = await fetch(`/api/picking-records?${params}`)
       const data = await res.json()
       if (data.success) {
@@ -264,7 +271,7 @@ export default function PickingLogTab() {
             <Select value={filterWorker} onValueChange={setFilterWorker}>
               <SelectTrigger className="h-8 w-40 sm:w-44 text-sm"><SelectValue placeholder="All workers" /></SelectTrigger>
               <SelectContent>
-                <SelectItem value="">All workers</SelectItem>
+                <SelectItem value={ALL_WORKERS}>All workers</SelectItem>
                 {workers.map((w) => <SelectItem key={w.id} value={w.id}>{w.name}</SelectItem>)}
               </SelectContent>
             </Select>
@@ -385,7 +392,7 @@ export default function PickingLogTab() {
                     <TableHead className="text-right">Rate</TableHead>
                     <TableHead className="text-right">Amount</TableHead>
                     <TableHead className="hidden md:table-cell">Location</TableHead>
-                    <TableHead className="hidden sm:table-cell">Notes</TableHead>
+                    <TableHead className="hidden md:table-cell">Notes</TableHead>
                     {(canWrite || canDelete) && <TableHead className="w-20" />}
                   </TableRow>
                 </TableHeader>
@@ -406,7 +413,7 @@ export default function PickingLogTab() {
                             </SelectContent>
                           </Select>
                         </TableCell>
-                        <TableCell className="hidden sm:table-cell"><Input value={editForm.notes} onChange={(e) => setEditForm((f) => ({ ...f, notes: e.target.value }))} className="h-8 w-40" placeholder="Notes" /></TableCell>
+                        <TableCell className="hidden md:table-cell"><Input value={editForm.notes} onChange={(e) => setEditForm((f) => ({ ...f, notes: e.target.value }))} className="h-8 w-40" placeholder="Notes" /></TableCell>
                         <TableCell>
                           <div className="flex gap-1">
                             <Button size="icon" variant="ghost" className="h-7 w-7" disabled={saving} onClick={() => handleSaveEdit(r.id)}>
@@ -419,12 +426,20 @@ export default function PickingLogTab() {
                     ) : (
                       <TableRow key={r.id}>
                         <TableCell className="text-sm">{r.pickDate.slice(0, 10)}</TableCell>
-                        <TableCell className="font-medium text-sm">{r.workerName}</TableCell>
+                        <TableCell className="font-medium text-sm">
+                          {r.workerName}
+                          {/* Location is desktop-only below md and Notes below sm, so on a phone
+                              you could not tell which block was picked or read any note. Both are
+                              surfaced here as sub-lines rather than as extra columns. */}
+                          <span className="mt-0.5 block text-xs font-normal text-muted-foreground md:hidden">
+                            {[resolveLocationName(r.locationId), r.notes].filter(Boolean).join(" · ") || null}
+                          </span>
+                        </TableCell>
                         <TableCell className="text-right text-sm">{r.kgPicked.toLocaleString("en-IN", { maximumFractionDigits: 1 })}</TableCell>
                         <TableCell className="text-right text-sm">₹{r.ratePerKg}</TableCell>
                         <TableCell className="text-right text-sm font-medium">{formatCurrency(r.amount)}</TableCell>
                         <TableCell className="hidden md:table-cell text-xs text-muted-foreground">{resolveLocationName(r.locationId) || "—"}</TableCell>
-                        <TableCell className="hidden sm:table-cell text-xs text-muted-foreground max-w-[160px] truncate">{r.notes || "—"}</TableCell>
+                        <TableCell className="hidden md:table-cell text-xs text-muted-foreground max-w-[160px] truncate">{r.notes || "—"}</TableCell>
                         {(canWrite || canDelete) && (
                           <TableCell>
                             <TooltipProvider>

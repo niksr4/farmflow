@@ -20,21 +20,21 @@ const PEPPER_SEASONS: EstateSeason[] = ["post-harvest-pruning", "harvest-peak"]
 // Tab ordering by priority for each phase
 const SEASON_TAB_ORDER: Record<string, string[]> = {
   "harvest-peak": [
-    "home", "attendance", "accounts", "processing", "dispatch", "sales", "pepper",
+    "home", "attendance", "accounts", "picking", "processing", "dispatch", "sales", "pepper",
     "inventory", "rainfall", "season", "season-pl", "balance-sheet",
     "yield-forecast", "ai-analysis", "quality", "curing", "picking",
     "activity-log", "plant-health", "news", "market-pricing",
     "resources", "documents", "journal", "compliance", "receivables", "billing",
   ],
   "pre-harvest": [
-    "home", "attendance", "accounts", "processing", "inventory", "season", "rainfall",
+    "home", "attendance", "accounts", "picking", "processing", "inventory", "season", "rainfall",
     "dispatch", "sales", "season-pl", "balance-sheet", "yield-forecast",
     "ai-analysis", "activity-log", "plant-health", "news", "market-pricing",
     "resources", "documents", "journal", "quality", "curing", "picking",
     "compliance", "receivables", "billing",
   ],
   "post-harvest-pruning": [
-    "home", "attendance", "accounts", "processing", "dispatch", "sales", "pepper",
+    "home", "attendance", "accounts", "picking", "processing", "dispatch", "sales", "pepper",
     "inventory", "rainfall", "season", "season-pl", "balance-sheet",
     "activity-log", "ai-analysis", "quality", "curing", "yield-forecast",
     "plant-health", "news", "market-pricing", "resources", "documents",
@@ -42,7 +42,7 @@ const SEASON_TAB_ORDER: Record<string, string[]> = {
   ],
   // Off-season (berry-formation, monsoon, blossom) — labour & maintenance dominant
   "default": [
-    "home", "attendance", "accounts", "rainfall", "inventory", "season", "balance-sheet",
+    "home", "attendance", "accounts", "picking", "rainfall", "inventory", "season", "balance-sheet",
     "season-pl", "ai-analysis", "activity-log", "plant-health", "news",
     "market-pricing", "yield-forecast", "resources", "documents", "journal",
     "processing", "dispatch", "sales", "pepper", "quality", "curing", "picking",
@@ -54,7 +54,7 @@ const SEASON_TAB_ORDER: Record<string, string[]> = {
 export const SEASONAL_TABS = new Set(["processing", "dispatch", "sales", "pepper", "curing", "quality", "picking"])
 
 // Tabs that are always primary regardless of season
-export const ALWAYS_PRIMARY_TABS = new Set(["home", "attendance", "accounts", "inventory", "rainfall", "season"])
+export const ALWAYS_PRIMARY_TABS = new Set(["home", "attendance", "accounts", "picking", "inventory", "rainfall", "season"])
 
 export function getSeasonAwareTabOrder(availableTabs: string[]): string[] {
   const phase = getCurrentEstatePhase()
@@ -71,8 +71,8 @@ export function getSeasonQuickActions(availableTabs: string[]): string[] {
   const isPepper = PEPPER_SEASONS.includes(phase.season)
 
   const candidates = isHarvest
-    ? ["processing", "dispatch", "sales", ...(isPepper ? ["pepper"] : []), "accounts", "rainfall", "inventory", "season"]
-    : ["accounts", "rainfall", "inventory", "season", "ai-analysis", "resources", "plant-health"]
+    ? ["processing", "dispatch", "sales", ...(isPepper ? ["pepper"] : []), "accounts", "picking", "rainfall", "inventory", "season"]
+    : ["accounts", "picking", "rainfall", "inventory", "season", "ai-analysis", "resources", "plant-health"]
 
   return candidates.filter((t) => availableTabs.includes(t)).slice(0, 6)
 }
@@ -130,9 +130,9 @@ export function getMobileBottomNavTabs(availableTabs: string[]): string[] {
   // Always show accounts (labour+expenses) and rainfall
   // In harvest: swap one slot for processing
   if (isHarvest) {
-    return ["home", "processing", "accounts", "rainfall"].filter((t) => availableTabs.includes(t))
+    return ["home", "processing", "accounts", "picking", "rainfall"].filter((t) => availableTabs.includes(t))
   }
-  return ["home", "accounts", "rainfall", "inventory"].filter((t) => availableTabs.includes(t))
+  return ["home", "accounts", "picking", "rainfall", "inventory"].filter((t) => availableTabs.includes(t))
 }
 
 // Peak logging hours from HoneyFarm data: Mon 11am-12pm, Fri 5pm, Sat 10am

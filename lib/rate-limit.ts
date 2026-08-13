@@ -40,6 +40,12 @@ const SENSITIVE_RATE_LIMIT_KEYS = new Set<RateLimitKey>([
   "authSignupVerify",
   "authForgotPassword",
   "authForgotPasswordIp",
+  // Was the one IP-keyed auth control missing here, so it failed *open* while its twin
+  // authForgotPasswordIp -- same 15/hour limit, same shape of abuse -- failed closed. A counter
+  // query failure silently removed the per-IP cap on a public signup endpoint. Failing closed
+  // costs nothing real: the store is the app's own database, and provisioning a tenant needs it
+  // anyway, so a signup could not have succeeded during that window regardless.
+  "authSignupIp",
   "authResetPassword",
   "opsErrorIngest",
 ])

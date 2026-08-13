@@ -6,7 +6,7 @@ import TodayGapsCard from "@/components/today-gaps-card"
 import QuickLogPanel from "@/components/quick-log-panel"
 import WeekBatchEntry from "@/components/week-batch-entry"
 import { LOCATION_ALL } from "@/components/inventory-system/constants"
-import type { DrilldownOptions } from "@/components/inventory-system/types"
+import type { DrilldownOptions, HeroStat } from "@/components/inventory-system/types"
 
 type Props = {
   estateName: string
@@ -17,6 +17,15 @@ type Props = {
   onDrilldown: (opts: DrilldownOptions) => void
   onTabChange: (tab: string) => void
   onOpenSidebar: () => void
+  /**
+   * The *same* stats array the desktop home hero renders, not a hand-picked copy of it.
+   * Desktop and mobile are separate components (`HomeTab` is gated behind `!isMobile`), so
+   * nothing structurally stops them drifting -- and they had: desktop led with total cost for
+   * the fiscal year while mobile showed only this week's labour. Passing the array through
+   * means any stat added to the home hero appears on both surfaces automatically. Layout may
+   * differ between them; the data must not.
+   */
+  heroStats?: HeroStat[]
 }
 
 export default function MobileHomeSection({
@@ -28,6 +37,7 @@ export default function MobileHomeSection({
   onDrilldown,
   onTabChange,
   onOpenSidebar,
+  heroStats = [],
 }: Props) {
   const { t } = useLocale()
   // "All locations" is a view-filter sentinel, not a real location id — never forward it
@@ -46,6 +56,36 @@ export default function MobileHomeSection({
           <h1 className="text-2xl font-black text-white leading-tight">
             {estateName || "FarmFlow"}
           </h1>
+
+          {/* Stacked under the name rather than beside it: estate names run long, and a
+              side-by-side figure is the first thing to break on a narrow phone.
+              The first stat leads, the rest sit alongside it — same figures as desktop,
+              phone-shaped. */}
+          {heroStats.length > 0 && (
+            <div className="mt-4 space-y-3 border-t border-white/10 pt-3">
+              {heroStats.map((stat, index) => (
+                <div key={stat.label}>
+                  <p className="text-[9px] font-bold uppercase tracking-[0.18em] text-emerald-300/70">
+                    {stat.label}
+                  </p>
+                  <p
+                    className={
+                      index === 0
+                        ? "mt-0.5 text-2xl font-black tabular-nums text-white"
+                        : "mt-0.5 text-base font-bold tabular-nums text-white/90"
+                    }
+                  >
+                    {stat.value}
+                  </p>
+                  {stat.subValue && (
+                    <p className="mt-1 whitespace-pre-line text-[11px] leading-4 text-emerald-100/50">
+                      {stat.subValue}
+                    </p>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       </div>
 
