@@ -201,3 +201,54 @@ describe("CSV export matches the on-screen filter", () => {
     expect(page).toContain("disabled={!visibleRows.length}")
   })
 })
+
+describe("estates with no fingerprint reader", () => {
+  // Medappa Estates, 2026-08-13: the writer marked 21 of 23 workers present by hand every
+  // morning for ten days. Those rows carry no check_in_time -- only a terminal produces one --
+  // so status was derived as absent for the entire crew, every single day, while the muster
+  // roll they had just filled in said present. The owner reported it as "the workers show as
+  // absent because there is no thumb impression system", which was exactly right.
+  it("counts a hand-marked worker as present", () => {
+    const [row] = buildAttendanceReport([
+      { employeeCode: null, employeeName: "Hand marked", checkIn: null, checkOut: null, markedPresent: true },
+    ])
+
+    expect(row.status).toBe("P")
+    expect(row.inTime).toBe("00:00")
+    expect(row.outTime).toBe("00:00")
+    // No terminal saw them arrive, so there is no missing check-out to chase.
+    expect(row.missingCheckOut).toBe(false)
+  })
+
+  it("still counts an unmarked worker as absent", () => {
+    const [row] = buildAttendanceReport([
+      { employeeCode: null, employeeName: "Not marked", checkIn: null, checkOut: null, markedPresent: false },
+    ])
+
+    expect(row.status).toBe("A")
+  })
+
+  it("leaves device-driven rows exactly as they were", () => {
+    const [punchedBoth, punchedOnce] = buildAttendanceReport([
+      { employeeCode: "1", employeeName: "In and out", checkIn: "07:55:42", checkOut: "17:02:10" },
+      { employeeCode: "2", employeeName: "In only", checkIn: "07:55:42", checkOut: null },
+    ])
+
+    expect(punchedBoth.status).toBe("P")
+    expect(punchedBoth.missingCheckOut).toBe(false)
+    expect(punchedOnce.status).toBe("P")
+    expect(punchedOnce.missingCheckOut).toBe(true)
+  })
+
+  it("summary tiles agree with the per-row status", () => {
+    const rows = buildAttendanceReport([
+      { employeeCode: null, employeeName: "A", checkIn: null, checkOut: null, markedPresent: true },
+      { employeeCode: null, employeeName: "B", checkIn: null, checkOut: null, markedPresent: true },
+      { employeeCode: null, employeeName: "C", checkIn: null, checkOut: null, markedPresent: false },
+    ])
+    const summary = summariseAttendanceReport(rows)
+
+    expect(summary.present).toBe(2)
+    expect(summary.absent).toBe(1)
+  })
+})

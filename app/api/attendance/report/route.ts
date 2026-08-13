@@ -65,6 +65,11 @@ export async function GET(request: Request) {
           w.full_name,
           to_char(r.check_in_time AT TIME ZONE 'Asia/Kolkata', 'HH24:MI:SS')  AS check_in,
           to_char(r.check_out_time AT TIME ZONE 'Asia/Kolkata', 'HH24:MI:SS') AS check_out,
+          -- Presence is "the muster roll has a row for this worker today", not "a terminal saw
+          -- them". Estates with no fingerprint reader mark by hand and store no times, so
+          -- deriving status from check_in alone reported an entire crew absent on days they had
+          -- been marked present.
+          (r.id IS NOT NULL) AS marked_present,
           (SELECT report_date FROM target)::text AS report_date
         FROM attendance_workers w
         LEFT JOIN attendance_records r
@@ -100,6 +105,7 @@ export async function GET(request: Request) {
       full_name: string
       check_in: string | null
       check_out: string | null
+      marked_present: boolean
       report_date: string
     }>, Array<{ total: number; online: number }>]
 
@@ -109,6 +115,7 @@ export async function GET(request: Request) {
       employeeName: row.full_name,
       checkIn: row.check_in,
       checkOut: row.check_out,
+      markedPresent: Boolean(row.marked_present),
     }))
 
     const report = buildAttendanceReport(input)

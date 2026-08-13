@@ -22,6 +22,13 @@ export type AttendanceReportInput = {
   checkIn: string | null
   /** Null when the worker punched only once that day — see below. */
   checkOut: string | null
+  /**
+   * True when the muster roll records this worker for the day, whether or not a terminal ever
+   * saw them. Estates without a fingerprint reader mark attendance by hand, and those rows carry
+   * no check-in time at all — deriving presence from checkIn alone reported a full crew as absent
+   * on the very days the writer had marked them present.
+   */
+  markedPresent?: boolean
 }
 
 export type AttendanceReportRow = {
@@ -82,8 +89,13 @@ export const computeWorkDuration = (checkIn: string | null, checkOut: string | n
  */
 export function buildAttendanceReport(workers: AttendanceReportInput[]): AttendanceReportRow[] {
   return workers.map((worker, index) => {
-    const present = Boolean(worker.checkIn)
-    const missingCheckOut = present && !worker.checkOut
+    // A punch proves presence; so does a human ticking the muster roll. Only the former carries
+    // times, so a hand-marked worker is Present with blank times -- the same treatment a
+    // single-punch worker already gets.
+    const present = Boolean(worker.checkIn) || Boolean(worker.markedPresent)
+    // Only meaningful for someone the terminal actually saw arrive. A hand-marked worker has no
+    // check-out to be missing, and flagging them "needs attention" every day would be noise.
+    const missingCheckOut = Boolean(worker.checkIn) && !worker.checkOut
 
     return {
       serial: index + 1,
