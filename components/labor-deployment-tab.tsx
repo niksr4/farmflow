@@ -33,6 +33,7 @@ import { useToast } from "@/hooks/use-toast"
 import { FARMFLOW_RECORD_SAVED_EVENT } from "@/components/inventory-system/constants"
 import { useMediaQuery } from "@/hooks/use-media-query"
 import QuickLogPanel from "@/components/quick-log-panel"
+import LabourCostSummary from "@/components/accounts/labour-cost-summary"
 import { trackClick, reportActionFailure, reportActionError } from "@/lib/track-action"
 import { deleteWithUndo } from "@/lib/undo-delete"
 import { formatLocationLabel } from "@/lib/location-label"
@@ -993,6 +994,14 @@ export default function LaborDeploymentTab({
           ) : null}
         </CardContent>
       </Card>}
+
+      {/* Where the money went, before the row-by-row list. Reads the labour_cost view, so it is
+          correct whichever way this tenant is entering labour. */}
+      {activeSection === "history" && !loading && startDate && endDate && (
+        <div className="px-3 pb-1 sm:px-0">
+          <LabourCostSummary startDate={startDate} endDate={endDate} />
+        </div>
+      )}
 
       {activeSection === "history" && (loading ? (
         <Card><CardContent className="p-0"><SkeletonTable rows={4} cols={5} /></CardContent></Card>
