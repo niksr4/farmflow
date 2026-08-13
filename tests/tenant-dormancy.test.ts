@@ -1,11 +1,13 @@
 import { describe, expect, it } from "vitest"
 import {
   buildActivitySignal,
+  buildDataWriteUnionSql,
   evaluateDigestDormancy,
   evaluateProbeDormancy,
   mostRecentActivityAt,
   DIGEST_QUIET_DAYS,
   DIGEST_MIN_TENANT_AGE_DAYS,
+  DORMANCY_PROBE_THRESHOLD_DAYS,
   type TenantActivityInput,
 } from "../lib/server/agents/tenant-dormancy"
 
@@ -129,11 +131,38 @@ describe("evaluateProbeDormancy", () => {
   it("flags a tenant quiet past the probe threshold", () => {
     const result = evaluateProbeDormancy(signal({ lastLoginAt: daysAgo(5) }))
     expect(result.dormant).toBe(true)
-    expect(result.daysSinceLastLogin).toBe(5)
+    expect(result.daysSinceActivity).toBe(5)
   })
 
   it("leaves a recently active tenant alone", () => {
     expect(evaluateProbeDormancy(signal({ lastLoginAt: daysAgo(2) })).dormant).toBe(false)
+  })
+
+  // Regression, from a real send on 2026-08-12: Medappa Estates' writer entered attendance
+  // every morning for eight straight days while staying signed in, so the newest
+  // auth_login_success event was five days old and the probe fired — telling an admin nobody
+  // had opened an app his own staff had used hours earlier. Gating on login alone cannot see
+  // the most engaged users, because 30-day sessions mean they rarely log in again.
+  it("does not probe a tenant whose login is stale but who is entering data daily", () => {
+    const result = evaluateProbeDormancy(
+      signal({ lastLoginAt: daysAgo(28), lastDataWriteAt: daysAgo(0) }),
+    )
+    expect(result.dormant).toBe(false)
+  })
+
+  it("probes only once both signals have gone quiet", () => {
+    const quiet = DORMANCY_PROBE_THRESHOLD_DAYS
+    // Login long gone, but a write inside the window keeps them out.
+    expect(
+      evaluateProbeDormancy(signal({ lastLoginAt: daysAgo(40), lastDataWriteAt: daysAgo(quiet - 1) }))
+        .dormant,
+    ).toBe(false)
+    // Both past the threshold — now it is a genuine silence.
+    const result = evaluateProbeDormancy(
+      signal({ lastLoginAt: daysAgo(40), lastDataWriteAt: daysAgo(quiet) }),
+    )
+    expect(result.dormant).toBe(true)
+    expect(result.daysSinceActivity).toBe(quiet)
   })
 
   it("does not probe a tenant too new to have gone quiet", () => {
@@ -180,5 +209,39 @@ describe("evaluateProbeDormancy", () => {
     )
     expect(result.dormant).toBe(true)
     expect(result.alreadyProbedThisEpisode).toBe(false)
+  })
+
+  it("treats data entered after a probe as the end of that episode", () => {
+    // They came back and started recording again without a fresh login. If they later go
+    // quiet a second time, that is a new episode and deserves a new probe.
+    const result = evaluateProbeDormancy(
+      signal({
+        lastLoginAt: daysAgo(40),
+        lastDataWriteAt: daysAgo(10),
+        lastProbeSentAt: daysAgo(20),
+        probeLastKnownActivityAt: daysAgo(40),
+      }),
+    )
+    expect(result.alreadyProbedThisEpisode).toBe(false)
+  })
+})
+
+describe("what counts as a human data write", () => {
+  // A biometric terminal punches on its own schedule with nobody signed in. If those rows
+  // counted, an estate could abandon the app entirely and never be noticed by the probe or
+  // stood down by the digest, for as long as the device stayed plugged in.
+  it("excludes biometric punches but keeps manual attendance", () => {
+    const sqlText = buildDataWriteUnionSql()
+
+    expect(sqlText).toContain("FROM attendance_records WHERE source IS DISTINCT FROM 'biometric'")
+    expect(sqlText).not.toMatch(/FROM attendance_records GROUP BY/)
+  })
+
+  it("still counts every hand-entered table", () => {
+    const sqlText = buildDataWriteUnionSql()
+
+    for (const table of ["labor_transactions", "processing_records", "rainfall_records", "sales_records"]) {
+      expect(sqlText).toContain(`FROM ${table} GROUP BY tenant_id`)
+    }
   })
 })

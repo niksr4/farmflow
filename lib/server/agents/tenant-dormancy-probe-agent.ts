@@ -9,10 +9,10 @@ import { fetchWithTimeout } from "@/lib/server/http"
 import { logServerError, logServerWarning } from "@/lib/server/safe-logging"
 import { fetchTenantActivitySignals, evaluateProbeDormancy } from "@/lib/server/agents/tenant-dormancy"
 
-// Dormancy probe — sent to a tenant's admin when NOBODY in that tenant has
-// logged in for DORMANCY_PROBE_THRESHOLD_DAYS. Login (not transaction volume) is
-// the signal: a quiet week of data entry can just mean off-season, but if
-// no one from the estate has even opened the app, that's worth checking in on.
+// Dormancy probe — sent to a tenant's admin when NOBODY in that tenant has shown any sign of
+// life for DORMANCY_PROBE_THRESHOLD_DAYS: no login and no data entered by a person. Either
+// one keeps them out of this agent, and a data write is the stronger of the two — 30-day
+// sessions mean a writer entering attendance daily can go weeks without a login event.
 //
 // Sent once per "dormancy episode" — if the tenant logs in again and later
 // goes quiet a second time, that's a new episode and gets a new probe.
@@ -37,8 +37,8 @@ type DormantCandidate = {
   tenantName: string
   recipientEmail: string
   recipientName: string
-  daysSinceLastLogin: number
-  lastLoginAt: Date | null
+  daysSinceActivity: number
+  lastActivityAt: Date
 }
 
 async function fetchDormantCandidates(): Promise<DormantCandidate[]> {
@@ -85,7 +85,7 @@ async function fetchDormantCandidates(): Promise<DormantCandidate[]> {
     const signal = signals.get(String(row.tenant_id))
     if (!signal) continue
 
-    const { dormant, daysSinceLastLogin, alreadyProbedThisEpisode } = evaluateProbeDormancy(signal)
+    const { dormant, daysSinceActivity, alreadyProbedThisEpisode } = evaluateProbeDormancy(signal)
     if (!dormant) continue
     if (alreadyProbedThisEpisode) continue
 
@@ -94,22 +94,25 @@ async function fetchDormantCandidates(): Promise<DormantCandidate[]> {
       tenantName: String(row.tenant_name || "your estate"),
       recipientEmail,
       recipientName: String(row.recipient_name || "there"),
-      daysSinceLastLogin,
-      lastLoginAt: signal.lastLoginAt,
+      daysSinceActivity,
+      lastActivityAt: signal.lastActivityAt,
     })
   }
 
   return candidates
 }
 
-async function markProbeSent(tenantId: string, lastLoginAt: Date | null): Promise<void> {
+// last_known_activity_at records what we probed against — a login, a data write, whichever was
+// newest. The episode check reads last_probe_sent_at rather than this column, so its value is
+// purely forensic: it answers "what did the agent believe when it sent this?" after the fact.
+async function markProbeSent(tenantId: string, lastActivityAt: Date): Promise<void> {
   if (!sql) return
   await sql.query(
     `INSERT INTO tenant_dormancy_probes (tenant_id, last_probe_sent_at, last_known_activity_at)
      VALUES ($1, NOW(), $2)
      ON CONFLICT (tenant_id) DO UPDATE
        SET last_probe_sent_at = NOW(), last_known_activity_at = $2`,
-    [tenantId, lastLoginAt],
+    [tenantId, lastActivityAt],
   )
 }
 
@@ -121,7 +124,7 @@ function buildProbeEmail(candidate: DormantCandidate): { subject: string; html: 
   const text = [
     `Hi ${firstName},`,
     ``,
-    `Nobody's logged into FarmFlow for ${candidate.tenantName} in about ${candidate.daysSinceLastLogin} days.`,
+    `There's been no activity on FarmFlow for ${candidate.tenantName} in about ${candidate.daysSinceActivity} days — no one signed in, and nothing recorded.`,
     ``,
     `No pressure if it's been a quiet stretch on the estate — just checking in case something's blocking you, or you need a hand with anything.`,
     ``,
@@ -148,7 +151,7 @@ function buildProbeEmail(candidate: DormantCandidate): { subject: string; html: 
         <tr><td style="background:#ffffff;padding:32px;border-left:1px solid #e5e7eb;border-right:1px solid #e5e7eb;">
           <p style="margin:0 0 16px;font-size:15px;color:#111827;">Hi ${firstName},</p>
           <p style="margin:0 0 16px;font-size:15px;color:#374151;line-height:1.6;">
-            Nobody's logged into FarmFlow for <strong>${candidate.tenantName}</strong> in about ${candidate.daysSinceLastLogin} days.
+            There's been no activity on FarmFlow for <strong>${candidate.tenantName}</strong> in about ${candidate.daysSinceActivity} days — no one signed in, and nothing recorded.
           </p>
           <p style="margin:0 0 24px;font-size:15px;color:#374151;line-height:1.6;">
             No pressure if it's been a quiet stretch on the estate — just checking in case something's blocking you, or you need a hand with anything.
@@ -246,7 +249,7 @@ export async function runTenantDormancyProbeAgent(input?: {
         })
         continue
       }
-      await markProbeSent(candidate.tenantId, candidate.lastLoginAt)
+      await markProbeSent(candidate.tenantId, candidate.lastActivityAt)
       probesSent++
     } catch (error) {
       logServerError("tenant-dormancy-probe: send error", error)

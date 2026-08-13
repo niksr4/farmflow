@@ -15,7 +15,7 @@ import "server-only"
 // owner connection — there's no single app.tenant_id session context to set here.
 import { adminSql as sql } from "@/lib/server/db"
 
-/** Probe fires once a tenant has had no login for this long. */
+/** Probe fires once a tenant has shown no sign of life — login or data entry — for this long. */
 export const DORMANCY_PROBE_THRESHOLD_DAYS = 4
 
 /** Never suppress a new tenant's digest — they're still being onboarded. */
@@ -47,13 +47,13 @@ export type TenantActivityInput = {
 }
 
 export type TenantActivitySignal = TenantActivityInput & {
+  /** Most recent login OR data write, falling back to tenant creation. Never null. */
+  lastActivityAt: Date
   daysSinceTenantCreated: number
   daysSinceLastLogin: number | null
   daysSinceLastDataWrite: number | null
   /** Days since the most recent login OR data write, falling back to tenant creation. */
   daysSinceAnyActivity: number
-  /** Days since last login, falling back to tenant creation when they've never logged in. */
-  daysSinceLastLoginOrCreation: number
   /**
    * Tenant has never logged in AND never written a row — the account exists but nobody has
    * ever opened it. Distinct from dormant: there is no "back to normal" to nudge them
@@ -69,17 +69,35 @@ export type TenantActivitySignal = TenantActivityInput & {
 // Tables a live estate actually writes to. Keyed on created_at (row insertion), not the
 // business date column — a user back-dating last month's labour is still active today,
 // and a user who entered nothing is inactive even if they hold future-dated rows.
-const ACTIVITY_TABLES = [
-  "processing_records",
-  "labor_transactions",
-  "expense_transactions",
-  "rainfall_records",
-  "sales_records",
-  "dispatch_records",
-  "picking_records",
-  "attendance_records",
-  "journal_entries",
-] as const
+//
+// "Write" has to mean a *person* used the app, because both policies below read this as
+// proof of life. A row a machine produced on a timer is not proof of anything.
+const ACTIVITY_TABLES: ReadonlyArray<{ table: string; where?: string }> = [
+  { table: "processing_records" },
+  { table: "labor_transactions" },
+  { table: "expense_transactions" },
+  { table: "rainfall_records" },
+  { table: "sales_records" },
+  { table: "dispatch_records" },
+  { table: "picking_records" },
+  // Biometric punches are written by a terminal in the field, with nobody signed in. Counting
+  // them would let a plugged-in device keep a long-abandoned estate looking active for ever —
+  // precisely the case the probe exists to notice. Manual attendance still counts: somebody
+  // opened the app and marked a muster roll.
+  { table: "attendance_records", where: "source IS DISTINCT FROM 'biometric'" },
+  { table: "journal_entries" },
+]
+
+/**
+ * The UNION ALL that defines "a person wrote something". Exported so a test can hold the
+ * machine-write exclusions in place — they are invisible in the query otherwise, and adding
+ * a table back as a bare name is the easy mistake.
+ */
+export const buildDataWriteUnionSql = (): string =>
+  ACTIVITY_TABLES.map(
+    ({ table, where }) =>
+      `SELECT tenant_id, MAX(created_at) AS ts FROM ${table}${where ? ` WHERE ${where}` : ""} GROUP BY tenant_id`,
+  ).join("\n        UNION ALL ")
 
 const isValidDate = (value: unknown): value is Date =>
   value instanceof Date && !Number.isNaN(value.getTime())
@@ -109,13 +127,14 @@ export function buildActivitySignal(
   input: TenantActivityInput,
   now: Date = new Date(),
 ): TenantActivitySignal {
+  const lastActivityAt = mostRecentActivityAt(input)
   return {
     ...input,
+    lastActivityAt,
     daysSinceTenantCreated: daysBetween(input.tenantCreatedAt, now),
     daysSinceLastLogin: input.lastLoginAt ? daysBetween(input.lastLoginAt, now) : null,
     daysSinceLastDataWrite: input.lastDataWriteAt ? daysBetween(input.lastDataWriteAt, now) : null,
-    daysSinceAnyActivity: daysBetween(mostRecentActivityAt(input), now),
-    daysSinceLastLoginOrCreation: daysBetween(input.lastLoginAt ?? input.tenantCreatedAt, now),
+    daysSinceAnyActivity: daysBetween(lastActivityAt, now),
     isUnactivated: input.lastLoginAt === null && input.lastDataWriteAt === null,
   }
 }
@@ -125,9 +144,7 @@ export async function fetchTenantActivitySignals(): Promise<Map<string, TenantAc
   const signals = new Map<string, TenantActivitySignal>()
   if (!sql) return signals
 
-  const dataWriteUnion = ACTIVITY_TABLES.map(
-    (table) => `SELECT tenant_id, MAX(created_at) AS ts FROM ${table} GROUP BY tenant_id`,
-  ).join("\n        UNION ALL ")
+  const dataWriteUnion = buildDataWriteUnionSql()
 
   const result = await sql.query(`
     WITH login AS (
@@ -219,27 +236,33 @@ export function evaluateDigestDormancy(signal: TenantActivitySignal): {
 }
 
 /**
- * Probe policy — unchanged from the original inline implementation: dormant after
- * DORMANCY_PROBE_THRESHOLD_DAYS without a login, and sent once per dormancy episode.
- * Login (not data volume) is deliberately the signal here: a quiet week of data entry
- * can just be off-season, but nobody opening the app at all is worth checking on.
+ * Probe policy: dormant after DORMANCY_PROBE_THRESHOLD_DAYS with no sign of life at all,
+ * sent once per dormancy episode.
+ *
+ * This used to gate on the login timestamp alone, on the reasoning that a quiet week of data
+ * entry can just be off-season while nobody opening the app is worth checking on. That
+ * reasoning inverts the evidence. Sessions are 30 days, so the writer who marks the muster
+ * roll every single morning generates no `auth_login_success` events at all — and a data
+ * write is *stronger* proof someone is using the product than a login is, because you cannot
+ * write a row without being in the app. The result was a "haven't seen you in a few days"
+ * probe landing on an estate that had entered attendance that same morning, which reads to
+ * the recipient as the product not knowing they exist.
+ *
+ * It is the same 30-day-session trap `evaluateDigestDormancy` already avoids; the probe just
+ * never had the fix applied. The thresholds stay different (4 days vs 14) — that difference
+ * is the real distinction between the two policies, not which signals they trust.
  */
 export function evaluateProbeDormancy(signal: TenantActivitySignal): {
   dormant: boolean
-  daysSinceLastLogin: number
+  daysSinceActivity: number
   alreadyProbedThisEpisode: boolean
 } {
-  // Episode identity is "the login we last probed against". For a tenant that has NEVER
-  // logged in that value is legitimately NULL, so `last_probe_sent_at` — not
-  // `last_known_activity_at` — is what tells us a probe already went out. The previous
-  // implementation keyed off the latter alone, which is falsy for a never-logged-in tenant,
-  // so its episode never closed and it was re-probed on every daily cron run.
+  // An episode is closed by anything happening after we nudged, so that is exactly what this
+  // asks. Comparing timestamps to `last_probe_sent_at` also sidesteps the NULL hole in the
+  // stored activity marker: it is legitimately NULL for tenants probed before this column
+  // meant anything, and reading it as "never probed" re-sent the probe every daily run.
   const alreadyProbedThisEpisode = Boolean(
-    signal.lastProbeSentAt &&
-      (signal.lastLoginAt === null
-        ? signal.probeLastKnownActivityAt === null
-        : signal.probeLastKnownActivityAt !== null &&
-          signal.probeLastKnownActivityAt.getTime() === signal.lastLoginAt.getTime()),
+    signal.lastProbeSentAt && signal.lastActivityAt.getTime() <= signal.lastProbeSentAt.getTime(),
   )
 
   return {
@@ -254,8 +277,8 @@ export function evaluateProbeDormancy(signal: TenantActivitySignal): {
     dormant:
       !signal.isUnactivated &&
       signal.daysSinceTenantCreated >= DORMANCY_PROBE_THRESHOLD_DAYS &&
-      signal.daysSinceLastLoginOrCreation >= DORMANCY_PROBE_THRESHOLD_DAYS,
-    daysSinceLastLogin: signal.daysSinceLastLoginOrCreation,
+      signal.daysSinceAnyActivity >= DORMANCY_PROBE_THRESHOLD_DAYS,
+    daysSinceActivity: signal.daysSinceAnyActivity,
     alreadyProbedThisEpisode,
   }
 }

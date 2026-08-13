@@ -340,14 +340,22 @@ Three lifecycle states, not two:
   nobody has opened is nonsense, and "haven't seen you in a few days" implies a lapse that never
   happened. Both conditions are required — a tenant with data but no login event is an older
   account whose logins predate the `security_events` trail, not a fresh one.
-- **Dormant** — activated, then went quiet. Probe fires after 4 quiet days (login only), once per
-  dormancy episode. Digests stand down after `DIGEST_QUIET_DAYS` (14) with no activity of either
-  kind, and never before `DIGEST_MIN_TENANT_AGE_DAYS` (14). Tune those two constants.
+- **Dormant** — activated, then went quiet. Probe fires after 4 quiet days, once per dormancy
+  episode. Digests stand down after `DIGEST_QUIET_DAYS` (14) with no activity of either kind,
+  and never before `DIGEST_MIN_TENANT_AGE_DAYS` (14). Tune those two constants. The 4-vs-14
+  threshold is the *only* difference between the two policies — both read the same signals.
 - **Active** — normal sending.
 
-- Activity = last login **OR** last data write, whichever is newer. Both matter: sessions are
-  30 days, so an actively-used tenant can show a three-week-old `auth_login_success` event.
-  Gating on login alone would silence digests for the most engaged users.
+- Activity = last login **OR** last human data write, whichever is newer. Both matter: sessions
+  are 30 days, so an actively-used tenant can show a three-week-old `auth_login_success` event.
+  Gating on login alone silences nothing but *mis*-fires: it sent a "haven't seen you in a few
+  days" probe to Medappa Estates on 2026-08-12 while their writer was marking attendance daily
+  from a session opened a week earlier. The probe used to gate on login alone; it no longer does.
+- "Human" write is load-bearing: biometric punches (`attendance_records.source = 'biometric'`)
+  are excluded, because a terminal on a timer would otherwise keep an abandoned estate looking
+  active forever. Manual attendance still counts. See `buildDataWriteUnionSql`.
+- An episode closes when anything happens *after* `last_probe_sent_at` — not by matching the
+  stored `last_known_activity_at`, which is now written for forensics only.
 - Both digest gates **fail open** — if the signal query errors, everyone gets a digest as before.
 - Force a send to a quiet tenant: `?includeDormant=1` on `/api/cron/weekly-digest` or
   `/api/cron/daily-digest`.
