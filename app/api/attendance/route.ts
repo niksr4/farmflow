@@ -49,10 +49,13 @@ export async function GET(request: Request) {
         ? accountsSql` AND (${accountsSql.unsafe(column)} IS NULL OR ${accountsSql.unsafe(column)} IN (SELECT id FROM locations WHERE tenant_id = ${tenantContext.tenantId} AND estate = ${activeEstate}))`
         : accountsSql``
 
-    const [workersRows, presentRows, weeklyRows, deviceRows, estateRows] = await runTenantQueries(accountsSql, tenantContext, [
+    const [workersRows, presentRows, weeklyRows, deviceRows, estateRows, assignmentRows] = await runTenantQueries(accountsSql, tenantContext, [
       accountsSql`
         SELECT id, full_name, daily_rate, device_user_code, location_id, created_at,
-               worker_type, phone, bank_name, bank_account, bank_ifsc
+               worker_type, phone, bank_name, bank_account, bank_ifsc,
+               -- 'gang' rows carry a headcount instead of a fingerprint: a contract crew is one
+               -- line on the muster, not eleven. See scripts/115.
+               kind, headcount, estate
         FROM attendance_workers
         WHERE tenant_id = ${tenantContext.tenantId}
           AND active = TRUE
@@ -96,6 +99,25 @@ export async function GET(request: Request) {
         WHERE tenant_id = ${tenantContext.tenantId}
           AND estate IS NOT NULL
       `,
+      // What each worker actually did today. Scoped by the WORKER's estate, not the assignment's
+      // block: a Tirtha-based worker who spent the morning on a Citrus block is still on the
+      // Tirtha muster, and hiding that row would show them present with no work against their
+      // name. Every worker on this list gets all of their rows.
+      accountsSql`
+        SELECT a.id, a.worker_id, a.activity_code, a.location_id, a.day_fraction,
+               a.rate, a.headcount, a.lump_sum, a.total_cost, a.notes,
+               aa.activity AS activity_name,
+               COALESCE(l.name, l.code) AS location_name
+        FROM labour_assignments a
+        JOIN attendance_workers w ON w.id = a.worker_id AND w.tenant_id = a.tenant_id
+        LEFT JOIN locations l ON l.id = a.location_id
+        LEFT JOIN account_activities aa
+          ON aa.code = a.activity_code AND aa.tenant_id = a.tenant_id
+        WHERE a.tenant_id = ${tenantContext.tenantId}
+          AND a.work_date = ${date}
+          ${estateClause("w.location_id")}
+        ORDER BY LOWER(w.full_name), a.created_at ASC
+      `,
     ])
 
     return NextResponse.json({
@@ -127,6 +149,26 @@ export async function GET(request: Request) {
         bankName: row.bank_name ? String(row.bank_name) : null,
         bankAccount: row.bank_account ? String(row.bank_account) : null,
         bankIfsc: row.bank_ifsc ? String(row.bank_ifsc) : null,
+        kind: row.kind === "gang" ? "gang" : "individual",
+        headcount: row.headcount != null ? Number(row.headcount) : null,
+        estate: row.estate ? String(row.estate) : null,
+      })),
+      // One row per job, so a worker who split the day appears more than once. The muster maps
+      // these onto workers by workerId; a worker with none is present but unallocated, which is
+      // a legitimate state first thing in the morning.
+      assignments: assignmentRows.map((row: any) => ({
+        id: String(row.id),
+        workerId: String(row.worker_id),
+        activityCode: String(row.activity_code || ""),
+        activityName: row.activity_name ? String(row.activity_name) : null,
+        locationId: row.location_id ? String(row.location_id) : null,
+        locationName: row.location_name ? String(row.location_name) : null,
+        dayFraction: Number(row.day_fraction),
+        rate: row.rate != null ? Number(row.rate) : 0,
+        headcount: Number(row.headcount) || 1,
+        lumpSum: row.lump_sum != null ? Number(row.lump_sum) : null,
+        totalCost: row.total_cost != null ? Number(row.total_cost) : 0,
+        notes: row.notes ? String(row.notes) : null,
       })),
       presentWorkerIds: presentRows.map((row: any) => String(row.worker_id)).filter(Boolean),
       presentRecords: presentRows.map((row: any) => ({

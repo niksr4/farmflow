@@ -1,0 +1,218 @@
+import { NextResponse } from "next/server"
+import { accountsSql } from "@/lib/server/db"
+import { requireModuleAccess, isModuleAccessError } from "@/lib/server/module-access"
+import { canWriteModule } from "@/lib/permissions"
+import { logAuditEvent } from "@/lib/server/audit-log"
+import { normalizeTenantContext, runTenantQuery, runTenantTransaction } from "@/lib/server/tenant-db"
+import { activityCodeExistsForTenant } from "@/lib/server/activity-codes"
+import { validateLocationForTenant } from "@/lib/server/location-utils"
+import { normalizeAttendanceDate } from "@/lib/attendance"
+import { logServerError } from "@/lib/server/safe-logging"
+import { sanitizeRouteError } from "@/lib/server/sanitize-route-error"
+
+/**
+ * What each worker did on a given day, and where.
+ *
+ * Deliberately separate from PUT /api/attendance, which owns presence. That route runs a careful
+ * diff so re-saving a manual muster cannot wipe check_in_time / source on a row a fingerprint
+ * terminal wrote; routing assignment writes through it would put that logic at risk for no gain.
+ *
+ * Presence and assignment are different facts at different grains -- one row per worker per day
+ * versus one row per worker per job -- and the fingerprint terminal can only ever produce the
+ * first. A scanner knows who turned up; it cannot know what they were sent to do.
+ */
+
+export const dynamic = "force-dynamic"
+export const revalidate = 0
+
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
+
+/** Postgres raises this from the day-cap trigger in scripts/116. */
+const isDayCapError = (error: unknown) =>
+  String((error as Error)?.message || "").includes("labour_assignments: worker")
+
+const num = (value: unknown, fallback: number) => {
+  const parsed = Number(value)
+  return Number.isFinite(parsed) ? parsed : fallback
+}
+
+export async function POST(request: Request) {
+  let tenantId: string | null = null
+  try {
+    const sessionUser = await requireModuleAccess("accounts")
+    if (!canWriteModule(sessionUser.role, "accounts")) {
+      return NextResponse.json({ success: false, error: "Insufficient role" }, { status: 403 })
+    }
+    tenantId = sessionUser.tenantId
+    const tenantContext = normalizeTenantContext(sessionUser.tenantId, sessionUser.role)
+
+    const body = await request.json().catch(() => ({}))
+    const date = normalizeAttendanceDate(body?.date, "")
+    if (!date) {
+      return NextResponse.json({ success: false, error: "Valid work date is required" }, { status: 400 })
+    }
+
+    const workerIds: string[] = Array.from(
+      new Set<string>(
+        (Array.isArray(body?.workerIds) ? body.workerIds : []).map((v: unknown) => String(v ?? "").trim()),
+      ),
+    ).filter((id: string) => UUID.test(id))
+    if (workerIds.length === 0) {
+      return NextResponse.json({ success: false, error: "Select at least one worker" }, { status: 400 })
+    }
+
+    const activityCode = String(body?.activityCode || "").trim()
+    if (!(await activityCodeExistsForTenant(tenantContext, activityCode))) {
+      return NextResponse.json(
+        { success: false, error: `Activity code "${activityCode}" isn't one of your codes. Pick one from the list, or add it under Codes settings first.` },
+        { status: 400 },
+      )
+    }
+
+    const requestedLocation = body?.locationId ? String(body.locationId).trim() : null
+    const locationId = await validateLocationForTenant(accountsSql, tenantContext, sessionUser, requestedLocation)
+    if (requestedLocation && !locationId) {
+      return NextResponse.json({ success: false, error: "That block belongs to a different estate" }, { status: 400 })
+    }
+
+    const dayFraction = num(body?.dayFraction, 1)
+    if (!(dayFraction > 0 && dayFraction <= 2)) {
+      return NextResponse.json(
+        { success: false, error: "A day's share must be more than 0 and at most 2 (a full day plus overtime)" },
+        { status: 400 },
+      )
+    }
+
+    const lumpSum = body?.lumpSum == null || body.lumpSum === "" ? null : num(body.lumpSum, -1)
+    if (lumpSum !== null && lumpSum < 0) {
+      return NextResponse.json({ success: false, error: "A contract amount cannot be negative" }, { status: 400 })
+    }
+
+    // Rate and headcount default per worker from the roster: an individual is one person at their
+    // own daily rate, a gang is its crew size. Copied onto the row at entry time so a gang later
+    // changing size cannot rewrite what last month cost. An explicit rate on the request wins --
+    // that is how overtime and a one-off rate get recorded.
+    const roster = await runTenantQuery(
+      accountsSql,
+      tenantContext,
+      accountsSql`
+        SELECT id, full_name, daily_rate, kind, headcount
+        FROM attendance_workers
+        WHERE tenant_id = ${tenantContext.tenantId}
+          AND active = TRUE
+          AND id = ANY(${workerIds})
+      `,
+    )
+    if (roster.length !== workerIds.length) {
+      return NextResponse.json({ success: false, error: "One or more workers are invalid for this tenant" }, { status: 400 })
+    }
+
+    const overrideRate = body?.rate == null || body.rate === "" ? null : num(body.rate, -1)
+    if (overrideRate !== null && overrideRate < 0) {
+      return NextResponse.json({ success: false, error: "A rate cannot be negative" }, { status: 400 })
+    }
+
+    const rows = roster.map((w: any) => ({
+      workerId: String(w.id),
+      name: String(w.full_name || ""),
+      rate: overrideRate ?? (w.daily_rate != null ? Number(w.daily_rate) : 0),
+      headcount: w.kind === "gang" ? Math.max(1, Number(w.headcount) || 1) : 1,
+    }))
+
+    // One transaction: a bulk assign either lands for the whole selection or not at all. Half a
+    // crew allocated is worse than none, because it looks finished.
+    try {
+      await runTenantTransaction(accountsSql, tenantContext, (tx) =>
+        rows.map(
+          (r) => tx`
+            INSERT INTO labour_assignments (tenant_id, worker_id, work_date, activity_code, location_id,
+                                            day_fraction, rate, headcount, lump_sum, notes, recorded_by)
+            VALUES (${tenantContext.tenantId}, ${r.workerId}, ${date}, ${activityCode}, ${locationId},
+                    ${dayFraction}, ${r.rate}, ${r.headcount}, ${lumpSum},
+                    ${String(body?.notes || "").trim() || null}, ${sessionUser.username || "system"})
+          `,
+        ),
+      )
+    } catch (error) {
+      if (isDayCapError(error)) {
+        return NextResponse.json(
+          {
+            success: false,
+            error:
+              "That would book someone for more than two days in one day. Reduce the day share, or check what they are already assigned to.",
+          },
+          { status: 409 },
+        )
+      }
+      throw error
+    }
+
+    await logAuditEvent(accountsSql, sessionUser, {
+      action: "create",
+      entityType: "labour_assignments",
+      entityId: date,
+      after: { date, activityCode, locationId, dayFraction, lumpSum, workers: rows.map((r) => r.name) },
+    })
+
+    return NextResponse.json({ success: true, assigned: rows.length })
+  } catch (error) {
+    if (isModuleAccessError(error)) {
+      return NextResponse.json({ success: false, error: "Module access disabled" }, { status: 403 })
+    }
+    logServerError("Failed to save labour assignments", { error, tenantId })
+    return NextResponse.json(
+      { success: false, error: sanitizeRouteError(error, "Could not save the work allocation") },
+      { status: 500 },
+    )
+  }
+}
+
+export async function DELETE(request: Request) {
+  let tenantId: string | null = null
+  try {
+    const sessionUser = await requireModuleAccess("accounts")
+    if (!canWriteModule(sessionUser.role, "accounts")) {
+      return NextResponse.json({ success: false, error: "Insufficient role" }, { status: 403 })
+    }
+    tenantId = sessionUser.tenantId
+    const tenantContext = normalizeTenantContext(sessionUser.tenantId, sessionUser.role)
+
+    const { searchParams } = new URL(request.url)
+    const id = String(searchParams.get("id") || "").trim()
+    if (!UUID.test(id)) {
+      return NextResponse.json({ success: false, error: "Valid assignment id is required" }, { status: 400 })
+    }
+
+    const removed = await runTenantQuery(
+      accountsSql,
+      tenantContext,
+      accountsSql`
+        DELETE FROM labour_assignments
+        WHERE id = ${id}::uuid
+          AND tenant_id = ${tenantContext.tenantId}
+        RETURNING id, worker_id, work_date::text AS work_date, activity_code, total_cost
+      `,
+    )
+    if (!removed.length) {
+      return NextResponse.json({ success: false, error: "That allocation no longer exists" }, { status: 404 })
+    }
+
+    await logAuditEvent(accountsSql, sessionUser, {
+      action: "delete",
+      entityType: "labour_assignments",
+      entityId: id,
+      before: removed[0],
+    })
+
+    return NextResponse.json({ success: true })
+  } catch (error) {
+    if (isModuleAccessError(error)) {
+      return NextResponse.json({ success: false, error: "Module access disabled" }, { status: 403 })
+    }
+    logServerError("Failed to delete labour assignment", { error, tenantId })
+    return NextResponse.json(
+      { success: false, error: sanitizeRouteError(error, "Could not remove the work allocation") },
+      { status: 500 },
+    )
+  }
+}

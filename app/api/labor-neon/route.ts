@@ -12,6 +12,7 @@ import { logAuditEvent } from "@/lib/server/audit-log"
 import { logRouteMutationFailure } from "@/lib/server/route-error-events"
 import { sanitizeRouteError } from "@/lib/server/sanitize-route-error"
 import { aggregateLaborEntries, computeLaborTotalCost } from "@/lib/labour-cost"
+import { activityCodeExistsForTenant } from "@/lib/server/activity-codes"
 
 export const dynamic = "force-dynamic"
 export const revalidate = 0
@@ -66,23 +67,10 @@ async function tableHasLaborEntriesColumn(tableName: string) {
   return Array.isArray(rows) && rows.length > 0
 }
 
-async function validateActivityCodeForTenant(
-  tenantContext: { tenantId: string; role: string },
-  code: string,
-) {
-  const rows = await runTenantQuery(
-    accountsSql,
-    tenantContext,
-    accountsSql`
-      SELECT code
-      FROM account_activities
-      WHERE code = ${code}
-        AND tenant_id = ${tenantContext.tenantId}
-      LIMIT 1
-    `,
-  )
-  return Boolean(rows?.length)
-}
+// Moved to lib/server/activity-codes.ts so labour assignments run the identical check rather
+// than a second copy that can drift. Thin alias kept: this name appears at three call sites
+// below and renaming them adds diff noise to a route that handles money.
+const validateActivityCodeForTenant = activityCodeExistsForTenant
 
 export async function GET(request: Request) {
   try {
