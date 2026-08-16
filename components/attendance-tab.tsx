@@ -299,6 +299,10 @@ export default function AttendanceTab() {
   // before leaving the screen, which is the whole point of allocating on the roll instead of
   // reconstructing it in Accounts a week later.
   const dayCost = useMemo(() => assignments.reduce((sum, a) => sum + a.totalCost, 0), [assignments])
+  // Has this estate started allocating work at all today? Drives whether the cost figures are
+  // shown -- an estate that only takes attendance should not be told daily that its labour cost
+  // nothing and that four people are unaccounted for.
+  const allocatesWork = assignments.length > 0
   const unallocatedCount = useMemo(() => {
     const withWork = new Set(assignments.map((a) => a.workerId))
     return presentWorkerIds.filter((id) => !withWork.has(id)).length
@@ -556,12 +560,23 @@ export default function AttendanceTab() {
       {/* Where the day stands, before the detail. Four figures a manager can act on: who turned
           up, who did not, what it has cost, and who is still unaccounted for. */}
       {!loading && workers.length > 0 && (
-        <div className="grid grid-cols-4 gap-px overflow-hidden rounded-xl border border-stone-200 bg-stone-200 mx-3 mt-3 dark:border-white/[0.08] dark:bg-white/[0.08]">
+        <div className={cn(
+          "grid gap-px overflow-hidden rounded-xl border border-stone-200 bg-stone-200 mx-3 mt-3 dark:border-white/[0.08] dark:bg-white/[0.08]",
+          allocatesWork ? "grid-cols-4" : "grid-cols-2",
+        )}>
           {[
             { label: "Present", value: String(presentCount), tone: "emerald" as const },
             { label: "Absent", value: String(absentCount), tone: "plain" as const },
-            { label: "Cost today", value: `₹${Math.round(dayCost).toLocaleString("en-IN")}`, tone: "clay" as const },
-            { label: "No work set", value: String(unallocatedCount), tone: unallocatedCount > 0 ? ("amber" as const) : ("plain" as const) },
+            // Cost and stragglers only mean something to an estate that allocates work. Shown to
+            // one that does not, "Cost today Rs 0" is a permanent zero and an amber "No work set"
+            // is a standing accusation about a feature they have not adopted -- a nag that can
+            // never be cleared. They appear the moment the first job is set for the day.
+            ...(allocatesWork
+              ? [
+                  { label: "Cost today", value: `₹${Math.round(dayCost).toLocaleString("en-IN")}`, tone: "clay" as const },
+                  { label: "No work set", value: String(unallocatedCount), tone: unallocatedCount > 0 ? ("amber" as const) : ("plain" as const) },
+                ]
+              : []),
           ].map((tile) => (
             <div key={tile.label} className="bg-white px-2 py-2.5 text-center dark:bg-card">
               <p className="text-[9px] font-black uppercase tracking-wider text-stone-400">{tile.label}</p>
