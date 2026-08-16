@@ -69,6 +69,27 @@ type AttendanceRecordDetail = {
   source: "manual" | "biometric"
 }
 
+/**
+ * The muster roll's column template, shared by the header and every line.
+ *
+ * It is one string on purpose: the columns only line up while the header, a worker's first line
+ * and each extra job of a split day all use the identical track list, and three copies of that
+ * would drift the first time someone widened a cell.
+ *
+ * Day and cost are their own columns from sm up and collapse into the work cell on a phone --
+ * display:none keeps them out of the grid entirely, so the same markup is four columns on a
+ * phone and six on a laptop without a second layout to maintain.
+ */
+const MUSTER_GRID =
+  "grid items-center gap-x-1.5 sm:gap-x-2 " +
+  // The name is the column a manager searches down, so it gets whatever is left after the rest
+  // are cut to the bone. At 390px that is about 120px -- enough for "Ponnappa M" unabbreviated,
+  // which an earlier, roomier-looking split was not.
+  "grid-cols-[minmax(0,1fr)_4.25rem_4.5rem_4rem] " +
+  // Proportional on a wide screen rather than a fixed name column plus one enormous gap, which
+  // left the work and block so far from the name they stopped reading as the same row.
+  "sm:grid-cols-[minmax(0,2fr)_minmax(0,1.6fr)_minmax(0,1.4fr)_5rem_7rem_4.5rem]"
+
 const formatPunchTime = (iso: string | null) => {
   if (!iso) return "--:--"
   const parsed = new Date(iso)
@@ -224,6 +245,19 @@ export default function AttendanceTab() {
   ): Promise<boolean> => {
     setAssigningWorkerId(workerId)
     try {
+      // Presence is staged locally until Save, but the server will not accept work for anyone it
+      // cannot see on the muster. Persist the roll first so ticking someone present and setting
+      // their work in one motion behaves the way it reads.
+      const presence = await fetch("/api/attendance", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ date: selectedDate, presentWorkerIds }),
+      })
+      const presenceData = await presence.json().catch(() => ({}))
+      if (!presence.ok || !presenceData?.success) {
+        throw new Error(presenceData?.error || "Could not save who was present")
+      }
+
       const res = await fetch("/api/attendance/assignments", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -259,6 +293,16 @@ export default function AttendanceTab() {
   )
   const presentCount = presentWorkerIds.length
   const absentCount = workers.length - presentCount
+
+  // What the day has cost so far, and how much of it is still unaccounted for. The second number
+  // is the one that changes behaviour: a manager who can see "6 present with no work set" fixes it
+  // before leaving the screen, which is the whole point of allocating on the roll instead of
+  // reconstructing it in Accounts a week later.
+  const dayCost = useMemo(() => assignments.reduce((sum, a) => sum + a.totalCost, 0), [assignments])
+  const unallocatedCount = useMemo(() => {
+    const withWork = new Set(assignments.map((a) => a.workerId))
+    return presentWorkerIds.filter((id) => !withWork.has(id)).length
+  }, [assignments, presentWorkerIds])
   const noRateWorkers = workers.filter((w) => w.dailyRate === null)
   // Only meaningful on a multi-estate tenant: an unassigned worker appears under every estate,
   // so the estate selector silently has no effect on the roster and nothing says why.
@@ -277,6 +321,18 @@ export default function AttendanceTab() {
   const weeklyReportHasRates = weeklyReportRows.some((row) => row.wageTotal !== null)
 
   const toggleWorker = (id: string) => {
+    // Work already recorded means marking them absent would leave a payable with nobody on the
+    // muster to have earned it. Refused rather than silently dropping the jobs -- deleting money
+    // records as a side effect of a tap is not something a screen should decide.
+    const jobs = assignments.filter((a) => a.workerId === id)
+    if (jobs.length > 0 && presentSet.has(id)) {
+      toast.error(
+        jobs.length === 1
+          ? "Remove their work first — you cannot mark someone absent who has a job recorded."
+          : `Remove their ${jobs.length} jobs first — you cannot mark someone absent who has work recorded.`,
+      )
+      return
+    }
     setPresentWorkerIds((cur) => {
       const s = new Set(cur)
       s.has(id) ? s.delete(id) : s.add(id)
@@ -497,6 +553,34 @@ export default function AttendanceTab() {
         )}
       </div>
 
+      {/* Where the day stands, before the detail. Four figures a manager can act on: who turned
+          up, who did not, what it has cost, and who is still unaccounted for. */}
+      {!loading && workers.length > 0 && (
+        <div className="grid grid-cols-4 gap-px overflow-hidden rounded-xl border border-stone-200 bg-stone-200 mx-3 mt-3 dark:border-white/[0.08] dark:bg-white/[0.08]">
+          {[
+            { label: "Present", value: String(presentCount), tone: "emerald" as const },
+            { label: "Absent", value: String(absentCount), tone: "plain" as const },
+            { label: "Cost today", value: `₹${Math.round(dayCost).toLocaleString("en-IN")}`, tone: "clay" as const },
+            { label: "No work set", value: String(unallocatedCount), tone: unallocatedCount > 0 ? ("amber" as const) : ("plain" as const) },
+          ].map((tile) => (
+            <div key={tile.label} className="bg-white px-2 py-2.5 text-center dark:bg-card">
+              <p className="text-[9px] font-black uppercase tracking-wider text-stone-400">{tile.label}</p>
+              <p
+                className={cn(
+                  "mt-0.5 truncate text-base font-black tabular-nums",
+                  tile.tone === "emerald" && "text-emerald-700 dark:text-emerald-400",
+                  tile.tone === "clay" && "text-amber-800 dark:text-amber-500",
+                  tile.tone === "amber" && "text-amber-600",
+                  tile.tone === "plain" && "text-stone-500",
+                )}
+              >
+                {tile.value}
+              </p>
+            </div>
+          ))}
+        </div>
+      )}
+
       {/* Worker list */}
       <div className="px-3 pt-3 space-y-2">
         {/* Rate nudge */}
@@ -533,7 +617,19 @@ export default function AttendanceTab() {
         ) : workers.length === 0 ? (
           <EmptyState title="No employees yet" description="Add your first employee below." size="sm" />
         ) : (
-          workers.map((worker) => {
+          <>
+          {/* Column headers. The roll is read down a column -- who is on Weeding, which blocks got
+              nobody -- far more often than it is read across one worker, so the cells line up on a
+              fixed template and every line keeps to it. */}
+          <div className={cn(MUSTER_GRID, "px-2 pb-1 text-[10px] font-black uppercase tracking-wider text-stone-400 sm:px-3")}>
+            <span>Worker</span>
+            <span>Work</span>
+            <span>Block</span>
+            <span className="hidden sm:block text-right">Day</span>
+            <span className="hidden sm:block text-right">Cost</span>
+            <span />
+          </div>
+          {workers.map((worker) => {
             const isPresent = presentSet.has(worker.id)
             const isRemoving = removingWorkerId === worker.id
             const record = recordByWorkerId.get(worker.id)
@@ -547,129 +643,170 @@ export default function AttendanceTab() {
               // role="button" are not reachable by assistive tech, which would also announce the
               // row as one button named after every word in it. The check circle carries the real
               // semantics; keyboard users get that.
+              // Present is a tint and a rail, not a solid fill. A saturated row forces every cell
+              // to invert its colours, and the columns stop being comparable at a glance -- which
+              // is the whole reason for the table.
               <div
                 key={worker.id}
                 onClick={act}
                 className={cn(
-                  "w-full flex items-center justify-between rounded-2xl px-4 py-4 cursor-pointer",
-                  "transition-all active:scale-[0.98] touch-manipulation",
+                  "w-full overflow-hidden rounded-xl border-l-4 py-1.5 cursor-pointer",
+                  "transition-colors touch-manipulation",
                   isPresent
-                    ? "bg-emerald-600 shadow-md shadow-emerald-100"
-                    : "bg-white shadow-sm",
+                    ? "border-emerald-500 bg-emerald-50 dark:bg-emerald-500/10"
+                    : "border-transparent bg-white shadow-sm dark:bg-card",
                 )}
               >
-                <div className="text-left min-w-0 flex items-start gap-3">
-                  <div className="min-w-0">
-                  <p className={cn(
-                    "text-base font-bold leading-tight truncate",
-                    isPresent ? "text-white" : "text-stone-500",
-                  )}>
-                    {worker.name}
-                    {worker.kind === "gang" && (
-                      <span className={cn(
-                        "ml-2 rounded-full px-2 py-0.5 text-[10px] font-black uppercase tracking-wide align-middle",
-                        isPresent ? "bg-white/20 text-white" : "bg-stone-100 text-stone-500",
-                      )}>
-                        crew of {worker.headcount ?? 1}
-                      </span>
-                    )}
-                  </p>
-                  <p className={cn(
-                    "flex items-center gap-1 text-xs font-medium mt-0.5",
-                    isPresent ? "text-emerald-200" : "text-stone-400",
-                  )}>
-                    {isBiometric ? (
-                      <>
-                        <Fingerprint className="h-3 w-3 shrink-0" />
-                        {formatPunchTime(record?.checkInTime ?? null)} – {formatPunchTime(record?.checkOutTime ?? null)}
-                      </>
-                    ) : worker.dailyRate !== null ? (
-                      `₹${worker.dailyRate}/day`
-                    ) : (
-                      "No rate"
-                    )}
-                  </p>
-
-                  {/* What they actually did. One chip per job, so a split day reads as two. */}
-                  {rows.length > 0 ? (
-                    <div className="mt-1.5 flex flex-wrap gap-1.5">
-                      {rows.map((a) => (
-                        <span key={a.id}
-                              className={cn(
-                                "inline-flex items-center gap-1.5 rounded-lg px-2 py-1 text-[11px] font-semibold",
-                                isPresent ? "bg-white/15 text-white" : "bg-stone-100 text-stone-600",
-                              )}>
-                          <span className="font-mono opacity-70">{a.activityCode}</span>
-                          {a.locationName ?? "no block"}
-                          {a.dayFraction !== 1 && <span className="opacity-70">· {a.dayFraction}d</span>}
-                          <span className="opacity-70">· ₹{a.totalCost.toLocaleString("en-IN")}</span>
-                          <button type="button" aria-label="Remove this allocation"
-                                  onClick={(event) => { event.stopPropagation(); void handleRemoveAssignment(a.id) }}
-                                  className="ml-0.5 opacity-60 hover:opacity-100">×</button>
-                        </span>
-                      ))}
+                {/* One line per job. A worker with a split day gets two, and the name is written
+                    once so the eye reads it as one person's day rather than two people. */}
+                {(rows.length > 0 ? rows : [null]).map((a, i) => (
+                  <div key={a?.id ?? "empty"} className={cn(MUSTER_GRID, "px-2 py-1 sm:px-3")}>
+                    <div className="min-w-0">
+                      {i === 0 && (
+                        <>
+                          <p className="flex items-baseline gap-1 text-[13px] font-bold leading-tight text-stone-700 dark:text-stone-200">
+                            <span className="truncate">{worker.name}</span>
+                            {worker.kind === "gang" && (
+                              <span className="shrink-0 text-[10px] font-black text-stone-400">×{worker.headcount ?? 1}</span>
+                            )}
+                          </p>
+                          <p className="mt-0.5 flex items-center gap-1 truncate text-[11px] font-medium text-stone-400">
+                            {isBiometric ? (
+                              <>
+                                <Fingerprint className="h-3 w-3 shrink-0" />
+                                {formatPunchTime(record?.checkInTime ?? null)} – {formatPunchTime(record?.checkOutTime ?? null)}
+                              </>
+                            ) : worker.dailyRate !== null ? (
+                              `₹${worker.dailyRate}/day`
+                            ) : (
+                              "No rate"
+                            )}
+                          </p>
+                        </>
+                      )}
                     </div>
-                  ) : null}
 
-                  {activities.length > 0 && (
+                    <div className="min-w-0">
+                      {a ? (
+                        <>
+                          <p className="truncate font-mono text-[11px] font-bold text-stone-700 dark:text-stone-200">
+                            {a.activityCode}
+                          </p>
+                          {/* Day and cost have their own columns from sm up; on a phone they ride
+                              under the code rather than being dropped, so the two layouts still
+                              show the same numbers. */}
+                          <p className="truncate text-[10px] text-stone-400 sm:hidden">
+                            {a.dayFraction}d · ₹{a.totalCost.toLocaleString("en-IN")}
+                          </p>
+                        </>
+                      ) : (
+                        <span className="text-[11px] text-stone-300">—</span>
+                      )}
+                    </div>
+
+                    <div className="flex min-w-0 items-center gap-1">
+                      {a ? (
+                        <>
+                          <span className="truncate text-[11px] font-semibold text-stone-600 dark:text-stone-300">
+                            {a.locationName ?? "no block"}
+                          </span>
+                          <button
+                            type="button"
+                            aria-label={`Remove ${a.activityCode} allocation`}
+                            onClick={(event) => { event.stopPropagation(); void handleRemoveAssignment(a.id) }}
+                            className="shrink-0 text-stone-300 hover:text-red-500"
+                          >
+                            ×
+                          </button>
+                        </>
+                      ) : (
+                        <span className="text-[11px] text-stone-300">—</span>
+                      )}
+                    </div>
+
+                    <span className="hidden text-right text-[11px] tabular-nums text-stone-500 sm:block">
+                      {a ? `${a.dayFraction}d` : ""}
+                    </span>
+                    <span className="hidden text-right text-[11px] font-semibold tabular-nums text-stone-600 sm:block dark:text-stone-300">
+                      {a ? `₹${a.totalCost.toLocaleString("en-IN")}` : ""}
+                    </span>
+
+                    <div className="flex shrink-0 items-center justify-end gap-0.5">
+                      {i === 0 && (
+                        <>
+                          <button
+                            type="button"
+                            aria-label={`Remove ${worker.name}`}
+                            disabled={isRemoving}
+                            onClick={(event) => {
+                              event.stopPropagation()
+                              handleRemoveWorker(worker.id, worker.name)
+                            }}
+                            className="flex h-8 w-8 items-center justify-center rounded-lg text-stone-300 touch-manipulation active:bg-stone-100 disabled:opacity-50"
+                          >
+                            {isRemoving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
+                          </button>
+                          <button
+                            type="button"
+                            aria-pressed={isPresent}
+                            aria-label={`${worker.name} present`}
+                            onClick={(event) => { event.stopPropagation(); act() }}
+                            className={cn(
+                              "flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border-2 transition-all touch-manipulation",
+                              isPresent
+                                ? "border-emerald-600 bg-emerald-600"
+                                : "border-stone-200 bg-white dark:bg-transparent",
+                            )}
+                          >
+                            {isPresent && <Check className="h-4 w-4 text-white stroke-[3]" />}
+                          </button>
+                        </>
+                      )}
+                    </div>
+                  </div>
+                ))}
+
+                {/* Full width, below the columns -- the editor needs the room the cells do not have. */}
+                <div className="px-3">
+                  {activities.length > 0 && isPresent && (
                     <WorkerAllocation
                       workerEstate={worker.estate ?? null}
                       locations={locations}
                       activities={activities}
                       saving={assigningWorkerId === worker.id}
-                      present={isPresent}
+                      hasWork={rows.length > 0}
                       onAdd={(payload) => handleAddAssignment(worker.id, payload)}
                     />
+                  )}
+
+                  {/* Absent means no work, full stop -- an assignment is a payable and the muster
+                      is what says it was earned. Said out loud rather than just omitting the
+                      control, so a manager looking for it knows which tap comes first. */}
+                  {activities.length > 0 && !isPresent && rows.length === 0 && (
+                    <p className="pb-0.5 text-[11px] font-medium text-stone-300 dark:text-stone-600">
+                      Mark present to set work
+                    </p>
                   )}
 
                   {/* Work recorded for someone nobody marked present. Surfaced rather than
                       auto-corrected: the fix is a judgement call, not something a screen
                       should make silently. */}
                   {!isPresent && rows.length > 0 && (
-                    <p className="mt-1.5 text-[11px] font-bold text-amber-600">
+                    <p className="pb-1 text-[11px] font-bold text-amber-600">
                       Work recorded but not marked present
                     </p>
                   )}
 
                   {pickingWorkerIds.includes(worker.id) && rows.length > 0 && (
-                    <p className={cn("mt-1.5 text-[11px] font-bold", isPresent ? "text-amber-200" : "text-amber-600")}>
+                    <p className="pb-1 text-[11px] font-bold text-amber-600">
                       Also picked today — paid by weight and by day
                     </p>
                   )}
-                  </div>
-                </div>
-                <div className="flex shrink-0 items-center gap-1">
-                  <button
-                    type="button"
-                    aria-label={`Remove ${worker.name}`}
-                    disabled={isRemoving}
-                    onClick={(event) => {
-                      event.stopPropagation()
-                      handleRemoveWorker(worker.id, worker.name)
-                    }}
-                    className={cn(
-                      "flex h-9 w-9 items-center justify-center rounded-xl touch-manipulation disabled:opacity-50",
-                      isPresent ? "text-emerald-100 active:bg-white/20" : "text-stone-300 active:bg-stone-100",
-                    )}
-                  >
-                    {isRemoving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
-                  </button>
-                  <button
-                    type="button"
-                    aria-pressed={isPresent}
-                    aria-label={`${worker.name} present`}
-                    onClick={(event) => { event.stopPropagation(); act() }}
-                    className={cn(
-                      "flex h-9 w-9 shrink-0 items-center justify-center rounded-xl transition-all touch-manipulation",
-                      isPresent ? "bg-white/20" : "border-2 border-stone-200 bg-white",
-                    )}
-                  >
-                    {isPresent && <Check className="h-5 w-5 text-white stroke-[3]" />}
-                  </button>
                 </div>
               </div>
             )
-          })
+          })}
+          </>
         )}
 
         {/* Bulk actions */}
@@ -685,7 +822,21 @@ export default function AttendanceTab() {
             </button>
             <button
               type="button"
-              onClick={() => setPresentWorkerIds([])}
+              onClick={() => {
+                // Anyone with work recorded keeps their place on the roll. Clearing them would
+                // leave a payable nobody is on the muster to have earned, and doing that to a
+                // whole roster in one tap is worse than doing it to one person.
+                const withWork = new Set(assignments.map((a) => a.workerId))
+                const kept = presentWorkerIds.filter((id) => withWork.has(id))
+                setPresentWorkerIds(kept)
+                if (kept.length > 0) {
+                  toast.info(
+                    kept.length === 1
+                      ? "1 worker kept — they have work recorded today."
+                      : `${kept.length} workers kept — they have work recorded today.`,
+                  )
+                }
+              }}
               disabled={presentCount === 0}
               className="flex-1 flex items-center justify-center rounded-2xl border border-stone-200 bg-white py-3 text-sm font-semibold text-stone-600 active:bg-stone-50 touch-manipulation disabled:opacity-40"
             >

@@ -82,7 +82,7 @@ const pick = async (label, comboLabel, optionIndex) => {
 }
 
 const allocate = async (n, activityIdx, blockIdx) => {
-  await page.getByRole("button", { name: /set work/i }).first().click()
+  await page.getByRole("button", { name: /set work|add another job/i }).first().click()
   await page.waitForTimeout(500)
   const work = await pick(`job ${n}`, "Work", activityIdx)
   const block = await pick(`block ${n}`, "Block", blockIdx)

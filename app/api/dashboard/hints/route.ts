@@ -34,13 +34,13 @@ export async function GET() {
           (SELECT COUNT(*) FROM locations        WHERE tenant_id = ${tenantId})::int  AS location_count,
           (
             SELECT COUNT(*) FROM (
-              SELECT id FROM labor_transactions   WHERE tenant_id = ${tenantId}
+              SELECT 1 FROM labour_cost          WHERE tenant_id = ${tenantId}
               UNION ALL
-              SELECT id FROM processing_records   WHERE tenant_id = ${tenantId}
+              SELECT 1 FROM processing_records   WHERE tenant_id = ${tenantId}
               UNION ALL
-              SELECT id FROM expense_transactions WHERE tenant_id = ${tenantId}
+              SELECT 1 FROM expense_transactions WHERE tenant_id = ${tenantId}
               UNION ALL
-              SELECT id FROM sales_records        WHERE tenant_id = ${tenantId}
+              SELECT 1 FROM sales_records        WHERE tenant_id = ${tenantId}
             ) sub
           )::int AS data_count,
           (

@@ -94,23 +94,23 @@ export async function GET(request: NextRequest) {
         SELECT
           lt.id::text,
           'labor'                        AS type,
-          COALESCE(aa.activity, lt.code) AS title,
+          COALESCE(aa.activity, lt.activity_code) AS title,
           COALESCE(lt.task_description, lt.notes) AS subtitle,
           lt.total_cost                  AS amount,
           NULL::numeric                  AS quantity,
           NULL::text                     AS unit,
-          lt.deployment_date::text       AS date
-        FROM labor_transactions lt
+          lt.work_date::text             AS date
+        FROM labour_cost lt
         LEFT JOIN account_activities aa
-          ON aa.code = lt.code AND aa.tenant_id = lt.tenant_id
+          ON aa.code = lt.activity_code AND aa.tenant_id = lt.tenant_id
         WHERE lt.tenant_id = ${tenantId}
           AND (
             aa.activity       ILIKE ${pattern}
             OR lt.notes       ILIKE ${pattern}
             OR lt.task_description ILIKE ${pattern}
-            OR lt.code        ILIKE ${pattern}
+            OR lt.activity_code ILIKE ${pattern}
           )
-        ORDER BY lt.deployment_date DESC
+        ORDER BY lt.work_date DESC
         LIMIT 6
       `),
     ])

@@ -48,19 +48,19 @@ export async function GET(request: Request) {
         tenantContext,
         sql`
           SELECT
-            lt.deployment_date,
-            lt.hf_laborers,
-            lt.hf_cost_per_laborer,
-            lt.outside_laborers,
-            lt.outside_cost_per_laborer,
+            lt.work_date AS deployment_date,
+            lt.estate_laborers AS hf_laborers,
+            lt.estate_rate     AS hf_cost_per_laborer,
+            lt.contract_laborers AS outside_laborers,
+            lt.contract_rate     AS outside_cost_per_laborer,
             lt.total_cost,
-            lt.code
-          FROM labor_transactions lt
+            lt.activity_code AS code
+          FROM labour_cost lt
           LEFT JOIN locations l ON l.id = lt.location_id
-          WHERE lt.deployment_date >= ${start}::date AND lt.deployment_date <= ${end}::date
+          WHERE lt.work_date >= ${start}::date AND lt.work_date <= ${end}::date
             AND lt.tenant_id = ${tenantId}
             ${estateScope(activeEstate)}
-          ORDER BY lt.deployment_date DESC
+          ORDER BY lt.work_date DESC
         `,
       )
     } catch (error) {

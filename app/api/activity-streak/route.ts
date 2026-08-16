@@ -42,7 +42,7 @@ export async function GET() {
             `
             SELECT DISTINCT (recorded_at AT TIME ZONE $2)::date::text AS day
             FROM (
-              SELECT deployment_date AS recorded_at FROM labor_transactions WHERE tenant_id = $1
+              SELECT work_date AS recorded_at FROM labour_cost WHERE tenant_id = $1
               UNION ALL
               SELECT entry_date FROM expense_transactions WHERE tenant_id = $1
             ) t

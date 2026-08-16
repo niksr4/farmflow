@@ -40,7 +40,7 @@ export async function GET(request: Request) {
       ? await Promise.all([
           sql`
             SELECT 1 FROM information_schema.columns
-            WHERE table_schema = 'public' AND table_name = 'labor_transactions' AND column_name = 'location_id'
+            WHERE table_schema = 'public' AND table_name = 'labour_cost' AND column_name = 'location_id'
             LIMIT 1
           `.then((rows) => Array.isArray(rows) && rows.length > 0),
           sql`
@@ -79,11 +79,11 @@ export async function GET(request: Request) {
         LIMIT 3
       `).catch(() => []),
       runTenantQuery(sql, tenantContext, sql`
-        SELECT (deployment_date AT TIME ZONE 'Asia/Kolkata')::date::text AS date, code, total_cost
-        FROM labor_transactions
+        SELECT (work_date AT TIME ZONE 'Asia/Kolkata')::date::text AS date, activity_code AS code, total_cost
+        FROM labour_cost
         WHERE tenant_id = ${tenantId}
           ${laborEstateFilter}
-        ORDER BY deployment_date DESC, id DESC
+        ORDER BY work_date DESC, source_id DESC
         LIMIT 2
       `).catch(() => []),
       runTenantQuery(sql, tenantContext, sql`

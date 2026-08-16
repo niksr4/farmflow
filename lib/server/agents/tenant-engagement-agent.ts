@@ -53,10 +53,10 @@ async function fetchYesterdayActivity(): Promise<Map<string, YesterdayActivity>>
             AND source IS DISTINCT FROM 'tenant-smoke-agent'
             AND created_at >= (CURRENT_DATE - INTERVAL '1 day') AT TIME ZONE 'Asia/Kolkata'
             AND created_at <  CURRENT_DATE AT TIME ZONE 'Asia/Kolkata')  AS logins_yesterday,
-        (SELECT COUNT(*) FROM labor_transactions
+        (SELECT COUNT(*) FROM labour_cost
           WHERE tenant_id = t.id
-            AND deployment_date >= (CURRENT_DATE - INTERVAL '1 day') AT TIME ZONE 'Asia/Kolkata'
-            AND deployment_date <  CURRENT_DATE AT TIME ZONE 'Asia/Kolkata') AS labor_yesterday,
+            AND work_date >= (CURRENT_DATE - INTERVAL '1 day') AT TIME ZONE 'Asia/Kolkata'
+            AND work_date <  CURRENT_DATE AT TIME ZONE 'Asia/Kolkata') AS labor_yesterday,
         (SELECT COUNT(*) FROM processing_records
           WHERE tenant_id = t.id
             AND created_at >= (CURRENT_DATE - INTERVAL '1 day') AT TIME ZONE 'Asia/Kolkata'
@@ -134,19 +134,19 @@ async function fetchTenantEngagementData(): Promise<TenantEngagementRow[]> {
       (
         SELECT COUNT(*)
         FROM (
-          SELECT id FROM labor_transactions      WHERE tenant_id = t.id
+          SELECT 1 FROM labour_cost             WHERE tenant_id = t.id
           UNION ALL
-          SELECT id FROM transaction_history     WHERE tenant_id = t.id
+          SELECT 1 FROM transaction_history     WHERE tenant_id = t.id
           UNION ALL
-          SELECT id FROM rainfall_records        WHERE tenant_id = t.id
+          SELECT 1 FROM rainfall_records        WHERE tenant_id = t.id
           UNION ALL
-          SELECT id FROM processing_records      WHERE tenant_id = t.id
+          SELECT 1 FROM processing_records      WHERE tenant_id = t.id
           UNION ALL
-          SELECT id FROM sales_records           WHERE tenant_id = t.id
+          SELECT 1 FROM sales_records           WHERE tenant_id = t.id
           UNION ALL
-          SELECT id FROM dispatch_records        WHERE tenant_id = t.id
+          SELECT 1 FROM dispatch_records        WHERE tenant_id = t.id
           UNION ALL
-          SELECT id FROM expense_transactions    WHERE tenant_id = t.id
+          SELECT 1 FROM expense_transactions    WHERE tenant_id = t.id
         ) sub
       )                                                             AS operational_data_count,
 

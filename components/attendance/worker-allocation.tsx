@@ -34,13 +34,14 @@ const DAY_SHARES = [
 ] as const
 
 export default function WorkerAllocation({
-  workerEstate, locations, activities, saving, present, onAdd,
+  workerEstate, locations, activities, saving, hasWork, onAdd,
 }: {
   workerEstate: string | null
   locations: LocationOption[]
   activities: ActivityOption[]
   saving: boolean
-  present: boolean
+  /** Already has at least one job today, so the trigger offers a second rather than a first. */
+  hasWork: boolean
   onAdd: (payload: { activityCode: string; locationId: string | null; dayFraction: number }) => Promise<boolean>
 }) {
   const [open, setOpen] = useState(false)
@@ -80,11 +81,11 @@ export default function WorkerAllocation({
         type="button"
         onClick={(e) => { e.stopPropagation(); setOpen(true) }}
         className={cn(
-          "mt-1.5 inline-flex items-center gap-1 rounded-lg px-2 py-1 text-[11px] font-bold touch-manipulation",
-          present ? "bg-white/15 text-white" : "bg-stone-100 text-stone-500",
+          "mb-0.5 inline-flex items-center gap-1 rounded-lg px-1.5 py-0.5 text-[11px] font-bold touch-manipulation",
+          "text-stone-400 hover:bg-stone-100 hover:text-stone-600 dark:hover:bg-white/[0.06]",
         )}
       >
-        <Plus className="h-3 w-3" /> Set work
+        <Plus className="h-3 w-3" /> {hasWork ? "Add another job" : "Set work"}
       </button>
     )
   }

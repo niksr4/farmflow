@@ -18,7 +18,9 @@ import { describe, expect, it } from "vitest"
  */
 const SCOPED_ROUTES = [
   { path: "app/api/exports/ops/route.ts", minJoiningQueries: 8, probe: "FROM processing_records" },
-  { path: "app/api/ai-charts-data/route.ts", minJoiningQueries: 2, probe: "FROM labor_transactions" },
+  // Labour comes from the labour_cost view now, so the estate filter has to survive that move --
+  // scoping a view is exactly as necessary as scoping the table it replaced. See scripts/117.
+  { path: "app/api/ai-charts-data/route.ts", minJoiningQueries: 2, probe: "FROM labour_cost" },
 ] as const
 
 /**

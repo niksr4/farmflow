@@ -22,20 +22,14 @@ const ALLOWED = new Map<string, string>([
   ["app/api/import-bulk/route.ts", "writes rows"],
   ["app/api/admin/seed-tenant/route.ts", "writes demo rows"],
   ["app/api/get-activity/route.ts", "rewrites activity codes on the rows"],
+  ["app/api/ai-validate/route.ts", "audits the raw rows for bad data"],
+  ["app/api/admin/tenant-activity/route.ts", "joins audit_logs on the legacy row id"],
   ["lib/tenant-deletion.ts", "deletes rows"],
   ["components/tenant-settings/utils.ts", "names the table in a deletion summary"],
   ["lib/server/pnl.ts", "names relations in a comment"],
-  // Activity signals, not money: these ask "did anything get written", and after a cutover the
-  // muster path answers through labour_assignments. Tracked separately from cost reporting.
-  ["lib/server/agents/tenant-dormancy.ts", "activity signal"],
-  ["lib/server/agents/tenant-engagement-agent.ts", "activity signal"],
-  ["app/api/activity-streak/route.ts", "activity signal"],
-  ["app/api/recent-activity/route.ts", "activity feed"],
-  ["app/api/admin/tenant-activity/route.ts", "activity feed"],
-  ["app/api/search/route.ts", "activity feed"],
-  ["app/api/dashboard/hints/route.ts", "activity signal"],
-  ["app/api/ai-charts-data/route.ts", "activity signal"],
-  ["app/api/ai-validate/route.ts", "checks the raw rows"],
+  // Reads both tables by name because it asks "did a human write anything", and after a cutover
+  // that answer lives in labour_assignments. Listed separately in ACTIVITY_TABLES.
+  ["lib/server/agents/tenant-dormancy.ts", "activity signal over both tables"],
 ])
 
 const walk = (dir: string, out: string[] = []): string[] => {

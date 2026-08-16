@@ -28,6 +28,13 @@ const ROUTES = [
   ["reconciliation", `/api/reconciliation?startDate=${FY.start}&endDate=${FY.end}`],
   ["exports/ops (labour csv)", `/api/exports/ops?dataset=labor&startDate=${FY.start}&endDate=${FY.end}`],
   ["exports/ops (pnl-monthly)", `/api/exports/ops?dataset=pnl-monthly&startDate=${FY.start}&endDate=${FY.end}`],
+  // Activity signals, not money -- but they read the same view, so a wrong column is the same
+  // runtime 500, and a tenant on the muster looking "inactive" is its own kind of wrong.
+  ["activity-streak", `/api/activity-streak`],
+  ["recent-activity", `/api/recent-activity`],
+  ["dashboard/hints", `/api/dashboard/hints`],
+  ["search (labour)", `/api/search?q=weed`],
+  ["ai-charts-data", `/api/ai-charts-data?start=${FY.start}&end=${FY.end}`],
 ]
 
 const browser = await chromium.launch()

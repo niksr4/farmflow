@@ -107,6 +107,38 @@ export async function POST(request: Request) {
       return NextResponse.json({ success: false, error: "One or more workers are invalid for this tenant" }, { status: 400 })
     }
 
+    // Nobody gets deployed on a day they were not there. The client hides the control for an
+    // absent worker, but that is a convenience, not the rule -- this is the rule, because an
+    // assignment is a payable and the muster is what says the money was earned.
+    //
+    // Checked against saved attendance, so the client persists presence before it posts here.
+    const presentRows = await runTenantQuery(
+      accountsSql,
+      tenantContext,
+      accountsSql`
+        SELECT worker_id
+        FROM attendance_records
+        WHERE tenant_id = ${tenantContext.tenantId}
+          AND attendance_date = ${date}::date
+          AND worker_id = ANY(${workerIds})
+      `,
+    )
+    const present = new Set(presentRows.map((r: any) => String(r.worker_id)))
+    const absent = roster.filter((w: any) => !present.has(String(w.id)))
+    if (absent.length > 0) {
+      const names = absent.map((w: any) => String(w.full_name || "")).filter(Boolean)
+      return NextResponse.json(
+        {
+          success: false,
+          error:
+            names.length === 1
+              ? `${names[0]} is not marked present on this day. Mark them present first, then set their work.`
+              : `${names.length} of these workers are not marked present on this day. Mark them present first, then set their work.`,
+        },
+        { status: 409 },
+      )
+    }
+
     const overrideRate = body?.rate == null || body.rate === "" ? null : num(body.rate, -1)
     if (overrideRate !== null && overrideRate < 0) {
       return NextResponse.json({ success: false, error: "A rate cannot be negative" }, { status: 400 })

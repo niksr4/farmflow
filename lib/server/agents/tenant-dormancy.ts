@@ -75,6 +75,12 @@ export type TenantActivitySignal = TenantActivityInput & {
 const ACTIVITY_TABLES: ReadonlyArray<{ table: string; where?: string }> = [
   { table: "processing_records" },
   { table: "labor_transactions" },
+  // Labour typed into Accounts and labour allocated on the muster roll are the same act of
+  // bookkeeping, so both count. Without this, a tenant who has moved to the muster writes nothing
+  // to labor_transactions, and if their attendance comes from a fingerprint terminal — excluded
+  // just below — the gate sees an estate that has gone silent while somebody is in fact
+  // allocating work every morning. That is how the probe misfired on Medappa once already.
+  { table: "labour_assignments" },
   { table: "expense_transactions" },
   { table: "rainfall_records" },
   { table: "sales_records" },
