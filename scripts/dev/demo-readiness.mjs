@@ -24,42 +24,42 @@ const check = (ok, msg) => { if (!ok) failures++; console.log(`  ${ok ? "ok  " :
 
 // Leave the tenant exactly as found: rates stay unset, which is Manoj's call to make.
 const before = await sql`SELECT id, daily_rate FROM attendance_workers WHERE tenant_id=${T}`
+// The roll only ever shows active workers, so that is what the count is compared against.
+const activeCount = Number((await sql`SELECT COUNT(*)::int n FROM attendance_workers WHERE tenant_id=${T} AND active`)[0].n)
 await sql`DELETE FROM labour_assignments WHERE tenant_id=${T} AND work_date=${today}::date`
 await sql`DELETE FROM attendance_records WHERE tenant_id=${T} AND attendance_date=${today}::date`
 
 const browser = await chromium.launch()
 const page = await (await browser.newContext({ viewport: { width: 1280, height: 1000 } })).newPage()
 
-console.log("\n== owner signs in ==")
+console.log("\n== the estate's own admin signs in ==")
 await page.goto(`${BASE}/login`, { waitUntil: "domcontentloaded" })
-await page.locator("input#username").pressSequentially(process.env.E2E_OWNER_USERNAME, { delay: 15 })
-await page.locator("input#password").pressSequentially(process.env.E2E_OWNER_PASSWORD, { delay: 15 })
+// Signing in as the tenant's own admin rather than previewing as owner: Attendance and the
+// labour routes do not call resolveScopedSessionUser, so owner preview does not reach them.
+// Worth fixing, but not by changing tenant resolution on write paths the night before a demo.
+await page.locator("input#username").pressSequentially("medappa_admin", { delay: 15 })
+await page.locator("input#password").pressSequentially("MusterDemo!2026", { delay: 15 })
 await page.locator('button[type="submit"]:not([disabled])').waitFor({ timeout: 20000 })
 await page.click('button[type="submit"]')
 await page.waitForLoadState("networkidle", { timeout: 40000 })
 check(/admin|dashboard/.test(page.url()), `landed on ${page.url().replace(BASE, "")}`)
 
-console.log(`\n== preview ${TENANT} ==`)
-// Preview is a cookie the owner's session is resolved through (lib/module-access.ts). Setting it
-// directly is what the existing e2e specs do, and it is exactly what the console's
-// "Preview as Estate Admin" button ends up doing.
-await page.context().addCookies([{ name: "farmflow_preview_tenant", value: T, url: BASE }])
+console.log(`\n== ${TENANT} ==`)
 await page.goto(`${BASE}/dashboard?tab=attendance`, { waitUntil: "domcontentloaded" })
 await page.waitForTimeout(5000)
 
 const snapshot = await (await page.request.get(`${BASE}/api/attendance?date=${today}`)).json()
 const previewing = snapshot?.workers?.length ?? 0
 check(previewing > 0, `attendance shows ${previewing} workers`)
-const isMedappa = previewing === before.length
-check(isMedappa, `that is ${TENANT}'s roster (${before.length} on the roll)`)
+const isMedappa = previewing === activeCount
+check(isMedappa, `that is ${TENANT}'s roster (${activeCount} active on the roll)`)
 
 if (!isMedappa) {
-  console.log("\n  NOTE: preview did not switch tenant. Use the admin console's")
-  console.log("        'Preview as Estate Admin' button before opening Attendance.")
+  console.log("\n  NOTE: wrong tenant -- check the medappa_admin login.")
 }
 
 console.log("\n== the rate guard is what a new estate meets first ==")
-const w = before[0]
+const w = (await sql`SELECT id FROM attendance_workers WHERE tenant_id=${T} AND active ORDER BY full_name LIMIT 1`)[0]
 await page.request.put(`${BASE}/api/attendance`, { data: { date: today, presentWorkerIds: [w.id] } })
 const code = (await sql`SELECT code FROM account_activities WHERE tenant_id=${T} ORDER BY code LIMIT 1`)[0].code
 const block = (await sql`SELECT id, name FROM locations WHERE tenant_id=${T} ORDER BY name LIMIT 1`)[0]
