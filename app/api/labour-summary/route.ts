@@ -23,6 +23,7 @@ export const dynamic = "force-dynamic"
 export const revalidate = 0
 
 const DATE = /^\d{4}-\d{2}-\d{2}$/
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
 
 export async function GET(request: Request) {
   try {
@@ -46,7 +47,25 @@ export async function GET(request: Request) {
         ))`
       : accountsSql``
 
-    const [byBlock, byWork, byKind, totals] = await runTenantQueries(accountsSql, tenantContext, [
+    // Narrow to one activity or one block. Both are answerable across a tenant's whole history --
+    // every legacy row carries a code, and just over half carry a block -- so these work long
+    // before anyone moves to the muster.
+    const code = String(searchParams.get("code") || "").trim()
+    const codeClause = code ? accountsSql` AND lc.activity_code = ${code}` : accountsSql``
+
+    const locationId = String(searchParams.get("locationId") || "").trim()
+    const locationClause = UUID.test(locationId)
+      ? accountsSql` AND lc.location_id = ${locationId}::uuid`
+      : accountsSql``
+
+    // "Which weeks did this cost me" is a different question from "which blocks", and the answer
+    // is the one that shows a spike. Weekly by default; monthly once a range gets long enough that
+    // weeks stop fitting on a screen.
+    const bucket = searchParams.get("bucket") === "month" ? "month" : "week"
+
+    const filters = accountsSql`${estateClause}${codeClause}${locationClause}`
+
+    const [byBlock, byWork, byKind, totals, byPeriod, options] = await runTenantQueries(accountsSql, tenantContext, [
       accountsSql`
         SELECT
           COALESCE(l.name, l.code, 'No block recorded') AS label,
@@ -59,7 +78,7 @@ export async function GET(request: Request) {
         LEFT JOIN locations l ON l.id = lc.location_id
         WHERE lc.tenant_id = ${tenantContext.tenantId}
           AND lc.work_date BETWEEN ${startDate}::date AND ${endDate}::date
-          ${estateClause}
+          ${filters}
         GROUP BY l.name, l.code, l.estate, l.area_acres
         ORDER BY SUM(lc.total_cost) DESC
       `,
@@ -73,7 +92,7 @@ export async function GET(request: Request) {
           ON aa.code = lc.activity_code AND aa.tenant_id = lc.tenant_id
         WHERE lc.tenant_id = ${tenantContext.tenantId}
           AND lc.work_date BETWEEN ${startDate}::date AND ${endDate}::date
-          ${estateClause}
+          ${filters}
         GROUP BY lc.activity_code
         ORDER BY SUM(lc.total_cost) DESC
       `,
@@ -89,7 +108,7 @@ export async function GET(request: Request) {
         FROM labour_cost lc
         WHERE lc.tenant_id = ${tenantContext.tenantId}
           AND lc.work_date BETWEEN ${startDate}::date AND ${endDate}::date
-          ${estateClause}
+          ${filters}
       `,
       accountsSql`
         SELECT
@@ -98,6 +117,27 @@ export async function GET(request: Request) {
           COUNT(*) FILTER (WHERE lc.source = 'assignment')::int AS from_muster,
           COUNT(*) FILTER (WHERE lc.source = 'transaction')::int AS from_accounts
         FROM labour_cost lc
+        WHERE lc.tenant_id = ${tenantContext.tenantId}
+          AND lc.work_date BETWEEN ${startDate}::date AND ${endDate}::date
+          ${filters}
+      `,
+      accountsSql`
+        SELECT date_trunc(${bucket}, lc.work_date)::date::text AS period,
+               SUM(lc.total_cost)::numeric AS cost,
+               COUNT(*)::int AS entries
+        FROM labour_cost lc
+        WHERE lc.tenant_id = ${tenantContext.tenantId}
+          AND lc.work_date BETWEEN ${startDate}::date AND ${endDate}::date
+          ${filters}
+        GROUP BY 1 ORDER BY 1
+      `,
+      // What the pickers can offer. Deliberately unfiltered by code/block, so choosing one does
+      // not empty the list you chose it from.
+      accountsSql`
+        SELECT DISTINCT lc.activity_code AS code, l.id AS location_id,
+               COALESCE(l.name, l.code) AS location_name
+        FROM labour_cost lc
+        LEFT JOIN locations l ON l.id = lc.location_id
         WHERE lc.tenant_id = ${tenantContext.tenantId}
           AND lc.work_date BETWEEN ${startDate}::date AND ${endDate}::date
           ${estateClause}
@@ -131,6 +171,23 @@ export async function GET(request: Request) {
         name: row.name ? String(row.name) : null,
         cost: n(row.cost),
       })),
+      bucket,
+      appliedFilters: { code: code || null, locationId: UUID.test(locationId) ? locationId : null },
+      byPeriod: byPeriod.map((row: any) => ({
+        period: String(row.period),
+        cost: n(row.cost),
+        entries: n(row.entries),
+      })),
+      filterOptions: {
+        codes: [...new Set(options.map((r: any) => String(r.code || "")).filter(Boolean))].sort(),
+        blocks: [
+          ...new Map(
+            options
+              .filter((r: any) => r.location_id)
+              .map((r: any) => [String(r.location_id), { id: String(r.location_id), name: String(r.location_name || "Block") }]),
+          ).values(),
+        ].sort((a: any, b: any) => a.name.localeCompare(b.name)),
+      },
       byKind: {
         estateLabourers: n(k.estate_laborers),
         contractLabourers: n(k.contract_laborers),

@@ -17,12 +17,16 @@ import { cn } from "@/lib/utils"
 
 type Row = { label: string; estate: string | null; areaAcres: number | null; cost: number; costPerAcre: number | null }
 type WorkRow = { code: string; name: string | null; cost: number }
+type PeriodRow = { period: string; cost: number; entries: number }
 type Summary = {
   total: number
   entries: number
+  bucket: "week" | "month"
   source: { fromMuster: number; fromAccounts: number }
   byBlock: Row[]
   byWork: WorkRow[]
+  byPeriod: PeriodRow[]
+  filterOptions: { codes: string[]; blocks: Array<{ id: string; name: string }> }
   byKind: { estateLabourers: number; contractLabourers: number; estateCost: number; contractCost: number }
 }
 
@@ -53,26 +57,51 @@ function Bars({ rows, tone }: { rows: Array<{ key: string; label: string; sub?: 
   )
 }
 
+/** Weeks read as dates; months read as months. */
+const periodLabel = (iso: string, bucket: "week" | "month") => {
+  const d = new Date(iso + "T12:00:00")
+  if (Number.isNaN(d.getTime())) return iso
+  return bucket === "month"
+    ? d.toLocaleDateString("en-IN", { month: "short", year: "2-digit" })
+    : d.toLocaleDateString("en-IN", { day: "numeric", month: "short" })
+}
+
 export default function LabourCostSummary({ startDate, endDate }: { startDate: string; endDate: string }) {
   const [data, setData] = useState<Summary | null>(null)
   const [loading, setLoading] = useState(true)
+  // Narrowing to one code or one block is how a grower actually interrogates this: "what did
+  // weeding cost me", "what has that block taken". Both answerable across the whole history.
+  const [code, setCode] = useState("")
+  const [block, setBlock] = useState("")
+  const [bucket, setBucket] = useState<"week" | "month">("week")
+  // Kept from the unfiltered response so choosing a filter never empties its own picker.
+  const [options, setOptions] = useState<Summary["filterOptions"]>({ codes: [], blocks: [] })
 
   useEffect(() => {
-    let cancelled = false
+    const controller = new AbortController()
     setLoading(true)
     void (async () => {
       try {
-        const res = await fetch(`/api/labour-summary?startDate=${startDate}&endDate=${endDate}`)
+        const qs = new URLSearchParams({ startDate, endDate, bucket })
+        if (code) qs.set("code", code)
+        if (block) qs.set("locationId", block)
+        const res = await fetch(`/api/labour-summary?${qs}`, { signal: controller.signal })
         const body = await res.json()
-        if (!cancelled && body?.success) setData(body)
+        if (body?.success) {
+          setData(body)
+          if (!code && !block) setOptions(body.filterOptions)
+        }
       } catch {
-        // Non-fatal: the labour list below still renders, this panel just stays empty.
+        // Non-fatal: the labour list below still renders, this panel just stays empty. An abort
+        // from a superseded filter change lands here too and is not a failure.
       } finally {
-        if (!cancelled) setLoading(false)
+        if (!controller.signal.aborted) setLoading(false)
       }
     })()
-    return () => { cancelled = true }
-  }, [startDate, endDate])
+    return () => controller.abort()
+  }, [startDate, endDate, code, block, bucket])
+
+  const filtered = Boolean(code || block)
 
   if (loading) {
     return (
@@ -86,8 +115,86 @@ export default function LabourCostSummary({ startDate, endDate }: { startDate: s
   const { byKind } = data
   const kindTotal = byKind.estateCost + byKind.contractCost
 
+  const selectCls =
+    "h-8 rounded-lg border border-stone-200 bg-white px-2 text-xs font-semibold text-stone-600 " +
+    "dark:border-white/[0.1] dark:bg-transparent dark:text-stone-300"
+
   return (
     <div className="space-y-4">
+      {/* Ask it a narrower question. The pickers list what this period actually contains, so an
+          option is never a dead end. */}
+      <div className="flex flex-wrap items-center gap-2">
+        <select aria-label="Filter by work" className={selectCls} value={code} onChange={(e) => setCode(e.target.value)}>
+          <option value="">All work</option>
+          {options.codes.map((c) => <option key={c} value={c}>{c}</option>)}
+        </select>
+
+        <select aria-label="Filter by block" className={selectCls} value={block} onChange={(e) => setBlock(e.target.value)}>
+          <option value="">All blocks</option>
+          {options.blocks.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
+        </select>
+
+        <div className="flex overflow-hidden rounded-lg border border-stone-200 dark:border-white/[0.1]">
+          {(["week", "month"] as const).map((b) => (
+            <button
+              key={b}
+              type="button"
+              onClick={() => setBucket(b)}
+              className={cn(
+                "px-2.5 py-1.5 text-xs font-bold capitalize",
+                bucket === b ? "bg-emerald-600 text-white" : "text-stone-500",
+              )}
+            >
+              {b}ly
+            </button>
+          ))}
+        </div>
+
+        {filtered && (
+          <button
+            type="button"
+            onClick={() => { setCode(""); setBlock("") }}
+            className="text-xs font-bold text-emerald-700 underline underline-offset-2 dark:text-emerald-400"
+          >
+            Clear
+          </button>
+        )}
+
+        <span className="ml-auto text-sm font-black tabular-nums">
+          {money(data.total)}
+          <span className="ml-1.5 text-xs font-medium text-muted-foreground">
+            over {data.entries} {data.entries === 1 ? "entry" : "entries"}
+          </span>
+        </span>
+      </div>
+
+      {/* When it was spent. This is the panel that shows a spike, which neither block nor code can. */}
+      {data.byPeriod.length > 1 && (
+        <section className="rounded-xl border border-stone-200 bg-white p-4 dark:border-white/[0.06] dark:bg-card">
+          <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-stone-400">
+            By {data.bucket}
+          </p>
+          <p className="mb-3 text-xs text-muted-foreground">When the money went out</p>
+          <div className="flex items-end gap-1 overflow-x-auto pb-1" style={{ height: 96 }}>
+            {data.byPeriod.map((row) => {
+              const max = Math.max(1, ...data.byPeriod.map((r) => r.cost))
+              return (
+                <div key={row.period} className="flex min-w-[2.25rem] flex-1 flex-col items-center gap-1">
+                  <div
+                    title={`${periodLabel(row.period, data.bucket)} — ${money(row.cost)}`}
+                    className="w-full rounded-t bg-emerald-600/80"
+                    style={{ height: `${Math.max(2, (row.cost / max) * 68)}px` }}
+                  />
+                  <span className="whitespace-nowrap text-[9px] text-stone-400">
+                    {periodLabel(row.period, data.bucket)}
+                  </span>
+                </div>
+              )
+            })}
+          </div>
+        </section>
+      )}
+
       <div className="grid gap-4 lg:grid-cols-3">
         <section className="rounded-xl border border-stone-200 bg-white p-4 dark:border-white/[0.06] dark:bg-card">
           <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-stone-400">By block</p>
@@ -117,7 +224,7 @@ export default function LabourCostSummary({ startDate, endDate }: { startDate: s
               cost: w.cost,
             }))}
           />
-          {data.byWork.length === 1 && (
+          {data.byWork.length === 1 && !filtered && (
             // A single bucket means every entry carries the same code, so this breakdown cannot
             // tell the estate anything. Worth saying plainly rather than showing one full-width bar
             // and letting it read as a finding.
