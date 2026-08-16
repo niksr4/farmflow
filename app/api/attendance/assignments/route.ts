@@ -151,6 +151,24 @@ export async function POST(request: Request) {
       headcount: w.kind === "gang" ? Math.max(1, Number(w.headcount) || 1) : 1,
     }))
 
+    // A worker with no daily rate would have produced a Rs 0 payable, saved without complaint,
+    // and quietly pulled that block's cost-per-acre towards zero. Nobody reviewing the roll would
+    // see anything wrong -- the row is there, the work is named, only the money is missing.
+    const rateless = rows.filter((r) => !(r.rate > 0))
+    if (rateless.length > 0) {
+      const names = rateless.map((r) => r.name).filter(Boolean)
+      return NextResponse.json(
+        {
+          success: false,
+          error:
+            names.length === 1
+              ? `${names[0]} has no daily rate, so this work would be recorded as costing nothing. Set their rate on the Workers tab first.`
+              : `${names.length} of these workers have no daily rate, so the work would be recorded as costing nothing. Set their rates on the Workers tab first.`,
+        },
+        { status: 409 },
+      )
+    }
+
     // One transaction: a bulk assign either lands for the whole selection or not at all. Half a
     // crew allocated is worse than none, because it looks finished.
     try {

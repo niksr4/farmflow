@@ -7,6 +7,7 @@ import { validateLocationForTenant } from "@/lib/server/location-utils"
 import { resolveActiveEstate } from "@/lib/server/estate-filter"
 import { SELECTED_ESTATE_COOKIE } from "@/lib/server/estate-cookie"
 import { normalizeTenantContext, runTenantQueries, runTenantQuery } from "@/lib/server/tenant-db"
+import { blockedByLabourCutover } from "@/lib/server/labour-entry-mode"
 import { canDeleteModule, canWriteModule } from "@/lib/permissions"
 import { logAuditEvent } from "@/lib/server/audit-log"
 import { logRouteMutationFailure } from "@/lib/server/route-error-events"
@@ -330,6 +331,12 @@ export async function POST(request: Request) {
     const tenantContext = normalizeTenantContext(sessionUser.tenantId, sessionUser.role)
     const body = await request.json()
     const { date, code, laborEntries, notes } = body
+    // A tenant who has moved to the muster must not be able to file labour here for a day the
+    // totals now take from somewhere else -- it would save, and silently count for nothing.
+    const cutoverBlock = await blockedByLabourCutover(tenantContext, body?.date)
+    if (cutoverBlock) {
+      return NextResponse.json({ success: false, error: cutoverBlock }, { status: 409 })
+    }
     if (!(await validateActivityCodeForTenant(tenantContext, String(code || "")))) {
       return NextResponse.json(
         { success: false, error: `Activity code "${code}" doesn't exist for this tenant. Pick one from the list or add it under Codes settings first.` },
@@ -553,6 +560,12 @@ export async function PUT(request: Request) {
     const tenantContext = normalizeTenantContext(sessionUser.tenantId, sessionUser.role)
     const body = await request.json()
     const { id, date, code, laborEntries, notes } = body
+    // A tenant who has moved to the muster must not be able to file labour here for a day the
+    // totals now take from somewhere else -- it would save, and silently count for nothing.
+    const cutoverBlock = await blockedByLabourCutover(tenantContext, body?.date)
+    if (cutoverBlock) {
+      return NextResponse.json({ success: false, error: cutoverBlock }, { status: 409 })
+    }
     if (!(await validateActivityCodeForTenant(tenantContext, String(code || "")))) {
       return NextResponse.json(
         { success: false, error: `Activity code "${code}" doesn't exist for this tenant. Pick one from the list or add it under Codes settings first.` },
