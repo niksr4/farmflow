@@ -28,6 +28,42 @@ export default function LoginPage() {
   const { t } = useLocale()
   const router = useRouter()
 
+  /**
+   * Adopt whatever the browser put in the fields before React was listening.
+   *
+   * These are controlled inputs and the submit button is gated on their state, but a password
+   * manager writes straight to the DOM node -- no input event, so onChange never runs. State
+   * stays empty, the button stays disabled, and on the next render React writes its own empty
+   * value back over the credentials. The user sees either a dead Sign in button or fields that
+   * clear themselves, and no amount of clicking helps because nothing is wrong with the password.
+   *
+   * Chrome also fills asynchronously, and not always before mount, so a single read on mount is
+   * not enough -- this re-checks over the first second and stops as soon as it has something.
+   */
+  useEffect(() => {
+    let cancelled = false
+    const adopt = () => {
+      if (cancelled) return false
+      const usernameEl = document.getElementById("username") as HTMLInputElement | null
+      const passwordEl = document.getElementById("password") as HTMLInputElement | null
+      let found = false
+      if (usernameEl?.value) {
+        setUsername((current) => (current ? current : ((found = true), usernameEl.value)))
+      }
+      if (passwordEl?.value) {
+        setPassword((current) => (current ? current : ((found = true), passwordEl.value)))
+      }
+      return found
+    }
+
+    if (adopt()) return
+    const timers = [60, 200, 500, 1000].map((ms) => setTimeout(adopt, ms))
+    return () => {
+      cancelled = true
+      timers.forEach(clearTimeout)
+    }
+  }, [])
+
   const ensurePrivacyNoticeAccepted = async (role: string, tenantId: string) => {
     if (!tenantId || role === "owner") {
       return
