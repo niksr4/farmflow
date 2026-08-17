@@ -129,6 +129,16 @@ describe("assembled policy", () => {
     expect(CONTENT_SECURITY_POLICY).toMatch(/worker-src [^;]*\bblob:/)
   })
 
+  it("lets an already-trusted analytics host load its pixel", () => {
+    // A host permitted for script-src and connect-src but not img-src is not a tighter policy,
+    // just an inconsistent one -- it drops hits with no error anyone sees.
+    const scriptHosts = /script-src ([^;]*)/.exec(CONTENT_SECURITY_POLICY)?.[1] ?? ""
+    const imgHosts = /img-src ([^;]*)/.exec(CONTENT_SECURITY_POLICY)?.[1] ?? ""
+    if (scriptHosts.includes("googletagmanager.com")) {
+      expect(imgHosts).toContain("googletagmanager.com")
+    }
+  })
+
   it("contains no malformed partial-label wildcard in any directive", () => {
     // Catches `o*.host`, `api*.host` etc. anywhere in the policy, not just connect-src.
     expect(CONTENT_SECURITY_POLICY).not.toMatch(/[A-Za-z0-9-]+\*\./)
