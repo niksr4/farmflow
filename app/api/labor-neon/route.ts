@@ -96,9 +96,9 @@ export async function GET(request: Request) {
     const activeEstate = resolveActiveEstate(searchParams, cookieEstate)
     const locationFilterClause =
       supportsLocation && validLocationId
-        ? accountsSql` AND location_id = ${validLocationId}::uuid`
+        ? accountsSql` AND lc.location_id = ${validLocationId}::uuid`
         : supportsLocation && activeEstate
-          ? accountsSql` AND (location_id IS NULL OR location_id IN (SELECT id FROM locations WHERE tenant_id = ${tenantContext.tenantId} AND estate = ${activeEstate}))`
+          ? accountsSql` AND (lc.location_id IS NULL OR lc.location_id IN (SELECT id FROM locations WHERE tenant_id = ${tenantContext.tenantId} AND estate = ${activeEstate}))`
           : accountsSql``
     const supportsTaskDescription = await tableHasTaskDescriptionColumn("labor_transactions")
     const taskDescriptionSelect = supportsTaskDescription ? accountsSql`, task_description` : accountsSql``
@@ -113,99 +113,55 @@ export async function GET(request: Request) {
     const offset = !all && offsetParam ? Math.max(Number.parseInt(offsetParam, 10) || 0, 0) : 0
     const dateFilterClause =
       startDate && endDate
-        ? accountsSql` AND deployment_date >= ${startDate}::date AND deployment_date <= ${endDate}::date`
+        ? accountsSql` AND lc.work_date >= ${startDate}::date AND lc.work_date <= ${endDate}::date`
         : accountsSql``
 
-    const deploymentRowsQuery = supportsLocation
-      ? limit
-        ? accountsSql`
-            SELECT 
-              id,
-              deployment_date as date,
-              recorded_by,
-              code,
-              hf_laborers,
-              hf_cost_per_laborer,
-              outside_laborers,
-              outside_cost_per_laborer,
-              total_cost,
-              notes${taskDescriptionSelect}${laborEntriesSelect},
-              location_id
-            FROM labor_transactions
-            WHERE tenant_id = ${tenantContext.tenantId}
-              ${locationFilterClause}
-              ${dateFilterClause}
-            ORDER BY deployment_date DESC
-            LIMIT ${limit} OFFSET ${offset}
-          `
-        : accountsSql`
-            SELECT 
-              id,
-              deployment_date as date,
-              recorded_by,
-              code,
-              hf_laborers,
-              hf_cost_per_laborer,
-              outside_laborers,
-              outside_cost_per_laborer,
-              total_cost,
-              notes${taskDescriptionSelect}${laborEntriesSelect},
-              location_id
-            FROM labor_transactions
-            WHERE tenant_id = ${tenantContext.tenantId}
-              ${locationFilterClause}
-              ${dateFilterClause}
-            ORDER BY deployment_date DESC
-          `
-      : limit
-        ? accountsSql`
-            SELECT 
-              id,
-              deployment_date as date,
-              recorded_by,
-              code,
-              hf_laborers,
-              hf_cost_per_laborer,
-              outside_laborers,
-              outside_cost_per_laborer,
-              total_cost,
-              notes${taskDescriptionSelect}${laborEntriesSelect}
-            FROM labor_transactions
-            WHERE tenant_id = ${tenantContext.tenantId}
-              ${dateFilterClause}
-            ORDER BY deployment_date DESC
-            LIMIT ${limit} OFFSET ${offset}
-          `
-        : accountsSql`
-            SELECT 
-              id,
-              deployment_date as date,
-              recorded_by,
-              code,
-              hf_laborers,
-              hf_cost_per_laborer,
-              outside_laborers,
-              outside_cost_per_laborer,
-              total_cost,
-              notes${taskDescriptionSelect}${laborEntriesSelect}
-            FROM labor_transactions
-            WHERE tenant_id = ${tenantContext.tenantId}
-              ${dateFilterClause}
-            ORDER BY deployment_date DESC
-          `
+    // One list, both ways of recording labour. Reading the view rather than the table is what
+    // stops the day after a cutover looking like a day nobody worked: the summary above this list
+    // already counted it, and an empty list under a non-zero total reads as a broken screen.
+    //
+    // A muster day arrives as one row per worker per job, so a split day is two lines with two
+    // blocks -- the same shape the roll shows. `source` travels with each row because only the
+    // legacy ones can be edited here; an assignment is owned by the muster.
+    const rowLimit = limit ? accountsSql` LIMIT ${limit} OFFSET ${offset}` : accountsSql``
+    const deploymentRowsQuery = accountsSql`
+      SELECT
+        lc.source_id            AS id,
+        lc.source,
+        lc.work_date            AS date,
+        lc.recorded_by,
+        lc.activity_code        AS code,
+        lc.estate_laborers      AS hf_laborers,
+        lc.estate_rate          AS hf_cost_per_laborer,
+        lc.contract_laborers    AS outside_laborers,
+        lc.contract_rate        AS outside_cost_per_laborer,
+        lc.total_cost,
+        lc.notes,
+        lc.task_description,
+        lc.labor_entries,
+        lc.location_id,
+        w.full_name             AS worker_name
+      FROM labour_cost lc
+      LEFT JOIN attendance_workers w ON w.id = lc.worker_id
+      WHERE lc.tenant_id = ${tenantContext.tenantId}
+        ${locationFilterClause}
+        ${dateFilterClause}
+      ORDER BY lc.work_date DESC, lc.created_at DESC
+      ${rowLimit}
+    `
 
     const queryList = [
       accountsSql`
         SELECT COUNT(*)::int as count
-        FROM labor_transactions
-        WHERE tenant_id = ${tenantContext.tenantId}
+        FROM labour_cost lc
+        WHERE lc.tenant_id = ${tenantContext.tenantId}
           ${locationFilterClause}
           ${dateFilterClause}
       `,
       accountsSql`
-        SELECT COALESCE(SUM(total_cost), 0) as total
-        FROM labor_transactions
-        WHERE tenant_id = ${tenantContext.tenantId}
+        SELECT COALESCE(SUM(lc.total_cost), 0) as total
+        FROM labour_cost lc
+        WHERE lc.tenant_id = ${tenantContext.tenantId}
           ${locationFilterClause}
           ${dateFilterClause}
       `,
@@ -267,9 +223,13 @@ export async function GET(request: Request) {
         laborEntries,
         totalCost: Number.parseFloat(row.total_cost),
         notes: row.notes || "",
-        locationId: supportsLocation && row.location_id ? String(row.location_id) : null,
-        taskDescription: supportsTaskDescription && row.task_description ? String(row.task_description) : null,
+        locationId: row.location_id ? String(row.location_id) : null,
+        taskDescription: row.task_description ? String(row.task_description) : null,
         user: row.recorded_by || "—",
+        // "transaction" rows were typed here and can be edited here. "assignment" rows came off
+        // the muster roll -- shown so the day is complete, but editing one belongs on the roll.
+        source: String(row.source || "transaction"),
+        workerName: row.worker_name ? String(row.worker_name) : null,
       }
     })
 

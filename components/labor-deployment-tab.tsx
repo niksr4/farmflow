@@ -1106,6 +1106,17 @@ export default function LaborDeploymentTab({
                         {deployment.notes && (
                           <p className="text-xs text-stone-400 italic">{deployment.notes}</p>
                         )}
+                        {/* A muster row has no life of its own here -- it is one worker's job on
+                            the roll, and its id belongs to the assignments table, not the legacy
+                            one these buttons write to. Send them to the day instead. */}
+                        {deployment.source === "assignment" ? (
+                          <a
+                            href={`/dashboard?tab=attendance&date=${String(deployment.date).slice(0, 10)}`}
+                            className="mt-2 flex h-10 items-center justify-center gap-1.5 rounded-xl border border-stone-200 bg-white text-sm font-semibold text-emerald-700 touch-manipulation"
+                          >
+                            Open {deployment.workerName ? `${deployment.workerName}'s` : "this"} day in Attendance
+                          </a>
+                        ) : (
                         <div className="flex gap-2 pt-2">
                           <button
                             type="button"
@@ -1122,6 +1133,7 @@ export default function LaborDeploymentTab({
                             <Trash2 className="h-3.5 w-3.5" /> Delete
                           </button>
                         </div>
+                        )}
                       </div>
                     </CollapsibleContent>
                   </Collapsible>
@@ -1171,6 +1183,14 @@ export default function LaborDeploymentTab({
                       <TableCell className="text-sm text-muted-foreground">{resolveLocationName(deployment.locationId) || "-"}</TableCell>
                       <TableCell className="max-w-[180px] truncate text-xs text-muted-foreground">{deployment.notes || "-"}</TableCell>
                       <TableCell>
+                        {deployment.source === "assignment" ? (
+                          <a
+                            href={`/dashboard?tab=attendance&date=${String(deployment.date).slice(0, 10)}`}
+                            className="text-xs font-semibold text-emerald-700 underline underline-offset-2 dark:text-emerald-400"
+                          >
+                            Open in Attendance
+                          </a>
+                        ) : (
                         <TooltipProvider>
                           <div className="flex gap-2">
                             <Tooltip>
@@ -1195,6 +1215,7 @@ export default function LaborDeploymentTab({
                             </Tooltip>
                           </div>
                         </TooltipProvider>
+                        )}
                       </TableCell>
                     </TableRow>
                   ))}

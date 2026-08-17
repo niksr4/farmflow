@@ -24,6 +24,15 @@ export interface LaborDeployment {
   user: string
   locationId?: string | null
   updatedAt?: string
+  /**
+   * Where this row came from. "transaction" was typed into Accounts and can be edited there.
+   * "assignment" is one worker's job off the muster roll -- shown so a day after a cutover is not
+   * a blank list under a non-zero total, but its id belongs to labour_assignments, so editing or
+   * deleting it here would address a row that does not exist.
+   */
+  source?: "transaction" | "assignment"
+  /** Set on muster rows only: whose day this job belongs to. */
+  workerName?: string | null
 }
 
 type LaborDataOptions = {
