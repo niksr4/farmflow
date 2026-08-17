@@ -49,6 +49,8 @@ export function useLaborData(locationId?: string, options: LaborDataOptions = {}
   const [error, setError] = useState<string | null>(null)
   const [totalCount, setTotalCount] = useState(0)
   const [totalCost, setTotalCost] = useState(0)
+  // Non-null once this estate records labour on the muster roll instead of here.
+  const [assignmentsFrom, setAssignmentsFrom] = useState<string | null>(null)
   const [hasMore, setHasMore] = useState(false)
   const [page, setPage] = useState(0)
   const [allLoaded, setAllLoaded] = useState(false)
@@ -137,6 +139,7 @@ export function useLaborData(locationId?: string, options: LaborDataOptions = {}
           const nextTotalCost = Number(data.totalCost) || 0
           setTotalCount(nextTotalCount)
           setTotalCost(nextTotalCost)
+          setAssignmentsFrom(data.assignmentsFrom ? String(data.assignmentsFrom) : null)
           let nextDeploymentsLength = 0
           setDeployments((prev) => {
             const nextDeployments = append ? [...prev, ...data.deployments] : data.deployments
@@ -304,6 +307,7 @@ export function useLaborData(locationId?: string, options: LaborDataOptions = {}
     error,
     totalCount,
     totalCost,
+    assignmentsFrom,
     hasMore,
     loadMore,
     allLoaded,

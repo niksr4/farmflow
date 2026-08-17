@@ -7,7 +7,7 @@ import { validateLocationForTenant } from "@/lib/server/location-utils"
 import { resolveActiveEstate } from "@/lib/server/estate-filter"
 import { SELECTED_ESTATE_COOKIE } from "@/lib/server/estate-cookie"
 import { normalizeTenantContext, runTenantQueries, runTenantQuery } from "@/lib/server/tenant-db"
-import { blockedByLabourCutover } from "@/lib/server/labour-entry-mode"
+import { blockedByLabourCutover, getLabourCutover } from "@/lib/server/labour-entry-mode"
 import { canDeleteModule, canWriteModule } from "@/lib/permissions"
 import { logAuditEvent } from "@/lib/server/audit-log"
 import { logRouteMutationFailure } from "@/lib/server/route-error-events"
@@ -260,6 +260,9 @@ export async function GET(request: Request) {
       deployments,
       totalCount,
       totalCost,
+      // Null unless this estate has moved to the muster roll. The form uses it to step aside
+      // before anyone types, instead of accepting a full entry and refusing it on save.
+      assignmentsFrom: await getLabourCutover(tenantContext),
     })
   } catch (error: any) {
     console.error("❌ Error fetching labour deployments:", error.message)

@@ -107,6 +107,7 @@ export default function LaborDeploymentTab({
     loadMore,
     allLoaded,
     loadAll,
+    assignmentsFrom,
     addDeployment,
     updateDeployment,
     deleteDeployment,
@@ -541,12 +542,34 @@ export default function LaborDeploymentTab({
       </div>
     )}
     <div className="space-y-4">
-      <InPageNav items={[
-        { label: "Log Entry", active: activeSection === "form", onClick: () => setActiveSection("form") },
-        { label: "History", active: activeSection === "history", onClick: () => setActiveSection("history") },
-      ]} />
+      <InPageNav items={
+        // An estate that records labour on the muster has no "Log Entry" to offer: the server
+        // refuses anything dated on or after the switch, and letting someone fill in the whole
+        // form before saying so is a worse way to deliver the same no. History stays -- their
+        // older entries are still theirs to read and correct.
+        assignmentsFrom
+          ? [{ label: "History", active: true, onClick: () => setActiveSection("history") }]
+          : [
+              { label: "Log Entry", active: activeSection === "form", onClick: () => setActiveSection("form") },
+              { label: "History", active: activeSection === "history", onClick: () => setActiveSection("history") },
+            ]
+      } />
+
+      {assignmentsFrom && (
+        <div className="flex flex-wrap items-center gap-x-2 gap-y-1 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm dark:border-emerald-500/20 dark:bg-emerald-500/10">
+          <span className="font-semibold text-emerald-900 dark:text-emerald-200">
+            Labour is recorded on the muster roll from {assignmentsFrom}.
+          </span>
+          <a href="/dashboard?tab=attendance" className="font-bold text-emerald-700 underline underline-offset-2 dark:text-emerald-400">
+            Open Attendance
+          </a>
+          <span className="w-full text-xs text-emerald-800/80 dark:text-emerald-300/80">
+            Entries before that date are still listed below and can be edited here.
+          </span>
+        </div>
+      )}
       {/* Mobile: QuickLogPanel tiles as default entry — full form opens via "More details" */}
-      {activeSection === "form" && isMobile && !isAdding && (
+      {!assignmentsFrom && activeSection === "form" && isMobile && !isAdding && (
         <QuickLogPanel
           locationId={formLocationId || undefined}
           onNavigateToFull={openNewForm}
@@ -554,7 +577,7 @@ export default function LaborDeploymentTab({
       )}
 
       {/* Desktop: traditional add button */}
-      {activeSection === "form" && !isMobile && !isAdding && (
+      {!assignmentsFrom && activeSection === "form" && !isMobile && !isAdding && (
         <button
           type="button"
           onClick={openNewForm}
