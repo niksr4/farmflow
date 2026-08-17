@@ -218,13 +218,15 @@ export async function GET(request: NextRequest) {
       checks.push({ id: "processing_yield", label: "Processing yield", status: "warning", detail: "Could not check processing yield." })
     }
 
-    // ── 6. Labour cost pipeline overlap — costed labour vs payroll/attendance ──
-    // labour_cost is what feeds Accounts/P&L, whichever way the tenant enters: typed
-    // into the Labour deployment tab, or allocated per worker off the muster roll.
-    // worker_ledger + attendance_records + picking_records (Payroll summary) is a
-    // separate, un-reconciled pipeline. Neither side checks the other, so a tenant
-    // can double-log the same spend in both, or log real labour cost only in
-    // payroll and have it silently missing from every P&L total.
+    // ── 6. Labour that nobody has costed ──
+    // A day someone was present but never given work is real labour that reaches no total:
+    // labour_cost only knows what was allocated or typed, so that person's wage is missing
+    // from Accounts, the P&L and every block breakdown.
+    //
+    // This used to compare two "pipelines" and warn they might double-count. That framing is
+    // dead: payroll now derives from labour_assignments too, so allocated work is the same
+    // number on both sides and pitting them against each other reported an overlap that
+    // cannot exist. What is left worth checking is the genuine gap -- presence with no job.
     try {
       const [bulkRows, payrollRows] = await runTenantQueries(accountsSql, tenantContext, [
         accountsSql.query(
@@ -245,13 +247,28 @@ export async function GET(request: NextRequest) {
              FROM picking_records
              WHERE tenant_id = $1 AND pick_date BETWEEN $2::date AND $3::date
              GROUP BY worker_id
+           ),
+           -- Days present with nothing allocated. A day that carries an assignment is already
+           -- in labour_cost, so counting it here would invent a spend that does not exist.
+           uncosted_days AS (
+             SELECT ar.worker_id, COUNT(*)::int AS uncosted_days
+             FROM attendance_records ar
+             WHERE ar.tenant_id = $1
+               AND ar.attendance_date BETWEEN $2::date AND $3::date
+               AND NOT EXISTS (
+                 SELECT 1 FROM labour_assignments la
+                 WHERE la.tenant_id = ar.tenant_id
+                   AND la.worker_id = ar.worker_id
+                   AND la.work_date = ar.attendance_date
+               )
+             GROUP BY ar.worker_id
            )
            SELECT
-             COALESCE(SUM(COALESCE(a.days_present, 0) * COALESCE(w.daily_rate, 0)), 0) AS attendance_cost,
+             COALESCE(SUM(u.uncosted_days * COALESCE(w.daily_rate, 0)), 0) AS attendance_cost,
              COALESCE(SUM(COALESCE(p.picking_total, 0)), 0) AS picking_cost,
-             COUNT(*) FILTER (WHERE COALESCE(a.days_present, 0) > 0 OR COALESCE(p.picking_total, 0) > 0) AS active_workers
+             COUNT(*) FILTER (WHERE u.uncosted_days > 0) AS active_workers
            FROM attendance_workers w
-           LEFT JOIN attendance_days a ON a.worker_id = w.id
+           LEFT JOIN uncosted_days u ON u.worker_id = w.id
            LEFT JOIN picking_earnings p ON p.worker_id = w.id
            WHERE w.tenant_id = $1`,
           [tenantId, start, end],
@@ -270,13 +287,13 @@ export async function GET(request: NextRequest) {
           status: "ok",
           detail: "No labour activity recorded in either pipeline for this period.",
         })
-      } else if (bulkEntries > 0 && activeWorkers > 0) {
+      } else if (activeWorkers > 0) {
         checks.push({
           id: "labor_pipeline_overlap",
-          label: "Labour cost pipeline check",
+          label: "Labour that reaches no total",
           status: "warning",
-          detail: `Both labour pipelines have entries this period — ₹${bulkCost.toFixed(0)} via Labour deployment (${bulkEntries} entries, included in Accounts/P&L) and ₹${payrollCost.toFixed(0)} via Payroll/attendance (${activeWorkers} workers, NOT included in Accounts/P&L). These are never cross-checked against each other — confirm the same spend isn't logged in both.`,
-          value: `₹${bulkCost.toFixed(0)} vs ₹${payrollCost.toFixed(0)}`,
+          detail: `${activeWorkers} worker${activeWorkers === 1 ? " was" : "s were"} marked present on ${activeWorkers === 1 ? "a day" : "days"} with no work set — roughly ₹${payrollCost.toFixed(0)} of wages that appear in no cost total. Set their work on the muster roll for those days, or the spend stays invisible to Accounts and the P&L. Costed labour this period: ₹${bulkCost.toFixed(0)} across ${bulkEntries} entries.`,
+          value: `₹${payrollCost.toFixed(0)} uncosted`,
         })
       } else if (activeWorkers > 0) {
         checks.push({
