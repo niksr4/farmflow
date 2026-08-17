@@ -3088,7 +3088,7 @@ export default function InventorySystem() {
     () =>
       ({
         home: { label: "Dashboard", icon: Home },
-        attendance: { label: "Attendance", icon: Check },
+        attendance: { label: "Muster", heading: "Muster & work allocation", icon: Check },
         inventory: { label: "Inventory", icon: List },
         processing: { label: processingWorkspaceLabel, icon: processingWorkspaceIcon },
         dispatch: { label: "Dispatch", icon: Truck },
@@ -3114,7 +3114,11 @@ export default function InventorySystem() {
         "market-pricing": { label: "Market Rates", icon: Tag },
         compliance: { label: "Compliance", icon: ShieldCheck },
         picking: { label: "Picking Log", icon: Wheat },
-      }) as Record<string, { label: string; icon: React.ComponentType<{ className?: string }> }>,
+      }) as Record<
+        string,
+        // heading is the page <h1> when the rail needs a shorter word than the screen deserves.
+        { label: string; heading?: string; icon: React.ComponentType<{ className?: string }> }
+      >,
     [processingWorkspaceIcon, processingWorkspaceLabel],
   )
   const mobileHomeQuickActions = useMemo(() => {
@@ -4322,7 +4326,7 @@ export default function InventorySystem() {
                 {gs.groupLabel && (
                   <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-emerald-700 leading-none mb-0.5">{gs.groupLabel}</p>
                 )}
-                <h1 className="text-lg font-black text-stone-900 leading-tight">{meta.label}</h1>
+                <h1 className="text-lg font-black text-stone-900 leading-tight">{meta.heading ?? meta.label}</h1>
               </div>
             </div>
           )

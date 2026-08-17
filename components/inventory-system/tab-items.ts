@@ -56,7 +56,7 @@ export function buildDashboardTabItems(input: DashboardTabItemsInput): {
   const compact = (items: Array<DashboardTabItem | null>) => items.filter(Boolean) as DashboardTabItem[]
 
   const operations = compact([
-    input.canShowAttendance ? { value: "attendance", label: "Attendance", icon: Check } : null,
+    input.canShowAttendance ? { value: "attendance", label: "Muster", icon: Check } : null,
     input.canShowAccounts
       ? {
           value: "accounts",

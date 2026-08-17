@@ -16,7 +16,7 @@
  */
 
 import { useMemo, useState } from "react"
-import { Loader2, Plus } from "lucide-react"
+import { Loader2 } from "lucide-react"
 import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { cn } from "@/lib/utils"
 
@@ -34,17 +34,15 @@ const DAY_SHARES = [
 ] as const
 
 export default function WorkerAllocation({
-  workerEstate, locations, activities, saving, hasWork, onAdd,
+  workerEstate, locations, activities, saving, onAdd, onClose,
 }: {
   workerEstate: string | null
   locations: LocationOption[]
   activities: ActivityOption[]
   saving: boolean
-  /** Already has at least one job today, so the trigger offers a second rather than a first. */
-  hasWork: boolean
   onAdd: (payload: { activityCode: string; locationId: string | null; dayFraction: number }) => Promise<boolean>
+  onClose: () => void
 }) {
-  const [open, setOpen] = useState(false)
   const [activityCode, setActivityCode] = useState("")
   const [locationId, setLocationId] = useState(NO_BLOCK)
   const [dayFraction, setDayFraction] = useState(1)
@@ -71,23 +69,8 @@ export default function WorkerAllocation({
       setActivityCode("")
       setLocationId(NO_BLOCK)
       setDayFraction(1)
-      setOpen(false)
+      onClose()
     }
-  }
-
-  if (!open) {
-    return (
-      <button
-        type="button"
-        onClick={(e) => { e.stopPropagation(); setOpen(true) }}
-        className={cn(
-          "mb-0.5 inline-flex items-center gap-1 rounded-lg px-1.5 py-0.5 text-[11px] font-bold touch-manipulation",
-          "text-stone-400 hover:bg-stone-100 hover:text-stone-600 dark:hover:bg-white/[0.06]",
-        )}
-      >
-        <Plus className="h-3 w-3" /> {hasWork ? "Add another job" : "Set work"}
-      </button>
-    )
   }
 
   return (
@@ -155,7 +138,7 @@ export default function WorkerAllocation({
         </button>
         <button
           type="button"
-          onClick={() => setOpen(false)}
+          onClick={onClose}
           className="h-9 rounded-lg px-3 text-xs font-bold text-stone-500 touch-manipulation"
         >
           Cancel

@@ -30,7 +30,7 @@ export default function AttendanceWorkspace({ showLaborManagement = false }: Att
   const [activeSection, setActiveSection] = useState<AttendanceSection>("attendance")
 
   const navItems: Array<{ value: AttendanceSection; label: string; icon: React.ComponentType<{ className?: string }> }> = [
-    { value: "attendance", label: "Attendance", icon: Check },
+    { value: "attendance", label: "Muster", icon: Check },
     ...(showLaborManagement
       ? [
           { value: "workers" as AttendanceSection, label: "Workers", icon: Users },

@@ -22,6 +22,7 @@ import {
   Fingerprint,
   IndianRupee,
   Loader2,
+  Plus,
   PlusCircle,
   Trash2,
   Users,
@@ -147,6 +148,7 @@ export default function AttendanceTab() {
   const [locations, setLocations] = useState<Array<{ id: string; name: string; code?: string | null }>>([])
   const [activities, setActivities] = useState<Array<{ code: string; reference?: string | null }>>([])
   const [assigningWorkerId, setAssigningWorkerId] = useState<string | null>(null)
+  const [allocatingWorkerId, setAllocatingWorkerId] = useState<string | null>(null)
 
   const weekDays = useMemo(() => getWeekDays(weekOffset), [weekOffset])
 
@@ -714,6 +716,18 @@ export default function AttendanceTab() {
                             {a.dayFraction}d · ₹{a.totalCost.toLocaleString("en-IN")}
                           </p>
                         </>
+                      ) : isPresent && activities.length > 0 ? (
+                        // In the Work column, not in a band underneath it: this is the cell that
+                        // is about to hold the answer, and it is the one tap the day needs. Full
+                        // cell width and 32px tall, because the previous 113x22 target was not
+                        // something to hit with dirty hands.
+                        <button
+                          type="button"
+                          onClick={(event) => { event.stopPropagation(); setAllocatingWorkerId(worker.id) }}
+                          className="flex h-8 w-full items-center justify-center gap-1 rounded-lg border border-dashed border-emerald-300 text-[11px] font-bold text-emerald-700 touch-manipulation active:bg-emerald-100 dark:border-emerald-500/40 dark:text-emerald-400"
+                        >
+                          <Plus className="h-3 w-3" /> Set work
+                        </button>
                       ) : (
                         <span className="text-[11px] text-stone-300">—</span>
                       )}
@@ -781,26 +795,37 @@ export default function AttendanceTab() {
                   </div>
                 ))}
 
+                {/* A second job is the exception, so it is offered once beneath a worker who
+                    already has one rather than advertised on every row of the roll. */}
+                {isPresent && rows.length > 0 && activities.length > 0 && allocatingWorkerId !== worker.id && (
+                  <div className={cn(MUSTER_GRID, "px-2 pb-1 sm:px-3")}>
+                    <span />
+                    {/* Spans work and block: the label will not fit in a 68px column on a phone,
+                        and a wrapped two-line "Another job" reads as a rendering fault. */}
+                    <button
+                      type="button"
+                      onClick={(event) => { event.stopPropagation(); setAllocatingWorkerId(worker.id) }}
+                      className="col-span-2 flex h-7 w-full items-center justify-center gap-1 whitespace-nowrap rounded-lg text-[10px] font-bold text-stone-400 touch-manipulation active:bg-stone-100 dark:active:bg-white/[0.06]"
+                    >
+                      <Plus className="h-3 w-3" /> Another job
+                    </button>
+                    <span className="hidden sm:block" />
+                    <span className="hidden sm:block" />
+                    <span />
+                  </div>
+                )}
+
                 {/* Full width, below the columns -- the editor needs the room the cells do not have. */}
                 <div className="px-3">
-                  {activities.length > 0 && isPresent && (
+                  {activities.length > 0 && isPresent && allocatingWorkerId === worker.id && (
                     <WorkerAllocation
                       workerEstate={worker.estate ?? null}
                       locations={locations}
                       activities={activities}
                       saving={assigningWorkerId === worker.id}
-                      hasWork={rows.length > 0}
                       onAdd={(payload) => handleAddAssignment(worker.id, payload)}
+                      onClose={() => setAllocatingWorkerId(null)}
                     />
-                  )}
-
-                  {/* Absent means no work, full stop -- an assignment is a payable and the muster
-                      is what says it was earned. Said out loud rather than just omitting the
-                      control, so a manager looking for it knows which tap comes first. */}
-                  {activities.length > 0 && !isPresent && rows.length === 0 && (
-                    <p className="pb-0.5 text-[11px] font-medium text-stone-300 dark:text-stone-600">
-                      Mark present to set work
-                    </p>
                   )}
 
                   {/* Work recorded for someone nobody marked present. Surfaced rather than
