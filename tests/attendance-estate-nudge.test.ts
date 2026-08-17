@@ -3,32 +3,45 @@ import { resolve } from "node:path"
 import { describe, expect, it } from "vitest"
 
 /**
- * The estate selector works, but on a multi-estate tenant it can silently do nothing.
+ * The muster roll is not estate-filtered, and the save must stay in step with that.
  *
- * Unassigned workers show under EVERY estate (the always-NULL-shows convention), so Medappa --
- * 21 locations across two estates, all 24 workers unassigned -- gets an identical roster whichever
- * estate is selected, with nothing explaining why. Labour filters correctly because those records
- * do carry a location, which makes the attendance case more confusing, not less.
+ * Presence has no place -- attendance_records carries no location, and a terminal belongs to a
+ * tenant rather than an estate -- so an estate filter on the roll could only match on a property
+ * of the worker, while the estate of the day's work is not settled until a block is picked. It
+ * also made the ordinary case impossible: with Valley selected, a Hill worker sent to Valley
+ * vanished from the roll and could not be marked present where they actually were.
+ *
+ * The pairing below is the part worth guarding. While the roll filtered, the PUT had to scope its
+ * delete to the same estate or saving one estate's sheet wiped the others' attendance for that
+ * date. Now that the roll lists everyone, presentWorkerIds is complete and the delete must NOT be
+ * scoped -- otherwise unticking a worker from another estate silently fails to save. Reintroduce
+ * either half alone and one of those two bugs comes back.
  */
 const tab = readFileSync(resolve(process.cwd(), "components/attendance-tab.tsx"), "utf8")
 const route = readFileSync(resolve(process.cwd(), "app/api/attendance/route.ts"), "utf8")
 
-describe("unassigned-worker nudge", () => {
-  it("only counts unassigned workers on a multi-estate tenant", () => {
-    // Laxmi has 20 unassigned workers and one estate; telling them would be pure noise.
-    expect(tab).toContain("isMultiEstate ? workers.filter((w) => !w.estate) : []")
+describe("the muster roll lists every worker, whichever estate is selected", () => {
+  it("does not filter the roster by the worker's estate", () => {
+    expect(route).not.toMatch(/AND \(w\.estate IS NULL OR w\.estate = /)
+    expect(route).not.toMatch(/estateClause\(/)
   })
 
-  it("derives multi-estate from distinct estates, not location count", () => {
-    // Two locations under one estate is not a multi-estate tenant -- same rule the estate
-    // picker itself uses.
+  it("does not scope the attendance delete by estate either", () => {
+    // The two are one decision. A scoped delete under an unfiltered roll drops saves.
+    expect(route).not.toMatch(/estateWorkerScopeClause = activeEstate/)
+    expect(route).toContain("const estateWorkerScopeClause = accountsSql``")
+  })
+
+  it("no longer explains a filter that does not happen", () => {
+    // The banner told a manager why the selector changed nothing. It changes nothing by design
+    // now, so the sentence is noise on every multi-estate roll, every day.
+    expect(tab).not.toContain("they appear under every estate")
+  })
+
+  it("still reports which tenants run more than one estate", () => {
+    // The selector itself is unaffected -- it scopes every report, where the estate is a
+    // property of the recorded work rather than a guess about the person.
     expect(route).toContain("COUNT(DISTINCT estate)::int AS estate_count")
-    expect(route).toContain("isMultiEstate:")
-  })
-
-  it("explains the consequence, not just the count", () => {
-    // "23 workers unassigned" is not actionable; "they appear under every estate" is.
-    expect(tab).toContain("they appear under every estate")
   })
 })
 

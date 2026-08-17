@@ -37,9 +37,18 @@ export async function GET(request: Request) {
     // convention as everywhere else the estate filter is wired in.
     const cookieEstate = (await cookies()).get(SELECTED_ESTATE_COOKIE)?.value || null
     const activeEstate = resolveActiveEstate(searchParams, cookieEstate)
-    const estateFilter = activeEstate
-      ? accountsSql` AND (w.location_id IS NULL OR w.location_id IN (SELECT id FROM locations WHERE tenant_id = ${tenantContext.tenantId} AND estate = ${activeEstate}))`
-      : accountsSql``
+    // Payroll is not estate-scoped, on purpose.
+    //
+    // It keyed off attendance_workers.location_id, which scripts/115 superseded when a worker
+    // came to belong to an estate rather than a block. Nothing has populated that column since,
+    // so with it null everywhere the always-NULL-shows rule let every worker through: the filter
+    // has looked like it worked while doing nothing.
+    //
+    // Repairing it would be worse than removing it. One person can earn across two estates in a
+    // single day -- that is the movement this whole redesign was built to record -- so splitting
+    // their pay by estate is not a question payroll can answer honestly. Cost per estate is a
+    // question for the reports, which scope by the block the work happened on.
+    const estateFilter = accountsSql``
 
     const rows = await runTenantQuery(
       accountsSql,

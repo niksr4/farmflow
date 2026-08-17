@@ -134,7 +134,6 @@ export default function AttendanceTab() {
   const [newWorkerCode, setNewWorkerCode] = useState("")
   // Tenants without a fingerprint terminal never see any of the biometric UI.
   const [hasBiometricDevices, setHasBiometricDevices] = useState(false)
-  const [isMultiEstate, setIsMultiEstate] = useState(false)
   const [newWorkerRate, setNewWorkerRate] = useState("")
   const [showAddWorker, setShowAddWorker] = useState(false)
   const [showSummary, setShowSummary] = useState(false)
@@ -177,7 +176,6 @@ export default function AttendanceTab() {
         setAssignments(Array.isArray(data.assignments) ? data.assignments : [])
         setPickingWorkerIds(Array.isArray(data.pickingWorkerIds) ? data.pickingWorkerIds : [])
         setHasBiometricDevices(Boolean(data.hasBiometricDevices))
-        setIsMultiEstate(Boolean(data.isMultiEstate))
         setError(null)
 
         // "Everyone present by default" applies to TODAY ONLY.
@@ -315,7 +313,6 @@ export default function AttendanceTab() {
   const noRateWorkers = workers.filter((w) => w.dailyRate === null)
   // Only meaningful on a multi-estate tenant: an unassigned worker appears under every estate,
   // so the estate selector silently has no effect on the roster and nothing says why.
-  const unassignedWorkers = isMultiEstate ? workers.filter((w) => !w.estate) : []
 
   const workersById = useMemo(() => new Map(workers.map((w) => [w.id, w])), [workers])
   const weeklyReportRows = useMemo(
@@ -613,19 +610,7 @@ export default function AttendanceTab() {
           </div>
         )}
 
-        {/* An unassigned worker shows under every estate, so on a two-estate tenant the selector
-            changes nothing about the roster and there is no hint why. Surfacing it here is the
-            only place a manager would notice. */}
-        {!loading && unassignedWorkers.length > 0 && (
-          <div className="flex items-center gap-3 rounded-2xl bg-amber-50 border border-amber-100 px-4 py-3">
-            <Users className="h-4 w-4 shrink-0 text-amber-600" />
-            <p className="text-sm font-medium text-amber-800">
-              {unassignedWorkers.length} worker{unassignedWorkers.length > 1 ? "s" : ""} not assigned to an estate —
-              they appear under every estate
-            </p>
-          </div>
-        )}
-
+        
         {error && <p className="text-sm text-red-600 px-1">{error}</p>}
 
         {loading ? (

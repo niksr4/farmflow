@@ -1,9 +1,6 @@
 import { NextResponse } from "next/server"
-import { cookies } from "next/headers"
 import { accountsSql } from "@/lib/server/db"
 import { requireModuleAccess, isModuleAccessError } from "@/lib/server/module-access"
-import { resolveActiveEstate } from "@/lib/server/estate-filter"
-import { SELECTED_ESTATE_COOKIE } from "@/lib/server/estate-cookie"
 import { canWriteModule } from "@/lib/permissions"
 import { logAuditEvent } from "@/lib/server/audit-log"
 import { normalizeTenantContext, runTenantQueries, runTenantQuery } from "@/lib/server/tenant-db"
@@ -38,21 +35,20 @@ export async function GET(request: Request) {
     const date = normalizeAttendanceDate(searchParams.get("date"), getTodayAttendanceDate())
     const { startDate, endDate } = getAttendanceWeekWindow(date)
 
-    // Filters on the worker's OWN estate (script 115), not on the estate of whichever block they
-    // happened to be assigned to. A worker belongs to an estate; a deployment happens on a block.
-    // Script 112's location_id was only ever a proxy for this, and it asked the wrong question --
-    // Medappa's picker offered 21 blocks when the answer was one of 2.
+    // THE ROLL IS NOT ESTATE-FILTERED, AND THAT IS DELIBERATE.
     //
-    // Unassigned workers still show under every estate (the always-NULL-shows convention in
-    // lib/estate-filter.ts). That is why this switch changes nothing on deploy: script 115
-    // backfills estate from the assigned block, and every Medappa worker is unassigned, so they
-    // go from "NULL location, shows everywhere" to "NULL estate, shows everywhere".
-    const cookieEstate = (await cookies()).get(SELECTED_ESTATE_COOKIE)?.value || null
-    const activeEstate = resolveActiveEstate(searchParams, cookieEstate)
-    const estateClause = (column = "estate") =>
-      activeEstate
-        ? accountsSql` AND (${accountsSql.unsafe(column)} IS NULL OR ${accountsSql.unsafe(column)} = ${activeEstate})`
-        : accountsSql``
+    // Presence has no place. attendance_records carries no location, and a fingerprint terminal
+    // belongs to a tenant rather than an estate -- so there is nothing on a day's presence for an
+    // estate filter to match. Filtering the roll could only filter on a property of the *worker*,
+    // while the estate of the day's work is not settled until a block is picked, which happens
+    // after presence.
+    //
+    // It also made the ordinary case impossible: with Valley selected, a Hill worker sent to
+    // Valley disappeared from the roll, so nobody could mark them present where they actually
+    // were. Blocks are guided-not-fenced for the same reason (worker-allocation.tsx), and the
+    // selector still scopes every report, where the estate is a property of the recorded work.
+    //
+    // PUT below must stay in step: its delete-scope existed only because this filtered.
 
     const [workersRows, presentRows, pickingRows, weeklyRows, deviceRows, estateRows, assignmentRows] = await runTenantQueries(accountsSql, tenantContext, [
       accountsSql`
@@ -64,7 +60,6 @@ export async function GET(request: Request) {
         FROM attendance_workers
         WHERE tenant_id = ${tenantContext.tenantId}
           AND active = TRUE
-          ${estateClause()}
         ORDER BY LOWER(full_name), created_at ASC
       `,
       accountsSql`
@@ -95,7 +90,6 @@ export async function GET(request: Request) {
          AND ar.attendance_date BETWEEN ${startDate} AND ${endDate}
         WHERE w.tenant_id = ${tenantContext.tenantId}
           AND w.active = TRUE
-          ${estateClause("w.estate")}
         GROUP BY w.id, w.full_name, w.created_at
         ORDER BY LOWER(w.full_name), w.created_at ASC
       `,
@@ -130,7 +124,6 @@ export async function GET(request: Request) {
           ON aa.code = a.activity_code AND aa.tenant_id = a.tenant_id
         WHERE a.tenant_id = ${tenantContext.tenantId}
           AND a.work_date = ${date}
-          ${estateClause("w.estate")}
         ORDER BY LOWER(w.full_name), a.created_at ASC
       `,
     ])
@@ -249,22 +242,12 @@ export async function PUT(request: Request) {
       }
     }
 
-    // The muster sheet this save came from was itself estate-filtered (GET above applies the
-    // same estateClause), so presentWorkerIds can only ever contain workers from the active
-    // estate -- a worker in a *different* estate can never appear in it, present or not. Without
-    // scoping the DELETE below to the same estate, saving Estate A's muster would wipe every
-    // other estate's attendance_records for the date, since their worker_ids are (correctly)
-    // absent from this estate-scoped presentWorkerIds list.
-    const { searchParams } = new URL(request.url)
-    const cookieEstate = (await cookies()).get(SELECTED_ESTATE_COOKIE)?.value || null
-    const activeEstate = resolveActiveEstate(searchParams, cookieEstate)
-    const estateWorkerScopeClause = activeEstate
-      ? accountsSql` AND worker_id IN (
-          SELECT id FROM attendance_workers w
-          WHERE w.tenant_id = ${tenantContext.tenantId}
-            AND (w.estate IS NULL OR w.estate = ${activeEstate})
-        )`
-      : accountsSql``
+    // No estate scope on the delete, because the GET no longer filters the roll: the sheet this
+    // save came from listed every worker, so presentWorkerIds is complete and a missing id
+    // genuinely means absent. This clause used to be load-bearing -- while the roll was
+    // estate-filtered, an unscoped delete would have wiped the other estates' attendance for the
+    // date. The two must stay in step; scoping only one of them silently drops a save.
+    const estateWorkerScopeClause = accountsSql``
 
     // Diff, not replace: only remove rows for workers no longer present, and insert new
     // present workers with ON CONFLICT DO NOTHING. A blanket delete-then-reinsert would
