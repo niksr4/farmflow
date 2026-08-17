@@ -86,7 +86,7 @@ const MUSTER_GRID =
   // The name is the column a manager searches down, so it gets whatever is left after the rest
   // are cut to the bone. At 390px that is about 120px -- enough for "Ponnappa M" unabbreviated,
   // which an earlier, roomier-looking split was not.
-  "grid-cols-[minmax(0,1fr)_4.25rem_4.5rem_4rem] " +
+  "grid-cols-[minmax(0,1fr)_5.5rem_4rem_3.75rem] " +
   // Proportional on a wide screen rather than a fixed name column plus one enormous gap, which
   // left the work and block so far from the name they stopped reading as the same row.
   "sm:grid-cols-[minmax(0,2fr)_minmax(0,1.6fr)_minmax(0,1.4fr)_5rem_7rem_4.5rem]"
@@ -706,14 +706,19 @@ export default function AttendanceTab() {
                     <div className="min-w-0">
                       {a ? (
                         <>
-                          <p className="truncate font-mono text-[11px] font-bold text-stone-700 dark:text-stone-200">
-                            {a.activityCode}
+                          {/* The name first: nobody memorises that 140 is Arabica Harvesting, and
+                              a column of bare numbers cannot be read down, which is the whole
+                              point of it being a column. The code stays, smaller, for whoever
+                              does know it. */}
+                          <p className="truncate text-[11px] font-bold leading-tight text-stone-700 dark:text-stone-200">
+                            {a.activityName || a.activityCode}
                           </p>
-                          {/* Day and cost have their own columns from sm up; on a phone they ride
-                              under the code rather than being dropped, so the two layouts still
+                          {/* Day and cost get their own columns from sm up; on a phone they ride
+                              here beside the code rather than being dropped, so both layouts
                               show the same numbers. */}
-                          <p className="truncate text-[10px] text-stone-400 sm:hidden">
-                            {a.dayFraction}d · ₹{a.totalCost.toLocaleString("en-IN")}
+                          <p className="truncate text-[10px] leading-tight text-stone-400">
+                            <span className="font-mono">{a.activityCode}</span>
+                            <span className="sm:hidden"> · {a.dayFraction}d · ₹{a.totalCost.toLocaleString("en-IN")}</span>
                           </p>
                         </>
                       ) : isPresent && activities.length > 0 ? (

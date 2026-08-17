@@ -3094,7 +3094,7 @@ export default function InventorySystem() {
         dispatch: { label: "Dispatch", icon: Truck },
         sales: { label: "Sales", icon: TrendingUp },
         pepper: { label: "Pepper", icon: Leaf },
-        accounts: { label: "Labour & Costs", icon: Users },
+        accounts: { label: "Costs", heading: "Costs & expenses", icon: Users },
         "balance-sheet": { label: "Financial Summary", icon: Scale },
         "season-pl": { label: "Profit & Loss", icon: LineChart },
         receivables: { label: "Money Owed", icon: Receipt },
