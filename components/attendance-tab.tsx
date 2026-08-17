@@ -21,6 +21,7 @@ import {
   FileText,
   Fingerprint,
   IndianRupee,
+  ListChecks,
   Loader2,
   Plus,
   PlusCircle,
@@ -36,6 +37,7 @@ import { EmptyState } from "@/components/ui/empty-state"
 import { trackRecordCreated } from "@/lib/track-action"
 import { useSingleFlight } from "@/hooks/use-single-flight"
 import AttendanceDeviceSettings from "@/components/attendance-device-settings"
+import ActivityCodeReference from "@/components/attendance/activity-code-reference"
 import WorkerAllocation from "@/components/attendance/worker-allocation"
 
 type AttendanceWorker = {
@@ -123,6 +125,7 @@ export default function AttendanceTab() {
   const [weeklySummary, setWeeklySummary] = useState<AttendanceSummaryRow[]>([])
   const [presentRecords, setPresentRecords] = useState<AttendanceRecordDetail[]>([])
   const [showDeviceSettings, setShowDeviceSettings] = useState(false)
+  const [showCodes, setShowCodes] = useState(false)
   const [loading, setLoading] = useState(true)
   const [isSaving, setIsSaving] = useState(false)
   const [isAddingWorker, setIsAddingWorker] = useState(false)
@@ -989,6 +992,29 @@ export default function AttendanceTab() {
               </div>
             )}
           </div>
+        )}
+
+        {/* What the codes mean. The roll is where that question gets asked -- mid-allocation, at
+            seven in the morning -- so the list is here as well as under Costs, where it is owned. */}
+        {activities.length > 0 && (
+        <div className="pt-1">
+          <button
+            type="button"
+            onClick={() => setShowCodes(!showCodes)}
+            className="flex w-full items-center justify-between py-1.5 text-xs font-bold uppercase tracking-widest text-stone-400"
+          >
+            <span className="flex items-center gap-1.5">
+              <ListChecks className="h-3.5 w-3.5" />
+              Activity codes
+            </span>
+            <span>{showCodes ? "▲" : "▼"}</span>
+          </button>
+          {showCodes && (
+            <div className="pt-2">
+              <ActivityCodeReference activities={activities} />
+            </div>
+          )}
+        </div>
         )}
 
         {/* Fingerprint devices -- hidden entirely for estates with no terminal registered */}
