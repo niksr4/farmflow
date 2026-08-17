@@ -27,10 +27,24 @@ await page.locator('button[type="submit"]:not([disabled])').waitFor()
 await page.click('button[type="submit"]')
 await page.waitForURL(/dashboard/, { timeout: 90000 }).catch(() => {})
 
+// Seed the row this test edits rather than inheriting whatever a previous harness left behind:
+// the ones that run before this clear the table on exit, so depending on their residue meant
+// failing for a reason that had nothing to do with editing.
+const seedWorker = (await sql`
+  SELECT id, full_name FROM attendance_workers WHERE tenant_id=${T} AND active ORDER BY full_name LIMIT 1`)[0]
+const seedCode = (await sql`SELECT code FROM account_activities WHERE tenant_id=${T} ORDER BY code LIMIT 1`)[0].code
+const seedBlock = (await sql`SELECT id FROM locations WHERE tenant_id=${T} ORDER BY name LIMIT 1`)[0]
+await sql`DELETE FROM labour_assignments WHERE tenant_id=${T} AND work_date=${today}::date`
+await page.request.put(`${BASE}/api/attendance`, { data: { date: today, presentWorkerIds: [seedWorker.id] } })
+await page.request.post(`${BASE}/api/attendance/assignments`, {
+  data: { date: today, workerIds: [seedWorker.id], activityCode: seedCode, locationId: seedBlock.id, dayFraction: 1 },
+})
+
 const row = (await sql`
   SELECT la.id, la.activity_code, la.location_id, la.day_fraction, la.total_cost, w.full_name
   FROM labour_assignments la JOIN attendance_workers w ON w.id = la.worker_id
   WHERE la.tenant_id=${T} AND la.work_date=${today}::date ORDER BY w.full_name LIMIT 1`)[0]
+if (!row) { console.error("could not seed an allocation to edit"); process.exit(1) }
 const otherCode = (await sql`
   SELECT code FROM account_activities WHERE tenant_id=${T} AND code <> ${row.activity_code} ORDER BY code LIMIT 1`)[0].code
 const otherBlock = (await sql`
