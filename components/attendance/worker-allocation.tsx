@@ -34,18 +34,25 @@ const DAY_SHARES = [
 ] as const
 
 export default function WorkerAllocation({
-  workerEstate, locations, activities, saving, onAdd, onClose,
+  workerEstate, locations, activities, saving, editing, onAdd, onClose,
 }: {
   workerEstate: string | null
   locations: LocationOption[]
   activities: ActivityOption[]
   saving: boolean
-  onAdd: (payload: { activityCode: string; locationId: string | null; dayFraction: number }) => Promise<boolean>
+  /** An existing job being corrected, or null when setting a new one. */
+  editing: { id: string; activityCode: string; locationId: string | null; dayFraction: number } | null
+  onAdd: (payload: {
+    id?: string
+    activityCode: string
+    locationId: string | null
+    dayFraction: number
+  }) => Promise<boolean>
   onClose: () => void
 }) {
-  const [activityCode, setActivityCode] = useState("")
-  const [locationId, setLocationId] = useState(NO_BLOCK)
-  const [dayFraction, setDayFraction] = useState(1)
+  const [activityCode, setActivityCode] = useState(editing?.activityCode ?? "")
+  const [locationId, setLocationId] = useState(editing?.locationId ?? NO_BLOCK)
+  const [dayFraction, setDayFraction] = useState(editing?.dayFraction ?? 1)
   const [busy, setBusy] = useState(false)
 
   // Own estate first, then everywhere else. Nothing is hidden -- workers get moved across estates
@@ -60,6 +67,7 @@ export default function WorkerAllocation({
     if (!activityCode) return
     setBusy(true)
     const ok = await onAdd({
+      ...(editing ? { id: editing.id } : {}),
       activityCode,
       locationId: locationId === NO_BLOCK ? null : locationId,
       dayFraction,
@@ -134,7 +142,7 @@ export default function WorkerAllocation({
           onClick={submit}
           className="h-9 flex-1 rounded-lg bg-emerald-600 text-xs font-bold text-white disabled:opacity-40 touch-manipulation"
         >
-          {busy ? <Loader2 className="mx-auto h-3.5 w-3.5 animate-spin" /> : "Add"}
+          {busy ? <Loader2 className="mx-auto h-3.5 w-3.5 animate-spin" /> : editing ? "Save" : "Add"}
         </button>
         <button
           type="button"

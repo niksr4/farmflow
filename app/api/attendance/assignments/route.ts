@@ -217,6 +217,109 @@ export async function POST(request: Request) {
   }
 }
 
+/**
+ * Correct an allocation in place.
+ *
+ * Delete-and-re-add already worked, but it is the destructive way round: the row is gone from the
+ * moment you tap, and a manager who gets interrupted between the two halves has silently turned a
+ * costed day into an uncosted one. Editing keeps the day whole while it is being fixed.
+ *
+ * The row's worker and date are fixed -- moving work to a different person or day is a different
+ * act, and doing it by stealth inside an edit would let a payable change hands without anything
+ * recording that it had. Delete and re-allocate for that.
+ */
+export async function PUT(request: Request) {
+  let tenantId: string | null = null
+  try {
+    const sessionUser = await requireModuleAccess("accounts")
+    if (!canWriteModule(sessionUser.role, "accounts")) {
+      return NextResponse.json({ success: false, error: "Insufficient role" }, { status: 403 })
+    }
+    tenantId = sessionUser.tenantId
+    const tenantContext = normalizeTenantContext(sessionUser.tenantId, sessionUser.role)
+
+    const body = await request.json().catch(() => ({}))
+    const id = String(body?.id || "").trim()
+    if (!UUID.test(id)) {
+      return NextResponse.json({ success: false, error: "Valid assignment id is required" }, { status: 400 })
+    }
+
+    const activityCode = String(body?.activityCode || "").trim()
+    if (!(await activityCodeExistsForTenant(tenantContext, activityCode))) {
+      return NextResponse.json(
+        { success: false, error: `Activity code "${activityCode}" isn't one of your codes.` },
+        { status: 400 },
+      )
+    }
+
+    const requestedLocation = body?.locationId ? String(body.locationId).trim() : null
+    const locationId = await validateLocationForTenant(accountsSql, tenantContext, sessionUser, requestedLocation)
+    if (requestedLocation && !locationId) {
+      return NextResponse.json({ success: false, error: "That block belongs to a different estate" }, { status: 400 })
+    }
+
+    const dayFraction = num(body?.dayFraction, 1)
+    if (!(dayFraction > 0 && dayFraction <= 2)) {
+      return NextResponse.json(
+        { success: false, error: "A day's share must be more than 0 and at most 2 (a full day plus overtime)" },
+        { status: 400 },
+      )
+    }
+
+    const overrideRate = body?.rate == null || body.rate === "" ? null : num(body.rate, -1)
+    if (overrideRate !== null && overrideRate < 0) {
+      return NextResponse.json({ success: false, error: "A rate cannot be negative" }, { status: 400 })
+    }
+
+    try {
+      const updated = await runTenantQuery(
+        accountsSql,
+        tenantContext,
+        accountsSql`
+          UPDATE labour_assignments
+          SET activity_code = ${activityCode},
+              location_id   = ${locationId},
+              day_fraction  = ${dayFraction},
+              rate          = COALESCE(${overrideRate}, rate),
+              notes         = ${String(body?.notes || "").trim() || null},
+              updated_at    = NOW()
+          WHERE id = ${id}::uuid
+            AND tenant_id = ${tenantContext.tenantId}
+          RETURNING id, worker_id, work_date::text AS work_date, activity_code, total_cost
+        `,
+      )
+      if (!updated.length) {
+        return NextResponse.json({ success: false, error: "That allocation no longer exists" }, { status: 404 })
+      }
+
+      await logAuditEvent(accountsSql, sessionUser, {
+        action: "update",
+        entityType: "labour_assignment",
+        entityId: id,
+        after: updated[0] as Record<string, unknown>,
+      }).catch(() => undefined)
+
+      return NextResponse.json({ success: true, assignment: updated[0] })
+    } catch (error) {
+      // The same ceiling the insert honours: editing a half day up to a full one can overflow a
+      // worker's day just as easily as adding a second job.
+      if (isDayCapError(error)) {
+        return NextResponse.json({ success: false, error: String((error as Error).message) }, { status: 409 })
+      }
+      throw error
+    }
+  } catch (error) {
+    if (isModuleAccessError(error)) {
+      return NextResponse.json({ success: false, error: "Module access disabled" }, { status: 403 })
+    }
+    logServerError("Failed to update a labour assignment", { error, tenantId })
+    return NextResponse.json(
+      { success: false, error: sanitizeRouteError(error, "Could not update the work") },
+      { status: 500 },
+    )
+  }
+}
+
 export async function DELETE(request: Request) {
   let tenantId: string | null = null
   try {

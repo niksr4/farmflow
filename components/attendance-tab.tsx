@@ -151,6 +151,7 @@ export default function AttendanceTab() {
   const [activities, setActivities] = useState<Array<{ code: string; reference?: string | null }>>([])
   const [assigningWorkerId, setAssigningWorkerId] = useState<string | null>(null)
   const [allocatingWorkerId, setAllocatingWorkerId] = useState<string | null>(null)
+  const [editingAssignment, setEditingAssignment] = useState<LabourAssignment | null>(null)
 
   const weekDays = useMemo(() => getWeekDays(weekOffset), [weekOffset])
 
@@ -244,7 +245,7 @@ export default function AttendanceTab() {
   // instead of silently discarding what was typed.
   const handleAddAssignment = async (
     workerId: string,
-    payload: { activityCode: string; locationId: string | null; dayFraction: number },
+    payload: { id?: string; activityCode: string; locationId: string | null; dayFraction: number },
   ): Promise<boolean> => {
     setAssigningWorkerId(workerId)
     try {
@@ -261,11 +262,19 @@ export default function AttendanceTab() {
         throw new Error(presenceData?.error || "Could not save who was present")
       }
 
-      const res = await fetch("/api/attendance/assignments", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ date: selectedDate, workerIds: [workerId], ...payload }),
-      })
+      // Correcting an existing job edits it in place; delete-and-re-add would leave the day
+      // uncosted in between, which is the state a distracted manager never comes back to.
+      const res = payload.id
+        ? await fetch("/api/attendance/assignments", {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(payload),
+          })
+        : await fetch("/api/attendance/assignments", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ date: selectedDate, workerIds: [workerId], ...payload }),
+          })
       const data = await res.json().catch(() => ({}))
       if (!res.ok || !data?.success) throw new Error(data?.error || "Could not save the work")
       await loadSnapshot(selectedDate)
@@ -698,9 +707,18 @@ export default function AttendanceTab() {
                               a column of bare numbers cannot be read down, which is the whole
                               point of it being a column. The code stays, smaller, for whoever
                               does know it. */}
-                          <p className="truncate text-[11px] font-bold leading-tight text-stone-700 dark:text-stone-200">
+                          <button
+                            type="button"
+                            aria-label={`Edit ${a.activityName || a.activityCode}`}
+                            onClick={(event) => {
+                              event.stopPropagation()
+                              setEditingAssignment(a)
+                              setAllocatingWorkerId(worker.id)
+                            }}
+                            className="block w-full truncate text-left text-[11px] font-bold leading-tight text-stone-700 underline decoration-dotted decoration-stone-300 underline-offset-2 dark:text-stone-200"
+                          >
                             {a.activityName || a.activityCode}
-                          </p>
+                          </button>
                           {/* Day and cost get their own columns from sm up; on a phone they ride
                               here beside the code rather than being dropped, so both layouts
                               show the same numbers. */}
@@ -716,7 +734,7 @@ export default function AttendanceTab() {
                         // something to hit with dirty hands.
                         <button
                           type="button"
-                          onClick={(event) => { event.stopPropagation(); setAllocatingWorkerId(worker.id) }}
+                          onClick={(event) => { event.stopPropagation(); setEditingAssignment(null); setAllocatingWorkerId(worker.id) }}
                           className="flex h-8 w-full items-center justify-center gap-1 rounded-lg border border-dashed border-emerald-300 text-[11px] font-bold text-emerald-700 touch-manipulation active:bg-emerald-100 dark:border-emerald-500/40 dark:text-emerald-400"
                         >
                           <Plus className="h-3 w-3" /> Set work
@@ -797,7 +815,7 @@ export default function AttendanceTab() {
                         and a wrapped two-line "Another job" reads as a rendering fault. */}
                     <button
                       type="button"
-                      onClick={(event) => { event.stopPropagation(); setAllocatingWorkerId(worker.id) }}
+                      onClick={(event) => { event.stopPropagation(); setEditingAssignment(null); setAllocatingWorkerId(worker.id) }}
                       className="col-span-2 flex h-7 w-full items-center justify-center gap-1 whitespace-nowrap rounded-lg text-[10px] font-bold text-stone-400 touch-manipulation active:bg-stone-100 dark:active:bg-white/[0.06]"
                     >
                       <Plus className="h-3 w-3" /> Another job
@@ -812,12 +830,14 @@ export default function AttendanceTab() {
                 <div className="px-3">
                   {activities.length > 0 && isPresent && allocatingWorkerId === worker.id && (
                     <WorkerAllocation
+                      key={editingAssignment?.id ?? "new"}
                       workerEstate={worker.estate ?? null}
                       locations={locations}
                       activities={activities}
                       saving={assigningWorkerId === worker.id}
+                      editing={editingAssignment}
                       onAdd={(payload) => handleAddAssignment(worker.id, payload)}
-                      onClose={() => setAllocatingWorkerId(null)}
+                      onClose={() => { setAllocatingWorkerId(null); setEditingAssignment(null) }}
                     />
                   )}
 
