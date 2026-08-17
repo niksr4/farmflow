@@ -481,7 +481,12 @@ export default function LaborDeploymentTab({
 
   const formSectionRef = useRef<HTMLDivElement>(null)
   const historySectionRef = useRef<HTMLDivElement>(null)
-  const [activeSection, setActiveSection] = useState<"form" | "history">("form")
+  const [chosenSection, setChosenSection] = useState<"form" | "history">("form")
+  // A switched estate has no Log Entry section to be on, so "form" is not a state it can sit in.
+  // Derived rather than corrected in an effect: the tab defaults to "form", and an effect would
+  // render the empty in-between frame first -- which is exactly the blank history this replaced.
+  const activeSection = assignmentsFrom ? "history" : chosenSection
+  const setActiveSection = setChosenSection
 
   // Rows optimistically hidden while their undo-delete window is open
   const [hiddenIds, setHiddenIds] = useState<Set<string>>(new Set())

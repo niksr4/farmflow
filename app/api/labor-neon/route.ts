@@ -191,7 +191,15 @@ export async function GET(request: Request) {
 
       const laborEntries = storedLaborEntries ?? []
 
-      if (!storedLaborEntries) {
+      // A muster row knows the person. Falling through to the generic "Estate Labor" bucket below
+      // would discard the only thing the new model records that the old one could not.
+      if (!storedLaborEntries && row.source === "assignment" && row.worker_name) {
+        laborEntries.push({
+          name: String(row.worker_name),
+          laborCount: Number(row.hf_laborers) || Number(row.outside_laborers) || 0,
+          costPerLabor: Number(row.hf_cost_per_laborer) || Number(row.outside_cost_per_laborer) || 0,
+        })
+      } else if (!storedLaborEntries) {
         const hfLaborers = Number(row.hf_laborers) || 0
         const outsideLaborers = Number(row.outside_laborers) || 0
         const hfCostPerLaborer = Number.parseFloat(row.hf_cost_per_laborer || 0)
