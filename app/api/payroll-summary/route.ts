@@ -52,6 +52,24 @@ export async function GET(request: Request) {
             AND attendance_date BETWEEN ${startDate}::date AND ${endDate}::date
           GROUP BY worker_id
         ),
+        -- What the muster roll says this worker earned, where it has anything to say.
+        --
+        -- Counting attendance rows times a daily rate answers a different question, and gets two
+        -- cases wrong the moment the roll is in use. A gang of eleven is one attendance row, so it
+        -- paid for one person: Rathi & Team came out at Rs 600 against the roll's Rs 6,600. And a
+        -- day is no longer always a whole one -- 1.5 days of overtime paid a flat Rs 800.
+        --
+        -- total_cost already carries rate x headcount x day_fraction, so it is simply the better
+        -- number, and it is the one every other screen reports.
+        muster_earnings AS (
+          SELECT worker_id,
+                 SUM(total_cost)::numeric   AS muster_total,
+                 SUM(day_fraction)::numeric AS muster_days
+          FROM labour_assignments
+          WHERE tenant_id = ${tenantContext.tenantId}
+            AND work_date BETWEEN ${startDate}::date AND ${endDate}::date
+          GROUP BY worker_id
+        ),
         picking_earnings AS (
           SELECT worker_id, COALESCE(SUM(kg_picked * rate_per_kg), 0) AS picking_total,
                  COALESCE(SUM(kg_picked), 0) AS total_kg
@@ -75,20 +93,23 @@ export async function GET(request: Request) {
           w.full_name,
           w.worker_type,
           w.daily_rate,
-          COALESCE(a.days_present, 0)                                                               AS days_present,
+          -- Days worked, not days turned up, wherever the roll knows the difference.
+          COALESCE(m.muster_days, a.days_present, 0)                                                AS days_present,
           COALESCE(p.picking_total, 0)                                                              AS picking_earnings,
           COALESCE(p.total_kg, 0)                                                                   AS picking_kg,
-          COALESCE(a.days_present, 0) * COALESCE(w.daily_rate, 0)                                  AS attendance_earnings,
+          COALESCE(m.muster_total, COALESCE(a.days_present, 0) * COALESCE(w.daily_rate, 0))         AS attendance_earnings,
+          (m.muster_total IS NOT NULL)                                                              AS from_muster,
           COALESCE(l.total_deductions, 0)                                                           AS deductions,
           COALESCE(l.total_adjustments, 0)                                                          AS adjustments,
           (
             COALESCE(p.picking_total, 0)
-            + COALESCE(a.days_present, 0) * COALESCE(w.daily_rate, 0)
+            + COALESCE(m.muster_total, COALESCE(a.days_present, 0) * COALESCE(w.daily_rate, 0))
             + COALESCE(l.total_adjustments, 0)
             - COALESCE(l.total_deductions, 0)
           )                                                                                         AS net_payable
         FROM attendance_workers w
         LEFT JOIN attendance_days  a ON a.worker_id = w.id
+        LEFT JOIN muster_earnings  m ON m.worker_id = w.id
         LEFT JOIN picking_earnings p ON p.worker_id = w.id
         LEFT JOIN ledger_totals    l ON l.worker_id = w.id
         WHERE w.tenant_id = ${tenantContext.tenantId}
@@ -96,6 +117,7 @@ export async function GET(request: Request) {
           ${estateFilter}
           AND (
             COALESCE(a.days_present, 0) > 0
+            OR COALESCE(m.muster_total, 0) > 0
             OR COALESCE(p.picking_total, 0) > 0
             OR COALESCE(l.total_deductions, 0) > 0
             OR COALESCE(l.total_adjustments, 0) > 0
@@ -117,6 +139,8 @@ export async function GET(request: Request) {
       adjustments: Number(r.adjustments) || 0,
       netPayable: Number(r.net_payable) || 0,
       missingDailyRate: r.daily_rate == null && Number(r.days_present) > 0,
+      /** True when this line came from allocated work rather than days-times-rate. */
+      fromMuster: Boolean(r.from_muster),
     }))
 
     const totals = workers.reduce(

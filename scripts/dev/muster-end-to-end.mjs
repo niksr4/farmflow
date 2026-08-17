@@ -24,6 +24,9 @@ let failures = 0
 const check = (ok, msg) => { if (!ok) failures++; console.log(`  ${ok ? "ok  " : "FAIL"} ${msg}`) }
 
 // Clean slate, then a terminal puts five people on the roll.
+// Whatever entry mode this tenant was on is configuration, not test residue -- put it back at
+// the end. Wiping it is how a configured demo got silently undone by a test run.
+const priorMode = await sql`SELECT assignments_from::text AS d FROM tenant_labour_entry_mode WHERE tenant_id=${T}`
 await sql`DELETE FROM labour_assignments WHERE tenant_id=${T}`
 await sql`DELETE FROM attendance_records WHERE tenant_id=${T}`
 await sql`DELETE FROM tenant_labour_entry_mode WHERE tenant_id=${T}`
@@ -112,6 +115,11 @@ check(Math.abs(digestLabour - want) < 0.005, `the view the digests query totals 
 
 console.log("\n== cleaning up ==")
 await sql`DELETE FROM tenant_labour_entry_mode WHERE tenant_id=${T}`
+if (priorMode.length) {
+  await sql`INSERT INTO tenant_labour_entry_mode (tenant_id, assignments_from)
+            VALUES (${T}, ${priorMode[0].d}::date)`
+  console.log(`  restored this tenant's cutover of ${priorMode[0].d}`)
+}
 await sql`DELETE FROM labour_assignments WHERE tenant_id=${T}`
 const restored = await ask(`/api/accounts-totals?startDate=${FY.start}&endDate=${FY.end}`)
 check(Math.abs(Number(restored.laborTotal) - legacyBefore) < 0.005, "removing the cutover restores the legacy total")

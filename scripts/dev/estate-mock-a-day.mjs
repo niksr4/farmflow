@@ -23,6 +23,8 @@ const today = new Date().toISOString().slice(0, 10)
 // A clean day: this replaces whatever was on it, including the punches earlier runs left.
 await sql`DELETE FROM labour_assignments WHERE tenant_id=${T} AND work_date=${today}::date`
 await sql`DELETE FROM attendance_records WHERE tenant_id=${T} AND attendance_date=${today}::date`
+// Expenses too, or a second run doubles the day's consumables instead of replacing them.
+await sql`DELETE FROM expense_transactions WHERE tenant_id=${T} AND entry_date=${today}::date`
 
 const workers = await sql`
   SELECT id, full_name, kind, headcount, estate, daily_rate

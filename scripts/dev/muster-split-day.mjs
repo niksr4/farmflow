@@ -32,9 +32,13 @@ const page = await ctx.newPage()
 const errors = []
 page.on("pageerror", (e) => errors.push("PAGEERROR: " + e.message))
 page.on("console", (m) => {
-  // Vercel Analytics' debug script is dev-only and blocked by CSP here; in production it is
-  // served same-origin from /_vercel/insights. Not a finding, and not worth drowning real ones.
-  if (m.type() === "error" && !m.text().includes("va.vercel-scripts.com")) errors.push(m.text())
+  // Third-party noise that is not this app failing, and which drowns the errors that are:
+  //   va.vercel-scripts.com  - dev-only debug script; production serves it same-origin
+  //   www.google.com         - GA4's Google Signals endpoint, deliberately outside connect-src
+  //   429                    - this harness hammering its own login
+  const t = m.text()
+  const benign = t.includes("va.vercel-scripts.com") || t.includes("www.google.com") || t.includes("429")
+  if (m.type() === "error" && !benign) errors.push(t)
 })
 const writes = []
 const failed = []
@@ -82,7 +86,7 @@ const pick = async (label, comboLabel, optionIndex) => {
 }
 
 const allocate = async (n, activityIdx, blockIdx) => {
-  await page.getByRole("button", { name: /set work|add another job/i }).first().click()
+  await page.getByRole("button", { name: /set work|another job/i }).first().click()
   await page.waitForTimeout(500)
   const work = await pick(`job ${n}`, "Work", activityIdx)
   const block = await pick(`block ${n}`, "Block", blockIdx)

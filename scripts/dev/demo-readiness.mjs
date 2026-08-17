@@ -59,7 +59,10 @@ if (!isMedappa) {
 }
 
 console.log("\n== the rate guard is what a new estate meets first ==")
-const w = (await sql`SELECT id FROM attendance_workers WHERE tenant_id=${T} AND active ORDER BY full_name LIMIT 1`)[0]
+const w = (await sql`SELECT id, daily_rate FROM attendance_workers WHERE tenant_id=${T} AND active ORDER BY full_name LIMIT 1`)[0]
+// Clear this one worker's rate for the duration, so the guard is proven regardless of whether
+// the tenant has since been set up. Restored at the end with everything else.
+await sql`UPDATE attendance_workers SET daily_rate = NULL WHERE id=${w.id}`
 await page.request.put(`${BASE}/api/attendance`, { data: { date: today, presentWorkerIds: [w.id] } })
 const code = (await sql`SELECT code FROM account_activities WHERE tenant_id=${T} ORDER BY code LIMIT 1`)[0].code
 const block = (await sql`SELECT id, name FROM locations WHERE tenant_id=${T} ORDER BY name LIMIT 1`)[0]
@@ -79,10 +82,16 @@ check(res.status() === 200, `allocation now accepted (${res.status()})`)
 const [row] = await sql`SELECT total_cost FROM labour_assignments WHERE tenant_id=${T} AND work_date=${today}::date`
 check(Number(row?.total_cost) === 600, `costed at Rs ${row?.total_cost} against ${block.name}`)
 
-console.log("\n== and it is invisible downstream until the estate switches over ==")
+console.log("\n== whether Costs counts it depends on the cutover, and only on that ==")
+const cutover = await sql`SELECT assignments_from::text AS d FROM tenant_labour_entry_mode WHERE tenant_id=${T}`
 const summary = await (await page.request.get(`${BASE}/api/labour-summary?startDate=2026-04-01&endDate=2027-03-31`)).json()
-check(Number(summary.source?.fromMuster ?? 0) === 0, "Accounts still reports only the legacy entries, by design")
-console.log(`       (labour-summary total Rs ${Number(summary.total ?? 0).toLocaleString("en-IN")}, all from Accounts)`)
+const fromMuster = Number(summary.source?.fromMuster ?? 0)
+if (cutover.length) {
+  check(fromMuster > 0, `switched from ${cutover[0].d}, so Costs counts the muster (${fromMuster} rows)`)
+} else {
+  check(fromMuster === 0, "not switched, so Costs reports only the typed entries -- by design")
+}
+console.log(`       (labour-summary total Rs ${Number(summary.total ?? 0).toLocaleString("en-IN")})`)
 
 await page.screenshot({ path: `${OUT}/demo-medappa.png`, fullPage: true })
 

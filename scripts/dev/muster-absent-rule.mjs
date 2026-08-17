@@ -68,12 +68,14 @@ console.log("\n== the UI ==")
 await page.reload({ waitUntil: "domcontentloaded" })
 await page.waitForTimeout(4000)
 
-const absentHints = await page.getByText("Mark present to set work").count()
-check(absentHints > 0, `absent rows say "Mark present to set work" (${absentHints} of them)`)
+// Absent rows offer no allocation control at all -- that is the whole assertion. There is
+// deliberately no explanatory line any more; the empty Work column carries it.
+const absentTriggers = await page.getByRole("button", { name: /^Set work$/ }).count()
 
 // The one present worker is the only row offering the control.
-const triggers = await page.getByRole("button", { name: /set work|add another job/i }).count()
+const triggers = await page.getByRole("button", { name: /set work|another job/i }).count()
 check(triggers === 1, `only the present worker can be allocated (${triggers} trigger${triggers === 1 ? "" : "s"})`)
+check(absentTriggers === 0, `no absent row offers "Set work" (${absentTriggers})`)
 
 // Un-ticking someone who has work must be refused rather than stranding the payable.
 await page.getByRole("button", { name: `${worker.full_name} present` }).first().click()
