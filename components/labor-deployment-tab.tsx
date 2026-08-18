@@ -482,10 +482,20 @@ export default function LaborDeploymentTab({
   const formSectionRef = useRef<HTMLDivElement>(null)
   const historySectionRef = useRef<HTMLDivElement>(null)
   const [chosenSection, setChosenSection] = useState<"form" | "history">("form")
+  // The cutover is a DATE, not a flag, and the two are not interchangeable.
+  //
+  // This used to hide the form the moment a tenant had a cutover row at all. Since a cutover is
+  // normally set a day or more ahead -- you announce it before it happens -- that took the form
+  // away while the estate was still supposed to be using it, and the muster was not counting yet
+  // either. Medappa lost an evening that way: no form to type into, and an allocation dated that
+  // day would have saved and counted nowhere. A whole day with no working way to record labour.
+  //
+  // So: before the date, nothing changes. From the date, the muster owns it.
+  const cutoverReached = Boolean(assignmentsFrom) && todayIso() >= String(assignmentsFrom)
   // A switched estate has no Log Entry section to be on, so "form" is not a state it can sit in.
   // Derived rather than corrected in an effect: the tab defaults to "form", and an effect would
   // render the empty in-between frame first -- which is exactly the blank history this replaced.
-  const activeSection = assignmentsFrom ? "history" : chosenSection
+  const activeSection = cutoverReached ? "history" : chosenSection
   const setActiveSection = setChosenSection
 
   // Rows optimistically hidden while their undo-delete window is open
@@ -552,7 +562,7 @@ export default function LaborDeploymentTab({
         // refuses anything dated on or after the switch, and letting someone fill in the whole
         // form before saying so is a worse way to deliver the same no. History stays -- their
         // older entries are still theirs to read and correct.
-        assignmentsFrom
+        cutoverReached
           ? [{ label: "History", active: true, onClick: () => setActiveSection("history") }]
           : [
               { label: "Log Entry", active: activeSection === "form", onClick: () => setActiveSection("form") },
@@ -560,7 +570,7 @@ export default function LaborDeploymentTab({
             ]
       } />
 
-      {assignmentsFrom && (
+      {cutoverReached && (
         <div className="flex flex-wrap items-center gap-x-2 gap-y-1 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm dark:border-emerald-500/20 dark:bg-emerald-500/10">
           <span className="font-semibold text-emerald-900 dark:text-emerald-200">
             Labour is recorded on the muster roll from {assignmentsFrom}.
@@ -573,8 +583,22 @@ export default function LaborDeploymentTab({
           </span>
         </div>
       )}
+
+      {/* Cutover announced but not yet arrived: the form still works, and saying so beats letting
+          them find out on the day. Amber rather than emerald -- this is a heads-up, not a state. */}
+      {assignmentsFrom && !cutoverReached && (
+        <div className="flex flex-wrap items-center gap-x-2 gap-y-1 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm dark:border-amber-500/20 dark:bg-amber-500/10">
+          <span className="font-semibold text-amber-900 dark:text-amber-200">
+            From {assignmentsFrom}, labour moves to the muster roll.
+          </span>
+          <span className="w-full text-xs text-amber-800/80 dark:text-amber-300/80">
+            Until then nothing changes — keep logging here as usual. Worth setting each worker&apos;s
+            daily wage on the Workers tab before that date, since work cannot be allocated without one.
+          </span>
+        </div>
+      )}
       {/* Mobile: QuickLogPanel tiles as default entry — full form opens via "More details" */}
-      {!assignmentsFrom && activeSection === "form" && isMobile && !isAdding && (
+      {!cutoverReached && activeSection === "form" && isMobile && !isAdding && (
         <QuickLogPanel
           locationId={formLocationId || undefined}
           onNavigateToFull={openNewForm}
@@ -582,7 +606,7 @@ export default function LaborDeploymentTab({
       )}
 
       {/* Desktop: traditional add button */}
-      {!assignmentsFrom && activeSection === "form" && !isMobile && !isAdding && (
+      {!cutoverReached && activeSection === "form" && !isMobile && !isAdding && (
         <button
           type="button"
           onClick={openNewForm}

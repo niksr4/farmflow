@@ -56,3 +56,31 @@ export const blockedByLabourCutover = async (
     `would not be counted anywhere. Open Attendance for that day and set each worker's work instead.`
   )
 }
+
+/**
+ * The same guard pointing the other way: null when a muster allocation is allowed, otherwise why not.
+ *
+ * labour_cost reads muster rows only from assignments_from onward, so an allocation dated before
+ * the cutover saves happily and is counted by nothing -- money entered, receipt shown, no total
+ * moved. Identical damage to an Accounts entry after the cutover, and it needs the same refusal.
+ *
+ * This is not hypothetical: a cutover is normally set a day or more ahead so the estate can be
+ * told before it happens, and during that window the muster is visible and inviting while still
+ * being ignored by every cost reader.
+ */
+export const blockedByLabourCutoverBefore = async (
+  tenantContext: TenantContext,
+  date: unknown,
+): Promise<string | null> => {
+  const day = String(date ?? "").slice(0, 10)
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(day)) return null
+
+  const cutover = await getLabourCutover(tenantContext)
+  if (!cutover || day >= cutover) return null
+
+  return (
+    `This estate records labour on the muster roll from ${cutover}. Work dated ${day} belongs to ` +
+    `the earlier way of recording, so an allocation here would not be counted anywhere — enter it ` +
+    `in Costs instead.`
+  )
+}

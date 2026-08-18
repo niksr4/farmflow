@@ -2,6 +2,7 @@ import { NextResponse } from "next/server"
 import { accountsSql } from "@/lib/server/db"
 import { requireModuleAccess, isModuleAccessError } from "@/lib/server/module-access"
 import { canWriteModule } from "@/lib/permissions"
+import { blockedByLabourCutoverBefore } from "@/lib/server/labour-entry-mode"
 import { logAuditEvent } from "@/lib/server/audit-log"
 import { normalizeTenantContext, runTenantQuery, runTenantTransaction } from "@/lib/server/tenant-db"
 import { activityCodeExistsForTenant } from "@/lib/server/activity-codes"
@@ -66,6 +67,14 @@ export async function POST(request: Request) {
     const date = normalizeAttendanceDate(body?.date, "")
     if (!date) {
       return NextResponse.json({ success: false, error: "Valid work date is required" }, { status: 400 })
+    }
+
+    // Work dated before the cutover is read from the old Accounts entries, not from here, so an
+    // allocation for such a day would save and reach no total at all. Refused for the same reason
+    // the Accounts form refuses entries after the cutover.
+    const beforeCutover = await blockedByLabourCutoverBefore(tenantContext, date)
+    if (beforeCutover) {
+      return NextResponse.json({ success: false, error: beforeCutover }, { status: 409 })
     }
 
     const workerIds: string[] = Array.from(
