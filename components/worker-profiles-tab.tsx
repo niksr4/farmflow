@@ -42,6 +42,7 @@ type Worker = {
   workerType: WorkerType | null
   phone: string | null
   dailyRate: number | null
+  gender: string | null
   bankName: string | null
   bankAccount: string | null
   bankIfsc: string | null
@@ -71,6 +72,7 @@ const EMPTY_FORM = {
   workerType: "" as WorkerType | "",
   phone: "",
   dailyRate: "",
+  gender: "",
   bankName: "",
   bankAccount: "",
   bankIfsc: "",
@@ -151,6 +153,7 @@ export default function WorkerProfilesTab() {
             workerType: w.workerType || null,
             phone: w.phone || null,
             dailyRate: w.dailyRate != null ? Number(w.dailyRate) : null,
+            gender: w.gender ?? null,
             bankName: w.bankName || null,
             bankAccount: w.bankAccount || null,
             bankIfsc: w.bankIfsc || null,
@@ -184,6 +187,7 @@ export default function WorkerProfilesTab() {
           name: form.name.trim(),
           workerType: form.workerType || null,
           dailyRate: form.dailyRate ? Number(form.dailyRate) : null,
+          gender: form.gender || null,
           estate: form.estate === UNASSIGNED_ESTATE ? null : form.estate,
           phone: form.phone.trim() || null,
           bankName: form.bankName.trim() || null,
@@ -212,6 +216,7 @@ export default function WorkerProfilesTab() {
       workerType: worker.workerType || "",
       phone: worker.phone || "",
       dailyRate: worker.dailyRate != null ? String(worker.dailyRate) : "",
+      gender: worker.gender || "",
       bankName: worker.bankName || "",
       bankAccount: worker.bankAccount || "",
       deviceUserCode: worker.deviceUserCode || "",
@@ -321,10 +326,35 @@ export default function WorkerProfilesTab() {
                   </SelectContent>
                 </Select>
               </div>
+              {/* Recorded for INDICOFS reporting. Deliberately not an input to pay -- everyone
+                  doing the same work is paid the same rate. */}
               <div className="space-y-1.5">
                 <FieldLabel
-                  label="Daily rate (₹)"
-                  tooltip="Standard daily wage for this worker. Used to calculate attendance earnings in Payroll Summary. E.g. ₹500 per day."
+                  label="Gender"
+                  tooltip="Reported in INDICOFS workforce returns. It has no effect on pay: the rate belongs to the work, and everyone doing that work is paid the same."
+                />
+                <Select
+                  value={form.gender || "unset"}
+                  onValueChange={(v) => setForm((f) => ({ ...f, gender: v === "unset" ? "" : v }))}
+                >
+                  <SelectTrigger><SelectValue placeholder="Not recorded" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="unset">Not recorded</SelectItem>
+                    <SelectItem value="female">Female</SelectItem>
+                    <SelectItem value="male">Male</SelectItem>
+                    <SelectItem value="other">Other</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {/* The estate's normal wage for this person, and the base of the chain: a rate on
+                  the work overrides it for jobs that pay differently, and an amount typed on a
+                  deployment overrides both for a day that was unusual. Most days fall through to
+                  this one, which is how most estates actually pay. */}
+              <div className="space-y-1.5">
+                <FieldLabel
+                  label="Daily wage (₹)"
+                  tooltip="What this worker normally earns for a day. Work that pays differently can carry its own rate under Costs, and a one-off amount can be typed on the deployment itself — both override this."
                 />
                 <Input
                   type="number" inputMode="decimal"

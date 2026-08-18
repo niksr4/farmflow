@@ -163,10 +163,10 @@ export async function POST(request: Request) {
     // What this work pays. The rate belongs to the task, not the person: the same worker earns a
     // different amount weeding than shade lopping, which is what the estate's own history shows.
     //
-    // An explicit rate on the request wins, so an unusual day can be priced without editing the
-    // code for everyone. Then the code's own rate. The worker's daily_rate is only a fallback for
-    // an estate mid-transition whose codes have not been priced yet -- once they have, it is never
-    // consulted, and it is what still prices an estate that has not moved to the muster at all.
+    // Three sources, most specific first: an amount typed on this entry, then a rate on the work,
+    // then the worker's normal daily wage. Most estates pay a daily wage and most days fall
+    // through to it -- the code's rate exists for the jobs that are the exception, like shade
+    // lopping paying more than weeding. All three being absent is what gets refused.
     const codeRateRow = await runTenantQuery(
       accountsSql,
       tenantContext,
@@ -222,8 +222,8 @@ export async function POST(request: Request) {
           success: false,
           error:
             names.length === 1
-              ? `"${activityCode}" has no rate set, so this work would be recorded as costing nothing. Give the code a rate under Costs, or type one on this entry.`
-              : `"${activityCode}" has no rate set, so this work would be recorded as costing nothing. Give the code a rate under Costs, or type one on this entry.`,
+              ? `${names[0]} has no daily wage and "${activityCode}" has no rate, so this would be recorded as costing nothing. Set their wage on the Workers tab, give the work a rate under Costs, or type an amount on this entry.`
+              : `${names.length} of these workers have no daily wage and "${activityCode}" has no rate, so this would be recorded as costing nothing. Set their wages, give the work a rate under Costs, or type an amount on this entry.`,
         },
         { status: 409 },
       )

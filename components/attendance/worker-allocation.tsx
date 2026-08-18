@@ -40,7 +40,7 @@ const DAY_SHARES = [
 ] as const
 
 export default function WorkerAllocation({
-  workerEstate, locations, activities, saving, editing, headcount, isGang, onAdd, onClose,
+  workerEstate, locations, activities, saving, editing, headcount, isGang, workerRate, onAdd, onClose,
 }: {
   workerEstate: string | null
   locations: LocationOption[]
@@ -50,6 +50,8 @@ export default function WorkerAllocation({
   editing: { id: string; activityCode: string; locationId: string | null; dayFraction: number } | null
   /** A gang carries its crew size; an individual is always one. */
   headcount: number
+  /** The estate's normal wage for this person -- the base of the rate chain. */
+  workerRate: number | null
   isGang: boolean
   onAdd: (payload: {
     id?: string
@@ -86,7 +88,12 @@ export default function WorkerAllocation({
     return raw == null || raw === "" ? null : Number(raw)
   }, [activities, activityCode])
 
-  const effectiveRate = rateOverride.trim() !== "" ? Number(rateOverride) : codeRate
+  // Typed here wins, then the work's own rate, then this person's normal daily wage. Most days
+  // fall through to the wage, which is how most estates pay -- the code's rate exists for the
+  // jobs that are the exception.
+  const typed = rateOverride.trim() !== "" ? Number(rateOverride) : null
+  const effectiveRate = typed ?? codeRate ?? workerRate
+  const rateSource = typed != null ? "typed here" : codeRate != null ? "this work" : workerRate != null ? "daily wage" : null
   const heads = isGang ? Math.max(1, Number(crew) || 1) : 1
   const extras = [driver, supervisor, vehicle].reduce((sum, v) => sum + (Number(v) || 0), 0)
   const total =
@@ -206,7 +213,7 @@ export default function WorkerAllocation({
           type="number" inputMode="decimal" min={0}
           value={rateOverride}
           onChange={(e) => setRateOverride(e.target.value)}
-          placeholder={codeRate != null ? String(codeRate) : "not set for this work"}
+          placeholder={effectiveRate != null ? String(effectiveRate) : "no rate yet"}
           aria-label="Rate per day"
           className="h-8 flex-1 rounded-lg border border-stone-200 px-2 text-xs tabular-nums placeholder:text-stone-400 dark:border-white/[0.1] dark:bg-transparent"
         />
@@ -235,12 +242,14 @@ export default function WorkerAllocation({
       {/* What it will cost, before it is saved. */}
       <p className="px-0.5 text-[11px] font-bold text-stone-500">
         {total == null ? (
-          <span className="text-amber-600">No rate for this work yet — type one above</span>
+          <span className="text-amber-600">
+            No wage for this worker and no rate on this work — type an amount above
+          </span>
         ) : (
           <>
             <span className="text-stone-700 dark:text-stone-200">₹{Math.round(total).toLocaleString("en-IN")}</span>
             <span className="ml-1 font-medium text-stone-400">
-              = ₹{effectiveRate}{isGang ? ` × ${heads}` : ""}{dayFraction !== 1 ? ` × ${dayFraction}` : ""}
+              = ₹{effectiveRate}{rateSource ? ` (${rateSource})` : ""}{isGang ? ` × ${heads}` : ""}{dayFraction !== 1 ? ` × ${dayFraction}` : ""}
               {payMultiplier !== 1 ? ` × ${payMultiplier} holiday` : ""}
               {extras > 0 ? ` + ₹${extras.toLocaleString("en-IN")} extras` : ""}
             </span>

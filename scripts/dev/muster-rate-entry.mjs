@@ -85,9 +85,27 @@ if (noRate) {
   const res = await allocate({ workerIds: [individual.id], activityCode: noRate.code, locationId: null, dayFraction: 1 })
   const body = await res.json().catch(() => ({}))
   check(res.status() === 409, `refused with ${res.status()}`)
-  check(/no rate set/i.test(body.error || ""), `message names the work: "${String(body.error).slice(0, 70)}"`)
+  check(/no daily wage and .* has no rate/i.test(body.error || ""), `message names all three ways to fix it: "${String(body.error).slice(0, 90)}..."`)
   await sql`UPDATE attendance_workers SET daily_rate = 600 WHERE tenant_id=${T} AND id=${individual.id}`
 }
+
+console.log("\n== the chain: typed beats the work, the work beats the daily wage ==")
+// Most estates pay a daily wage and most days fall through to it. A rate on the work exists for
+// the jobs that are the exception -- shade lopping paying more than weeding.
+await sql`DELETE FROM labour_assignments WHERE tenant_id=${T} AND work_date=${today}::date`
+await sql`UPDATE attendance_workers SET daily_rate = 500 WHERE tenant_id=${T} AND id=${individual.id}`
+const plain = (await sql`SELECT code FROM account_activities WHERE tenant_id=${T} AND default_rate IS NULL LIMIT 1`)[0]
+if (plain) {
+  await allocate({ workerIds: [individual.id], activityCode: plain.code, locationId: null, dayFraction: 1 })
+  check(await costOf(individual.id) === 500, `unpriced work fell through to the Rs 500 daily wage (got Rs ${await costOf(individual.id)})`)
+  await sql`DELETE FROM labour_assignments WHERE tenant_id=${T} AND worker_id=${individual.id}`
+}
+await allocate({ workerIds: [individual.id], activityCode: code, locationId: null, dayFraction: 1 })
+check(await costOf(individual.id) === 700, `work priced at Rs 700 overrode the Rs 500 wage (got Rs ${await costOf(individual.id)})`)
+await sql`DELETE FROM labour_assignments WHERE tenant_id=${T} AND worker_id=${individual.id}`
+await allocate({ workerIds: [individual.id], activityCode: code, locationId: null, dayFraction: 1, rate: 1100 })
+check(await costOf(individual.id) === 1100, `an amount typed on the entry beat both (got Rs ${await costOf(individual.id)})`)
+await sql`UPDATE attendance_workers SET daily_rate = 600 WHERE tenant_id=${T} AND id=${individual.id}`
 
 await sql`DELETE FROM labour_assignments WHERE tenant_id=${T} AND work_date=${today}::date`
 console.log(failures === 0 ? "\nPASS -- the work carries the rate, and the cost is visible before it is saved\n" : `\n${failures} FAILURE(S)\n`)

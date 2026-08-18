@@ -15,6 +15,15 @@ import {
 } from "@/lib/attendance"
 import { logServerError } from "@/lib/server/safe-logging"
 
+/** INDICOFS asks estates to report their workforce by gender. It never touches pay. */
+const VALID_GENDERS = ["female", "male", "other"] as const
+const readGender = (value: unknown): string | null | undefined => {
+  if (value === undefined) return undefined
+  if (value === null || value === "") return null
+  const g = String(value).toLowerCase()
+  return (VALID_GENDERS as readonly string[]).includes(g) ? g : undefined
+}
+
 export async function POST(request: Request) {
   try {
     const sessionUser = await requireModuleAccess("accounts")
@@ -23,6 +32,7 @@ export async function POST(request: Request) {
     }
 
     const body = await request.json().catch(() => ({}))
+    const gender = readGender(body?.gender) ?? null
     const name = normalizeAttendanceWorkerName(body?.name)
     if (!name) {
       return NextResponse.json({ success: false, error: "Employee name is required" }, { status: 400 })
@@ -91,6 +101,7 @@ export async function POST(request: Request) {
           full_name,
           worker_type,
           daily_rate,
+          gender,
           location_id,
           estate,
           device_user_code,
@@ -104,6 +115,7 @@ export async function POST(request: Request) {
           ${name},
           ${workerType},
           ${dailyRate},
+          ${gender},
           ${locationId},
           ${estate},
           ${deviceUserCode},
@@ -112,7 +124,7 @@ export async function POST(request: Request) {
           ${bankAccount},
           ${bankIfsc}
         )
-        RETURNING id, full_name, worker_type, daily_rate, location_id, estate, device_user_code,
+        RETURNING id, full_name, worker_type, daily_rate, gender, location_id, estate, device_user_code,
                   phone, bank_name, bank_account, bank_ifsc, created_at
       `,
     )
@@ -144,6 +156,7 @@ export async function POST(request: Request) {
             name: String(worker.full_name || ""),
             workerType: worker.worker_type ? String(worker.worker_type) : null,
             dailyRate: worker.daily_rate != null ? Number(worker.daily_rate) : null,
+            gender: worker.gender ? String(worker.gender) : null,
             locationId: worker.location_id ? String(worker.location_id) : null,
             estate: worker.estate ? String(worker.estate) : null,
             createdAt: worker.created_at ? String(worker.created_at) : null,

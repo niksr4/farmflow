@@ -97,7 +97,7 @@ const noRate = await page.request.post(`${BASE}/api/attendance/assignments`, {
 })
 const noRateBody = await noRate.json().catch(() => ({}))
 check(noRate.status() === 409, `refused with 409 (got ${noRate.status()})`)
-check(/no rate set/i.test(noRateBody.error || ""), `message names the work: "${noRateBody.error || ""}"`)
+check(/no daily wage and .* has no rate/i.test(noRateBody.error || ""), `message names the worker and the work: "${String(noRateBody.error).slice(0, 80)}..."`)
 await sql`UPDATE account_activities SET default_rate = ${pricedBefore} WHERE tenant_id=${T} AND code=${code}`
 await sql`UPDATE attendance_workers SET daily_rate = 600 WHERE id=${spare.id}`
 

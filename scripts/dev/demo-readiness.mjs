@@ -73,7 +73,7 @@ let res = await page.request.post(`${BASE}/api/attendance/assignments`, {
   data: { date: today, workerIds: [w.id], activityCode: code, locationId: block.id, dayFraction: 1 },
 })
 let bodyJson = await res.json().catch(() => ({}))
-check(res.status() === 409 && /no rate set/i.test(bodyJson.error || ""), `refused until the work is priced: "${(bodyJson.error || "").slice(0, 60)}..."`)
+check(res.status() === 409 && /no daily wage and .* has no rate/i.test(bodyJson.error || ""), `refused until the work is priced: "${(bodyJson.error || "").slice(0, 60)}..."`)
 
 console.log("\n== pricing the work unblocks it ==")
 await sql`UPDATE account_activities SET default_rate = 600 WHERE tenant_id=${T} AND code=${code}`

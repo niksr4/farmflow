@@ -14,6 +14,15 @@ const isUniqueViolation = (error: unknown) => String((error as any)?.code || "")
 
 const VALID_WORKER_TYPES = ["permanent", "seasonal", "contractor"] as const
 
+/** INDICOFS asks estates to report their workforce by gender. It never touches pay. */
+const VALID_GENDERS = ["female", "male", "other"] as const
+const readGender = (value: unknown): string | null | undefined => {
+  if (value === undefined) return undefined
+  if (value === null || value === "") return null
+  const g = String(value).toLowerCase()
+  return (VALID_GENDERS as readonly string[]).includes(g) ? g : undefined
+}
+
 export async function GET(request: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
     const { id } = await params
@@ -24,7 +33,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
       accountsSql,
       tenantContext,
       accountsSql`
-        SELECT id, full_name, worker_type, phone, daily_rate, bank_name, bank_account, bank_ifsc, device_user_code, location_id, estate, active, created_at
+        SELECT id, full_name, worker_type, phone, daily_rate, gender, bank_name, bank_account, bank_ifsc, device_user_code, location_id, estate, active, created_at
         FROM attendance_workers
         WHERE id = ${id}::uuid
           AND tenant_id = ${tenantContext.tenantId}
@@ -45,6 +54,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
         workerType: w.worker_type ? String(w.worker_type) : null,
         phone: w.phone ? String(w.phone) : null,
         dailyRate: w.daily_rate != null ? Number(w.daily_rate) : null,
+        gender: w.gender ? String(w.gender) : null,
         bankName: w.bank_name ? String(w.bank_name) : null,
         bankAccount: w.bank_account ? String(w.bank_account) : null,
         bankIfsc: w.bank_ifsc ? String(w.bank_ifsc) : null,
@@ -79,7 +89,7 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
       accountsSql,
       tenantContext,
       accountsSql`
-        SELECT id, full_name, worker_type, phone, daily_rate, bank_name, bank_account, bank_ifsc, device_user_code, active
+        SELECT id, full_name, worker_type, phone, daily_rate, gender, bank_name, bank_account, bank_ifsc, device_user_code, active
         FROM attendance_workers
         WHERE id = ${id}::uuid AND tenant_id = ${tenantContext.tenantId}
         LIMIT 1
@@ -97,6 +107,7 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
       return NextResponse.json({ success: false, error: "Employee name cannot be empty" }, { status: 400 })
     }
 
+    const gender = readGender(body?.gender)
     const workerType =
       body?.workerType != null
         ? VALID_WORKER_TYPES.includes(body.workerType)
@@ -147,6 +158,7 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
             worker_type      = CASE WHEN ${workerType !== undefined} THEN ${workerType ?? null} ELSE worker_type END,
             phone            = CASE WHEN ${phone !== undefined} THEN ${phone ?? null} ELSE phone END,
             daily_rate       = CASE WHEN ${dailyRate !== undefined} THEN ${dailyRate ?? null} ELSE daily_rate END,
+            gender           = CASE WHEN ${gender !== undefined} THEN ${gender ?? null} ELSE gender END,
             bank_name        = CASE WHEN ${bankName !== undefined} THEN ${bankName ?? null} ELSE bank_name END,
             bank_account     = CASE WHEN ${bankAccount !== undefined} THEN ${bankAccount ?? null} ELSE bank_account END,
             bank_ifsc        = CASE WHEN ${bankIfsc !== undefined} THEN ${bankIfsc ?? null} ELSE bank_ifsc END,
