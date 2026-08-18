@@ -54,6 +54,7 @@ interface AccountActivity {
   reference: string
   labor_count?: number
   expense_count?: number
+  assignment_count?: number
 }
 
 interface Activity {
@@ -170,7 +171,7 @@ export default function AccountsPage({
     sorters: {
       code: (a) => String(a.code || ""),
       reference: (a) => String(a.reference || ""),
-      usage: (a) => (Number(a.labor_count) || 0) + (Number(a.expense_count) || 0),
+      usage: (a) => (Number(a.labor_count) || 0) + (Number(a.expense_count) || 0) + (Number(a.assignment_count) || 0),
     },
     defaultSort: "code",
     defaultDirection: "asc",
@@ -185,7 +186,6 @@ export default function AccountsPage({
   const [newActivityReference, setNewActivityReference] = useState("")
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [editingActivityCode, setEditingActivityCode] = useState<string | null>(null)
-  const [editingActivityNextCode, setEditingActivityNextCode] = useState("")
   const [editingActivityReference, setEditingActivityReference] = useState("")
   const [isUpdatingActivity, setIsUpdatingActivity] = useState(false)
   const [isDeletingActivityCode, setIsDeletingActivityCode] = useState<string | null>(null)
@@ -349,6 +349,7 @@ export default function AccountsPage({
           reference: String(activity.reference || activity.activity || ""),
           labor_count: Number(activity.labor_count) || 0,
           expense_count: Number(activity.expense_count) || 0,
+          assignment_count: Number(activity.assignment_count) || 0,
         }))
         setAccountActivities(normalized)
       }
@@ -426,23 +427,20 @@ export default function AccountsPage({
       return
     }
     setEditingActivityCode(activity.code)
-    setEditingActivityNextCode(activity.code)
     setEditingActivityReference(activity.reference)
   }
 
   const cancelEditingActivity = () => {
     setEditingActivityCode(null)
-    setEditingActivityNextCode("")
     setEditingActivityReference("")
   }
 
   const handleUpdateActivity = async () => {
     if (!editingActivityCode) return
-    const nextCode = editingActivityNextCode.trim().toUpperCase()
     const nextReference = editingActivityReference.trim()
 
-    if (!nextCode || !nextReference) {
-      toast.error("Code and reference are required")
+    if (!nextReference) {
+      toast.error("A description is required")
       return
     }
 
@@ -453,9 +451,9 @@ export default function AccountsPage({
         headers: {
           "Content-Type": "application/json",
         },
+        // No nextCode: the code is fixed once created, and the route refuses to change it.
         body: JSON.stringify({
           code: editingActivityCode,
-          nextCode,
           reference: nextReference,
         }),
       })
@@ -1305,7 +1303,7 @@ export default function AccountsPage({
               ) : (
                 <div className="rounded-2xl bg-white shadow-sm divide-y divide-stone-50 overflow-hidden">
                   {activityControls.items.map((activity) => {
-                    const usageCount = (activity.labor_count || 0) + (activity.expense_count || 0)
+                    const usageCount = (activity.labor_count || 0) + (activity.expense_count || 0) + (activity.assignment_count || 0)
                     return (
                       <div key={activity.code} className="flex items-center justify-between px-4 py-3.5">
                         <div>
@@ -1315,7 +1313,6 @@ export default function AccountsPage({
                         <div className="flex gap-2">
                           <button type="button" onClick={() => {
                             setEditingActivityCode(activity.code)
-                            setEditingActivityNextCode(activity.code)
                             setEditingActivityReference(activity.reference)
                           }} className="text-stone-400 p-1.5 rounded-xl hover:bg-stone-100">
                             <Pencil className="h-4 w-4" />
@@ -1785,22 +1782,16 @@ export default function AccountsPage({
                       <TableBody>
                         {activityControls.items.map((activity) => {
                           const isEditing = editingActivityCode === activity.code
-                          const usageCount = (activity.labor_count || 0) + (activity.expense_count || 0)
+                          const usageCount = (activity.labor_count || 0) + (activity.expense_count || 0) + (activity.assignment_count || 0)
                           const canDelete = canManageActivities && usageCount === 0
                           return (
                             <TableRow key={activity.code}>
-                              <TableCell className="font-medium">
-                                {isEditing ? (
-                                  <Input
-                                    value={editingActivityNextCode}
-                                    onChange={(event) => setEditingActivityNextCode(event.target.value.toUpperCase())}
-                                    disabled={isUpdatingActivity}
-                                    className="h-8"
-                                  />
-                                ) : (
-                                  activity.code
-                                )}
-                              </TableCell>
+                              {/* The code is the identifier every record is filed under, so it
+                                  stays fixed once created -- the API refuses to rename it. Showing
+                                  it as text rather than a disabled input avoids offering an edit
+                                  that would only come back as an error. The description below is
+                                  editable, which is where a typo actually needs fixing. */}
+                              <TableCell className="font-medium">{activity.code}</TableCell>
                               <TableCell>
                                 {isEditing ? (
                                   <Input
@@ -1815,7 +1806,7 @@ export default function AccountsPage({
                               </TableCell>
                               <TableCell className="text-xs text-muted-foreground">
                                 {usageCount > 0
-                                  ? `${usageCount} records (${activity.labor_count || 0} labour, ${activity.expense_count || 0} expense)`
+                                  ? `${usageCount} records (${activity.labor_count || 0} labour, ${activity.expense_count || 0} expense, ${activity.assignment_count || 0} muster)`
                                   : "Unused"}
                               </TableCell>
                               <TableCell>
@@ -1875,23 +1866,15 @@ export default function AccountsPage({
                   <div className="space-y-3 md:hidden">
                     {activityControls.items.map((activity) => {
                       const isEditing = editingActivityCode === activity.code
-                      const usageCount = (activity.labor_count || 0) + (activity.expense_count || 0)
+                      const usageCount = (activity.labor_count || 0) + (activity.expense_count || 0) + (activity.assignment_count || 0)
                       const canDelete = canManageActivities && usageCount === 0
                       return (
                         <Card key={activity.code} className="border-border/60">
                           <CardContent className="space-y-3 p-3">
                             <div className="space-y-1">
                               <Label className="text-xs text-muted-foreground">Code</Label>
-                              {isEditing ? (
-                                <Input
-                                  value={editingActivityNextCode}
-                                  onChange={(event) => setEditingActivityNextCode(event.target.value.toUpperCase())}
-                                  disabled={isUpdatingActivity}
-                                  className="h-9"
-                                />
-                              ) : (
-                                <p className="text-sm font-medium">{activity.code}</p>
-                              )}
+                              {/* Fixed once created -- see the desktop table above. */}
+                              <p className="text-sm font-medium">{activity.code}</p>
                             </div>
                             <div className="space-y-1">
                               <Label className="text-xs text-muted-foreground">Reference</Label>
@@ -1908,7 +1891,7 @@ export default function AccountsPage({
                             </div>
                             <p className="text-xs text-muted-foreground">
                               {usageCount > 0
-                                ? `${usageCount} linked records (${activity.labor_count || 0} labour, ${activity.expense_count || 0} expense)`
+                                ? `${usageCount} linked records (${activity.labor_count || 0} labour, ${activity.expense_count || 0} expense, ${activity.assignment_count || 0} muster)`
                                 : "No linked records"}
                             </p>
                             <div className="flex gap-2">

@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server"
 import { accountsSql } from "@/lib/server/db"
 import { requireModuleAccess, isModuleAccessError } from "@/lib/server/module-access"
-import { normalizeTenantContext, runTenantQuery, runTenantTransaction } from "@/lib/server/tenant-db"
+import { normalizeTenantContext, runTenantQuery } from "@/lib/server/tenant-db"
 import { canDeleteModule, canWriteModule } from "@/lib/permissions"
 import { logAuditEvent } from "@/lib/server/audit-log"
 import { buildMissingAccountActivitySuggestions } from "@/lib/account-activity-suggestions"
@@ -34,7 +34,11 @@ export async function GET(_request: Request) {
             aa.module_hint,
             aa.tracks_inventory,
             COALESCE(lt.usage_count, 0)::int AS labor_count,
-            COALESCE(et.usage_count, 0)::int AS expense_count
+            COALESCE(et.usage_count, 0)::int AS expense_count,
+            -- The muster is the third place a code gets used. Without it the UI counts a
+            -- heavily-used code as unused and offers a Delete button that the DELETE handler
+            -- then refuses -- an error the estate did nothing to deserve.
+            COALESCE(la.usage_count, 0)::int AS assignment_count
           FROM account_activities aa
           LEFT JOIN (
             SELECT code, COUNT(*)::int AS usage_count
@@ -48,12 +52,22 @@ export async function GET(_request: Request) {
             WHERE tenant_id = ${tenantContext.tenantId}
             GROUP BY code
           ) et ON et.code = aa.code
+          LEFT JOIN (
+            SELECT activity_code AS code, COUNT(*)::int AS usage_count
+            FROM labour_assignments
+            WHERE tenant_id = ${tenantContext.tenantId}
+            GROUP BY activity_code
+          ) la ON la.code = aa.code
           WHERE aa.tenant_id = ${tenantContext.tenantId}
           ORDER BY aa.code ASC
         `,
       )
     } catch (error) {
-      if (!isMissingRelation(error, "labor_transactions") && !isMissingRelation(error, "expense_transactions")) {
+      if (
+        !isMissingRelation(error, "labor_transactions") &&
+        !isMissingRelation(error, "expense_transactions") &&
+        !isMissingRelation(error, "labour_assignments")
+      ) {
         throw error
       }
       result = await runTenantQuery(
@@ -66,7 +80,8 @@ export async function GET(_request: Request) {
             module_hint,
             tracks_inventory,
             0::int AS labor_count,
-            0::int AS expense_count
+            0::int AS expense_count,
+            0::int AS assignment_count
           FROM account_activities
           WHERE tenant_id = ${tenantContext.tenantId}
           ORDER BY code ASC
@@ -208,93 +223,41 @@ export async function PUT(request: Request) {
       return NextResponse.json({ success: false, error: "Activity code not found" }, { status: 404 })
     }
 
+    // The code itself is not editable. It is the identifier every record is filed under, and
+    // the rename that used to live here rewrote history to match: it copied the code to a new
+    // row and then UPDATEd labor_transactions and expense_transactions to point at it, so
+    // "what did 151 cost last season" silently changed answer. That is the opposite of a single
+    // source of truth, and the estate asked for it to stop.
+    //
+    // It had also grown a hole. The cascade knew about labor_transactions and
+    // expense_transactions but never labour_assignments, which did not exist when it was
+    // written -- so on a muster tenant a rename left every allocation pointing at a code that
+    // no longer existed. Refusing the rename closes that without having to maintain the
+    // cascade across a growing number of tables.
+    //
+    // The description stays editable: it is a label, not an identifier, and fixing a typo in
+    // it changes no record's meaning.
     if (nextCode !== currentCode) {
-      const conflictRows = await runTenantQuery(
-        accountsSql,
-        tenantContext,
-        accountsSql`
-          SELECT code
-          FROM account_activities
-          WHERE tenant_id = ${tenantContext.tenantId}
-            AND code = ${nextCode}
-          LIMIT 1
-        `,
-      )
-      if (conflictRows?.length) {
-        return NextResponse.json({ success: false, error: "Activity code already exists" }, { status: 409 })
-      }
-
-      // Renaming a code touches 4 statements across 3 tables; each used to run as its own
-      // standalone request, so a failure partway through (e.g. a dropped connection between
-      // the INSERT and the reference updates) left account_activities with both the old and
-      // new code live and labor/expense rows pointing at whichever code the failure landed on
-      // -- a real, silent data-corruption risk for a rename that's supposed to be atomic.
-      // Table existence is still checked up front (not inside the transaction) so a tenant
-      // genuinely missing one of these optional tables degrades the same way it did before,
-      // rather than rolling back the whole rename.
-      const [hasLaborTable, hasExpenseTable] = await Promise.all([
-        runTenantQuery(
-          accountsSql,
-          tenantContext,
-          accountsSql`
-            SELECT 1 FROM information_schema.tables
-            WHERE table_schema = 'public' AND table_name = 'labor_transactions'
-            LIMIT 1
-          `,
-        ).then((rows) => Array.isArray(rows) && rows.length > 0),
-        runTenantQuery(
-          accountsSql,
-          tenantContext,
-          accountsSql`
-            SELECT 1 FROM information_schema.tables
-            WHERE table_schema = 'public' AND table_name = 'expense_transactions'
-            LIMIT 1
-          `,
-        ).then((rows) => Array.isArray(rows) && rows.length > 0),
-      ])
-
-      await runTenantTransaction(accountsSql, tenantContext, (txn) => {
-        const queries = [
-          txn`
-            INSERT INTO account_activities (code, activity, tenant_id)
-            VALUES (${nextCode}, ${nextReference}, ${tenantContext.tenantId})
-          `,
-        ]
-        if (hasLaborTable) {
-          queries.push(txn`
-            UPDATE labor_transactions
-            SET code = ${nextCode}
-            WHERE tenant_id = ${tenantContext.tenantId}
-              AND code = ${currentCode}
-          `)
-        }
-        if (hasExpenseTable) {
-          queries.push(txn`
-            UPDATE expense_transactions
-            SET code = ${nextCode}
-            WHERE tenant_id = ${tenantContext.tenantId}
-              AND code = ${currentCode}
-          `)
-        }
-        queries.push(txn`
-          DELETE FROM account_activities
-          WHERE tenant_id = ${tenantContext.tenantId}
-            AND code = ${currentCode}
-        `)
-        return queries
-      })
-    } else {
-      await runTenantQuery(
-        accountsSql,
-        tenantContext,
-        accountsSql`
-          UPDATE account_activities
-          SET activity = ${nextReference}
-          WHERE tenant_id = ${tenantContext.tenantId}
-            AND code = ${currentCode}
-        `,
+      return NextResponse.json(
+        {
+          success: false,
+          error:
+            "An activity code cannot be renamed — every record filed under it would have to be rewritten. Add a new code and stop using this one instead. The description can still be edited.",
+        },
+        { status: 409 },
       )
     }
+
+    await runTenantQuery(
+      accountsSql,
+      tenantContext,
+      accountsSql`
+        UPDATE account_activities
+        SET activity = ${nextReference}
+        WHERE tenant_id = ${tenantContext.tenantId}
+          AND code = ${currentCode}
+      `,
+    )
 
     await logAuditEvent(accountsSql, sessionUser, {
       action: "update",
@@ -394,11 +357,34 @@ export async function DELETE(request: Request) {
       }
     }
 
-    if (laborUsageCount > 0 || expenseUsageCount > 0) {
+    // The muster is the third place a code gets used, and it was missing from this guard --
+    // so on a tenant using labour_assignments a code could be deleted out from under live
+    // allocations, leaving the muster pointing at a code the picker no longer offers.
+    let assignmentUsageCount = 0
+    try {
+      const assignmentRows = await runTenantQuery(
+        accountsSql,
+        tenantContext,
+        accountsSql`
+          SELECT COUNT(*)::int AS count
+          FROM labour_assignments
+          WHERE tenant_id = ${tenantContext.tenantId}
+            AND activity_code = ${code}
+        `,
+      )
+      assignmentUsageCount = Number(assignmentRows?.[0]?.count) || 0
+    } catch (error) {
+      if (!isMissingRelation(error, "labour_assignments")) {
+        throw error
+      }
+    }
+
+    if (laborUsageCount > 0 || expenseUsageCount > 0 || assignmentUsageCount > 0) {
       return NextResponse.json(
         {
           success: false,
-          error: "This activity code is already used in labour/expense records. Edit it instead of deleting.",
+          error:
+            "This activity code is already used in labour, expense or muster records. Edit its description instead of deleting it.",
         },
         { status: 409 },
       )
