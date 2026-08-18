@@ -1,8 +1,10 @@
 -- 115: Let the muster roll hold contract gangs, and tag each worker to an estate.
 --
--- DRAFTED, NOT YET APPLIED. Blocked on confirming the gang model with Medappa -- see the
--- attendance-as-single-entry-point plan. Do not run this until that is settled; the shape of
--- `kind`/`headcount` is exactly what is under discussion.
+-- SETTLED AND APPLIED ON DEV. The gang model this was blocked on was confirmed with Medappa on
+-- 2026-08-17: a gang is one roster row with an editable per-day headcount, plus driver,
+-- supervisor and vehicle charges recorded separately. `kind`/`headcount` below are that answer.
+-- Safe to run on prod -- verified 2026-08-18 against 49 existing workers, none of which violate
+-- the new CHECK (kind defaults to 'individual', headcount to NULL).
 --
 -- Two problems, one table.
 --
