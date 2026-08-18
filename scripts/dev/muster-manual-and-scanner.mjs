@@ -83,11 +83,8 @@ const cost = await sql`SELECT COUNT(*)::int n, COALESCE(SUM(total_cost),0)::nume
 check(Number(cost[0].n) === 2 && Number(cost[0].c) > 0, `both cost money: ${cost[0].n} rows, Rs ${Number(cost[0].c).toLocaleString("en-IN")}`)
 
 console.log("\n== 5. work with no rate is refused rather than costing nothing ==")
-// The rate belongs to the task now, so it is the code that has to be unpriced. Clearing a
-// person's rate proves nothing any more -- nothing reads it while the work carries a rate.
+// The daily wage is the only source now, so that is what has to be absent for the guard to fire.
 const spare = roster.find((w) => w.id !== enrolled[0].id && w.id !== byHand.id)
-const pricedBefore = (await sql`SELECT default_rate FROM account_activities WHERE tenant_id=${T} AND code=${code}`)[0]?.default_rate ?? null
-await sql`UPDATE account_activities SET default_rate = NULL WHERE tenant_id=${T} AND code=${code}`
 await sql`UPDATE attendance_workers SET daily_rate = NULL WHERE id=${spare.id}`
 await page.request.put(`${BASE}/api/attendance`, {
   data: { date: today, presentWorkerIds: [enrolled[0].id, byHand.id, spare.id] },
@@ -97,8 +94,7 @@ const noRate = await page.request.post(`${BASE}/api/attendance/assignments`, {
 })
 const noRateBody = await noRate.json().catch(() => ({}))
 check(noRate.status() === 409, `refused with 409 (got ${noRate.status()})`)
-check(/no daily wage and .* has no rate/i.test(noRateBody.error || ""), `message names the worker and the work: "${String(noRateBody.error).slice(0, 80)}..."`)
-await sql`UPDATE account_activities SET default_rate = ${pricedBefore} WHERE tenant_id=${T} AND code=${code}`
+check(/no daily wage/i.test(noRateBody.error || ""), `message names the worker: "${String(noRateBody.error).slice(0, 80)}..."`)
 await sql`UPDATE attendance_workers SET daily_rate = 600 WHERE id=${spare.id}`
 
 console.log("\n== 6. the UI shows both, and says which is which ==")
