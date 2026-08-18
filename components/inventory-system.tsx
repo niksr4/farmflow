@@ -596,7 +596,7 @@ export default function InventorySystem() {
   const canShowRainfallSection = canShowRainfall || canShowWeather
   const canShowIntelligence = !isScopedUser && (canShowDispatch || canShowSalesWorkspace || canShowAccounts || canShowSeason)
   const canShowProcessingWorkspace = canShowProcessing || canShowPepper
-  const processingWorkspaceLabel = canShowProcessing ? "Pulping" : "Pepper Processing"
+  const processingWorkspaceLabel = canShowProcessing ? "Processing" : "Pepper Processing"
   const processingWorkspaceIcon = canShowProcessing ? Factory : Leaf
   const shouldLoadHomeMetrics = activeTab === "home"
   const shouldLoadExceptionSummary = activeTab === "home" || activeTab === "season"
@@ -2932,7 +2932,7 @@ export default function InventorySystem() {
         id: "processing-strip",
         tab: "processing",
         visible: canShowProcessing,
-        label: "Pulping Output",
+        label: "Processing Output",
         value: processingTotals.loading ? "Loading..." : `${formatNumber(processingTotalKg, 0)} kg`,
         subValue: processingTotals.loading
           ? "Updating totals"

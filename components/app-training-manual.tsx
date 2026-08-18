@@ -141,7 +141,7 @@ const glossary = [
   },
   {
     term: "Module",
-    meaning: "One major area of the app, like Pulping, Accounts, or Rainfall. Your plan and your workspace settings decide which modules are turned on.",
+    meaning: "One major area of the app, like Processing, Costs, or Rainfall. Your plan and your workspace settings decide which modules are turned on.",
   },
   {
     term: "Subtab",
@@ -170,7 +170,7 @@ const isAdminOrOwnerRole = (userRole: AppTrainingManualProps["userRole"]) => use
 const getOperationsOverviewLabels = (enabledModules: string[]) =>
   compact([
     hasModule(enabledModules, "inventory") || hasModule(enabledModules, "transactions") ? "Stock & Inventory" : null,
-    hasModule(enabledModules, "processing") ? "Pulping" : null,
+    hasModule(enabledModules, "processing") ? "Processing" : null,
     hasModule(enabledModules, "dispatch") ? "Dispatch" : null,
     hasModule(enabledModules, "sales") ? "Sales" : null,
     hasModule(enabledModules, "other-sales") ? "Other Sales" : null,
@@ -318,7 +318,7 @@ const buildDailyRoutines = (
   options: { isTailored: boolean; userRole: AppTrainingManualProps["userRole"] },
 ) => {
   const supervisorActions = compact([
-    hasModule(enabledModules, "processing") ? "Pulping" : null,
+    hasModule(enabledModules, "processing") ? "Processing" : null,
     hasModule(enabledModules, "pepper") ? "Pepper Processing" : null,
     hasModule(enabledModules, "curing") ? "Curing & Drying" : null,
     hasModule(enabledModules, "quality") ? "Quality Grading" : null,
@@ -423,7 +423,7 @@ const buildManualGroups = (
       : null,
     hasModule(enabledModules, "processing")
       ? {
-          name: "Pulping",
+          name: "Processing",
           whatItIs: "The coffee post-harvest tab for cherry intake, pulping, and output tracking. When Pepper is enabled, it shares this same tab as an extra subtab (Pepper Processing) instead of opening a separate tab.",
           openItWhen: "Cherry intake, pulping, fermentation, drying progress, or output lot creation happens.",
           doneLooksLike: "Each coffee lot has date, quantity, location, and traceable output.",
@@ -464,7 +464,7 @@ const buildManualGroups = (
     hasModule(enabledModules, "pepper")
       ? {
           name: "Pepper Processing",
-          whatItIs: "A subtab inside Pulping for pepper picking and green-to-dry conversion.",
+          whatItIs: "A subtab inside Processing for pepper picking and green-to-dry conversion.",
           openItWhen: "Pepper harvest and drying need tracking without opening a separate main tab.",
           doneLooksLike: "Pepper stays visible for the team without mixing into coffee pulping records.",
         }

@@ -97,9 +97,11 @@ const ASSISTANT_SHORTCUTS: AssistantShortcut[] = [
   },
   {
     id: "processing",
-    label: "Open Pulping",
+    label: "Open Processing",
     description: "Record cherry intake, ripe totals, and processing output.",
     action: { tab: "processing" },
+    // "pulping" stays a keyword: the tab was called that until now, and it is still what the
+    // work is called on the estate. Searching the old name has to keep finding the tab.
     keywords: ["processing", "pulping", "pulper", "ripe", "parchment", "cherry"],
     requiresOneOf: ["processing"],
   },

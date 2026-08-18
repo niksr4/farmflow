@@ -49,7 +49,7 @@ const DispatchTab = dynamic(() => import("@/components/dispatch-tab"), {
   loading: () => <TabPanelLoading label="Dispatch" />,
 })
 const ProcessingTab = dynamic(() => import("@/components/processing-tab"), {
-  loading: () => <TabPanelLoading label="Pulping" />,
+  loading: () => <TabPanelLoading label="Processing" />,
 })
 const RainfallWeatherTab = dynamic(() => import("@/components/rainfall-weather-tab"), {
   loading: () => <TabPanelLoading label="Rainfall and weather" />,

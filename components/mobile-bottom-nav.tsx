@@ -29,7 +29,7 @@ const SHORT_LABELS: Record<string, string> = {
   accounts: "Labour",
   rainfall: "Rain",
   inventory: "Stock",
-  processing: "Pulping",
+  processing: "Processing",
   dispatch: "Dispatch",
   sales: "Sales",
   season: "Season",

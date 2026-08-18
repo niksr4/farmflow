@@ -172,7 +172,7 @@ const EN_TRANSLATIONS: TranslationTree = {
       accounts: "Labour",
       rainfall: "Rain",
       inventory: "Stock",
-      processing: "Pulping",
+      processing: "Processing",
       dispatch: "Dispatch",
       sales: "Sales",
       more: "More",

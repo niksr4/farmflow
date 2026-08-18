@@ -63,8 +63,8 @@ const WORKSPACE_DEFINITIONS: WorkspaceDefinition[] = [
     isAvailable: (modules: Set<string>) => modules.has("inventory") || modules.has("transactions"),
   },
   {
-    label: "Pulping",
-    detail: "Use Pulping for coffee intake, ripe totals, parchment output, and pepper processing when enabled.",
+    label: "Processing",
+    detail: "Use Processing for coffee intake, ripe totals, parchment output, and pepper processing when enabled.",
     isAvailable: (modules: Set<string>) => modules.has("processing") || modules.has("pepper"),
   },
   {

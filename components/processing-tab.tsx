@@ -992,7 +992,7 @@ export default function ProcessingTab({ showDataToolsControls = false }: Process
         { label: "Recent Entries", active: activeSection === "recent-entries", onClick: () => setActiveSection("recent-entries") },
       ]} />
       <TaskGuideCard
-        eyebrow="Pulping guide"
+        eyebrow="Processing guide"
         title="Record coffee pulping and output here"
         description="Enter each day's intake, pulping progress, and processed output. Keep every record tied to the actual date, location, and coffee type."
         bullets={[

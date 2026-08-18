@@ -407,7 +407,7 @@ export function buildHeroContent(p: BuildHeroContentParams): HeroContent {
     case "processing":
       if (resolvedProcessingWorkspaceView === "pepper")
         return { badge: "Pepper Flow", title: "Pepper harvest and conversion", description: "Keep pepper close to coffee work without crowding the main Operations rail.", chips: chipsPepper, stats: pepperStats }
-      return { badge: "Coffee Pulping", title: "Daily coffee pulping, yield, and conversion", description: canShowPepper ? "Keep all post-harvest crop records in one workspace." : "Keep dispatch and sales aligned with real coffee output.", chips: chipsProcessing, stats: processingTotalsStats }
+      return { badge: "Coffee Processing", title: "Daily coffee pulping, yield, and conversion", description: canShowPepper ? "Keep all post-harvest crop records in one workspace." : "Keep dispatch and sales aligned with real coffee output.", chips: chipsProcessing, stats: processingTotalsStats }
     case "dispatch":
       return { badge: "Dispatch Highlights", title: "Outbound bags and reconciliations", description: "Track what leaves the estate and what remains.", chips: chipsDispatch, stats: dispatchStats }
     case "sales":
