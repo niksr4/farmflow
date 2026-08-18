@@ -129,15 +129,6 @@ export async function GET(request: Request) {
             ? sql` AND invoice_date <= ${endDate}::date`
             : sql``
 
-    const pickingDateClause =
-      startDate && endDate
-        ? sql` AND pick_date >= ${startDate}::date AND pick_date <= ${endDate}::date`
-        : startDate
-          ? sql` AND pick_date >= ${startDate}::date`
-          : endDate
-            ? sql` AND pick_date <= ${endDate}::date`
-            : sql``
-
     // Reused across every table below that carries location_id -- billing_invoices is the one
     // exception (no location granularity there) and stays tenant-wide regardless of this filter.
     // A NULL location_id is never "the other estate's" -- a record predating location tracking,
@@ -151,7 +142,6 @@ export async function GET(request: Request) {
       otherSalesResult,
       laborResult,
       expenseResult,
-      pickingResult,
       inventoryResult,
       receivablesPeriodResult,
       receivablesLiveResult,
@@ -215,19 +205,10 @@ export async function GET(request: Request) {
         `,
         ["expense_transactions"],
       ),
-      runOptionalQuery<{ total_amount: number; total_count: number }>(
-        tenantContext,
-        sql`
-          SELECT
-            COALESCE(SUM(kg_picked * rate_per_kg), 0) AS total_amount,
-            COUNT(*)::int AS total_count
-          FROM picking_records
-          WHERE tenant_id = ${tenantContext.tenantId}
-            ${pickingDateClause}
-            ${estateClause}
-        `,
-        ["picking_records"],
-      ),
+      // Picking is no longer queried here. It reaches this route inside labour_cost from
+      // scripts/122, so a separate line would be the same money twice. The result of this query
+      // was in fact never read -- but leaving a loaded picking total sitting beside the labour
+      // total is how the next person adds them.
       runOptionalQuery<{ restock_outflow: number; deplete_value: number; total_count: number }>(
         tenantContext,
         sql`
