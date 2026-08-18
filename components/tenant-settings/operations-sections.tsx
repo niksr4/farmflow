@@ -58,6 +58,8 @@ type LocationsSectionProps = {
   newLocationName: string
   newLocationCode: string
   newLocationEstate: string
+  editingLocationArea: string
+  onEditingLocationAreaChange: (value: string) => void
   isCreatingLocation: boolean
   editingLocationId: string | null
   editingLocationName: string
@@ -81,6 +83,8 @@ export function LocationsSection({
   newLocationName,
   newLocationCode,
   newLocationEstate,
+  editingLocationArea,
+  onEditingLocationAreaChange,
   isCreatingLocation,
   editingLocationId,
   editingLocationName,
@@ -248,6 +252,7 @@ export function LocationsSection({
                 <TableHead>Name</TableHead>
                 <TableHead>Code</TableHead>
                 <TableHead>Estate</TableHead>
+                <TableHead className="w-[110px]">Acres</TableHead>
                 <TableHead>Actions</TableHead>
               </TableRow>
             </TableHeader>
@@ -300,6 +305,28 @@ export function LocationsSection({
                             />
                           ) : (
                             location.estate || "-"
+                          )}
+                        </TableCell>
+                        {/* Planted acres. Every per-acre figure divides by this, so a block
+                            without one has no cost per acre at all rather than a wrong one --
+                            which is why nobody has ever seen that column. */}
+                        <TableCell className="text-muted-foreground">
+                          {editingLocationId === location.id ? (
+                            <Input
+                              type="number"
+                              inputMode="decimal"
+                              min={0}
+                              step="0.1"
+                              placeholder="acres"
+                              aria-label={`Area of ${location.name} in acres`}
+                              value={editingLocationArea}
+                              onChange={(event) => onEditingLocationAreaChange(event.target.value)}
+                              className="tabular-nums"
+                            />
+                          ) : location.areaAcres != null ? (
+                            <span className="tabular-nums">{location.areaAcres} ac</span>
+                          ) : (
+                            <span className="text-amber-600">not set</span>
                           )}
                         </TableCell>
                         <TableCell>

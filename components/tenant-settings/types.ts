@@ -32,6 +32,8 @@ export interface LocationRow {
   name: string
   code: string
   estate?: string | null
+  /** Planted acres. Null until recorded; every per-acre figure divides by it. */
+  areaAcres?: number | null
 }
 
 export interface PrivacyStatus {

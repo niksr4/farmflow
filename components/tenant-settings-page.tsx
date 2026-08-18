@@ -209,6 +209,7 @@ export default function TenantSettingsPage() {
   const [editingLocationName, setEditingLocationName] = useState("")
   const [editingLocationCode, setEditingLocationCode] = useState("")
   const [editingLocationEstate, setEditingLocationEstate] = useState("")
+  const [editingLocationArea, setEditingLocationArea] = useState("")
   const [isUpdatingLocationId, setIsUpdatingLocationId] = useState<string | null>(null)
 
   const [privacyStatus, setPrivacyStatus] = useState<PrivacyStatus | null>(null)
@@ -944,6 +945,7 @@ export default function TenantSettingsPage() {
     setEditingLocationId(location.id)
     setEditingLocationName(String(location.name || ""))
     setEditingLocationCode(String(location.code || ""))
+    setEditingLocationArea(location.areaAcres != null ? String(location.areaAcres) : "")
     setEditingLocationEstate(String(location.estate || ""))
   }
 
@@ -977,6 +979,8 @@ export default function TenantSettingsPage() {
           // entirely, which is what every pre-existing caller here relied on before this field
           // had a UI at all.
           estate: String(editingLocationEstate || "").trim() || null,
+          // Sent even when blank, so clearing the field genuinely clears the area.
+          areaAcres: String(editingLocationArea || "").trim() === "" ? null : Number(editingLocationArea),
           tenantId,
         }),
       })
@@ -1373,6 +1377,8 @@ export default function TenantSettingsPage() {
                     editingLocationName={editingLocationName}
                     editingLocationCode={editingLocationCode}
                     editingLocationEstate={editingLocationEstate}
+                    editingLocationArea={editingLocationArea}
+                    onEditingLocationAreaChange={setEditingLocationArea}
                     isUpdatingLocationId={isUpdatingLocationId}
                     onNewLocationNameChange={setNewLocationName}
                     onNewLocationCodeChange={setNewLocationCode}

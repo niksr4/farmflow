@@ -44,7 +44,22 @@ function serializeLocation(row: Record<string, unknown>) {
     name: String(row.name || ""),
     code: String(row.code || ""),
     estate: row.estate ? String(row.estate) : null,
+    // Null until someone records it. Every per-acre figure divides by this, so a block without
+    // one simply has no cost per acre rather than a wrong one.
+    areaAcres: row.area_acres != null ? Number(row.area_acres) : null,
   }
+}
+
+/**
+ * Planted acres for a block. Optional, but it is the denominator for every per-acre figure --
+ * cost per acre, yield per acre, and the whole comparison between blocks. Without it those
+ * columns simply never appear, which is a quieter failure than an error.
+ */
+const readAreaAcres = (value: unknown): number | null | "invalid" => {
+  if (value == null || value === "") return null
+  const parsed = Number(value)
+  if (!Number.isFinite(parsed) || parsed <= 0 || parsed > 100000) return "invalid"
+  return parsed
 }
 
 export async function GET(request: Request) {
@@ -59,7 +74,7 @@ export async function GET(request: Request) {
       sql,
       tenantContext,
       sql`
-        SELECT id, name, code, estate
+        SELECT id, name, code, estate, area_acres
         FROM locations
         WHERE tenant_id = ${tenantId}
         ORDER BY name ASC
@@ -117,6 +132,11 @@ export async function POST(request: Request) {
     tenantId = resolveRequestedTenantId(sessionUser, requestedTenantId, { fallbackToSessionTenant: true }) || sessionUser.tenantId
     const tenantContext = normalizeTenantContext(tenantId, sessionUser.role)
 
+    const areaAcres = readAreaAcres(body?.areaAcres)
+    if (areaAcres === "invalid") {
+      return NextResponse.json({ success: false, error: "Area must be a positive number of acres" }, { status: 400 })
+    }
+
     if (!name) {
       return NextResponse.json({ success: false, error: "Location name is required" }, { status: 400 })
     }
@@ -125,10 +145,10 @@ export async function POST(request: Request) {
       sql,
       tenantContext,
       sql`
-        INSERT INTO locations (tenant_id, name, code, estate)
-        VALUES (${tenantId}, ${name}, ${code}, ${estate})
+        INSERT INTO locations (tenant_id, name, code, estate, area_acres)
+        VALUES (${tenantId}, ${name}, ${code}, ${estate}, ${areaAcres})
         ON CONFLICT (tenant_id, code) DO NOTHING
-        RETURNING id, name, code, estate
+        RETURNING id, name, code, estate, area_acres
       `,
     )
 
@@ -175,6 +195,11 @@ export async function PATCH(request: Request) {
     const name = String(body.name || "").trim()
     const codeInput = String(body.code || "").trim()
     const estateProvided = Object.prototype.hasOwnProperty.call(body, "estate")
+    const areaProvided = Object.prototype.hasOwnProperty.call(body, "areaAcres")
+    const areaAcres = readAreaAcres(body?.areaAcres)
+    if (areaAcres === "invalid") {
+      return NextResponse.json({ success: false, error: "Area must be a positive number of acres" }, { status: 400 })
+    }
     const estate = typeof body.estate === "string" && body.estate.trim() ? body.estate.trim() : null
     const requestedTenantId = body.tenantId
     tenantId = resolveRequestedTenantId(sessionUser, requestedTenantId, { fallbackToSessionTenant: true }) || sessionUser.tenantId
@@ -227,10 +252,11 @@ export async function PATCH(request: Request) {
       tenantContext,
       sql`
         UPDATE locations
-        SET name = ${name}, code = ${code}, estate = ${nextEstate}
+        SET name = ${name}, code = ${code}, estate = ${nextEstate},
+            area_acres = CASE WHEN ${areaProvided} THEN ${areaAcres} ELSE area_acres END
         WHERE id = ${id}
           AND tenant_id = ${tenantId}
-        RETURNING id, name, code, estate
+        RETURNING id, name, code, estate, area_acres
       `,
     )
 
