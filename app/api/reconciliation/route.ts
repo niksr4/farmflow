@@ -283,9 +283,9 @@ export async function GET(request: NextRequest) {
       if (bulkEntries === 0 && activeWorkers === 0) {
         checks.push({
           id: "labor_pipeline_overlap",
-          label: "Labour cost pipeline check",
+          label: "Labour that reaches no total",
           status: "ok",
-          detail: "No labour activity recorded in either pipeline for this period.",
+          detail: "No labour recorded for this period.",
         })
       } else if (activeWorkers > 0) {
         checks.push({
@@ -295,24 +295,21 @@ export async function GET(request: NextRequest) {
           detail: `${activeWorkers} worker${activeWorkers === 1 ? " was" : "s were"} marked present on ${activeWorkers === 1 ? "a day" : "days"} with no work set — roughly ₹${payrollCost.toFixed(0)} of wages that appear in no cost total. Set their work on the muster roll for those days, or the spend stays invisible to Accounts and the P&L. Costed labour this period: ₹${bulkCost.toFixed(0)} across ${bulkEntries} entries.`,
           value: `₹${payrollCost.toFixed(0)} uncosted`,
         })
-      } else if (activeWorkers > 0) {
-        checks.push({
-          id: "labor_pipeline_overlap",
-          label: "Labour cost pipeline check",
-          status: "warning",
-          detail: `₹${payrollCost.toFixed(0)} in payroll/attendance costs this period (${activeWorkers} workers) is not reflected in Accounts/P&L — only the Labour deployment tab feeds the balance sheet. If this is real spend, it's currently invisible to your P&L.`,
-          value: `₹${payrollCost.toFixed(0)} untracked`,
-        })
       } else {
         checks.push({
           id: "labor_pipeline_overlap",
-          label: "Labour cost pipeline check",
+          label: "Labour that reaches no total",
           status: "ok",
-          detail: `₹${bulkCost.toFixed(0)} logged via Labour deployment (${bulkEntries} entries) this period — single pipeline in use, no overlap risk.`,
+          detail: `₹${bulkCost.toFixed(0)} of labour costed across ${bulkEntries} entries this period, and nobody was marked present without being given work.`,
         })
       }
     } catch {
-      checks.push({ id: "labor_pipeline_overlap", label: "Labour cost pipeline check", status: "warning", detail: "Could not check labour pipeline overlap." })
+      checks.push({
+        id: "labor_pipeline_overlap",
+        label: "Labour that reaches no total",
+        status: "warning",
+        detail: "Could not check for attendance with no work allocated.",
+      })
     }
 
     const hasErrors = checks.some((c) => c.status === "error")
