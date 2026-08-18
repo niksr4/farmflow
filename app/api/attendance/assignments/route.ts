@@ -304,6 +304,20 @@ export async function PUT(request: Request) {
       return NextResponse.json({ success: false, error: "Valid assignment id is required" }, { status: 400 })
     }
 
+    // Editing an allocation is a write like any other, and the row it edits is only counted when
+    // the tenant is on the muster for that date. Guarded on the row's own date rather than on
+    // anything in the body, since the date is not editable here.
+    const existingDate = await runTenantQuery(
+      accountsSql,
+      tenantContext,
+      accountsSql`SELECT work_date::text AS d FROM labour_assignments
+                  WHERE id = ${id} AND tenant_id = ${tenantContext.tenantId} LIMIT 1`,
+    )
+    const editBlocked = await blockedByLabourCutoverBefore(tenantContext, existingDate?.[0]?.d)
+    if (editBlocked) {
+      return NextResponse.json({ success: false, error: editBlocked }, { status: 409 })
+    }
+
     const activityCode = String(body?.activityCode || "").trim()
     if (!(await activityCodeExistsForTenant(tenantContext, activityCode))) {
       return NextResponse.json(

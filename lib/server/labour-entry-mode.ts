@@ -60,13 +60,19 @@ export const blockedByLabourCutover = async (
 /**
  * The same guard pointing the other way: null when a muster allocation is allowed, otherwise why not.
  *
- * labour_cost reads muster rows only from assignments_from onward, so an allocation dated before
- * the cutover saves happily and is counted by nothing -- money entered, receipt shown, no total
- * moved. Identical damage to an Accounts entry after the cutover, and it needs the same refusal.
+ * labour_cost counts a muster row only when the tenant has a cutover AND the work is dated on or
+ * after it. Both halves matter, and missing either one produces the identical failure -- a row
+ * saved, a receipt shown, and no total anywhere that moves.
  *
- * This is not hypothetical: a cutover is normally set a day or more ahead so the estate can be
- * told before it happens, and during that window the muster is visible and inviting while still
- * being ignored by every cost reader.
+ *   no cutover at all      -> the estate never switched. The Muster tab is still visible to them
+ *                             (it is gated on the accounts module, which everyone has) and "Set
+ *                             work" is right there, so this is reachable by anyone, not just by
+ *                             a tenant mid-migration. Refuse.
+ *   dated before cutover   -> those days are read from the old Accounts entries. Refuse.
+ *   dated on/after cutover -> allowed.
+ *
+ * The no-cutover case is the one that bites hardest, because nothing about that tenant's screen
+ * suggests they are doing something the app will ignore.
  */
 export const blockedByLabourCutoverBefore = async (
   tenantContext: TenantContext,
@@ -76,7 +82,15 @@ export const blockedByLabourCutoverBefore = async (
   if (!/^\d{4}-\d{2}-\d{2}$/.test(day)) return null
 
   const cutover = await getLabourCutover(tenantContext)
-  if (!cutover || day >= cutover) return null
+
+  if (!cutover) {
+    return (
+      `This estate records labour in Costs, not on the muster roll, so work set here would not be ` +
+      `counted anywhere. Mark attendance as usual and enter the day's labour in Costs.`
+    )
+  }
+
+  if (day >= cutover) return null
 
   return (
     `This estate records labour on the muster roll from ${cutover}. Work dated ${day} belongs to ` +

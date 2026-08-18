@@ -121,6 +121,13 @@ export default function AttendanceTab() {
   const [weekOffset, setWeekOffset] = useState(0)
   const [selectedDate, setSelectedDate] = useState(dateToStr(new Date()))
   const [workers, setWorkers] = useState<AttendanceWorker[]>([])
+  // The date this estate started recording labour on the muster, or null if it never did.
+  // Allocation is only counted from that date, so it is also the only date range worth offering.
+  const [assignmentsFrom, setAssignmentsFrom] = useState<string | null>(null)
+  // Work set outside this window is saved but counted by nothing: labour_cost reads muster rows
+  // only when the tenant has a cutover and the day is on or after it. Offering the button anyway
+  // is how an estate ends up with a day's labour recorded and no total that moved.
+  const musterRecordsLabour = Boolean(assignmentsFrom) && selectedDate >= String(assignmentsFrom)
   const [presentWorkerIds, setPresentWorkerIds] = useState<string[]>([])
   const [weeklySummary, setWeeklySummary] = useState<AttendanceSummaryRow[]>([])
   const [presentRecords, setPresentRecords] = useState<AttendanceRecordDetail[]>([])
@@ -177,6 +184,7 @@ export default function AttendanceTab() {
         setAssignments(Array.isArray(data.assignments) ? data.assignments : [])
         setPickingWorkerIds(Array.isArray(data.pickingWorkerIds) ? data.pickingWorkerIds : [])
         setHasBiometricDevices(Boolean(data.hasBiometricDevices))
+        setAssignmentsFrom(data.assignmentsFrom ? String(data.assignmentsFrom).slice(0, 10) : null)
         setError(null)
 
         // "Everyone present by default" applies to TODAY ONLY.
@@ -727,7 +735,7 @@ export default function AttendanceTab() {
                             <span className="sm:hidden"> · {a.dayFraction}d · ₹{a.totalCost.toLocaleString("en-IN")}</span>
                           </p>
                         </>
-                      ) : isPresent && activities.length > 0 ? (
+                      ) : isPresent && activities.length > 0 && musterRecordsLabour ? (
                         // In the Work column, not in a band underneath it: this is the cell that
                         // is about to hold the answer, and it is the one tap the day needs. Full
                         // cell width and 32px tall, because the previous 113x22 target was not

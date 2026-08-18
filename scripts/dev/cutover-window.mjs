@@ -65,7 +65,26 @@ const rowsAfter = Number((await sql`SELECT COUNT(*)::int n FROM labour_assignmen
                                     WHERE tenant_id=${T} AND work_date=${today}::date`)[0].n)
 check(rowsAfter === rowsBefore, `wrote nothing: ${rowsBefore} rows before, ${rowsAfter} after`)
 
-console.log("\n== 3. a back-dated allocation is refused too ==")
+console.log("\n== 3a. a tenant that NEVER switched cannot allocate at all ==")
+// Laxmi, HoneyFarm and Seshagiri are in this state, and the Muster tab is visible to them --
+// it is gated on the accounts module, which every tenant has. Nothing on their screen hints
+// that work set there would be counted by nothing, so the refusal has to come from the server.
+await sql`DELETE FROM tenant_labour_entry_mode WHERE tenant_id=${T}`
+const neverBefore = Number((await sql`SELECT COUNT(*)::int n FROM labour_assignments
+                                      WHERE tenant_id=${T} AND work_date=${today}::date`)[0].n)
+const never = await page.request.post(`${BASE}/api/attendance/assignments`, {
+  data: { date: today, workerIds: [worker], activityCode: code, locationId: block, dayFraction: 1 },
+})
+const neverBody = await never.json().catch(() => ({}))
+check(never.status() === 409, `refused with 409 (${never.status()})`)
+check(/records labour in Costs/i.test(neverBody.error || ""), `points at Costs: "${String(neverBody.error).slice(0, 70)}..."`)
+const neverAfter = Number((await sql`SELECT COUNT(*)::int n FROM labour_assignments
+                                     WHERE tenant_id=${T} AND work_date=${today}::date`)[0].n)
+check(neverAfter === neverBefore, `wrote nothing: ${neverBefore} before, ${neverAfter} after`)
+await sql`INSERT INTO tenant_labour_entry_mode (tenant_id, assignments_from, set_by)
+          VALUES (${T}, ${tomorrow}::date, 'cutover-window-harness')`
+
+console.log("\n== 3b. a back-dated allocation is refused too ==")
 const back = await page.request.post(`${BASE}/api/attendance/assignments`, {
   data: { date: yesterday, workerIds: [worker], activityCode: code, locationId: block, dayFraction: 1 },
 })
