@@ -180,7 +180,8 @@ export async function GET(request: Request) {
                 ),
                 0
               ) AS sold_kgs
-            FROM sales_records
+            -- booked_revenue: see scripts/121. sales_records alone omits pepper.
+            FROM booked_revenue
             WHERE tenant_id = ${tenantContext.tenantId}
               AND sale_date >= ${startDateIso}::date
               AND sale_date <= ${endDateIso}::date

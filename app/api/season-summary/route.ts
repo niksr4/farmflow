@@ -161,7 +161,9 @@ export async function GET(request: NextRequest) {
             0
           ) AS sold_kgs,
           COALESCE(SUM(revenue), 0) AS revenue
-        FROM sales_records
+        -- booked_revenue unions sales_records with other_sales_records under one revenue
+        -- definition. Reading sales_records directly drops pepper and contract sales. scripts/121.
+        FROM booked_revenue
         WHERE tenant_id = $1
           AND sale_date >= $2::date
           AND sale_date <= $3::date
@@ -288,7 +290,9 @@ export async function GET(request: NextRequest) {
             0
           ) AS sold_kgs,
           COALESCE(SUM(revenue), 0) AS revenue
-        FROM sales_records
+        -- booked_revenue unions sales_records with other_sales_records under one revenue
+        -- definition. Reading sales_records directly drops pepper and contract sales. scripts/121.
+        FROM booked_revenue
         WHERE tenant_id = $1
           AND sale_date >= $2::date
           AND sale_date <= $3::date
@@ -343,11 +347,13 @@ export async function GET(request: NextRequest) {
           COALESCE(l.code, '') AS location_code,
           COALESCE(SUM(sr.bags_sold), 0) AS bags_sold,
           COALESCE(
-            SUM(COALESCE(NULLIF(sr.kgs_received, 0), NULLIF(sr.kgs, 0), NULLIF(sr.weight_kgs, 0), NULLIF(sr.kgs_sent, 0), sr.bags_sold * ${bagWeightKg})),
+            SUM(COALESCE(NULLIF(sr.kgs, 0), sr.bags_sold * ${bagWeightKg})),
             0
           ) AS sold_kgs,
           COALESCE(SUM(sr.revenue), 0) AS revenue
-        FROM sales_records sr
+        -- Revenue by location has to include pepper too, or a block that grew it looks
+        -- unproductive. The view already resolves the kilo columns. scripts/121.
+        FROM booked_revenue sr
         LEFT JOIN locations l ON l.id = sr.location_id
         WHERE sr.tenant_id = $1
           AND sr.sale_date >= $2::date

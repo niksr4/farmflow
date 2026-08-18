@@ -72,7 +72,9 @@ async function fetchSeasonAggregates(
     `).catch(() => []),
     runTenantQuery(sql, tenantContext, sql`
       SELECT COALESCE(SUM(kgs), 0) AS total_kgs, COALESCE(SUM(revenue), 0) AS total_revenue
-      FROM sales_records
+      -- booked_revenue: see scripts/121. A year-on-year comparison built on sales_records
+      -- alone silently drops whichever years had pepper sales.
+      FROM booked_revenue
       WHERE sale_date >= ${startDate} AND sale_date <= ${endDate}
         AND tenant_id = ${tenantContext.tenantId}
         ${estateClause}

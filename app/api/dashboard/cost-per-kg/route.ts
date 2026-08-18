@@ -108,7 +108,8 @@ export async function GET(request: Request) {
             COALESCE(SUM(
               COALESCE(NULLIF(kgs_received, 0), NULLIF(kgs, 0), NULLIF(weight_kgs, 0), NULLIF(kgs_sent, 0), bags_sold * ${bagWeightKg})
             ), 0) AS total_sold_kg
-          FROM sales_records
+          -- booked_revenue: cost per kg must divide by everything sold, pepper included. scripts/121.
+          FROM booked_revenue
           WHERE tenant_id = ${context.tenantId}
             AND sale_date >= ${fy.startDate}::date
             AND sale_date <= ${fy.endDate}::date

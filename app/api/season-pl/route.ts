@@ -98,9 +98,12 @@ export async function GET(request: NextRequest) {
       sql.query(
         `SELECT
            COALESCE(buyer_name, 'Unknown') AS buyer,
-           COALESCE(SUM(total_revenue), 0) AS total_inr,
-           COALESCE(SUM(COALESCE(NULLIF(kgs, 0), NULLIF(weight_kgs, 0), bags_sold * ${bagWeightKg})), 0) AS kgs_sold
-         FROM sales_records
+           COALESCE(SUM(revenue), 0) AS total_inr,
+           COALESCE(SUM(COALESCE(NULLIF(kgs, 0), bags_sold * ${bagWeightKg})), 0) AS kgs_sold
+         -- booked_revenue, not sales_records: pepper and other non-coffee sales live in
+         -- other_sales_records, and reading the table directly is how HoneyFarm's Rs 12,12,380
+         -- was missing from this tab while the balance sheet showed it. See scripts/121.
+         FROM booked_revenue
          WHERE tenant_id = $1
            AND sale_date >= $2::date
            AND sale_date <= $3::date

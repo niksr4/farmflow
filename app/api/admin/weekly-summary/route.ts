@@ -103,7 +103,7 @@ const loadSummaryForRange = async (
       sql`
         SELECT COUNT(*)::int AS count,
                COALESCE(SUM(revenue), 0) AS revenue
-        FROM sales_records
+        FROM booked_revenue
         WHERE tenant_id = ${tenantId}
           AND sale_date >= ${range.startDate}::date
           AND sale_date <= ${range.endDate}::date

@@ -160,11 +160,16 @@ export async function GET(request: Request) {
       runOptionalQuery<{ total_revenue: number; total_count: number }>(
         tenantContext,
         sql`
+          -- Split by source for display, but both halves come from booked_revenue so the
+          -- definition of "what a sale was worth" is the one every other tab now uses.
+          -- This route was already correct; going through the view is what stops it and the
+          -- others drifting apart again. scripts/121.
           SELECT
             COALESCE(SUM(revenue), 0) AS total_revenue,
             COUNT(*)::int AS total_count
-          FROM sales_records
+          FROM booked_revenue
           WHERE tenant_id = ${tenantContext.tenantId}
+            AND source = 'sale'
             ${salesDateClause}
             ${estateClause}
         `,
@@ -176,8 +181,9 @@ export async function GET(request: Request) {
           SELECT
             COALESCE(SUM(revenue), 0) AS total_revenue,
             COUNT(*)::int AS total_count
-          FROM other_sales_records
+          FROM booked_revenue
           WHERE tenant_id = ${tenantContext.tenantId}
+            AND source = 'other_sale'
             ${salesDateClause}
             ${estateClause}
         `,

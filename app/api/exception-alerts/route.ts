@@ -271,11 +271,11 @@ export async function GET(request: Request) {
             sr.bag_type,
             COALESCE(SUM(sr.bags_sold), 0) AS bags_sold,
             COALESCE(
-              SUM(COALESCE(NULLIF(sr.kgs_received, 0), NULLIF(sr.kgs, 0), NULLIF(sr.weight_kgs, 0), NULLIF(sr.kgs_sent, 0), sr.bags_sold * ${bagWeightKg})),
+              SUM(COALESCE(NULLIF(sr.kgs, 0), sr.bags_sold * ${bagWeightKg})),
               0
             ) AS sold_kgs,
             COALESCE(SUM(sr.revenue), 0) AS revenue
-          FROM sales_records sr
+          FROM booked_revenue sr
           LEFT JOIN locations l ON l.id = sr.location_id
           WHERE sr.tenant_id = $1
             AND sr.sale_date >= $2::date
@@ -293,11 +293,11 @@ export async function GET(request: Request) {
             sr.bag_type,
             COALESCE(SUM(sr.bags_sold), 0) AS bags_sold,
             COALESCE(
-              SUM(COALESCE(NULLIF(sr.kgs_received, 0), NULLIF(sr.kgs, 0), NULLIF(sr.weight_kgs, 0), NULLIF(sr.kgs_sent, 0), sr.bags_sold * ${bagWeightKg})),
+              SUM(COALESCE(NULLIF(sr.kgs, 0), sr.bags_sold * ${bagWeightKg})),
               0
             ) AS sold_kgs,
             COALESCE(SUM(sr.revenue), 0) AS revenue
-          FROM sales_records sr
+          FROM booked_revenue sr
           LEFT JOIN locations l ON l.id = sr.location_id
           WHERE sr.tenant_id = $1
             AND sr.sale_date >= $2::date
@@ -389,11 +389,11 @@ export async function GET(request: Request) {
             sale_date::text AS sale_date,
             COALESCE(SUM(bags_sold), 0) AS bags_sold,
             COALESCE(
-              SUM(COALESCE(NULLIF(kgs_received, 0), NULLIF(kgs, 0), NULLIF(weight_kgs, 0), NULLIF(kgs_sent, 0), bags_sold * ${bagWeightKg})),
+              SUM(COALESCE(NULLIF(kgs, 0), bags_sold * ${bagWeightKg})),
               0
             ) AS sold_kgs,
             COALESCE(SUM(revenue), 0) AS revenue
-          FROM sales_records
+          FROM booked_revenue
           WHERE tenant_id = $1
             AND sale_date >= $2::date
             AND sale_date <= $3::date
@@ -465,11 +465,11 @@ export async function GET(request: Request) {
           SELECT
             COALESCE(SUM(bags_sold), 0) AS bags_sold,
             COALESCE(
-              SUM(COALESCE(NULLIF(kgs_received, 0), NULLIF(kgs, 0), NULLIF(weight_kgs, 0), NULLIF(kgs_sent, 0), bags_sold * ${bagWeightKg})),
+              SUM(COALESCE(NULLIF(kgs, 0), bags_sold * ${bagWeightKg})),
               0
             ) AS sold_kgs,
             COALESCE(SUM(revenue), 0) AS revenue
-          FROM sales_records
+          FROM booked_revenue
           WHERE tenant_id = $1
             AND sale_date >= $2::date
             AND sale_date <= $3::date
@@ -481,11 +481,11 @@ export async function GET(request: Request) {
           SELECT
             COALESCE(SUM(bags_sold), 0) AS bags_sold,
             COALESCE(
-              SUM(COALESCE(NULLIF(kgs_received, 0), NULLIF(kgs, 0), NULLIF(weight_kgs, 0), NULLIF(kgs_sent, 0), bags_sold * ${bagWeightKg})),
+              SUM(COALESCE(NULLIF(kgs, 0), bags_sold * ${bagWeightKg})),
               0
             ) AS sold_kgs,
             COALESCE(SUM(revenue), 0) AS revenue
-          FROM sales_records
+          FROM booked_revenue
           WHERE tenant_id = $1
             AND sale_date >= $2::date
             AND sale_date <= $3::date
