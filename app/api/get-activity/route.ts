@@ -187,6 +187,17 @@ export async function PUT(request: Request) {
     const nextCode = normalizeCode(body?.nextCode || body?.code)
     const nextReference = normalizeReference(body?.reference || body?.activity)
 
+    // What this work pays per head per day. Null clears it, which leaves the muster asking for
+    // an amount on each deployment instead -- both are valid ways to run, and an estate can
+    // price the codes it uses daily and leave the rare ones open.
+    const hasRate = Object.prototype.hasOwnProperty.call(body ?? {}, "defaultRate")
+    const rawRate = (body as any)?.defaultRate
+    const defaultRate =
+      rawRate == null || rawRate === "" ? null : Number(rawRate)
+    if (hasRate && defaultRate !== null && (!Number.isFinite(defaultRate) || defaultRate < 0)) {
+      return NextResponse.json({ success: false, error: "A rate cannot be negative" }, { status: 400 })
+    }
+
     if (!currentCode || !nextCode || !nextReference) {
       return NextResponse.json(
         { success: false, error: "code, nextCode, and reference are required" },
@@ -198,7 +209,7 @@ export async function PUT(request: Request) {
       accountsSql,
       tenantContext,
       accountsSql`
-        SELECT code, activity
+        SELECT code, activity, default_rate
         FROM account_activities
         WHERE tenant_id = ${tenantContext.tenantId}
           AND code = ${currentCode}
@@ -258,8 +269,9 @@ export async function PUT(request: Request) {
       await runTenantTransaction(accountsSql, tenantContext, (txn) => {
         const queries = [
           txn`
-            INSERT INTO account_activities (code, activity, tenant_id)
-            VALUES (${nextCode}, ${nextReference}, ${tenantContext.tenantId})
+            INSERT INTO account_activities (code, activity, tenant_id, default_rate)
+            VALUES (${nextCode}, ${nextReference}, ${tenantContext.tenantId},
+                    ${hasRate ? defaultRate : (existingRows?.[0] as any)?.default_rate ?? null})
           `,
         ]
         if (hasLaborTable) {
@@ -291,7 +303,8 @@ export async function PUT(request: Request) {
         tenantContext,
         accountsSql`
           UPDATE account_activities
-          SET activity = ${nextReference}
+          SET activity = ${nextReference},
+              default_rate = CASE WHEN ${hasRate} THEN ${defaultRate} ELSE default_rate END
           WHERE tenant_id = ${tenantContext.tenantId}
             AND code = ${currentCode}
         `,
