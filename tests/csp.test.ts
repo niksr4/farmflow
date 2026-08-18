@@ -139,6 +139,18 @@ describe("assembled policy", () => {
     }
   })
 
+  it("lets Vercel Analytics load the script the app actually renders", () => {
+    // app/layout.tsx renders <Analytics /> on every page. CSP refused the script host for its
+    // whole life, so the component mounted and the browser dropped the request without a word --
+    // the same silent shape as the ingest wildcard above. Caught by walking the tabs and reading
+    // the console, which is the only place a CSP refusal ever appears.
+    const layout = readFileSync(path.resolve(__dirname, "../app/layout.tsx"), "utf8")
+    if (!/@vercel\/analytics/.test(layout)) return // component removed; nothing to permit
+
+    const scriptHosts = /script-src ([^;]*)/.exec(CONTENT_SECURITY_POLICY)?.[1] ?? ""
+    expect(scriptHosts).toContain("va.vercel-scripts.com")
+  })
+
   it("contains no malformed partial-label wildcard in any directive", () => {
     // Catches `o*.host`, `api*.host` etc. anywhere in the policy, not just connect-src.
     expect(CONTENT_SECURITY_POLICY).not.toMatch(/[A-Za-z0-9-]+\*\./)
