@@ -1466,6 +1466,17 @@ export default function InventorySystem() {
     }, 0)
   }, [inventory, resolveItemValue])
 
+  // Stock is very often recorded without a price -- across production, 91% of all consumption and
+  // most purchases carry no cost -- so the figure above is a floor, not a valuation. Derived from
+  // the same list it sums rather than from the API summary, because a caveat that disagrees with
+  // the number beside it is worse than none.
+  const inventoryValueCaveat = useMemo(() => {
+    const held = inventory.filter((item) => (Number(item.quantity) || 0) > 0)
+    const unpriced = held.filter((item) => (Number(resolveItemValue(item).totalValue) || 0) === 0)
+    if (unpriced.length === 0 || held.length === 0) return null
+    return `${unpriced.length} of ${held.length} items in stock have no cost recorded — this is at least what your stock is worth, not the full value.`
+  }, [inventory, resolveItemValue])
+
   const filteredInventoryTotals = useMemo(() => {
     const totalQuantity = filteredAndSortedInventory.reduce((sum, item) => sum + (Number(item.quantity) || 0), 0)
     const totalValue = filteredAndSortedInventory.reduce((sum, item) => {
@@ -1549,6 +1560,7 @@ export default function InventorySystem() {
   const heroContent: HeroContent = useMemo(() => buildHeroContent({
     activeTab,
     resolvedInventoryValue,
+    resolvedInventoryValueCaveat: inventoryValueCaveat,
     resolvedProcessingWorkspaceView,
     canShowPepper,
     enabledModuleIds: new Set(enabledModules ?? []),

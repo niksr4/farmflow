@@ -74,6 +74,8 @@ type AccountsTotals = {
 export type BuildHeroContentParams = {
   activeTab: string
   resolvedInventoryValue: number
+  /** Set when some stock has no cost recorded, so the value above is a floor, not a valuation. */
+  resolvedInventoryValueCaveat?: string | null
   resolvedProcessingWorkspaceView: string
   canShowPepper: boolean
   /** Set of currently enabled module IDs — replaces the isModuleEnabled callback. */
@@ -111,7 +113,7 @@ const fmtCount = (n: number) => formatNumber(n, 0)
 
 export function buildHeroContent(p: BuildHeroContentParams): HeroContent {
   const {
-    activeTab, resolvedInventoryValue, resolvedProcessingWorkspaceView,
+    activeTab, resolvedInventoryValue, resolvedInventoryValueCaveat, resolvedProcessingWorkspaceView,
     canShowPepper, enabledModuleIds, currentFiscalYearLabel,
     bagWeightLabel, recentActivityLabel, unassignedLabel, loading,
     accountsTotalsLoading, estateMetrics, unassignedTransactions, totalTransactions,
@@ -123,8 +125,13 @@ export function buildHeroContent(p: BuildHeroContentParams): HeroContent {
 
   // ── Common stats ──────────────────────────────────────────────────────────
   const inventoryValueStat: HeroStat = {
-    label: "Inventory value",
+    // Stock is routinely recorded without a price -- across production, 91% of consumption and
+    // most purchases carry no cost -- so this figure is a floor. Labelled rather than dropped:
+    // the estate asked to keep it, and a number with its own limits stated is usable, while the
+    // same number presented as complete is a quiet lie.
+    label: resolvedInventoryValueCaveat ? "Inventory value (partial)" : "Inventory value",
     value: formatCurrency(resolvedInventoryValue, 0),
+    subValue: resolvedInventoryValueCaveat ?? undefined,
     metricValue: resolvedInventoryValue,
   }
   const activeLocationsStat: HeroStat = {
