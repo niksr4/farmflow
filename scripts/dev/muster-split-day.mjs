@@ -92,8 +92,18 @@ const allocate = async (n, activityIdx, blockIdx) => {
   const block = await pick(`block ${n}`, "Block", blockIdx)
   await page.getByRole("button", { name: "Half", exact: true }).first().click()
   await page.waitForTimeout(200)
+  // Wait for the write itself, not a guessed number of milliseconds. Allocating now persists
+  // presence before it posts the job, so a fixed sleep that was long enough yesterday silently
+  // became too short -- and the harness reported a missing row rather than a slow one.
+  const posted = page.waitForResponse(
+    (r) => r.url().includes("/api/attendance/assignments") && r.request().method() === "POST",
+    { timeout: 60000 },
+  )
   await page.getByRole("button", { name: "Add", exact: true }).first().click()
-  await page.waitForTimeout(2500)
+  await posted
+  // Then let the roll reload before the next allocation reads it.
+  await page.waitForResponse((r) => r.url().includes("/api/attendance?") && r.request().method() === "GET", { timeout: 60000 }).catch(() => {})
+  await page.waitForTimeout(600)
   console.log(`       -> ${work} @ ${block}, half day`)
 }
 

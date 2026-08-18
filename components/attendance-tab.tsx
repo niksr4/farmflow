@@ -836,6 +836,8 @@ export default function AttendanceTab() {
                       activities={activities}
                       saving={assigningWorkerId === worker.id}
                       editing={editingAssignment}
+                      headcount={worker.kind === "gang" ? Math.max(1, Number(worker.headcount) || 1) : 1}
+                      isGang={worker.kind === "gang"}
                       onAdd={(payload) => handleAddAssignment(worker.id, payload)}
                       onClose={() => { setAllocatingWorkerId(null); setEditingAssignment(null) }}
                     />

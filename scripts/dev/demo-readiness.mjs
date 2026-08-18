@@ -60,21 +60,25 @@ if (!isMedappa) {
 
 console.log("\n== the rate guard is what a new estate meets first ==")
 const w = (await sql`SELECT id, daily_rate FROM attendance_workers WHERE tenant_id=${T} AND active ORDER BY full_name LIMIT 1`)[0]
-// Clear this one worker's rate for the duration, so the guard is proven regardless of whether
-// the tenant has since been set up. Restored at the end with everything else.
+// Unprice the work for the duration, so the guard is proven regardless of how the tenant has
+// since been set up. The rate belongs to the task now, so clearing a person's rate proves
+// nothing -- nothing reads it while the work carries one. Both are restored at the end.
 await sql`UPDATE attendance_workers SET daily_rate = NULL WHERE id=${w.id}`
 await page.request.put(`${BASE}/api/attendance`, { data: { date: today, presentWorkerIds: [w.id] } })
 const code = (await sql`SELECT code FROM account_activities WHERE tenant_id=${T} ORDER BY code LIMIT 1`)[0].code
+const priorCodeRate = (await sql`SELECT default_rate FROM account_activities WHERE tenant_id=${T} AND code=${code}`)[0]?.default_rate ?? null
+await sql`UPDATE account_activities SET default_rate = NULL WHERE tenant_id=${T} AND code=${code}`
 const block = (await sql`SELECT id, name FROM locations WHERE tenant_id=${T} ORDER BY name LIMIT 1`)[0]
 let res = await page.request.post(`${BASE}/api/attendance/assignments`, {
   data: { date: today, workerIds: [w.id], activityCode: code, locationId: block.id, dayFraction: 1 },
 })
 let bodyJson = await res.json().catch(() => ({}))
-check(res.status() === 409 && /no daily rate/i.test(bodyJson.error || ""), `refused until a rate exists: "${(bodyJson.error || "").slice(0, 60)}..."`)
+check(res.status() === 409 && /no rate set/i.test(bodyJson.error || ""), `refused until the work is priced: "${(bodyJson.error || "").slice(0, 60)}..."`)
 
-console.log("\n== setting the rate on the Workers tab unblocks it ==")
+console.log("\n== pricing the work unblocks it ==")
+await sql`UPDATE account_activities SET default_rate = 600 WHERE tenant_id=${T} AND code=${code}`
 const put = await page.request.put(`${BASE}/api/attendance/workers/${w.id}`, { data: { dailyRate: 600 } })
-check(put.status() === 200, `saved a rate through the Workers API (${put.status()})`)
+check(put.status() === 200, `the Workers API still answers (${put.status()})`)
 res = await page.request.post(`${BASE}/api/attendance/assignments`, {
   data: { date: today, workerIds: [w.id], activityCode: code, locationId: block.id, dayFraction: 1 },
 })
@@ -101,6 +105,7 @@ await sql`DELETE FROM attendance_records WHERE tenant_id=${T} AND attendance_dat
 for (const r of before) {
   await sql`UPDATE attendance_workers SET daily_rate=${r.daily_rate} WHERE id=${r.id}`
 }
+await sql`UPDATE account_activities SET default_rate = ${priorCodeRate} WHERE tenant_id=${T} AND code=${code}`
 const rates = await sql`SELECT COUNT(*)::int n FROM attendance_workers WHERE tenant_id=${T} AND daily_rate IS NOT NULL`
 check(Number(rates[0].n) === before.filter((r) => r.daily_rate != null).length, "rates left exactly as they were")
 

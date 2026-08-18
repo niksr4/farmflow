@@ -82,8 +82,12 @@ const cost = await sql`SELECT COUNT(*)::int n, COALESCE(SUM(total_cost),0)::nume
                        FROM labour_assignments WHERE tenant_id=${T} AND work_date=${today}::date`
 check(Number(cost[0].n) === 2 && Number(cost[0].c) > 0, `both cost money: ${cost[0].n} rows, Rs ${Number(cost[0].c).toLocaleString("en-IN")}`)
 
-console.log("\n== 5. a worker with no rate is refused rather than costing nothing ==")
+console.log("\n== 5. work with no rate is refused rather than costing nothing ==")
+// The rate belongs to the task now, so it is the code that has to be unpriced. Clearing a
+// person's rate proves nothing any more -- nothing reads it while the work carries a rate.
 const spare = roster.find((w) => w.id !== enrolled[0].id && w.id !== byHand.id)
+const pricedBefore = (await sql`SELECT default_rate FROM account_activities WHERE tenant_id=${T} AND code=${code}`)[0]?.default_rate ?? null
+await sql`UPDATE account_activities SET default_rate = NULL WHERE tenant_id=${T} AND code=${code}`
 await sql`UPDATE attendance_workers SET daily_rate = NULL WHERE id=${spare.id}`
 await page.request.put(`${BASE}/api/attendance`, {
   data: { date: today, presentWorkerIds: [enrolled[0].id, byHand.id, spare.id] },
@@ -93,7 +97,8 @@ const noRate = await page.request.post(`${BASE}/api/attendance/assignments`, {
 })
 const noRateBody = await noRate.json().catch(() => ({}))
 check(noRate.status() === 409, `refused with 409 (got ${noRate.status()})`)
-check(/no daily rate/i.test(noRateBody.error || ""), `message: "${noRateBody.error || ""}"`)
+check(/no rate set/i.test(noRateBody.error || ""), `message names the work: "${noRateBody.error || ""}"`)
+await sql`UPDATE account_activities SET default_rate = ${pricedBefore} WHERE tenant_id=${T} AND code=${code}`
 await sql`UPDATE attendance_workers SET daily_rate = 600 WHERE id=${spare.id}`
 
 console.log("\n== 6. the UI shows both, and says which is which ==")

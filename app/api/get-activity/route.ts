@@ -33,6 +33,9 @@ export async function GET(_request: Request) {
             aa.activity as reference,
             aa.module_hint,
             aa.tracks_inventory,
+            -- What this work pays per head per day. The muster fills it in when the work is
+            -- chosen, so the cost of a deployment is visible before it is saved.
+            aa.default_rate,
             COALESCE(lt.usage_count, 0)::int AS labor_count,
             COALESCE(et.usage_count, 0)::int AS expense_count
           FROM account_activities aa

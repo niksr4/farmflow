@@ -36,6 +36,22 @@ const num = (value: unknown, fallback: number) => {
   return Number.isFinite(parsed) ? parsed : fallback
 }
 
+/** An optional money amount: absent stays absent rather than becoming zero. */
+const optionalAmount = (value: unknown): number | null | "invalid" => {
+  if (value == null || value === "") return null
+  const parsed = Number(value)
+  if (!Number.isFinite(parsed) || parsed < 0) return "invalid"
+  return parsed
+}
+
+/** Holiday pay doubles the money for one day's work -- it does not lengthen the day. */
+const readPayMultiplier = (value: unknown): number | "invalid" => {
+  if (value == null || value === "") return 1
+  const parsed = Number(value)
+  if (!Number.isFinite(parsed) || parsed <= 0 || parsed > 3) return "invalid"
+  return parsed
+}
+
 export async function POST(request: Request) {
   let tenantId: string | null = null
   try {
@@ -144,11 +160,55 @@ export async function POST(request: Request) {
       return NextResponse.json({ success: false, error: "A rate cannot be negative" }, { status: 400 })
     }
 
+    // What this work pays. The rate belongs to the task, not the person: the same worker earns a
+    // different amount weeding than shade lopping, which is what the estate's own history shows.
+    //
+    // An explicit rate on the request wins, so an unusual day can be priced without editing the
+    // code for everyone. Then the code's own rate. The worker's daily_rate is only a fallback for
+    // an estate mid-transition whose codes have not been priced yet -- once they have, it is never
+    // consulted, and it is what still prices an estate that has not moved to the muster at all.
+    const codeRateRow = await runTenantQuery(
+      accountsSql,
+      tenantContext,
+      accountsSql`
+        SELECT default_rate
+        FROM account_activities
+        WHERE tenant_id = ${tenantContext.tenantId} AND code = ${activityCode}
+        LIMIT 1
+      `,
+    )
+    const codeRate = (codeRateRow?.[0] as any)?.default_rate
+    const rateForThisWork = overrideRate ?? (codeRate != null ? Number(codeRate) : null)
+
+    const payMultiplier = readPayMultiplier(body?.payMultiplier)
+    if (payMultiplier === "invalid") {
+      return NextResponse.json({ success: false, error: "Pay multiplier must be between 0 and 3" }, { status: 400 })
+    }
+
+    const extras = {
+      driver: optionalAmount(body?.driverCharge),
+      supervisor: optionalAmount(body?.supervisorCharge),
+      vehicle: optionalAmount(body?.vehicleCharge),
+    }
+    if (Object.values(extras).includes("invalid")) {
+      return NextResponse.json({ success: false, error: "Driver, supervisor and vehicle charges cannot be negative" }, { status: 400 })
+    }
+
+    // A gang is booked at a crew size but only some of them turn up, and it is what turned up
+    // that gets paid. An individual is always one person.
+    const crewOnRequest = body?.headcount == null || body.headcount === "" ? null : num(body.headcount, -1)
+    if (crewOnRequest !== null && crewOnRequest < 1) {
+      return NextResponse.json({ success: false, error: "Crew size must be at least 1" }, { status: 400 })
+    }
+
     const rows = roster.map((w: any) => ({
       workerId: String(w.id),
       name: String(w.full_name || ""),
-      rate: overrideRate ?? (w.daily_rate != null ? Number(w.daily_rate) : 0),
-      headcount: w.kind === "gang" ? Math.max(1, Number(w.headcount) || 1) : 1,
+      rate: rateForThisWork ?? (w.daily_rate != null ? Number(w.daily_rate) : 0),
+      headcount:
+        w.kind === "gang"
+          ? Math.max(1, crewOnRequest ?? Number(w.headcount) ?? 1)
+          : 1,
     }))
 
     // A worker with no daily rate would have produced a Rs 0 payable, saved without complaint,
@@ -162,8 +222,8 @@ export async function POST(request: Request) {
           success: false,
           error:
             names.length === 1
-              ? `${names[0]} has no daily rate, so this work would be recorded as costing nothing. Set their rate on the Workers tab first.`
-              : `${names.length} of these workers have no daily rate, so the work would be recorded as costing nothing. Set their rates on the Workers tab first.`,
+              ? `"${activityCode}" has no rate set, so this work would be recorded as costing nothing. Give the code a rate under Costs, or type one on this entry.`
+              : `"${activityCode}" has no rate set, so this work would be recorded as costing nothing. Give the code a rate under Costs, or type one on this entry.`,
         },
         { status: 409 },
       )
@@ -176,9 +236,12 @@ export async function POST(request: Request) {
         rows.map(
           (r) => tx`
             INSERT INTO labour_assignments (tenant_id, worker_id, work_date, activity_code, location_id,
-                                            day_fraction, rate, headcount, lump_sum, notes, recorded_by)
+                                            day_fraction, rate, headcount, lump_sum, pay_multiplier,
+                                            driver_charge, supervisor_charge, vehicle_charge,
+                                            notes, recorded_by)
             VALUES (${tenantContext.tenantId}, ${r.workerId}, ${date}, ${activityCode}, ${locationId},
-                    ${dayFraction}, ${r.rate}, ${r.headcount}, ${lumpSum},
+                    ${dayFraction}, ${r.rate}, ${r.headcount}, ${lumpSum}, ${payMultiplier},
+                    ${extras.driver}, ${extras.supervisor}, ${extras.vehicle},
                     ${String(body?.notes || "").trim() || null}, ${sessionUser.username || "system"})
           `,
         ),
@@ -271,18 +334,37 @@ export async function PUT(request: Request) {
       return NextResponse.json({ success: false, error: "A rate cannot be negative" }, { status: 400 })
     }
 
+    const editMultiplier = readPayMultiplier(body?.payMultiplier)
+    if (editMultiplier === "invalid") {
+      return NextResponse.json({ success: false, error: "Pay multiplier must be between 0 and 3" }, { status: 400 })
+    }
+    const editExtras = {
+      driver: optionalAmount(body?.driverCharge),
+      supervisor: optionalAmount(body?.supervisorCharge),
+      vehicle: optionalAmount(body?.vehicleCharge),
+    }
+    if (Object.values(editExtras).includes("invalid")) {
+      return NextResponse.json({ success: false, error: "Driver, supervisor and vehicle charges cannot be negative" }, { status: 400 })
+    }
+    const editCrew = body?.headcount == null || body.headcount === "" ? null : Math.max(1, num(body.headcount, 1))
+
     try {
       const updated = await runTenantQuery(
         accountsSql,
         tenantContext,
         accountsSql`
           UPDATE labour_assignments
-          SET activity_code = ${activityCode},
-              location_id   = ${locationId},
-              day_fraction  = ${dayFraction},
-              rate          = COALESCE(${overrideRate}, rate),
-              notes         = ${String(body?.notes || "").trim() || null},
-              updated_at    = NOW()
+          SET activity_code     = ${activityCode},
+              location_id       = ${locationId},
+              day_fraction      = ${dayFraction},
+              rate              = COALESCE(${overrideRate}, rate),
+              pay_multiplier    = ${editMultiplier},
+              headcount         = COALESCE(${editCrew}, headcount),
+              driver_charge     = ${editExtras.driver},
+              supervisor_charge = ${editExtras.supervisor},
+              vehicle_charge    = ${editExtras.vehicle},
+              notes             = ${String(body?.notes || "").trim() || null},
+              updated_at        = NOW()
           WHERE id = ${id}::uuid
             AND tenant_id = ${tenantContext.tenantId}
           RETURNING id, worker_id, work_date::text AS work_date, activity_code, total_cost
