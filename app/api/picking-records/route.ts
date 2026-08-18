@@ -20,6 +20,9 @@ const isUuid = (v: string) => UUID_PATTERN.test(v)
 const pickingBodySchema = z.object({
   workerId: z.string().uuid("Invalid worker ID"),
   pickDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "pickDate must be YYYY-MM-DD"),
+  // Defaults to coffee: every existing row predates the distinction and coffee is what they
+  // have always meant in practice.
+  crop: z.enum(["coffee", "pepper"]).default("coffee"),
   kgPicked: z.number().positive("kg picked must be positive").max(9999),
   ratePerKg: z.number().min(0, "rate must be non-negative").max(99999),
   locationId: z.string().uuid().nullable().optional(),
@@ -40,6 +43,12 @@ export async function GET(request: Request) {
     const offset = Math.max(Number.parseInt(searchParams.get("offset") || "0", 10) || 0, 0)
 
     const workerFilter = workerId ? accountsSql` AND pr.worker_id = ${workerId}::uuid` : accountsSql``
+    // Coffee and pepper are both picked by weight but at different rates and against different
+    // yields, so a combined total answers nothing. Absent means both.
+    const cropParam = String(searchParams.get("crop") || "").toLowerCase()
+    const cropFilter = cropParam === "coffee" || cropParam === "pepper"
+      ? accountsSql` AND pr.crop = ${cropParam}`
+      : accountsSql``
     const startFilter = startDate ? accountsSql` AND pr.pick_date >= ${startDate}::date` : accountsSql``
     const endFilter = endDate ? accountsSql` AND pr.pick_date <= ${endDate}::date` : accountsSql``
     // No explicit per-location filter exists on this route today, so the estate filter is
@@ -59,7 +68,7 @@ export async function GET(request: Request) {
           SELECT COUNT(*)::int AS count
           FROM picking_records pr
           WHERE pr.tenant_id = ${tenantContext.tenantId}
-            ${workerFilter} ${startFilter} ${endFilter} ${estateFilter}
+            ${workerFilter}${cropFilter} ${startFilter} ${endFilter} ${estateFilter}
         `,
       ),
       runTenantQuery(
@@ -76,6 +85,7 @@ export async function GET(request: Request) {
             -- <input type="date"> on edit, which then failed this route's YYYY-MM-DD check on
             -- save. See the Neon date convention note in CLAUDE.md.
             pr.pick_date::text AS pick_date,
+            pr.crop,
             pr.kg_picked,
             pr.rate_per_kg,
             (pr.kg_picked * pr.rate_per_kg) AS amount,
@@ -85,7 +95,7 @@ export async function GET(request: Request) {
           FROM picking_records pr
           JOIN attendance_workers aw ON aw.id = pr.worker_id
           WHERE pr.tenant_id = ${tenantContext.tenantId}
-            ${workerFilter} ${startFilter} ${endFilter} ${estateFilter}
+            ${workerFilter}${cropFilter} ${startFilter} ${endFilter} ${estateFilter}
           ORDER BY pr.pick_date DESC, aw.full_name ASC
           LIMIT ${limit} OFFSET ${offset}
         `,
@@ -99,7 +109,7 @@ export async function GET(request: Request) {
             COALESCE(SUM(kg_picked * rate_per_kg), 0) AS total_amount
           FROM picking_records pr
           WHERE pr.tenant_id = ${tenantContext.tenantId}
-            ${workerFilter} ${startFilter} ${endFilter} ${estateFilter}
+            ${workerFilter}${cropFilter} ${startFilter} ${endFilter} ${estateFilter}
         `,
       ),
     ])
@@ -117,6 +127,7 @@ export async function GET(request: Request) {
         kgPicked: Number(r.kg_picked),
         ratePerKg: Number(r.rate_per_kg),
         amount: Number(r.amount),
+        crop: r.crop ? String(r.crop) : "coffee",
         locationId: r.location_id ? String(r.location_id) : null,
         notes: r.notes ? String(r.notes) : null,
       })),
@@ -148,7 +159,7 @@ export async function POST(request: Request) {
         { status: 400 },
       )
     }
-    const { workerId, pickDate, kgPicked, ratePerKg, locationId, notes } = parsed.data
+    const { workerId, pickDate, crop, kgPicked, ratePerKg, locationId, notes } = parsed.data
 
     // Verify worker belongs to this tenant
     const workerRows = await runTenantQuery(
@@ -164,11 +175,12 @@ export async function POST(request: Request) {
       accountsSql,
       tenantContext,
       accountsSql`
-        INSERT INTO picking_records (tenant_id, worker_id, pick_date, kg_picked, rate_per_kg, location_id, notes)
+        INSERT INTO picking_records (tenant_id, worker_id, pick_date, crop, kg_picked, rate_per_kg, location_id, notes)
         VALUES (
           ${tenantContext.tenantId},
           ${workerId}::uuid,
           ${pickDate}::date,
+          ${crop},
           ${kgPicked},
           ${ratePerKg},
           ${locationId ?? null}::uuid,
