@@ -8,6 +8,7 @@ export const splitSqlStatements = (content) => {
   let buffer = ""
   let dollarTag = null // e.g. "$$" or "$body$" while inside a dollar-quoted block
   let inLineComment = false
+  let inString = false // inside a '...' literal
 
   for (let i = 0; i < content.length; i += 1) {
     const ch = content[i]
@@ -16,6 +17,30 @@ export const splitSqlStatements = (content) => {
     if (inLineComment) {
       buffer += ch
       if (ch === "\n") inLineComment = false
+      continue
+    }
+
+    // A single-quoted literal is opaque: a ";" inside one is data, and so is a "--".
+    // Without this, a COMMENT whose text contains either was chopped mid-literal and the
+    // remainder glued onto the next statement -- which surfaces as the thoroughly unhelpful
+    // "cannot insert multiple commands into a prepared statement".
+    if (inString) {
+      buffer += ch
+      // '' is an escaped quote inside a literal, not the end of one.
+      if (ch === "'") {
+        if (content[i + 1] === "'") {
+          buffer += "'"
+          i += 1
+        } else {
+          inString = false
+        }
+      }
+      continue
+    }
+
+    if (!dollarTag && ch === "'") {
+      inString = true
+      buffer += ch
       continue
     }
 
