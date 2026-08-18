@@ -3,6 +3,7 @@ import { accountsSql } from "@/lib/server/db"
 import { requireModuleAccess, isModuleAccessError } from "@/lib/server/module-access"
 import { canWriteModule } from "@/lib/permissions"
 import { logAuditEvent } from "@/lib/server/audit-log"
+import { getLabourCutover } from "@/lib/server/labour-entry-mode"
 import { normalizeTenantContext, runTenantQueries, runTenantQuery } from "@/lib/server/tenant-db"
 import {
   ATTENDANCE_SCHEMA_HELP,
@@ -138,6 +139,11 @@ export async function GET(request: Request) {
       // sees it, otherwise registering a tenant's FIRST device is impossible -- no device would
       // mean no UI would mean no way to add one.
       hasBiometricDevices: deviceRows.length > 0 || String(sessionUser.role || "").toLowerCase() === "owner",
+      // Null while an estate still types labour into Accounts. Their pay comes from a rate on the
+      // worker and that field stays exactly where it was; only an estate that has moved to the
+      // muster takes its rate from the work instead. Laxmi and HoneyFarm are on the first path
+      // and nothing about their day changes.
+      assignmentsFrom: await getLabourCutover(tenantContext),
       // Unassigned workers show under EVERY estate (the always-NULL-shows convention in
       // lib/estate-filter.ts), so on a multi-estate tenant the selector silently does nothing to
       // the roster. Medappa has 21 locations across two estates and all 24 workers unassigned,
