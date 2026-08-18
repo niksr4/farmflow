@@ -236,6 +236,16 @@ export async function GET(request: Request) {
             COUNT(*)::int AS total_count
           FROM transaction_history
           WHERE tenant_id = ${tenantContext.tenantId}
+            -- Correcting an item's price used to write a full deplete-and-restock pair valued at
+            -- the entire holding. That code is long gone, but 59 such rows remain on one tenant
+            -- and are 70% of the money in their ledger -- so "stock purchases" read Rs 8,94,933
+            -- when 94% of it was a price edit, and "depletion for losses" Rs 8,85,133 with 98%
+            -- the same. Both lines described revaluation and called it trade.
+            -- Excluded from the figures only. The rows stay, quantities stay, and the balances
+            -- they produced are the ones the estate has been operating on -- they reconcile
+            -- against the ledger exactly, so recomputing them would break a working stock count
+            -- to tidy a display.
+            AND COALESCE(notes, '') NOT ILIKE 'Price updated%'
             ${inventoryDateClause}
             ${estateClause}
         `,

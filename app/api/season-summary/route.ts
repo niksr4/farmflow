@@ -201,6 +201,9 @@ export async function GET(request: NextRequest) {
         FROM transaction_history
         WHERE tenant_id = $1
           AND LOWER(transaction_type) IN ('restock', 'restocking')
+          -- Price corrections were once written as stock movements; they are revaluation, not
+          -- purchases. See the note in finance-balance-sheet.
+          AND COALESCE(notes, '') NOT ILIKE 'Price updated%'
           AND transaction_date >= $2::date
           AND transaction_date <= $3::date
           ${estateFilterSql(4)}
@@ -235,6 +238,9 @@ export async function GET(request: NextRequest) {
         FROM transaction_history
         WHERE tenant_id = $1
           AND LOWER(transaction_type) IN ('restock', 'restocking')
+          -- Price corrections were once written as stock movements; they are revaluation, not
+          -- purchases. See the note in finance-balance-sheet.
+          AND COALESCE(notes, '') NOT ILIKE 'Price updated%'
           AND transaction_date >= $2::date
           AND transaction_date <= $3::date
           ${estateFilterSql(4)}

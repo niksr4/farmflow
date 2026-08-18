@@ -105,6 +105,47 @@ describe("cost is never counted by halves", () => {
     expect(pnl).toMatch(/PNL_REVENUE_TABLES = \["sales_records", "other_sales_records"\]/)
   })
 
+  it("inventory money totals exclude the price-correction rows", () => {
+    // Correcting an item's price once wrote a full deplete-and-restock pair valued at the whole
+    // holding. 59 such rows survive on one tenant and are 70% of the money in their ledger, so
+    // any total that counts them is describing a price edit as trade: "stock purchases" read
+    // Rs 14,86,864 instead of Rs 6,44,431, and "depletion for losses" Rs 9,50,350 instead of
+    // Rs 87,207. The writer is gone; the rows are not, and never will be — they are load-bearing
+    // for balances that reconcile exactly against the ledger.
+    // Checked per QUERY, not per file. exports/ops contains both a row-level inventory export
+    // (which should show every row, reprices included — the note explains what they are) and a
+    // labour SUM elsewhere; a file-level regex conflates the two and flags a correct export.
+    const offenders: string[] = []
+    for (const route of routes) {
+      for (const match of route.body.matchAll(/\bFROM\s+transaction_history\b/gi)) {
+        // Only this query's own SELECT list. A fixed lookback bleeds into the previous query in
+        // multi-query files and flags reconciliation, which fetches ledger ROWS (no aggregate)
+        // and must keep the reprice rows — they are real movements, and dropping them would
+        // break the very balance replay that check exists to run.
+        const head = route.body.slice(0, match.index!)
+        const selectAt = head.toUpperCase().lastIndexOf("SELECT")
+        const selectClause = selectAt === -1 ? "" : head.slice(selectAt)
+        // Bounded to THIS query's SQL. A fixed forward window ran past the closing backtick and
+        // picked up the next query's filter, so removing a real filter still passed — a test
+        // that cannot fail is worse than no test. Verified by deleting one and watching it go red.
+        const tail = route.body.slice(match.index!)
+        const stop = Math.min(
+          ...[tail.indexOf("`"), tail.toUpperCase().indexOf("SELECT", 1)]
+            .filter((i) => i > 0)
+            .concat([tail.length]),
+        )
+        const whereClause = tail.slice(0, stop)
+
+        const aggregatesMoney = /SUM\s*\(/i.test(selectClause) && /total_cost/i.test(selectClause)
+        if (!aggregatesMoney) continue
+        if (/NOT ILIKE 'Price updated%'/.test(whereClause)) continue
+        offenders.push(route.rel)
+      }
+    }
+
+    expect([...new Set(offenders)]).toEqual([])
+  })
+
   it("labour still reaches cost through labour_cost, never the raw tables", () => {
     // labor_transactions and labour_assignments are the two entry methods; reading either
     // directly for money skips the cutover logic that decides which one a date belongs to.
