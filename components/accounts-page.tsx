@@ -54,8 +54,6 @@ interface AccountActivity {
   reference: string
   labor_count?: number
   expense_count?: number
-  /** What this work pays per head per day. Null means the muster asks for an amount each time. */
-  default_rate?: number | string | null
 }
 
 interface Activity {
@@ -189,8 +187,6 @@ export default function AccountsPage({
   const [editingActivityCode, setEditingActivityCode] = useState<string | null>(null)
   const [editingActivityNextCode, setEditingActivityNextCode] = useState("")
   const [editingActivityReference, setEditingActivityReference] = useState("")
-  // Blank means the work is not priced: the muster then asks for an amount on each deployment.
-  const [editingActivityRate, setEditingActivityRate] = useState("")
   const [isUpdatingActivity, setIsUpdatingActivity] = useState(false)
   const [isDeletingActivityCode, setIsDeletingActivityCode] = useState<string | null>(null)
   const [summaryTotals, setSummaryTotals] = useState({
@@ -431,7 +427,6 @@ export default function AccountsPage({
     }
     setEditingActivityCode(activity.code)
     setEditingActivityNextCode(activity.code)
-    setEditingActivityRate(activity?.default_rate != null ? String(activity.default_rate) : "")
     setEditingActivityReference(activity.reference)
   }
 
@@ -439,7 +434,6 @@ export default function AccountsPage({
     setEditingActivityCode(null)
     setEditingActivityNextCode("")
     setEditingActivityReference("")
-    setEditingActivityRate("")
   }
 
   const handleUpdateActivity = async () => {
@@ -463,8 +457,6 @@ export default function AccountsPage({
           code: editingActivityCode,
           nextCode,
           reference: nextReference,
-          // Sent even when blank: clearing the field is how an estate says "ask me every time".
-          defaultRate: editingActivityRate.trim() === "" ? null : Number(editingActivityRate),
         }),
       })
       const data = await response.json()
@@ -1786,7 +1778,6 @@ export default function AccountsPage({
                         <TableRow>
                           <TableHead className="w-[160px]">Code</TableHead>
                           <TableHead>Reference</TableHead>
-                          <TableHead className="w-[150px]">Rate</TableHead>
                           <TableHead className="w-[190px]">Usage</TableHead>
                           <TableHead className="w-[180px] text-right">Actions</TableHead>
                         </TableRow>
@@ -1820,31 +1811,6 @@ export default function AccountsPage({
                                   />
                                 ) : (
                                   activity.reference
-                                )}
-                              </TableCell>
-                              <TableCell className="text-xs">
-                                {/* What this work pays per head per day. Fills the muster in
-                                    automatically; left blank, the muster asks for an amount on
-                                    each deployment instead. Either is a valid way to run. */}
-                                {isEditing ? (
-                                  <Input
-                                    type="number"
-                                    inputMode="decimal"
-                                    min={0}
-                                    value={editingActivityRate}
-                                    onChange={(event) => setEditingActivityRate(event.target.value)}
-                                    disabled={isUpdatingActivity}
-                                    placeholder="ask each time"
-                                    aria-label={`Rate for ${activity.code}`}
-                                    className="h-8 w-28 tabular-nums"
-                                  />
-                                ) : activity.default_rate != null ? (
-                                  <span className="font-semibold tabular-nums">
-                                    ₹{Number(activity.default_rate).toLocaleString("en-IN")}
-                                    <span className="ml-1 font-normal text-muted-foreground">/day</span>
-                                  </span>
-                                ) : (
-                                  <span className="text-muted-foreground">ask each time</span>
                                 )}
                               </TableCell>
                               <TableCell className="text-xs text-muted-foreground">

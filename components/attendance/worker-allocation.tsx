@@ -21,7 +21,7 @@ import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrig
 import { cn } from "@/lib/utils"
 
 type LocationOption = { id: string; name: string; code?: string | null; estate?: string | null }
-type ActivityOption = { code: string; reference?: string | null; default_rate?: number | string | null }
+type ActivityOption = { code: string; reference?: string | null }
 
 const NO_BLOCK = "__no_block__"
 
@@ -80,20 +80,13 @@ export default function WorkerAllocation({
   const [vehicle, setVehicle] = useState("")
   const [busy, setBusy] = useState(false)
 
-  // What this work pays, and therefore what this deployment will cost. Shown before saving,
-  // because a rate nobody can see is a rate nobody checks.
-  const codeRate = useMemo(() => {
-    const found = activities.find((a) => a.code === activityCode)
-    const raw = found?.default_rate
-    return raw == null || raw === "" ? null : Number(raw)
-  }, [activities, activityCode])
-
-  // Typed here wins, then the work's own rate, then this person's normal daily wage. Most days
-  // fall through to the wage, which is how most estates pay -- the code's rate exists for the
-  // jobs that are the exception.
+  // The daily wage, unless this day was worth something else. Work that pays differently is
+  // priced on the day rather than kept in a rate table: the exceptions vary by day, gang and
+  // season, so a stored rate would be stale more often than right. Shown before saving, because
+  // a cost nobody can see is a cost nobody checks.
   const typed = rateOverride.trim() !== "" ? Number(rateOverride) : null
-  const effectiveRate = typed ?? codeRate ?? workerRate
-  const rateSource = typed != null ? "typed here" : codeRate != null ? "this work" : workerRate != null ? "daily wage" : null
+  const effectiveRate = typed ?? workerRate
+  const rateSource = typed != null ? "this entry" : workerRate != null ? "daily wage" : null
   const heads = isGang ? Math.max(1, Number(crew) || 1) : 1
   const extras = [driver, supervisor, vehicle].reduce((sum, v) => sum + (Number(v) || 0), 0)
   const total =
@@ -243,7 +236,7 @@ export default function WorkerAllocation({
       <p className="px-0.5 text-[11px] font-bold text-stone-500">
         {total == null ? (
           <span className="text-amber-600">
-            No wage for this worker and no rate on this work — type an amount above
+            No daily wage for this worker — type what today is worth
           </span>
         ) : (
           <>

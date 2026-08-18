@@ -163,22 +163,10 @@ export async function POST(request: Request) {
     // What this work pays. The rate belongs to the task, not the person: the same worker earns a
     // different amount weeding than shade lopping, which is what the estate's own history shows.
     //
-    // Three sources, most specific first: an amount typed on this entry, then a rate on the work,
-    // then the worker's normal daily wage. Most estates pay a daily wage and most days fall
-    // through to it -- the code's rate exists for the jobs that are the exception, like shade
-    // lopping paying more than weeding. All three being absent is what gets refused.
-    const codeRateRow = await runTenantQuery(
-      accountsSql,
-      tenantContext,
-      accountsSql`
-        SELECT default_rate
-        FROM account_activities
-        WHERE tenant_id = ${tenantContext.tenantId} AND code = ${activityCode}
-        LIMIT 1
-      `,
-    )
-    const codeRate = (codeRateRow?.[0] as any)?.default_rate
-    const rateForThisWork = overrideRate ?? (codeRate != null ? Number(codeRate) : null)
+    // Two sources: an amount typed on this deployment, or the worker's daily wage. Work that
+    // pays differently is priced on the day it happens rather than kept in a rate table -- the
+    // exceptions vary by day, gang and season, so a stored rate would be stale more often than
+    // right. Neither being present is what gets refused.
 
     const payMultiplier = readPayMultiplier(body?.payMultiplier)
     if (payMultiplier === "invalid") {
@@ -204,7 +192,7 @@ export async function POST(request: Request) {
     const rows = roster.map((w: any) => ({
       workerId: String(w.id),
       name: String(w.full_name || ""),
-      rate: rateForThisWork ?? (w.daily_rate != null ? Number(w.daily_rate) : 0),
+      rate: overrideRate ?? (w.daily_rate != null ? Number(w.daily_rate) : 0),
       headcount:
         w.kind === "gang"
           ? Math.max(1, crewOnRequest ?? Number(w.headcount) ?? 1)
@@ -222,8 +210,8 @@ export async function POST(request: Request) {
           success: false,
           error:
             names.length === 1
-              ? `${names[0]} has no daily wage and "${activityCode}" has no rate, so this would be recorded as costing nothing. Set their wage on the Workers tab, give the work a rate under Costs, or type an amount on this entry.`
-              : `${names.length} of these workers have no daily wage and "${activityCode}" has no rate, so this would be recorded as costing nothing. Set their wages, give the work a rate under Costs, or type an amount on this entry.`,
+              ? `${names[0]} has no daily wage, so this work would be recorded as costing nothing. Set their wage on the Workers tab, or type an amount on this entry.`
+              : `${names.length} of these workers have no daily wage, so this work would be recorded as costing nothing. Set their wages on the Workers tab, or type an amount on this entry.`,
         },
         { status: 409 },
       )
