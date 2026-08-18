@@ -169,7 +169,7 @@ const EN_TRANSLATIONS: TranslationTree = {
   writer: {
     nav: {
       home: "Home",
-      accounts: "Labour",
+      accounts: "Costs",
       rainfall: "Rain",
       inventory: "Stock",
       processing: "Processing",

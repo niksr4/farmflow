@@ -26,7 +26,7 @@ type MobileBottomNavProps = {
 
 const SHORT_LABELS: Record<string, string> = {
   home: "Home",
-  accounts: "Labour",
+  accounts: "Costs",
   rainfall: "Rain",
   inventory: "Stock",
   processing: "Processing",
