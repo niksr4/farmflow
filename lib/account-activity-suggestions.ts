@@ -32,6 +32,9 @@ export const ACCOUNT_ACTIVITY_SUGGESTIONS: AccountActivitySuggestion[] = [
   { code: "121", reference: "Telephone Bill" },
   { code: "122", reference: "Miscellaneous" },
   { code: "123", reference: "Tools And Implements" },
+  // Everything leaves the store through an expense, so a torn bag or a short stock count needs a
+  // code to land under. Without one it was a bare depletion -- real cost, reaching no P&L line.
+  { code: "124", reference: "Stock Loss & Wastage" },
   { code: "131", reference: "Arabica Weeding, Trenching" },
   { code: "132", reference: "Arabica Pruning, Handling" },
   { code: "133", reference: "Arabica Borer Tracing" },
