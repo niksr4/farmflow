@@ -455,6 +455,32 @@ const collectInventoryPairs = (
   return Array.from(pairs.values())
 }
 
+/**
+ * What the stock taken out is worth, at the average cost it was bought in at.
+ *
+ * This is the number the expense SHOULD be. Before this, the amount was typed by hand while the
+ * depletion rows were valued from the running average, so one fertiliser application produced two
+ * figures that need never agree -- the typed one reaching the P&L, the computed one reaching the
+ * ledger. Nothing reconciled them.
+ *
+ * Returns null when no stock is involved, which is the case for electricity, transport, hire and
+ * every other expense that consumes nothing from the store. Those keep their typed amount.
+ */
+function deriveAmountFromStock(
+  plannedTransactions: PlannedExpenseInventoryTransaction[],
+): number | null {
+  if (plannedTransactions.length === 0) return null
+  const total = plannedTransactions.reduce(
+    (sum, t) => sum + (Number(t.quantity) || 0) * (Number(t.unitCost) || 0),
+    0,
+  )
+  // An item priced at zero -- stock that arrived before prices were required -- would otherwise
+  // silently rewrite a real typed amount to nothing. Better to leave what the estate typed and
+  // let the unpriced-stock report be the thing that fixes it.
+  if (!(total > 0)) return null
+  return Number(total.toFixed(2))
+}
+
 async function findRecentDuplicateExpenseId(options: {
   tenantContext: TenantContext
   date: string
@@ -1280,10 +1306,15 @@ export async function POST(request: Request) {
           )
         : []
 
+    // The amount follows the stock, not the keyboard. Price is captured once when stock arrives;
+    // taking 500 kg of urea out is worth 500 x whatever it cost, and asking someone to type that
+    // again is asking them to disagree with the ledger.
+    const derivedAmount = deriveAmountFromStock(plannedTransactions)
+
     const createStatement = buildCreateExpenseMutationStatement({
       date,
       code,
-      amount,
+      amount: derivedAmount ?? amount,
       notes: normalizedNotes,
       tenantId: tenantContext.tenantId,
       locationId: supportsLocation ? validLocationId : null,
@@ -1436,12 +1467,17 @@ export async function PUT(request: Request) {
       .map((row) => Number(row.id))
       .filter((value) => Number.isInteger(value) && value > 0)
 
+    // Same rule on edit as on create. Without this, correcting the quantity would move the
+    // depletion's value and leave the expense at whatever was typed originally -- reintroducing
+    // the divergence one edit at a time.
+    const derivedAmount = deriveAmountFromStock(plannedTransactions)
+
     const updateStatement = buildUpdateExpenseStatement({
       id,
       tenantId: tenantContext.tenantId,
       date,
       code,
-      amount,
+      amount: derivedAmount ?? amount,
       notes: normalizedNotes,
       locationId: supportsLocation ? validLocationId : null,
       supportsLocation,
