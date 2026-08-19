@@ -30,6 +30,11 @@ const ALLOWED = new Map<string, string>([
   // Reads both tables by name because it asks "did a human write anything", and after a cutover
   // that answer lives in labour_assignments. Listed separately in ACTIVITY_TABLES.
   ["lib/server/agents/tenant-dormancy.ts", "activity signal over both tables"],
+  // Counts rows to answer "has this block ever been used", which is a different question from
+  // "what did labour cost". The cutover rule does not apply: a block is not deletable if ANY
+  // entry references it, whichever side of a cutover that entry happens to fall on, and going
+  // through labour_cost would hide exactly the legacy rows that make deletion unsafe.
+  ["app/api/locations/route.ts", "counts usage before allowing a block to be deleted"],
 ])
 
 const walk = (dir: string, out: string[] = []): string[] => {
