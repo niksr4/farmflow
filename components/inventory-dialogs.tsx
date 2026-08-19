@@ -242,12 +242,19 @@ export default function InventoryDialogs(p: DialogProps) {
                 <Input id="edit-transaction-item" value={p.editingTransaction.item_type} onChange={(e) => p.handleEditTransactionChange("item_type", e.target.value)} />
               </div>
               <div className="space-y-2">
-                <FieldLabel htmlFor="edit-transaction-type" label="Transaction Type" tooltip="Restocking adds stock, depleting reduces it." />
+                {/* Everyday usage goes through an expense, where it picks up a code, a block and
+                    a value. What is left here is stock arriving, and stock that went without
+                    being used -- spilt, torn, or found short at a count. */}
+                <FieldLabel
+                  htmlFor="edit-transaction-type"
+                  label="Transaction Type"
+                  tooltip="Restocking adds stock. Depleting is for stock lost rather than used — spillage, damage, or a short count. Record fertiliser and chemicals you actually applied as an expense instead, so it reaches your costs and the right block."
+                />
                 <Select value={p.editingTransaction.transaction_type} onValueChange={(v) => p.handleEditTransactionChange("transaction_type", v)}>
                   <SelectTrigger id="edit-transaction-type" className="w-full"><SelectValue /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="restock">Restocking</SelectItem>
-                    <SelectItem value="deplete">Depleting</SelectItem>
+                    <SelectItem value="deplete">Depleting (lost or spilt)</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
