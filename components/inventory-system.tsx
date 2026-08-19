@@ -469,6 +469,9 @@ export default function InventorySystem() {
 
   // transaction creation/editing
   const [newTransaction, setNewTransaction] = useState<Transaction | null>(createDefaultTransaction())
+  // Why the stock went. Not part of Transaction because it describes the cost line the depletion
+  // books, not the stock movement itself.
+  const [lossReason, setLossReason] = useState("")
   const [editingTransaction, setEditingTransaction] = useState<Transaction | null>(null)
   const [editingTransactionOriginal, setEditingTransactionOriginal] = useState<Transaction | null>(null)
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false)
@@ -2227,7 +2230,7 @@ export default function InventorySystem() {
       const res = await fetch(API_TRANSACTIONS, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ...tx, location_id: locationValue }),
+        body: JSON.stringify({ ...tx, location_id: locationValue, loss_reason: lossReason || null }),
       })
       const json = await res.json()
       if (!res.ok || !json.success) {
@@ -2238,11 +2241,36 @@ export default function InventorySystem() {
         item_type: tx.item_type,
         location_id: locationOverride ?? tx.location_id ?? null,
       })
-      toast({ title: "Transaction recorded", description: "Transaction saved successfully.", variant: "default" })
+      // A depletion now books a cost line, so say so -- and say when it booked nothing, because an
+      // item nobody ever priced values its own loss at zero and that is worth knowing at the moment
+      // it happens rather than at the end of the season.
+      const loss = json.stock_loss
+      if (loss?.unvalued) {
+        toast({
+          title: "Stock reduced — but valued at ₹0",
+          description: `No purchase price on record for ${tx.item_type}, so the loss books nothing to your costs. Add a price on the next restock.`,
+          variant: "default",
+        })
+      } else if (loss?.expenseId) {
+        toast({
+          title: "Loss recorded",
+          description: `Stock reduced and ${formatCurrency(loss.amount)} booked to Stock Loss & Wastage.`,
+          variant: "default",
+        })
+      } else if (loss) {
+        toast({
+          title: "Stock reduced — cost line not saved",
+          description: "The stock came down but the matching cost entry failed. Add it under Stock Loss & Wastage in Costs.",
+          variant: "destructive",
+        })
+      } else {
+        toast({ title: "Transaction recorded", description: "Transaction saved successfully.", variant: "default" })
+      }
       // refresh after adding
       await refreshData(true)
       // reset
       setNewTransaction(createDefaultTransaction())
+      setLossReason("")
       setLastTransactionWriteFailure(null)
     } catch (error: any) {
       console.error("Record transaction error:", error)
@@ -4112,6 +4140,13 @@ export default function InventorySystem() {
       onClose={() => setIsMovementDrawerOpen(false)}
       onFieldChange={handleFieldChange}
       onLocationChange={setTransactionLocationId}
+      lossReason={lossReason}
+      onLossReasonChange={setLossReason}
+      onOpenExpenses={() => {
+        setIsMovementDrawerOpen(false)
+        setAccountsInitialTab("expenses")
+        handleTabChange("accounts")
+      }}
       onRecordTransaction={handleRecordTransaction}
       onRetryTransaction={handleRetryTransactionWrite}
       onDismissFailure={() => setLastTransactionWriteFailure(null)}

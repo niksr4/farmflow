@@ -10,6 +10,7 @@ import { Textarea } from "@/components/ui/textarea"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import { cn } from "@/lib/utils"
 import { LOCATION_UNASSIGNED, UNASSIGNED_LABEL_PICKER } from "@/components/inventory-system/constants"
+import { STOCK_LOSS_REASONS } from "@/lib/stock-loss"
 import type { Transaction } from "@/lib/inventory-types"
 import type { LocationOption } from "@/components/inventory-system/types"
 import { formatLocationLabel } from "@/lib/location-label"
@@ -31,8 +32,11 @@ type RecordMovementPanelProps = {
   selectedMovementUnit: string
   locations: LocationOption[]
   canShowAccounts: boolean
+  lossReason: string
   // handlers
   onClose: () => void
+  onLossReasonChange: (reason: string) => void
+  onOpenExpenses: () => void
   onFieldChange: (field: keyof Transaction, value: unknown) => void
   onLocationChange: (locationId: string) => void
   onRecordTransaction: () => void
@@ -57,7 +61,10 @@ export default function RecordMovementPanel({
   selectedMovementUnit,
   locations,
   canShowAccounts,
+  lossReason,
   onClose,
+  onLossReasonChange,
+  onOpenExpenses,
   onFieldChange,
   onLocationChange,
   onRecordTransaction,
@@ -77,7 +84,7 @@ export default function RecordMovementPanel({
         <div>
           <h3 className="text-lg font-semibold text-neutral-900">Record inventory movement</h3>
           <p className="text-xs text-neutral-500">
-            Restock, deplete, or correct stock without leaving the inventory workspace.
+            Record stock arriving, or stock lost before anyone could use it.
           </p>
         </div>
         <Button type="button" variant="ghost" size="sm" onClick={onClose}>
@@ -90,7 +97,8 @@ export default function RecordMovementPanel({
         <Badge variant="outline" className="border-emerald-200 bg-white text-emerald-700">Estate linked</Badge>
       </div>
       <div className="mt-4 rounded-2xl border border-emerald-100 bg-emerald-50/70 px-4 py-3 text-sm text-emerald-900">
-        Record restocks when stock arrives. Record depletions when stock is used, lost, or corrected.
+        Restock when stock arrives. Record a loss when stock went missing rather than being applied
+        {canShowAccounts ? " — fertiliser and spray you actually used belong in Other Expenses." : "."}
       </div>
       <div className="mt-6 space-y-5">
         {lastTransactionWriteFailure && (
@@ -267,7 +275,7 @@ export default function RecordMovementPanel({
                     <Info className="h-3 w-3" />
                   </button>
                 </TooltipTrigger>
-                <TooltipContent>Restocking adds stock when goods arrive. Depleting records stock used, issued, lost, or corrected.</TooltipContent>
+                <TooltipContent>Restocking adds stock when goods arrive. A loss removes stock that was spilt, expired, or came up short — not stock that was applied to a block.</TooltipContent>
               </Tooltip>
             </TooltipProvider>
           </div>
@@ -304,22 +312,53 @@ export default function RecordMovementPanel({
             >
               <RadioGroupItem value="Depleting" id="depleting" className="mt-1 h-4 w-4" />
               <div className="space-y-1">
-                <p className="text-sm font-semibold text-neutral-900">Depleting</p>
-                <p className="text-xs leading-relaxed text-neutral-500">Used, issued, lost, or corrected stock.</p>
+                <p className="text-sm font-semibold text-neutral-900">Lost or spilt</p>
+                <p className="text-xs leading-relaxed text-neutral-500">Gone without being applied — spillage, damage, expiry, or a short count.</p>
               </div>
             </label>
           </RadioGroup>
+          {/* The old version of this said "if the same usage should also appear in Accounts, record
+              it there instead" -- a correct sentence with no way to act on it, sitting in a panel
+              that called depletion "used, issued, lost or corrected" three times over. The estate
+              read the invitation, not the caveat. The route out is now a button. */}
+          {newTransaction?.transaction_type !== "restock" && canShowAccounts && (
+            <div className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-3">
+              <p className="text-xs font-semibold text-amber-900">Applying it to a block, not losing it?</p>
+              <p className="mt-1 text-xs leading-relaxed text-amber-800">
+                Fertiliser, spray, or fuel that was actually used belongs in Other Expenses, where it gets an
+                activity code and a block. Stock still comes down, and the cost is worked out from what you paid —
+                you only enter the quantity.
+              </p>
+              <button
+                type="button"
+                data-testid="movement-open-expenses"
+                onClick={onOpenExpenses}
+                className="mt-2.5 rounded-lg bg-amber-700 px-3 py-2 text-xs font-bold text-white transition-colors hover:bg-amber-800 touch-manipulation"
+              >
+                Record as an expense instead →
+              </button>
+            </div>
+          )}
+
+          {/* Required, because "why" is the whole difference between a loss and mis-filed usage,
+              and it is the only part nobody can reconstruct from the numbers later. */}
           {newTransaction?.transaction_type !== "restock" && (
-            <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
-              {canShowAccounts ? (
-                <>
-                  Use this when you only need stock tracking. If the same usage should also appear in Accounts and P&amp;L, record it in{" "}
-                  <strong>Accounts → Non-Labour Expenses</strong> instead.
-                </>
-              ) : (
-                "Use this for regular stock usage, losses, or corrections."
+            <div className="space-y-2">
+              <label className="text-sm font-medium text-neutral-700">What happened to it?</label>
+              <Select value={lossReason} onValueChange={onLossReasonChange}>
+                <SelectTrigger data-testid="movement-loss-reason" className="w-full h-11 rounded-xl border-black/5 bg-white focus-visible:ring-2 focus-visible:ring-emerald-200">
+                  <SelectValue placeholder="Select a reason" />
+                </SelectTrigger>
+                <SelectContent className="z-[70]">
+                  {STOCK_LOSS_REASONS.map((reason) => (
+                    <SelectItem key={reason.value} value={reason.value}>{reason.label}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {!lossReason && (
+                <p className="text-xs text-neutral-500">Pick a reason to save — it is what the cost line will say.</p>
               )}
-            </p>
+            </div>
           )}
         </div>
 
@@ -364,7 +403,8 @@ export default function RecordMovementPanel({
 
         {newTransaction?.transaction_type !== "restock" && (
           <p className="text-xs text-neutral-600 bg-neutral-50 border border-black/5 rounded-lg px-3 py-2">
-            Depleted stock is valued at the <strong>weighted average cost</strong> on record — total spend divided by current quantity.
+            The loss is valued at the <strong>weighted average cost</strong> on record — total spend divided by current
+            quantity — and books a <strong>Stock Loss &amp; Wastage</strong> cost line so it reaches your P&amp;L.
           </p>
         )}
 
@@ -400,10 +440,11 @@ export default function RecordMovementPanel({
         <Button
           type="button"
           data-testid="movement-record-transaction"
+          disabled={newTransaction?.transaction_type !== "restock" && !lossReason}
           onClick={onRecordTransaction}
           className="w-full h-11 text-base bg-emerald-700 hover:bg-emerald-800 text-white shadow-sm"
         >
-          <Check className="mr-2 h-5 w-5" /> Record movement
+          <Check className="mr-2 h-5 w-5" /> {newTransaction?.transaction_type === "restock" ? "Record restock" : "Record loss"}
         </Button>
       </div>
     </div>

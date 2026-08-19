@@ -16,6 +16,13 @@ import {
   repairCurrentInventoryUpsertConstraints,
 } from "@/lib/server/current-inventory-constraints"
 import { sanitizeRouteError } from "@/lib/server/sanitize-route-error"
+import {
+  STOCK_LOSS_ACTIVITY,
+  STOCK_LOSS_CODE,
+  buildStockLossNote,
+  isExpenseOriginatedDepletion,
+  isUnvaluedLoss,
+} from "@/lib/stock-loss"
 
 export const dynamic = "force-dynamic"
 
@@ -720,6 +727,72 @@ export async function POST(request: NextRequest) {
       after: result?.[0] ?? null,
     })
 
+    // Stock that leaves the store is money that left with it, so a manual depletion books a
+    // matching cost line under 124. Expense-originated depletions already have one -- minting a
+    // second here would double-count the same fertiliser and, worse, is self-feeding.
+    let stockLoss: { expenseId: number | null; amount: number; unvalued: boolean } | null = null
+    if (normalizedType === "deplete" && !isExpenseOriginatedDepletion(notesValue)) {
+      try {
+        // 129 only seeded 124 for tenants that already had 134/154, so a tenant provisioned
+        // outside that shape can reach here without the code. Create it rather than dropping the
+        // cost on the floor -- an estate should never lose a cost line to a missing lookup row.
+        await runTenantQuery(
+          inventorySql,
+          tenantContext,
+          inventorySql`
+            INSERT INTO account_activities (tenant_id, code, activity)
+            VALUES (${tenantContext.tenantId}, ${STOCK_LOSS_CODE}, ${STOCK_LOSS_ACTIVITY})
+            ON CONFLICT (tenant_id, code) DO NOTHING
+          `,
+        )
+
+        const lossNote = buildStockLossNote({
+          itemType: canonicalItemType,
+          quantity: quantityValue,
+          unit: unitValue,
+          reason: typeof body?.loss_reason === "string" ? body.loss_reason : null,
+          userNotes: stripUsageLocationTag(notesValue),
+        })
+
+        const lossRows = await runTenantQuery(
+          inventorySql,
+          tenantContext,
+          inventorySql`
+            INSERT INTO expense_transactions (entry_date, code, total_amount, notes, tenant_id, location_id, recorded_by)
+            VALUES (
+              ${normalizedTransactionDate}::timestamptz,
+              ${STOCK_LOSS_CODE},
+              ${Number(total_cost.toFixed(2))},
+              ${lossNote},
+              ${tenantContext.tenantId},
+              ${requestedUsageLocationId},
+              ${sessionUser.username || "system"}
+            )
+            RETURNING id
+          `,
+        )
+        stockLoss = {
+          expenseId: lossRows?.[0]?.id ?? null,
+          amount: Number(total_cost.toFixed(2)),
+          unvalued: isUnvaluedLoss(total_cost),
+        }
+      } catch (lossError) {
+        // The stock has already moved and the trigger has already run. Failing the request now
+        // would tell the estate their depletion did not save while it plainly did, and they would
+        // enter it again. Report the depletion as the success it was and say the cost line is
+        // missing, so it is visible rather than silently absent -- which was the original bug.
+        console.error("[SERVER] stock-loss expense not written for depletion:", lossError)
+        await logRouteMutationFailure({
+          tenantId,
+          source: "api/transactions-neon",
+          endpoint: "/api/transactions-neon",
+          action: "create_stock_loss_expense",
+          error: lossError,
+        })
+        stockLoss = { expenseId: null, amount: Number(total_cost.toFixed(2)), unvalued: isUnvaluedLoss(total_cost) }
+      }
+    }
+
     return NextResponse.json({
       success: true,
       transaction: result[0],
@@ -727,6 +800,7 @@ export async function POST(request: NextRequest) {
       pooled_fallback_applied: pooledFallbackApplied,
       usage_location_id: pooledFallbackApplied ? requestedUsageLocationId : null,
       stock_location_id: stockLocationValue,
+      stock_loss: stockLoss,
     })
   } catch (error: any) {
     console.error("[SERVER] ❌ Error adding transaction:", error)
