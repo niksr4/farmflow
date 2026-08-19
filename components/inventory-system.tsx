@@ -368,9 +368,18 @@ export default function InventorySystem() {
   // inventory, sales) to just the current estate's blocks -- a convenience filter, not a
   // server-enforced restriction. Falls back to the full list whenever nothing is selected or
   // the tenant only has one estate.
+  // Every picker downstream is asking "where was this work done", so the store is removed here
+  // once rather than in each of them. The Inventory tab reads `locations` directly, which is why
+  // the fetch above takes both kinds. scripts/128.
+  const blockLocations = useMemo(
+    () => locations.filter((loc) => (loc.kind ?? "block") === "block"),
+    [locations],
+  )
+  // Built from blockLocations, not the raw list: this feeds the location dropdowns across
+  // processing, dispatch, labour, expenses and sales, and none of them mean the store.
   const estateFilteredLocations = useMemo(
-    () => (canSelectEstate && selectedEstate ? locations.filter((loc) => loc.estate === selectedEstate) : locations),
-    [canSelectEstate, selectedEstate, locations],
+    () => (canSelectEstate && selectedEstate ? blockLocations.filter((loc) => loc.estate === selectedEstate) : blockLocations),
+    [canSelectEstate, selectedEstate, blockLocations],
   )
   useEffect(() => {
     if (selectedEstate && locations.length > 0 && !availableEstates.includes(selectedEstate)) {
@@ -827,8 +836,11 @@ export default function InventorySystem() {
       // had this problem since it has no estate-cookie narrowing at all.
       const endpoint =
         isPreviewMode && previewTenantId
-          ? `/api/locations?tenantId=${encodeURIComponent(previewTenantId)}&scope=all`
-          : "/api/locations?scope=all"
+          ? `/api/locations?tenantId=${encodeURIComponent(previewTenantId)}&scope=all&kind=all`
+          // kind=all: this master list feeds every tab, and the Inventory tab needs the store
+          // while the muster, processing and expense pickers need blocks. Each narrows what it
+          // shows; the fetch must not narrow for them. scripts/128.
+          : "/api/locations?scope=all&kind=all"
       const response = await fetch(endpoint)
       const data = await response.json()
       const loaded = Array.isArray(data.locations) ? data.locations : []

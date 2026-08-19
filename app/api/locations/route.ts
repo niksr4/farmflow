@@ -47,6 +47,9 @@ function serializeLocation(row: Record<string, unknown>) {
     // Null until someone records it. Every per-acre figure divides by this, so a block without
     // one simply has no cost per acre rather than a wrong one.
     areaAcres: row.area_acres != null ? Number(row.area_acres) : null,
+    // 'block' where work happens, 'store' where stock sits. Defaulted rather than assumed so a
+    // row written before scripts/128 still reads as a block.
+    kind: row.kind === "store" ? "store" : "block",
   }
 }
 
@@ -74,7 +77,7 @@ export async function GET(request: Request) {
       sql,
       tenantContext,
       sql`
-        SELECT id, name, code, estate, area_acres
+        SELECT id, name, code, estate, area_acres, kind
         FROM locations
         WHERE tenant_id = ${tenantId}
         ORDER BY name ASC
@@ -82,6 +85,19 @@ export async function GET(request: Request) {
     )
 
     let serialized = locations.map((row) => serializeLocation(row as Record<string, unknown>))
+
+    // Blocks and stores are both rows in `locations` (scripts/128) but they are never
+    // interchangeable: a block is where work happens, a store is where stock sits. Callers say
+    // which they want. Default is blocks, because that is what every picker in the app has always
+    // been asking for -- offering the store among them would let someone allocate a day's labour
+    // to the shed.
+    //
+    // ?kind=all is for the settings page, which manages both.
+    const requestedKind = (searchParams.get("kind") || "block").toLowerCase()
+    if (requestedKind !== "all") {
+      const want = requestedKind === "store" ? "store" : "block"
+      serialized = serialized.filter((loc) => (loc.kind || "block") === want)
+    }
 
     // Per-user location restriction: null = unrestricted (owner/admin, or a `user` with no
     // assignment yet). A non-null array is a hard allow-list -- restricted locations are

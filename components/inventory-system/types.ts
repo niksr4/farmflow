@@ -13,6 +13,12 @@ export interface LocationOption {
   name: string
   code?: string | null
   estate?: string | null
+  /**
+   * 'block' where work happens, 'store' where stock sits (scripts/128). Optional because the
+   * field predates the distinction; anything without it is a block. A picker asking for a place
+   * to do work must filter this, or it will offer the shed.
+   */
+  kind?: "block" | "store" | null
 }
 
 export interface WorkspaceBootstrapPayload {
