@@ -144,6 +144,17 @@ export async function POST(request: Request) {
     const name = (body.name || "").trim()
     const code = body.code ? normalizeCode(body.code) : normalizeCode(name)
     const estate = typeof body.estate === "string" && body.estate.trim() ? body.estate.trim() : null
+    // A store is where stock sits; a block is where work happens (scripts/128). Defaults to block,
+    // which is what almost all of these are and keeps every existing caller behaving as before.
+    //
+    // A store may carry an estate or not, and both are real: HoneyFarm runs one store across HF,
+    // MV and PG, while Medappa asked for one per estate. A store with no estate serves everything,
+    // exactly as a block with no estate does.
+    //
+    // Settable only on create. Turning an existing block into a store, or the reverse, would move
+    // every record hanging off it into a place of the wrong kind -- and a block with a year of
+    // labour on it is not something anyone should be able to reclassify from a dropdown.
+    const kind = String(body.kind || "").trim().toLowerCase() === "store" ? "store" : "block"
     const requestedTenantId = body.tenantId
     tenantId = resolveRequestedTenantId(sessionUser, requestedTenantId, { fallbackToSessionTenant: true }) || sessionUser.tenantId
     const tenantContext = normalizeTenantContext(tenantId, sessionUser.role)
@@ -161,10 +172,10 @@ export async function POST(request: Request) {
       sql,
       tenantContext,
       sql`
-        INSERT INTO locations (tenant_id, name, code, estate, area_acres)
-        VALUES (${tenantId}, ${name}, ${code}, ${estate}, ${areaAcres})
+        INSERT INTO locations (tenant_id, name, code, estate, area_acres, kind)
+        VALUES (${tenantId}, ${name}, ${code}, ${estate}, ${areaAcres}, ${kind})
         ON CONFLICT (tenant_id, code) DO NOTHING
-        RETURNING id, name, code, estate, area_acres
+        RETURNING id, name, code, estate, area_acres, kind
       `,
     )
 
