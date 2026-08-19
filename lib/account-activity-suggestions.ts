@@ -55,7 +55,13 @@ export const ACCOUNT_ACTIVITY_SUGGESTIONS: AccountActivitySuggestion[] = [
   // second-largest activity after general permanent labour, and with Under Lopping it is 28% of
   // everything they spend on labour. Their writer went looking for it on his first morning on
   // the muster and the nearest thing in the list was "Arabica Shade Work".
-  { code: "145", reference: "Shade Lopping" },
+  // Shade management is four jobs, per the estate owner: plant or prune, on permanent shade
+  // trees or on the leguminous under-storey. All crop-neutral -- a shade tree is worked over
+  // whichever coffee is beneath it, and the deployment carries the block.
+  { code: "145", reference: "Shade Tree Pruning / Lopping" },
+  { code: "146", reference: "Shade Tree Planting" },
+  { code: "147", reference: "Dadap / Glyricidia Planting" },
+  { code: "148", reference: "Dadap / Glyricidia Pruning" },
   { code: "150", reference: "Drip line Maintenance" },
   { code: "151", reference: "Robusta Weeding" },
   { code: "152", reference: "Robusta Pruning, Handling" },
