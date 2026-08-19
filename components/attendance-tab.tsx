@@ -162,7 +162,22 @@ export default function AttendanceTab() {
   const [locations, setLocations] = useState<Array<{ id: string; name: string; code?: string | null }>>([])
   const [activities, setActivities] = useState<Array<{ code: string; reference?: string | null }>>([])
   const [assigningWorkerId, setAssigningWorkerId] = useState<string | null>(null)
+  // Sentinel for "the batch panel is saving", so the spinner has an id to match without
+  // pretending the work belongs to one particular worker.
+  const BATCH_SAVING = "__batch__"
   const [allocatingWorkerId, setAllocatingWorkerId] = useState<string | null>(null)
+  // Setting work for several people at once. The API has always taken an array of worker ids --
+  // it dedupes them and pluralises its own error messages -- but the UI only ever sent one, so a
+  // 22-person day meant 22 identical trips through the same panel.
+  //
+  // A separate MODE rather than a second meaning for the row tap. Outside it a tap marks present
+  // or absent; inside it a tap selects. Giving one gesture two meanings on a screen used with
+  // dirty hands in a field is how the wrong thing gets recorded, which is what the note above
+  // on `assignments` was already warning about.
+  const [batchMode, setBatchMode] = useState(false)
+  const [batchIds, setBatchIds] = useState<string[]>([])
+  const batchSet = useMemo(() => new Set(batchIds), [batchIds])
+  const exitBatch = useCallback(() => { setBatchMode(false); setBatchIds([]) }, [])
   const [editingAssignment, setEditingAssignment] = useState<LabourAssignment | null>(null)
 
   const weekDays = useMemo(() => getWeekDays(weekOffset), [weekOffset])
@@ -257,10 +272,13 @@ export default function AttendanceTab() {
   // owner's request. Returns whether it landed so the row can keep its dropdowns open on failure
   // instead of silently discarding what was typed.
   const handleAddAssignment = async (
-    workerId: string,
+    // One id, or several when the same job is being set for a group. The route has always taken
+    // an array; only this caller was passing a single-element one.
+    workerId: string | string[],
     payload: { id?: string; activityCode: string; locationId: string | null; dayFraction: number },
   ): Promise<boolean> => {
-    setAssigningWorkerId(workerId)
+    const workerIds = Array.isArray(workerId) ? workerId : [workerId]
+    setAssigningWorkerId(Array.isArray(workerId) ? BATCH_SAVING : workerId)
     try {
       // Presence is staged locally until Save, but the server will not accept work for anyone it
       // cannot see on the muster. Persist the roll first so ticking someone present and setting
@@ -286,7 +304,7 @@ export default function AttendanceTab() {
         : await fetch("/api/attendance/assignments", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ date: selectedDate, workerIds: [workerId], ...payload }),
+            body: JSON.stringify({ date: selectedDate, workerIds, ...payload }),
           })
       const data = await res.json().catch(() => ({}))
       if (!res.ok || !data?.success) throw new Error(data?.error || "Could not save the work")
@@ -636,7 +654,71 @@ export default function AttendanceTab() {
           </div>
         )}
 
-        
+
+        {/* Same job, several people -- the common shape of an estate day. Offered only once
+            somebody is present and there are codes to choose from, because before that it would
+            be a button that can only disappoint. */}
+        {!loading && presentWorkerIds.length > 1 && activities.length > 0 && (
+          batchMode ? (
+            <div className="flex flex-wrap items-center gap-2 rounded-2xl border border-sky-200 bg-sky-50 px-3 py-2.5 dark:border-sky-500/20 dark:bg-sky-500/10">
+              <span className="text-sm font-bold text-sky-900 dark:text-sky-200">
+                {batchIds.length === 0
+                  ? "Tap the people doing the same job"
+                  : `${batchIds.length} selected`}
+              </span>
+              <div className="ml-auto flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setBatchIds(workers.filter((w) => presentSet.has(w.id)).map((w) => w.id))}
+                  className="rounded-lg px-2 py-1 text-xs font-bold text-sky-700 active:bg-sky-100 dark:text-sky-300"
+                >
+                  Select all present
+                </button>
+                <button
+                  type="button"
+                  onClick={exitBatch}
+                  className="rounded-lg px-2 py-1 text-xs font-bold text-stone-500 active:bg-stone-100"
+                >
+                  Cancel
+                </button>
+              </div>
+              {batchIds.length > 0 && (
+                <div className="w-full">
+                  <WorkerAllocation
+                    key={`batch-${batchIds.length}`}
+                    workerEstate={null}
+                    locations={locations}
+                    activities={activities}
+                    saving={assigningWorkerId === BATCH_SAVING}
+                    editing={null}
+                    headcount={1}
+                    isGang={false}
+                    // Deliberately null: a group can hold people on different wages, so there is
+                    // no single rate to prefill. Each row is still costed from its own worker's
+                    // wage server-side -- typing an amount here overrides it for all of them,
+                    // which is the point when a whole group is on one contract price.
+                    workerRate={null}
+                    onAdd={async (payload) => {
+                      const ok = await handleAddAssignment(batchIds, payload)
+                      if (ok) exitBatch()
+                      return ok
+                    }}
+                    onClose={exitBatch}
+                  />
+                </div>
+              )}
+            </div>
+          ) : (
+            <button
+              type="button"
+              onClick={() => { setAllocatingWorkerId(null); setEditingAssignment(null); setBatchMode(true) }}
+              className="flex w-full items-center justify-center gap-2 rounded-2xl border-2 border-dashed border-sky-200 py-2.5 text-sm font-bold text-sky-700 transition-colors touch-manipulation active:bg-sky-50 dark:border-sky-500/30 dark:text-sky-400"
+            >
+              <Plus className="h-4 w-4" /> Set the same work for several people
+            </button>
+          )
+        )}
+
         {error && <p className="text-sm text-red-600 px-1">{error}</p>}
 
         {loading ? (
@@ -666,7 +748,15 @@ export default function AttendanceTab() {
             const record = recordByWorkerId.get(worker.id)
             const isBiometric = isPresent && record?.source === "biometric"
             const rows = assignmentsByWorker.get(worker.id) || []
-            const act = () => toggleWorker(worker.id)
+            const act = () =>
+              batchMode
+                ? setBatchIds((cur) =>
+                    cur.includes(worker.id) ? cur.filter((id) => id !== worker.id) : [...cur, worker.id],
+                  )
+                : toggleWorker(worker.id)
+            // Only someone present can be given work, so batch mode simply ignores the absent --
+            // the same rule the single-worker path already enforces server-side.
+            const batchSelected = batchMode && batchSet.has(worker.id)
             return (
               // Tapping anywhere on the row still toggles presence -- that is the whole point on a
               // phone. But the row is not itself a button: it contains a delete button, a dismiss
@@ -683,9 +773,13 @@ export default function AttendanceTab() {
                 className={cn(
                   "w-full overflow-hidden rounded-xl border-l-4 py-1.5 cursor-pointer",
                   "transition-colors touch-manipulation",
-                  isPresent
-                    ? "border-emerald-500 bg-emerald-50 dark:bg-emerald-500/10"
-                    : "border-transparent bg-white shadow-sm dark:bg-card",
+                  batchSelected
+                    ? "border-sky-500 bg-sky-50 ring-2 ring-sky-300 dark:bg-sky-500/10"
+                    : isPresent
+                      ? "border-emerald-500 bg-emerald-50 dark:bg-emerald-500/10"
+                      : "border-transparent bg-white shadow-sm dark:bg-card",
+                  // An absent worker cannot be given work, so it is dimmed rather than offered.
+                  batchMode && !isPresent && "opacity-40",
                 )}
               >
                 {/* One line per job. A worker with a split day gets two, and the name is written
