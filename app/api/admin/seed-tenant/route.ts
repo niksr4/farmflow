@@ -40,7 +40,6 @@ const seededInventoryUnits: Record<string, string> = {
   "NPK 19-19-19": "kg",
   "Diesel (L)": "L",
   "Fungicide (L)": "L",
-  "Jute Bags": "bags",
 }
 
 const daysAgo = (days: number) => {
@@ -245,17 +244,6 @@ export async function POST(request: Request) {
         total_cost: 83200,
       },
       {
-        days: 19,
-        locationId: mvLocationId,
-        item_type: "Jute Bags",
-        quantity: 450,
-        transaction_type: "restock",
-        notes: "Packaging replenishment",
-        user_id: seededBy,
-        price: 30,
-        total_cost: 13500,
-      },
-      {
         days: 15,
         locationId: hfLocationId,
         item_type: "Urea Fertilizer",
@@ -295,17 +283,6 @@ export async function POST(request: Request) {
         quantity: 22,
         transaction_type: "deplete",
         notes: "Canopy spray completed",
-        user_id: seededBy,
-        price: 0,
-        total_cost: 0,
-      },
-      {
-        days: 6,
-        locationId: pgLocationId,
-        item_type: "Jute Bags",
-        quantity: 85,
-        transaction_type: "deplete",
-        notes: "Dispatch packing usage",
         user_id: seededBy,
         price: 0,
         total_cost: 0,

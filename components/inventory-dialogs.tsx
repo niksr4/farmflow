@@ -18,6 +18,7 @@ import { LOCATION_UNASSIGNED, UNASSIGNED_LABEL } from "@/components/inventory-sy
 import type { InventoryItem, Transaction } from "@/lib/inventory-types"
 import type { LocationOption } from "@/components/inventory-system/types"
 import { formatLocationLabel } from "@/lib/location-label"
+import { inventoryUnitOptions, isLegacyInventoryUnit } from "@/lib/inventory-units"
 import { isRestockType } from "@/lib/inventory-edit-rules"
 
 // ── Shared types ─────────────────────────────────────────────────────────────
@@ -180,12 +181,17 @@ export default function InventoryDialogs(p: DialogProps) {
                 <Select value={p.newItemForm.unit} onValueChange={(v) => p.setNewItemForm((prev) => ({ ...prev, unit: v }))}>
                   <SelectTrigger id="new-item-unit" className="w-full"><SelectValue placeholder="Select unit" /></SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="kg">kg</SelectItem>
-                    <SelectItem value="bags">bags</SelectItem>
-                    <SelectItem value="L">L</SelectItem>
-                    <SelectItem value="units">units</SelectItem>
+                    {inventoryUnitOptions(p.newItemForm.unit).map((u) => (
+                      <SelectItem key={u} value={u}>{u}</SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
+                {isLegacyInventoryUnit(p.newItemForm.unit) && (
+                  <p className="text-xs text-amber-700">
+                    {p.newItemForm.unit} is no longer offered — a bag is a different weight for every commodity.
+                    Record the weight in kg instead.
+                  </p>
+                )}
               </div>
             </div>
             <div className="space-y-2">
@@ -349,7 +355,14 @@ export default function InventoryDialogs(p: DialogProps) {
               </div>
               <div className="space-y-2">
                 <FieldLabel htmlFor="edit-item-unit" label="Unit" tooltip="Common units are kg, bags, or liters." />
-                <Input id="edit-item-unit" value={p.inventoryEditForm.unit} onChange={(e) => p.setInventoryEditForm((prev) => ({ ...prev, unit: e.target.value }))} />
+                <Select value={p.inventoryEditForm.unit} onValueChange={(v) => p.setInventoryEditForm((prev) => ({ ...prev, unit: v }))}>
+                  <SelectTrigger id="edit-item-unit" className="w-full"><SelectValue placeholder="Select unit" /></SelectTrigger>
+                  <SelectContent>
+                    {inventoryUnitOptions(p.inventoryEditForm.unit).map((u) => (
+                      <SelectItem key={u} value={u}>{u}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
             </div>
             <div className="space-y-2">
