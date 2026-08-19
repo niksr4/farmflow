@@ -1365,7 +1365,10 @@ export default function AccountsPage({
     <WorkspacePageShell
       className="container mx-auto px-4 py-6 sm:p-6"
       badge="Finance workspace"
-      title="Accounts Management"
+      // "Costs" in the sidebar, the breadcrumb and the tab strip -- so "Costs & expenses" here.
+      // This screen was showing four names for itself at once: Costs, Costs & expenses, Accounts
+      // and Accounts Management, all visible without scrolling.
+      title="Costs & expenses"
       description="Track labour, expenses, and estate activity codes."
       accent="amber"
       stats={accountsShellStats}

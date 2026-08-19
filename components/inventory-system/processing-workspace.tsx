@@ -20,7 +20,10 @@ type Props = {
 }
 
 const VIEW_LABEL: Record<ProcessingView, string> = {
-  coffee: "Coffee Pulping",
+  // Two controls side by side must be named the same way. "Coffee Pulping" beside "Pepper
+  // Processing" reads as two different kinds of thing when they are the same tab's two halves.
+  // The prose beneath still says pulping, because that is the job.
+  coffee: "Coffee Processing",
   pepper: "Pepper Processing",
 }
 

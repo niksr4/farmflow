@@ -60,7 +60,10 @@ export function buildDashboardTabItems(input: DashboardTabItemsInput): {
     input.canShowAccounts
       ? {
           value: "accounts",
-          label: "Accounts",
+          // "Costs" everywhere. The desktop rail and the phone's bottom nav were reconciled
+          // earlier today; this tab strip was the third surface naming the same tab, and it is
+          // the one a mobile user actually reads while standing in the roll.
+          label: "Costs",
           icon: Users,
           subtabs: ["Daily Labour", "Non-Labour Expenses", "Cost Codes"],
         }

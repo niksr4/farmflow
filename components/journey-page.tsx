@@ -41,7 +41,7 @@ const MODULE_PATHWAYS = [
   {
     title: "Estate Owner Command",
     description: "Best for estates running end-to-end operations with complete lot and cash visibility.",
-    modules: ["Inventory", "Processing", "Dispatch", "Sales", "Season View", "Accounts", "Activity Log"],
+    modules: ["Inventory", "Processing", "Dispatch", "Sales", "Season View", "Costs", "Activity Log"],
   },
   {
     title: "Estate + Curing Works",
@@ -51,7 +51,7 @@ const MODULE_PATHWAYS = [
   {
     title: "Inventory + Accounts Essentials",
     description: "Best for estates starting with stock control and finance discipline.",
-    modules: ["Inventory", "Accounts", "Transaction History"],
+    modules: ["Inventory", "Costs", "Transaction History"],
   },
 ]
 

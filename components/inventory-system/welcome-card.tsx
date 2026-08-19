@@ -27,7 +27,7 @@ export default function WelcomeCard({
         <div>
           <CardTitle>Welcome to your estate workspace</CardTitle>
           <CardDescription>
-            Start by adding locations and logging your first pulping output. Everything else builds on those
+            Start by adding your blocks and logging your first processing output. Everything else builds on those
             records.
           </CardDescription>
         </div>

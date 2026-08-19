@@ -181,7 +181,7 @@ const getOperationsOverviewLabels = (enabledModules: string[]) =>
 
 const getFinanceEntryLabels = (enabledModules: string[]) =>
   compact([
-    hasModule(enabledModules, "accounts") ? "Accounts" : null,
+    hasModule(enabledModules, "accounts") ? "Costs" : null,
     hasModule(enabledModules, "billing") ? "Billing" : null,
     hasModule(enabledModules, "receivables") ? "Receivables" : null,
     hasModule(enabledModules, "market-pricing") ? "Market Rates" : null,
@@ -258,7 +258,7 @@ const buildDecisionRules = (
 ) => {
   const operationsEntryPoints = getOperationsOverviewLabels(enabledModules)
   const financeEntryPoints = compact([
-    hasModule(enabledModules, "accounts") ? "Accounts" : null,
+    hasModule(enabledModules, "accounts") ? "Costs" : null,
     hasModule(enabledModules, "billing") ? "Billing" : null,
     hasModule(enabledModules, "receivables") ? "Receivables" : null,
   ])
@@ -280,7 +280,7 @@ const buildDecisionRules = (
     },
     {
       title: "Money was spent, paid, billed, or collected",
-      answer: `Go to Finance. Start with ${joinReadableList(financeEntryPoints) || "Accounts"}.`,
+      answer: `Go to Finance. Start with ${joinReadableList(financeEntryPoints) || "Costs"}.`,
     },
     hasModule(enabledModules, "market-pricing")
       ? {
@@ -475,7 +475,7 @@ const buildManualGroups = (
   const financeItems = compact([
     hasModule(enabledModules, "accounts")
       ? {
-          name: "Accounts",
+          name: "Costs",
           whatItIs: "Daily Labour, Expenses, Attendance, and Cost Codes always live here. Turn on Picking Log for piece-rate picking pay, or Labour Management for a full Worker Roster plus an advances/deductions Ledger and Payroll. Tap Cost Patterns for a spending analysis when you need it.",
           openItWhen: "People worked, money was spent, or you need to maintain accounting categories.",
           doneLooksLike: "Costs are captured with enough detail to explain the season and labour use. Cost Patterns shows where money is going without cluttering the entry view.",
