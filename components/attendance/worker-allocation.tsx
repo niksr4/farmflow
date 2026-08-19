@@ -69,7 +69,14 @@ export default function WorkerAllocation({
   onClose: () => void
 }) {
   const [activityCode, setActivityCode] = useState(editing?.activityCode ?? "")
-  const [locationId, setLocationId] = useState(editing?.locationId ?? NO_BLOCK)
+  // Empty, not NO_BLOCK. Defaulting to "no particular block" made the unattributed answer the
+  // one you got by touching nothing, and attribution is the whole reason the muster exists --
+  // Laxmi carry 77% of a year's labour with no block on it, recorded through a form that made
+  // skipping the field the path of least resistance.
+  //
+  // "No particular block" stays in the list, because maintenance and carpentry genuinely are not
+  // block work and forcing a block there would just make people lie. It simply has to be chosen.
+  const [locationId, setLocationId] = useState(editing?.locationId ?? "")
   const [dayFraction, setDayFraction] = useState(editing?.dayFraction ?? 1)
   const [payMultiplier, setPayMultiplier] = useState(1)
   // Blank means "whatever this work pays"; typing here prices this one entry differently without
@@ -136,7 +143,7 @@ export default function WorkerAllocation({
     setBusy(false)
     if (ok) {
       setActivityCode("")
-      setLocationId(NO_BLOCK)
+      setLocationId("")
       setDayFraction(1)
       onClose()
     }
@@ -183,7 +190,9 @@ export default function WorkerAllocation({
       </Select>
 
       <Select value={locationId} onValueChange={setLocationId}>
-        <SelectTrigger aria-label="Block" className="h-9 text-xs"><SelectValue /></SelectTrigger>
+        <SelectTrigger aria-label="Block" className="h-9 text-xs">
+          <SelectValue placeholder="Which block?" />
+        </SelectTrigger>
         <SelectContent>
           <SelectItem value={NO_BLOCK}>No particular block</SelectItem>
           {grouped.mine.length > 0 && (
@@ -292,7 +301,7 @@ export default function WorkerAllocation({
       <div className="flex gap-1.5">
         <button
           type="button"
-          disabled={!activityCode || busy || saving}
+          disabled={!activityCode || !locationId || busy || saving}
           onClick={submit}
           className="h-9 flex-1 rounded-lg bg-emerald-600 text-xs font-bold text-white disabled:opacity-40 touch-manipulation"
         >

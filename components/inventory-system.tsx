@@ -377,6 +377,37 @@ export default function InventorySystem() {
   )
   // Built from blockLocations, not the raw list: this feeds the location dropdowns across
   // processing, dispatch, labour, expenses and sales, and none of them mean the store.
+  // Only fetched while an estate is actually selected, because that is the only moment the
+  // unattributed pool distorts what is on screen. See app/api/dashboard/estate-attribution.
+  const [estateAttribution, setEstateAttribution] = useState<{
+    amount: number
+    percent: number
+    rows: number
+  } | null>(null)
+
+  useEffect(() => {
+    if (!canSelectEstate || !selectedEstate) {
+      setEstateAttribution(null)
+      return
+    }
+    let ignore = false
+    ;(async () => {
+      try {
+        const res = await fetch("/api/dashboard/estate-attribution")
+        const data = await res.json().catch(() => ({}))
+        if (ignore || !data?.success) return
+        setEstateAttribution({
+          amount: Number(data.unattributed) || 0,
+          percent: Number(data.unattributedPercent) || 0,
+          rows: Number(data.unattributedRows) || 0,
+        })
+      } catch {
+        // A banner that cannot say how much simply says less; it must never take the tab down.
+      }
+    })()
+    return () => { ignore = true }
+  }, [canSelectEstate, selectedEstate])
+
   const estateFilteredLocations = useMemo(
     () => (canSelectEstate && selectedEstate ? blockLocations.filter((loc) => loc.estate === selectedEstate) : blockLocations),
     [canSelectEstate, selectedEstate, blockLocations],
@@ -4182,7 +4213,11 @@ export default function InventorySystem() {
         )}
 
         {canSelectEstate && selectedEstate && (
-          <EstateFilterBanner estate={selectedEstate} onShowAll={() => setSelectedEstate(null)} />
+          <EstateFilterBanner
+            estate={selectedEstate}
+            onShowAll={() => setSelectedEstate(null)}
+            unattributed={estateAttribution}
+          />
         )}
 
         {showWelcome && (
