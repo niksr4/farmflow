@@ -26,9 +26,24 @@ await page.locator("input#password").pressSequentially("MorningFlow!2026", { del
 await page.click('button[type="submit"]')
 await page.waitForLoadState("networkidle", { timeout: 30000 })
 
-// A code the muster is actually using.
-const used = await sql`SELECT activity_code, COUNT(*)::int n FROM labour_assignments
-                       WHERE tenant_id=${T} GROUP BY activity_code ORDER BY n DESC LIMIT 1`
+// A code the muster is actually using. Seeded if there is none, rather than assumed: the other
+// harnesses clean up their allocations, so whether this one finds a row depends on what ran
+// before it -- and a test that only works in a particular order is a test that will eventually
+// be believed when it is wrong.
+let used = await sql`SELECT activity_code, COUNT(*)::int n FROM labour_assignments
+                     WHERE tenant_id=${T} GROUP BY activity_code ORDER BY n DESC LIMIT 1`
+let seeded = false
+if (!used.length) {
+  const w = (await sql`SELECT id FROM attendance_workers WHERE tenant_id=${T} AND active ORDER BY full_name LIMIT 1`)[0]
+  const c = (await sql`SELECT code FROM account_activities WHERE tenant_id=${T} ORDER BY code LIMIT 1`)[0]
+  const l = (await sql`SELECT id FROM locations WHERE tenant_id=${T} ORDER BY name LIMIT 1`)[0]
+  const d = (await sql`SELECT COALESCE(MAX(assignments_from), CURRENT_DATE)::text v FROM tenant_labour_entry_mode WHERE tenant_id=${T}`)[0].v.slice(0,10)
+  await sql`INSERT INTO labour_assignments (tenant_id, worker_id, work_date, activity_code, location_id, headcount, day_fraction, rate)
+            VALUES (${T}, ${w.id}, ${d}::date, ${c.code}, ${l.id}, 1, 1, 600)`
+  used = await sql`SELECT activity_code, COUNT(*)::int n FROM labour_assignments
+                   WHERE tenant_id=${T} GROUP BY activity_code ORDER BY n DESC LIMIT 1`
+  seeded = true
+}
 console.log(`\nmuster-used code: ${used[0]?.activity_code} (${used[0]?.n} allocations)\n`)
 
 console.log("== 1. renaming a code is refused ==")
@@ -67,6 +82,7 @@ const row = (listBody.activities || []).find((a) => a.code === used[0].activity_
 check(Number(row?.assignment_count) === used[0].n,
   `assignment_count = ${row?.assignment_count}, muster rows = ${used[0].n}`)
 
+if (seeded) await sql`DELETE FROM labour_assignments WHERE tenant_id=${T} AND activity_code=${used[0].activity_code}`
 console.log(failures === 0 ? "\nPASS -- codes are stable, descriptions are not, the muster is counted\n" : `\n${failures} FAILURE(S)\n`)
 await browser.close()
 process.exit(failures === 0 ? 0 : 1)

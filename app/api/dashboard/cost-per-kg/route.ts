@@ -105,8 +105,11 @@ export async function GET(request: Request) {
         sql!`
           SELECT
             COALESCE(SUM(revenue), 0) AS total_revenue,
+            -- booked_revenue already resolves kgs_received/kgs/weight_kgs/kgs_sent into one kgs
+            -- column; asking for them here is what made this route 500. Bags stay, because bag
+            -- weight is a per-tenant setting the view cannot know.
             COALESCE(SUM(
-              COALESCE(NULLIF(kgs_received, 0), NULLIF(kgs, 0), NULLIF(weight_kgs, 0), NULLIF(kgs_sent, 0), bags_sold * ${bagWeightKg})
+              COALESCE(NULLIF(kgs, 0), bags_sold * ${bagWeightKg})
             ), 0) AS total_sold_kg
           -- booked_revenue: cost per kg must divide by everything sold, pepper included. scripts/121.
           FROM booked_revenue
