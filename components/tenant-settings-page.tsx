@@ -211,6 +211,7 @@ export default function TenantSettingsPage() {
   const [editingLocationEstate, setEditingLocationEstate] = useState("")
   const [editingLocationArea, setEditingLocationArea] = useState("")
   const [isUpdatingLocationId, setIsUpdatingLocationId] = useState<string | null>(null)
+  const [isDeletingLocationId, setIsDeletingLocationId] = useState<string | null>(null)
 
   const [privacyStatus, setPrivacyStatus] = useState<PrivacyStatus | null>(null)
   const [privacyError, setPrivacyError] = useState<string | null>(null)
@@ -956,6 +957,29 @@ export default function TenantSettingsPage() {
     setEditingLocationEstate("")
   }
 
+  // Deleting a block is refused by the server the moment anything references it, and the refusal
+  // names what is using it. So the confirm here is about intent, not safety -- the estate is
+  // being asked "did you mean this one", not "are you sure you want to lose a year of records".
+  const handleDeleteLocation = async (location: LocationRow) => {
+    if (!window.confirm(`Remove the block "${location.name}"? This only works if nothing has been recorded against it.`)) return
+    setIsDeletingLocationId(location.id)
+    try {
+      const response = await fetch(`/api/locations?id=${encodeURIComponent(location.id)}`, { method: "DELETE" })
+      const data = await response.json().catch(() => ({}))
+      if (!response.ok || !data?.success) throw new Error(data?.error || "Could not remove the block")
+      toast({ title: "Block removed", description: `"${location.name}" is gone.` })
+      await loadLocations()
+    } catch (error: unknown) {
+      toast({
+        title: "Kept it",
+        description: error instanceof Error ? error.message : "Could not remove the block",
+        variant: "destructive",
+      })
+    } finally {
+      setIsDeletingLocationId(null)
+    }
+  }
+
   const handleUpdateLocation = async () => {
     if (!editingLocationId) return
     if (!editingLocationName.trim()) {
@@ -1389,6 +1413,8 @@ export default function TenantSettingsPage() {
                     onEditingLocationEstateChange={setEditingLocationEstate}
                     onUpdateLocation={handleUpdateLocation}
                     onStartEditLocation={startEditLocation}
+                    onDeleteLocation={handleDeleteLocation}
+                    isDeletingLocationId={isDeletingLocationId}
                     onCancelEditLocation={cancelEditLocation}
                   />
                 ),

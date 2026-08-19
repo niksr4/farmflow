@@ -284,3 +284,126 @@ export async function PATCH(request: Request) {
     return NextResponse.json({ success: false, error: sanitizeRouteError(error, "Failed to update location") }, { status: 500 })
   }
 }
+
+/**
+ * Delete a block.
+ *
+ * Refused outright if anything at all references it. That is not caution for its own sake --
+ * processing_records and pepper_records are ON DELETE CASCADE, so deleting a block that has been
+ * used would silently destroy harvest records (HoneyFarm has 56 processing rows sitting on one
+ * block), and picking_records carries a location_id with no foreign key at all, so those would
+ * be left pointing at an id that no longer exists.
+ *
+ * Every referencing table is checked, including the ones the database would not stop us on. A
+ * block with history is not deletable at any point in the future; the reason to have this at all
+ * is the blocks nobody ever used -- a mistyped name, a duplicate, the six empty ones on an estate
+ * that set itself up and never recorded against them.
+ */
+export async function DELETE(request: Request) {
+  let tenantId: string | null = null
+  try {
+    const sessionUser = await requireAnyModuleAccess(LOCATION_MODULES, await requireSessionUser())
+    try {
+      requireAdminRole(sessionUser.role)
+    } catch {
+      return NextResponse.json({ success: false, error: "Insufficient role" }, { status: 403 })
+    }
+
+    const { searchParams } = new URL(request.url)
+    const id = String(searchParams.get("id") || "").trim()
+    if (!id) {
+      return NextResponse.json({ success: false, error: "Block id is required" }, { status: 400 })
+    }
+
+    tenantId = resolveRequestedTenantId(sessionUser, null)
+    const tenantContext = normalizeTenantContext(tenantId, sessionUser.role)
+
+    const existing = await runTenantQuery(
+      sql,
+      tenantContext,
+      sql`SELECT id, name, code FROM locations WHERE id = ${id}::uuid AND tenant_id = ${tenantContext.tenantId} LIMIT 1`,
+    )
+    if (!existing?.length) {
+      return NextResponse.json({ success: false, error: "Block not found" }, { status: 404 })
+    }
+
+    // Ordered so the message names the thing an estate cares about most first.
+    const USERS_OF_A_BLOCK: ReadonlyArray<{ table: string; label: string }> = [
+      { table: "processing_records", label: "processing records" },
+      { table: "pepper_records", label: "pepper records" },
+      { table: "labour_assignments", label: "muster entries" },
+      { table: "labor_transactions", label: "labour entries" },
+      { table: "expense_transactions", label: "expenses" },
+      { table: "picking_records", label: "picking records" },
+      { table: "dispatch_records", label: "dispatches" },
+      { table: "sales_records", label: "sales" },
+      { table: "other_sales_records", label: "other sales" },
+      { table: "transaction_history", label: "stock movements" },
+      { table: "current_inventory", label: "stock balances" },
+      { table: "journal_entries", label: "journal entries" },
+      { table: "attendance_workers", label: "workers based here" },
+    ]
+
+    const uses: string[] = []
+    for (const { table, label } of USERS_OF_A_BLOCK) {
+      try {
+        const rows = await runTenantQuery(
+          sql,
+          tenantContext,
+          sql.query(
+            `SELECT COUNT(*)::int AS count FROM "${table}" WHERE tenant_id = $1 AND location_id = $2::uuid`,
+            [tenantContext.tenantId, id],
+          ),
+        )
+        const count = Number((rows as any)?.[0]?.count) || 0
+        if (count > 0) uses.push(`${count} ${label}`)
+      } catch (error) {
+        // A tenant on an older schema may genuinely not have one of these tables. Anything else
+        // is rethrown -- swallowing it would turn "I could not check" into "nothing uses this".
+        const message = String((error as any)?.message || "")
+        if (!/relation .* does not exist/.test(message)) throw error
+      }
+    }
+
+    if (uses.length > 0) {
+      return NextResponse.json(
+        {
+          success: false,
+          error:
+            `"${existing[0].name}" is used by ${uses.join(", ")}, so deleting it would take that history with it. ` +
+            `Rename it instead if it is wrong, or leave it — an unused block costs nothing.`,
+          uses,
+        },
+        { status: 409 },
+      )
+    }
+
+    await runTenantQuery(
+      sql,
+      tenantContext,
+      sql`DELETE FROM locations WHERE id = ${id}::uuid AND tenant_id = ${tenantContext.tenantId}`,
+    )
+
+    await logAuditEvent(sql, sessionUser, {
+      action: "delete",
+      entityType: "locations",
+      entityId: id,
+      before: existing[0] ?? null,
+    })
+
+    return NextResponse.json({ success: true })
+  } catch (error: any) {
+    console.error("Error deleting location:", error)
+    if (isModuleAccessError(error)) {
+      return NextResponse.json({ success: false, error: "Module access disabled" }, { status: 403 })
+    }
+    await logRouteMutationFailure({
+      tenantId,
+      source: "locations-api",
+      endpoint: "/api/locations",
+      action: "delete_location",
+      error,
+    })
+    return NextResponse.json({ success: false, error: sanitizeRouteError(error, "Failed to delete block") }, { status: 500 })
+  }
+}

@@ -75,6 +75,8 @@ type LocationsSectionProps = {
   onEditingLocationEstateChange: (value: string) => void
   onUpdateLocation: () => void
   onStartEditLocation: (location: LocationRow) => void
+  onDeleteLocation: (location: LocationRow) => void
+  isDeletingLocationId: string | null
   onCancelEditLocation: () => void
 }
 
@@ -100,6 +102,8 @@ export function LocationsSection({
   onEditingLocationEstateChange,
   onUpdateLocation,
   onStartEditLocation,
+  onDeleteLocation,
+  isDeletingLocationId,
   onCancelEditLocation,
 }: LocationsSectionProps) {
   // Estates aren't a separate table -- they're just whatever distinct, non-blank values exist
@@ -340,9 +344,24 @@ export function LocationsSection({
                               </Button>
                             </div>
                           ) : (
-                            <Button size="sm" variant="outline" onClick={() => onStartEditLocation(location)}>
-                              Edit
-                            </Button>
+                            <div className="flex gap-2">
+                              <Button size="sm" variant="outline" onClick={() => onStartEditLocation(location)}>
+                                Edit
+                              </Button>
+                              {/* Offered on every block. The server refuses any that carries
+                                  history and says what is using it, which is a better answer than
+                                  a hidden button -- "why can I not remove this" is answerable,
+                                  "where is the delete" is not. */}
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                className="text-destructive hover:bg-destructive/10 hover:text-destructive"
+                                onClick={() => onDeleteLocation(location)}
+                                disabled={isDeletingLocationId === location.id}
+                              >
+                                {isDeletingLocationId === location.id ? "Removing..." : "Delete"}
+                              </Button>
+                            </div>
                           )}
                         </TableCell>
                       </TableRow>
