@@ -1059,15 +1059,18 @@ export default function InventorySystem() {
     }
   }, [locations])
 
+  // Stock moves in and out of a STORE. Checked against storeLocations, not the whole list --
+  // against the whole list a tenant with one block and no store would have seated its stock
+  // movements on the block, which is the confusion scripts/128 exists to end.
   useEffect(() => {
     if (
       transactionLocationId !== LOCATION_UNASSIGNED &&
       transactionLocationId !== LOCATION_ALL &&
-      !locations.find((loc) => loc.id === transactionLocationId)
+      !storeLocations.find((loc) => loc.id === transactionLocationId)
     ) {
-      setTransactionLocationId(locations.length === 1 ? locations[0].id : LOCATION_UNASSIGNED)
+      setTransactionLocationId(storeLocations.length === 1 ? storeLocations[0].id : LOCATION_UNASSIGNED)
     }
-  }, [locations, transactionLocationId])
+  }, [storeLocations, transactionLocationId])
 
   // load initial data
   const refreshData = useCallback(async (_force = false) => {
