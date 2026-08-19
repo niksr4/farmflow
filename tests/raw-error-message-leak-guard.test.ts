@@ -80,8 +80,6 @@ const KNOWN_RAW_ERROR_LEAKS = [
   "app/api/season-summary/route.ts",
   "app/api/tenant-modules/route.ts",
   "app/api/transactions-neon/batch/route.ts",
-  "app/api/transactions-neon/[id]/route.ts",
-  "app/api/transactions-neon/update/route.ts",
   "app/api/weather/rainfall-context/route.ts",
   "app/api/yield-forecast/route.ts",
 ].sort()

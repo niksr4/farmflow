@@ -6,6 +6,7 @@ import { recalculateInventoryForItem } from "@/lib/server/inventory-recalc"
 import { canDeleteModule } from "@/lib/permissions"
 import { logAuditEvent } from "@/lib/server/audit-log"
 import { logRouteMutationFailure } from "@/lib/server/route-error-events"
+import { sanitizeRouteError } from "@/lib/server/sanitize-route-error"
 
 export const dynamic = "force-dynamic"
 
@@ -79,8 +80,11 @@ export async function DELETE(_request: NextRequest, context: RouteContext) {
       action: "delete_transaction",
       error,
     })
+    // A raw Postgres message here reaches the browser: column and constraint names, SQL syntax,
+    // sometimes the connection string's host. The full error is already on its way to Sentry via
+    // logRouteMutationFailure above, so nothing is lost by giving the client the sanitised form.
     return NextResponse.json(
-      { success: false, message: error.message || "Failed to delete transaction" },
+      { success: false, message: sanitizeRouteError(error, "Failed to delete transaction") },
       { status: 500 },
     )
   }

@@ -9,6 +9,7 @@ import { logAuditEvent } from "@/lib/server/audit-log"
 import { normalizeInventoryItemType } from "@/lib/inventory-item-type"
 import { requiresRestockUnitPrice } from "@/lib/inventory-edit-rules"
 import { logRouteMutationFailure } from "@/lib/server/route-error-events"
+import { sanitizeRouteError } from "@/lib/server/sanitize-route-error"
 
 export const dynamic = "force-dynamic"
 
@@ -366,12 +367,12 @@ export async function PUT(request: NextRequest) {
       action: "update_transaction",
       error,
     })
+    // Was leaking twice over -- the raw message, and error.toString() which adds the error class
+    // name in front of it. The `error` field is dropped rather than sanitised: two fields saying
+    // the same thing is how one of them gets forgotten the next time this is edited, and the
+    // client only ever read `message`. Full detail still reaches Sentry above.
     return NextResponse.json(
-      {
-        success: false,
-        message: error.message || "Failed to update transaction",
-        error: error.toString(),
-      },
+      { success: false, message: sanitizeRouteError(error, "Failed to update transaction") },
       { status: 500 },
     )
   }
