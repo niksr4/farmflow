@@ -18,6 +18,7 @@
 import { useMemo, useState } from "react"
 import { Loader2 } from "lucide-react"
 import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { Input } from "@/components/ui/input"
 import { cn } from "@/lib/utils"
 
 type LocationOption = { id: string; name: string; code?: string | null; estate?: string | null }
@@ -94,6 +95,21 @@ export default function WorkerAllocation({
       ? null
       : effectiveRate * heads * dayFraction * payMultiplier + extras
 
+  const [workQuery, setWorkQuery] = useState("")
+
+  // Matches the code OR its description, and on every word typed rather than as a prefix, so
+  // "shade lop" finds "134 Arabica Shade Work" and "lopping" finds it too. An estate's name for
+  // a job rarely matches the code list word for word -- Medappa call it Shade Lopping, the list
+  // calls it Arabica Shade Work -- and a prefix match would find neither.
+  const matchingActivities = useMemo(() => {
+    const terms = workQuery.trim().toLowerCase().split(/\s+/).filter(Boolean)
+    if (terms.length === 0) return activities
+    return activities.filter((a) => {
+      const haystack = `${a.code} ${a.reference ?? ""}`.toLowerCase()
+      return terms.every((t) => haystack.includes(t))
+    })
+  }, [activities, workQuery])
+
   // Own estate first, then everywhere else. Nothing is hidden -- workers get moved across estates
   // as the work demands, and a picker that forbids it just sends the truth back into free text.
   const grouped = useMemo(() => {
@@ -132,14 +148,37 @@ export default function WorkerAllocation({
       onClick={(e) => e.stopPropagation()}
       onKeyDown={(e) => e.stopPropagation()}
     >
-      <Select value={activityCode} onValueChange={setActivityCode}>
+      {/* Searchable, because the list is 80 codes long on a real estate and this is used on a
+          phone, standing in a field, at 7am. Medappa's writer asked for "Shade Looping" on day
+          one and could not find it -- the estate's word for the job is not always the word in
+          the code list, and scrolling eighty items to discover that is not a search. Matching on
+          the description as well as the code is what makes "shade" reach 134 Arabica Shade Work. */}
+      <Select value={activityCode} onValueChange={setActivityCode} onOpenChange={(open) => !open && setWorkQuery("")}>
         <SelectTrigger aria-label="Work" className="h-9 text-xs"><SelectValue placeholder="What work?" /></SelectTrigger>
         <SelectContent>
-          {activities.map((a) => (
-            <SelectItem key={a.code} value={a.code}>
-              {a.code}{a.reference ? ` — ${a.reference}` : ""}
-            </SelectItem>
-          ))}
+          <div className="sticky top-0 z-10 bg-popover px-1.5 pb-1.5 pt-1">
+            <Input
+              autoFocus
+              value={workQuery}
+              onChange={(e) => setWorkQuery(e.target.value)}
+              // Radix Select types ahead to jump between items; without this the search box
+              // never receives the keystrokes it is asking for.
+              onKeyDown={(e) => e.stopPropagation()}
+              placeholder="Search work or code…"
+              className="h-8 text-xs"
+            />
+          </div>
+          {matchingActivities.length === 0 ? (
+            <p className="px-3 py-4 text-center text-xs text-muted-foreground">
+              No work matches “{workQuery}”. Add it under Costs → Codes.
+            </p>
+          ) : (
+            matchingActivities.map((a) => (
+              <SelectItem key={a.code} value={a.code}>
+                {a.code}{a.reference ? ` — ${a.reference}` : ""}
+              </SelectItem>
+            ))
+          )}
         </SelectContent>
       </Select>
 
