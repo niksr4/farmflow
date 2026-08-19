@@ -143,6 +143,11 @@ export default function AttendanceTab() {
   const [hasBiometricDevices, setHasBiometricDevices] = useState(false)
   const [newWorkerRate, setNewWorkerRate] = useState("")
   const [showAddWorker, setShowAddWorker] = useState(false)
+  // A contract crew is one roster row with a headcount, not N invented people. Until now the
+  // muster could display and allocate a gang but nothing could create one, so an estate whose
+  // Accounts labour form had been retired at cutover simply could not record contract labour.
+  const [newWorkerIsGang, setNewWorkerIsGang] = useState(false)
+  const [newWorkerHeadcount, setNewWorkerHeadcount] = useState("")
   const [showSummary, setShowSummary] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [autoSelectedDate, setAutoSelectedDate] = useState<string | null>(null)
@@ -445,6 +450,8 @@ export default function AttendanceTab() {
           name: newWorkerName,
           dailyRate: newWorkerRate.trim() ? Number(newWorkerRate) : undefined,
           deviceUserCode: newWorkerCode.trim() || undefined,
+          kind: newWorkerIsGang ? "gang" : "individual",
+          headcount: newWorkerIsGang ? Number(newWorkerHeadcount) : undefined,
         }),
       })
       const data = await res.json().catch(() => ({}))
@@ -453,6 +460,8 @@ export default function AttendanceTab() {
       setNewWorkerName("")
       setNewWorkerRate("")
       setNewWorkerCode("")
+      setNewWorkerIsGang(false)
+      setNewWorkerHeadcount("")
       setShowAddWorker(false)
       setAutoSelectedDate(null)
       await loadSnapshot(selectedDate)
@@ -917,26 +926,64 @@ export default function AttendanceTab() {
             className="w-full flex items-center justify-center gap-2 rounded-2xl border-2 border-dashed border-stone-200 py-4 text-sm font-semibold text-stone-400 hover:border-stone-300 transition-colors touch-manipulation"
           >
             <PlusCircle className="h-4 w-4" />
-            Add employee
+            Add employee or crew
           </button>
         ) : (
           <form
             onSubmit={handleAddWorker}
             className="space-y-2 rounded-2xl border border-stone-200 bg-white px-3 py-2.5"
           >
+            {/* Person or crew. A contract gang -- "Rathi & Team" -- is a third of the headcount on
+                the days it turns up, and putting it on the roster as one row with a headcount is
+                what lets the muster cost it without inventing nine names that would then need
+                marking present individually. */}
+            <div className="flex items-center gap-1 rounded-xl bg-stone-100 p-0.5 dark:bg-stone-800">
+              {[
+                { gang: false, label: "Person" },
+                { gang: true, label: "Contract crew" },
+              ].map((opt) => (
+                <button
+                  key={opt.label}
+                  type="button"
+                  onClick={() => setNewWorkerIsGang(opt.gang)}
+                  disabled={isAddingWorker}
+                  className={cn(
+                    "flex-1 rounded-lg px-2 py-1.5 text-xs font-bold transition-colors",
+                    newWorkerIsGang === opt.gang
+                      ? "bg-white text-stone-900 shadow-sm dark:bg-stone-950 dark:text-stone-100"
+                      : "text-stone-500",
+                  )}
+                >
+                  {opt.label}
+                </button>
+              ))}
+            </div>
+
             <Input
               value={newWorkerName}
               onChange={(e) => setNewWorkerName(e.target.value)}
-              placeholder="Employee name"
+              placeholder={newWorkerIsGang ? "Crew name, e.g. Rathi & Team" : "Employee name"}
               className="h-9 text-base border-0 bg-transparent p-0 focus-visible:ring-0"
               autoFocus
               disabled={isAddingWorker}
             />
             <div className="flex items-center gap-2">
+              {newWorkerIsGang && (
+                <Input
+                  value={newWorkerHeadcount}
+                  onChange={(e) => setNewWorkerHeadcount(e.target.value)}
+                  placeholder="How many"
+                  inputMode="numeric"
+                  type="number"
+                  min={1}
+                  className="w-24 h-9 text-base"
+                  disabled={isAddingWorker}
+                />
+              )}
               <Input
                 value={newWorkerRate}
                 onChange={(e) => setNewWorkerRate(e.target.value)}
-                placeholder="Rate/day ₹ (optional)"
+                placeholder={newWorkerIsGang ? "Rate/head ₹" : "Rate/day ₹ (optional)"}
                 inputMode="decimal"
                 type="number"
                 min={0}
@@ -960,11 +1007,15 @@ export default function AttendanceTab() {
                 type="submit"
                 size="sm"
                 className="h-9 rounded-xl bg-emerald-700 hover:bg-emerald-800"
-                disabled={isAddingWorker || !newWorkerName.trim()}
+                disabled={
+                  isAddingWorker ||
+                  !newWorkerName.trim() ||
+                  (newWorkerIsGang && !(Number(newWorkerHeadcount) >= 1))
+                }
               >
                 {isAddingWorker ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : "Add"}
               </Button>
-              <button type="button" onClick={() => { setShowAddWorker(false); setNewWorkerName(""); setNewWorkerRate(""); setNewWorkerCode("") }}
+              <button type="button" onClick={() => { setShowAddWorker(false); setNewWorkerName(""); setNewWorkerRate(""); setNewWorkerCode(""); setNewWorkerIsGang(false); setNewWorkerHeadcount("") }}
                 className="text-xs text-stone-400 px-1 shrink-0">Cancel</button>
             </div>
           </form>

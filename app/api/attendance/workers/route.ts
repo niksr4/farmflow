@@ -33,6 +33,21 @@ export async function POST(request: Request) {
 
     const body = await request.json().catch(() => ({}))
     const gender = readGender(body?.gender) ?? null
+
+    // A contract gang is one roster row with a headcount, not N invented people. The columns
+    // arrived in scripts/115 with "Rathi & Team" as the worked example and the muster has always
+    // been able to display and allocate one -- but nothing could ever CREATE one, so a tenant
+    // whose Accounts labour form had been retired at cutover had no way to record contract labour
+    // at all. Medappa hit exactly that on their first morning.
+    const kind = String(body?.kind || "").trim().toLowerCase() === "gang" ? "gang" : "individual"
+    const rawHeadcount = Number(body?.headcount)
+    const headcount = kind === "gang" ? Math.floor(rawHeadcount) : null
+    if (kind === "gang" && (!Number.isFinite(rawHeadcount) || (headcount as number) < 1)) {
+      return NextResponse.json(
+        { success: false, error: "A crew needs a headcount of at least 1 — how many people it normally brings." },
+        { status: 400 },
+      )
+    }
     const name = normalizeAttendanceWorkerName(body?.name)
     if (!name) {
       return NextResponse.json({ success: false, error: "Employee name is required" }, { status: 400 })
@@ -102,6 +117,8 @@ export async function POST(request: Request) {
           worker_type,
           daily_rate,
           gender,
+          kind,
+          headcount,
           location_id,
           estate,
           device_user_code,
@@ -116,6 +133,8 @@ export async function POST(request: Request) {
           ${workerType},
           ${dailyRate},
           ${gender},
+          ${kind},
+          ${headcount},
           ${locationId},
           ${estate},
           ${deviceUserCode},
@@ -124,8 +143,8 @@ export async function POST(request: Request) {
           ${bankAccount},
           ${bankIfsc}
         )
-        RETURNING id, full_name, worker_type, daily_rate, gender, location_id, estate, device_user_code,
-                  phone, bank_name, bank_account, bank_ifsc, created_at
+        RETURNING id, full_name, worker_type, daily_rate, gender, kind, headcount, location_id, estate,
+                  device_user_code, phone, bank_name, bank_account, bank_ifsc, created_at
       `,
     )
 
@@ -157,6 +176,8 @@ export async function POST(request: Request) {
             workerType: worker.worker_type ? String(worker.worker_type) : null,
             dailyRate: worker.daily_rate != null ? Number(worker.daily_rate) : null,
             gender: worker.gender ? String(worker.gender) : null,
+            kind: worker.kind ? String(worker.kind) : "individual",
+            headcount: worker.headcount != null ? Number(worker.headcount) : null,
             locationId: worker.location_id ? String(worker.location_id) : null,
             estate: worker.estate ? String(worker.estate) : null,
             createdAt: worker.created_at ? String(worker.created_at) : null,
