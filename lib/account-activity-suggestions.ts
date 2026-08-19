@@ -45,6 +45,17 @@ export const ACCOUNT_ACTIVITY_SUGGESTIONS: AccountActivitySuggestion[] = [
   { code: "141", reference: "Arabica Processing & Drying" },
   { code: "143", reference: "Arabica Irrigation" },
   { code: "144", reference: "Arabica Harvesting incentive" },
+  // Deliberately crop-neutral, and deliberately sitting in the gap between the Arabica (131-144)
+  // and Robusta (151-164) ranges rather than being duplicated into both. A shade tree is lopped
+  // over whichever coffee happens to be under it -- the operation is about the canopy, not the
+  // crop -- and the block on the deployment already says which. 150 Drip line Maintenance is the
+  // existing precedent for a neutral code living in this neighbourhood.
+  //
+  // Added because it is not a small job: on Medappa it is 52 labourer-days and Rs 41,600, their
+  // second-largest activity after general permanent labour, and with Under Lopping it is 28% of
+  // everything they spend on labour. Their writer went looking for it on his first morning on
+  // the muster and the nearest thing in the list was "Arabica Shade Work".
+  { code: "145", reference: "Shade Lopping" },
   { code: "150", reference: "Drip line Maintenance" },
   { code: "151", reference: "Robusta Weeding" },
   { code: "152", reference: "Robusta Pruning, Handling" },
