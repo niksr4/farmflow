@@ -80,6 +80,8 @@ const KNOWN_RAW_ERROR_LEAKS = [
   "app/api/season-summary/route.ts",
   "app/api/tenant-modules/route.ts",
   "app/api/transactions-neon/batch/route.ts",
+  "app/api/transactions-neon/[id]/route.ts",
+  "app/api/transactions-neon/update/route.ts",
   "app/api/weather/rainfall-context/route.ts",
   "app/api/yield-forecast/route.ts",
 ].sort()
@@ -96,7 +98,7 @@ const SAFE_HELPERS = [
 ]
 
 const RAW_MESSAGE_ACCESS_RE =
-  /error\s*\?\.\s*message|error\s*\.\s*message|\(error as Error\)\.message|String\(error\)|error\s*\?\.\s*toString\(\)/
+  /error\s*\?\.\s*message|error\s*\.\s*message|\(error as Error\)\.message|String\(error\)|error\s*\?\.\s*toString\(\)|error\s*\.\s*toString\(\)/
 
 // lib/biometric-attendance.ts's normalizeBiometricSchemaError(error) and lib/attendance.ts's
 // sibling normalizeAttendanceSchemaError(error) both look like sanitizers but aren't: each only
@@ -163,7 +165,10 @@ const findRawErrorMessageLeaks = (): string[] => {
     // or in a sibling field returned in the same response object (e.g. `message: error?.message`
     // alongside a safe `error: "..."` string) -- either way the client receives the raw text.
     let looksLikeLeak = false
-    const errorFieldRe = /error:\s*/g
+    // A leak can land in the response's "error" field, or in a sibling field like "message"
+    // returned alongside (or instead of) a safe "error" string -- both put the raw text in the
+    // client's hands, so both field names are scanned the same way.
+    const errorFieldRe = /(?:error|message):\s*/g
     let match: RegExpExecArray | null
     while ((match = errorFieldRe.exec(src))) {
       const windowText = src.slice(match.index, match.index + 220)
@@ -173,7 +178,7 @@ const findRawErrorMessageLeaks = (): string[] => {
       }
       // Field value may be a plain identifier assigned from a raw access earlier
       // (`const message = error?.message || "..."; ... error: message`).
-      const idMatch = windowText.match(/^error:\s*([a-zA-Z0-9_]+)/)
+      const idMatch = windowText.match(/^(?:error|message):\s*([a-zA-Z0-9_]+)/)
       if (idMatch) {
         const varName = idMatch[1]
         const assignRe = new RegExp(
