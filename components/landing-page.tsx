@@ -59,11 +59,12 @@ function CountUpNumber({
 }
 
 /* ── Infinite marquee strip ── */
+// The words a planter already uses. Nothing here needs translating into farm-software.
 const marqueeItems = [
-  "Cherry intake", "Pulping records", "Parchment out", "Dispatch", "Sales",
-  "Labour & wages", "Season P&L", "Cost per KG", "Weekly digest",
-  "Market timing", "AI assistant", "Rainfall tracker", "Inventory",
-  "Buyer receipts", "Accounts", "Exception alerts", "Yield forecast",
+  "Cherry intake", "Pulping", "Wet parchment", "Drying yard", "Outturn",
+  "Arabica", "Robusta", "The muster", "Shade lopping", "Cost per kilo",
+  "Dispatch to curing", "Buyer weighment", "Season P&L", "Rainfall",
+  "Pepper", "Arecanut", "Weekly digest",
 ]
 
 function MarqueeStrip() {
@@ -119,21 +120,21 @@ const representativeEstateFlow = [
 
 const benefits = [
   {
-    title: "Know your conversion ratio every day",
+    title: "Outturn you can see coming",
     description:
-      "Cherry in, parchment out — logged daily so you know exactly what your pulping yield is, not just at the end of the season when it's too late to act.",
+      "Cherry in, wet parchment out, dry weight off the yard — entered the day it happens. A bad conversion shows up in that week, not in March when the year is already spent.",
     icon: Coffee,
   },
   {
-    title: "Stop losing money to unrecorded labour",
+    title: "The muster, and what it cost",
     description:
-      "Picker attendance, picking rates, and daily wages logged by block. At the end of the month, your cost per kg isn't a guess.",
+      "Mark who came in, set what each person worked on and where. Contract gangs go on as one crew with a headcount. The wage bill and the cost of a block build themselves out of the roll.",
     icon: Users,
   },
   {
-    title: "Your season's P&L, always current",
+    title: "What a kilo of parchment actually cost",
     description:
-      "Revenue, labour, expenses, and production connected automatically. Your gross margin and cost per kg update the moment you log a sale — no spreadsheet assembly at the end of the season.",
+      "Labour, fertiliser, spray and fuel, each against the block it was spent on. Not the estate average — the number for that block, this season.",
     icon: Wallet,
   },
 ]
@@ -182,42 +183,42 @@ const howItWorks = [
     step: "01",
     title: "Set up your estate in one morning",
     detail:
-      "Add your blocks, pulping sections, and team. Staff can start logging cherry intake and labour the same day — no training needed.",
+      "Name your blocks, your store, and your workers. Eighty activity codes are already there — shade lopping, manuring, picking, spraying — so nothing has to be invented first.",
   },
   {
     step: "02",
-    title: "Log the day's work as it happens",
+    title: "Your writer marks the day, same as always",
     detail:
-      "Cherry intake, pulping batches, parchment out, picker attendance, dispatch — each entry is date-stamped and tied to the block or lot it came from.",
+      "The muster in the morning, cherry and pulping as it comes in, dispatch when the lorry leaves. On a phone, in the field, on whatever signal there is.",
   },
   {
     step: "03",
-    title: "Your season's numbers make sense",
+    title: "The season adds itself up",
     detail:
-      "Cherry-to-parchment ratio, cost per kg, revenue — all traceable to the exact day. No chasing notebooks at the end of harvest.",
+      "Outturn, wage bill, cost per kilo, what each block returned. Ready the day you want it — not reconstructed from notebooks in May.",
   },
 ]
 
 const outcomeCards = [
   {
     eyebrow: "Pulping & drying",
-    title: "Your conversion ratio, every day",
+    title: "Outturn, batch by batch",
     detail:
-      "Cherry intake into pulping batches, parchment out of the drying yard — tracked daily so you can spot a bad batch before it becomes a bad season.",
+      "Cherry into the pulper, wet parchment out, dry weight off the yard. Arabica and Robusta kept apart, so a weak batch shows as itself and not as an average.",
     icon: Coffee,
   },
   {
     eyebrow: "Labour & costs",
-    title: "Know your cost per kg",
+    title: "Every rupee against a block",
     detail:
-      "Picker wages, fertiliser, and consumables logged against the block they were spent on. Cost per kg of parchment becomes a real number.",
+      "Wages off the muster, fertiliser and spray out of the store — each landing on the block it was spent on. Cost per kilo stops being an estimate.",
     icon: Wallet,
   },
   {
     eyebrow: "Dispatch & sales",
-    title: "Nothing leaves without a record",
+    title: "What you sent, what they weighed",
     detail:
-      "Dispatch entries, buyer receipts, and sales are linked. Saleable stock only counts once the buyer confirms the weight.",
+      "Bags out to the curing works, against what the buyer's weighbridge confirmed. Stock only counts as sold once that weight comes back.",
     icon: Truck,
   },
 ]
@@ -235,12 +236,12 @@ const coreSurfacePills = [
   "Drying & parchment",
   "Dispatch",
   "Sales",
-  "Labour & wages",
-  "Accounts",
+  "The muster",
+  "Costs",
   "Season P&L",
+  "Pepper & arecanut",
   "Weekly digest",
   "Market timing",
-  "AI assistant",
   "Rainfall",
 ]
 
@@ -509,6 +510,66 @@ export default function LandingPage() {
           </div>
         </MotionSection>
 
+        {/* ── Why coffee-only ──
+            This section used to promise six more crops. It was replaced deliberately: breadth was
+            the wrong pitch. A planter choosing estate software is not asking whether it will one day
+            handle cocoa -- they are asking whether it knows what outturn means. Depth in one crop is
+            the argument, so the section now proves the coffee-specific vocabulary instead of listing
+            crops we do not serve. Pepper and arecanut stay, framed as what they actually are on a
+            Coorg estate: intercrops on the same land, not a separate market. */}
+        <MotionSection {...reveal(0.04)}>
+          <div>
+            <div className="mb-14 text-center">
+              <p className="text-sm font-medium text-emerald-400">Coffee, and nothing else</p>
+              <h2 className="mx-auto mt-3 max-w-3xl text-balance font-display text-4xl font-semibold text-stone-50 sm:text-5xl">
+                Generic farm software makes you translate
+              </h2>
+              <p className="mx-auto mt-4 max-w-2xl text-base leading-7 text-stone-400">
+                Every field, every report, every number is built around how a coffee estate actually runs —
+                not a crop-agnostic template with your own words pasted over it.
+              </p>
+            </div>
+
+            <div className="mt-0 grid gap-px overflow-hidden rounded-xl border border-white/[0.06] bg-white/[0.06] sm:grid-cols-2 lg:grid-cols-3">
+              {[
+                {
+                  term: "Arabica and Robusta, apart",
+                  detail: "Different blocks, different pulping, different prices. Kept separate the whole way through, because averaging them tells you nothing.",
+                },
+                {
+                  term: "Outturn",
+                  detail: "Cherry in, wet parchment out, dry weight off the yard. The ratio you are actually judged on, calculated the day you log it.",
+                },
+                {
+                  term: "The muster",
+                  detail: "The daily roll, marked the way your writer already marks it. Contract gangs go on as a crew with a headcount, not twenty invented names.",
+                },
+                {
+                  term: "Dispatch to the curing works",
+                  detail: "What left the estate, and what the curer's weighbridge said when it arrived. The gap between the two is your first real number.",
+                },
+                {
+                  term: "Cost per kilo, per block",
+                  detail: "Shade lopping, spray rounds, manuring, picking — each against the block it was spent on. Blocks are not all the same and the costing should not pretend they are.",
+                },
+                {
+                  term: "Pepper and arecanut",
+                  detail: "Up the shade trees and in the wet patches. Tracked and sold alongside the coffee, because on a Coorg estate they are the same piece of land.",
+                },
+              ].map((item) => (
+                <div key={item.term} className="bg-[#0a1210] px-5 py-6">
+                  <p className="text-sm font-semibold text-emerald-300">{item.term}</p>
+                  <p className="mt-2 text-[13px] leading-6 text-stone-400">{item.detail}</p>
+                </div>
+              ))}
+            </div>
+
+            <p className="mt-8 text-center text-xs leading-6 text-stone-500">
+              Built in Karnataka, on working estates in Coorg and Chikmagalur.
+            </p>
+          </div>
+        </MotionSection>
+
         {/* ── Advisor section ── */}
         <MotionSection {...reveal(0.04)}>
           <div className="mb-14 text-center">
@@ -729,41 +790,6 @@ export default function LandingPage() {
                 </MotionDiv>
               )
             })}
-          </div>
-        </MotionSection>
-
-        {/* ── Crop roadmap ── */}
-        <MotionSection {...reveal(0.04)}>
-          <div className="rounded-2xl border border-white/[0.06] bg-white/[0.02] px-6 py-8 text-center sm:px-10">
-            <p className="text-xs uppercase tracking-[0.25em] text-stone-600">Built for coffee planters — expanding further</p>
-            <p className="mx-auto mt-3 max-w-xl text-sm leading-7 text-stone-400">
-              Coffee is live today — full processing, grading, and dispatch workflows included, with dedicated pepper tracking and Other Sales covering arecanut and side crops. Tea, cocoa, spices, and more are coming as those communities join.
-            </p>
-            <div className="mt-6 flex flex-wrap items-center justify-center gap-3">
-              {[
-                { emoji: "☕", label: "Coffee", active: true },
-                { emoji: "🫚", label: "Pepper", active: true },
-                { emoji: "🍵", label: "Tea" },
-                { emoji: "🍫", label: "Cocoa" },
-                { emoji: "🌿", label: "Spices" },
-                { emoji: "🌰", label: "Tree nuts" },
-                { emoji: "🌾", label: "Grains" },
-                { emoji: "🥦", label: "Horticulture" },
-              ].map((crop) => (
-                <span
-                  key={crop.label}
-                  className={`flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-medium ${
-                    crop.active
-                      ? "border-emerald-400/30 bg-emerald-400/[0.08] text-emerald-300"
-                      : "border-white/[0.06] bg-white/[0.02] text-stone-600"
-                  }`}
-                >
-                  <span>{crop.emoji}</span>
-                  {crop.label}
-                  {!crop.active && <span className="ml-0.5 text-[10px] text-stone-700">Soon</span>}
-                </span>
-              ))}
-            </div>
           </div>
         </MotionSection>
 

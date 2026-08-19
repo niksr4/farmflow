@@ -38,10 +38,10 @@ const EN_TRANSLATIONS: TranslationTree = {
       navJourney: "Journey",
       navTrust: "Trust",
       navEarlyAccess: "Early Access",
-      badge: "Proactive estate advisor — not just another farm ledger",
-      title: "Your estate advisor. Not just your books.",
+      badge: "Built for Arabica and Robusta estates",
+      title: "Cherry to parchment to sale. One book.",
       description:
-        "FarmFlow tracks every cherry and every rupee — then tells you what it means. A weekly AI digest, market timing signals, and an assistant that answers questions about your own numbers.",
+        "The numbers a coffee planter actually runs on: what the pulper turned out, who was on the muster, what a kilo of parchment cost you, and what the curing works really weighed. Pepper and arecanut come along, because they grow on the same land.",
       bullet1: "Log cherry intake, pulping batches, and dry output every day",
       bullet2: "Track picker productivity and labour costs by block",
       bullet3: "Know your conversion ratio and catch losses before they compound",
