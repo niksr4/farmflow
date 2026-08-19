@@ -189,15 +189,24 @@ export default function InventoryDialogs(p: DialogProps) {
               </div>
             </div>
             <div className="space-y-2">
-              <Label htmlFor="new-item-location">Location</Label>
+              {/* A storehouse, not a block. Stock sits in a shed; work happens on a block, and the
+                  two were the same dropdown until scripts/128. "Unassigned" is gone with it --
+                  every balance now lives somewhere, and an estate with one store still names it,
+                  because "wherever" stops being an answer the day a second shed exists. */}
+              <Label htmlFor="new-item-location">Storehouse</Label>
               <Select value={p.newItemForm.locationId} onValueChange={(v) => p.setNewItemForm((prev) => ({ ...prev, locationId: v }))}>
-                <SelectTrigger id="new-item-location" className="w-full"><SelectValue placeholder="Select location" /></SelectTrigger>
+                <SelectTrigger id="new-item-location" className="w-full"><SelectValue placeholder="Which storehouse?" /></SelectTrigger>
                 <SelectContent className="max-h-[40vh] overflow-y-auto">
-                  <SelectItem value={LOCATION_UNASSIGNED}>{UNASSIGNED_LABEL}</SelectItem>
-                  {locations.map((loc) => <SelectItem key={loc.id} value={loc.id}>{formatLocationLabel(loc, locations)}</SelectItem>)}
+                  {locations.length === 0 ? (
+                    <p className="px-3 py-4 text-center text-xs text-muted-foreground">
+                      No storehouse yet. Add one under Settings → Locations.
+                    </p>
+                  ) : (
+                    locations.map((loc) => <SelectItem key={loc.id} value={loc.id}>{formatLocationLabel(loc, locations)}</SelectItem>)
+                  )}
                 </SelectContent>
               </Select>
-              <p className="text-xs text-muted-foreground">Choose where this item is stored.</p>
+              <p className="text-xs text-muted-foreground">Which shed this stock is kept in.</p>
             </div>
             <div className="grid gap-4 sm:grid-cols-2">
               <div className="space-y-2">
@@ -260,10 +269,13 @@ export default function InventoryDialogs(p: DialogProps) {
               </div>
             </div>
             <div className="space-y-2">
-              <FieldLabel htmlFor="edit-transaction-location" label="Location" tooltip="Location ties the transaction to an estate block." />
+              <FieldLabel htmlFor="edit-transaction-location" label="Storehouse" tooltip="Which shed the stock moved in or out of. Blocks are where work happens; stock lives in a store." />
               <Select value={p.editingTransaction.location_id ?? LOCATION_UNASSIGNED} onValueChange={(v) => p.handleEditTransactionChange("location_id", v === LOCATION_UNASSIGNED ? null : v)}>
-                <SelectTrigger id="edit-transaction-location" className="w-full"><SelectValue placeholder="Select location" /></SelectTrigger>
+                <SelectTrigger id="edit-transaction-location" className="w-full"><SelectValue placeholder="Which storehouse?" /></SelectTrigger>
                 <SelectContent className="max-h-[40vh] overflow-y-auto">
+                  {/* Legacy rows written before stores existed still carry no location, so the
+                      option stays reachable to describe them -- it is just no longer offered as a
+                      destination for anything new. */}
                   <SelectItem value={LOCATION_UNASSIGNED}>{UNASSIGNED_LABEL}</SelectItem>
                   {locations.map((loc) => <SelectItem key={loc.id} value={loc.id}>{formatLocationLabel(loc, locations)}</SelectItem>)}
                 </SelectContent>
@@ -341,9 +353,9 @@ export default function InventoryDialogs(p: DialogProps) {
               </div>
             </div>
             <div className="space-y-2">
-              <FieldLabel htmlFor="edit-item-location" label="Adjustment Location" tooltip="Choose where the correction should be applied." />
+              <FieldLabel htmlFor="edit-item-location" label="Which storehouse" tooltip="Which shed this correction applies to. A count is short in one place, not everywhere." />
               <Select value={p.inventoryEditLocationId} onValueChange={p.setInventoryEditLocationId}>
-                <SelectTrigger id="edit-item-location" className="w-full"><SelectValue placeholder="Select location" /></SelectTrigger>
+                <SelectTrigger id="edit-item-location" className="w-full"><SelectValue placeholder="Which storehouse?" /></SelectTrigger>
                 <SelectContent className="max-h-[40vh] overflow-y-auto">
                   <SelectItem value={LOCATION_UNASSIGNED}>{UNASSIGNED_LABEL}</SelectItem>
                   {locations.map((loc) => <SelectItem key={loc.id} value={loc.id}>{formatLocationLabel(loc, locations)}</SelectItem>)}

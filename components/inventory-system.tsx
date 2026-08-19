@@ -408,6 +408,15 @@ export default function InventorySystem() {
     return () => { ignore = true }
   }, [canSelectEstate, selectedEstate])
 
+  // Where stock can physically be. Narrowed by the estate selector the same way blocks are, so a
+  // Medappa user viewing Tirtha is offered the Tirtha store and not the Citrus one.
+  const storeLocations = useMemo(() => {
+    const stores = locations.filter((loc) => loc.kind === "store")
+    return canSelectEstate && selectedEstate
+      ? stores.filter((loc) => !loc.estate || loc.estate === selectedEstate)
+      : stores
+  }, [locations, canSelectEstate, selectedEstate])
+
   const estateFilteredLocations = useMemo(
     () => (canSelectEstate && selectedEstate ? blockLocations.filter((loc) => loc.estate === selectedEstate) : blockLocations),
     [canSelectEstate, selectedEstate, blockLocations],
@@ -2585,11 +2594,14 @@ export default function InventorySystem() {
   }
 
   const openNewItemDialog = () => {
-    const defaultLocation =
-      selectedLocationId !== LOCATION_ALL ? selectedLocationId : transactionLocationId !== LOCATION_ALL ? transactionLocationId : LOCATION_UNASSIGNED
+    // Seeded only when there is exactly one storehouse and therefore no choice to make. With two,
+    // it stays empty and gets asked -- Medappa keep one shed per estate, and guessing which one a
+    // delivery went into is how stock ends up in the wrong place with nobody noticing.
+    //
+    // The old default here was a BLOCK id, or "unassigned". Neither is a shed.
     setNewItemForm((prev) => ({
       ...prev,
-      locationId: defaultLocation,
+      locationId: storeLocations.length === 1 ? storeLocations[0].id : "",
     }))
     setIsNewItemDialogOpen(true)
   }
@@ -2614,7 +2626,10 @@ export default function InventorySystem() {
       quantity: "",
       price: "",
       notes: "",
-      locationId: LOCATION_UNASSIGNED,
+      // Empty, so the storehouse is chosen rather than inherited. An estate with one shed still
+      // names it -- "wherever" stops being an answer the day a second one exists, and Medappa
+      // already has two.
+      locationId: "",
     })
   }
 
@@ -2627,6 +2642,14 @@ export default function InventorySystem() {
 
     if (!itemName) {
       toast({ title: "Missing name", description: "Item name is required.", variant: "destructive" })
+      return
+    }
+    if (!newItemForm.locationId) {
+      toast({
+        title: "Which storehouse?",
+        description: "Pick the shed this stock is kept in, so the balance belongs somewhere real.",
+        variant: "destructive",
+      })
       return
     }
     if (Number.isNaN(quantityValue) || quantityValue < 0) {
@@ -4081,7 +4104,7 @@ export default function InventorySystem() {
       hasMovementItemTypes={hasMovementItemTypes}
       allItemTypesForDropdown={allItemTypesForDropdown}
       selectedMovementUnit={selectedMovementUnit}
-      locations={estateFilteredLocations}
+      locations={storeLocations}
       canShowAccounts={canShowAccounts}
       onClose={() => setIsMovementDrawerOpen(false)}
       onFieldChange={handleFieldChange}
@@ -5140,7 +5163,7 @@ export default function InventorySystem() {
         )}
         <InventoryDialogs
           isMobile={isMobile}
-          locations={estateFilteredLocations}
+          locations={storeLocations}
           preventNegativeKey={preventNegativeKey}
           preventNumberScrollChange={preventNumberScrollChange}
           coerceNonNegativeNumber={coerceNonNegativeNumber}
