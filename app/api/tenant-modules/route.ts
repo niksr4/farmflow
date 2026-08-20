@@ -8,6 +8,7 @@ import { resolveScopedSessionUser } from "@/lib/server/module-access"
 import { MODULE_BUNDLES, resolveTenantEnabledModules } from "@/lib/modules"
 import { resolveTenantPlanId } from "@/lib/server/tenant-subscriptions"
 import { normalizeTenantContext, runTenantQuery } from "@/lib/server/tenant-db"
+import { sanitizeRouteError } from "@/lib/server/sanitize-route-error"
 
 export async function GET(_request: Request) {
   try {
@@ -82,6 +83,6 @@ export async function GET(_request: Request) {
     if (error?.message === "Unauthorized") {
       return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 })
     }
-    return NextResponse.json({ success: false, error: error.message || "Failed to load modules" }, { status: 500 })
+    return NextResponse.json({ success: false, error: sanitizeRouteError(error, "Failed to load modules") }, { status: 500 })
   }
 }

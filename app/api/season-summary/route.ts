@@ -16,6 +16,7 @@ import {
   resolveSalesKgs,
   toLocationBucket,
 } from "@/lib/server/season-summary-utils"
+import { sanitizeRouteError } from "@/lib/server/sanitize-route-error"
 
 export const dynamic = "force-dynamic"
 export const revalidate = 0
@@ -1059,6 +1060,6 @@ export async function GET(request: NextRequest) {
     if (isModuleAccessError(error)) {
       return NextResponse.json({ success: false, error: "Module access disabled" }, { status: 403 })
     }
-    return NextResponse.json({ success: false, error: error.message || "Failed to load season summary" }, { status: 500 })
+    return NextResponse.json({ success: false, error: sanitizeRouteError(error, "Failed to load season summary") }, { status: 500 })
   }
 }

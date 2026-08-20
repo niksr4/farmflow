@@ -77,11 +77,6 @@ const KNOWN_RAW_ERROR_LEAKS = [
   "app/api/processing-records/check-anomaly/route.ts",
   "app/api/recent-activity/route.ts",
   "app/api/register-interest/route.ts",
-  "app/api/season-summary/route.ts",
-  "app/api/tenant-modules/route.ts",
-  "app/api/transactions-neon/batch/route.ts",
-  "app/api/weather/rainfall-context/route.ts",
-  "app/api/yield-forecast/route.ts",
 ].sort()
 
 // Any of these anywhere in the file means its error responses go through the safe path -- even if

@@ -18,6 +18,7 @@ import {
   WEATHER_FORECAST_DAYS,
 } from "@/lib/weather-guidance"
 import { DEFAULT_WEATHER_QUERY, normalizeWeatherLocationQuery } from "@/lib/weather-config"
+import { sanitizeRouteError } from "@/lib/server/sanitize-route-error"
 
 type ForecastDay = {
   date: string
@@ -158,7 +159,7 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ success: false, error: "Module access disabled" }, { status: 403 })
     }
     return NextResponse.json(
-      { success: false, error: error?.message || "Failed to build rainfall context" },
+      { success: false, error: sanitizeRouteError(error, "Failed to build rainfall context") },
       { status: 500 },
     )
   }

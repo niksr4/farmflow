@@ -7,6 +7,7 @@ import { logAuditEvent } from "@/lib/server/audit-log"
 import { repairCurrentInventoryUpsertConstraints } from "@/lib/server/current-inventory-constraints"
 import { logRouteMutationFailure } from "@/lib/server/route-error-events"
 import { resolveTenantUserUuid } from "@/lib/server/tenant-user"
+import { sanitizeRouteError } from "@/lib/server/sanitize-route-error"
 
 export const dynamic = "force-dynamic"
 
@@ -172,7 +173,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json(
       {
         success: false,
-        message: error?.message || "Failed to batch update transactions",
+        message: sanitizeRouteError(error, "Failed to batch update transactions"),
         error: error?.toString() || String(error),
       },
       { status: 500 }
