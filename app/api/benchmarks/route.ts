@@ -3,7 +3,7 @@ import { sql, adminSql } from "@/lib/server/db"
 import { requireSessionUser } from "@/lib/server/auth"
 import { resolveScopedSessionUser } from "@/lib/server/module-access"
 import { getFiscalYearDateRange, getCurrentFiscalYear } from "@/lib/fiscal-year-utils"
-import { mergeTenantEstateProfile, getCropLabel } from "@/lib/tenant-estate-profile"
+import { mergeTenantEstateProfile, CROP_LABEL } from "@/lib/tenant-estate-profile"
 import { parseJsonObject } from "@/lib/server/tenant-experience-db"
 
 export const dynamic = "force-dynamic"
@@ -66,8 +66,8 @@ export async function GET(request: Request) {
     )
     const prefs = parseJsonObject(tenantRows[0]?.ui_preferences, "ui_preferences") ?? {}
     const profile = mergeTenantEstateProfile((prefs as any).estateProfile ?? null)
-    const cropFamily = profile.cropFamily ?? "coffee"
-    const cropLabel = getCropLabel(profile)
+    const cropFamily = CROP_LABEL
+    const cropLabel = CROP_LABEL
 
     const { startDate, endDate } = getFiscalYearDateRange(getCurrentFiscalYear())
 
@@ -98,18 +98,13 @@ export async function GET(request: Request) {
           AND pr.crop_today > 0
         LEFT JOIN sales_records sr
           ON sr.tenant_id = t.id
-          AND sr.sale_date >= $2
-          AND sr.sale_date <= $3
+          AND sr.sale_date >= $1
+          AND sr.sale_date <= $2
           AND sr.price_per_bag > 0
-        WHERE
-          COALESCE(
-            t.ui_preferences->'estateProfile'->>'cropFamily',
-            'coffee'
-          ) = $1
         GROUP BY t.id
         HAVING COUNT(DISTINCT pr.id) >= 3
         `,
-        [cropFamily, startDate, endDate],
+        [startDate, endDate],
       ),
     )
 

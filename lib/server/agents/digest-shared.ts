@@ -11,8 +11,6 @@ export type TenantDigestRow = {
   tenantName: string
   ownerEmail: string
   ownerName: string
-  cropFamily: string | null
-  primaryVarieties: string[]
   weatherLocationQuery: string | null
 }
 
@@ -57,8 +55,6 @@ export async function fetchTenantOwnersWithVerifiedEmail(): Promise<TenantDigest
       tenantName: String(row.tenant_name || "Your Estate"),
       ownerEmail: String(row.owner_email),
       ownerName: String(row.owner_name || "Estate Manager"),
-      cropFamily: profile.cropFamily,
-      primaryVarieties: profile.primaryVarieties,
       weatherLocationQuery: buildTenantWeatherQuery(profile) ?? null,
     }
   })

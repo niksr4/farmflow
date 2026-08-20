@@ -9,7 +9,7 @@ import { buildTenantAiDataSummary } from "@/lib/server/ai-analysis"
 import { getClaudeClient, isClaudeConfigured, extractClaudeText, CLAUDE_SONNET } from "@/lib/server/claude"
 import { fetchWithTimeout } from "@/lib/server/http"
 import { logServerError, logServerWarning } from "@/lib/server/safe-logging"
-import { getCropLabel, getCropVarietiesLabel } from "@/lib/tenant-estate-profile"
+import { CROP_LABEL } from "@/lib/tenant-estate-profile"
 import { buildEstateCalendarContext } from "@/lib/coffee-estate-calendar"
 import { buildAgronomyContext } from "@/lib/coffee-agronomy"
 import { upsertWeeklyMetrics, fetchHistoricalMetrics, buildHistoricalBaselineContext } from "@/lib/server/tenant-weekly-metrics"
@@ -350,9 +350,7 @@ async function generateWeeklyDigestText(
     })
     const history = await fetchHistoricalMetrics(tenant.tenantId, 12)
 
-    const cropLabel = getCropLabel({ cropFamily: tenant.cropFamily, primaryVarieties: tenant.primaryVarieties, acreageAcres: null, weatherLocationLabel: "", weatherLatitude: null, weatherLongitude: null })
-    const varietiesLabel = getCropVarietiesLabel({ cropFamily: tenant.cropFamily, primaryVarieties: tenant.primaryVarieties, acreageAcres: null, weatherLocationLabel: "", weatherLatitude: null, weatherLongitude: null })
-    const cropContext = varietiesLabel ? `${cropLabel} (${varietiesLabel})` : cropLabel
+    const cropContext = CROP_LABEL
     const lastWeekSection = buildLastWeekSection(lastWeek)
     const historySection = buildHistoricalBaselineContext(history, {
       cherryKg: lastWeek.processingKg,
@@ -389,7 +387,7 @@ Rules:
 - Use the season context above to interpret the data correctly. Low activity in the off-season is not a problem. Missing expected activities (e.g. no fertiliser in April) must be flagged.
 - Ground every number strictly in the provided data. Never invent figures.
 - When data is sparse or missing, say so plainly — but explain whether that is normal for this time of year.
-- Use the correct crop terminology: refer to the primary crop as "${cropLabel}", use variety names where relevant.
+- Use the correct crop terminology: refer to the primary crop as "${CROP_LABEL}", use variety names where relevant.
 - Use INR (₹) for currency and KG for weight unless the data suggests otherwise.
 - Keep the tone warm, professional, and practical. Estate managers are busy.
 - This is a weekly email digest — keep it under 550 words.

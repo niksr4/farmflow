@@ -3,7 +3,7 @@ import { getFiscalYearDateRange, getCurrentFiscalYear, type FiscalYear } from "@
 import { normalizeTenantContext, runTenantQuery } from "@/lib/server/tenant-db"
 import { logServerError } from "@/lib/server/safe-logging"
 import type { InventoryItem, Transaction } from "@/lib/inventory-types"
-import { getCropLabel, getCropVarietiesLabel, mergeTenantEstateProfile } from "@/lib/tenant-estate-profile"
+import { CROP_LABEL, mergeTenantEstateProfile } from "@/lib/tenant-estate-profile"
 
 type TenantContext = ReturnType<typeof normalizeTenantContext>
 
@@ -132,9 +132,9 @@ async function fetchCropProfile(tenantContext: TenantContext): Promise<{ cropFam
     const profile = mergeTenantEstateProfile(
       prefs.estateProfile && typeof prefs.estateProfile === "object" ? prefs.estateProfile as Record<string, unknown> : null,
     )
-    return { cropFamily: profile.cropFamily, primaryVarieties: profile.primaryVarieties }
+    return { cropFamily: CROP_LABEL, primaryVarieties: [] as string[] }
   } catch {
-    return { cropFamily: null, primaryVarieties: [] }
+    return { cropFamily: CROP_LABEL, primaryVarieties: [] as string[] }
   }
 }
 
@@ -380,9 +380,7 @@ async function fetchTransactionHistory(startDate: string, endDate: string, tenan
 function buildDataSummary(data: DataSummaryInput): string {
   const sections: string[] = []
 
-  const cropLabel = getCropLabel({ cropFamily: data.cropFamily ?? null, primaryVarieties: data.primaryVarieties ?? [], acreageAcres: null, weatherLocationLabel: "", weatherLatitude: null, weatherLongitude: null })
-  const varietiesLabel = getCropVarietiesLabel({ cropFamily: data.cropFamily ?? null, primaryVarieties: data.primaryVarieties ?? [], acreageAcres: null, weatherLocationLabel: "", weatherLatitude: null, weatherLongitude: null })
-  sections.push(`## Crop: ${cropLabel}${varietiesLabel ? ` (${varietiesLabel})` : ""}`)
+  sections.push(`## Crop: ${CROP_LABEL}`)
 
   sections.push(`## Fiscal Year: ${data.fiscalYear}`)
   sections.push(`## Analysis Date: ${new Date().toLocaleDateString("en-IN")}`)

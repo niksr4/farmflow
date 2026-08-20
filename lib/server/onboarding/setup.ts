@@ -52,8 +52,6 @@ export type GuidedSetupState = {
   primaryLocationName: string
   primaryLocationCode: string
   moduleBundleId: string
-  cropFamily: string | null
-  primaryVarieties: string[]
 }
 
 export type CompleteGuidedSetupInput = {
@@ -63,8 +61,6 @@ export type CompleteGuidedSetupInput = {
   primaryLocationName: string
   primaryLocationCode: string
   moduleBundleId: string
-  cropFamily?: string | null
-  primaryVarieties?: string[]
 }
 
 const normalizeLocationCode = (value: string) => value.trim().toUpperCase().replace(/\s+/g, "-")
@@ -161,8 +157,6 @@ export async function loadGuidedSetup(sessionUser: SessionUser): Promise<GuidedS
     primaryLocationName: primaryLocation?.name || buildStarterLocationName(String(tenant.name || "")),
     primaryLocationCode: primaryLocation?.code || STARTER_LOCATION_CODE,
     moduleBundleId,
-    cropFamily: estateProfile.cropFamily,
-    primaryVarieties: estateProfile.primaryVarieties,
   }
 }
 
@@ -184,11 +178,7 @@ export async function completeGuidedSetup(sessionUser: SessionUser, input: Compl
   const existingTenantRows = await loadTenantSetupRow(tenantContext)
   const existingPrefs = parseJsonObject(existingTenantRows[0]?.ui_preferences, "ui_preferences") ?? {}
   const existingEstateProfile = mergeTenantEstateProfile((existingPrefs as any).estateProfile ?? null)
-  const mergedEstateProfile = {
-    ...existingEstateProfile,
-    ...(input.cropFamily !== undefined ? { cropFamily: input.cropFamily ?? null } : {}),
-    ...(input.primaryVarieties !== undefined ? { primaryVarieties: input.primaryVarieties } : {}),
-  }
+  const mergedEstateProfile = { ...existingEstateProfile }
   const mergedUiPreferences = { ...(existingPrefs as object), estateProfile: mergedEstateProfile }
 
   await runTenantQuery(
