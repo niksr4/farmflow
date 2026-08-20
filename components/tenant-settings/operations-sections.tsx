@@ -58,6 +58,7 @@ type LocationsSectionProps = {
   newLocationName: string
   newLocationCode: string
   newLocationEstate: string
+  newLocationArea: string
   editingLocationArea: string
   onEditingLocationAreaChange: (value: string) => void
   isCreatingLocation: boolean
@@ -69,6 +70,7 @@ type LocationsSectionProps = {
   onNewLocationNameChange: (value: string) => void
   onNewLocationCodeChange: (value: string) => void
   onNewLocationEstateChange: (value: string) => void
+  onNewLocationAreaChange: (value: string) => void
   onCreateLocation: () => void
   onEditingLocationNameChange: (value: string) => void
   onEditingLocationCodeChange: (value: string) => void
@@ -85,6 +87,7 @@ export function LocationsSection({
   newLocationName,
   newLocationCode,
   newLocationEstate,
+  newLocationArea,
   editingLocationArea,
   onEditingLocationAreaChange,
   isCreatingLocation,
@@ -96,6 +99,7 @@ export function LocationsSection({
   onNewLocationNameChange,
   onNewLocationCodeChange,
   onNewLocationEstateChange,
+  onNewLocationAreaChange,
   onCreateLocation,
   onEditingLocationNameChange,
   onEditingLocationCodeChange,
@@ -176,7 +180,7 @@ export function LocationsSection({
         </datalist>
 
         <div className="rounded-2xl border border-border/60 bg-white/90 p-4 shadow-sm">
-          <div className="grid grid-cols-1 gap-3 md:grid-cols-[2fr_1fr_1fr_auto]">
+          <div className="grid grid-cols-1 gap-3 md:grid-cols-[2fr_1fr_1fr_1fr_auto]">
             <div className="space-y-2">
               <HelpLabel
                 htmlFor="location-name"
@@ -219,6 +223,26 @@ export function LocationsSection({
                 placeholder="Leave blank, or e.g. Tirtha Estate"
                 value={newLocationEstate}
                 onChange={(event) => onNewLocationEstateChange(event.target.value)}
+                onKeyDown={(event) => { if (event.key === "Enter") onCreateLocation() }}
+              />
+            </div>
+
+            <div className="space-y-2">
+              <HelpLabel
+                htmlFor="location-area"
+                label="Area in acres"
+                help="Planted area of this block. It is what turns cost into cost per acre, which is the only way one block can be compared with another. You can add it later, but the comparison stays blank until you do."
+              />
+              <Input
+                id="location-area"
+                type="number"
+                inputMode="decimal"
+                min={0}
+                step="0.1"
+                placeholder="e.g. 4.5"
+                className="tabular-nums"
+                value={newLocationArea}
+                onChange={(event) => onNewLocationAreaChange(event.target.value)}
                 onKeyDown={(event) => { if (event.key === "Enter") onCreateLocation() }}
               />
             </div>

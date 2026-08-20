@@ -1,6 +1,6 @@
 "use client"
 
-import { useCallback, useEffect, useRef, useState } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { useSession } from "next-auth/react"
 import Link from "next/link"
 import { Building2, KeyRound, Layers2, Lock, Settings2, UserCircle, Users } from "lucide-react"
@@ -204,6 +204,21 @@ export default function TenantSettingsPage() {
   const [newLocationName, setNewLocationName] = useState("")
   const [newLocationCode, setNewLocationCode] = useState("")
   const [newLocationEstate, setNewLocationEstate] = useState("")
+  const [newLocationArea, setNewLocationArea] = useState("")
+
+  // The estate's acreage is the sum of its blocks, never a number of its own. Stores are excluded
+  // -- a shed has a footprint but not a planted area, and counting it would inflate every
+  // per-acre figure the app produces.
+  const blockAcreage = useMemo(() => {
+    const blocks = locations.filter((l) => (l.kind || "block") !== "store")
+    const withArea = blocks.filter((l) => l.areaAcres != null && Number(l.areaAcres) > 0)
+    const total = withArea.reduce((sum, l) => sum + Number(l.areaAcres || 0), 0)
+    return {
+      blocks: blocks.length,
+      withArea: withArea.length,
+      total: withArea.length > 0 ? Number(total.toFixed(2)) : null,
+    }
+  }, [locations])
   const [isCreatingLocation, setIsCreatingLocation] = useState(false)
   const [editingLocationId, setEditingLocationId] = useState<string | null>(null)
   const [editingLocationName, setEditingLocationName] = useState("")
@@ -923,6 +938,7 @@ export default function TenantSettingsPage() {
           name: newLocationName.trim(),
           code: String(newLocationCode || "").trim() || undefined,
           estate: String(newLocationEstate || "").trim() || null,
+          areaAcres: String(newLocationArea || "").trim() === "" ? null : Number(newLocationArea),
           tenantId,
         }),
       })
@@ -933,6 +949,7 @@ export default function TenantSettingsPage() {
       setNewLocationName("")
       setNewLocationCode("")
       setNewLocationEstate("")
+      setNewLocationArea("")
       await loadLocations()
       toast({ title: "Location created", description: `${data.location.name} added.` })
     } catch (error: any) {
@@ -1346,8 +1363,12 @@ export default function TenantSettingsPage() {
                     estateProfileDraft={estateProfileDraft}
                     isSavingEstateProfile={isSavingEstateProfile}
                     settingsLoading={settingsLoading}
+                    blockAcreageTotal={blockAcreage.total}
+                    blocksWithAcreage={blockAcreage.withArea}
+                    blocksTotal={blockAcreage.blocks}
                     onEstateProfileChange={handleEstateProfileChange}
                     onSaveEstateProfile={handleSaveEstateProfile}
+                    onGoToLocations={() => setActiveSectionId("locations")}
                   />
                 ),
               },
@@ -1401,6 +1422,8 @@ export default function TenantSettingsPage() {
                     editingLocationName={editingLocationName}
                     editingLocationCode={editingLocationCode}
                     editingLocationEstate={editingLocationEstate}
+                    newLocationArea={newLocationArea}
+                    onNewLocationAreaChange={setNewLocationArea}
                     editingLocationArea={editingLocationArea}
                     onEditingLocationAreaChange={setEditingLocationArea}
                     isUpdatingLocationId={isUpdatingLocationId}

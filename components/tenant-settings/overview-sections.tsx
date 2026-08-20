@@ -203,14 +203,23 @@ type EstateProfileSectionProps = {
   estateProfileDraft: TenantEstateProfile
   isSavingEstateProfile: boolean
   settingsLoading: boolean
+  /** Sum of every block's acreage. The estate does not carry an acreage of its own. */
+  blockAcreageTotal: number | null
+  blocksWithAcreage: number
+  blocksTotal: number
   onEstateProfileChange: (patch: Partial<TenantEstateProfile>) => void
   onSaveEstateProfile: () => void
+  onGoToLocations: () => void
 }
 
 export function EstateProfileSection({
   estateProfileDraft,
   isSavingEstateProfile,
   settingsLoading,
+  blockAcreageTotal,
+  blocksWithAcreage,
+  blocksTotal,
+  onGoToLocations,
   onEstateProfileChange,
   onSaveEstateProfile,
 }: EstateProfileSectionProps) {
@@ -219,7 +228,7 @@ export function EstateProfileSection({
       <CardHeader>
         <CardTitle>Estate Footprint & Weather</CardTitle>
         <CardDescription>
-          Save acreage and the exact weather coordinates for this estate so planning views use the right baseline.
+          Acreage adds up from your blocks. Set the weather coordinates here so planning views use the right baseline.
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
@@ -229,32 +238,46 @@ export function EstateProfileSection({
               <Badge variant="outline" className="border-emerald-200 bg-white text-emerald-700">
                 Planning baseline
               </Badge>
-              <p className="text-base font-semibold text-foreground">Add acreage so season views can report per-acre performance.</p>
+              <p className="text-base font-semibold text-foreground">Your planted area, added up from every block.</p>
               <p className="text-sm leading-6 text-muted-foreground">
-                This is especially useful once inventory, crop, and season numbers start building up.
+                Give each block its area in Locations and this fills itself in — along with cost per acre on the Costs tab.
               </p>
             </div>
 
+            {/* Derived, not typed. This was a free-text acreage sitting beside a per-block acreage
+                in Locations -- two independently editable numbers for one physical fact, which
+                drift the first time a block is split or sold and then quietly disagree forever.
+                The block is the thing that has an area; the estate is the sum of its blocks. Both
+                were empty on every tenant, so making this derived costs nothing and closes the
+                gap before anyone types a number into it. */}
             <div className="space-y-2">
-              <Label htmlFor="estate-acreage">Acreage (acres)</Label>
-              <Input
-                id="estate-acreage"
-                type="number"
-                inputMode="decimal"
-                min="0"
-                step="0.01"
-                placeholder="e.g. 125"
-                value={estateProfileDraft.acreageAcres ?? ""}
-                onChange={(event) =>
-                  onEstateProfileChange({
-                    acreageAcres: event.target.value === "" ? null : Number(event.target.value),
-                  })
-                }
-              />
+              <Label>Acreage (acres)</Label>
+              <div className="rounded-xl border border-emerald-100 bg-white/85 px-4 py-3">
+                {blockAcreageTotal != null ? (
+                  <p className="text-2xl font-semibold tabular-nums text-foreground">
+                    {blockAcreageTotal.toLocaleString("en-IN")} <span className="text-base font-normal text-muted-foreground">acres</span>
+                  </p>
+                ) : (
+                  <p className="text-sm font-medium text-amber-700">Not set on any block yet</p>
+                )}
+                <p className="mt-1 text-xs leading-5 text-muted-foreground">
+                  {blocksTotal === 0
+                    ? "Add your blocks first, then give each one its area."
+                    : blocksWithAcreage === 0
+                      ? `None of your ${blocksTotal} blocks has an area yet.`
+                      : blocksWithAcreage === blocksTotal
+                        ? `Added up from all ${blocksTotal} blocks.`
+                        : `From ${blocksWithAcreage} of ${blocksTotal} blocks — the other ${blocksTotal - blocksWithAcreage} have no area set, so this total is short.`}
+                </p>
+              </div>
+              <Button type="button" variant="outline" size="sm" onClick={onGoToLocations}>
+                Set acreage per block
+              </Button>
             </div>
 
             <div className="rounded-xl border border-emerald-100 bg-white/85 p-3 text-xs leading-5 text-emerald-900">
-              <span className="font-semibold">Good rule:</span> use planted or managed acres for the estate, not just the currently harvested plot.
+              <span className="font-semibold">Why per block:</span> cost per acre is only comparable if each
+              block carries its own area. One estate-wide number cannot tell you which block is expensive.
             </div>
           </div>
 

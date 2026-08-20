@@ -34,6 +34,8 @@ export interface LocationRow {
   estate?: string | null
   /** Planted acres. Null until recorded; every per-acre figure divides by it. */
   areaAcres?: number | null
+  /** Settings lists blocks and storehouses together, so a row here may be either. */
+  kind?: "block" | "store"
 }
 
 export interface PrivacyStatus {
