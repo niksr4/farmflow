@@ -218,7 +218,7 @@ CI runs automatically on every push to main via `.github/workflows/ci.yml`.
 ## Database Migrations
 
 Sequential SQL files in `scripts/`. Highest numbered = latest schema state.
-As of 2026-07-28: up to `102-laxmi-restock-type-repair.sql`, applied to both dev and prod.
+As of 2026-08-20: up to `130-honeyfarm-two-estates.sql`, applied to both dev and prod.
 
 "Fully migrated" is not quite true and never was: `74-tenant-commercial-access.sql` was never
 applied to prod (see the Razorpay Billing section). Verify against `schema_migrations` rather
