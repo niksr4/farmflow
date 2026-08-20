@@ -1,6 +1,7 @@
 import "server-only"
 
 import { DEFAULT_AUTH_EMAIL_FROM, EMAIL_BCC_MONITORING } from "@/lib/email-addresses"
+import { escapeHtml } from "@/lib/html-escape"
 // This agent runs from cron across every tenant, not inside a per-request handler, so it uses
 // the RLS-bypassing owner connection rather than app_runtime, which requires a per-request
 // app.tenant_id session context this code never has.
@@ -119,9 +120,9 @@ function buildNudge1Email(candidate: NudgeCandidate): { subject: string; html: s
         </td></tr>
 
         <tr><td style="background:#ffffff;padding:32px;border-left:1px solid #e5e7eb;border-right:1px solid #e5e7eb;">
-          <p style="margin:0 0 16px;font-size:15px;color:#111827;">Hi ${firstName},</p>
+          <p style="margin:0 0 16px;font-size:15px;color:#111827;">Hi ${escapeHtml(firstName)},</p>
           <p style="margin:0 0 16px;font-size:15px;color:#374151;line-height:1.6;">
-            You set up your FarmFlow workspace for <strong>${candidate.estateName}</strong> a few days ago — great to have you on board.
+            You set up your FarmFlow workspace for <strong>${escapeHtml(candidate.estateName)}</strong> a few days ago — great to have you on board.
           </p>
           <p style="margin:0 0 20px;font-size:15px;color:#374151;line-height:1.6;">
             We noticed you haven't started recording yet. Here's the quickest way in — pick whichever fits today:
@@ -211,9 +212,9 @@ function buildNudge2Email(candidate: NudgeCandidate): { subject: string; html: s
         </td></tr>
 
         <tr><td style="background:#ffffff;padding:32px;border-left:1px solid #e5e7eb;border-right:1px solid #e5e7eb;">
-          <p style="margin:0 0 16px;font-size:15px;color:#111827;">Hi ${firstName},</p>
+          <p style="margin:0 0 16px;font-size:15px;color:#111827;">Hi ${escapeHtml(firstName)},</p>
           <p style="margin:0 0 16px;font-size:15px;color:#374151;line-height:1.6;">
-            Just checking in — your FarmFlow workspace for <strong>${candidate.estateName}</strong> is still set up and ready to go.
+            Just checking in — your FarmFlow workspace for <strong>${escapeHtml(candidate.estateName)}</strong> is still set up and ready to go.
           </p>
           <p style="margin:0 0 20px;font-size:15px;color:#374151;line-height:1.6;">
             We know getting started with new software can feel like one more thing on a long list.

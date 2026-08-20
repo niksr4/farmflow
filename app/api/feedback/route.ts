@@ -2,6 +2,7 @@ import { NextResponse } from "next/server"
 import { requireModuleAccess } from "@/lib/server/module-access"
 import { checkRateLimit, buildRateLimitHeaders, isRateLimitUnavailableError } from "@/lib/rate-limit"
 import { DEFAULT_SUPPORT_EMAIL, DEFAULT_ALERT_EMAIL_FROM } from "@/lib/email-addresses"
+import { escapeHtml } from "@/lib/html-escape"
 import { fetchWithTimeout } from "@/lib/server/http"
 
 export const dynamic = "force-dynamic"
@@ -49,7 +50,6 @@ export async function POST(request: Request) {
       // pageContext is free-text from the request body, same as message -- escape it too
       // instead of interpolating it raw (message already was escaped; this was the one field
       // in this table that wasn't, despite being just as attacker-controlled).
-      const escapeHtml = (value: string) => value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
       const safePageContext = escapeHtml(pageContext)
       const safeMessage = escapeHtml(message)
       const html = `

@@ -51,18 +51,16 @@ describe("sendSignupVerificationEmail", () => {
     expect(body.to).toEqual(["person@example.com"])
   })
 
-  // KNOWN BUG — filed to the FarmFlow Linear backlog by the 2026-08-05 code scan
-  // (lib/server/onboarding/email.ts: unescaped name/estateName in verification HTML email).
-  // `input.name` and `input.estateName` come straight from the public signup form
-  // (lib/server/onboarding/signup.ts -> createOrRefreshSignupRequest) and are interpolated
-  // directly into the HTML email body with no call to lib/html-escape's `escapeHtml` — the
-  // exact helper this codebase built for this exact problem (see its own doc comment: "Every
-  // transactional email in this codebase is built by string-interpolating values into an HTML
-  // template"), and which app/api/contact/route.ts and app/api/feedback/route.ts already use.
-  // This test documents the current (unsafe) behavior. Once the fix lands (escaping name/
-  // estateName before interpolation), update this assertion to expect the escaped form
-  // instead, e.g. `&lt;img src=x onerror=alert(1)&gt;`.
-  it("does not currently escape HTML metacharacters in name/estateName (characterization test — see findings log)", async () => {
+  // Fixed by the 2026-08-10 code scan (lib/server/onboarding/email.ts now escapes
+  // `input.name`/`input.estateName` via lib/html-escape's `escapeHtml` before interpolating
+  // them into the HTML email body — the exact helper this codebase built for this exact
+  // problem (see its own doc comment: "Every transactional email in this codebase is built
+  // by string-interpolating values into an HTML template"), and which app/api/contact/route.ts
+  // and app/api/feedback/route.ts already used. `input.name` and `input.estateName` come
+  // straight from the public signup form (lib/server/onboarding/signup.ts ->
+  // createOrRefreshSignupRequest), so this is the highest-severity of the three sites fixed in
+  // this pass: zero authentication required to reach it.
+  it("escapes HTML metacharacters in name/estateName before embedding them in the HTML body", async () => {
     process.env.RESEND_API_KEY = "test_key"
     process.env.AUTH_EMAIL_FROM = "FarmFlow <hello@farmflow.app>"
     process.env.AUTH_EMAIL_PREVIEW_DIR = ""
@@ -78,9 +76,12 @@ describe("sendSignupVerificationEmail", () => {
 
     const [, init] = fetchMock.mock.calls[0]
     const body = JSON.parse(init.body as string)
-    // Documents today's behavior: the raw tag and raw ampersand both pass through untouched.
-    expect(body.html).toContain('<img src=x onerror=alert(1)>')
-    expect(body.html).toContain("Estate & Co")
+    // Both the raw tag and the raw ampersand must be neutralised — ampersand-first escaping is
+    // what stops a pre-encoded payload (`&lt;img ... &gt;`) from surviving a second pass.
+    expect(body.html).not.toContain('<img src=x onerror=alert(1)>')
+    expect(body.html).toContain('&lt;img src=x onerror=alert(1)&gt;')
+    expect(body.html).not.toContain("Estate & Co")
+    expect(body.html).toContain("Estate &amp; Co")
   })
 
   it("skips sending and reports the reason when RESEND_API_KEY is not configured", async () => {

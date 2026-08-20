@@ -4,6 +4,7 @@ import { mkdir, writeFile } from "node:fs/promises"
 import path from "node:path"
 
 import { DEFAULT_ALERT_EMAIL_FROM, DEFAULT_AUTH_EMAIL_FROM, EMAIL_BCC_MONITORING } from "@/lib/email-addresses"
+import { escapeHtml } from "@/lib/html-escape"
 import { fetchWithTimeout } from "@/lib/server/http"
 import { getAuthEmailSenderConfigurationError, maskEmailAddress } from "@/lib/server/onboarding/utils"
 import { buildEmailChangeLink } from "@/lib/server/email-change-utils"
@@ -105,7 +106,7 @@ export async function sendEmailChangeVerification(input: {
 
   const html = `
     <div style="font-family: Arial, sans-serif; line-height: 1.6; color: #122018;">
-      <p>Hi ${input.username || "there"},</p>
+      <p>Hi ${escapeHtml(input.username || "there")},</p>
       <p>Confirm this address to finish changing the email on your FarmFlow account.</p>
       <p>
         <a href="${link}" style="display: inline-block; background: #17633f; color: #ffffff; padding: 12px 18px; border-radius: 8px; text-decoration: none;">
@@ -154,8 +155,8 @@ export async function sendEmailChangeNotice(input: {
 
   const html = `
     <div style="font-family: Arial, sans-serif; line-height: 1.6; color: #122018;">
-      <p>Hi ${input.username || "there"},</p>
-      <p>Someone requested changing the email on your FarmFlow account to <strong>${masked}</strong>.</p>
+      <p>Hi ${escapeHtml(input.username || "there")},</p>
+      <p>Someone requested changing the email on your FarmFlow account to <strong>${escapeHtml(masked)}</strong>.</p>
       <p>If that was you, no action is needed — confirm using the link sent to the new address.</p>
       <p style="color: #8a2b2b;"><strong>If it was not you</strong>, your account may be compromised. Change your password immediately and contact support@thefarmflow.in.</p>
     </div>

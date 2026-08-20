@@ -4,6 +4,7 @@ import { mkdir, writeFile } from "node:fs/promises"
 import path from "node:path"
 
 import { DEFAULT_ALERT_EMAIL_FROM, DEFAULT_AUTH_EMAIL_FROM, EMAIL_BCC_MONITORING } from "@/lib/email-addresses"
+import { escapeHtml } from "@/lib/html-escape"
 import { fetchWithTimeout } from "@/lib/server/http"
 import {
   buildVerificationLink,
@@ -84,8 +85,8 @@ export async function sendSignupVerificationEmail(
 
   const html = `
     <div style="font-family: Arial, sans-serif; line-height: 1.6; color: #122018;">
-      <p>Hi ${input.name || "there"},</p>
-      <p>Verify your email to finish creating your FarmFlow workspace for <strong>${input.estateName}</strong>.</p>
+      <p>Hi ${escapeHtml(input.name || "there")},</p>
+      <p>Verify your email to finish creating your FarmFlow workspace for <strong>${escapeHtml(input.estateName)}</strong>.</p>
       <p>
         <a href="${verificationLink}" style="display: inline-block; background: #17633f; color: #ffffff; padding: 12px 18px; border-radius: 8px; text-decoration: none;">
           Verify Email

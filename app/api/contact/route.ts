@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server"
 import { z } from "zod"
 import { DEFAULT_SUPPORT_EMAIL, DEFAULT_SUPPORT_EMAIL_FROM } from "@/lib/email-addresses"
+import { escapeHtml } from "@/lib/html-escape"
 import { checkRateLimit, buildRateLimitHeaders, isRateLimitUnavailableError } from "@/lib/rate-limit"
 
 const contactBodySchema = z.object({
@@ -75,7 +76,6 @@ export async function POST(request: Request) {
   // free text -- escape everything interpolated into the HTML email, not just `message`.
   // inquiryLabel is exempt: it only ever comes from the fixed INQUIRY_LABELS map above, never
   // from the request body.
-  const escapeHtml = (value: string) => value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;")
   const safeName = escapeHtml(name)
   const safeEmail = escapeHtml(email)
   const safeIp = escapeHtml(ipAddress)

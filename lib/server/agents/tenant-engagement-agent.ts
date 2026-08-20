@@ -9,6 +9,7 @@ import { getCurrentEstatePhase } from "@/lib/coffee-estate-calendar"
 import { adminSql as sql } from "@/lib/server/db"
 import { fetchWithTimeout } from "@/lib/server/http"
 import { logServerWarning } from "@/lib/server/safe-logging"
+import { escapeHtml } from "@/lib/html-escape"
 
 type YesterdayActivity = {
   tenantId: string
@@ -198,8 +199,6 @@ function buildActivitySummary(a: YesterdayActivity | undefined): string {
 // (lib/server/onboarding/provision-tenant.ts) with no character restriction beyond length -- it
 // is attacker-controlled. Every tenantName/flag interpolated into this internal HTML report must
 // be escaped, the same way contact/feedback route emails already are.
-const escapeHtml = (value: string) =>
-  value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;")
 
 function buildAlertHtml(summaries: Array<TenantEngagementRow & TenantGuidanceSummary>, generatedAt: string, yesterdayActivity: Map<string, YesterdayActivity>, estatePhaseLabel: string): string {
   const statusBadge = (status: TenantGuidanceSummary["status"]) => {

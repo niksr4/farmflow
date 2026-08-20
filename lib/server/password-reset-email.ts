@@ -4,6 +4,7 @@ import { mkdir, writeFile } from "node:fs/promises"
 import path from "node:path"
 
 import { DEFAULT_ALERT_EMAIL_FROM, DEFAULT_AUTH_EMAIL_FROM, EMAIL_BCC_MONITORING } from "@/lib/email-addresses"
+import { escapeHtml } from "@/lib/html-escape"
 import { fetchWithTimeout } from "@/lib/server/http"
 import { getAuthEmailSenderConfigurationError } from "@/lib/server/onboarding/utils"
 import { buildPasswordResetLink } from "@/lib/server/password-reset-utils"
@@ -78,7 +79,7 @@ export async function sendPasswordResetEmail(input: PasswordResetEmailInput): Pr
 
   const html = `
     <div style="font-family: Arial, sans-serif; line-height: 1.6; color: #122018;">
-      <p>Hi ${input.username || "there"},</p>
+      <p>Hi ${escapeHtml(input.username || "there")},</p>
       <p>We received a request to reset your FarmFlow password.</p>
       <p>
         <a href="${resetLink}" style="display: inline-block; background: #17633f; color: #ffffff; padding: 12px 18px; border-radius: 8px; text-decoration: none;">

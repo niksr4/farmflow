@@ -8,6 +8,7 @@ import { adminSql as sql } from "@/lib/server/db"
 import { fetchWithTimeout } from "@/lib/server/http"
 import { logServerError, logServerWarning } from "@/lib/server/safe-logging"
 import { fetchTenantActivitySignals, evaluateProbeDormancy } from "@/lib/server/agents/tenant-dormancy"
+import { escapeHtml } from "@/lib/html-escape"
 
 // Dormancy probe — sent to a tenant's admin when NOBODY in that tenant has shown any sign of
 // life for DORMANCY_PROBE_THRESHOLD_DAYS: no login and no data entered by a person. Either
@@ -149,9 +150,9 @@ function buildProbeEmail(candidate: DormantCandidate): { subject: string; html: 
         </td></tr>
 
         <tr><td style="background:#ffffff;padding:32px;border-left:1px solid #e5e7eb;border-right:1px solid #e5e7eb;">
-          <p style="margin:0 0 16px;font-size:15px;color:#111827;">Hi ${firstName},</p>
+          <p style="margin:0 0 16px;font-size:15px;color:#111827;">Hi ${escapeHtml(firstName)},</p>
           <p style="margin:0 0 16px;font-size:15px;color:#374151;line-height:1.6;">
-            There's been no activity on FarmFlow for <strong>${candidate.tenantName}</strong> in about ${candidate.daysSinceActivity} days — no one signed in, and nothing recorded.
+            There's been no activity on FarmFlow for <strong>${escapeHtml(candidate.tenantName)}</strong> in about ${candidate.daysSinceActivity} days — no one signed in, and nothing recorded.
           </p>
           <p style="margin:0 0 24px;font-size:15px;color:#374151;line-height:1.6;">
             No pressure if it's been a quiet stretch on the estate — just checking in case something's blocking you, or you need a hand with anything.

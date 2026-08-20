@@ -21,6 +21,7 @@ import { createDigestFeedbackLinks, type DigestFeedbackLinks } from "@/lib/serve
 import { fetchTenantOwnersWithVerifiedEmail, fetchRecentRainfallSummary, type TenantDigestRow } from "@/lib/server/agents/digest-shared"
 import { fetchTenantActivitySignals, evaluateDigestDormancy } from "@/lib/server/agents/tenant-dormancy"
 import { fetchTenantEstateNames, fetchActivityByEstate, buildEstateBreakdownSection } from "@/lib/server/agents/digest-estate-breakdown"
+import { escapeHtml } from "@/lib/html-escape"
 
 type DigestResult = {
   tenantId: string
@@ -477,8 +478,6 @@ function buildFeedbackHtml(feedbackLinks: DigestFeedbackLinks | null): string {
 // sendDigestEmail below), so an unescaped payload here would land in a shared inbox every week,
 // not once. digestText is AI-generated but can quote the tenant's own data verbatim (buyer
 // names, notes) which is just as attacker-reachable, so every interpolation here is escaped.
-const escapeHtml = (value: string) =>
-  value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;")
 
 function buildDigestHtml(ownerName: string, tenantName: string, digestText: string, feedbackLinks: DigestFeedbackLinks | null): string {
   // Convert plain-text numbered sections to simple HTML paragraphs

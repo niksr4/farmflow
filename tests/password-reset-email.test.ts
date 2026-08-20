@@ -49,18 +49,15 @@ describe("sendPasswordResetEmail", () => {
     expect(body.to).toEqual(["person@example.com"])
   })
 
-  // KNOWN BUG — filed to the FarmFlow Linear backlog by the 2026-08-05 code scan
-  // (lib/server/password-reset-email.ts: unescaped username in reset HTML email), the same
-  // pattern as lib/server/onboarding/email.ts. `input.username` is interpolated directly into
-  // the HTML body via `<p>Hi ${input.username || "there"},</p>` with no call to
-  // lib/html-escape's `escapeHtml`, unlike app/api/contact/route.ts and app/api/feedback/route.ts.
+  // Fixed by the 2026-08-10 code scan (lib/server/password-reset-email.ts now escapes
+  // `input.username` via lib/html-escape's `escapeHtml` before interpolating it into the HTML
+  // body), the same fix applied to lib/server/onboarding/email.ts and lib/server/email-change-email.ts.
   // Usernames are generated from user-controlled signup input (see
   // lib/server/onboarding/utils.ts buildUsernameSeeds / normalizeCandidate), which strips most
   // HTML-unsafe characters — but existing accounts (created before that normalization, or via
-  // other paths) are not guaranteed to have a clean username, so this stays a real gap.
-  // This test documents the current (unsafe) behavior; once fixed, update the assertion to
-  // expect the escaped form.
-  it("does not currently escape HTML metacharacters in username (characterization test — see findings log)", async () => {
+  // other paths) are not guaranteed to have a clean username, so escaping at the email layer
+  // stays the real fix rather than relying on upstream normalization alone.
+  it("escapes HTML metacharacters in username before embedding it in the HTML body", async () => {
     process.env.RESEND_API_KEY = "test_key"
     process.env.AUTH_EMAIL_FROM = "FarmFlow <hello@farmflow.app>"
     process.env.AUTH_EMAIL_PREVIEW_DIR = ""
@@ -75,7 +72,8 @@ describe("sendPasswordResetEmail", () => {
 
     const [, init] = fetchMock.mock.calls[0]
     const body = JSON.parse(init.body as string)
-    expect(body.html).toContain('<img src=x onerror=alert(1)>')
+    expect(body.html).not.toContain('<img src=x onerror=alert(1)>')
+    expect(body.html).toContain('&lt;img src=x onerror=alert(1)&gt;')
   })
 
   it("skips sending and reports the reason when RESEND_API_KEY is not configured", async () => {
