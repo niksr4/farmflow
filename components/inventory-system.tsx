@@ -195,6 +195,12 @@ import {
   getOnboardingStatusRequests,
   type OnboardingAccess,
   type OnboardingStatusKey,
+  isBlocksAndAcreageDone,
+  isStorehouseDone,
+  isInventoryDone,
+  isWorkersDone,
+  isWeatherDone,
+  isTeamMemberDone,
   type OnboardingStatusSnapshot,
 } from "@/components/inventory-system/onboarding"
 
@@ -1151,11 +1157,20 @@ export default function InventorySystem() {
         canShowSales: isAdmin && isModuleEnabled("sales"),
         canManageUsers: isAdmin,
       }
+      // kind=all, because the checklist asks about blocks AND the storehouse. The default is
+      // blocks only, which would leave "Name your storehouse" permanently unfinished for an
+      // estate that already has one -- inventory-system.tsx is on the allowlist in
+      // tests/location-kind-callers.test.ts precisely for this.
       const locationsEndpoint =
         isPreviewMode && previewTenantId
-          ? `/api/locations?tenantId=${encodeURIComponent(previewTenantId)}`
-          : "/api/locations"
-      const requests = getOnboardingStatusRequests(locationsEndpoint, onboardingAccess, tenantId)
+          ? `/api/locations?scope=all&kind=all&tenantId=${encodeURIComponent(previewTenantId)}`
+          : "/api/locations?scope=all&kind=all"
+      const requests = getOnboardingStatusRequests(
+        locationsEndpoint,
+        onboardingAccess,
+        tenantId,
+        getTodayDateInputValue(),
+      )
 
       if (requests.length === 0) {
         setOnboardingStatus(INITIAL_ONBOARDING_STATUS)
@@ -1187,30 +1202,24 @@ export default function InventorySystem() {
       const hasRecords = (data: any) =>
         (Number(data?.totalCount) || 0) > 0 || (Array.isArray(data?.records) && data.records.length > 0)
 
+      // Each rule lives in onboarding.ts as a pure predicate rather than inline here, so it can be
+      // tested against a real payload shape. A check reading the wrong field name never throws --
+      // the step just never goes green, which nobody notices until an estate says it is stuck.
+      const checks: Partial<Record<OnboardingStatusKey, (payload: any) => boolean>> = {
+        blocks_acreage: isBlocksAndAcreageDone,
+        storehouse: isStorehouseDone,
+        inventory: isInventoryDone,
+        workers: isWorkersDone,
+        weather: isWeatherDone,
+        team_member: isTeamMemberDone,
+        locations: (payload) => Array.isArray(payload?.locations) && payload.locations.length > 0,
+        account_codes: (payload) => Array.isArray(payload?.activities) && payload.activities.length > 0,
+      }
+
       requests.forEach((request, index) => {
         const payload = payloads[index]
-        if (request.key === "locations") {
-          nextStatus.locations = Array.isArray(payload?.locations) && payload.locations.length > 0
-          return
-        }
-        if (request.key === "account_codes") {
-          nextStatus.account_codes = Array.isArray(payload?.activities) && payload.activities.length > 0
-          return
-        }
-        if (request.key === "inventory") {
-          nextStatus.inventory =
-            Number(payload?.summary?.total_items) > 0 ||
-            (Array.isArray(payload?.inventory) && payload.inventory.length > 0) ||
-            (Array.isArray(payload?.items) && payload.items.length > 0)
-          return
-        }
-        if (request.key === "team_member") {
-          // Done when at least one additional user exists beyond the admin themselves
-          nextStatus.team_member = Array.isArray(payload?.users) && payload.users.length > 1
-          return
-        }
-
-        nextStatus[request.key as Exclude<OnboardingStatusKey, "locations" | "account_codes" | "inventory" | "team_member">] = hasRecords(payload)
+        const check = checks[request.key]
+        nextStatus[request.key] = check ? check(payload) : hasRecords(payload)
       })
 
       setOnboardingStatus(nextStatus)

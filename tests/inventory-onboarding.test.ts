@@ -23,10 +23,14 @@ describe("inventory onboarding helpers", () => {
     const steps = buildOnboardingSteps(INITIAL_ONBOARDING_STATUS, access)
     const phases = buildLaunchGuidePhases(INITIAL_ONBOARDING_STATUS, access)
 
-    // requests include all enabled modules for status fetching
-    expect(requests.map((request) => request.key)).toEqual(["locations", "inventory", "processing", "dispatch"])
-    // steps exclude processing/dispatch — they're seasonal and intentionally omitted from the launch checklist
-    expect(steps.map((step) => step.key)).toEqual(["locations", "inventory"])
+    // The estate map is asked for unconditionally now: every figure the app produces is per-block
+    // or per-acre, so it is not gated on which modules happen to be on.
+    expect(requests.map((request) => request.key)).toEqual([
+      "blocks_acreage", "storehouse", "inventory", "weather", "locations", "processing", "dispatch",
+    ])
+    // Processing and dispatch stay out of the checklist — they are seasonal, and an off-season
+    // estate would never be able to finish setup.
+    expect(steps.map((step) => step.key)).toEqual(["blocks_acreage", "storehouse", "inventory", "weather"])
     expect(phases.map((phase) => phase.id)).toEqual(["phase-1", "phase-2", "phase-3"])
   })
 
@@ -49,8 +53,10 @@ describe("inventory onboarding helpers", () => {
     const steps = buildOnboardingSteps(status, access)
     const phases = buildLaunchGuidePhases(status, access)
 
-    expect(requests.map((request) => request.key)).toEqual(["inventory"])
-    expect(steps.map((step) => step.key)).toEqual(["inventory"])
+    expect(requests.map((request) => request.key)).toEqual([
+      "blocks_acreage", "storehouse", "inventory", "weather",
+    ])
+    expect(steps.map((step) => step.key)).toEqual(["blocks_acreage", "storehouse", "inventory", "weather"])
     expect(phases).toHaveLength(1)
     expect(phases[0]).toMatchObject({
       id: "phase-1",

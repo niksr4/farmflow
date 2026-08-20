@@ -54,6 +54,18 @@ describe("buildSmartNextSteps", () => {
       requiresGuidedSetup: true,
       onboardingStatus: { ...INITIAL_ONBOARDING_STATUS, inventory: false },
     })
+    // Mapping the estate comes before stock: acreage is the denominator under every per-acre
+    // number, and stock entered against no block cannot be attributed to one later.
+    expect(steps[0]?.id).toBe("onboarding-blocks_acreage")
+  })
+
+  it("moves on to stock once the estate is mapped and the store exists", () => {
+    const steps = buildSmartNextSteps({
+      ...baseInput,
+      canShowInventory: true,
+      requiresGuidedSetup: true,
+      onboardingStatus: { ...INITIAL_ONBOARDING_STATUS, blocks_acreage: true, storehouse: true, inventory: false },
+    })
     expect(steps[0]?.id).toBe("onboarding-inventory")
   })
 
@@ -119,7 +131,13 @@ describe("buildSmartNextSteps", () => {
     // earlier step's, which silently ate the designed universal fallback: first-live-record also
     // resolves to "home" for a barely-configured tenant — exactly the tenant that needs the
     // "ask FarmFlow where to go" card most. Dedupe is now by id alone.
-    const steps = buildSmartNextSteps({ ...baseInput, recentActivity: [] })
+    // The collision used to happen by accident, because the first pending onboarding step
+    // resolved to "home". It now resolves to "settings" (map your estate), so the clash has to be
+    // arranged deliberately or this stops testing the thing it was written for: with every
+    // onboarding step done there is no pending step to borrow a tab from, and first-live-record
+    // falls back to "home" — the same tab stuck-help uses.
+    const allDone = { ...INITIAL_ONBOARDING_STATUS, blocks_acreage: true, weather: true }
+    const steps = buildSmartNextSteps({ ...baseInput, onboardingStatus: allDone, recentActivity: [] })
     const firstLiveRecord = steps.find((s) => s.id === "first-live-record")
     expect(firstLiveRecord?.actionTab).toBe("home")
     expect(steps.some((s) => s.id === "stuck-help")).toBe(true)
