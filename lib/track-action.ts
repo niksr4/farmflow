@@ -1,5 +1,6 @@
 import posthog from "posthog-js"
 import * as Sentry from "@sentry/nextjs"
+import { isNetworkError, isOffline } from "@/lib/network-error"
 
 // Call at the top of any button's onClick — sync or async — to log intent immediately.
 export function trackClick(action: string, meta?: Record<string, unknown>) {
@@ -35,9 +36,24 @@ export function reportActionFailure(action: string, error: string, meta?: Record
 }
 
 // Call when an action throws an unexpected exception.
+//
+// A dropped connection is not an exception in the sense Sentry is for. Writers use this on Android
+// phones under tree cover, so `TypeError: Failed to fetch` is the ordinary case -- and at error
+// level it buries the reports that mean something. It still goes to PostHog, where the volume is
+// the point: a rise in action_failed/network is a real signal about field connectivity, and one
+// nobody has to triage.
 export function reportActionError(action: string, err: unknown, meta?: Record<string, unknown>) {
   if (typeof window === "undefined") return
   const message = err instanceof Error ? err.message : String(err)
+
+  if (isNetworkError(err)) {
+    posthog.capture("action_failed", { action, error: message, reason: "network", offline: isOffline(), ...meta })
+    // Kept as a breadcrumb so it still shows in the trail of a later, real error -- "they were
+    // offline thirty seconds before this" is often the explanation.
+    Sentry.addBreadcrumb({ category: "network", level: "info", message: `[${action}] ${message}`, data: meta })
+    return
+  }
+
   posthog.capture("action_failed", { action, error: message, ...meta })
   Sentry.captureException(err instanceof Error ? err : new Error(message), {
     tags: { action },

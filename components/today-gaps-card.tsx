@@ -16,10 +16,11 @@ import { useAbortableRequests } from "@/hooks/use-abortable"
 import { isAbortError } from "@/lib/abortable"
 import { addDays, format, isToday, startOfWeek } from "date-fns"
 import { reportActionError } from "@/lib/track-action"
-import { AlertTriangle, ArrowRight, Check, CloudRain, Droplets, Loader2, Users } from "lucide-react"
+import { AlertTriangle, ArrowRight, Check, CloudRain, Droplets, Loader2, Users, WifiOff } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { formatCurrency, formatNumber } from "@/lib/format"
 import { getSeasonBadge } from "@/lib/season-utils"
+import { isNetworkError } from "@/lib/network-error"
 
 type GapDay = { date: string; label: string; isToday: boolean }
 
@@ -45,6 +46,7 @@ export default function TodayGapsCard({ onNavigate, className }: Props) {
   const [gaps, setGaps] = useState<GapDay[]>([])
   const [stats, setStats] = useState<WeekStats | null>(null)
   const [loading, setLoading] = useState(true)
+  const [offline, setOffline] = useState(false)
   const seasonBadge = getSeasonBadge()
 
   // Refetches fire on every farmflow:record-saved event, so a burst of saves can leave
@@ -103,11 +105,20 @@ export default function TodayGapsCard({ onNavigate, className }: Props) {
         : []
 
       setGaps(gapDays)
+      setOffline(false)
     } catch (err) {
       // Superseded by a newer refetch, or unmounted — not a failure. Reporting it would
       // put noise in Sentry and blank a card that is about to be repopulated.
       if (isAbortError(err)) return
       reportActionError("today_gaps_load", err)
+      // A dropped connection must not blank the card. Emptying it renders "I could not find
+      // out" as "you have no gaps today" -- which is the one message this card exists to
+      // avoid getting wrong, and the writer has no way to tell the difference. Keep whatever
+      // was last known and say the connection went; the next refetch repairs it.
+      if (isNetworkError(err)) {
+        setOffline(true)
+        return
+      }
       setGaps([])
       setStats(null)
     } finally {
@@ -142,10 +153,19 @@ export default function TodayGapsCard({ onNavigate, className }: Props) {
   }
 
   const hasGaps = gaps.length > 0
-  const allCaughtUp = !hasGaps && stats && stats.laborCost > 0
+  // "Caught up" is a claim about the data. It cannot be made while the last load failed --
+  // otherwise a writer who walked out of signal is told they are up to date on a card that
+  // simply never heard back.
+  const allCaughtUp = !offline && !hasGaps && stats && stats.laborCost > 0
 
   return (
     <div className={cn("space-y-3", className)}>
+      {offline && (
+        <div className="flex items-center gap-2 rounded-xl border border-stone-200 bg-stone-50 px-3 py-2 text-xs text-stone-600 dark:border-white/[0.06] dark:bg-white/[0.03] dark:text-stone-400">
+          <WifiOff className="h-3.5 w-3.5 shrink-0" />
+          <span>No connection — showing what was last loaded. This refreshes on its own.</span>
+        </div>
+      )}
       {/* Season label */}
       <div className="flex items-center justify-between px-1">
         <p className="text-sm font-black text-stone-700">This week</p>
