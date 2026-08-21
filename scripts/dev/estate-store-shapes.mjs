@@ -16,9 +16,11 @@
 import { neon } from "@neondatabase/serverless"
 const sql = neon(process.env.DATABASE_URL)
 
-/** Mirrors storeLocations in inventory-system.tsx. If they drift, this is the one that is wrong. */
-const storesFor = (stores, estate) =>
-  estate ? stores.filter((s) => !s.estate || s.estate === estate) : stores
+// The rule is no longer written here. lib/estate-shapes.ts holds it, the component calls it, and
+// tests/tenant-shapes.test.ts exercises it across every arrangement -- including two nobody has
+// yet. This used to say "if they drift, this is the one that is wrong", which was an admission
+// that a second copy existed at all.
+const storesFor = (stores, estate) => stores.filter((s) => !estate || !s.estate || s.estate === estate)
 
 for (const t of await sql`SELECT id, name FROM tenants ORDER BY name`) {
   const locs = await sql`SELECT name, estate, kind FROM locations WHERE tenant_id=${t.id} ORDER BY kind, name`

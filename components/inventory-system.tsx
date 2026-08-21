@@ -211,6 +211,7 @@ import { useSingleFlight } from "@/hooks/use-single-flight"
 import { isAbortError } from "@/lib/abortable"
 import { useWriteQueue } from "@/hooks/use-write-queue"
 import type { WriteQueueBlockedEntry } from "@/lib/write-queue"
+import { storesForEstate } from "@/lib/estate-shapes"
 import {
   AiAnalysisCharts,
   AccountsPage,
@@ -422,12 +423,14 @@ export default function InventorySystem() {
 
   // Where stock can physically be. Narrowed by the estate selector the same way blocks are, so a
   // Medappa user viewing Tirtha is offered the Tirtha store and not the Citrus one.
-  const storeLocations = useMemo(() => {
-    const stores = locations.filter((loc) => loc.kind === "store")
-    return canSelectEstate && selectedEstate
-      ? stores.filter((loc) => !loc.estate || loc.estate === selectedEstate)
-      : stores
-  }, [locations, canSelectEstate, selectedEstate])
+  // One rule, in lib/estate-shapes.ts, pinned by the shape matrix in tests/tenant-shapes.test.ts.
+  // It used to be written here and again in scripts/dev/estate-store-shapes.mjs, whose own comment
+  // conceded "if they drift, this is the one that is wrong" -- which is a bug waiting for someone
+  // to edit one copy.
+  const storeLocations = useMemo(
+    () => storesForEstate(locations, canSelectEstate ? selectedEstate : null),
+    [locations, canSelectEstate, selectedEstate],
+  )
 
   const estateFilteredLocations = useMemo(
     () => (canSelectEstate && selectedEstate ? blockLocations.filter((loc) => loc.estate === selectedEstate) : blockLocations),

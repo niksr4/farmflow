@@ -74,9 +74,11 @@ describe("blocks and stores are asked for by name", () => {
 
   it("a store serves its own estate, or every estate when it names none", () => {
     const shell = files.find((f) => f.rel === "components/inventory-system.tsx")!.body
-    // The one rule that makes all four tenant shapes work without special cases. `!loc.estate`
-    // is the shared-shed case: HoneyFarm run one store across HF, MV and PG.
-    expect(shell).toMatch(/storeLocations = useMemo\(\(\) => \{[\s\S]{0,400}!loc\.estate \|\| loc\.estate === selectedEstate/)
+    // The rule itself now lives in lib/estate-shapes.ts and is exercised across every tenant
+    // arrangement by tests/tenant-shapes.test.ts. What matters here is that the component still
+    // defers to it rather than growing a second copy -- which is exactly how it drifted before.
+    expect(shell).toMatch(/storeLocations = useMemo\(\s*\(\) => storesForEstate\(/)
+    expect(shell).toContain('from "@/lib/estate-shapes"')
   })
 })
 
