@@ -88,12 +88,20 @@ Key files:
 - `lib/server/onboarding/provision-tenant.ts` — creates tenant, modules, location, **seeds 80 default activity codes**
 - `components/welcome-onboarding-page.tsx`, `components/onboarding-checklist.tsx`
 
-**Onboarding checklist steps** (in order):
-1. Add estate manager (creates a second user account)
-2. Add estate locations (if processing/dispatch/sales enabled)
-3. Set up activity codes (auto-completed — 80 codes pre-seeded)
-4. Add first inventory item
-5. Log first labor deployment
+**Onboarding checklist steps** (in order) — `components/inventory-system/onboarding.ts`:
+1. **Map your estate** — estates, blocks, and every block's acreage
+2. **Name your storehouse**
+3. **Opening stock and what it cost**
+4. **Workers and their daily rates**
+5. **Pin your weather location**
+6. **Give your writer a login**
+
+Completion is **all, not any**, wherever the number is a denominator: stock is done when *every*
+item is priced, workers when *every* worker has a rate. The old list went green on the first row,
+which is how estates finished onboarding with one of forty items priced. Each check is a pure
+predicate in that file so it can be tested against a real payload shape — one reading the wrong
+field does not throw, it just never goes green, which is invisible until someone says the checklist
+is stuck. Activity codes are no longer a step: 80 are pre-seeded.
 
 **Owner alert:** owner gets an email the moment a new tenant self-provisions.
 `/signup` is a live public URL — anyone can self-register.
