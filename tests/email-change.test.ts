@@ -130,9 +130,12 @@ describe("email change flow wiring", () => {
   })
 
   it("exposes the page to every role, including writers", () => {
-    // app/settings/page.tsx bounces role=user; the email page must sit outside that redirect
-    // or "change your own email" quietly excludes writers.
+    // This used to also assert that app/settings/page.tsx bounced role=user, because the email
+    // page had to sit outside that redirect or "change your own email" quietly excluded writers.
+    // The redirect is gone -- writers reach their own Language and Security sections directly --
+    // so the workaround is no longer load-bearing. What still matters is the goal it protected:
+    // this page must never grow a role check of its own.
     expect(read("app/settings/email/page.tsx")).not.toContain('role === "user"')
-    expect(read("app/settings/page.tsx")).toContain('role === "user"')
+    expect(read("app/settings/page.tsx")).not.toMatch(/role === "user"[\s\S]{0,80}redirect\("\/dashboard"\)/)
   })
 })

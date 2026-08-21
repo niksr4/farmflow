@@ -9,11 +9,15 @@ export default async function SettingsPage() {
     redirect("/welcome")
   }
 
-  // Writers (role=user) have no settings surface — their locale and password
-  // are managed by the estate admin. Keep the pared app pared.
-  if (sessionUser.role === "user") {
-    redirect("/dashboard")
-  }
+  // Writers used to be redirected away entirely, on the reasoning that their locale and password
+  // were "managed by the estate admin". Both endpoints have always been self-service --
+  // /api/account/preferences and /api/account/password gate on requireSessionUser and nothing
+  // more -- so the only thing the redirect achieved was that a Kannada-speaking writer could not
+  // set the app to Kannada, and nobody could rotate their own password without asking their boss.
+  //
+  // The page itself is already role-aware: every estate section is behind isAdminOrOwner, and
+  // Language and Security are marked "visible to everyone". A writer now sees those two and
+  // nothing else -- no People, no Locations, no Import, no modules, no billing.
 
   return <TenantSettingsPage />
 }

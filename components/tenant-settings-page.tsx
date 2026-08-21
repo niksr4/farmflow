@@ -1196,7 +1196,12 @@ export default function TenantSettingsPage() {
   if (isOwner) {
     sectionLinks.push({ id: "tenant-modules", label: "Allowed Modules" })
   }
-  sectionLinks.push({ id: "tenant-users", label: "People" })
+  // People lists every account on the estate and is where roles are changed. A writer has no
+  // business there -- and it was the one section pushed unconditionally, so opening Settings to
+  // writers without this would have handed them the user list.
+  if (isAdminOrOwner) {
+    sectionLinks.push({ id: "tenant-users", label: "People" })
+  }
   if (isAdminOrOwner) {
     sectionLinks.push({ id: "user-module-overrides", label: "User Exceptions" })
   }
