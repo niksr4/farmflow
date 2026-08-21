@@ -24,6 +24,7 @@ import {
   type InventoryAllocationSlot,
 } from "@/lib/expense-inventory"
 import { sanitizeRouteError } from "@/lib/server/sanitize-route-error"
+import { resolveExpenseStockLocationId } from "@/lib/server/expense-stock-source"
 
 export const dynamic = "force-dynamic"
 export const revalidate = 0
@@ -1297,12 +1298,17 @@ export async function POST(request: Request) {
       }
     }
 
+    // The shed on the same estate as the block being worked -- not the block itself, which is
+    // what used to be passed and could never match a stock slot. See expense-stock-source.ts.
+    const stockSourceLocationId = supportsLocation
+      ? await resolveExpenseStockLocationId(accountsSql, tenantContext, validLocationId)
+      : null
     const plannedTransactions =
       supportsInventoryLink && rawInventoryItems.length > 0
         ? await planExpenseInventoryTransactions(
             tenantContext,
             rawInventoryItems,
-            supportsLocation ? validLocationId : null,
+            stockSourceLocationId,
           )
         : []
 
@@ -1458,7 +1464,7 @@ export async function PUT(request: Request) {
         ? await planExpenseInventoryTransactions(
             tenantContext,
             rawInventoryItems,
-            supportsLocation ? validLocationId : null,
+            supportsLocation ? await resolveExpenseStockLocationId(accountsSql, tenantContext, validLocationId) : null,
             existingInventoryTransactions,
           )
         : []
