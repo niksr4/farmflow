@@ -50,6 +50,9 @@ type Worker = {
   estate: string | null
   deviceUserCode: string | null
   active: boolean
+  /** A contract crew is one row with a headcount, not N invented people. scripts/115. */
+  kind: "individual" | "gang"
+  headcount: number | null
 }
 
 const UNASSIGNED_LOCATION = "__unassigned__"
@@ -161,6 +164,8 @@ export default function WorkerProfilesTab() {
             estate: w.estate || null,
             deviceUserCode: w.deviceUserCode || null,
             active: true,
+            kind: w.kind === "gang" ? "gang" : "individual",
+            headcount: w.headcount != null ? Number(w.headcount) : null,
           })),
         )
       }
@@ -354,7 +359,7 @@ export default function WorkerProfilesTab() {
               <div className="space-y-1.5">
                 <FieldLabel
                   label="Daily wage (₹)"
-                  tooltip="What this worker normally earns for a day. Work that pays differently can carry its own rate under Costs, and a one-off amount can be typed on the deployment itself — both override this."
+                  tooltip="What this worker normally earns for a day. For a contract crew this is the rate PER PERSON — the day's cost is this times the headcount. Work that pays differently can carry its own rate under Costs, and a one-off amount can be typed on the deployment itself; both override this."
                 />
                 <Input
                   type="number" inputMode="decimal"
@@ -497,6 +502,17 @@ export default function WorkerProfilesTab() {
                         <div className="min-w-0 flex-1">
                           <div className="flex flex-wrap items-center gap-2">
                             <p className="truncate text-sm font-bold text-stone-800 dark:text-stone-100">{w.name}</p>
+                            {/* A crew reads as one person otherwise, and its rate is per head --
+                                so the row has to say both, or the day's cost is off by the
+                                headcount and looks entirely plausible. */}
+                            {w.kind === "gang" && (
+                              <span className="shrink-0 rounded-full border border-amber-300 bg-amber-50 px-2 py-0.5 text-[10px] font-bold text-amber-800 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-300">
+                                Crew of {w.headcount ?? "?"}
+                                {Number(w.dailyRate) > 0 && w.headcount
+                                  ? ` · ₹${(Number(w.dailyRate) * Number(w.headcount)).toLocaleString("en-IN")}/day`
+                                  : ""}
+                              </span>
+                            )}
                             {w.workerType && (
                               <Badge variant="outline" className={`text-[10px] ${WORKER_TYPE_COLORS[w.workerType]}`}>
                                 {WORKER_TYPE_LABELS[w.workerType]}
@@ -547,7 +563,7 @@ export default function WorkerProfilesTab() {
                               </SelectContent>
                             </Select>
                           )}
-                          <Input value={editForm.dailyRate} onChange={(e) => setEditForm((f) => ({ ...f, dailyRate: e.target.value }))} placeholder="Daily rate" inputMode="decimal" />
+                          <Input value={editForm.dailyRate} onChange={(e) => setEditForm((f) => ({ ...f, dailyRate: e.target.value }))} placeholder={w.kind === "gang" ? "Daily rate per person" : "Daily rate"} inputMode="decimal" />
                           <Input value={editForm.phone} onChange={(e) => setEditForm((f) => ({ ...f, phone: e.target.value }))} placeholder="Phone" inputMode="tel" />
                           <Input value={editForm.bankName} onChange={(e) => setEditForm((f) => ({ ...f, bankName: e.target.value }))} placeholder="Bank name" />
                           <Input value={editForm.bankAccount} onChange={(e) => setEditForm((f) => ({ ...f, bankAccount: e.target.value }))} placeholder="Account no." />
