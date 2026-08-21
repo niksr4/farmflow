@@ -47,6 +47,7 @@ const KNOWN_RAW_ERROR_LEAKS = [
   "app/api/ai-proactive-insights/route.ts",
   "app/api/attendance/devices/[id]/route.ts",
   "app/api/attendance/devices/route.ts",
+  "app/api/attendance/assignments/route.ts",
   "app/api/attendance/route.ts",
   "app/api/attendance/unmapped-codes/route.ts",
   "app/api/attendance/workers/[id]/route.ts",
@@ -67,7 +68,6 @@ const KNOWN_RAW_ERROR_LEAKS = [
   "app/api/cron/weekly-digest/route.ts",
   "app/api/documents/[id]/file/route.ts",
   "app/api/documents/route.ts",
-  "app/api/exception-alerts/route.ts",
   "app/api/exports/ops/route.ts",
   "app/api/finance-balance-sheet/route.ts",
   "app/api/get-activity/route.ts",
@@ -79,10 +79,18 @@ const KNOWN_RAW_ERROR_LEAKS = [
   "app/api/register-interest/route.ts",
 ].sort()
 
-// Any of these anywhere in the file means its error responses go through the safe path -- even if
-// only some branches use it, treat the file as handled rather than false-positiving on files that
-// are migrating incrementally. (None of the seeded entries above hit this today; this is here so
-// the detector doesn't re-flag a file the moment a fix adds the helper to just one branch.)
+// These are the safe ways to put an error in a response. Their PRESENCE no longer exempts a file.
+//
+// It used to: "any of these anywhere in the file means its error responses go through the safe
+// path -- even if only some branches use it". That was a deliberate trade to avoid false-positiving
+// on incremental migrations, and it cost exactly what it was always going to. On 2026-08-20 five
+// routes were fixed by sanitizing their `message` field; app/api/transactions-neon/batch also
+// returned `error: error?.toString() || String(error)` two lines below, and the moment the file
+// gained its first sanitizeRouteError call the whole file stopped being scanned. The guard went
+// green over a live leak, and it took an outside scan to find it.
+//
+// A partial fix is precisely when a file most needs checking. The field-value check below is what
+// distinguishes a sanitized field from a raw one, so the file-level skip buys nothing.
 const SAFE_HELPERS = [
   "sanitizeRouteError(",
   "buildErrorResponse(",
@@ -136,6 +144,25 @@ const VERIFIED_FALSE_POSITIVES = new Set([
   "app/api/auth/confirm-email-change/route.ts",
 ])
 
+/**
+ * The text of one object field's value: from just after `field:` to the comma or brace that ends
+ * it, respecting nesting so a ternary or a call with its own commas is read whole.
+ */
+const readFieldValue = (src: string, from: number) => {
+  let depth = 0
+  for (let i = from; i < src.length && i < from + 600; i++) {
+    const ch = src[i]
+    if (ch === "(" || ch === "[" || ch === "{") depth++
+    else if (ch === ")" || ch === "]" || ch === "}") {
+      if (depth === 0) return src.slice(from, i)
+      depth--
+    } else if ((ch === "," || ch === "\n") && depth === 0) {
+      return src.slice(from, i)
+    }
+  }
+  return src.slice(from, from + 600)
+}
+
 const findRawErrorMessageLeaks = (): string[] => {
   const root = process.cwd()
   const apiDir = resolve(root, "app/api")
@@ -145,7 +172,6 @@ const findRawErrorMessageLeaks = (): string[] => {
     const relativePath = relative(root, file).split("\\").join("/")
     if (VERIFIED_FALSE_POSITIVES.has(relativePath)) continue
     const src = readFileSync(file, "utf8")
-    if (SAFE_HELPERS.some((helper) => src.includes(helper))) continue
 
     if (NORMALIZER_PASSTHROUGH_RE.test(src)) {
       flagged.push(relative(root, file).split("\\").join("/"))
@@ -164,14 +190,20 @@ const findRawErrorMessageLeaks = (): string[] => {
     const errorFieldRe = /(?:error|message):\s*/g
     let match: RegExpExecArray | null
     while ((match = errorFieldRe.exec(src))) {
-      const windowText = src.slice(match.index, match.index + 220)
+      // The field's OWN value, not the 220 characters that happen to follow it. A fixed window
+      // reaches past the end of the object into unrelated code -- a safe `error: "..."` string
+      // sitting above a `console.error(..., error.message)` read as a leak, which is how the
+      // false positives that motivated the file-level skip appeared in the first place.
+      const windowText = readFieldValue(src, match.index + match[0].length)
       if (RAW_MESSAGE_ACCESS_RE.test(windowText)) {
         looksLikeLeak = true
         break
       }
       // Field value may be a plain identifier assigned from a raw access earlier
       // (`const message = error?.message || "..."; ... error: message`).
-      const idMatch = windowText.match(/^(?:error|message):\s*([a-zA-Z0-9_]+)/)
+      // windowText is now the value alone, so this matches the whole of it rather than looking
+      // past a field prefix that is no longer included.
+      const idMatch = windowText.trim().match(/^([a-zA-Z0-9_]+)$/)
       if (idMatch) {
         const varName = idMatch[1]
         const assignRe = new RegExp(

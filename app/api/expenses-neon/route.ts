@@ -1374,7 +1374,7 @@ export async function POST(request: Request) {
       return NextResponse.json(
         {
           success: false,
-          error: error instanceof Error && error.message ? error.message : "Insufficient stock for the linked inventory item. Restock it first.",
+          error: sanitizeRouteError(error, "Insufficient stock for the linked inventory item. Restock it first."),
         },
         { status: 409 },
       )
@@ -1570,7 +1570,7 @@ export async function PUT(request: Request) {
       return NextResponse.json(
         {
           success: false,
-          error: error instanceof Error && error.message ? error.message : "Insufficient stock for the linked inventory item. Restock it first.",
+          error: sanitizeRouteError(error, "Insufficient stock for the linked inventory item. Restock it first."),
         },
         { status: 409 },
       )
