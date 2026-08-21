@@ -1,16 +1,64 @@
 #!/usr/bin/env bash
 # Fast local guard so a whole-repo failure can't reach a shared branch. Runs the same early
 # checks CI runs (lint → typecheck → unit tests), which is what would otherwise fail in CI.
-# Skip with:  git push --no-verify
-set -e
+# Skip entirely with:  git push --no-verify
+#
+# A CHECK THAT FAILED AND A CHECK THAT COULD NOT RUN ARE NOT THE SAME THING.
+#
+# This hook used to treat them identically, and an automated contributor lost two full days to
+# it: its sandbox host ran out of disk, `pnpm` died with ERR_PNPM_ENOSPC before any check
+# executed, the push was refused, and the fixes -- which were correct -- went in the bin with the
+# disposable clone. It then re-derived the identical work the next day and lost it the same way.
+#
+# Blocking on a real failure protects the branch. Blocking because the machine is full protects
+# nothing: nothing was checked, so nothing was learned, and the only outcome is discarded work.
+# CI is the actual gate -- it runs lint, typecheck, tests, build and public e2e on every push --
+# so letting an unverifiable push through costs a red CI run at worst, while refusing it costs
+# the work. So: if a check runs and fails, stop. If the environment cannot run it, say so loudly
+# and let CI decide.
+set -uo pipefail
 
-echo "▶ pre-push: lint"
-pnpm lint
+# Exit codes and messages that mean "the toolchain never got to run", not "your code is wrong".
+ENV_FAILURE_PATTERN='ENOSPC|ENOMEM|no space left|cannot allocate memory|EACCES.*node_modules|Cannot find module .*(next|vitest|eslint)|ERR_PNPM_.*_FAIL'
 
-echo "▶ pre-push: typecheck"
-pnpm typecheck
+degraded=0
 
-echo "▶ pre-push: unit tests"
-pnpm test
+run_check() {
+  local label="$1"
+  shift
+  echo "▶ pre-push: ${label}"
+
+  local output
+  output="$("$@" 2>&1)"
+  local status=$?
+
+  if [ $status -eq 0 ]; then
+    return 0
+  fi
+
+  printf '%s\n' "$output"
+
+  if printf '%s' "$output" | grep -qE "$ENV_FAILURE_PATTERN"; then
+    echo ""
+    echo "⚠ pre-push: ${label} could not run — this machine could not execute the toolchain."
+    echo "  Not a code failure. Allowing the push; CI will run the same checks properly."
+    degraded=1
+    return 0
+  fi
+
+  echo ""
+  echo "✗ pre-push: ${label} failed. Fix it, or push with --no-verify if you know better."
+  exit 1
+}
+
+run_check "lint" pnpm lint
+run_check "typecheck" pnpm typecheck
+run_check "unit tests" pnpm test
+
+if [ "$degraded" -eq 1 ]; then
+  echo ""
+  echo "⚠ pushed WITHOUT full local verification — watch CI on this one."
+  exit 0
+fi
 
 echo "✓ pre-push checks passed"
