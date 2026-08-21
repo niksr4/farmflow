@@ -377,8 +377,14 @@ export default function InventorySystem() {
   // Every picker downstream is asking "where was this work done", so the store is removed here
   // once rather than in each of them. The Inventory tab reads `locations` directly, which is why
   // the fetch above takes both kinds. scripts/128.
+  // Everything except the storehouse. That means blocks AND estate-general locations: both are
+  // places cost can be attributed to, and general is where estate-wide spend belongs -- 99.4% of
+  // HoneyFarm's sits there. Filtering to kind === "block" would have removed it from the labour,
+  // expense, processing, dispatch and sales dropdowns the moment scripts/133 reclassified it,
+  // leaving their writer no way to file the spend he files every week. Only acreage cares about
+  // the block/general distinction, and it checks the kind itself.
   const blockLocations = useMemo(
-    () => locations.filter((loc) => (loc.kind ?? "block") === "block"),
+    () => locations.filter((loc) => (loc.kind ?? "block") !== "store"),
     [locations],
   )
   // Built from blockLocations, not the raw list: this feeds the location dropdowns across

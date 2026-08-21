@@ -205,12 +205,13 @@ export default function TenantSettingsPage() {
   const [newLocationCode, setNewLocationCode] = useState("")
   const [newLocationEstate, setNewLocationEstate] = useState("")
   const [newLocationArea, setNewLocationArea] = useState("")
+  const [newLocationKind, setNewLocationKind] = useState<"block" | "store" | "general">("block")
 
   // The estate's acreage is the sum of its blocks, never a number of its own. Stores are excluded
   // -- a shed has a footprint but not a planted area, and counting it would inflate every
   // per-acre figure the app produces.
   const blockAcreage = useMemo(() => {
-    const blocks = locations.filter((l) => (l.kind || "block") !== "store")
+    const blocks = locations.filter((l) => (l.kind || "block") === "block")
     const withArea = blocks.filter((l) => l.areaAcres != null && Number(l.areaAcres) > 0)
     const total = withArea.reduce((sum, l) => sum + Number(l.areaAcres || 0), 0)
     return {
@@ -939,6 +940,7 @@ export default function TenantSettingsPage() {
           code: String(newLocationCode || "").trim() || undefined,
           estate: String(newLocationEstate || "").trim() || null,
           areaAcres: String(newLocationArea || "").trim() === "" ? null : Number(newLocationArea),
+          kind: newLocationKind,
           tenantId,
         }),
       })
@@ -950,6 +952,7 @@ export default function TenantSettingsPage() {
       setNewLocationCode("")
       setNewLocationEstate("")
       setNewLocationArea("")
+      setNewLocationKind("block")
       await loadLocations()
       toast({ title: "Location created", description: `${data.location.name} added.` })
     } catch (error: any) {
@@ -1424,6 +1427,8 @@ export default function TenantSettingsPage() {
                     editingLocationEstate={editingLocationEstate}
                     newLocationArea={newLocationArea}
                     onNewLocationAreaChange={setNewLocationArea}
+                    newLocationKind={newLocationKind}
+                    onNewLocationKindChange={setNewLocationKind}
                     editingLocationArea={editingLocationArea}
                     onEditingLocationAreaChange={setEditingLocationArea}
                     isUpdatingLocationId={isUpdatingLocationId}

@@ -96,9 +96,13 @@ export type LaunchGuidePhaseConfig = {
 
 const asArray = (value: unknown) => (Array.isArray(value) ? value : [])
 
-/** Blocks only, since a storehouse has a footprint but no planted area. */
+/**
+ * Land only. A storehouse has a footprint but no planted area, and an estate-general location is
+ * not a place at all -- it holds spend that belongs to no block. Asking either for an area would
+ * leave HoneyFarm permanently stuck on step one, since two of their six locations are general.
+ */
 export const selectBlocks = (payload: any) =>
-  asArray(payload?.locations).filter((l: any) => (l?.kind || "block") !== "store")
+  asArray(payload?.locations).filter((l: any) => (l?.kind || "block") === "block")
 
 /**
  * Every block, not the first one. One block with an area and nine without produces a per-acre

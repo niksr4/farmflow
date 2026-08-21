@@ -79,3 +79,16 @@ describe("blocks and stores are asked for by name", () => {
     expect(shell).toMatch(/storeLocations = useMemo\(\(\) => \{[\s\S]{0,400}!loc\.estate \|\| loc\.estate === selectedEstate/)
   })
 })
+
+describe("estate-general locations stay selectable for cost", () => {
+  // scripts/133 split "general" out of "block" so acreage could exclude it. The cost dropdowns
+  // must NOT follow: 99.4% of HoneyFarm's spend is filed against a general location, and
+  // narrowing this filter to kind === "block" silently removes their most-used option.
+  const shell = readFileSync("components/inventory-system.tsx", "utf8")
+
+  it("builds the location dropdowns by excluding stores, not by demanding blocks", () => {
+    const memo = shell.slice(shell.indexOf("const blockLocations"), shell.indexOf("const blockLocations") + 260)
+    expect(memo).toContain('!== "store"')
+    expect(memo).not.toContain('=== "block"')
+  })
+})

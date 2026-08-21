@@ -59,6 +59,7 @@ type LocationsSectionProps = {
   newLocationCode: string
   newLocationEstate: string
   newLocationArea: string
+  newLocationKind: "block" | "store" | "general"
   editingLocationArea: string
   onEditingLocationAreaChange: (value: string) => void
   isCreatingLocation: boolean
@@ -71,6 +72,7 @@ type LocationsSectionProps = {
   onNewLocationCodeChange: (value: string) => void
   onNewLocationEstateChange: (value: string) => void
   onNewLocationAreaChange: (value: string) => void
+  onNewLocationKindChange: (value: "block" | "store" | "general") => void
   onCreateLocation: () => void
   onEditingLocationNameChange: (value: string) => void
   onEditingLocationCodeChange: (value: string) => void
@@ -88,6 +90,7 @@ export function LocationsSection({
   newLocationCode,
   newLocationEstate,
   newLocationArea,
+  newLocationKind,
   editingLocationArea,
   onEditingLocationAreaChange,
   isCreatingLocation,
@@ -100,6 +103,7 @@ export function LocationsSection({
   onNewLocationCodeChange,
   onNewLocationEstateChange,
   onNewLocationAreaChange,
+  onNewLocationKindChange,
   onCreateLocation,
   onEditingLocationNameChange,
   onEditingLocationCodeChange,
@@ -181,6 +185,28 @@ export function LocationsSection({
 
         <div className="rounded-2xl border border-border/60 bg-white/90 p-4 shadow-sm">
           <div className="grid grid-cols-1 gap-3 md:grid-cols-[2fr_1fr_1fr_1fr_auto]">
+            {/* First, because it changes what the rest of the form means. Everything created here
+                used to be a block by default -- which is why every storehouse in production was
+                made by a migration rather than by an estate, and why estate-wide spend had to be
+                given a block that is not a place. */}
+            <div className="space-y-2 md:col-span-4">
+              <HelpLabel
+                htmlFor="location-kind"
+                label="What are you adding?"
+                help="A block is land you work and harvest. A storehouse holds stock. Estate-wide is for spend that is real but belongs to no single block."
+              />
+              <Select value={newLocationKind} onValueChange={(v) => onNewLocationKindChange(v as "block" | "store" | "general")}>
+                <SelectTrigger id="location-kind" className="w-full">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="block">Planting block — land you work</SelectItem>
+                  <SelectItem value="store">Storehouse — where stock is kept</SelectItem>
+                  <SelectItem value="general">Estate-wide — spend not tied to one block</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
             <div className="space-y-2">
               <HelpLabel
                 htmlFor="location-name"
@@ -227,6 +253,7 @@ export function LocationsSection({
               />
             </div>
 
+            {newLocationKind === "block" && (
             <div className="space-y-2">
               <HelpLabel
                 htmlFor="location-area"
@@ -246,6 +273,7 @@ export function LocationsSection({
                 onKeyDown={(event) => { if (event.key === "Enter") onCreateLocation() }}
               />
             </div>
+            )}
 
             <div className="flex items-end">
               <Button onClick={onCreateLocation} disabled={isCreatingLocation} className="w-full">

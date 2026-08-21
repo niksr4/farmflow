@@ -168,3 +168,38 @@ describe("the requests behind the checks", () => {
     }
   })
 })
+
+describe("a general location is not a piece of land", () => {
+  // 99.4% of HoneyFarm's cost sits on "Honeyfarm (general)" and "Sidapur (general)". They hold
+  // spend that is real but belongs to no block, so they must never be asked for an area -- and
+  // must never enter an acreage denominator, or every per-acre figure on the estate is wrong.
+  it("does not demand acreage from a general location", () => {
+    const payload = {
+      locations: [
+        { kind: "block", areaAcres: 4 },
+        { kind: "general", areaAcres: null },
+        { kind: "store", areaAcres: null },
+      ],
+    }
+    expect(isBlocksAndAcreageDone(payload)).toBe(true)
+    expect(countBlocksMissingAcreage(payload)).toBe(0)
+  })
+
+  it("would otherwise leave HoneyFarm stuck on step one forever", () => {
+    // Their real shape: two blocks, two generals, one store.
+    const honeyfarm = {
+      locations: [
+        { kind: "block", areaAcres: 12 },
+        { kind: "block", areaAcres: 8 },
+        { kind: "general", areaAcres: null },
+        { kind: "general", areaAcres: null },
+        { kind: "store", areaAcres: null },
+      ],
+    }
+    expect(isBlocksAndAcreageDone(honeyfarm)).toBe(true)
+  })
+
+  it("still counts a real block that has no area", () => {
+    expect(isBlocksAndAcreageDone({ locations: [{ kind: "block", areaAcres: null }, { kind: "general" }] })).toBe(false)
+  })
+})

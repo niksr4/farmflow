@@ -49,7 +49,7 @@ function serializeLocation(row: Record<string, unknown>) {
     areaAcres: row.area_acres != null ? Number(row.area_acres) : null,
     // 'block' where work happens, 'store' where stock sits. Defaulted rather than assumed so a
     // row written before scripts/128 still reads as a block.
-    kind: row.kind === "store" ? "store" : "block",
+    kind: row.kind === "store" ? "store" : row.kind === "general" ? "general" : "block",
   }
 }
 
@@ -95,8 +95,13 @@ export async function GET(request: Request) {
     // ?kind=all is for the settings page, which manages both.
     const requestedKind = (searchParams.get("kind") || "block").toLowerCase()
     if (requestedKind !== "all") {
+      // "block" deliberately includes estate-general locations: both are places cost can be
+      // attributed to, and every cost picker asks for blocks. Only acreage cares about the
+      // difference, and it checks the serialized kind directly.
       const want = requestedKind === "store" ? "store" : "block"
-      serialized = serialized.filter((loc) => (loc.kind || "block") === want)
+      serialized = serialized.filter((loc) =>
+        want === "store" ? loc.kind === "store" : (loc.kind || "block") !== "store",
+      )
     }
 
     // Per-user location restriction: null = unrestricted (owner/admin, or a `user` with no
@@ -154,15 +159,20 @@ export async function POST(request: Request) {
     // Settable only on create. Turning an existing block into a store, or the reverse, would move
     // every record hanging off it into a place of the wrong kind -- and a block with a year of
     // labour on it is not something anyone should be able to reclassify from a dropdown.
-    const kind = String(body.kind || "").trim().toLowerCase() === "store" ? "store" : "block"
+    const requested = String(body.kind || "").trim().toLowerCase()
+    const kind = requested === "store" ? "store" : requested === "general" ? "general" : "block"
     const requestedTenantId = body.tenantId
     tenantId = resolveRequestedTenantId(sessionUser, requestedTenantId, { fallbackToSessionTenant: true }) || sessionUser.tenantId
     const tenantContext = normalizeTenantContext(tenantId, sessionUser.role)
 
-    const areaAcres = readAreaAcres(body?.areaAcres)
-    if (areaAcres === "invalid") {
+    const rawArea = readAreaAcres(body?.areaAcres)
+    if (rawArea === "invalid") {
       return NextResponse.json({ success: false, error: "Area must be a positive number of acres" }, { status: 400 })
     }
+    // Only land has a planted area. A shed and an "estate in general" stay NULL, or the figure
+    // silently joins an acreage denominator it does not belong in and quietly corrupts every
+    // per-acre number the estate is shown.
+    const areaAcres = kind === "block" ? rawArea : null
 
     if (!name) {
       return NextResponse.json({ success: false, error: "Location name is required" }, { status: 400 })
