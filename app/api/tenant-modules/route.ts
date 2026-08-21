@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server"
 import { sql } from "@/lib/server/db"
+import { sanitizeRouteError } from "@/lib/server/sanitize-route-error"
 
 export const dynamic = "force-dynamic"
 export const revalidate = 0
@@ -8,7 +9,6 @@ import { resolveScopedSessionUser } from "@/lib/server/module-access"
 import { MODULE_BUNDLES, resolveTenantEnabledModules } from "@/lib/modules"
 import { resolveTenantPlanId } from "@/lib/server/tenant-subscriptions"
 import { normalizeTenantContext, runTenantQuery } from "@/lib/server/tenant-db"
-import { sanitizeRouteError } from "@/lib/server/sanitize-route-error"
 
 export async function GET(_request: Request) {
   try {

@@ -1,3 +1,6 @@
+// Kept in sync with the subprocessor list in section 5 of app/legal/privacy/page.tsx --
+// update both together. This is the page that list is supposed to be the "full list" for,
+// so drifting out of sync with it defeats the point of having a separate page at all.
 const SUBPROCESSORS = [
   {
     name: "Vercel",
@@ -10,14 +13,29 @@ const SUBPROCESSORS = [
     location: "AWS ap-southeast-1 (Singapore)",
   },
   {
-    name: "Email provider",
-    purpose: "System emails (not enabled yet)",
-    location: "TBD",
+    name: "Resend",
+    purpose: "Transactional email delivery (verification codes, weekly digests, account alerts)",
+    location: "United States",
   },
   {
-    name: "Analytics provider",
-    purpose: "Product analytics (not enabled yet)",
-    location: "TBD",
+    name: "Anthropic",
+    purpose: "AI assistant and analysis features (relevant context only; not used for training without consent)",
+    location: "United States",
+  },
+  {
+    name: "PostHog",
+    purpose: "Product analytics (pages visited, features used, click events)",
+    location: "EU (routed via our own domain, /ingest/)",
+  },
+  {
+    name: "Google Analytics (GA4)",
+    purpose: "Website traffic and acquisition analytics",
+    location: "United States",
+  },
+  {
+    name: "Sentry",
+    purpose: "Error and performance monitoring",
+    location: "EU (de.sentry.io)",
   },
 ]
 
@@ -27,7 +45,7 @@ export default function SubprocessorsPage() {
       <div className="space-y-2">
         <p className="text-xs uppercase tracking-[0.3em] text-muted-foreground">Legal</p>
         <h1 className="text-3xl font-semibold text-foreground">Subprocessor List</h1>
-        <p className="text-sm text-muted-foreground">Updated: 2026-02-09</p>
+        <p className="text-sm text-muted-foreground">Updated: 2026-08-21</p>
       </div>
 
       <div className="space-y-3">

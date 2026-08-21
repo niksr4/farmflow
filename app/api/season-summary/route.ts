@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server"
 import { cookies } from "next/headers"
 import { sql } from "@/lib/server/db"
+import { sanitizeRouteError } from "@/lib/server/sanitize-route-error"
 import { requireModuleAccess, isModuleAccessError } from "@/lib/server/module-access"
 import { resolveActiveEstate } from "@/lib/server/estate-filter"
 import { SELECTED_ESTATE_COOKIE } from "@/lib/server/estate-cookie"
@@ -16,7 +17,6 @@ import {
   resolveSalesKgs,
   toLocationBucket,
 } from "@/lib/server/season-summary-utils"
-import { sanitizeRouteError } from "@/lib/server/sanitize-route-error"
 
 export const dynamic = "force-dynamic"
 export const revalidate = 0

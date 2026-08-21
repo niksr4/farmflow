@@ -5,6 +5,7 @@ import { normalizeTenantContext, runTenantQuery } from "@/lib/server/tenant-db"
 import { buildRateLimitHeaders, checkRateLimit } from "@/lib/rate-limit"
 import { fetchWithTimeout } from "@/lib/server/http"
 import { logServerError } from "@/lib/server/safe-logging"
+import { sanitizeRouteError } from "@/lib/server/sanitize-route-error"
 import { parseJsonObject } from "@/lib/server/tenant-experience-db"
 import { buildTenantWeatherQuery } from "@/lib/tenant-estate-profile"
 import {
@@ -18,7 +19,6 @@ import {
   WEATHER_FORECAST_DAYS,
 } from "@/lib/weather-guidance"
 import { DEFAULT_WEATHER_QUERY, normalizeWeatherLocationQuery } from "@/lib/weather-config"
-import { sanitizeRouteError } from "@/lib/server/sanitize-route-error"
 
 type ForecastDay = {
   date: string

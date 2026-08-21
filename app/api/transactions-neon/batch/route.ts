@@ -6,8 +6,8 @@ import { canDeleteModule } from "@/lib/permissions"
 import { logAuditEvent } from "@/lib/server/audit-log"
 import { repairCurrentInventoryUpsertConstraints } from "@/lib/server/current-inventory-constraints"
 import { logRouteMutationFailure } from "@/lib/server/route-error-events"
-import { resolveTenantUserUuid } from "@/lib/server/tenant-user"
 import { sanitizeRouteError } from "@/lib/server/sanitize-route-error"
+import { resolveTenantUserUuid } from "@/lib/server/tenant-user"
 
 export const dynamic = "force-dynamic"
 
@@ -174,7 +174,6 @@ export async function POST(request: NextRequest) {
       {
         success: false,
         message: sanitizeRouteError(error, "Failed to batch update transactions"),
-        error: error?.toString() || String(error),
       },
       { status: 500 }
     )

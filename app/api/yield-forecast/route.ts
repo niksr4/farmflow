@@ -1,9 +1,9 @@
 import { NextResponse, type NextRequest } from "next/server"
 import { sql } from "@/lib/server/db"
+import { sanitizeRouteError } from "@/lib/server/sanitize-route-error"
 import { requireModuleAccess, isModuleAccessError } from "@/lib/server/module-access"
 import { normalizeTenantContext, runTenantQueries, runTenantQuery } from "@/lib/server/tenant-db"
 import { getCurrentFiscalYear } from "@/lib/fiscal-year-utils"
-import { sanitizeRouteError } from "@/lib/server/sanitize-route-error"
 
 export const dynamic = "force-dynamic"
 export const revalidate = 0
