@@ -1,5 +1,9 @@
 # FarmFlow — Claude Code Project Guide
 
+> **Start with [STATUS.md](STATUS.md)** for where things currently stand — tenant states, what is
+> blocked on whom, and decisions already settled. This file is how the system works; that one is
+> what is happening. Keep it current when a tenant's state changes.
+
 ## Project Overview
 
 FarmFlow is a multi-tenant farm management SaaS for coffee/pepper/rubber estates.
