@@ -6,12 +6,13 @@ import { SELECTED_ESTATE_COOKIE } from "@/lib/server/estate-cookie"
 import { logServerError } from "@/lib/server/safe-logging"
 import { sql } from "@/lib/server/db"
 import { normalizeTenantContext, runTenantQuery } from "@/lib/server/tenant-db"
+import type { ActivityModule } from "@/lib/activity-contracts"
 
 export const dynamic = "force-dynamic"
 export const revalidate = 0
 
 export type ActivityEntry = {
-  module: "processing" | "dispatch" | "sales" | "labor" | "expenses"
+  module: ActivityModule
   label: string
   detail: string
   date: string // ISO date string

@@ -12,8 +12,8 @@ import { formatDateForDisplay } from "@/lib/date-utils"
 import { cn } from "@/lib/utils"
 import FilterBar from "@/components/filter-bar"
 import { useListControls } from "@/hooks/use-list-controls"
+import { ACTIVITY_SOURCES, type ActivitySource } from "@/lib/activity-contracts"
 
-type ActivitySource = "labor" | "expense" | "inventory"
 
 type ActivityRecord = {
   id: string
@@ -37,11 +37,12 @@ const SOURCE_LABELS: Record<string, string> = {
   inventory: "Inventory",
 }
 
+// Derived from the contract rather than retyped. This list carrying its own spelling of "labour"
+// is exactly what made the filter silently return every source -- the route ignored a value it did
+// not recognise, so the dropdown looked like it worked.
 const SOURCE_OPTIONS: Array<{ value: string; label: string }> = [
   { value: "all", label: "All modules" },
-  { value: "labor", label: "Labour" },
-  { value: "expense", label: "Non-Labour Expenses" },
-  { value: "inventory", label: "Inventory" },
+  ...ACTIVITY_SOURCES.map((value) => ({ value, label: SOURCE_LABELS[value] })),
 ]
 
 const formatSourceLabel = (source: string) => SOURCE_LABELS[source] ?? source

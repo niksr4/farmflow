@@ -4,6 +4,7 @@ import { requireAdminSession } from "@/lib/server/mfa"
 import { normalizeTenantContext, runTenantQueries } from "@/lib/server/tenant-db"
 import { buildAdminErrorResponse, databaseNotConfiguredResponse } from "@/lib/server/route-utils"
 import { isForbiddenTenantAccess, resolveRequestedTenantId } from "@/lib/permissions"
+import { ACTIVITY_SOURCES, type ActivitySource } from "@/lib/activity-contracts"
 
 // Maps a source name to a SQL fragment for the UNION.
 // Returns null if the source is unknown (for safety).
@@ -12,8 +13,7 @@ import { isForbiddenTenantAccess, resolveRequestedTenantId } from "@/lib/permiss
 // an audit table can never be read unbounded.
 const SEARCH_FETCH_CEILING = 2000
 
-const VALID_SOURCES = ["labor", "expense", "inventory"] as const
-type ActivitySource = (typeof VALID_SOURCES)[number]
+const VALID_SOURCES = ACTIVITY_SOURCES
 
 const isMissingRelation = (error: unknown, relation: string) => {
   const message = String((error as Error)?.message || error)

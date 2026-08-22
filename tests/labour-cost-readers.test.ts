@@ -26,7 +26,6 @@ const ALLOWED = new Map<string, string>([
   ["app/api/admin/tenant-activity/route.ts", "joins audit_logs on the legacy row id"],
   ["lib/tenant-deletion.ts", "deletes rows"],
   ["components/tenant-settings/utils.ts", "names the table in a deletion summary"],
-  ["lib/server/pnl.ts", "names relations in a comment"],
   // Reads both tables by name because it asks "did a human write anything", and after a cutover
   // that answer lives in labour_assignments. Listed separately in ACTIVITY_TABLES.
   ["lib/server/agents/tenant-dormancy.ts", "activity signal over both tables"],
@@ -47,13 +46,22 @@ const walk = (dir: string, out: string[] = []): string[] => {
   return out
 }
 
+// Comments stripped before the check. A file that only NAMES labor_transactions while explaining
+// why the view exists is not a reader of it, and flagging one teaches the reader to add allowlist
+// entries instead of thinking -- which is how a guard stops guarding. (Third test this week with
+// this defect: the same fix went into crop-config and activity-contracts.)
+const codeOf = (file: string) =>
+  readFileSync(file, "utf8")
+    .replace(/\/\*[\s\S]*?\*\//g, "")
+    .replace(/\/\/[^\n]*/g, "")
+
 describe("labour cost is read through the view", () => {
   const root = process.cwd()
   const files = ["app", "lib", "components"].flatMap((d) => walk(join(root, d)))
 
   it("has no unlisted reader touching labor_transactions", () => {
     const offenders = files
-      .filter((f) => readFileSync(f, "utf8").includes("labor_transactions"))
+      .filter((f) => codeOf(f).includes("labor_transactions"))
       .map((f) => f.slice(root.length + 1))
       .filter((rel) => !ALLOWED.has(rel))
 
@@ -64,7 +72,7 @@ describe("labour cost is read through the view", () => {
     // An allowlist entry that no longer applies is a hole waiting for the next edit to fall into.
     const stale = [...ALLOWED.keys()].filter((rel) => {
       try {
-        return !readFileSync(join(root, rel), "utf8").includes("labor_transactions")
+        return !codeOf(join(root, rel)).includes("labor_transactions")
       } catch {
         return true
       }

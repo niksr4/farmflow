@@ -4,9 +4,12 @@ import type {
   SmartNextStep,
 } from "@/components/inventory-system/types"
 import type { ExecutionOutcomeCheck } from "@/components/inventory-system/execution-outcomes"
+import type { ActivityModule } from "@/lib/activity-contracts"
 
 type IntelligenceAction = { label: string; tab: string }
-type RecentActivityEntry = { module: string; label: string; detail: string; date: string }
+// `module: string` is what let `=== "labour"` below sit here unnoticed against a route that
+// emits "labor". Typed to the shared contract, the compiler rejects the misspelling.
+type RecentActivityEntry = { module: ActivityModule | string; label: string; detail: string; date: string }
 type TabMeta = Record<string, { label: string } | undefined>
 
 export type SmartNextStepsInput = {
@@ -232,7 +235,7 @@ export function buildSmartNextSteps(input: SmartNextStepsInput): SmartNextStep[]
         actionTab: nextTab,
         askPrompt: "I entered an expense. Should I also review inventory, account codes, or something else?",
       })
-    } else if (latestActivity.module === "labour" && canShowAccounts) {
+    } else if (latestActivity.module === "labor" && canShowAccounts) {
       addStep({
         id: "after-labour",
         tone: "progress",
