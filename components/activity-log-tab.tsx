@@ -13,7 +13,7 @@ import { cn } from "@/lib/utils"
 import FilterBar from "@/components/filter-bar"
 import { useListControls } from "@/hooks/use-list-controls"
 
-type ActivitySource = "labour" | "expense" | "inventory"
+type ActivitySource = "labor" | "expense" | "inventory"
 
 type ActivityRecord = {
   id: string
@@ -32,14 +32,14 @@ type ActivityLogTabProps = {
 const PAGE_SIZE = 50
 
 const SOURCE_LABELS: Record<string, string> = {
-  labour: "Labour",
+  labor: "Labour",
   expense: "Non-Labour Expenses",
   inventory: "Inventory",
 }
 
 const SOURCE_OPTIONS: Array<{ value: string; label: string }> = [
   { value: "all", label: "All modules" },
-  { value: "labour", label: "Labour" },
+  { value: "labor", label: "Labour" },
   { value: "expense", label: "Non-Labour Expenses" },
   { value: "inventory", label: "Inventory" },
 ]
@@ -47,7 +47,7 @@ const SOURCE_OPTIONS: Array<{ value: string; label: string }> = [
 const formatSourceLabel = (source: string) => SOURCE_LABELS[source] ?? source
 
 const sourceTagClass = (source: string) => {
-  if (source === "labour") return "bg-sky-100 text-sky-700 border-sky-200"
+  if (source === "labor") return "bg-sky-100 text-sky-700 border-sky-200"
   if (source === "expense") return "bg-amber-100 text-amber-700 border-amber-200"
   if (source === "inventory") return "bg-emerald-100 text-emerald-700 border-emerald-200"
   return "bg-muted text-muted-foreground border-border"
@@ -226,7 +226,7 @@ export default function ActivityLogTab({ tenantId }: ActivityLogTabProps) {
                     {filteredRecords.map((rec) => {
                       const amountStr = formatAmount(rec.amount)
                       const sourceMeta: Record<string, string> = {
-                        labour: "Labour deployments, wages, and worker costs",
+                        labor: "Labour deployments, wages, and worker costs",
                         expense: "Equipment, consumables, and activity expenses",
                         inventory: "Stock movements, purchases, and allocations",
                       }
