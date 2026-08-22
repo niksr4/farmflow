@@ -58,6 +58,10 @@ type Worker = {
 const UNASSIGNED_LOCATION = "__unassigned__"
 const UNASSIGNED_ESTATE = "__unassigned_estate__"
 
+/** Recorded for INDICOFS workforce returns. Never an input to pay. */
+const GENDER_LABELS: Record<string, string> = { female: "Female", male: "Male", other: "Other" }
+const formatGender = (g: string | null) => (g ? GENDER_LABELS[g] ?? g : null)
+
 const WORKER_TYPE_LABELS: Record<WorkerType, string> = {
   permanent: "Permanent",
   seasonal: "Seasonal",
@@ -247,6 +251,7 @@ export default function WorkerProfilesTab() {
           bankIfsc: editForm.bankIfsc.trim() || null,
           estate: editForm.estate === UNASSIGNED_ESTATE ? null : editForm.estate,
           deviceUserCode: editForm.deviceUserCode.trim() || null,
+          gender: editForm.gender || null,
         }),
       })
       const data = await res.json()
@@ -565,6 +570,23 @@ export default function WorkerProfilesTab() {
                           )}
                           <Input value={editForm.dailyRate} onChange={(e) => setEditForm((f) => ({ ...f, dailyRate: e.target.value }))} placeholder={w.kind === "gang" ? "Daily rate per person" : "Daily rate"} inputMode="decimal" />
                           <Input value={editForm.phone} onChange={(e) => setEditForm((f) => ({ ...f, phone: e.target.value }))} placeholder="Phone" inputMode="tel" />
+                          {/* Editable, not just settable. It was on the create form and nowhere
+                              else, so a worker added before the field existed -- or added in a
+                              hurry -- could never be corrected. INDICOFS asks for the workforce
+                              broken down by gender; a value you cannot fix later is a return you
+                              cannot file. The API has always accepted it on update. */}
+                          <Select
+                            value={editForm.gender || "unset"}
+                            onValueChange={(v) => setEditForm((f) => ({ ...f, gender: v === "unset" ? "" : v }))}
+                          >
+                            <SelectTrigger className="h-10"><SelectValue placeholder="Gender" /></SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="unset">Gender not recorded</SelectItem>
+                              <SelectItem value="female">Female</SelectItem>
+                              <SelectItem value="male">Male</SelectItem>
+                              <SelectItem value="other">Other</SelectItem>
+                            </SelectContent>
+                          </Select>
                           <Input value={editForm.bankName} onChange={(e) => setEditForm((f) => ({ ...f, bankName: e.target.value }))} placeholder="Bank name" />
                           <Input value={editForm.bankAccount} onChange={(e) => setEditForm((f) => ({ ...f, bankAccount: e.target.value }))} placeholder="Account no." />
                           <Input value={editForm.bankIfsc} onChange={(e) => setEditForm((f) => ({ ...f, bankIfsc: e.target.value }))} placeholder="IFSC" />
@@ -584,6 +606,7 @@ export default function WorkerProfilesTab() {
                         </div>
                       ) : (
                         <div className="space-y-1.5 bg-stone-50/60 px-1 pb-4 pt-1 text-sm dark:bg-white/[0.02]">
+                          <MobileField label="Gender" value={formatGender(w.gender) ?? "—"} />
                           <MobileField label="Phone" value={w.phone || "—"} />
                           <MobileField
                             label="Bank"
@@ -621,6 +644,10 @@ export default function WorkerProfilesTab() {
                     <TableHead>Type</TableHead>
                     {showEstateField && <TableHead>Estate</TableHead>}
                     <TableHead>Daily Rate</TableHead>
+                    {/* Gender was settable on create and displayed nowhere, which made it
+                        write-only: you could record it and never see or correct it. INDICOFS
+                        4.6.3G asks the estate to *demonstrate* this data. */}
+                    <TableHead className="hidden lg:table-cell">Gender</TableHead>
                     <TableHead className="hidden sm:table-cell">Phone</TableHead>
                     <TableHead className="hidden md:table-cell">Bank</TableHead>
                     {/* Only for estates with a terminal — same gate as everywhere else. */}
@@ -676,6 +703,20 @@ export default function WorkerProfilesTab() {
                             className="h-8 w-24"
                             placeholder="₹/day"
                           />
+                        </TableCell>
+                        <TableCell className="hidden lg:table-cell">
+                          <Select
+                            value={editForm.gender || "unset"}
+                            onValueChange={(v) => setEditForm((f) => ({ ...f, gender: v === "unset" ? "" : v }))}
+                          >
+                            <SelectTrigger className="h-8 w-28"><SelectValue placeholder="—" /></SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="unset">Not recorded</SelectItem>
+                              <SelectItem value="female">Female</SelectItem>
+                              <SelectItem value="male">Male</SelectItem>
+                              <SelectItem value="other">Other</SelectItem>
+                            </SelectContent>
+                          </Select>
                         </TableCell>
                         <TableCell className="hidden sm:table-cell">
                           <Input
@@ -755,6 +796,7 @@ export default function WorkerProfilesTab() {
                         <TableCell className="text-sm">
                           {w.dailyRate != null ? `₹${w.dailyRate.toLocaleString("en-IN")}` : <span className="text-xs text-muted-foreground">—</span>}
                         </TableCell>
+                        <TableCell className="hidden lg:table-cell text-sm text-muted-foreground">{formatGender(w.gender) ?? "—"}</TableCell>
                         <TableCell className="hidden sm:table-cell text-sm text-muted-foreground">{w.phone || "—"}</TableCell>
                         <TableCell className="hidden md:table-cell text-sm text-muted-foreground">
                           {w.bankName ? (
