@@ -25,13 +25,20 @@ const T = (await sql`SELECT id FROM tenants WHERE name='Estate Mock'`)[0].id
 const FIELD = ["131", "132", "137", "140", "151", "152", "157", "160", "182"]
 const OVERHEAD = ["219", "221", "245", "210", "216", "217", "211", "200", "206"]
 
-// Valley Estate had five unnamed test blocks. Coffee-estate names, with matching short codes.
+// Five extra named blocks so the screens read like a real estate rather than three codes.
+//
+// These used to be RENAMES of leftover "UI Test Block …" rows, which meant this harness silently
+// did nothing the moment that litter was cleaned up -- and estate-mock-a-day.mjs, which allocates
+// against RS/OA/PL, would then fail on codes that no longer resolved. They are created outright
+// now, so the harness does not depend on debris from an earlier run.
+//
+// Split across both estates, since Estate Mock mirrors HoneyFarm's two-estate shape.
 const BLOCKS = [
-  ["UITE8MFNVX", "Riverside", "RS"],
-  ["UITE8MLX5M", "Lower Valley", "LV"],
-  ["UITE8MVGTK", "Nursery", "NUR"],
-  ["UITE8N6ALH", "Old Arabica", "OA"],
-  ["UITE8NBKMX", "Pepper Line", "PL"],
+  ["Riverside", "RS", "Honeyfarm"],
+  ["Lower Valley", "LV", "Honeyfarm"],
+  ["Nursery", "NUR", "Sidapur"],
+  ["Old Arabica", "OA", "Sidapur"],
+  ["Pepper Line", "PL", "Sidapur"],
 ]
 
 console.log("== seeding the 80 default activity codes ==")
@@ -83,11 +90,12 @@ const dropped = await sql`
 console.log(`  dropped ${dropped.length}: ${dropped.map((r) => r.code).join(", ") || "none"}`)
 
 console.log("\n== naming the blocks ==")
-for (const [oldCode, name, code] of BLOCKS) {
-  const r = await sql`
-    UPDATE locations SET name=${name}, code=${code}
-    WHERE tenant_id=${T} AND code=${oldCode} RETURNING name`
-  if (r.length) console.log(`  ${oldCode} -> ${name} (${code})`)
+for (const [name, code, estate] of BLOCKS) {
+  await sql`
+    INSERT INTO locations (tenant_id, name, code, estate, kind)
+    VALUES (${T}, ${name}, ${code}, ${estate}, 'block')
+    ON CONFLICT (tenant_id, code) DO UPDATE SET name=EXCLUDED.name, estate=EXCLUDED.estate`
+  console.log(`  ${name} (${code}) on ${estate}`)
 }
 
 console.log("\n== result ==")

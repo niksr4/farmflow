@@ -70,7 +70,10 @@ await page.locator("#assign-block").click()
 await page.waitForTimeout(700)
 const blocks = await page.locator('[role="option"]').allInnerTexts()
 console.log("   blocks offered:", JSON.stringify(blocks.slice(0, 5)))
-await page.getByRole("option", { name: "HF", exact: true }).click()
+// "HF" is now the code, not the label -- the block reads "HF A/C" since Estate Mock was reshaped
+// to mirror HoneyFarm. exact:true against the old string silently matched nothing and the click
+// timed out, which reads as a broken picker rather than a stale harness.
+await page.getByRole("option", { name: "HF A/C", exact: true }).click()
 await page.waitForTimeout(400)
 // half day
 await page.getByRole("button", { name: "Half day" }).click()
