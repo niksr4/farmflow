@@ -295,7 +295,13 @@ export default function OtherExpensesTab({
       amount: deployment.amount,
       notes: deployment.notes || "",
     })
-    if (deployment.locationId) setFormLocationId(deployment.locationId)
+    // Always set it, including to empty. Setting it only when the row HAS a block left the
+    // previous row's block in state -- so editing an expense on HF A/C and then one with no
+    // block showed, and saved, HF A/C. Silent re-attribution of cost to a block it never
+    // touched. resetForm does not clear this either, which is deliberate for consecutive NEW
+    // entries (a writer filing ten expenses for one block should not repick it ten times) but
+    // is exactly wrong when opening an existing row.
+    setFormLocationId(deployment.locationId || "")
     const linkedItems = Array.isArray(deployment.inventoryItems) && deployment.inventoryItems.length > 0
       ? deployment.inventoryItems
       : deployment.inventoryItemType
