@@ -65,6 +65,7 @@ export const ACCOUNT_ACTIVITY_SUGGESTIONS: AccountActivitySuggestion[] = [
   { code: "146", reference: "Shade Tree Planting" },
   { code: "147", reference: "Dadap / Glyricidia Planting" },
   { code: "148", reference: "Dadap / Glyricidia Pruning" },
+  { code: "149", reference: "Trenching" },
   { code: "150", reference: "Drip line Maintenance" },
   { code: "151", reference: "Robusta Weeding" },
   { code: "152", reference: "Robusta Pruning, Handling" },
