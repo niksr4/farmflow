@@ -47,6 +47,45 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    /**
+     * A restock at ₹0 corrupts the weighted average for every later depletion of that item, and
+     * from there every expense derived from it. The three single-row paths -- opening stock, a new
+     * restock, and editing one -- have all refused this for a while. This one never did: it wrote
+     * `t.price || 0` straight through.
+     *
+     * That made it the widest hole of the four, not the narrowest. It replaces the tenant's entire
+     * ledger in one call, so it is exactly where a spreadsheet of unpriced rows arrives -- a
+     * hundred zero-priced restocks in a single request, past a rule the rest of the app enforces
+     * one row at a time.
+     *
+     * Unlike the edit path there is no exemption for rows that already exist at ₹0. A wipe-and-
+     * replace cannot tell a legacy row being restored from a new one being introduced, and
+     * guessing wrong in the permissive direction is what the other three guards exist to prevent.
+     * The cost is that restoring an old export means pricing its restocks first, which is work
+     * the unpriced-stock report was going to ask for anyway.
+     */
+    const unpricedRestocks = transactions
+      .map((t: any, index: number) => ({ index, t }))
+      .filter(({ t }) => String(t?.transaction_type ?? "").toLowerCase().includes("restock") && !(Number(t?.price) > 0))
+
+    if (unpricedRestocks.length > 0) {
+      const named = unpricedRestocks
+        .slice(0, 5)
+        .map(({ index, t }) => `row ${index + 1} (${String(t?.item_type ?? "unnamed item")})`)
+        .join(", ")
+      return NextResponse.json(
+        {
+          success: false,
+          message:
+            `${unpricedRestocks.length} restock(s) have no unit price: ${named}` +
+            `${unpricedRestocks.length > 5 ? ", and others" : ""}. ` +
+            `A ₹0 restock corrupts the weighted average cost for every future depletion of that item, ` +
+            `so nothing has been imported. Add a unit price to each restock and try again.`,
+        },
+        { status: 400 },
+      )
+    }
+
     const existingCountRows = await runTenantQuery(
       accountsSql,
       tenantContext,

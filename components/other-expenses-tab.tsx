@@ -49,6 +49,8 @@ interface InventoryItem {
   itemType: string
   unit: string
   quantity: number
+  /** Weighted average cost this item was bought in at. 0 means nothing priced it yet. */
+  avgPrice: number
 }
 
 const formatInventoryUsage = (inventoryItems?: Array<{ itemType: string; quantity?: number | null }>) => {
@@ -196,6 +198,45 @@ export default function OtherExpensesTab({
   ) ?? null
   const selectedActivityHint = selectedActivity?.module_hint ?? null
   const selectedTracksInventory = selectedActivity?.tracks_inventory ?? false
+
+  /**
+   * What the linked stock is worth, at the average cost it was bought in at.
+   *
+   * The server has always done this -- deriveAmountFromStock in /api/expenses-neon, saved as
+   * `derivedAmount ?? amount`. The form did not, so it kept asking for an Amount and then had it
+   * silently replaced: you typed Rs 5,000, linked 10 kg at Rs 400, and Rs 4,000 was stored. Two
+   * numbers that need never agree, with the receipt showing one and the P&L the other.
+   *
+   * The arithmetic here is deliberately identical to the server's, including the "any unpriced
+   * item means no derivation at all" rule. Matching it is the point: a form that computes a
+   * *slightly* different total is worse than one that computes none, because the disagreement
+   * only shows up after saving.
+   */
+  const stockCost = useMemo(() => {
+    const linked = invLines
+      .map((line) => ({ line, stock: inventoryItems.find((item) => item.itemType === line.itemType) }))
+      .filter(({ line }) => line.itemType && Number(line.quantity) > 0)
+
+    if (linked.length === 0) return { derived: null as number | null, unpriced: [] as string[], working: "" }
+
+    // An item at Rs 0 is stock that arrived before prices were required. The server refuses to
+    // derive from it rather than rewrite a real typed amount to nothing, and so does this.
+    const unpriced = linked.filter(({ stock }) => !(Number(stock?.avgPrice) > 0)).map(({ line }) => line.itemType)
+    if (unpriced.length > 0) return { derived: null, unpriced, working: "" }
+
+    const total = linked.reduce((sum, { line, stock }) => sum + Number(line.quantity) * Number(stock!.avgPrice), 0)
+    const working = linked
+      .map(({ line, stock }) => `${Number(line.quantity)} ${stock!.unit} x Rs ${Number(stock!.avgPrice).toLocaleString("en-IN")}`)
+      .join("  +  ")
+    return { derived: Number(total.toFixed(2)), unpriced: [], working }
+  }, [invLines, inventoryItems])
+
+  // Keep the field showing what will actually be saved. Without this the form displays a stale
+  // typed figure right up to the moment the server replaces it.
+  useEffect(() => {
+    if (stockCost.derived === null) return
+    setFormData((prev) => (prev.amount === stockCost.derived ? prev : { ...prev, amount: stockCost.derived! }))
+  }, [stockCost.derived])
 
   const sortedActivities = [...activities].sort((a, b) =>
     ((b.expense_count ?? 0) + (b.labor_count ?? 0)) - ((a.expense_count ?? 0) + (a.labor_count ?? 0))
@@ -491,7 +532,7 @@ export default function OtherExpensesTab({
 
                 <div className="space-y-2">
                   <Label htmlFor="expense-amount" className="text-base">
-                    Amount (₹)
+                    {stockCost.derived !== null ? "Amount (₹) — from stock" : "Amount (₹)"}
                   </Label>
                   <Input
                     id="expense-amount"
@@ -503,8 +544,31 @@ export default function OtherExpensesTab({
                       setFormData((prev) => ({ ...prev, amount: Number.parseFloat(e.target.value) || 0 }))
                     }
                     required
-                    className="h-11"
+                    /* Read-only rather than hidden: the number is the point of the form, and an
+                       amount that vanishes when you link an item looks like a bug. Read-only says
+                       "this is computed", which is the honest description. */
+                    readOnly={stockCost.derived !== null}
+                    aria-describedby={stockCost.derived !== null || stockCost.unpriced.length > 0 ? "expense-amount-help" : undefined}
+                    className={cn("h-11", stockCost.derived !== null && "bg-muted text-muted-foreground")}
                   />
+                  {stockCost.derived !== null && (
+                    /* Shows its working. "Rs 4,000" alone invites the question this answers. */
+                    <p id="expense-amount-help" className="text-xs text-muted-foreground">
+                      {stockCost.working} — the average cost this stock was bought in at. Change the
+                      quantity above to change the amount.
+                    </p>
+                  )}
+                  {stockCost.unpriced.length > 0 && (
+                    /* The case that used to pass silently: unpriced stock means the server keeps
+                       whatever was typed, so the expense and the stock it consumed can disagree
+                       by any amount. Saying so here is the difference between a number someone
+                       chose and a number nobody checked. */
+                    <p id="expense-amount-help" className="text-xs text-amber-600">
+                      {stockCost.unpriced.join(", ")} {stockCost.unpriced.length === 1 ? "has" : "have"} no
+                      cost recorded, so the amount can&apos;t be worked out from stock. Price the stock
+                      under Inventory, or enter the amount yourself and know it isn&apos;t derived.
+                    </p>
+                  )}
                 </div>
 
                 <div className="space-y-2">
