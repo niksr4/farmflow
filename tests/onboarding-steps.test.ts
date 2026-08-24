@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest"
 
 import {
+  buildLaunchGuidePhases,
   buildOnboardingSteps,
   countBlocksMissingAcreage,
   countItemsMissingPrice,
@@ -201,5 +202,57 @@ describe("a general location is not a piece of land", () => {
 
   it("still counts a real block that has no area", () => {
     expect(isBlocksAndAcreageDone({ locations: [{ kind: "block", areaAcres: null }, { kind: "general" }] })).toBe(false)
+  })
+})
+
+describe("a launch-guide button names the tab it actually opens", () => {
+  /**
+   * Found by the daily scan on 2026-08-23 and lost to a blocked push. The Week-1 card's label fell
+   * through to a hardcoded "Open Inventory" whenever locations were already set -- but the tab it
+   * routes to is processing or dispatch there for a tenant with Inventory disabled. A button that
+   * names one destination and opens another is the same confident-wrong-answer class as everything
+   * else here: nothing errors, the user just ends up somewhere they were not promised.
+   */
+  const withInventoryOff: OnboardingAccess = {
+    ...fullAccess,
+    canShowInventory: false,
+  }
+
+  it("says Pulping when it opens Pulping", () => {
+    const phase = buildLaunchGuidePhases({ ...INITIAL_ONBOARDING_STATUS, locations: true }, withInventoryOff)[0]
+    expect(phase.actionTab).toBe("processing")
+    expect(phase.actionLabel).toBe("Open Pulping")
+  })
+
+  it("says Dispatch when Pulping is off too", () => {
+    const access = { ...withInventoryOff, canShowProcessing: false }
+    const phase = buildLaunchGuidePhases({ ...INITIAL_ONBOARDING_STATUS, locations: true }, access)[0]
+    expect(phase.actionTab).toBe("dispatch")
+    expect(phase.actionLabel).toBe("Open Dispatch")
+  })
+
+  it("still says Inventory when it opens Inventory", () => {
+    const phase = buildLaunchGuidePhases({ ...INITIAL_ONBOARDING_STATUS, locations: true }, fullAccess)[0]
+    expect(phase.actionTab).toBe("inventory")
+    expect(phase.actionLabel).toBe("Open Inventory")
+  })
+
+  it("never names a tab it does not route to, across every phase and access shape", () => {
+    const EXPECTED: Record<string, string> = {
+      inventory: "Open Inventory",
+      processing: "Open Pulping",
+      dispatch: "Open Dispatch",
+      accounts: "Open Accounts",
+      sales: "Open Sales",
+    }
+    for (const access of [fullAccess, withInventoryOff, { ...withInventoryOff, canShowProcessing: false }]) {
+      for (const locations of [true, false]) {
+        for (const phase of buildLaunchGuidePhases({ ...INITIAL_ONBOARDING_STATUS, locations }, access)) {
+          const expected = EXPECTED[phase.actionTab]
+          if (!expected) continue
+          expect(phase.actionLabel, `"${phase.actionLabel}" opens ${phase.actionTab}`).toBe(expected)
+        }
+      }
+    }
   })
 })

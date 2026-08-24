@@ -190,7 +190,11 @@ const getFinanceEntryLabels = (enabledModules: string[]) =>
 const getInsightLabels = (enabledModules: string[]) =>
   compact([
     hasModule(enabledModules, "season") ? "Season Summary" : null,
-    hasModule(enabledModules, "season") ? "Harvest Forecast" : null,
+    // Harvest Forecast is the `yield-forecast` module, not `season` -- they are separate entries
+    // in lib/modules.ts and separate tabs in the Insights nav. Gating it on `season` meant a
+    // tenant with Season View but not Harvest Forecast read about a tab they do not have, and a
+    // tenant with the reverse combination never saw it mentioned at all.
+    hasModule(enabledModules, "yield-forecast") ? "Harvest Forecast" : null,
     hasModule(enabledModules, "plant-health") ? "Crop Health" : null,
     hasModule(enabledModules, "ai-analysis") ? "AI Insights" : null,
     hasModule(enabledModules, "news") ? "Market News" : null,
@@ -532,7 +536,7 @@ const buildManualGroups = (
           doneLooksLike: "You can explain where the season is strong, weak, or delayed.",
         }
       : null,
-    hasModule(enabledModules, "season")
+    hasModule(enabledModules, "yield-forecast")
       ? {
           name: "Harvest Forecast",
           whatItIs: "A forward estimate of likely production.",

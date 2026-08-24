@@ -300,6 +300,26 @@ export const buildOnboardingSteps = (
   return steps
 }
 
+/**
+ * "Open X" for the launch guide, matching its sibling phases -- getActionLabel says "Go to X" and
+ * belongs to the checklist steps. Taking the tab as its only argument is the point: a label and a
+ * destination that are computed separately are a label and a destination that can disagree.
+ */
+const phaseActionLabel = (tab: string) => {
+  switch (tab) {
+    case "processing":
+      return "Open Pulping"
+    case "dispatch":
+      return "Open Dispatch"
+    case "accounts":
+      return "Open Accounts"
+    case "sales":
+      return "Open Sales"
+    default:
+      return "Open Inventory"
+  }
+}
+
 export const buildLaunchGuidePhases = (
   status: OnboardingStatusSnapshot,
   access: OnboardingAccess,
@@ -320,12 +340,11 @@ export const buildLaunchGuidePhases = (
       ? "Configure locations and inventory masters before daily records begin."
       : "Create inventory items and record opening movements to establish your stock baseline.",
     done: foundationDone,
-    actionLabel:
-      requiresLocations && !status.locations
-        ? foundationActionTab === "inventory"
-          ? "Open Inventory"
-          : getActionLabel(foundationActionTab)
-        : "Open Inventory",
+    // Derived from the tab it actually opens, never stated separately. The old nested ternary
+    // fell through to a hardcoded "Open Inventory" whenever locations were already set -- but
+    // foundationActionTab is processing or dispatch there for a tenant with Inventory disabled,
+    // so the button named one tab and opened another.
+    actionLabel: phaseActionLabel(foundationActionTab),
     actionTab: foundationActionTab,
   })
 
