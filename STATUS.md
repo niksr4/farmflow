@@ -74,6 +74,20 @@ mark every morning currently produces no cost at all.
 
 ---
 
+## What we're building next
+
+[docs/AGRONOMY-MODEL.md](docs/AGRONOMY-MODEL.md) — the data model for INDICOFS evidence, yield
+per acre, and eventually agronomic advice. The short version:
+
+- Yield per block **already exists** (`processing_records.location_id`). Only acreage is missing,
+  and that is a column with a UI and no values, not a build.
+- Rainfall goes **where the gauge is** and rolls up per estate. Per block would mean copying one
+  real reading across twenty-one.
+- Soil tests are deliberate and rare, so they live in Settings, on the block. Sprays happen on a
+  Tuesday, so they fold into the expense form rather than becoming a new tab.
+- The advisor is rules first (Coffee Board tables, works from one sample), comparison second
+  (needs only acreage), patterns third (needs seasons we do not have).
+
 ## How to check rather than remember
 
 | Question | Command |
