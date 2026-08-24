@@ -28,6 +28,9 @@ type Props = {
   onTabChange: (tab: string) => void
   onAccountsExpense: () => void
   onAccountsLabor: () => void
+  onMuster: () => void
+  /** True when the muster is where labour is recorded today -- see the button below. */
+  musterRecordsLabour: boolean
   buildWorkspaceHref: (path: string) => string
   estateName?: string
 }
@@ -69,6 +72,8 @@ export default function WorkspaceLauncher({
   onTabChange,
   onAccountsExpense,
   onAccountsLabor,
+  onMuster,
+  musterRecordsLabour,
   buildWorkspaceHref,
   estateName,
 }: Props) {
@@ -134,9 +139,18 @@ export default function WorkspaceLauncher({
             "grid gap-3",
             canShowRainfall ? "grid-cols-3" : "grid-cols-2",
           )}>
+            {/* Sends the writer where today's labour actually gets recorded, which is not the same
+                place for every tenant. Once an estate is on the muster, typed Accounts entries for
+                today are refused outright (lib/server/labour-entry-mode.ts) -- so a button reading
+                "Labour" that opened the Accounts form was walking them into a rejected write. And
+                before an estate cuts over, the reverse: the muster hides work allocation for dates
+                before the line, so sending them there early is a roster they cannot cost.
+
+                This flips on the same condition the muster itself uses, so the two can never
+                disagree about which side of the line today is on. */}
             <button
               type="button"
-              onClick={onAccountsLabor}
+              onClick={musterRecordsLabour ? onMuster : onAccountsLabor}
               className={cn(
                 "group relative flex flex-col overflow-hidden rounded-2xl bg-gradient-to-br from-emerald-600 to-emerald-900 text-white text-left px-4 shadow-[0_8px_20px_-8px_rgba(20,83,45,0.5)] touch-manipulation active:scale-[0.97] transition-all hover:shadow-[0_10px_24px_-8px_rgba(20,83,45,0.6)]",
                 isMobile ? "py-4" : "py-3.5",
@@ -149,8 +163,12 @@ export default function WorkspaceLauncher({
               )}>
                 <Users className={cn(isMobile ? "h-5 w-5" : "h-4 w-4", "text-white")} />
               </span>
-              <p className={cn("relative font-black leading-tight", isMobile ? "text-[15px]" : "text-sm")}>Labour</p>
-              <p className="relative text-[10px] text-emerald-200/70 mt-0.5">Workers & wages</p>
+              <p className={cn("relative font-black leading-tight", isMobile ? "text-[15px]" : "text-sm")}>
+                {musterRecordsLabour ? "Muster" : "Labour"}
+              </p>
+              <p className="relative text-[10px] text-emerald-200/70 mt-0.5">
+                {musterRecordsLabour ? "Attendance & work" : "Workers & wages"}
+              </p>
             </button>
 
             <button

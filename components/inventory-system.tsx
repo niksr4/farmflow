@@ -82,7 +82,7 @@ import HomeTab from "@/components/home-tab"
 import UniversalSearch from "@/components/universal-search"
 import Link from "next/link"
 import Image from "next/image"
-import { isWithinLast24Hours } from "@/lib/date-utils"
+import { isWithinLast24Hours, todayIso } from "@/lib/date-utils"
 import { formatCurrency, formatNumber } from "@/lib/format"
 import { type AccountsExportFormat } from "@/lib/accounts-export"
 import { getCurrentFiscalYear } from "@/lib/fiscal-year-utils"
@@ -529,6 +529,8 @@ export default function InventorySystem() {
   const [onboardingBagWeightKg, setOnboardingBagWeightKg] = useState("")
   const [isSavingOnboardingDefaults, setIsSavingOnboardingDefaults] = useState(false)
   const [trialDaysRemaining, setTrialDaysRemaining] = useState<number | null>(null)
+  // The date this tenant started recording labour on the muster, or null if they never have.
+  const [labourCutover, setLabourCutover] = useState<string | null>(null)
   const [trialBannerDismissed, setTrialBannerDismissed] = useState(false)
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false)
 
@@ -660,6 +662,14 @@ export default function InventorySystem() {
   const canShowResources = isModuleEnabled("resources") && isFeatureEnabled("showResourcesTab")
   const canShowPlantHealth = isOwner || isModuleEnabled("plant-health")
   const canShowWelcomeCard = isFeatureEnabled("showWelcomeCard")
+  /**
+   * Whether the muster is where labour is recorded *today*, which is not the same as whether this
+   * tenant has a cutover date at all. A date set for next Monday means labour still goes into
+   * Accounts until then, and the muster deliberately hides work allocation before the line -- so
+   * pointing "Log today" at it early lands the writer on a roster they cannot cost.
+   */
+  const musterRecordsLabour = Boolean(labourCutover) && todayIso() >= String(labourCutover)
+
   const canShowRainfallSection = canShowRainfall || canShowWeather
   const canShowIntelligence = !isScopedUser && (canShowDispatch || canShowSalesWorkspace || canShowAccounts || canShowSeason)
   const canShowProcessingWorkspace = canShowProcessing || canShowPepper
@@ -802,6 +812,7 @@ export default function InventorySystem() {
       setEnabledModules(Array.isArray(data.modules) ? data.modules.map((moduleId) => String(moduleId)) : null)
       setLocations(Array.isArray(data.locations) ? data.locations : [])
       setCurrentPlanId(data.planId ? String(data.planId) : null)
+      setLabourCutover(data.labourCutover ? String(data.labourCutover).slice(0, 10) : null)
       if (typeof data.trialDaysRemaining === "number") {
         if (data.trialDaysRemaining === 0) {
           router.replace("/trial-expired")
@@ -4544,6 +4555,8 @@ export default function InventorySystem() {
               onTabChange={handleTabChange}
               onAccountsExpense={() => { setAccountsInitialTab("expenses"); handleTabChange("accounts") }}
               onAccountsLabor={() => { setAccountsInitialTab("labour"); handleTabChange("accounts") }}
+              onMuster={() => handleTabChange("attendance")}
+              musterRecordsLabour={musterRecordsLabour}
               buildWorkspaceHref={buildWorkspaceHref}
               estateName={tenantSettings.estateName}
             />

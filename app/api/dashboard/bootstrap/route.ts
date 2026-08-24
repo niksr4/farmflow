@@ -7,6 +7,7 @@ import { MODULE_BUNDLES, resolveTenantEnabledModules } from "@/lib/modules"
 import { resolveTenantPlanId } from "@/lib/server/tenant-subscriptions"
 import { normalizeTenantContext, runTenantQueries } from "@/lib/server/tenant-db"
 import { buildErrorResponse, databaseNotConfiguredResponse } from "@/lib/server/route-utils"
+import { getLabourCutover } from "@/lib/server/labour-entry-mode"
 
 export const dynamic = "force-dynamic"
 export const revalidate = 0
@@ -44,7 +45,7 @@ export async function GET() {
     const isOwnerWithoutActivePreview =
       String(sessionUser.role || "").toLowerCase() === "owner" && sessionUser.tenantId === rawSessionUser.tenantId
     if (isOwnerWithoutActivePreview) {
-      return NextResponse.json({ success: true, modules: null, locations: [] })
+      return NextResponse.json({ success: true, modules: null, locations: [], labourCutover: null })
     }
 
     const tenantId = sessionUser.tenantId
@@ -107,6 +108,10 @@ export async function GET() {
       planId,
       plans: MODULE_BUNDLES,
       trialDaysRemaining,
+      // Which way this tenant records labour. Null means they have not switched and everything is
+      // still typed into Accounts. The shell needs it to aim the "Log today" button somewhere the
+      // work can actually be recorded -- see the comment on that button.
+      labourCutover: await getLabourCutover(tenantContext),
     })
   } catch (error) {
     console.error("Error loading workspace bootstrap:", error)

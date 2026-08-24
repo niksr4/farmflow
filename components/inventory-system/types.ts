@@ -27,6 +27,8 @@ export interface WorkspaceBootstrapPayload {
   planId?: string | null
   plans?: import("@/lib/modules").ModuleBundle[]
   trialDaysRemaining?: number | null
+  /** ISO date this tenant started recording labour on the muster; null if they never switched. */
+  labourCutover?: string | null
 }
 
 export interface IntelligenceCodePattern {
