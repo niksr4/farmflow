@@ -41,7 +41,8 @@ const DAY_SHARES = [
 ] as const
 
 export default function WorkerAllocation({
-  workerEstate, locations, activities, saving, editing, headcount, isGang, workerRate, onAdd, onClose,
+  workerEstate, locations, activities, saving, editing, headcount, isGang, workerRate, batchWorkers,
+  onAdd, onClose,
 }: {
   workerEstate: string | null
   locations: LocationOption[]
@@ -53,6 +54,18 @@ export default function WorkerAllocation({
   headcount: number
   /** The estate's normal wage for this person -- the base of the rate chain. */
   workerRate: number | null
+  /**
+   * In batch mode, the selected people and the wage each already carries. Absent for a single
+   * worker.
+   *
+   * The batch panel used to pass workerRate={null} and nothing else, on the correct reasoning that
+   * a group can hold people on different wages so there is no single rate to prefill. But null
+   * made `total` null, which rendered "No daily wage for this worker -- type what today is worth"
+   * over a group where every single person had one. The server has always costed each row from
+   * its own worker's wage; the panel was contradicting it and inviting a typed rate that would
+   * then override the roster for all of them.
+   */
+  batchWorkers?: Array<{ name: string; rate: number | null }>
   isGang: boolean
   onAdd: (payload: {
     id?: string
@@ -101,6 +114,26 @@ export default function WorkerAllocation({
     effectiveRate == null || !Number.isFinite(effectiveRate)
       ? null
       : effectiveRate * heads * dayFraction * payMultiplier + extras
+
+  /**
+   * Batch pricing, worked per person rather than from one shared rate. A typed override applies to
+   * everyone -- that is the point of it, for a group on one contract price -- but with nothing
+   * typed each person is costed from their own wage, exactly as the route does it.
+   */
+  const batchPricing = (() => {
+    if (!batchWorkers || batchWorkers.length === 0) return null
+    const priced = batchWorkers.map((w) => ({ name: w.name, rate: typed ?? w.rate }))
+    const unpaid = priced.filter((w) => !(Number(w.rate) > 0)).map((w) => w.name)
+    const rates = priced.map((w) => Number(w.rate))
+    const allSame = rates.every((r) => r === rates[0])
+    return {
+      unpaid,
+      // Only meaningful when nobody is missing a wage; a partial sum would understate the day.
+      sum: unpaid.length > 0 ? null : rates.reduce((acc, r) => acc + r * dayFraction * payMultiplier, 0) + extras,
+      sharedRate: allSame && rates.length > 0 && Number.isFinite(rates[0]) ? rates[0] : null,
+      count: priced.length,
+    }
+  })()
 
   const [workQuery, setWorkQuery] = useState("")
 
@@ -282,7 +315,31 @@ export default function WorkerAllocation({
 
       {/* What it will cost, before it is saved. */}
       <p className="px-0.5 text-[11px] font-bold text-stone-500">
-        {total == null ? (
+        {batchPricing ? (
+          batchPricing.unpaid.length > 0 ? (
+            /* Names them, like the route does when it refuses. "No daily wage for this worker" over
+               a group of twenty-one told you nothing about which one. */
+            <span className="text-amber-600">
+              No daily wage for {batchPricing.unpaid.slice(0, 3).join(", ")}
+              {batchPricing.unpaid.length > 3 ? ` and ${batchPricing.unpaid.length - 3} more` : ""} — type
+              what today is worth, or set their wage in the roster
+            </span>
+          ) : (
+            <>
+              <span className="text-stone-700 dark:text-stone-200">
+                ₹{Math.round(batchPricing.sum as number).toLocaleString("en-IN")}
+              </span>
+              <span className="ml-1 font-medium text-stone-400">
+                = {batchPricing.count} {batchPricing.count === 1 ? "worker" : "workers"}
+                {batchPricing.sharedRate != null
+                  ? ` at ₹${batchPricing.sharedRate}${typed != null ? " (this entry)" : " (daily wage)"}`
+                  : " at their own daily wage"}
+                {dayFraction !== 1 ? ` × ${dayFraction}` : ""}
+                {payMultiplier !== 1 ? ` × ${payMultiplier} holiday` : ""}
+              </span>
+            </>
+          )
+        ) : total == null ? (
           <span className="text-amber-600">
             No daily wage for this worker — type what today is worth
           </span>

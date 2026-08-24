@@ -84,3 +84,44 @@ describe("a crew's size is editable, like everything else that is creatable", ()
     expect(strip(roster)).toContain("editForm.headcount")
   })
 })
+
+describe("batch allocation prices from the roster, not from a typed guess", () => {
+  /**
+   * The batch panel passed workerRate={null} on correct reasoning -- a group can hold people on
+   * different wages, so there is no single rate to prefill -- but null made the cost preview null,
+   * which rendered "No daily wage for this worker" over a group where every person had one.
+   *
+   * That was not merely wrong text. It invited a typed rate, and a typed rate overrides ALL of
+   * them: on Laxmi, whose 21 workers are 20 at Rs 450 and one at Rs 500, typing 450 would have
+   * quietly underpaid that one person on every batch entry. The route has always costed each row
+   * from its own worker's wage; only the panel disagreed.
+   */
+  const panel = readFileSync("components/attendance/worker-allocation.tsx", "utf8")
+
+  it("the panel is given the people, not just a null rate", () => {
+    expect(strip(attendance)).toContain("batchWorkers={batchIds.map((id) => {")
+    expect(panel).toContain("batchWorkers?: Array<{ name: string; rate: number | null }>")
+  })
+
+  it("sums each person's own wage rather than multiplying one rate", () => {
+    const body = strip(panel)
+    expect(body).toContain("const priced = batchWorkers.map((w) => ({ name: w.name, rate: typed ?? w.rate }))")
+    expect(body).toContain("rates.reduce((acc, r) => acc + r * dayFraction * payMultiplier, 0)")
+  })
+
+  it("only claims a shared rate when there genuinely is one", () => {
+    // Laxmi's 21 are not all on the same wage, so the preview must say "their own daily wage"
+    // rather than pick one and imply everybody is on it.
+    expect(strip(panel)).toContain("const allSame = rates.every((r) => r === rates[0])")
+    expect(panel).toContain("at their own daily wage")
+  })
+
+  it("refuses to show a partial total when someone has no wage", () => {
+    // A sum over the people who happen to have rates understates the day and looks authoritative.
+    expect(strip(panel)).toContain("sum: unpaid.length > 0 ? null :")
+  })
+
+  it("names who is missing a wage, like the route does", () => {
+    expect(panel).toContain("No daily wage for {batchPricing.unpaid.slice(0, 3).join(\", \")}")
+  })
+})

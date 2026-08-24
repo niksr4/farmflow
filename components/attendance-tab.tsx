@@ -691,11 +691,20 @@ export default function AttendanceTab() {
                     editing={null}
                     headcount={1}
                     isGang={false}
-                    // Deliberately null: a group can hold people on different wages, so there is
-                    // no single rate to prefill. Each row is still costed from its own worker's
-                    // wage server-side -- typing an amount here overrides it for all of them,
-                    // which is the point when a whole group is on one contract price.
+                    // Still null: a group can hold people on different wages, so there is no single
+                    // rate to prefill, and typing one overrides all of them -- which is the point
+                    // when a whole group is on one contract price.
+                    //
+                    // But the panel now gets the people too, because null alone made it announce
+                    // "No daily wage for this worker" over a group where everyone had one, and
+                    // that invites a typed rate that then shadows the roster. Each row is costed
+                    // from its own worker's wage server-side; the panel says so now instead of
+                    // contradicting it.
                     workerRate={null}
+                    batchWorkers={batchIds.map((id) => {
+                      const w = workers.find((x) => x.id === id)
+                      return { name: w?.name ?? "Unnamed", rate: w?.dailyRate ?? null }
+                    })}
                     onAdd={async (payload) => {
                       const ok = await handleAddAssignment(batchIds, payload)
                       if (ok) exitBatch()
