@@ -418,7 +418,12 @@ export async function GET(request: Request) {
         records: toCount((inventoryRow as any).total_count),
         includedInBookedNet: false,
         status: inventoryResult.available ? "available" : "missing",
-        note: "Manual depletion entries for losses and corrections (reference only).",
+        // Was "Manual depletion entries for losses and corrections". It is not: this figure is
+        // every depletion, and most of it is ordinary consumption booked through an expense. On
+        // HoneyFarm that read Rs 79,848 of "losses and corrections" when Rs 64,944 of it was
+        // fertiliser going onto blocks exactly as intended -- overstating waste roughly fivefold
+        // on a line an owner would reasonably read as waste.
+        note: "All stock leaving the store, whether used through an expense or written off. Reference only — the cost is already booked via the expense entries above.",
       },
       {
         id: "receivables_live",
