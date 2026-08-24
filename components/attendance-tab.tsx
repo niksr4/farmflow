@@ -5,7 +5,7 @@
  *
  * Design principles:
  *  - Day strip at top: tap a day, instant switch. No date pickers.
- *  - Default: everyone present on first open. Tap to mark absent.
+ *  - Default: nobody present. Tap a name, or "All present" then untick the absentees.
  *  - Worker rows are full-width, 64px tall — works with dirty hands.
  *  - Present = bold green. Absent = muted grey. Impossible to confuse.
  *  - One big save button, always visible at the bottom.
@@ -150,7 +150,6 @@ export default function AttendanceTab() {
   const [newWorkerHeadcount, setNewWorkerHeadcount] = useState("")
   const [showSummary, setShowSummary] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [autoSelectedDate, setAutoSelectedDate] = useState<string | null>(null)
 
   // Work allocation. Selection mode is a separate mode on purpose: a row tap already means
   // "present / absent", and giving one gesture two meanings on a screen used with dirty hands
@@ -207,22 +206,19 @@ export default function AttendanceTab() {
         setAssignmentsFrom(data.assignmentsFrom ? String(data.assignmentsFrom).slice(0, 10) : null)
         setError(null)
 
-        // "Everyone present by default" applies to TODAY ONLY.
+        // NOBODY IS PRESENT UNTIL SOMEONE SAYS SO.
         //
-        // It is a real time-saver while taking a live muster — most workers turn up, so marking
-        // the exceptions beats tapping forty names. On a past date it invents history: a day
-        // nobody recorded renders identically to a day everyone attended, so there is no way to
-        // tell "all present" from "never taken". Worse, those pre-ticked rows are one Save away
-        // from becoming real attendance — and therefore real wages — for a day never mustered.
+        // Today used to open with every worker pre-ticked, on the reasoning that most turn up so
+        // marking the exceptions is faster. That reasoning was already rejected for past dates,
+        // in this same function, for a reason that applies just as well to today: pre-ticked rows
+        // are one Save away from becoming real attendance, and therefore real wages, for a day
+        // nobody actually mustered. Open the muster, get distracted, hit Save -- twenty-one people
+        // are paid. Nothing about the screen would look wrong afterwards.
         //
-        // Past dates now show exactly what is stored: absent unless a record says otherwise.
-        const isTodaysDate = isToday(new Date(`${date}T00:00:00`))
-        if (isTodaysDate && fetchedPresent.length === 0 && fetchedWorkers.length > 0 && autoSelectedDate !== date) {
-          setPresentWorkerIds(fetchedWorkers.map((w) => w.id))
-          setAutoSelectedDate(date)
-        } else {
-          setPresentWorkerIds(fetchedPresent)
-        }
+        // Presence is a claim about who turned up. The app does not know that, so it should not
+        // assert it. "All present" is one tap away for the common case, which costs a tap and
+        // makes the claim someone's rather than the default's.
+        setPresentWorkerIds(fetchedPresent)
       } catch (e: unknown) {
         setError(e instanceof Error ? e.message : "Failed to load")
         setWorkers([])
@@ -231,7 +227,7 @@ export default function AttendanceTab() {
         setLoading(false)
       }
     },
-    [autoSelectedDate],
+    [],
   )
 
   useEffect(() => { void loadSnapshot(selectedDate) }, [selectedDate]) // eslint-disable-line react-hooks/exhaustive-deps
@@ -481,7 +477,9 @@ export default function AttendanceTab() {
       setNewWorkerIsGang(false)
       setNewWorkerHeadcount("")
       setShowAddWorker(false)
-      setAutoSelectedDate(null)
+      // Reloading used to have to clear the auto-tick flag so a newly added worker would also get
+      // pre-ticked. Nothing is pre-ticked now, so a new worker simply appears, absent, like
+      // everyone else -- which is the honest state for someone the roll has not been taken for.
       await loadSnapshot(selectedDate)
     } catch (e: unknown) {
       toast.error(e instanceof Error ? e.message : "Failed to add")

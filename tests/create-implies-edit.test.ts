@@ -22,7 +22,17 @@ const formFields = (() => {
 })()
 
 // locationId is carried on the row but set through the estate picker, not a field of its own.
-const NOT_A_FORM_INPUT = new Set(["locationId"])
+//
+// `kind` is a deliberate exception, and the reason is in the view rather than the form:
+// labour_cost joins attendance_workers and branches on `w.kind`, so flipping a worker between
+// person and crew does not change them going forward -- it silently reclassifies every day they
+// have ever worked between the estate-labour and contract-labour columns of the P&L. Nobody
+// pressing a toggle on a roster row expects to restate a season.
+//
+// So a mis-created row is fixed by deactivating it and adding the right one, which loses nothing:
+// if it has no history there is nothing to lose, and if it has history that history is exactly
+// what must not move. Headcount, which does change legitimately as a crew grows, IS editable.
+const NOT_A_FORM_INPUT = new Set(["locationId", "kind"])
 
 describe("every field on the create form is editable afterwards", () => {
   it("finds the form's fields to check", () => {

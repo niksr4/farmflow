@@ -107,6 +107,30 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
       return NextResponse.json({ success: false, error: "Employee name cannot be empty" }, { status: 400 })
     }
 
+    /**
+     * A crew's size changes -- Rathi turns up with 8 in June and 12 in October -- and until now it
+     * could be set at creation and never again. That is the same creatable-but-not-editable gap
+     * that hid gender behind an add-only field, and it matters more here because headcount
+     * multiplies the day's cost.
+     *
+     * Only meaningful for a gang. Sending it for an individual is ignored rather than rejected:
+     * the client does not offer the field there, and a stray value should not fail a save that is
+     * otherwise fine.
+     */
+    const rawHeadcount = body?.headcount
+    const headcount =
+      rawHeadcount === undefined
+        ? undefined
+        : Number.isFinite(Number(rawHeadcount)) && Math.floor(Number(rawHeadcount)) >= 1
+          ? Math.floor(Number(rawHeadcount))
+          : null
+    if (rawHeadcount !== undefined && headcount === null) {
+      return NextResponse.json(
+        { success: false, error: "A crew needs a headcount of at least 1 — how many people it normally brings." },
+        { status: 400 },
+      )
+    }
+
     const gender = readGender(body?.gender)
     const workerType =
       body?.workerType != null
@@ -164,7 +188,10 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
             bank_ifsc        = CASE WHEN ${bankIfsc !== undefined} THEN ${bankIfsc ?? null} ELSE bank_ifsc END,
             device_user_code = CASE WHEN ${deviceUserCode !== undefined} THEN ${deviceUserCode ?? null} ELSE device_user_code END,
             location_id      = CASE WHEN ${locationId !== undefined} THEN ${locationId ?? null} ELSE location_id END,
-            estate           = CASE WHEN ${estate !== undefined} THEN ${estate ?? null} ELSE estate END
+            estate           = CASE WHEN ${estate !== undefined} THEN ${estate ?? null} ELSE estate END,
+            -- Guarded by kind so an individual can never acquire a headcount, which would make the
+            -- labour_cost view route their pay to the contract-labour column.
+            headcount        = CASE WHEN ${headcount !== undefined} AND kind = 'gang' THEN ${headcount ?? null} ELSE headcount END
           WHERE id = ${id}::uuid AND tenant_id = ${tenantContext.tenantId}
         `,
       )

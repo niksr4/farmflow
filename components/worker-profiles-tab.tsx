@@ -18,6 +18,7 @@ import { canWriteModule, type UserRole } from "@/lib/permissions"
 import { useAuth } from "@/hooks/use-auth"
 import FilterBar from "@/components/filter-bar"
 import { useListControls } from "@/hooks/use-list-controls"
+import { cn } from "@/lib/utils"
 import { numericInputValue } from "@/lib/number-input"
 import type { LocationOption } from "@/components/inventory-system/types"
 import { formatLocationLabel } from "@/lib/location-label"
@@ -76,6 +77,9 @@ const WORKER_TYPE_COLORS: Record<WorkerType, string> = {
 
 const EMPTY_FORM = {
   name: "",
+  /** "gang" is a contract crew: one row with a headcount, not N invented people. scripts/115. */
+  kind: "individual" as "individual" | "gang",
+  headcount: "",
   workerType: "" as WorkerType | "",
   phone: "",
   dailyRate: "",
@@ -194,6 +198,8 @@ export default function WorkerProfilesTab() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           name: form.name.trim(),
+          kind: form.kind,
+          headcount: form.kind === "gang" ? Number(form.headcount) : undefined,
           workerType: form.workerType || null,
           dailyRate: form.dailyRate ? Number(form.dailyRate) : null,
           gender: form.gender || null,
@@ -222,6 +228,8 @@ export default function WorkerProfilesTab() {
     setEditingId(worker.id)
     setEditForm({
       name: worker.name,
+      kind: worker.kind,
+      headcount: worker.headcount != null ? String(worker.headcount) : "",
       workerType: worker.workerType || "",
       phone: worker.phone || "",
       dailyRate: worker.dailyRate != null ? String(worker.dailyRate) : "",
@@ -243,6 +251,7 @@ export default function WorkerProfilesTab() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           name: editForm.name.trim() || undefined,
+          ...(editForm.kind === "gang" ? { headcount: Number(editForm.headcount) } : {}),
           workerType: editForm.workerType || null,
           phone: editForm.phone.trim() || null,
           dailyRate: editForm.dailyRate ? Number(editForm.dailyRate) : null,
@@ -309,16 +318,58 @@ export default function WorkerProfilesTab() {
 
         {isAdding && (
           <CardContent className="border-t border-border/50 pt-4">
+            {/* Person or crew, and it sits above the name because it changes what the name means.
+                The muster tab has offered this since scripts/115; this roster -- which calls itself
+                the shared roster feeding Attendance, Picking, Ledger and Payroll -- could display a
+                crew and edit its rate but never create one. So the only way to add a contract gang
+                was to find the inline form on another tab, which nobody would guess.
+
+                It matters at cutover: Laxmi paid Rs 1,07,650 for 111 man-days of outside labour
+                this season and has no crew on the roster, so the first contract job after they
+                switch has nowhere to go. */}
+            <div className="mb-3 flex items-center gap-1 rounded-xl bg-muted p-0.5 max-w-xs">
+              {[
+                { kind: "individual" as const, label: "Person" },
+                { kind: "gang" as const, label: "Contract crew" },
+              ].map((opt) => (
+                <button
+                  key={opt.kind}
+                  type="button"
+                  onClick={() => setForm((f) => ({ ...f, kind: opt.kind }))}
+                  disabled={saving}
+                  className={cn(
+                    "flex-1 rounded-lg px-2 py-1.5 text-xs font-bold transition-colors",
+                    form.kind === opt.kind ? "bg-background text-foreground shadow-sm" : "text-muted-foreground",
+                  )}
+                >
+                  {opt.label}
+                </button>
+              ))}
+            </div>
             <div className="grid gap-3 grid-cols-1 sm:grid-cols-2 md:grid-cols-3">
               <div className="space-y-1.5">
-                <FieldLabel label="Full name *" />
+                <FieldLabel label={form.kind === "gang" ? "Crew name *" : "Full name *"} />
                 <Input
                   value={form.name}
                   onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
-                  placeholder="Ravi Kumar"
+                  placeholder={form.kind === "gang" ? "Rathi & Team" : "Ravi Kumar"}
                   autoFocus
                 />
               </div>
+              {form.kind === "gang" && (
+                <div className="space-y-1.5">
+                  <FieldLabel
+                    label="Headcount *"
+                    tooltip="How many people the crew normally brings. It can be changed on any given day from the muster, so this is the usual number, not a promise."
+                  />
+                  <Input
+                    value={form.headcount}
+                    onChange={(e) => setForm((f) => ({ ...f, headcount: e.target.value }))}
+                    placeholder="e.g. 10"
+                    inputMode="numeric"
+                  />
+                </div>
+              )}
               <div className="space-y-1.5">
                 <FieldLabel
                   label="Type"
@@ -451,7 +502,13 @@ export default function WorkerProfilesTab() {
               <Button variant="ghost" size="sm" onClick={() => { setIsAdding(false); setForm(EMPTY_FORM) }}>
                 <X className="mr-1 h-4 w-4" /> Cancel
               </Button>
-              <Button size="sm" disabled={!form.name.trim() || saving} onClick={handleAdd}>
+              {/* A crew with no headcount is refused by the route anyway; disabling here says so
+                  before the round trip instead of after it. */}
+              <Button
+                size="sm"
+                disabled={!form.name.trim() || saving || (form.kind === "gang" && !(Number(form.headcount) >= 1))}
+                onClick={handleAdd}
+              >
                 {saving ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> : <Check className="mr-1.5 h-4 w-4" />}
                 Save
               </Button>
@@ -569,6 +626,17 @@ export default function WorkerProfilesTab() {
                             </Select>
                           )}
                           <Input value={editForm.dailyRate} onChange={(e) => setEditForm((f) => ({ ...f, dailyRate: e.target.value }))} placeholder={w.kind === "gang" ? "Daily rate per person" : "Daily rate"} inputMode="decimal" />
+                          {/* A crew's size changes between jobs -- 8 in June, 12 in October -- and
+                              it was settable at creation and never again. Headcount multiplies the
+                              day's cost, so a stale one is not a cosmetic error. */}
+                          {w.kind === "gang" && (
+                            <Input
+                              value={editForm.headcount}
+                              onChange={(e) => setEditForm((f) => ({ ...f, headcount: e.target.value }))}
+                              placeholder="How many in the crew"
+                              inputMode="numeric"
+                            />
+                          )}
                           <Input value={editForm.phone} onChange={(e) => setEditForm((f) => ({ ...f, phone: e.target.value }))} placeholder="Phone" inputMode="tel" />
                           {/* Editable, not just settable. It was on the create form and nowhere
                               else, so a worker added before the field existed -- or added in a
