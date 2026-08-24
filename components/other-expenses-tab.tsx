@@ -36,6 +36,12 @@ import { formatLocationLabel } from "@/lib/location-label"
 import { numericInputValue } from "@/lib/number-input"
 import { useSingleFlight } from "@/hooks/use-single-flight"
 
+/**
+ * Chosen when a cost belongs to the estate rather than to any one block. Stored as NULL, which is
+ * what the rest of the app already reads as "applies everywhere".
+ */
+const LOCATION_ESTATE_WIDE = "__estate_wide__"
+
 interface ActivityCode {
   code: string
   reference: string
@@ -98,11 +104,11 @@ export default function OtherExpensesTab({
   const [activities, setActivities] = useState<ActivityCode[]>([])
   const [showAllCodes, setShowAllCodes] = useState(false)
   // Activity picker: null = no dropdown open, string = active search query.
-  // codeQuery drives the "Type of cost" field, referenceQuery the "Cost name"
+  // codeQuery drives the "Type of cost" field. There was a second one for the removed "Cost name"
+  // box; it is gone with the field, because dead state is how a deleted input comes back.
   // field — both search the same activities list by code or reference, so
   // either field can be typed into and resolves the other.
   const [codeQuery, setCodeQuery] = useState<string | null>(null)
-  const [referenceQuery, setReferenceQuery] = useState<string | null>(null)
   const [inventoryItems, setInventoryItems] = useState<InventoryItem[]>([])
   const [supportsMultiInventoryItems, setSupportsMultiInventoryItems] = useState(false)
   const [expandedRows, setExpandedRows] = useState<Set<number>>(new Set())
@@ -169,9 +175,10 @@ export default function OtherExpensesTab({
       const data = await response.json()
       if (data.success) {
         setLocations(data.locations || [])
-        if (data.locations?.length) {
-          setFormLocationId((prev) => prev || data.locations[0].id)
-        }
+        // Nothing is preselected. This used to default to data.locations[0] -- whichever block
+        // sorted first alphabetically -- so an estate-wide cost like electricity was attributed to
+        // "Arabica block" unless someone noticed and changed it. A default that silently answers a
+        // question nobody was asked is the worst kind, because the record looks deliberate.
       }
     } catch (error) {
       console.error("Error fetching locations:", error)
@@ -263,7 +270,7 @@ export default function OtherExpensesTab({
     e.preventDefault()
     if (isSubmitting) return
     if (locations.length > 0 && !formLocationId) {
-      toast.error("Select a location before saving.")
+      toast.error("Say where this cost belongs — a block, or the whole estate.")
       return
     }
     // The Amount field is `required` with `min="0"`, but a typed "0" satisfies both, so
@@ -295,7 +302,8 @@ export default function OtherExpensesTab({
       reference: effectiveReference,
       amount: formData.amount,
       notes: formData.notes,
-      locationId: formLocationId || null,
+      // The sentinel means "no block", which is stored as NULL -- not as a location id.
+      locationId: formLocationId && formLocationId !== LOCATION_ESTATE_WIDE ? formLocationId : null,
       user: "admin",
     }
     if (validInvItems.length > 0) {
@@ -342,7 +350,10 @@ export default function OtherExpensesTab({
     // touched. resetForm does not clear this either, which is deliberate for consecutive NEW
     // entries (a writer filing ten expenses for one block should not repick it ten times) but
     // is exactly wrong when opening an existing row.
-    setFormLocationId(deployment.locationId || "")
+    // A stored NULL is "whole estate", not "unset". Mapping it to "" would show an empty picker
+    // and make an edit of an estate-wide cost demand an answer it already had -- and the easiest
+    // way out of that prompt is to pick a block, which silently attributes it.
+    setFormLocationId(deployment.locationId || LOCATION_ESTATE_WIDE)
     const linkedItems = Array.isArray(deployment.inventoryItems) && deployment.inventoryItems.length > 0
       ? deployment.inventoryItems
       : deployment.inventoryItemType
@@ -513,13 +524,20 @@ export default function OtherExpensesTab({
                 {locations.length > 0 && (
                   <div className="space-y-2">
                     <Label htmlFor="expense-location" className="text-base">
-                      Location
+                      Where the cost belongs
                     </Label>
                     <Select value={formLocationId} onValueChange={setFormLocationId}>
                       <SelectTrigger id="expense-location" className="h-11 w-full">
                         <SelectValue placeholder="Select location" />
                       </SelectTrigger>
                       <SelectContent>
+                        {/* Electricity, the phone bill, an audit fee -- these belong to the estate,
+                            not to a block, and forcing them onto one puts a cost per acre on land
+                            that never saw the money. NULL is already the app's word for "applies
+                            everywhere" (lib/estate-filter.ts), and 9 of Laxmi's 21 expenses are
+                            already stored that way -- a state the data held but this form could
+                            not produce. */}
+                        <SelectItem value={LOCATION_ESTATE_WIDE}>Whole estate — not one block</SelectItem>
                         {locations.map((loc) => (
                           <SelectItem key={loc.id} value={loc.id}>
                             {formatLocationLabel(loc, locations)}
@@ -644,35 +662,21 @@ export default function OtherExpensesTab({
                   </div>
                 )}
 
-                <div className="space-y-2">
-                  <Label htmlFor="expense-reference" className="text-base">
-                    Cost name
-                  </Label>
-                  <Input
-                    id="expense-reference"
-                    value={referenceQuery !== null ? referenceQuery : formData.reference}
-                    onChange={(e) => {
-                      const value = e.target.value
-                      setReferenceQuery(value)
-                      setFormData((prev) => ({ ...prev, reference: value }))
-                    }}
-                    onFocus={() => setReferenceQuery(formData.reference)}
-                    onBlur={() => setTimeout(() => setReferenceQuery(null), 150)}
-                    placeholder="Auto-filled from code, or type a category to search codes"
-                    required
-                    className={cn("h-11", isMobile && "h-12 rounded-xl text-base")}
-                  />
-                  {referenceQuery !== null && (
-                    <ActivitySuggestList
-                      options={filterActivitySuggestions(referenceQuery, visibleActivities, sortedActivities)}
-                      onSelect={(a) => {
-                        handleCodeChange(a.code)
-                        setReferenceQuery(null)
-                      }}
-                    />
-                  )}
-                  <p className="text-xs text-muted-foreground">Use a plain category name the owner and accountant will both recognize.</p>
-                </div>
+                {/* "Cost name" used to be a second required free-text box here. It was never
+                    stored -- expense_transactions has no reference column, and the API derives the
+                    name on read as COALESCE(aa.activity, et.code) by joining account_activities.
+                    So whatever was typed was discarded, and because it was free text you could
+                    pick code 155 and then name it something else entirely, see your words on
+                    screen, save, and get the code's own name back.
+
+                    One fact, one field. "Type of cost" above already searches the code AND the
+                    name, so "electricity" finds 122 the same way typing 122 does. What it resolves
+                    to is confirmed below rather than asked for again. */}
+                {formData.code && formData.reference && (
+                  <p className="text-xs text-muted-foreground">
+                    Recorded as <strong className="text-foreground">{formData.code} — {formData.reference}</strong>
+                  </p>
+                )}
               </div>
 
               <div className="space-y-2">
