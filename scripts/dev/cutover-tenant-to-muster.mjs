@@ -90,4 +90,18 @@ await sql`INSERT INTO tenant_labour_entry_mode (tenant_id, assignments_from, set
 const check = await sql`SELECT assignments_from::text d FROM tenant_labour_entry_mode WHERE tenant_id=${tenantId}`
 const after = await sql`SELECT COUNT(*)::int n, COALESCE(SUM(total_cost),0)::numeric c FROM labour_cost WHERE tenant_id=${tenantId}`
 console.log(`\nWRITTEN. ${name} reads the muster from ${check[0].d.slice(0, 10)}.`)
-console.log(`labour_cost now reports ${after[0].n} rows, ${money(after[0].c)} — unchanged from before, since the line is in the future.\n`)
+// Compare the two numbers rather than asserting a reason for them. The old wording said "unchanged
+// from before, since the line is in the future" and printed that whatever the date was -- including
+// a cutover dated today, where the line is not in the future at all. A script that explains a
+// number it did not check is how a wrong number gets read as confirmation.
+const kept = Number(before[0].c)
+const now = Number(after[0].c)
+const delta = now - kept
+console.log(
+  `labour_cost now reports ${after[0].n} rows, ${money(now)} — ` +
+  (delta === 0
+    ? `the same total as the ${before[0].n} legacy rows kept, so nothing moved.`
+    : `${delta > 0 ? "up" : "DOWN"} ${money(Math.abs(delta))} against the ${before[0].n} legacy rows kept.` +
+      (delta < 0 ? " That is spend leaving the books -- investigate before anyone reads a report." : "")) +
+  "\n",
+)
