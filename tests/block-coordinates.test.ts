@@ -12,6 +12,9 @@ import { describe, expect, it } from "vitest"
  * absent column and took a schema read to notice.
  */
 const route = readFileSync("app/api/locations/route.ts", "utf8")
+// Serialization moved to the shared module once bootstrap was found to be emitting a second,
+// kind-less shape of the same entity. The assertion follows the code rather than being relaxed.
+const serializer = readFileSync("lib/location-serialize.ts", "utf8")
 const form = readFileSync("components/tenant-settings/operations-sections.tsx", "utf8")
 
 describe("the route actually carries coordinates", () => {
@@ -20,8 +23,8 @@ describe("the route actually carries coordinates", () => {
   })
 
   it("serializes them", () => {
-    expect(route).toContain("latitude: row.latitude != null")
-    expect(route).toContain("longitude: row.longitude != null")
+    expect(serializer).toContain("latitude: row.latitude != null")
+    expect(serializer).toContain("longitude: row.longitude != null")
   })
 
   it("writes them on create and on edit", () => {

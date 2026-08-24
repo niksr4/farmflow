@@ -12,6 +12,7 @@ import { logAuditEvent } from "@/lib/server/audit-log"
 import { logRouteMutationFailure } from "@/lib/server/route-error-events"
 import { sanitizeRouteError } from "@/lib/server/sanitize-route-error"
 import { assertValidModuleIds } from "@/lib/modules"
+import { serializeLocationRow } from "@/lib/location-serialize"
 
 export const dynamic = "force-dynamic"
 export const revalidate = 0
@@ -38,25 +39,6 @@ function normalizeCode(value: string) {
   return value.trim().toUpperCase().replace(/\s+/g, "-")
 }
 
-function serializeLocation(row: Record<string, unknown>) {
-  return {
-    id: String(row.id || ""),
-    name: String(row.name || ""),
-    code: String(row.code || ""),
-    estate: row.estate ? String(row.estate) : null,
-    // Null until someone records it. Every per-acre figure divides by this, so a block without
-    // one simply has no cost per acre rather than a wrong one.
-    areaAcres: row.area_acres != null ? Number(row.area_acres) : null,
-    // 'block' where work happens, 'store' where stock sits. Defaulted rather than assumed so a
-    // row written before scripts/128 still reads as a block.
-    kind: row.kind === "store" ? "store" : row.kind === "general" ? "general" : "block",
-    // INDICOFS wants a farm map with the coffee blocks identified (4.2A/4.2B/4.3A) and evidence
-    // the land was not cleared after 2020 (4.5.1A/4.5.1C). The columns and a both-or-neither
-    // constraint have existed since the table was made; nothing had ever read or written them.
-    latitude: row.latitude != null ? Number(row.latitude) : null,
-    longitude: row.longitude != null ? Number(row.longitude) : null,
-  }
-}
 
 /**
  * A coordinate, or null, or "invalid". Latitude and longitude are read as a pair because the DB
@@ -103,7 +85,7 @@ export async function GET(request: Request) {
       `,
     )
 
-    let serialized = locations.map((row) => serializeLocation(row as Record<string, unknown>))
+    let serialized = locations.map((row) => serializeLocationRow(row as Record<string, unknown>))
 
     // Blocks and stores are both rows in `locations` (scripts/128) but they are never
     // interchangeable: a block is where work happens, a store is where stock sits. Callers say
@@ -236,7 +218,7 @@ export async function POST(request: Request) {
       after: result?.[0] ?? null,
     })
 
-    return NextResponse.json({ success: true, location: serializeLocation(result[0] as Record<string, unknown>) })
+    return NextResponse.json({ success: true, location: serializeLocationRow(result[0] as Record<string, unknown>) })
   } catch (error: any) {
     console.error("Error creating location:", error)
     if (isModuleAccessError(error)) {
@@ -354,7 +336,7 @@ export async function PATCH(request: Request) {
       after: result?.[0] ?? null,
     })
 
-    return NextResponse.json({ success: true, location: serializeLocation(result[0] as Record<string, unknown>) })
+    return NextResponse.json({ success: true, location: serializeLocationRow(result[0] as Record<string, unknown>) })
   } catch (error: any) {
     console.error("Error updating location:", error)
     if (isModuleAccessError(error)) {

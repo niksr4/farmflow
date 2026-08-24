@@ -8,16 +8,12 @@ import { resolveTenantPlanId } from "@/lib/server/tenant-subscriptions"
 import { normalizeTenantContext, runTenantQueries } from "@/lib/server/tenant-db"
 import { buildErrorResponse, databaseNotConfiguredResponse } from "@/lib/server/route-utils"
 import { getLabourCutover } from "@/lib/server/labour-entry-mode"
+import { serializeLocationRow } from "@/lib/location-serialize"
 
 export const dynamic = "force-dynamic"
 export const revalidate = 0
 
-const serializeLocation = (row: Record<string, unknown>) => ({
-  id: String(row.id || ""),
-  name: String(row.name || ""),
-  code: row.code ? String(row.code) : null,
-  estate: row.estate ? String(row.estate) : null,
-})
+
 
 // Billing enforcement is intentionally deferred (see CLAUDE.md "Razorpay Billing").
 // Real trial/commercial-access state lives in tenant_commercial_access, resolved via
@@ -58,7 +54,7 @@ export async function GET() {
         WHERE tenant_id = ${tenantId}
       `,
       sql`
-        SELECT id, name, code, estate
+        SELECT id, name, code, estate, area_acres, kind, latitude, longitude
         FROM locations
         WHERE tenant_id = ${tenantId}
         ORDER BY name ASC
@@ -104,7 +100,7 @@ export async function GET() {
     return NextResponse.json({
       success: true,
       modules: effectiveModules,
-      locations: visibleLocationRows.map((row) => serializeLocation(row as Record<string, unknown>)),
+      locations: visibleLocationRows.map((row) => serializeLocationRow(row as Record<string, unknown>)),
       planId,
       plans: MODULE_BUNDLES,
       trialDaysRemaining,

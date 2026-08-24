@@ -46,7 +46,10 @@ describe("the form computes the amount the server will actually store", () => {
   })
 
   it("carries avgPrice on the item type, or it has nothing to multiply", () => {
-    expect(form).toMatch(/interface InventoryItem \{[^}]*avgPrice: number/s)
+    // Bounded to the interface body rather than using a dotall regex, which this TS target
+    // rejects. Same assertion, no flag.
+    const body = form.slice(form.indexOf("interface InventoryItem {"))
+    expect(body.slice(0, body.indexOf("}"))).toContain("avgPrice: number")
   })
 
   it("makes the field read-only once it is derived", () => {

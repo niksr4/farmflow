@@ -216,15 +216,21 @@ export default function InventoryDialogs(p: DialogProps) {
             </div>
             <div className="grid gap-4 sm:grid-cols-2">
               <div className="space-y-2">
-                <Label htmlFor="new-item-qty">Initial Quantity (optional)</Label>
+                <Label htmlFor="new-item-qty">Initial Quantity</Label>
                 <Input id="new-item-qty" type="number" inputMode="decimal" min={0} step="0.01" value={p.newItemForm.quantity} onKeyDown={p.preventNegativeKey} onChange={(e) => p.setNewItemForm((prev) => ({ ...prev, quantity: e.target.value }))} />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="new-item-price">Unit Price{Number(p.newItemForm.quantity) > 0 ? " (required)" : " (optional)"}</Label>
+                {/* Never reads "optional". It was conditional on a quantity being typed, so the
+                    first thing anyone saw was "Unit Price (optional)" -- which is the opposite of
+                    the rule, and the server rejects the save a moment later. Creating an item is
+                    a restock; a restock without a price corrupts the weighted average for every
+                    depletion that follows it. */}
+                <Label htmlFor="new-item-price">Unit Price</Label>
                 <Input id="new-item-price" type="number" inputMode="decimal" min={0} step="0.01" value={p.newItemForm.price} onKeyDown={p.preventNegativeKey} onChange={(e) => p.setNewItemForm((prev) => ({ ...prev, price: e.target.value }))} />
-                {Number(p.newItemForm.quantity) > 0 && (
-                  <p className="text-xs text-muted-foreground">Required when adding starting stock, so cost tracking starts off accurate.</p>
-                )}
+                <p className="text-xs text-muted-foreground">
+                  What one {p.newItemForm.unit || "unit"} cost. Stock entered without a price is
+                  consumed for free by every expense that draws on it.
+                </p>
               </div>
             </div>
             <div className="space-y-2">

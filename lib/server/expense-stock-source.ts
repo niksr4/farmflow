@@ -49,9 +49,16 @@ export async function resolveExpenseStockLocationId(
       FROM locations s, worked w
       WHERE s.tenant_id = ${tenantContext.tenantId}
         AND s.kind = 'store'
-        AND w.estate IS NOT NULL
-        AND s.estate = w.estate
-      ORDER BY s.created_at ASC
+        -- A store with no estate serves every estate. The comment above has said so since this
+        -- file was written; the SQL did not implement it. s.estate = w.estate is NULL, not true,
+        -- when s.estate is NULL, so a tenant whose single shed serves the whole property matched
+        -- nothing and fell through to "take from whichever slot holds the most" -- the exact
+        -- behaviour this function exists to replace. Laxmi, HoneyFarm and Seshagiri all keep one
+        -- estate-wide store, so it has never worked for three of the four real tenants.
+        AND (s.estate IS NULL OR (w.estate IS NOT NULL AND s.estate = w.estate))
+      -- An estate's own store wins over the shared one; without this the shared store could be
+      -- picked for a Medappa block that has a dedicated shed sitting right there.
+      ORDER BY (s.estate IS NULL), s.created_at ASC
       LIMIT 1
     `,
   )
