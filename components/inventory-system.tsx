@@ -83,6 +83,7 @@ import UniversalSearch from "@/components/universal-search"
 import Link from "next/link"
 import Image from "next/image"
 import { isWithinLast24Hours, todayIso } from "@/lib/date-utils"
+import { kgFromBags } from "@/lib/inventory-units"
 import { formatCurrency, formatNumber } from "@/lib/format"
 import { type AccountsExportFormat } from "@/lib/accounts-export"
 import { getCurrentFiscalYear } from "@/lib/fiscal-year-utils"
@@ -477,6 +478,10 @@ export default function InventorySystem() {
     price: "",
     notes: "",
     locationId: LOCATION_UNASSIGNED,
+    // An input aid, not a unit. Bags never reach the ledger -- they are multiplied into the kg
+    // quantity below and the sack size is remembered on the item so it is typed once.
+    bagCount: "",
+    kgPerBag: "",
   })
   const [isSavingNewItem, setIsSavingNewItem] = useState(false)
   const [isMovementDrawerOpen, setIsMovementDrawerOpen] = useState(false)
@@ -2748,6 +2753,8 @@ export default function InventorySystem() {
       quantity: "",
       price: "",
       notes: "",
+      bagCount: "",
+      kgPerBag: "",
       // Empty, so the storehouse is chosen rather than inherited. An estate with one shed still
       // names it -- "wherever" stops being an answer the day a second one exists, and Medappa
       // already has two.
@@ -2758,7 +2765,10 @@ export default function InventorySystem() {
   const handleCreateNewItem = async () => {
     const itemName = newItemForm.name.trim()
     const unit = newItemForm.unit.trim() || "kg"
-    const quantityValue = Number(newItemForm.quantity || 0)
+    // Bags win when filled, because someone who typed "20 x 45" meant 900 kg and would not also
+    // have typed a quantity. Falling back the other way would silently ignore what they entered.
+    const fromBags = kgFromBags(newItemForm.bagCount, newItemForm.kgPerBag)
+    const quantityValue = fromBags ?? Number(newItemForm.quantity || 0)
     // The field asks for the invoice total now, not a per-unit rate. Named for what it holds --
     // calling a total `priceValue` is how the next person reintroduces a unit price by accident.
     const totalPriceValue = Number(newItemForm.price || 0)
@@ -2808,6 +2818,7 @@ export default function InventorySystem() {
           quantity: quantityValue,
           unit,
           total_price: totalPriceValue,
+          kg_per_bag: fromBags != null ? Number(newItemForm.kgPerBag) : undefined,
           notes: notes || undefined,
           user_id: user?.username || "system",
           location_id: locationValue,

@@ -39,3 +39,21 @@ export const isLegacyInventoryUnit = (unit: unknown) => {
   const value = String(unit || "").trim()
   return Boolean(value) && !isSupportedInventoryUnit(value)
 }
+
+/**
+ * Kilos in a number of bags, when someone is reading off an invoice that says "20 bags".
+ *
+ * Bags are an *input*, never a stored unit -- the quantity that lands in the ledger is always
+ * kilos. This exists because estates buy in sacks and the alternative is arithmetic in someone's
+ * head, which is the same thing we removed when stock started being priced by invoice total
+ * rather than per-unit rate.
+ *
+ * Returns null when either side is missing or not positive, so a half-filled helper contributes
+ * nothing rather than quietly writing a zero over a real quantity.
+ */
+export const kgFromBags = (bags: unknown, kgPerBag: unknown): number | null => {
+  const count = Number(bags)
+  const each = Number(kgPerBag)
+  if (!Number.isFinite(count) || !Number.isFinite(each) || count <= 0 || each <= 0) return null
+  return Number((count * each).toFixed(3))
+}

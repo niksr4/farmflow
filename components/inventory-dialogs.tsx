@@ -18,7 +18,7 @@ import { LOCATION_UNASSIGNED, UNASSIGNED_LABEL } from "@/components/inventory-sy
 import type { InventoryItem, Transaction } from "@/lib/inventory-types"
 import type { LocationOption } from "@/components/inventory-system/types"
 import { formatLocationLabel } from "@/lib/location-label"
-import { inventoryUnitOptions, isLegacyInventoryUnit } from "@/lib/inventory-units"
+import { inventoryUnitOptions, isLegacyInventoryUnit, kgFromBags } from "@/lib/inventory-units"
 import { isRestockType } from "@/lib/inventory-edit-rules"
 
 // ── Shared types ─────────────────────────────────────────────────────────────
@@ -30,6 +30,10 @@ type NewItemForm = {
   quantity: string
   price: string
   notes: string
+  /** Bags typed as an input aid. Never stored as a unit -- multiplied into `quantity` in kg. */
+  bagCount: string
+  /** The sack size for this item, remembered so the next restock only needs a bag count. */
+  kgPerBag: string
 }
 
 type InventoryEditForm = { name: string; unit: string; quantity: string; avgPrice: string }
@@ -218,6 +222,41 @@ export default function InventoryDialogs(p: DialogProps) {
               <div className="space-y-2">
                 <Label htmlFor="new-item-qty">Initial Quantity</Label>
                 <Input id="new-item-qty" type="number" inputMode="decimal" min={0} step="0.01" value={p.newItemForm.quantity} onKeyDown={p.preventNegativeKey} onChange={(e) => p.setNewItemForm((prev) => ({ ...prev, quantity: e.target.value }))} />
+                {/* Bags are how the invoice reads and how the shed looks; kilos are what gets
+                    stored, because a bag is 45 kg of urea and 50 of MOP and there is no one
+                    answer. Typing the sack size here converts once and remembers it, so the next
+                    restock of this item only needs the bag count. */}
+                {p.newItemForm.unit === "kg" && (
+                  <div className="rounded-lg border border-dashed border-stone-200 p-2 dark:border-white/[0.1]">
+                    <p className="mb-1.5 text-[11px] font-semibold text-muted-foreground">Bought in bags?</p>
+                    <div className="flex items-center gap-1.5">
+                      <Input
+                        type="number" inputMode="decimal" min={0} step="0.5"
+                        placeholder="bags"
+                        aria-label="Number of bags"
+                        value={p.newItemForm.bagCount}
+                        onKeyDown={p.preventNegativeKey}
+                        onChange={(e) => p.setNewItemForm((prev) => ({ ...prev, bagCount: e.target.value }))}
+                        className="h-9 flex-1 text-sm"
+                      />
+                      <span className="text-xs text-muted-foreground">x</span>
+                      <Input
+                        type="number" inputMode="decimal" min={0} step="0.5"
+                        placeholder="kg each"
+                        aria-label="Kilos per bag"
+                        value={p.newItemForm.kgPerBag}
+                        onKeyDown={p.preventNegativeKey}
+                        onChange={(e) => p.setNewItemForm((prev) => ({ ...prev, kgPerBag: e.target.value }))}
+                        className="h-9 flex-1 text-sm"
+                      />
+                    </div>
+                    {kgFromBags(p.newItemForm.bagCount, p.newItemForm.kgPerBag) != null && (
+                      <p className="mt-1.5 text-[11px] tabular-nums text-muted-foreground">
+                        = {kgFromBags(p.newItemForm.bagCount, p.newItemForm.kgPerBag)} kg
+                      </p>
+                    )}
+                  </div>
+                )}
               </div>
               <div className="space-y-2">
                 {/* Never reads "optional". It was conditional on a quantity being typed, so the

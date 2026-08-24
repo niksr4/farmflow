@@ -305,7 +305,7 @@ export async function POST(request: NextRequest) {
     const tenantUserUuid = await resolveTenantUserUuid(sessionUser)
     const body = await request.json()
 
-    const { item_type, quantity, unit, price, total_price, notes, location_id } = body
+    const { item_type, quantity, unit, price, total_price, kg_per_bag, notes, location_id } = body
     const itemType = normalizeInventoryItemType(item_type)
     const unitValue = String(unit || "").trim()
 
@@ -334,6 +334,11 @@ export async function POST(request: NextRequest) {
         { status: 400 },
       )
     }
+
+    // The sack size, when the quantity was reached by typing bags. Remembered so the next restock
+    // of this item only needs a bag count. Never a unit -- the quantity above is already kilos.
+    const rawKgPerBag = Number(kg_per_bag)
+    const kgPerBagValue = Number.isFinite(rawKgPerBag) && rawKgPerBag > 0 ? rawKgPerBag : null
 
     const total_cost = cost.totalCost
     const avg_price = quantityValue > 0 ? total_cost / quantityValue : 0
@@ -400,6 +405,24 @@ export async function POST(request: NextRequest) {
     } else {
       // No opening stock, so there is no ledger entry to keep in step with.
       await ensureInventorySlotExists(tenantContext, itemType, unitValue, locationValue)
+    }
+
+    // Written after the slot exists rather than in the INSERT above, because that insert seeds the
+    // row at zero and the average-cost trigger fills it in -- so this is the first moment there is
+    // a row to annotate. Nothing depends on it: it only saves the next person retyping the sack
+    // size, and a failure here must not fail a save whose stock and cost are already correct.
+    if (kgPerBagValue != null) {
+      await runTenantQuery(
+        inventorySql,
+        tenantContext,
+        inventorySql`
+          UPDATE current_inventory
+          SET kg_per_bag = ${kgPerBagValue}
+          WHERE tenant_id = ${tenantContext.tenantId}
+            AND item_type = ${itemType}
+            AND location_id IS NOT DISTINCT FROM ${locationValue}
+        `,
+      )
     }
 
     await logAuditEvent(inventorySql, sessionUser, {
