@@ -1101,6 +1101,30 @@ export default function InventorySystem() {
     }
   }, [storeLocations, transactionLocationId])
 
+  /**
+   * The same rule for the stock-level *filter*, which never had it.
+   *
+   * With one store it cannot bite: switching estate leaves the only store still selectable. Medappa
+   * has two, one per estate, and there it is wrong in the way this codebase fails -- quietly and
+   * plausibly. Pick the Tirtha store, switch the estate picker to Citrus Grove, and the fetch keeps
+   * sending the Tirtha location id: Tirtha's stock, under a Citrus Grove banner, with no pill
+   * highlighted because the selected store is no longer in the list and "All" is not selected
+   * either. Nothing is empty and nothing errors; the numbers just belong to the other estate.
+   *
+   * Falls back to LOCATION_ALL rather than to the surviving store. Showing everything the estate
+   * holds is the honest answer to "that filter no longer applies"; silently re-pointing it at a
+   * different shed would swap one wrong answer for another that is harder to notice.
+   */
+  useEffect(() => {
+    if (
+      selectedLocationId !== LOCATION_ALL &&
+      selectedLocationId !== LOCATION_UNASSIGNED &&
+      !storeLocations.find((loc) => loc.id === selectedLocationId)
+    ) {
+      setSelectedLocationId(LOCATION_ALL)
+    }
+  }, [storeLocations, selectedLocationId])
+
   // load initial data
   const refreshData = useCallback(async (_force = false) => {
     if (!tenantId) {

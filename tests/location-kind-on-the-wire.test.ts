@@ -99,3 +99,27 @@ describe("blocks stay out of inventory", () => {
     expect(calls.every((c) => c === "locations={storeLocations}")).toBe(true)
   })
 })
+
+describe("the estate picker and the store pill agree", () => {
+  /**
+   * Medappa keeps one store per estate, so narrowing to an estate changes which stores exist. The
+   * pill row already followed storeLocations; the *selection* did not, so a stale store id kept
+   * being sent to the fetch after the estate moved out from under it -- the other estate's stock
+   * under this estate's banner, no pill highlighted, nothing empty and nothing thrown.
+   */
+  const shell = readFileSync("components/inventory-system.tsx", "utf8")
+
+  it("clears a selected store that the current estate does not have", () => {
+    const at = shell.indexOf("selectedLocationId !== LOCATION_ALL &&")
+    expect(at).toBeGreaterThan(-1)
+    const guard = shell.slice(at, at + 400)
+    expect(guard).toContain("!storeLocations.find((loc) => loc.id === selectedLocationId)")
+    expect(guard).toContain("setSelectedLocationId(LOCATION_ALL)")
+  })
+
+  it("falls back to All rather than to whichever store survives", () => {
+    // Re-pointing the filter at a different shed swaps one wrong answer for a subtler one.
+    const at = shell.indexOf("!storeLocations.find((loc) => loc.id === selectedLocationId)")
+    expect(shell.slice(at, at + 200)).not.toContain("storeLocations[0].id")
+  })
+})
