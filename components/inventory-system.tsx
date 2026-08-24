@@ -1473,7 +1473,7 @@ export default function InventorySystem() {
   )
 
   const selectedLocationLabel = useMemo(() => {
-    if (selectedLocationId === LOCATION_ALL) return "All locations"
+    if (selectedLocationId === LOCATION_ALL) return "All stores"
     if (selectedLocationId === LOCATION_UNASSIGNED) return UNASSIGNED_LABEL
     return resolveLocationLabel(selectedLocationId)
   }, [selectedLocationId, resolveLocationLabel])
@@ -1872,18 +1872,21 @@ export default function InventorySystem() {
               ))}
             </SelectContent>
           </Select>
+          {/* Stores, like the column it filters. Offering blocks here produced a filter with no
+              rows behind it -- a movement is stock entering or leaving a shed, and the block a
+              chemical was sprayed on is recorded on the expense, not on the movement. */}
           <Select value={selectedLocationId} onValueChange={setSelectedLocationId}>
             <SelectTrigger className="w-full sm:w-48 h-10 border-stone-200 bg-white">
-              <SelectValue placeholder="All locations" />
+              <SelectValue placeholder="All stores" />
             </SelectTrigger>
             <SelectContent className="max-h-[40vh] overflow-y-auto">
-              <SelectItem value={LOCATION_ALL}>All locations</SelectItem>
+              <SelectItem value={LOCATION_ALL}>All stores</SelectItem>
               {(hasLegacyUnassignedTransactions || selectedLocationId === LOCATION_UNASSIGNED) && (
                 <SelectItem value={LOCATION_UNASSIGNED}>{UNASSIGNED_LABEL}</SelectItem>
               )}
-              {locations.map((loc) => (
+              {storeLocations.map((loc) => (
                 <SelectItem key={loc.id} value={loc.id}>
-                  {formatLocationLabel(loc, locations)}
+                  {formatLocationLabel(loc, storeLocations)}
                 </SelectItem>
               ))}
             </SelectContent>
@@ -1990,7 +1993,7 @@ export default function InventorySystem() {
                     </p>
                   </div>
                   <div className="rounded-md border border-black/5 bg-white px-2 py-1.5">
-                    <p className="text-[11px] uppercase tracking-wide text-muted-foreground">Location</p>
+                    <p className="text-[11px] uppercase tracking-wide text-muted-foreground">Store</p>
                     <p className="font-medium text-neutral-900">
                       {resolveLocationLabel(transaction.location_id, transaction.location_name || transaction.location_code)}
                     </p>
@@ -2044,7 +2047,12 @@ export default function InventorySystem() {
             <thead>
               <tr className="border-b border-stone-200 bg-emerald-700 text-xs font-bold uppercase tracking-[0.16em] text-emerald-300 dark:border-white/[0.05]">
                 <th className="py-4 px-4 text-left">Date</th>
-                <th className="py-4 px-4 text-left">Location</th>
+                {/* "Store", not "Location". Every row in this ledger is stock arriving at, or
+                    leaving, a shed -- an opening balance, a restock, or a write-off. Where stock
+                    gets *used* is a block, and that is named on the expense in Accounts, not here.
+                    Calling the column Location invited reading a shed as the place the fertiliser
+                    went onto, which is a different fact entirely and one this table never holds. */}
+                <th className="py-4 px-4 text-left">Store</th>
                 <th className="py-4 px-4 text-left">Item Type</th>
                 <th className="py-4 px-4 text-left">Quantity</th>
                 <th className="py-4 px-4 text-left">Transaction</th>
@@ -2839,7 +2847,7 @@ export default function InventorySystem() {
   }
 
   const exportToCSV = () => {
-    const headers = ["Date", "Location", "Item Type", "Quantity", "Unit Price", "Total Cost", "Transaction Type", "Notes", "User"]
+    const headers = ["Date", "Store", "Item Type", "Quantity", "Unit Price", "Total Cost", "Transaction Type", "Notes", "User"]
     const rows = filteredTransactions.map((t) => [
       t.transaction_date ?? "",
       resolveLocationLabel(t.location_id, t.location_name || t.location_code),
@@ -4780,7 +4788,9 @@ export default function InventorySystem() {
                     </p>
                     <div className="mt-4 flex flex-wrap gap-4 border-t border-stone-100 pt-4 dark:border-white/[0.05]">
                       <div>
-                        <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-emerald-700 dark:text-emerald-500">Location</p>
+                        {/* Same word as the column and the filter it summarises. Three labels for
+                            one concept is how "store" and "block" started meaning the same thing. */}
+                        <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-emerald-700 dark:text-emerald-500">Store</p>
                         <p className="mt-0.5 text-sm font-semibold text-stone-800 dark:text-stone-200">{selectedLocationLabel}</p>
                       </div>
                       <div>

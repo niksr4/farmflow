@@ -123,3 +123,47 @@ describe("the estate picker and the store pill agree", () => {
     expect(shell.slice(at, at + 200)).not.toContain("storeLocations[0].id")
   })
 })
+
+describe("the inventory ledger talks about stores, not locations", () => {
+  /**
+   * Every row in transaction_history is stock arriving at or leaving a shed: an opening balance, a
+   * restock, or a write-off. Where stock is *used* is a block, recorded on the expense in Accounts.
+   *
+   * The column was headed "Location", which reads as the place the fertiliser went onto -- a
+   * different fact, and one this table has never held. The distinction is the whole point of
+   * separating stores from blocks, so the words have to carry it.
+   */
+  const shell = readFileSync("components/inventory-system.tsx", "utf8")
+
+  it("the desktop header, the mobile card and the CSV all say Store", () => {
+    expect(shell).toContain('<th className="py-4 px-4 text-left">Store</th>')
+    expect(shell).toContain('text-muted-foreground">Store</p>')
+    expect(shell).toContain('const headers = ["Date", "Store", "Item Type"')
+  })
+
+  it("none of the three still says Location", () => {
+    // Mobile and desktop must agree; the CSV is what someone reads without the screen in front
+    // of them, so it is the one that can least afford a stale word.
+    expect(shell).not.toContain('<th className="py-4 px-4 text-left">Location</th>')
+    expect(shell).not.toContain('text-muted-foreground">Location</p>')
+    expect(shell).not.toContain('"Date", "Location", "Item Type"')
+  })
+
+  it("the summary strip above it uses the same word", () => {
+    // Three labels for one concept is how "store" and "block" drifted into meaning the same thing
+    // in the first place.
+    expect(shell).toContain('dark:text-emerald-500">Store</p>')
+    expect(shell).toContain('if (selectedLocationId === LOCATION_ALL) return "All stores"')
+  })
+
+  it("its filter offers stores and says so", () => {
+    expect(shell).toContain("{storeLocations.map((loc) => (\n                <SelectItem")
+    expect(shell).toContain("<SelectItem value={LOCATION_ALL}>All stores</SelectItem>")
+  })
+
+  it("the expenses table still says Location, because there it is a block", () => {
+    // The rename must not spread. An expense genuinely names where work happened.
+    const expenses = readFileSync("components/other-expenses-tab.tsx", "utf8")
+    expect(expenses).toContain('<TableHead className="sticky top-0 bg-muted/60">Location</TableHead>')
+  })
+})
