@@ -60,8 +60,14 @@ type LocationsSectionProps = {
   newLocationEstate: string
   newLocationArea: string
   newLocationKind: "block" | "store" | "general"
+  newLocationLat: string
+  newLocationLng: string
   editingLocationArea: string
+  editingLocationLat: string
+  editingLocationLng: string
   onEditingLocationAreaChange: (value: string) => void
+  onEditingLocationLatChange: (value: string) => void
+  onEditingLocationLngChange: (value: string) => void
   isCreatingLocation: boolean
   editingLocationId: string | null
   editingLocationName: string
@@ -73,6 +79,8 @@ type LocationsSectionProps = {
   onNewLocationEstateChange: (value: string) => void
   onNewLocationAreaChange: (value: string) => void
   onNewLocationKindChange: (value: "block" | "store" | "general") => void
+  onNewLocationLatChange: (value: string) => void
+  onNewLocationLngChange: (value: string) => void
   onCreateLocation: () => void
   onEditingLocationNameChange: (value: string) => void
   onEditingLocationCodeChange: (value: string) => void
@@ -91,8 +99,14 @@ export function LocationsSection({
   newLocationEstate,
   newLocationArea,
   newLocationKind,
+  newLocationLat,
+  newLocationLng,
   editingLocationArea,
+  editingLocationLat,
+  editingLocationLng,
   onEditingLocationAreaChange,
+  onEditingLocationLatChange,
+  onEditingLocationLngChange,
   isCreatingLocation,
   editingLocationId,
   editingLocationName,
@@ -104,6 +118,8 @@ export function LocationsSection({
   onNewLocationEstateChange,
   onNewLocationAreaChange,
   onNewLocationKindChange,
+  onNewLocationLatChange,
+  onNewLocationLngChange,
   onCreateLocation,
   onEditingLocationNameChange,
   onEditingLocationCodeChange,
@@ -275,6 +291,38 @@ export function LocationsSection({
             </div>
             )}
 
+            {/* A general location is an estate, not a place, so it has no point on the ground --
+                same reason it has no acreage. Blocks and stores both do: 4.2B asks for the coffee
+                blocks AND the infrastructure on the farm map. Optional, and paired: the database
+                enforces both-or-neither, because half a coordinate is not a location. */}
+            {newLocationKind !== "general" && (
+              <div className="space-y-2 md:col-span-2">
+                <HelpLabel
+                  htmlFor="location-lat"
+                  label="Where it is (optional)"
+                  help="Latitude and longitude. Stand on the block, open Maps on your phone, long-press your position and copy the two numbers. Needed for the farm map that coffee certification asks for, and it is what lets the weather forecast point at your estate rather than the nearest town."
+                />
+                <div className="grid grid-cols-2 gap-2">
+                  <Input
+                    id="location-lat"
+                    type="number" inputMode="decimal" step="0.0001"
+                    placeholder="Latitude, e.g. 12.4244"
+                    className="tabular-nums"
+                    value={newLocationLat}
+                    onChange={(event) => onNewLocationLatChange(event.target.value)}
+                  />
+                  <Input
+                    id="location-lng"
+                    type="number" inputMode="decimal" step="0.0001"
+                    placeholder="Longitude, e.g. 75.7382"
+                    className="tabular-nums"
+                    value={newLocationLng}
+                    onChange={(event) => onNewLocationLngChange(event.target.value)}
+                  />
+                </div>
+              </div>
+            )}
+
             <div className="flex items-end">
               <Button onClick={onCreateLocation} disabled={isCreatingLocation} className="w-full">
                 {isCreatingLocation ? "Adding..." : "Add Location"}
@@ -309,6 +357,7 @@ export function LocationsSection({
                 <TableHead>Code</TableHead>
                 <TableHead>Estate</TableHead>
                 <TableHead className="w-[110px]">Acres</TableHead>
+                <TableHead className="hidden lg:table-cell w-[190px]">Where it is</TableHead>
                 <TableHead>Actions</TableHead>
               </TableRow>
             </TableHeader>
@@ -383,6 +432,37 @@ export function LocationsSection({
                             <span className="tabular-nums">{location.areaAcres} ac</span>
                           ) : (
                             <span className="text-amber-600">not set</span>
+                          )}
+                        </TableCell>
+                        <TableCell className="hidden lg:table-cell text-muted-foreground">
+                          {editingLocationId === location.id ? (
+                            <div className="grid grid-cols-2 gap-1">
+                              <Input
+                                type="number" inputMode="decimal" step="0.0001"
+                                placeholder="lat"
+                                aria-label={`Latitude of ${location.name}`}
+                                value={editingLocationLat}
+                                onChange={(event) => onEditingLocationLatChange(event.target.value)}
+                                className="tabular-nums h-9"
+                              />
+                              <Input
+                                type="number" inputMode="decimal" step="0.0001"
+                                placeholder="lng"
+                                aria-label={`Longitude of ${location.name}`}
+                                value={editingLocationLng}
+                                onChange={(event) => onEditingLocationLngChange(event.target.value)}
+                                className="tabular-nums h-9"
+                              />
+                            </div>
+                          ) : location.latitude != null && location.longitude != null ? (
+                            <span className="tabular-nums text-xs">
+                              {location.latitude.toFixed(4)}, {location.longitude.toFixed(4)}
+                            </span>
+                          ) : location.kind === "general" ? (
+                            /* An estate is not a place; there is nothing to record here. */
+                            <span className="text-xs">—</span>
+                          ) : (
+                            <span className="text-xs text-amber-600">not set</span>
                           )}
                         </TableCell>
                         <TableCell>

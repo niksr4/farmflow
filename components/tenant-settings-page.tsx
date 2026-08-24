@@ -206,6 +206,8 @@ export default function TenantSettingsPage() {
   const [newLocationEstate, setNewLocationEstate] = useState("")
   const [newLocationArea, setNewLocationArea] = useState("")
   const [newLocationKind, setNewLocationKind] = useState<"block" | "store" | "general">("block")
+  const [newLocationLat, setNewLocationLat] = useState("")
+  const [newLocationLng, setNewLocationLng] = useState("")
 
   // The estate's acreage is the sum of its blocks, never a number of its own. Stores are excluded
   // -- a shed has a footprint but not a planted area, and counting it would inflate every
@@ -226,6 +228,8 @@ export default function TenantSettingsPage() {
   const [editingLocationCode, setEditingLocationCode] = useState("")
   const [editingLocationEstate, setEditingLocationEstate] = useState("")
   const [editingLocationArea, setEditingLocationArea] = useState("")
+  const [editingLocationLat, setEditingLocationLat] = useState("")
+  const [editingLocationLng, setEditingLocationLng] = useState("")
   const [isUpdatingLocationId, setIsUpdatingLocationId] = useState<string | null>(null)
   const [isDeletingLocationId, setIsDeletingLocationId] = useState<string | null>(null)
 
@@ -941,6 +945,8 @@ export default function TenantSettingsPage() {
           estate: String(newLocationEstate || "").trim() || null,
           areaAcres: String(newLocationArea || "").trim() === "" ? null : Number(newLocationArea),
           kind: newLocationKind,
+          latitude: String(newLocationLat || "").trim() === "" ? null : Number(newLocationLat),
+          longitude: String(newLocationLng || "").trim() === "" ? null : Number(newLocationLng),
           tenantId,
         }),
       })
@@ -953,6 +959,8 @@ export default function TenantSettingsPage() {
       setNewLocationEstate("")
       setNewLocationArea("")
       setNewLocationKind("block")
+      setNewLocationLat("")
+      setNewLocationLng("")
       await loadLocations()
       toast({ title: "Location created", description: `${data.location.name} added.` })
     } catch (error: any) {
@@ -967,6 +975,10 @@ export default function TenantSettingsPage() {
     setEditingLocationName(String(location.name || ""))
     setEditingLocationCode(String(location.code || ""))
     setEditingLocationArea(location.areaAcres != null ? String(location.areaAcres) : "")
+    // Set unconditionally, including to empty -- opening a block with no coordinates must not
+    // show the last one's. Same rule the expense form needed.
+    setEditingLocationLat(location.latitude != null ? String(location.latitude) : "")
+    setEditingLocationLng(location.longitude != null ? String(location.longitude) : "")
     setEditingLocationEstate(String(location.estate || ""))
   }
 
@@ -1025,6 +1037,8 @@ export default function TenantSettingsPage() {
           estate: String(editingLocationEstate || "").trim() || null,
           // Sent even when blank, so clearing the field genuinely clears the area.
           areaAcres: String(editingLocationArea || "").trim() === "" ? null : Number(editingLocationArea),
+          latitude: String(editingLocationLat || "").trim() === "" ? null : Number(editingLocationLat),
+          longitude: String(editingLocationLng || "").trim() === "" ? null : Number(editingLocationLng),
           tenantId,
         }),
       })
@@ -1365,7 +1379,7 @@ export default function TenantSettingsPage() {
               {
                 id: "estate-profile",
                 label: "Footprint",
-                hint: "Acreage, crops, weather point",
+                hint: "Acreage and weather point",
                 node: (
                   <EstateProfileSection
                     estateProfileDraft={estateProfileDraft}
@@ -1434,8 +1448,16 @@ export default function TenantSettingsPage() {
                     onNewLocationAreaChange={setNewLocationArea}
                     newLocationKind={newLocationKind}
                     onNewLocationKindChange={setNewLocationKind}
+                    newLocationLat={newLocationLat}
+                    onNewLocationLatChange={setNewLocationLat}
+                    newLocationLng={newLocationLng}
+                    onNewLocationLngChange={setNewLocationLng}
                     editingLocationArea={editingLocationArea}
                     onEditingLocationAreaChange={setEditingLocationArea}
+                    editingLocationLat={editingLocationLat}
+                    onEditingLocationLatChange={setEditingLocationLat}
+                    editingLocationLng={editingLocationLng}
+                    onEditingLocationLngChange={setEditingLocationLng}
                     isUpdatingLocationId={isUpdatingLocationId}
                     onNewLocationNameChange={setNewLocationName}
                     onNewLocationCodeChange={setNewLocationCode}

@@ -36,6 +36,9 @@ export interface LocationRow {
   areaAcres?: number | null
   /** Settings lists blocks and storehouses together, so a row here may be either. */
   kind?: "block" | "store" | "general"
+  /** Where the block physically is. Paired: the database enforces both-or-neither. */
+  latitude?: number | null
+  longitude?: number | null
 }
 
 export interface PrivacyStatus {

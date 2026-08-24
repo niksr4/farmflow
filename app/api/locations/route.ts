@@ -50,7 +50,26 @@ function serializeLocation(row: Record<string, unknown>) {
     // 'block' where work happens, 'store' where stock sits. Defaulted rather than assumed so a
     // row written before scripts/128 still reads as a block.
     kind: row.kind === "store" ? "store" : row.kind === "general" ? "general" : "block",
+    // INDICOFS wants a farm map with the coffee blocks identified (4.2A/4.2B/4.3A) and evidence
+    // the land was not cleared after 2020 (4.5.1A/4.5.1C). The columns and a both-or-neither
+    // constraint have existed since the table was made; nothing had ever read or written them.
+    latitude: row.latitude != null ? Number(row.latitude) : null,
+    longitude: row.longitude != null ? Number(row.longitude) : null,
   }
+}
+
+/**
+ * A coordinate, or null, or "invalid". Latitude and longitude are read as a pair because the DB
+ * enforces both-or-neither -- half a coordinate is not a location, and letting one through would
+ * surface as a constraint violation rather than a message anyone can act on.
+ */
+const readCoordinate = (value: unknown, limit: 90 | 180): number | null | "invalid" => {
+  if (value == null || value === "") return null
+  const parsed = Number(value)
+  if (!Number.isFinite(parsed) || parsed < -limit || parsed > limit) return "invalid"
+  // Two decimals is ~1.1km, which is the resolution the weather model works at anyway. Stored
+  // as given; rounding is the caller's business.
+  return parsed
 }
 
 /**
@@ -77,7 +96,7 @@ export async function GET(request: Request) {
       sql,
       tenantContext,
       sql`
-        SELECT id, name, code, estate, area_acres, kind
+        SELECT id, name, code, estate, area_acres, kind, latitude, longitude
         FROM locations
         WHERE tenant_id = ${tenantId}
         ORDER BY name ASC
@@ -174,6 +193,23 @@ export async function POST(request: Request) {
     // per-acre number the estate is shown.
     const areaAcres = kind === "block" ? rawArea : null
 
+    // A general location is an estate, not a place -- it has no point on the ground any more than
+    // it has a planted area. Blocks and stores are both real: 4.2B asks for the coffee blocks AND
+    // the infrastructure on the map.
+    const rawLat = readCoordinate(body?.latitude, 90)
+    const rawLng = readCoordinate(body?.longitude, 180)
+    if (rawLat === "invalid" || rawLng === "invalid") {
+      return NextResponse.json({ success: false, error: "Coordinates must be a valid latitude and longitude" }, { status: 400 })
+    }
+    const placeable = kind !== "general"
+    const latitude = placeable ? rawLat : null
+    const longitude = placeable ? rawLng : null
+    // Mirrors the locations_coords_paired_check constraint, so a half-entered pair returns a
+    // message rather than a Postgres error.
+    if ((latitude === null) !== (longitude === null)) {
+      return NextResponse.json({ success: false, error: "Enter both latitude and longitude, or neither" }, { status: 400 })
+    }
+
     if (!name) {
       return NextResponse.json({ success: false, error: "Location name is required" }, { status: 400 })
     }
@@ -182,10 +218,10 @@ export async function POST(request: Request) {
       sql,
       tenantContext,
       sql`
-        INSERT INTO locations (tenant_id, name, code, estate, area_acres, kind)
-        VALUES (${tenantId}, ${name}, ${code}, ${estate}, ${areaAcres}, ${kind})
+        INSERT INTO locations (tenant_id, name, code, estate, area_acres, kind, latitude, longitude)
+        VALUES (${tenantId}, ${name}, ${code}, ${estate}, ${areaAcres}, ${kind}, ${latitude}, ${longitude})
         ON CONFLICT (tenant_id, code) DO NOTHING
-        RETURNING id, name, code, estate, area_acres, kind
+        RETURNING id, name, code, estate, area_acres, kind, latitude, longitude
       `,
     )
 
@@ -284,16 +320,29 @@ export async function PATCH(request: Request) {
       return NextResponse.json({ success: false, error: "Location code already exists" }, { status: 409 })
     }
 
+    const coordsProvided =
+      Object.prototype.hasOwnProperty.call(body, "latitude") || Object.prototype.hasOwnProperty.call(body, "longitude")
+    const nextLat = readCoordinate(body?.latitude, 90)
+    const nextLng = readCoordinate(body?.longitude, 180)
+    if (nextLat === "invalid" || nextLng === "invalid") {
+      return NextResponse.json({ success: false, error: "Coordinates must be a valid latitude and longitude" }, { status: 400 })
+    }
+    if (coordsProvided && (nextLat === null) !== (nextLng === null)) {
+      return NextResponse.json({ success: false, error: "Enter both latitude and longitude, or neither" }, { status: 400 })
+    }
+
     const result = await runTenantQuery(
       sql,
       tenantContext,
       sql`
         UPDATE locations
         SET name = ${name}, code = ${code}, estate = ${nextEstate},
-            area_acres = CASE WHEN ${areaProvided} THEN ${areaAcres} ELSE area_acres END
+            area_acres = CASE WHEN ${areaProvided} THEN ${areaAcres} ELSE area_acres END,
+            latitude  = CASE WHEN ${coordsProvided} THEN ${nextLat}::numeric ELSE latitude END,
+            longitude = CASE WHEN ${coordsProvided} THEN ${nextLng}::numeric ELSE longitude END
         WHERE id = ${id}
           AND tenant_id = ${tenantId}
-        RETURNING id, name, code, estate, area_acres
+        RETURNING id, name, code, estate, area_acres, kind, latitude, longitude
       `,
     )
 
