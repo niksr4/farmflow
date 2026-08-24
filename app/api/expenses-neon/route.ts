@@ -356,13 +356,36 @@ async function tableHasExpenseInventoryLinksTable() {
   return Array.isArray(rows) && rows.length > 0
 }
 
-async function fetchInventoryItemsForTenant(tenantContext: TenantContext): Promise<Array<{ itemType: string; unit: string; quantity: number }>> {
+/**
+ * The stock list the expense form draws on. `avgPrice` is load-bearing, not decoration: the form
+ * derives the expense amount from quantity x average cost, so without it the derivation can never
+ * fire and every item -- priced or not -- falls into the "no cost recorded" branch and shows a
+ * warning that is false for most of them.
+ *
+ * That is exactly what shipped: the form was taught to read `avgPrice` while this query still
+ * selected three columns. Nothing threw, nothing 500'd, and the client simply read `undefined`.
+ * The server kept deriving the amount correctly, so the stored numbers were right and only the
+ * screen lied -- the quietest possible version of a broken contract.
+ *
+ * The average is weighted across locations (SUM(total_cost)/SUM(quantity)), not AVG(avg_price).
+ * A shed holding 2,000 kg at Rs 15 and another holding 10 kg at Rs 400 averages to Rs 16.9, not
+ * Rs 207.50, and the unweighted version would have valued every depletion wildly high for any
+ * tenant with two stores -- which is Medappa, as soon as they enter stock.
+ */
+async function fetchInventoryItemsForTenant(
+  tenantContext: TenantContext,
+): Promise<Array<{ itemType: string; unit: string; quantity: number; avgPrice: number }>> {
   try {
     const rows = await runTenantQuery(
       accountsSql,
       tenantContext,
       accountsSql`
-        SELECT item_type, COALESCE(unit, 'kg') AS unit, COALESCE(SUM(quantity), 0) AS quantity
+        SELECT item_type,
+               COALESCE(unit, 'kg') AS unit,
+               COALESCE(SUM(quantity), 0) AS quantity,
+               CASE WHEN COALESCE(SUM(quantity), 0) > 0
+                    THEN COALESCE(SUM(total_cost), 0) / SUM(quantity)
+                    ELSE 0 END AS avg_price
         FROM current_inventory
         WHERE tenant_id = ${tenantContext.tenantId}
         GROUP BY item_type, unit
@@ -374,6 +397,7 @@ async function fetchInventoryItemsForTenant(tenantContext: TenantContext): Promi
       itemType: String(r.item_type || ""),
       unit: String(r.unit || "kg"),
       quantity: Number(r.quantity) || 0,
+      avgPrice: Number(r.avg_price) || 0,
     }))
   } catch {
     return []

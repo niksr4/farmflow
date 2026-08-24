@@ -82,3 +82,32 @@ describe("unpriced stock is said out loud, not silently tolerated", () => {
     expect(form).toMatch(/can&apos;t be worked out from stock/)
   })
 })
+
+describe("the field the form derives from actually arrives", () => {
+  /**
+   * The form was taught to read `avgPrice` while the query behind ?inventoryItems=1 still selected
+   * three columns. Nothing threw; the client read `undefined`, `Number(undefined) > 0` was false,
+   * and every item -- priced or not -- took the "no cost recorded" branch. The server kept deriving
+   * correctly, so the stored numbers stayed right and only the screen lied.
+   *
+   * A contract described in two places is not a contract. This is the third time that shape has
+   * cost something in this codebase.
+   */
+  it("the query selects it", () => {
+    const fn = expenseRoute.slice(expenseRoute.indexOf("async function fetchInventoryItemsForTenant"))
+    const body = fn.slice(0, fn.indexOf("\n}\n"))
+    expect(body).toContain("AS avg_price")
+    expect(body).toContain("avgPrice: Number(r.avg_price) || 0")
+  })
+
+  it("declares it on the return type, so a caller reading it typechecks", () => {
+    expect(expenseRoute).toContain("quantity: number; avgPrice: number }>")
+  })
+
+  it("weights the average across locations rather than averaging the averages", () => {
+    // 2,000 kg at Rs 15 and 10 kg at Rs 400 is Rs 16.9/kg, not Rs 207.50. The unweighted version
+    // would overvalue every depletion for any tenant with two stores.
+    const fn = expenseRoute.slice(expenseRoute.indexOf("async function fetchInventoryItemsForTenant"))
+    expect(fn.slice(0, fn.indexOf("\n}\n"))).toContain("SUM(total_cost), 0) / SUM(quantity)")
+  })
+})
