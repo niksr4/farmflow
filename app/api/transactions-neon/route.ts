@@ -16,6 +16,7 @@ import {
   repairCurrentInventoryUpsertConstraints,
 } from "@/lib/server/current-inventory-constraints"
 import { sanitizeRouteError } from "@/lib/server/sanitize-route-error"
+import { resolveStockCost } from "@/lib/stock-cost"
 import {
   STOCK_LOSS_ACTIVITY,
   STOCK_LOSS_CODE,
@@ -508,7 +509,7 @@ export async function POST(request: NextRequest) {
     const tenantUserUuid = await resolveTenantUserUuid(sessionUser)
     const body = await request.json()
 
-    const { item_type, quantity, transaction_type, notes, price, location_id, unit, transaction_date } = body
+    const { item_type, quantity, transaction_type, notes, price, total_price, location_id, unit, transaction_date } = body
     const requestedItemType = normalizeInventoryItemType(item_type)
 
     if (!requestedItemType || !quantity || !transaction_type) {
@@ -530,11 +531,14 @@ export async function POST(request: NextRequest) {
       normalizedType = "deplete"
     }
 
-    if (normalizedType === "restock" && !(Number(price) > 0)) {
+    // Either field satisfies this. Checking only `price` would have rejected every restock the
+    // moment the form started sending a total instead -- a guard that fires on correct input is
+    // worse than the hole it was closing.
+    if (normalizedType === "restock" && !(Number(price) > 0) && !(Number(total_price) > 0)) {
       return NextResponse.json(
         {
           success: false,
-          message: "Unit price is required for restocks. A ₹0 price corrupts the weighted average cost for every future depletion.",
+          message: "Enter what this restock cost. A ₹0 restock corrupts the weighted average cost for every future depletion.",
         },
         { status: 400 },
       )
@@ -648,9 +652,11 @@ export async function POST(request: NextRequest) {
     // slot's current weighted-average cost so total_cost matches what the
     // update_inventory() trigger is about to deduct from current_inventory,
     // instead of being silently recorded as 0.
+    const restockCost = resolveStockCost({ quantity: quantityValue, totalPrice: total_price, unitPrice: price })
     const priceValue =
-      normalizedType === "deplete" ? Number(effectiveSlotMatch?.avg_price) || 0 : Number(price) || 0
-    const total_cost = quantityValue * priceValue
+      normalizedType === "deplete" ? Number(effectiveSlotMatch?.avg_price) || 0 : restockCost.unitPrice
+    const total_cost =
+      normalizedType === "deplete" ? Number((quantityValue * priceValue).toFixed(2)) : restockCost.totalCost
 
     if (normalizedType === "deplete") {
       underflowItemType = canonicalItemType

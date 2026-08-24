@@ -15,6 +15,7 @@ import {
   repairCurrentInventoryUpsertConstraints,
 } from "@/lib/server/current-inventory-constraints"
 import { sanitizeRouteError } from "@/lib/server/sanitize-route-error"
+import { resolveStockCost, hasStockCost } from "@/lib/stock-cost"
 
 export const dynamic = "force-dynamic"
 
@@ -304,7 +305,7 @@ export async function POST(request: NextRequest) {
     const tenantUserUuid = await resolveTenantUserUuid(sessionUser)
     const body = await request.json()
 
-    const { item_type, quantity, unit, price, notes, location_id } = body
+    const { item_type, quantity, unit, price, total_price, notes, location_id } = body
     const itemType = normalizeInventoryItemType(item_type)
     const unitValue = String(unit || "").trim()
 
@@ -319,19 +320,22 @@ export async function POST(request: NextRequest) {
     }
 
     const quantityValue = Number(quantity) || 0
-    const priceValue = Number(price) || 0
+    // The form now asks what was paid in total, because that is what the invoice says and what the
+    // weighted-average replay actually reads. `price` is still accepted for any caller not yet moved.
+    const cost = resolveStockCost({ quantity: quantityValue, totalPrice: total_price, unitPrice: price })
+    const priceValue = cost.unitPrice
 
-    if (quantityValue > 0 && priceValue <= 0) {
+    if (quantityValue > 0 && !hasStockCost(cost)) {
       return NextResponse.json(
         {
           success: false,
-          message: "Unit price is required when adding starting stock, so cost tracking starts off accurate.",
+          message: "Enter what this stock cost. Stock added without a price is consumed for free by every expense that draws on it.",
         },
         { status: 400 },
       )
     }
 
-    const total_cost = quantityValue * priceValue
+    const total_cost = cost.totalCost
     const avg_price = quantityValue > 0 ? total_cost / quantityValue : 0
 
     const resolvedLocationId = typeof location_id === "string" ? location_id.trim() : ""

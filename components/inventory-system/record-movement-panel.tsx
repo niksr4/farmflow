@@ -362,20 +362,24 @@ export default function RecordMovementPanel({
           )}
         </div>
 
-        {/* Price per unit — only meaningful for restocks; drives weighted average cost */}
+        {/* What the batch cost in total — only meaningful for restocks; drives weighted average
+            cost. Asked as a total rather than a rate because that is what the invoice says, and
+            because replayInventoryLedger rebuilds the average from total_cost and never reads the
+            per-unit column: asking for the rate meant collecting the rounded number and computing
+            the authoritative one from it. */}
         {newTransaction?.transaction_type === "restock" && (
           <div className="space-y-2">
             <div className="flex items-center gap-2">
-              <label className="text-sm font-medium text-neutral-700">Unit Price</label>
+              <label className="text-sm font-medium text-neutral-700">Total price paid (₹)</label>
               <TooltipProvider>
                 <Tooltip>
                   <TooltipTrigger asChild>
-                    <button type="button" aria-label="Unit price help" className="inline-flex h-5 w-5 items-center justify-center rounded-full border border-black/10 text-neutral-500 hover:text-neutral-700">
+                    <button type="button" aria-label="Price help" className="inline-flex h-5 w-5 items-center justify-center rounded-full border border-black/10 text-neutral-500 hover:text-neutral-700">
                       <Info className="h-3 w-3" />
                     </button>
                   </TooltipTrigger>
                   <TooltipContent className="max-w-[230px] text-xs leading-relaxed">
-                    Enter the price you paid per unit for this batch. FarmFlow uses weighted average costing — each restock recalculates the average as total spend ÷ total quantity. Depletions are then valued at that running average, so a missing price here corrupts the cost basis going forward.
+                    Enter what you paid for the whole batch, delivery included — the figure on the invoice. FarmFlow works out the per-unit rate from it. Costing is weighted average: each restock recalculates it as total spend ÷ total quantity, and depletions are valued at that running average, so a missing price here corrupts the cost basis going forward.
                   </TooltipContent>
                 </Tooltip>
               </TooltipProvider>
@@ -384,7 +388,7 @@ export default function RecordMovementPanel({
               type="number" inputMode="decimal"
               min={0}
               step="0.01"
-              placeholder="e.g. 60 for ₹60/kg"
+              placeholder="e.g. 3000 for a 50 kg bag at ₹60"
               value={newTransaction?.price ?? ""}
               onKeyDown={preventNegativeKey}
               onWheel={preventNumberScrollChange}
@@ -395,9 +399,17 @@ export default function RecordMovementPanel({
               }}
               className="h-11 rounded-xl border-black/5 bg-white focus-visible:ring-2 focus-visible:ring-emerald-200"
             />
-            <p className="text-xs text-neutral-500">
-              Required — restocking at ₹0 silently drags the average cost toward zero for every future depletion.
-            </p>
+            {Number(newTransaction?.quantity) > 0 && Number(newTransaction?.price) > 0 ? (
+              /* The rate, derived and shown back. A wildly wrong per-unit figure is how a
+                 mistyped quantity announces itself; a total alone never would. */
+              <p className="text-xs text-neutral-500 tabular-nums">
+                ₹{(Number(newTransaction.price) / Number(newTransaction.quantity)).toFixed(2)} per {newTransaction?.unit || "unit"}
+              </p>
+            ) : (
+              <p className="text-xs text-neutral-500">
+                Required — restocking at ₹0 silently drags the average cost toward zero for every future depletion.
+              </p>
+            )}
           </div>
         )}
 
@@ -433,7 +445,7 @@ export default function RecordMovementPanel({
 
         {newTransaction?.transaction_type === "restock" && !(Number(newTransaction?.price) > 0) && (
           <p className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
-            Add the unit price above to save — restocks need a price greater than ₹0.
+            Add what this batch cost above to save — restocks need a price greater than ₹0.
           </p>
         )}
 

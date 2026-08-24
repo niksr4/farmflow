@@ -71,3 +71,31 @@ describe("an estate-wide store is reachable", () => {
     expect(source).toContain("ORDER BY (s.estate IS NULL), s.created_at ASC")
   })
 })
+
+describe("blocks stay out of inventory", () => {
+  /**
+   * Stock sits in a shed. A block is where stock gets *used*, and that attribution is made on the
+   * expense -- resolveExpenseStockLocationId walks block -> estate -> that estate's store. Offering
+   * a block as a stock-level filter therefore offers a cut that can never hold a row.
+   *
+   * It was reachable because the chip row mapped `locations` rather than `storeLocations`, and the
+   * missing `kind` above meant storeLocations was empty anyway, so nobody noticed the wrong list
+   * was being used.
+   */
+  const shell = readFileSync("components/inventory-system.tsx", "utf8")
+
+  it("the stock-level filter is built from stores", () => {
+    expect(shell).toContain("{storeLocations.length > 0 && (")
+    expect(shell).toContain("{storeLocations.map((loc) => (")
+  })
+
+  it("and labels them against the same list, so a duplicate name disambiguates correctly", () => {
+    expect(shell).toContain('formatLocationLabel(loc, storeLocations, "Unnamed")')
+  })
+
+  it("the item dialogs are handed stores, never the full list", () => {
+    const calls = shell.match(/locations=\{[a-zA-Z]+\}/g) ?? []
+    expect(calls.length).toBeGreaterThan(0)
+    expect(calls.every((c) => c === "locations={storeLocations}")).toBe(true)
+  })
+})

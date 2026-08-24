@@ -2190,7 +2190,16 @@ export default function InventorySystem() {
       notes: safeGet(transaction?.notes, ""),
       transaction_date: safeGet(transaction?.transaction_date, createDefaultTransaction().transaction_date),
       user_id: safeGet(transaction?.user_id, user?.username || "unknown"),
-      price: safeGet(Number(transaction?.price), 0),
+      /**
+       * The price field now MEANS the batch total everywhere it is edited, so an existing row has
+       * to be loaded as one. Loading the stored per-unit rate under a "Total price paid" label
+       * would show a wrong number and then save it as the total on the next keystroke -- a 50 kg
+       * restock at Rs 60/kg reopening as "Rs 60 paid" and being written back as Rs 60 for the lot.
+       *
+       * total_cost is preferred because it is the column the weighted-average replay actually
+       * reads; rate x quantity is the fallback for rows written before it was populated.
+       */
+      price: safeGet(Number(transaction?.total_cost), 0) || safeGet(Number(transaction?.price), 0) * (Number(safeQuantity) || 0),
       total_cost: safeGet(Number(transaction?.total_cost), 0),
       unit: safeGet(transaction?.unit, "kg"),
       location_id: transaction?.location_id ?? null,
@@ -2246,7 +2255,17 @@ export default function InventorySystem() {
     }
     tx.transaction_date = normalizedTransactionDate
     tx.unit = resolveInventoryUnitForItemType(tx.item_type, tx.unit)
-    tx.total_cost = (Number(tx.price) || 0) * normalizedQty
+    /**
+     * The restock form now collects the invoice TOTAL in this field, not a per-unit rate.
+     * Depletions are untouched: they carry no user-entered price and are valued server-side at the
+     * slot's running average.
+     *
+     * The remap happens here, where the body is built, rather than by renaming the field through
+     * the panel -- `price` is read by the edit dialog, the ledger and the CSV export, and a rename
+     * that missed one would put a total in a column everything else reads as a rate.
+     */
+    const isRestockEntry = String(tx.transaction_type || "").toLowerCase().includes("restock")
+    tx.total_cost = isRestockEntry ? Number(tx.price) || 0 : (Number(tx.price) || 0) * normalizedQty
 
     const locationSource = locationOverride ?? transactionLocationId
     const normalizedLocationSource = typeof locationSource === "string" ? locationSource.trim() : ""
@@ -2259,7 +2278,12 @@ export default function InventorySystem() {
       const res = await fetch(API_TRANSACTIONS, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ...tx, location_id: locationValue, loss_reason: lossReason || null }),
+        body: JSON.stringify({
+          ...tx,
+          ...(isRestockEntry ? { price: undefined, total_price: Number(tx.price) || 0 } : {}),
+          location_id: locationValue,
+          loss_reason: lossReason || null,
+        }),
       })
       const json = await res.json()
       if (!res.ok || !json.success) {
@@ -2434,14 +2458,20 @@ export default function InventorySystem() {
     }
 
     tx.quantity = normalizedQty
-    tx.total_cost = (Number(tx.price) || 0) * normalizedQty
+    // Same remap as the create path, for the same reason.
+    const isRestockEdit = String(tx.transaction_type || "").toLowerCase().includes("restock")
+    tx.total_cost = isRestockEdit ? Number(tx.price) || 0 : (Number(tx.price) || 0) * normalizedQty
 
     setIsSavingTransactionEdit(true)
     try {
       const res = await fetch("/api/transactions-neon/update", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ...tx, location_id: tx.location_id ?? null }),
+        body: JSON.stringify({
+          ...tx,
+          ...(isRestockEdit ? { price: undefined, total_price: Number(tx.price) || 0 } : {}),
+          location_id: tx.location_id ?? null,
+        }),
       })
       const json = await res.json()
       if (!res.ok || !json.success) {
@@ -2697,7 +2727,9 @@ export default function InventorySystem() {
     const itemName = newItemForm.name.trim()
     const unit = newItemForm.unit.trim() || "kg"
     const quantityValue = Number(newItemForm.quantity || 0)
-    const priceValue = Number(newItemForm.price || 0)
+    // The field asks for the invoice total now, not a per-unit rate. Named for what it holds --
+    // calling a total `priceValue` is how the next person reintroduces a unit price by accident.
+    const totalPriceValue = Number(newItemForm.price || 0)
     const notes = newItemForm.notes.trim()
 
     if (!itemName) {
@@ -2716,14 +2748,14 @@ export default function InventorySystem() {
       toast({ title: "Invalid quantity", description: "Quantity must be 0 or more.", variant: "destructive" })
       return
     }
-    if (Number.isNaN(priceValue) || priceValue < 0) {
+    if (Number.isNaN(totalPriceValue) || totalPriceValue < 0) {
       toast({ title: "Invalid price", description: "Price must be 0 or more.", variant: "destructive" })
       return
     }
-    if (quantityValue > 0 && priceValue <= 0) {
+    if (quantityValue > 0 && totalPriceValue <= 0) {
       toast({
-        title: "Unit price required",
-        description: "Enter the price paid per unit when adding starting stock, so cost tracking starts off accurate.",
+        title: "What did this cost?",
+        description: "Enter the total paid for this stock. Stock added without a price is consumed for free by every expense that draws on it.",
         variant: "destructive",
       })
       return
@@ -2743,7 +2775,7 @@ export default function InventorySystem() {
           item_type: itemName,
           quantity: quantityValue,
           unit,
-          price: priceValue,
+          total_price: totalPriceValue,
           notes: notes || undefined,
           user_id: user?.username || "system",
           location_id: locationValue,
@@ -4806,7 +4838,12 @@ export default function InventorySystem() {
                       </div>
                     </div>
 
-                    {locations.length > 0 && (
+                    {/* Stores only. Stock sits in a shed; a block is where it gets *used*, and that
+                        attribution is made on the expense, not here. Filtering stock levels by
+                        block offered a cut that can never have rows in it -- and on Laxmi, whose
+                        blocks include one actually named "Store Block", it invited exactly the
+                        confusion this separation exists to remove. */}
+                    {storeLocations.length > 0 && (
                       <div className="flex items-center gap-2 overflow-x-auto border-b border-stone-100 px-5 py-3 dark:border-white/[0.05]">
                         <button
                           type="button"
@@ -4820,7 +4857,7 @@ export default function InventorySystem() {
                         >
                           All
                         </button>
-                        {locations.map((loc) => (
+                        {storeLocations.map((loc) => (
                           <button
                             key={loc.id}
                             type="button"
@@ -4832,7 +4869,7 @@ export default function InventorySystem() {
                                 : "border border-stone-200 bg-white text-stone-600 hover:bg-stone-50 dark:border-white/[0.1] dark:bg-white/[0.04] dark:text-stone-300",
                             )}
                           >
-                            {formatLocationLabel(loc, locations, "Unnamed")}
+                            {formatLocationLabel(loc, storeLocations, "Unnamed")}
                           </button>
                         ))}
                         {(hasLegacyUnassignedTransactions || selectedLocationId === LOCATION_UNASSIGNED) && (

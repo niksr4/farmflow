@@ -225,12 +225,21 @@ export default function InventoryDialogs(p: DialogProps) {
                     the rule, and the server rejects the save a moment later. Creating an item is
                     a restock; a restock without a price corrupts the weighted average for every
                     depletion that follows it. */}
-                <Label htmlFor="new-item-price">Unit Price</Label>
-                <Input id="new-item-price" type="number" inputMode="decimal" min={0} step="0.01" value={p.newItemForm.price} onKeyDown={p.preventNegativeKey} onChange={(e) => p.setNewItemForm((prev) => ({ ...prev, price: e.target.value }))} />
-                <p className="text-xs text-muted-foreground">
-                  What one {p.newItemForm.unit || "unit"} cost. Stock entered without a price is
-                  consumed for free by every expense that draws on it.
-                </p>
+                <Label htmlFor="new-item-price">Total price paid (₹)</Label>
+                <Input id="new-item-price" type="number" inputMode="decimal" min={0} step="0.01" placeholder="what the invoice says" value={p.newItemForm.price} onKeyDown={p.preventNegativeKey} onChange={(e) => p.setNewItemForm((prev) => ({ ...prev, price: e.target.value }))} />
+                {/* The derived rate, shown back rather than asked for. It is also the cheapest
+                    sanity check there is: a per-kg figure that is wildly wrong catches a
+                    fat-fingered quantity, which a total on its own never would. */}
+                {Number(p.newItemForm.quantity) > 0 && Number(p.newItemForm.price) > 0 ? (
+                  <p className="text-xs text-muted-foreground tabular-nums">
+                    ₹{(Number(p.newItemForm.price) / Number(p.newItemForm.quantity)).toFixed(2)} per {p.newItemForm.unit || "unit"}
+                  </p>
+                ) : (
+                  <p className="text-xs text-muted-foreground">
+                    What the whole lot cost, delivery included. Stock entered without a price is
+                    consumed for free by every expense that draws on it.
+                  </p>
+                )}
               </div>
             </div>
             <div className="space-y-2">
@@ -308,7 +317,7 @@ export default function InventoryDialogs(p: DialogProps) {
                 />
               </div>
               <div className="space-y-2">
-                <FieldLabel htmlFor="edit-transaction-price" label={editRequiresPrice ? "Unit Price (required)" : "Unit Price"} tooltip="Price per unit for this transaction. For restocks, this updates the weighted average cost (total spend ÷ total quantity). Depletions are always valued at the running average, not this field." />
+                <FieldLabel htmlFor="edit-transaction-price" label={editRequiresPrice ? "Total price paid (₹) (required)" : "Total price paid (₹)"} tooltip="What the whole batch cost, delivery included — the figure on the invoice. FarmFlow derives the per-unit rate from it. For restocks this updates the weighted average cost (total spend ÷ total quantity). Depletions are always valued at the running average, not this field." />
                 <Input
                   id="edit-transaction-price" type="number" inputMode="decimal"
                   value={p.editingTransaction.price ?? ""}

@@ -10,6 +10,7 @@ import { normalizeInventoryItemType } from "@/lib/inventory-item-type"
 import { requiresRestockUnitPrice } from "@/lib/inventory-edit-rules"
 import { logRouteMutationFailure } from "@/lib/server/route-error-events"
 import { sanitizeRouteError } from "@/lib/server/sanitize-route-error"
+import { resolveStockCost } from "@/lib/stock-cost"
 
 export const dynamic = "force-dynamic"
 
@@ -122,7 +123,7 @@ export async function PUT(request: NextRequest) {
     const tenantContext = normalizeTenantContext(sessionUser.tenantId, sessionUser.role)
     const body = await request.json()
 
-    const { id, item_type, quantity, transaction_type, notes, price, location_id, transaction_date } = body
+    const { id, item_type, quantity, transaction_type, notes, price, total_price, location_id, transaction_date } = body
     const requestedItemType = normalizeInventoryItemType(item_type)
 
     if (!id || !requestedItemType || !quantity || !transaction_type) {
@@ -171,7 +172,9 @@ export async function PUT(request: NextRequest) {
     if (
       requiresRestockUnitPrice({
         nextType: normalizedType,
-        nextPrice: price,
+        // Whichever the client sent. Passing only `price` would make this fire on a perfectly
+        // good edit that supplied a total instead.
+        nextPrice: Number(total_price) > 0 ? total_price : price,
         storedType: existingRow?.transaction_type,
         storedPrice: existingRow?.price,
       })
@@ -179,7 +182,7 @@ export async function PUT(request: NextRequest) {
       return NextResponse.json(
         {
           success: false,
-          message: "Unit price is required for restocks. A ₹0 price corrupts the weighted average cost for every future depletion.",
+          message: "Enter what this restock cost. A ₹0 restock corrupts the weighted average cost for every future depletion.",
         },
         { status: 400 },
       )
@@ -218,7 +221,6 @@ export async function PUT(request: NextRequest) {
       )
     }
 
-    const priceValue = Number(price) || 0
     const quantityValue = normalizeQuantity(quantity)
     if (!quantityValue || quantityValue <= 0) {
       return NextResponse.json(
@@ -229,7 +231,12 @@ export async function PUT(request: NextRequest) {
         { status: 400 },
       )
     }
-    const total_cost = quantityValue * priceValue
+
+    // Same resolution as the create paths, from the shared helper, so an edit cannot land the row
+    // in a shape a create could never have produced.
+    const editCost = resolveStockCost({ quantity: quantityValue, totalPrice: total_price, unitPrice: price })
+    const priceValue = editCost.unitPrice
+    const total_cost = editCost.totalCost
 
     if (normalizedType === "deplete" && requestedUsageLocationId) {
       let allowLegacyPooledFallback = false
