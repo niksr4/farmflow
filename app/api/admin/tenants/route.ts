@@ -18,7 +18,7 @@ import { persistTenantPlanId } from "@/lib/server/tenant-subscriptions"
 import { normalizeTenantContext, runTenantQueries, runTenantQuery } from "@/lib/server/tenant-db"
 import { logAuditEvent } from "@/lib/server/audit-log"
 import { sendOwnerTenantCreatedAlert } from "@/lib/server/onboarding/owner-alerts"
-import { buildAdminErrorResponse, databaseNotConfiguredResponse } from "@/lib/server/route-utils"
+import { buildAdminErrorResponse, databaseNotConfiguredResponse, isAuthRefusal } from "@/lib/server/route-utils"
 import { logServerError } from "@/lib/server/safe-logging"
 
 const updateTenantBodySchema = z.object({
@@ -164,7 +164,9 @@ export async function GET(_request: Request) {
 
     return NextResponse.json({ success: true, tenants })
   } catch (error: any) {
-    logServerError("Error fetching tenants", error)
+    // A guard turning someone away is not a fault. Without this, every 403 from this
+    // route also arrived in Sentry as a server error.
+    if (!isAuthRefusal(error)) logServerError("Error fetching tenants", error)
     return buildAdminErrorResponse(error, "Failed to fetch tenants", { ownerRequired: true })
   }
 }
@@ -249,7 +251,9 @@ export async function POST(request: Request) {
       },
     })
   } catch (error: any) {
-    logServerError("Error creating tenant", error)
+    // A guard turning someone away is not a fault. Without this, every 403 from this
+    // route also arrived in Sentry as a server error.
+    if (!isAuthRefusal(error)) logServerError("Error creating tenant", error)
     return buildAdminErrorResponse(error, "Failed to create tenant", { ownerRequired: true })
   }
 }
@@ -393,7 +397,9 @@ export async function DELETE(request: Request) {
       deletedManagedDependencies: deletionSummary.cleanupDependencies,
     })
   } catch (error: any) {
-    logServerError("Error deleting tenant", error)
+    // A guard turning someone away is not a fault. Without this, every 403 from this
+    // route also arrived in Sentry as a server error.
+    if (!isAuthRefusal(error)) logServerError("Error deleting tenant", error)
     return buildAdminErrorResponse(error, "Failed to delete tenant", { ownerRequired: true })
   }
 }
@@ -452,7 +458,9 @@ export async function PATCH(request: Request) {
 
     return NextResponse.json({ success: true, tenant: updated[0] })
   } catch (error: any) {
-    logServerError("Error updating tenant", error)
+    // A guard turning someone away is not a fault. Without this, every 403 from this
+    // route also arrived in Sentry as a server error.
+    if (!isAuthRefusal(error)) logServerError("Error updating tenant", error)
     return buildAdminErrorResponse(error, "Failed to update tenant", { ownerRequired: true })
   }
 }

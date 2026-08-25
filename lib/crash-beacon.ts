@@ -29,6 +29,25 @@ export const HEARTBEAT_INTERVAL_MS = 5_000
  */
 export const STALE_AFTER_MS = 30_000
 
+/**
+ * A session has to have actually been one before its death is worth reporting.
+ *
+ * classifySession had no floor: visible + no pagehide + stale ⇒ "crashed", however briefly the
+ * page existed. In production that made "PWA session ended without teardown" the single loudest
+ * issue in Sentry -- 22 events across 4 users in three weeks -- and every sampled event read
+ * durationSeconds: 0, interactions: 0, tenantId: unknown, on Android Chrome. Those are not crashes.
+ * They are page loads that went somewhere else immediately: a redirect to /login, a prefetch, a
+ * link preview, a bot. The tab navigated before the beacon could see a teardown.
+ *
+ * The file already argues that reporting routine iOS background reclaim "would bury the signal".
+ * This is the same mistake one step earlier -- burying it under sessions that never started.
+ *
+ * Two seconds and one interaction is deliberately a low bar. It is not trying to characterise a
+ * real session; it is only trying to exclude a page nobody was ever looking at.
+ */
+export const MIN_CRASH_DURATION_MS = 2_000
+export const MIN_CRASH_INTERACTIONS = 1
+
 /** Cap on stored records so a pathological loop can never grow localStorage without bound. */
 export const MAX_STORED_RECORDS = 10
 
@@ -88,7 +107,20 @@ export function classifySession(
 ): SessionOutcome {
   if (record.closedAt !== null) return "clean"
   if (now - record.lastSeenAt <= staleAfterMs) return "active"
-  return record.visibility === "visible" ? "crashed" : "backgrounded"
+  if (record.visibility !== "visible") return "backgrounded"
+
+  // Never got going. Reported as "backgrounded" rather than a new outcome because the caller
+  // already treats that as "not worth alerting on", which is exactly what this is -- and adding
+  // a fourth state would mean every consumer had to learn it to keep behaving correctly.
+  // The same duration the report will carry, not a second calculation of it. sessionDurationSeconds
+  // clamps at zero, so a record with a lastSeenAt before its startedAt -- clock skew, or a fixture
+  // someone wrote by hand -- reads as zero here and is excluded, which is the right answer for a
+  // record that does not describe a coherent session.
+  const lastedLongEnough = sessionDurationSeconds(record) * 1000 >= MIN_CRASH_DURATION_MS
+  const wasUsed = record.interactions >= MIN_CRASH_INTERACTIONS
+  if (!lastedLongEnough || !wasUsed) return "backgrounded"
+
+  return "crashed"
 }
 
 /** Whole seconds the session survived before it stopped reporting. */

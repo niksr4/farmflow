@@ -57,5 +57,20 @@ export const buildAdminErrorResponse = (
     forbiddenMessages: options.ownerRequired ? DEFAULT_OWNER_ADMIN_FORBIDDEN_MESSAGES : DEFAULT_ADMIN_FORBIDDEN_MESSAGES,
   })
 
+/**
+ * Was this error a guard refusing someone, rather than something going wrong?
+ *
+ * These already produce a 403 -- buildAdminErrorResponse maps them -- but every admin route logged
+ * them to Sentry on the way out, because the catch block calls logServerError before it decides
+ * what the status is. So an owner-only endpoint correctly turning away a non-owner arrived in the
+ * dashboard as a server error, and two such issues were sitting there unresolved.
+ *
+ * A permission check that fires is the system working. Reporting it as a fault trains everyone to
+ * ignore the report, which is how the one that matters gets missed.
+ */
+const AUTH_REFUSAL_MESSAGES = new Set([...DEFAULT_OWNER_ADMIN_FORBIDDEN_MESSAGES, "Insufficient role"])
+
+export const isAuthRefusal = (error: unknown) => AUTH_REFUSAL_MESSAGES.has(getErrorMessage(error, ""))
+
 export const databaseNotConfiguredResponse = () =>
   NextResponse.json({ success: false, error: DATABASE_NOT_CONFIGURED_MESSAGE }, { status: 500 })

@@ -3,7 +3,7 @@ import { adminSql } from "@/lib/server/db"
 import { inspectPlatformSchemaReadiness } from "@/lib/schema-readiness"
 import { requireOwnerRole } from "@/lib/tenant"
 import { requireAdminSession } from "@/lib/server/mfa"
-import { buildAdminErrorResponse, databaseNotConfiguredResponse } from "@/lib/server/route-utils"
+import { buildAdminErrorResponse, databaseNotConfiguredResponse, isAuthRefusal } from "@/lib/server/route-utils"
 import { logServerError } from "@/lib/server/safe-logging"
 
 type HealthStatus = "healthy" | "warning" | "critical" | "unknown"
@@ -126,7 +126,9 @@ export async function GET() {
         detail: "Could not inspect information_schema for migration drift.",
         actionPath: "/admin/inspect-databases",
       })
-      logServerError("Schema readiness inspection failed", error)
+      // A guard turning someone away is not a fault. Without this, every 403 from this
+      // route also arrived in Sentry as a server error.
+      if (!isAuthRefusal(error)) logServerError("Schema readiness inspection failed", error)
     }
 
     try {
@@ -338,7 +340,9 @@ export async function GET() {
       staleThresholdHours: STALE_THRESHOLD_HOURS,
     })
   } catch (error: any) {
-    logServerError("Failed to load system health", error)
+    // A guard turning someone away is not a fault. Without this, every 403 from this route also
+    // arrived in Sentry as a server error.
+    if (!isAuthRefusal(error)) logServerError("Failed to load system health", error)
     return buildAdminErrorResponse(error, "Failed to load system health", { ownerRequired: true })
   }
 }

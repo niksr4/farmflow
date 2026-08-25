@@ -7,7 +7,7 @@ import { generateTemporaryPassword, hashPassword } from "@/lib/passwords"
 import { logAuditEvent } from "@/lib/server/audit-log"
 import { logSecurityEvent } from "@/lib/server/security-events"
 import { isReservedPlatformUsername, isSystemUsername, normalizeUsername, normalizeUsernameLookup } from "@/lib/usernames"
-import { buildAdminErrorResponse, databaseNotConfiguredResponse } from "@/lib/server/route-utils"
+import { buildAdminErrorResponse, databaseNotConfiguredResponse, isAuthRefusal } from "@/lib/server/route-utils"
 import { logServerError } from "@/lib/server/safe-logging"
 import { isForbiddenTenantAccess, resolveOwnerScopedTenantId, resolveRequestedTenantId } from "@/lib/permissions"
 
@@ -116,7 +116,9 @@ export async function GET(request: Request) {
 
     return NextResponse.json({ success: true, users })
   } catch (error: unknown) {
-    logServerError("Error fetching users", error)
+    // A guard turning someone away is not a fault. Without this, every 403 from this
+    // route also arrived in Sentry as a server error.
+    if (!isAuthRefusal(error)) logServerError("Error fetching users", error)
     return buildAdminErrorResponse(error, "Failed to fetch users")
   }
 }
@@ -212,7 +214,9 @@ export async function POST(request: Request) {
     if (error?.code === "23505") {
       return NextResponse.json({ success: false, error: "Username is already in use" }, { status: 409 })
     }
-    logServerError("Error creating user", error)
+    // A guard turning someone away is not a fault. Without this, every 403 from this
+    // route also arrived in Sentry as a server error.
+    if (!isAuthRefusal(error)) logServerError("Error creating user", error)
     return buildAdminErrorResponse(error, "Failed to create user")
   }
 }
@@ -324,7 +328,9 @@ export async function PATCH(request: Request) {
     if (error?.code === "23505") {
       return NextResponse.json({ success: false, error: "Username is already in use" }, { status: 409 })
     }
-    logServerError("Error updating user", error)
+    // A guard turning someone away is not a fault. Without this, every 403 from this
+    // route also arrived in Sentry as a server error.
+    if (!isAuthRefusal(error)) logServerError("Error updating user", error)
     return buildAdminErrorResponse(error, "Failed to update user")
   }
 }
@@ -440,7 +446,9 @@ export async function PUT(request: Request) {
       message: "Temporary password generated. User must rotate password at next login.",
     })
   } catch (error: unknown) {
-    logServerError("Error resetting user password", error)
+    // A guard turning someone away is not a fault. Without this, every 403 from this
+    // route also arrived in Sentry as a server error.
+    if (!isAuthRefusal(error)) logServerError("Error resetting user password", error)
     return buildAdminErrorResponse(error, "Failed to reset password")
   }
 }
@@ -521,7 +529,9 @@ export async function DELETE(request: Request) {
 
     return NextResponse.json({ success: true })
   } catch (error: unknown) {
-    logServerError("Error deleting user", error)
+    // A guard turning someone away is not a fault. Without this, every 403 from this
+    // route also arrived in Sentry as a server error.
+    if (!isAuthRefusal(error)) logServerError("Error deleting user", error)
     return buildAdminErrorResponse(error, "Failed to delete user")
   }
 }
