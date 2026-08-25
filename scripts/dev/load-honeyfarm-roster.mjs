@@ -42,16 +42,45 @@ const isProd = process.argv.includes("prod")
 const commit = process.argv.includes("--commit")
 const sql = neon(isProd ? process.env.DATABASE_URL : process.env.DATABASE_URL_DEV)
 
-/** [fingerprint id, name] exactly as SmartHCM has them. */
+/**
+ * From their SmartHCM export of 25 Aug 2026: [fingerprint id, name, type, daily rate, gender].
+ *
+ * A null rate is not missing data. Staff are paid monthly and the proprietor is not paid a daily
+ * wage at all -- the export says "Monthly" and "0" respectively, neither of which is a day rate.
+ * Storing 0 would be a claim that a day of their time costs nothing; null says the app does not
+ * price their day, which is true, and the muster then declines to cost them rather than costing
+ * them wrong. Their pay is a kind of labour cost the product does not model yet (STATUS.md).
+ */
 const ROSTER = [
-  [1, "Bopaiah"], [2, "Muthu"], [3, "Chandra"], [4, "Chandrika"], [5, "Sara"],
-  [6, "Nabeesa"], [7, "Lakshmi"], [14, "Putturaju"], [15, "Radha"], [19, "Pathu"],
-  [22, "Seethu"], [23, "Sabiya"], [24, "Tangamma"], [31, "Saina"], [32, "Margina"],
-  [33, "Ajitali"], [36, "Makusali"], [37, "Aminul"], [39, "Safikul"], [40, "Ishak"],
-  [41, "Vajura"], [50, "AkashAli"], [51, "Abeeja"], [52, "Kajolly"], [53, "Akibul"],
-  [100, "Sumant C"], [103, "Sidda"], [104, "Rathna"],
+  [1, "Bopaiah", "staff", null, "male"],
+  [2, "Muthu", "staff", null, "male"],
+  [3, "Chandra", "chkroll_pf", 494, "male"],
+  [4, "Chandrika", "chkroll_pf", 494, "female"],
+  [5, "Sara", "chkroll_pf", 494, "female"],
+  [6, "Nabeesa", "chkroll_pf", 494, "female"],
+  [7, "Lakshmi", "chkroll_pf", 494, "female"],
+  [14, "Putturaju", "chkroll_pf", 494, "male"],
+  [15, "Radha", "chkroll_pf", 494, "female"],
+  [19, "Pathu", "chkroll_pf", 494, "female"],
+  [22, "Seethu", "casuals", 494, "female"],
+  [23, "Sabiya", "casuals", 494, "female"],
+  [24, "Tangamma", "casuals", 494, "female"],
+  [31, "Saina", "casuals", 494, "female"],
+  [32, "Margina", "seasonal_assam", 460, "female"],
+  [33, "Ajitali", "seasonal_assam", 460, "male"],
+  [36, "Makusali", "seasonal_assam", 460, "male"],
+  [37, "Aminul", "seasonal_assam", 460, "male"],
+  [39, "Safikul", "seasonal_assam", 460, "male"],
+  [40, "Ishak", "seasonal_assam", 460, "male"],
+  [41, "Vajura", "seasonal_assam", 460, "female"],
+  [50, "AkashAli", "seasonal_assam", 460, "male"],
+  [51, "Abeeja", "seasonal_assam", 460, "female"],
+  [52, "Kajolly", "seasonal_assam", 460, "female"],
+  [53, "Akibul", "seasonal_assam", 460, "male"],
+  [100, "Sumant C", "proprietor", null, "male"],
+  [103, "Sidda", "casuals", 494, "male"],
+  [104, "Rathna", "casuals", 494, "female"],
 ]
-
 
 const [tenant] = await sql`SELECT id, name FROM tenants WHERE name = 'HoneyFarm'`
 if (!tenant) {
@@ -60,20 +89,24 @@ if (!tenant) {
 }
 
 const existing = await sql`
-  SELECT full_name, device_user_code FROM attendance_workers WHERE tenant_id = ${tenant.id}`
-const byName = new Set(existing.map((w) => String(w.full_name).trim().toLowerCase()))
-const byCode = new Set(existing.filter((w) => w.device_user_code).map((w) => String(w.device_user_code)))
-
-const toAdd = ROSTER.filter(([code, name]) =>
-  !byName.has(name.trim().toLowerCase()) && !byCode.has(String(code)))
-const skipped = ROSTER.length - toAdd.length
+  SELECT device_user_code, full_name, worker_type, daily_rate, gender
+  FROM attendance_workers WHERE tenant_id = ${tenant.id}`
+const byCode = new Map(existing.filter((w) => w.device_user_code).map((w) => [String(w.device_user_code), w]))
 
 console.log(`\n=== ${isProd ? "PRODUCTION" : "dev"} — HoneyFarm roster ===\n`)
-console.log(`  already on the roster : ${existing.length}`)
-console.log(`  to add                : ${toAdd.length}${skipped ? `  (${skipped} already present, matched by name or fingerprint id)` : ""}`)
-console.log(`  daily rate            : NOT SET — each needs one before the muster will save`)
-console.log(`  estate                : not set — shows under both Honeyfarm and Sidapur\n`)
-for (const [code, name] of toAdd) console.log(`    #${String(code).padStart(3)}  ${name}`)
+console.log(`  on the roster now : ${existing.length}`)
+console.log(`  in the export     : ${ROSTER.length}\n`)
+
+const byType = {}
+for (const [, , type, rate] of ROSTER) {
+  byType[type] ??= { n: 0, rate }
+  byType[type].n += 1
+}
+for (const [type, v] of Object.entries(byType))
+  console.log(`    ${type.padEnd(16)} ${String(v.n).padStart(2)} people  ${v.rate == null ? "no daily rate (paid monthly)" : "Rs " + v.rate + "/day"}`)
+
+const missing = ROSTER.filter(([code]) => !byCode.has(String(code)))
+if (missing.length) console.log(`\n  ${missing.length} not yet on the roster: ${missing.map((m) => m[1]).join(", ")}`)
 
 if (!commit) {
   console.log("\nDry run. Re-run with --commit to write.\n")
@@ -81,11 +114,20 @@ if (!commit) {
 }
 
 let added = 0
-for (const [code, name] of toAdd) {
-  await sql`
-    INSERT INTO attendance_workers (tenant_id, full_name, active, device_user_code, kind)
-    VALUES (${tenant.id}, ${name}, true, ${String(code)}, 'individual')`
-  added += 1
+let updated = 0
+for (const [code, name, type, rate, gender] of ROSTER) {
+  if (byCode.has(String(code))) {
+    await sql`
+      UPDATE attendance_workers
+      SET full_name = ${name}, worker_type = ${type}, daily_rate = ${rate}, gender = ${gender}, active = true
+      WHERE tenant_id = ${tenant.id} AND device_user_code = ${String(code)}`
+    updated += 1
+  } else {
+    await sql`
+      INSERT INTO attendance_workers (tenant_id, full_name, active, worker_type, daily_rate, gender, device_user_code, kind)
+      VALUES (${tenant.id}, ${name}, true, ${type}, ${rate}, ${gender}, ${String(code)}, 'individual')`
+    added += 1
+  }
 }
 
 const [after] = await sql`
@@ -94,10 +136,12 @@ const [after] = await sql`
          COUNT(*) FILTER (WHERE device_user_code IS NOT NULL)::int coded
   FROM attendance_workers WHERE tenant_id = ${tenant.id}`
 
-console.log(`\nWRITTEN. ${added} added.`)
+console.log(`\nWRITTEN. ${added} added, ${updated} updated.`)
 console.log(`  roster now: ${after.active} active, ${after.unrated} without a rate, ${after.coded} with a fingerprint id\n`)
-console.log(`  NEXT: every one of them needs a daily rate. Until then the muster shows them but`)
-console.log(`  refuses to cost a day, naming whoever is missing one.\n`)
+console.log(`  The 3 without a daily rate are the 2 staff and the proprietor, and that is correct:`)
+console.log(`  the export says "Monthly" and "0", neither of which is a day rate. The muster will`)
+console.log(`  decline to cost their day rather than cost it wrong. Their pay needs labour_charges,`)
+console.log(`  which is parked -- see STATUS.md.\n`)
 console.log(`  Note for the cutover: their history splits labour into estate vs contract columns,`)
 console.log(`  and lately every day reads estate 0 / outside 27 -- the whole roster in the outside`)
 console.log(`  column. On the muster these are 28 individuals, so their cost lands in the ESTATE`)

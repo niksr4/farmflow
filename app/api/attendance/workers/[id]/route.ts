@@ -9,10 +9,13 @@ import { normalizeTenantContext, runTenantQuery } from "@/lib/server/tenant-db"
 import { normalizeAttendanceWorkerName, normalizeAttendanceSchemaError, ATTENDANCE_SCHEMA_HELP } from "@/lib/attendance"
 import { logServerError } from "@/lib/server/safe-logging"
 import { reconcileUnmappedPunches } from "@/lib/server/biometric-attendance"
+import { isWorkerType } from "@/lib/worker-types"
 
 const isUniqueViolation = (error: unknown) => String((error as any)?.code || "") === "23505"
 
-const VALID_WORKER_TYPES = ["permanent", "seasonal", "contractor"] as const
+// The list lives in lib/worker-types.ts. It used to be declared here AND retyped in
+// worker-profiles-tab.tsx, which is the contract-in-two-places shape that has already cost this
+// codebase three silent bugs (see lib/activity-contracts.ts).
 
 /** INDICOFS asks estates to report their workforce by gender. It never touches pay. */
 const VALID_GENDERS = ["female", "male", "other"] as const
@@ -134,7 +137,7 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
     const gender = readGender(body?.gender)
     const workerType =
       body?.workerType != null
-        ? VALID_WORKER_TYPES.includes(body.workerType)
+        ? isWorkerType(body.workerType)
           ? String(body.workerType)
           : null
         : undefined

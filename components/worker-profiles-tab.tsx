@@ -19,11 +19,12 @@ import { useAuth } from "@/hooks/use-auth"
 import FilterBar from "@/components/filter-bar"
 import { useListControls } from "@/hooks/use-list-controls"
 import { cn } from "@/lib/utils"
+import { WORKER_TYPES, workerTypeLabel, isPaidDaily, type WorkerType } from "@/lib/worker-types"
 import { numericInputValue } from "@/lib/number-input"
 import type { LocationOption } from "@/components/inventory-system/types"
 import { formatLocationLabel } from "@/lib/location-label"
 
-type WorkerType = "permanent" | "seasonal" | "contractor"
+// Imported, not redeclared. See lib/worker-types.ts.
 
 /** Label/value row used by the mobile card list's expanded section. */
 function MobileField({ label, value, mono = false }: { label: string; value: string; mono?: boolean }) {
@@ -63,17 +64,25 @@ const UNASSIGNED_ESTATE = "__unassigned_estate__"
 const GENDER_LABELS: Record<string, string> = { female: "Female", male: "Male", other: "Other" }
 const formatGender = (g: string | null) => (g ? GENDER_LABELS[g] ?? g : null)
 
-const WORKER_TYPE_LABELS: Record<WorkerType, string> = {
-  permanent: "Permanent",
-  seasonal: "Seasonal",
-  contractor: "Contractor",
-}
-
-const WORKER_TYPE_COLORS: Record<WorkerType, string> = {
+/**
+ * Colour by how the money works, not by name. The two that carry no daily rate -- staff and
+ * proprietor -- read differently on purpose, because a blank Daily Rate on those rows is correct
+ * and on every other type it is missing data.
+ *
+ * Falls back rather than being exhaustive: a type added to lib/worker-types.ts should show up
+ * as a plain badge, not crash the roster.
+ */
+const WORKER_TYPE_COLORS: Partial<Record<WorkerType, string>> = {
+  staff: "border-violet-400/30 bg-violet-400/10 text-violet-300",
+  proprietor: "border-violet-400/30 bg-violet-400/10 text-violet-300",
+  chkroll_pf: "border-emerald-400/30 bg-emerald-400/10 text-emerald-300",
+  casuals: "border-sky-400/30 bg-sky-400/10 text-sky-300",
+  seasonal_assam: "border-amber-400/30 bg-amber-400/10 text-amber-300",
   permanent: "border-emerald-400/30 bg-emerald-400/10 text-emerald-300",
   seasonal: "border-amber-400/30 bg-amber-400/10 text-amber-300",
   contractor: "border-sky-400/30 bg-sky-400/10 text-sky-300",
 }
+const WORKER_TYPE_FALLBACK = "border-stone-400/30 bg-stone-400/10 text-stone-300"
 
 const EMPTY_FORM = {
   name: "",
@@ -381,9 +390,9 @@ export default function WorkerProfilesTab() {
                 >
                   <SelectTrigger><SelectValue placeholder="Select type" /></SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="permanent">Permanent</SelectItem>
-                    <SelectItem value="seasonal">Seasonal</SelectItem>
-                    <SelectItem value="contractor">Contractor</SelectItem>
+                    {WORKER_TYPES.map((t) => (
+                      <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
               </div>
@@ -576,8 +585,8 @@ export default function WorkerProfilesTab() {
                               </span>
                             )}
                             {w.workerType && (
-                              <Badge variant="outline" className={`text-[10px] ${WORKER_TYPE_COLORS[w.workerType]}`}>
-                                {WORKER_TYPE_LABELS[w.workerType]}
+                              <Badge variant="outline" className={`text-[10px] ${(WORKER_TYPE_COLORS[w.workerType] ?? WORKER_TYPE_FALLBACK)}`}>
+                                {workerTypeLabel(w.workerType)}
                               </Badge>
                             )}
                           </div>
@@ -606,9 +615,9 @@ export default function WorkerProfilesTab() {
                           >
                             <SelectTrigger className="h-10"><SelectValue placeholder="Worker type" /></SelectTrigger>
                             <SelectContent>
-                              <SelectItem value="permanent">Permanent</SelectItem>
-                              <SelectItem value="seasonal">Seasonal</SelectItem>
-                              <SelectItem value="contractor">Contractor</SelectItem>
+                              {WORKER_TYPES.map((t) => (
+                                <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>
+                              ))}
                             </SelectContent>
                           </Select>
                           {showEstateField && (
@@ -720,7 +729,14 @@ export default function WorkerProfilesTab() {
                     <TableHead className="hidden md:table-cell">Bank</TableHead>
                     {/* Only for estates with a terminal — same gate as everywhere else. */}
                     {hasBiometricDevices && <TableHead>Finger ID</TableHead>}
-                    {canWrite && <TableHead className="w-20" />}
+                    {/* Pinned. Editing a row swaps eight display cells for eight inputs, which
+                        widens the table past the viewport and pushed Save and Cancel off the right
+                        edge -- reachable only by finding a horizontal scrollbar under a row that
+                        had just grown taller, which in practice meant not reachable at all. The
+                        actions are the one column that must never scroll away. */}
+                    {canWrite && (
+                      <TableHead className="sticky right-0 z-20 w-24 bg-background shadow-[-8px_0_8px_-8px_rgba(0,0,0,0.15)]" />
+                    )}
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -741,9 +757,9 @@ export default function WorkerProfilesTab() {
                           >
                             <SelectTrigger className="h-8 w-32"><SelectValue placeholder="Type" /></SelectTrigger>
                             <SelectContent>
-                              <SelectItem value="permanent">Permanent</SelectItem>
-                              <SelectItem value="seasonal">Seasonal</SelectItem>
-                              <SelectItem value="contractor">Contractor</SelectItem>
+                              {WORKER_TYPES.map((t) => (
+                                <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>
+                              ))}
                             </SelectContent>
                           </Select>
                         </TableCell>
@@ -827,12 +843,14 @@ export default function WorkerProfilesTab() {
                             />
                           </TableCell>
                         )}
-                        <TableCell>
+                        {/* Matches the pinned header. bg is opaque so the scrolling cells pass
+                            underneath rather than showing through. */}
+                        <TableCell className="sticky right-0 z-20 bg-muted/30 shadow-[-8px_0_8px_-8px_rgba(0,0,0,0.15)] backdrop-blur-sm">
                           <div className="flex gap-1">
-                            <Button size="icon" variant="ghost" className="h-7 w-7" disabled={saving} onClick={() => handleSaveEdit(w.id)}>
+                            <Button size="icon" variant="ghost" className="h-7 w-7" disabled={saving} onClick={() => handleSaveEdit(w.id)} aria-label="Save changes">
                               {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5 text-emerald-500" />}
                             </Button>
-                            <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => setEditingId(null)}>
+                            <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => setEditingId(null)} aria-label="Cancel editing">
                               <X className="h-3.5 w-3.5" />
                             </Button>
                           </div>
@@ -843,8 +861,8 @@ export default function WorkerProfilesTab() {
                         <TableCell className="font-medium">{w.name}</TableCell>
                         <TableCell>
                           {w.workerType ? (
-                            <Badge variant="outline" className={`text-xs ${WORKER_TYPE_COLORS[w.workerType]}`}>
-                              {WORKER_TYPE_LABELS[w.workerType]}
+                            <Badge variant="outline" className={`text-xs ${(WORKER_TYPE_COLORS[w.workerType] ?? WORKER_TYPE_FALLBACK)}`}>
+                              {workerTypeLabel(w.workerType)}
                             </Badge>
                           ) : (
                             <span className="text-xs text-muted-foreground">—</span>
@@ -880,8 +898,10 @@ export default function WorkerProfilesTab() {
                             )}
                           </TableCell>
                         )}
+                        {/* Same pin as the edit row, or the two states' action columns would sit
+                            in different places as you scroll. */}
                         {canWrite && (
-                          <TableCell>
+                          <TableCell className="sticky right-0 z-20 bg-background shadow-[-8px_0_8px_-8px_rgba(0,0,0,0.15)]">
                             <TooltipProvider>
                               <div className="flex gap-1">
                                 <Tooltip>

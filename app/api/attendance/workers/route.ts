@@ -14,6 +14,7 @@ import {
   normalizeAttendanceWorkerName,
 } from "@/lib/attendance"
 import { logServerError } from "@/lib/server/safe-logging"
+import { isWorkerType } from "@/lib/worker-types"
 
 /** INDICOFS asks estates to report their workforce by gender. It never touches pay. */
 const VALID_GENDERS = ["female", "male", "other"] as const
@@ -76,7 +77,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ success: false, error: "Employee already exists" }, { status: 409 })
     }
 
-    const workerType = ["permanent", "seasonal", "contractor"].includes(String(body?.workerType || ""))
+    const workerType = isWorkerType(body?.workerType)
       ? String(body.workerType)
       : null
     const dailyRate = body?.dailyRate != null && !Number.isNaN(Number(body.dailyRate)) ? Number(body.dailyRate) : null
