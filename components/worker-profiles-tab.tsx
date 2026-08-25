@@ -20,6 +20,7 @@ import FilterBar from "@/components/filter-bar"
 import { useListControls } from "@/hooks/use-list-controls"
 import { cn } from "@/lib/utils"
 import { WORKER_TYPES, workerTypeLabel, isPaidDaily, type WorkerType } from "@/lib/worker-types"
+import { UNSET_FACET_VALUE } from "@/lib/list-controls"
 import { numericInputValue } from "@/lib/number-input"
 import type { LocationOption } from "@/components/inventory-system/types"
 import { formatLocationLabel } from "@/lib/location-label"
@@ -54,6 +55,7 @@ type Worker = {
   active: boolean
   /** A contract crew is one row with a headcount, not N invented people. scripts/115. */
   kind: "individual" | "gang"
+  monthlyWage: number | null
   headcount: number | null
 }
 
@@ -89,6 +91,7 @@ const EMPTY_FORM = {
   /** "gang" is a contract crew: one row with a headcount, not N invented people. scripts/115. */
   kind: "individual" as "individual" | "gang",
   headcount: "",
+  monthlyWage: "",
   workerType: "" as WorkerType | "",
   phone: "",
   dailyRate: "",
@@ -107,12 +110,22 @@ export default function WorkerProfilesTab() {
 
   const [workers, setWorkers] = useState<Worker[]>([])
   const workerControls = useListControls(workers, {
-    searchFields: (w) => [w.name, w.phone, w.bankName, w.bankAccount, w.workerType],
+    searchFields: (w) => [w.name, w.phone, w.bankName, w.bankAccount, w.workerType, w.deviceUserCode],
     sorters: {
       name: (w) => String(w.name || ""),
       type: (w) => String(w.workerType || ""),
       rate: (w) => Number(w.dailyRate) || 0,
+      estate: (w) => String(w.estate || ""),
     },
+    /**
+     * Narrowing a thirty-six person roster by type is the difference between setting eleven
+     * Seasonal/Assam rates and scrolling for them. Estate matters for the same reason once a
+     * tenant runs two -- HoneyFarm's roster is 28 on one and 8 on the other.
+     */
+    facets: [
+      { key: "workerType", label: "Type", valueOf: (w) => w.workerType, labelOf: (v) => (v === UNSET_FACET_VALUE ? "No type set" : workerTypeLabel(v)) },
+      { key: "estate", label: "Estate", valueOf: (w) => w.estate, labelOf: (v) => (v === UNSET_FACET_VALUE ? "No estate set" : v) },
+    ],
     defaultSort: "name",
     defaultDirection: "asc",
   })
@@ -183,6 +196,7 @@ export default function WorkerProfilesTab() {
             deviceUserCode: w.deviceUserCode || null,
             active: true,
             kind: w.kind === "gang" ? "gang" : "individual",
+            monthlyWage: w.monthlyWage ?? null,
             headcount: w.headcount != null ? Number(w.headcount) : null,
           })),
         )
@@ -240,6 +254,7 @@ export default function WorkerProfilesTab() {
       name: worker.name,
       kind: worker.kind,
       headcount: worker.headcount != null ? String(worker.headcount) : "",
+      monthlyWage: worker.monthlyWage != null ? String(worker.monthlyWage) : "",
       workerType: worker.workerType || "",
       phone: worker.phone || "",
       dailyRate: worker.dailyRate != null ? String(worker.dailyRate) : "",
@@ -253,6 +268,100 @@ export default function WorkerProfilesTab() {
     })
   }
 
+  /**
+   * Edit-all mode: every row becomes inputs at once and one Save writes the changed ones.
+   *
+   * Row-at-a-time is fine for correcting one person and hopeless for the job people actually have
+   * -- HoneyFarm arrived with 28 workers needing a rate each, which is 28 rounds of click, type,
+   * save. This is the same edit path per row, batched.
+   *
+   * Only DIRTY rows are sent. Sending all 36 would rewrite fields nobody touched, and any
+   * concurrent change by someone else would be silently reverted by a save that looks like it only
+   * set a rate.
+   */
+  const [bulkEditing, setBulkEditing] = useState(false)
+  const [bulkDrafts, setBulkDrafts] = useState<Record<string, Partial<Worker>>>({})
+  const [bulkSaving, setBulkSaving] = useState(false)
+  const [bulkFailures, setBulkFailures] = useState<Array<{ name: string; error: string }>>([])
+
+  const bulkDirtyIds = Object.keys(bulkDrafts).filter((id) => {
+    const w = workers.find((x) => x.id === id)
+    const d = bulkDrafts[id]
+    if (!w || !d) return false
+    return Object.entries(d).some(([k, v]) => String((w as any)[k] ?? "") !== String(v ?? ""))
+  })
+
+  const setBulkField = (id: string, field: keyof Worker, value: unknown) =>
+    setBulkDrafts((prev) => ({ ...prev, [id]: { ...prev[id], [field]: value } }))
+
+  const bulkValueOf = (w: Worker, field: keyof Worker) => {
+    const d = bulkDrafts[w.id]
+    return d && field in d ? (d as any)[field] : (w as any)[field]
+  }
+
+  const startBulkEdit = () => {
+    setEditingId(null)
+    setBulkFailures([])
+    setBulkDrafts({})
+    setBulkEditing(true)
+  }
+
+  const cancelBulkEdit = () => {
+    setBulkEditing(false)
+    setBulkDrafts({})
+    setBulkFailures([])
+  }
+
+  /**
+   * Saves each dirty row and reports per row. Deliberately not all-or-nothing: there is no
+   * transaction across 28 HTTP calls, and pretending otherwise would mean a failure on row 27
+   * leaving 26 saved while the UI claimed nothing happened. Successes are kept, failures are named
+   * and their drafts survive so the work is not lost.
+   */
+  const handleBulkSave = async () => {
+    if (bulkDirtyIds.length === 0) { setBulkEditing(false); return }
+    setBulkSaving(true)
+    const failures: Array<{ name: string; error: string }> = []
+    const saved: string[] = []
+    for (const id of bulkDirtyIds) {
+      const w = workers.find((x) => x.id === id)
+      if (!w) continue
+      const v = (f: keyof Worker) => bulkValueOf(w, f)
+      try {
+        const res = await fetch(`/api/attendance/workers/${id}`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            name: String(v("name") ?? "").trim() || undefined,
+            workerType: v("workerType") || null,
+            gender: v("gender") || null,
+            dailyRate: v("dailyRate") !== "" && v("dailyRate") != null ? Number(v("dailyRate")) : null,
+            monthlyWage: v("monthlyWage") !== "" && v("monthlyWage") != null ? Number(v("monthlyWage")) : null,
+            estate: v("estate") || null,
+            deviceUserCode: String(v("deviceUserCode") ?? "").trim() || null,
+          }),
+        })
+        const data = await res.json().catch(() => ({}))
+        if (!res.ok || !data.success) throw new Error(data.error || `HTTP ${res.status}`)
+        saved.push(id)
+      } catch (err: any) {
+        failures.push({ name: w.name, error: String(err?.message || "failed") })
+      }
+    }
+    setBulkSaving(false)
+    setBulkFailures(failures)
+    if (failures.length === 0) {
+      toast.success(`${saved.length} worker${saved.length === 1 ? "" : "s"} updated`)
+      setBulkEditing(false)
+      setBulkDrafts({})
+    } else {
+      toast.error(`${saved.length} saved, ${failures.length} failed`)
+      // Keep only the drafts that did not save, so a retry sends exactly what is still outstanding.
+      setBulkDrafts((prev) => Object.fromEntries(Object.entries(prev).filter(([id]) => !saved.includes(id))))
+    }
+    await fetchWorkers()
+  }
+
   const handleSaveEdit = async (id: string) => {
     setSaving(true)
     try {
@@ -262,6 +371,7 @@ export default function WorkerProfilesTab() {
         body: JSON.stringify({
           name: editForm.name.trim() || undefined,
           ...(editForm.kind === "gang" ? { headcount: Number(editForm.headcount) } : {}),
+          monthlyWage: editForm.monthlyWage ? Number(editForm.monthlyWage) : null,
           workerType: editForm.workerType || null,
           phone: editForm.phone.trim() || null,
           dailyRate: editForm.dailyRate ? Number(editForm.dailyRate) : null,
@@ -318,11 +428,33 @@ export default function WorkerProfilesTab() {
               )}
             </CardDescription>
           </div>
-          {canWrite && !isAdding && (
-            <Button size="sm" onClick={() => setIsAdding(true)} className="shrink-0">
-              <Plus className="mr-1.5 h-4 w-4" />
-              Add Worker
-            </Button>
+          {canWrite && !isAdding && !bulkEditing && (
+            <div className="flex shrink-0 gap-2">
+              {workers.length > 1 && (
+                <Button size="sm" variant="outline" onClick={startBulkEdit}>
+                  <Pencil className="mr-1.5 h-4 w-4" />
+                  Edit all
+                </Button>
+              )}
+              <Button size="sm" onClick={() => setIsAdding(true)}>
+                <Plus className="mr-1.5 h-4 w-4" />
+                Add Worker
+              </Button>
+            </div>
+          )}
+          {canWrite && bulkEditing && (
+            <div className="flex shrink-0 items-center gap-2">
+              <span className="text-xs font-medium text-muted-foreground tabular-nums">
+                {bulkDirtyIds.length === 0 ? "No changes yet" : `${bulkDirtyIds.length} changed`}
+              </span>
+              <Button size="sm" onClick={handleBulkSave} disabled={bulkSaving || bulkDirtyIds.length === 0}>
+                {bulkSaving ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> : <Check className="mr-1.5 h-4 w-4" />}
+                Save {bulkDirtyIds.length || ""}
+              </Button>
+              <Button size="sm" variant="outline" onClick={cancelBulkEdit} disabled={bulkSaving}>
+                Cancel
+              </Button>
+            </div>
           )}
         </CardHeader>
 
@@ -528,6 +660,19 @@ export default function WorkerProfilesTab() {
 
         <CardContent className={isAdding ? "pt-2" : undefined}>
           {workers.length > 0 && (
+            <>
+            {bulkFailures.length > 0 && (
+              /* Named, because "3 failed" over a 36-row table is not actionable. Their drafts are
+                 still in the inputs, so a retry sends exactly what did not land. */
+              <div className="mb-3 rounded-lg border border-destructive/30 bg-destructive/5 px-3 py-2 text-xs">
+                <p className="font-semibold text-destructive">{bulkFailures.length} row(s) did not save — the rest did.</p>
+                <ul className="mt-1 space-y-0.5 text-muted-foreground">
+                  {bulkFailures.map((f) => (
+                    <li key={f.name}><span className="font-medium text-foreground">{f.name}</span>: {f.error}</li>
+                  ))}
+                </ul>
+              </div>
+            )}
             <FilterBar
               className="mb-4"
               search={workerControls.search}
@@ -537,12 +682,18 @@ export default function WorkerProfilesTab() {
                 { value: "name", label: "Name" },
                 { value: "type", label: "Type" },
                 { value: "rate", label: "Daily Rate" },
+                { value: "estate", label: "Estate" },
               ]}
               sortValue={workerControls.sortValue}
               onSortChange={workerControls.setSortValue}
               sortDirection={workerControls.sortDirection}
               onSortDirectionChange={workerControls.setSortDirection}
+              facets={workerControls.facetOptions}
+              onFacetChange={workerControls.setFacet}
+              onClearFacets={workerControls.clearFacets}
+              activeFacetCount={workerControls.activeFacetCount}
             />
+            </>
           )}
           {loading ? (
             <div className="flex items-center justify-center py-10 text-muted-foreground text-sm">
@@ -742,7 +893,101 @@ export default function WorkerProfilesTab() {
                 </TableHeader>
                 <TableBody>
                   {workerControls.items.map((w) =>
-                    editingId === w.id ? (
+                    /**
+                     * Bulk mode renders the fields that are actually filled in bulk -- type, pay,
+                     * gender, estate, fingerprint id -- and leaves name, phone and bank as text.
+                     * Nobody renames thirty-six people at once, and eight editable columns across
+                     * thirty-six rows is a spreadsheet nobody can aim at. Row-at-a-time editing is
+                     * still there for the rest.
+                     */
+                    bulkEditing ? (
+                      <TableRow key={w.id} className={cn(bulkDrafts[w.id] && bulkDirtyIds.includes(w.id) && "bg-emerald-500/5")}>
+                        <TableCell className="font-medium">{w.name}</TableCell>
+                        <TableCell>
+                          <select
+                            value={String(bulkValueOf(w, "workerType") ?? "")}
+                            onChange={(e) => setBulkField(w.id, "workerType", e.target.value)}
+                            aria-label={`Type for ${w.name}`}
+                            className="h-9 w-full min-w-[9rem] rounded-md border border-input bg-background px-2 text-sm"
+                          >
+                            <option value="">No type</option>
+                            {WORKER_TYPES.map((t) => (
+                              <option key={t.value} value={t.value}>{t.label}</option>
+                            ))}
+                          </select>
+                        </TableCell>
+                        {showEstateField && (
+                          <TableCell>
+                            <select
+                              value={String(bulkValueOf(w, "estate") ?? "")}
+                              onChange={(e) => setBulkField(w.id, "estate", e.target.value)}
+                              aria-label={`Estate for ${w.name}`}
+                              className="h-9 w-full min-w-[8rem] rounded-md border border-input bg-background px-2 text-sm"
+                            >
+                              <option value="">Unassigned</option>
+                              {estates.map((name) => <option key={name} value={name}>{name}</option>)}
+                            </select>
+                          </TableCell>
+                        )}
+                        <TableCell>
+                          {/* One pay basis or the other, never both -- the DB rejects it
+                              (scripts/141) and the type already says which applies. */}
+                          {isPaidDaily(bulkValueOf(w, "workerType")) ? (
+                            <Input
+                              className="h-9 w-24 tabular-nums"
+                              inputMode="decimal"
+                              placeholder="per day"
+                              value={String(bulkValueOf(w, "dailyRate") ?? "")}
+                              onChange={(e) => setBulkField(w.id, "dailyRate", e.target.value)}
+                              aria-label={`Daily rate for ${w.name}`}
+                            />
+                          ) : (
+                            <Input
+                              className="h-9 w-28 tabular-nums"
+                              inputMode="decimal"
+                              placeholder="per month"
+                              value={String(bulkValueOf(w, "monthlyWage") ?? "")}
+                              onChange={(e) => setBulkField(w.id, "monthlyWage", e.target.value)}
+                              aria-label={`Monthly wage for ${w.name}`}
+                            />
+                          )}
+                        </TableCell>
+                        <TableCell className="hidden lg:table-cell">
+                          <select
+                            value={String(bulkValueOf(w, "gender") ?? "")}
+                            onChange={(e) => setBulkField(w.id, "gender", e.target.value)}
+                            aria-label={`Gender for ${w.name}`}
+                            className="h-9 w-full min-w-[7rem] rounded-md border border-input bg-background px-2 text-sm"
+                          >
+                            <option value="">Not recorded</option>
+                            <option value="female">Female</option>
+                            <option value="male">Male</option>
+                            <option value="other">Other</option>
+                          </select>
+                        </TableCell>
+                        <TableCell className="hidden sm:table-cell text-sm text-muted-foreground">{w.phone || "—"}</TableCell>
+                        <TableCell className="hidden md:table-cell text-sm text-muted-foreground">{w.bankName || "—"}</TableCell>
+                        {showFingerIds && (
+                          <TableCell>
+                            <Input
+                              className="h-9 w-20 tabular-nums"
+                              inputMode="numeric"
+                              placeholder="ID"
+                              value={String(bulkValueOf(w, "deviceUserCode") ?? "")}
+                              onChange={(e) => setBulkField(w.id, "deviceUserCode", e.target.value)}
+                              aria-label={`Fingerprint id for ${w.name}`}
+                            />
+                          </TableCell>
+                        )}
+                        {canWrite && (
+                          <TableCell className="sticky right-0 z-20 bg-background shadow-[-8px_0_8px_-8px_rgba(0,0,0,0.15)]">
+                            {bulkDirtyIds.includes(w.id) && (
+                              <span className="text-[10px] font-bold uppercase tracking-wide text-emerald-600">changed</span>
+                            )}
+                          </TableCell>
+                        )}
+                      </TableRow>
+                    ) : editingId === w.id ? (
                       <TableRow key={w.id} className="bg-muted/30">
                         <TableCell>
                           <Input

@@ -74,7 +74,7 @@ export async function GET(request: Request) {
     const [workersRows, presentRows, pickingRows, weeklyRows, deviceRows, estateRows, assignmentRows] = await runTenantQueries(accountsSql, tenantContext, [
       accountsSql`
         SELECT id, full_name, daily_rate, device_user_code, location_id, created_at,
-               worker_type, phone, bank_name, bank_account, bank_ifsc, gender,
+               worker_type, phone, bank_name, bank_account, bank_ifsc, gender, monthly_wage,
                -- 'gang' rows carry a headcount instead of a fingerprint: a contract crew is one
                -- line on the muster, not eleven. See scripts/115.
                kind, headcount, estate
@@ -200,6 +200,7 @@ export async function GET(request: Request) {
         // and a value you cannot read back demonstrates nothing.
         workerType: row.worker_type ? String(row.worker_type) : null,
         gender: row.gender ? String(row.gender) : null,
+        monthlyWage: row.monthly_wage != null ? Number(row.monthly_wage) : null,
         phone: row.phone ? String(row.phone) : null,
         bankName: row.bank_name ? String(row.bank_name) : null,
         bankAccount: row.bank_account ? String(row.bank_account) : null,

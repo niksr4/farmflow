@@ -12,12 +12,25 @@ import { describe, expect, it } from "vitest"
  */
 const src = readFileSync(resolve(process.cwd(), "components/worker-profiles-tab.tsx"), "utf8")
 
-const putBody = src.slice(src.indexOf("method: \"PUT\""), src.indexOf("const data = await res.json()", src.indexOf("method: \"PUT\"")))
+/**
+ * Scoped to handleSaveEdit, not "the first PUT in the file". There are two PUTs now -- the
+ * row-at-a-time save and the bulk save -- and the bulk one deliberately sends a narrower set,
+ * because nobody edits thirty-six people's bank details at once. Grabbing whichever came first
+ * made this assert against the wrong request the moment a second one existed.
+ */
+const editFn = src.slice(src.indexOf("const handleSaveEdit"))
+const putBody = editFn.slice(editFn.indexOf('method: "PUT"'), editFn.indexOf("const data = await res.json()"))
 const postBody = src.slice(src.indexOf("/api/attendance/workers\", {"), src.indexOf("const data = await res.json()", src.indexOf("/api/attendance/workers\", {")))
 
 const EDITABLE = ["name", "workerType", "phone", "dailyRate", "bankName", "bankAccount", "bankIfsc", "estate", "deviceUserCode"]
 
 describe("worker profiles: edit form round-trips every field", () => {
+  it("is reading the row-edit save, not the bulk one", () => {
+    // If this slice ever picks up handleBulkSave the field assertions below become meaningless.
+    expect(putBody).toContain("bankIfsc")
+    expect(putBody.length).toBeLessThan(1600)
+  })
+
   for (const field of EDITABLE) {
     it(`sends ${field} on save`, () => {
       expect(putBody, `${field} is editable but missing from the PUT body`).toContain(`${field}:`)

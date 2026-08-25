@@ -99,8 +99,10 @@ describe("the actions column cannot scroll away", () => {
    */
   const roster = readFileSync("components/worker-profiles-tab.tsx", "utf8")
 
-  it("is pinned in the header and both row states", () => {
-    expect((roster.match(/sticky right-0/g) ?? []).length).toBe(3)
+  it("is pinned in the header and every row state", () => {
+    // Header, read-only row, row-edit row, bulk-edit row. A row state that forgets the pin puts
+    // its actions somewhere different as you scroll, which is worse than none of them having it.
+    expect((roster.match(/sticky right-0/g) ?? []).length).toBe(4)
   })
 
   it("and is opaque, so scrolling cells pass underneath rather than through", () => {

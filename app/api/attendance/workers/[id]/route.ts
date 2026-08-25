@@ -134,6 +134,21 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
       )
     }
 
+    /**
+     * A monthly wage is not a daily rate divided by anything. Staff are paid the same whether they
+     * work eighteen days or twenty-four, so there is no day rate to derive -- and every consumer of
+     * daily_rate multiplies it by days, which is why the two cannot share a column.
+     */
+    const rawMonthly = body?.monthlyWage
+    const monthlyWage =
+      rawMonthly === undefined ? undefined
+      : rawMonthly === null || rawMonthly === "" ? null
+      : Number.isFinite(Number(rawMonthly)) && Number(rawMonthly) > 0 ? Number(rawMonthly)
+      : "invalid"
+    if (monthlyWage === "invalid") {
+      return NextResponse.json({ success: false, error: "A monthly wage must be a positive amount" }, { status: 400 })
+    }
+
     const gender = readGender(body?.gender)
     const workerType =
       body?.workerType != null
@@ -184,7 +199,6 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
             full_name        = COALESCE(${name}, full_name),
             worker_type      = CASE WHEN ${workerType !== undefined} THEN ${workerType ?? null} ELSE worker_type END,
             phone            = CASE WHEN ${phone !== undefined} THEN ${phone ?? null} ELSE phone END,
-            daily_rate       = CASE WHEN ${dailyRate !== undefined} THEN ${dailyRate ?? null} ELSE daily_rate END,
             gender           = CASE WHEN ${gender !== undefined} THEN ${gender ?? null} ELSE gender END,
             bank_name        = CASE WHEN ${bankName !== undefined} THEN ${bankName ?? null} ELSE bank_name END,
             bank_account     = CASE WHEN ${bankAccount !== undefined} THEN ${bankAccount ?? null} ELSE bank_account END,
@@ -194,7 +208,13 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
             estate           = CASE WHEN ${estate !== undefined} THEN ${estate ?? null} ELSE estate END,
             -- Guarded by kind so an individual can never acquire a headcount, which would make the
             -- labour_cost view route their pay to the contract-labour column.
-            headcount        = CASE WHEN ${headcount !== undefined} AND kind = 'gang' THEN ${headcount ?? null} ELSE headcount END
+            headcount        = CASE WHEN ${headcount !== undefined} AND kind = 'gang' THEN ${headcount ?? null} ELSE headcount END,
+            monthly_wage     = CASE WHEN ${monthlyWage !== undefined} THEN ${monthlyWage ?? null}::numeric ELSE monthly_wage END,
+            -- The DB refuses both together (scripts/141). Clearing the other side here means
+            -- switching someone from daily to monthly is one edit rather than two, and cannot land
+            -- in the state the constraint rejects.
+            daily_rate       = CASE WHEN ${monthlyWage !== undefined} AND ${monthlyWage !== null} THEN NULL
+                                    WHEN ${dailyRate !== undefined} THEN ${dailyRate ?? null} ELSE daily_rate END
           WHERE id = ${id}::uuid AND tenant_id = ${tenantContext.tenantId}
         `,
       )
