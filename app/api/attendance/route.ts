@@ -13,6 +13,9 @@ import {
   normalizeAttendanceSchemaError,
 } from "@/lib/attendance"
 import { logServerError } from "@/lib/server/safe-logging"
+import { cookies } from "next/headers"
+import { resolveActiveEstate } from "@/lib/estate-filter"
+import { SELECTED_ESTATE_COOKIE } from "@/lib/server/estate-cookie"
 
 export const dynamic = "force-dynamic"
 export const revalidate = 0
@@ -36,31 +39,49 @@ export async function GET(request: Request) {
     const date = normalizeAttendanceDate(searchParams.get("date"), getTodayAttendanceDate())
     const { startDate, endDate } = getAttendanceWeekWindow(date)
 
-    // THE ROLL IS NOT ESTATE-FILTERED, AND THAT IS DELIBERATE.
-    //
-    // Presence has no place. attendance_records carries no location, and a fingerprint terminal
-    // belongs to a tenant rather than an estate -- so there is nothing on a day's presence for an
-    // estate filter to match. Filtering the roll could only filter on a property of the *worker*,
-    // while the estate of the day's work is not settled until a block is picked, which happens
-    // after presence.
-    //
-    // It also made the ordinary case impossible: with Valley selected, a Hill worker sent to
-    // Valley disappeared from the roll, so nobody could mark them present where they actually
-    // were. Blocks are guided-not-fenced for the same reason (worker-allocation.tsx), and the
-    // selector still scopes every report, where the estate is a property of the recorded work.
-    //
-    // PUT below must stay in step: its delete-scope existed only because this filtered.
+    /**
+     * THE ROLL FOLLOWS THE ESTATE SELECTOR, by the same always-shows rule as everything else.
+     *
+     * This used to be unfiltered, on the reasoning that presence has no place -- a day's
+     * attendance carries no location, so an estate filter could only match a property of the
+     * *worker*, not of the work. That reasoning is still true and it is still not the point.
+     * Thirty-four routes honour the selector; this and rainfall were the only two that did not,
+     * and rainfall genuinely cannot because its rows carry no location at all. A selector that
+     * scopes the whole app except one screen is not a scoping rule, it is a bug people learn to
+     * work around.
+     *
+     * The old objection was that a Hill worker sent to Valley would vanish from the Valley roll
+     * and be unmarkable. They do not vanish: presence is one row per person per day, tenant-wide,
+     * so a worker is marked once on the roll they belong to. Where they then WORK is the block on
+     * the allocation, which is not estate-fenced -- exactly as before.
+     *
+     * `estate IS NULL` still serves every estate. Laxmi's 21 workers carry no estate and are
+     * unaffected; HoneyFarm's 28/3 split and Medappa's 21/9 are what this is for.
+     *
+     * THE DELETE IN PUT MUST STAY IN STEP. It removes any attendance row for the date whose worker
+     * is not in presentWorkerIds. If the roll is scoped and the delete is not, saving Honeyfarm's
+     * roll silently wipes Sidapur's attendance for that day. Both are scoped by the same helper
+     * below; a test asserts neither can be scoped alone.
+     */
+    const activeEstate = resolveActiveEstate(
+      searchParams,
+      (await cookies()).get(SELECTED_ESTATE_COOKIE)?.value || null,
+    )
+    const rollEstateClause = activeEstate
+      ? accountsSql` AND (estate IS NULL OR estate = ${activeEstate})`
+      : accountsSql``
 
     const [workersRows, presentRows, pickingRows, weeklyRows, deviceRows, estateRows, assignmentRows] = await runTenantQueries(accountsSql, tenantContext, [
       accountsSql`
         SELECT id, full_name, daily_rate, device_user_code, location_id, created_at,
-               worker_type, phone, bank_name, bank_account, bank_ifsc,
+               worker_type, phone, bank_name, bank_account, bank_ifsc, gender,
                -- 'gang' rows carry a headcount instead of a fingerprint: a contract crew is one
                -- line on the muster, not eleven. See scripts/115.
                kind, headcount, estate
         FROM attendance_workers
         WHERE tenant_id = ${tenantContext.tenantId}
           AND active = TRUE
+          ${rollEstateClause}
         ORDER BY LOWER(full_name), created_at ASC
       `,
       accountsSql`
@@ -139,6 +160,20 @@ export async function GET(request: Request) {
       // sees it, otherwise registering a tenant's FIRST device is impossible -- no device would
       // mean no UI would mean no way to add one.
       hasBiometricDevices: deviceRows.length > 0 || String(sessionUser.role || "").toLowerCase() === "owner",
+      /**
+       * Whether to show fingerprint-id fields on the roster, which is a different question from
+       * whether a terminal exists.
+       *
+       * HoneyFarm has 28 workers carrying enrolment ids and no device registered: the ids were
+       * loaded from their payroll export so the scanner works the day it is installed. Gating the
+       * column on the device meant that data was stored, invisible and uneditable -- you could
+       * only enter enrolment ids after the hardware arrived, which is the wrong way round from how
+       * anyone actually prepares.
+       */
+      showFingerIds:
+        deviceRows.length > 0 ||
+        workersRows.some((row: any) => row.device_user_code) ||
+        String(sessionUser.role || "").toLowerCase() === "owner",
       // Null while an estate still types labour into Accounts. Their pay comes from a rate on the
       // worker and that field stays exactly where it was; only an estate that has moved to the
       // muster takes its rate from the work instead. Laxmi and HoneyFarm are on the first path
@@ -155,10 +190,16 @@ export async function GET(request: Request) {
         dailyRate: row.daily_rate != null ? Number(row.daily_rate) : null,
         deviceUserCode: row.device_user_code ? String(row.device_user_code) : null,
         locationId: row.location_id ? String(row.location_id) : null,
-        // The worker-profiles tab renders Phone and Bank columns and maps them straight off this
-        // response. They were never selected here, so those columns were blank for every tenant
-        // no matter what was stored, and the add form quietly had nowhere to put the values.
+        // The worker-profiles tab renders Phone, Bank and Gender columns and maps them straight
+        // off this response. They were never selected here, so those columns were blank for every
+        // tenant no matter what was stored.
+        //
+        // Gender was missed when phone and bank were fixed, and it is the worse one: it is
+        // editable, so it saved correctly, showed "—" on return, and read as "nothing saves".
+        // The write was never the problem. INDICOFS 4.6.2I asks the estate to *demonstrate* this,
+        // and a value you cannot read back demonstrates nothing.
         workerType: row.worker_type ? String(row.worker_type) : null,
+        gender: row.gender ? String(row.gender) : null,
         phone: row.phone ? String(row.phone) : null,
         bankName: row.bank_name ? String(row.bank_name) : null,
         bankAccount: row.bank_account ? String(row.bank_account) : null,
@@ -253,7 +294,24 @@ export async function PUT(request: Request) {
     // genuinely means absent. This clause used to be load-bearing -- while the roll was
     // estate-filtered, an unscoped delete would have wiped the other estates' attendance for the
     // date. The two must stay in step; scoping only one of them silently drops a save.
-    const estateWorkerScopeClause = accountsSql``
+    // Re-armed, in lockstep with the roll above. The comment that used to sit here said this
+    // clause "used to be load-bearing" -- it is load-bearing again the moment the roll is scoped,
+    // and leaving it empty would mean saving Honeyfarm's roll deletes Sidapur's attendance for the
+    // date. Silently: the save succeeds, the rows are gone, and nothing on either screen says so.
+    //
+    // The subquery is the same predicate the roll uses, deliberately spelled the same way rather
+    // than approximated, because "roughly the same set" is how the two drift apart.
+    const putEstate = resolveActiveEstate(
+      new URL(request.url).searchParams,
+      (await cookies()).get(SELECTED_ESTATE_COOKIE)?.value || null,
+    )
+    const estateWorkerScopeClause = putEstate
+      ? accountsSql` AND worker_id IN (
+          SELECT id FROM attendance_workers
+          WHERE tenant_id = ${tenantContext.tenantId}
+            AND (estate IS NULL OR estate = ${putEstate})
+        )`
+      : accountsSql``
 
     // Diff, not replace: only remove rows for workers no longer present, and insert new
     // present workers with ON CONFLICT DO NOTHING. A blanket delete-then-reinsert would

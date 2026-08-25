@@ -127,7 +127,8 @@ export default function WorkerProfilesTab() {
   const [form, setForm] = useState(EMPTY_FORM)
   // Same data-driven gate as the attendance tab: estates without a terminal see no
   // biometric fields at all.
-  const [hasBiometricDevices, setHasBiometricDevices] = useState(false)
+  // Not the same question as 'is a terminal connected' -- see showFingerIds in the route.
+  const [showFingerIds, setShowFingerIds] = useState(false)
   const [editForm, setEditForm] = useState(EMPTY_FORM)
   const [locations, setLocations] = useState<LocationOption[]>([])
   const locationById = new Map(locations.map((loc) => [loc.id, loc]))
@@ -165,7 +166,7 @@ export default function WorkerProfilesTab() {
       const res = await fetch("/api/attendance?date=" + todayIso() + "&scope=all", { cache: "no-store" })
       const data = await res.json()
       if (data.success) {
-        setHasBiometricDevices(Boolean(data.hasBiometricDevices))
+        setShowFingerIds(Boolean(data.showFingerIds))
         setWorkers(
           (data.workers || []).map((w: any) => ({
             id: String(w.id),
@@ -492,7 +493,7 @@ export default function WorkerProfilesTab() {
               </div>
               {/* Only for estates that actually have a fingerprint terminal — same gate as the
                   attendance tab, so nobody else sees a field they cannot use. */}
-              {hasBiometricDevices && (
+              {showFingerIds && (
                 <div className="space-y-1.5">
                   <FieldLabel
                     label="Finger ID"
@@ -667,7 +668,7 @@ export default function WorkerProfilesTab() {
                           <Input value={editForm.bankName} onChange={(e) => setEditForm((f) => ({ ...f, bankName: e.target.value }))} placeholder="Bank name" />
                           <Input value={editForm.bankAccount} onChange={(e) => setEditForm((f) => ({ ...f, bankAccount: e.target.value }))} placeholder="Account no." />
                           <Input value={editForm.bankIfsc} onChange={(e) => setEditForm((f) => ({ ...f, bankIfsc: e.target.value }))} placeholder="IFSC" />
-                          {hasBiometricDevices && (
+                          {showFingerIds && (
                             <Input value={editForm.deviceUserCode} onChange={(e) => setEditForm((f) => ({ ...f, deviceUserCode: e.target.value }))} placeholder="Finger ID" inputMode="numeric" />
                           )}
                           <div className="flex gap-2 pt-1">
@@ -692,7 +693,7 @@ export default function WorkerProfilesTab() {
                           {showEstateField && (
                             <MobileField label="Estate" value={estate ?? "Unassigned"} />
                           )}
-                          {hasBiometricDevices && <MobileField label="Finger ID" value={w.deviceUserCode || "—"} mono />}
+                          {showFingerIds && <MobileField label="Finger ID" value={w.deviceUserCode || "—"} mono />}
                           {canWrite && (
                             <div className="flex gap-2 pt-2">
                               <Button size="sm" variant="outline" className="flex-1" onClick={() => startEdit(w)}>
@@ -728,7 +729,7 @@ export default function WorkerProfilesTab() {
                     <TableHead className="hidden sm:table-cell">Phone</TableHead>
                     <TableHead className="hidden md:table-cell">Bank</TableHead>
                     {/* Only for estates with a terminal — same gate as everywhere else. */}
-                    {hasBiometricDevices && <TableHead>Finger ID</TableHead>}
+                    {showFingerIds && <TableHead>Finger ID</TableHead>}
                     {/* Pinned. Editing a row swaps eight display cells for eight inputs, which
                         widens the table past the viewport and pushed Save and Cancel off the right
                         edge -- reachable only by finding a horizontal scrollbar under a row that
@@ -832,7 +833,7 @@ export default function WorkerProfilesTab() {
                             />
                           </div>
                         </TableCell>
-                        {hasBiometricDevices && (
+                        {showFingerIds && (
                           <TableCell>
                             <Input
                               className="h-8 w-24"
@@ -889,7 +890,7 @@ export default function WorkerProfilesTab() {
                             <span>{w.bankName}{w.bankAccount ? ` · ${w.bankAccount}` : ""}{w.bankIfsc ? ` (${w.bankIfsc})` : ""}</span>
                           ) : "—"}
                         </TableCell>
-                        {hasBiometricDevices && (
+                        {showFingerIds && (
                           <TableCell className="text-sm">
                             {w.deviceUserCode ? (
                               <span className="font-mono">{w.deviceUserCode}</span>
