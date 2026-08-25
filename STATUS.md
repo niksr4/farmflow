@@ -3,7 +3,7 @@
 One page for the things that are easy to lose track of: what each tenant is doing, what is waiting
 on somebody else, and what has already been decided so it does not get re-argued.
 
-**Last reviewed: 2026-08-21.** Anything with a number in it should be re-checked against the DB
+**Last reviewed: 2026-08-25.** Anything with a number in it should be re-checked against the DB
 before you act on it — `node scripts/dev/referential-audit.mjs prod` and the queries in
 `scripts/dev/` are faster than remembering.
 
@@ -13,47 +13,61 @@ before you act on it — `node scripts/dev/referential-audit.mjs prod` and the q
 
 | | Estates / blocks | Store | Muster | Writer | Waiting on |
 |---|---|---|---|---|---|
-| **Medappa** | Citrus Grove 13, Tirtha 8 | one each | **live 19 Aug** | Gagan Rai | 22 of 33 worker rates — **Gagan can set these himself** |
-| **Laxmi** | Laxmi, 5 blocks | 1 | ready | — | nothing. Cut over whenever |
-| **HoneyFarm** | Honeyfarm (HF A/C, HF B), Sidapur (MV, PG) | 1 shared | blocked | KAB123 | **worker roster — nothing else moves until this arrives** |
-| **Seshagiri** | 6 blocks | 1 | blocked | — | are they still a customer? Silent since 18 May |
-| greenvalley | — | — | — | — | dormant, never used |
+| **Medappa** | Citrus Grove 13, Tirtha 8 | one each | **live 19 Aug** | Gagan Rai | nothing. 30 workers, all rated; 5 days recorded unprompted |
+| **Laxmi** | Laxmi, 5 blocks | 1 | **live 25 Aug** | Nandu | nothing blocking. Day 1 recorded 2 of 21 — watch days 2-5 |
+| **HoneyFarm** | Honeyfarm (HF A/C, HF B), Sidapur (MV, PG) | 1 shared | **date not set** | Dad (`KAB123`) | **28 daily rates.** Roster + fingerprint ids loaded 25 Aug |
+| **Seshagiri** | 6 blocks | 1 | **live 24 Aug** | — | **a worker roster.** Cut over but inert until one exists |
+| greenvalley | — | — | — | — | one login ever, no records. Not a tenant |
 
 `Estate Mock` is the demo tenant, not a customer.
 
 ### What is actually blocking what
 
-HoneyFarm is the critical path for everything. They have **zero workers and have never marked
-attendance**, while ~1,010 legacy labour rows still flow from them — so the old labour workflow
-cannot be deleted while they are on it.
+Three of four are on the muster. What is left is two rosters, not two cutovers — and neither is
+something we can do for them.
 
 ```
-Laxmi cutover  ──┐
-                 ├──▶  both on the muster  ──▶  delete the old labour workflow
-HoneyFarm: roster → practise a few days → cutover  ──┘
+HoneyFarm: 28 rates  ──▶ cutover  ──┐
+                                    ├──▶  delete the old labour write path
+Seshagiri: a roster at all  ────────┘
 ```
 
-Laxmi is independent and unblocked — their cutover does **not** depend on stock prices, despite an
-earlier note that coupled them. They currently mark the roll *and* type legacy labour separately.
-Nothing is double-counted (the cutover is not applied, so only legacy is costed) but the roll they
-mark every morning currently produces no cost at all.
+**HoneyFarm** is the last cutover and the largest legacy set: 1,024 typed rows, Rs 36,54,523, last
+written 22 Aug, so any date from 23 Aug on orphans nothing. Their 28 employees and fingerprint ids
+are loaded; **every one has no daily rate**, and the assignments route refuses to cost a worker
+without one. Cutting over before the rates land means Dad can mark 27 people present and cost none
+of them. Recoverable — allocations can be backfilled — but it is what he would hit first.
+
+**Seshagiri** asked to come back on 25 Aug after three months quiet, and is cut over. They have
+**zero workers**, so typed labour is refused and the muster is empty: they currently cannot record
+labour at all. The cutover changed a flag; the roster is what gives them a workflow.
+
+**Do not tag HoneyFarm's workers with an estate.** All 28 are NULL, which is what lets any of them
+be allocated to a block on either estate. Dad's rule that a Honeyfarm worker never punches at
+Sidapur is an enrolment decision for the scanners; the app neither knows nor needs it.
 
 ---
 
 ## Owed to people
 
-- **HoneyFarm — worker roster.** Name, estate (Honeyfarm / Sidapur), permanent or contract, daily
-  rate. Contract crews go on as one line with a headcount. *This is the one that unblocks the rest.*
-- **Gagan** — he can set the 22 missing worker rates himself, in Worker Profiles. `role=user` can
-  write `accounts`. Worth telling him rather than routing it through Manoj.
-- **Seshagiri** — still a customer? And the kg-per-bag weight for their 5 items, which is the last
-  thing holding `bags` in the schema.
-- **HoneyFarm / Laxmi — inventory.** Deliberately deferred until after the cutovers. Sheets are on
-  the Desktop in `farmflow-stabilization/`, asking for the **total paid** and the quantity that
-  total bought, not a per-unit price.
-- **Acreage — 0 of 38 blocks have it.** Blocks nothing, but every per-acre figure stays dark until
-  it lands, and `costPerAcre` is already built and rendering. Must go to an **admin**; writers
-  cannot set it.
+- **HoneyFarm — 28 daily rates.** The one thing between them and a cutover. Names and fingerprint
+  ids are already in; this is one number each. Ask for gender at the same time (INDICOFS 4.6.2I) —
+  it is not in their SmartHCM export.
+- **Seshagiri — the four lists.** [docs/ESTATE-DATA-REQUEST.md](docs/ESTATE-DATA-REQUEST.md) has
+  them with a paste-ready paragraph at the bottom: workers and rates, block names and planted acres,
+  current stock, and the past year of rainfall. Plus **kg per bag** for their 5 bag items, which is
+  the last thing holding `bags` in the schema.
+- **Seshagiri — what do they open it for?** 30 of the last 30 days logged in, nothing written since
+  18 May. Three months of daily visits with no entries is not disengagement, and whatever they are
+  looking at is probably the thing to build on.
+- **Nandu — the crew shape.** Rs 650 to Rs 1,300 across six codes, with two different shade rates on
+  one day. One crew pricing skilled work differently, or several crews? Decides one gang row or four.
+- **HoneyFarm / Laxmi — inventory prices.** Sheets on the Desktop in `farmflow-stabilization/`,
+  asking for the **total paid** and the quantity it bought. Laxmi's 8 items are all unpriced, so
+  their expense amounts never derive from stock.
+- **Acreage — 0 of 36 real blocks.** Every per-acre figure in the product divides by a number nobody
+  has entered. Cheapest thing on this list to collect: an owner knows their planted acres without
+  looking anything up. Must go to an **admin**; writers cannot set it.
 
 ---
 
@@ -71,6 +85,31 @@ mark every morning currently produces no cost at all.
 - **Inventory units are kg and L.** A bag is a different weight for every commodity.
 - **Writers get Language and Security in Settings, nothing else.** Acreage deliberately excluded —
   it needs a narrower permission than "edit location".
+
+---
+
+## Parked deliberately — not a bug, not forgotten
+
+**Labour that is not a day's wage has nowhere to live after a cutover.** Monthly salaries, bonuses
+and harvest incentives were typed labour rows; a cutover refuses those, and the muster's shape
+(headcount x rate x day) cannot express them. Laxmi: Rs 21,29,850 across 22 rows, 80% of their
+labour, including a single Rs 18,00,000 bonus on 30 May that made House Block read at Rs 12,154 per
+man-day. HoneyFarm: Rs 7,34,786 across 16.
+
+Laxmi hits this at month end, and their last salary run was 3 Aug. Interim answer is Other Expenses
+under the same code (101A, 101B, 103) — the P&L total is right either way, since it is labour plus
+expenses, but a salary reported as a non-labour expense is wrong on its face.
+
+The real answer is a fourth source in `labour_cost`, exactly how `picking` was solved: a
+`labour_charges` table with a date, a code, an amount, and nullable worker and location — no
+headcount, no day fraction, no rate, because those are what make it not fit. It surfaces in Muster
+-> Payroll, and the eight routes that read `labour_cost` pick it up with no further change.
+
+One thing to settle first: if a salaried person is also marked present on the muster, that is a
+double count arriving through a different door. Either salaried staff stay off the roster, or they
+are marked present with no rate.
+
+**Parked until all four tenants are recording normally.** Revisit with the edge cases, not before.
 
 ---
 
