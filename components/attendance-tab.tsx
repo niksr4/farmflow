@@ -513,7 +513,10 @@ export default function AttendanceTab() {
           <button
             type="button"
             onClick={() => setWeekOffset((o) => o - 1)}
-            className="flex items-center gap-1 rounded-lg px-2 py-1 text-xs font-semibold text-stone-500 active:bg-stone-100 touch-manipulation"
+            /* 44px is the tap target, not the type size: py-1 made these 24px tall, and going back
+               a week is how yesterday gets corrected -- the most common thing after marking today.
+               The label stays 12px; only the hit area grows. */
+            className="flex min-h-[44px] items-center gap-1 rounded-lg px-2 py-1 text-xs font-semibold text-stone-500 active:bg-stone-100 touch-manipulation"
           >
             <ChevronLeft className="h-3.5 w-3.5" /> Prev week
           </button>
@@ -524,7 +527,7 @@ export default function AttendanceTab() {
             type="button"
             disabled={weekOffset === 0}
             onClick={() => setWeekOffset((o) => Math.min(0, o + 1))}
-            className="flex items-center gap-1 rounded-lg px-2 py-1 text-xs font-semibold text-stone-500 active:bg-stone-100 touch-manipulation disabled:opacity-30"
+            className="flex min-h-[44px] items-center gap-1 rounded-lg px-2 py-1 text-xs font-semibold text-stone-500 active:bg-stone-100 touch-manipulation disabled:opacity-30"
           >
             Next week <ChevronRight className="h-3.5 w-3.5" />
           </button>
@@ -601,33 +604,30 @@ export default function AttendanceTab() {
         )}
       </div>
 
-      {/* Where the day stands, before the detail. Four figures a manager can act on: who turned
-          up, who did not, what it has cost, and who is still unaccounted for. */}
-      {!loading && workers.length > 0 && (
-        <div className={cn(
-          "grid gap-px overflow-hidden rounded-xl border border-stone-200 bg-stone-200 mx-3 mt-3 dark:border-white/[0.08] dark:bg-white/[0.08]",
-          allocatesWork ? "grid-cols-4" : "grid-cols-2",
-        )}>
+      {/* What the day cost and who is still unaccounted for -- the two figures the line above does
+          not already carry.
+
+          Present and Absent used to lead this row and have been dropped: "0 in / 21 out" sits
+          about forty pixels higher, and the save bar says "0 present" a third time. On a phone the
+          duplicate tiles cost ~65px of a 664px screen, which is a worker row, and on a tenant that
+          had set no work yet they were the *entire* row -- a bordered panel restating the sentence
+          above it. Three copies of one number is not emphasis, it is noise where the roll should be.
+
+          Cost and stragglers only mean something to an estate that allocates work. Shown to one
+          that does not, "Cost today Rs 0" is a permanent zero and an amber "No work set" is a
+          standing accusation about a feature they have not adopted -- a nag that can never be
+          cleared. So the row now appears with the first job set for the day, and not before. */}
+      {!loading && workers.length > 0 && allocatesWork && (
+        <div className="grid grid-cols-2 gap-px overflow-hidden rounded-xl border border-stone-200 bg-stone-200 mx-3 mt-3 dark:border-white/[0.08] dark:bg-white/[0.08]">
           {[
-            { label: "Present", value: String(presentCount), tone: "emerald" as const },
-            { label: "Absent", value: String(absentCount), tone: "plain" as const },
-            // Cost and stragglers only mean something to an estate that allocates work. Shown to
-            // one that does not, "Cost today Rs 0" is a permanent zero and an amber "No work set"
-            // is a standing accusation about a feature they have not adopted -- a nag that can
-            // never be cleared. They appear the moment the first job is set for the day.
-            ...(allocatesWork
-              ? [
-                  { label: "Cost today", value: `₹${Math.round(dayCost).toLocaleString("en-IN")}`, tone: "clay" as const },
-                  { label: "No work set", value: String(unallocatedCount), tone: unallocatedCount > 0 ? ("amber" as const) : ("plain" as const) },
-                ]
-              : []),
+            { label: "Cost today", value: `₹${Math.round(dayCost).toLocaleString("en-IN")}`, tone: "clay" as const },
+            { label: "No work set", value: String(unallocatedCount), tone: unallocatedCount > 0 ? ("amber" as const) : ("plain" as const) },
           ].map((tile) => (
             <div key={tile.label} className="bg-white px-2 py-2.5 text-center dark:bg-card">
               <p className="text-[9px] font-black uppercase tracking-wider text-stone-400">{tile.label}</p>
               <p
                 className={cn(
                   "mt-0.5 truncate text-base font-black tabular-nums",
-                  tile.tone === "emerald" && "text-emerald-700 dark:text-emerald-400",
                   tile.tone === "clay" && "text-amber-800 dark:text-amber-500",
                   tile.tone === "amber" && "text-amber-600",
                   tile.tone === "plain" && "text-stone-500",
@@ -889,7 +889,12 @@ export default function AttendanceTab() {
                       {a ? `₹${a.totalCost.toLocaleString("en-IN")}` : ""}
                     </span>
 
-                    <div className="flex shrink-0 items-center justify-end gap-0.5">
+                    {/* gap-0.5 put a 32px delete 2px from a 32px present toggle. On a phone that is
+                        one thumb width covering both, and the two outcomes are "mark Annu present"
+                        and "remove Annu from the roster" -- the mis-tap is not symmetrical. The
+                        toggle is now 44px because it is the most-tapped control in the product; the
+                        delete stays 32px and moves a thumb's width away. */}
+                    <div className="flex shrink-0 items-center justify-end gap-2">
                       {i === 0 && (
                         <>
                           <button
@@ -910,7 +915,7 @@ export default function AttendanceTab() {
                             aria-label={`${worker.name} present`}
                             onClick={(event) => { event.stopPropagation(); act() }}
                             className={cn(
-                              "flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border-2 transition-all touch-manipulation",
+                              "flex h-11 w-11 shrink-0 items-center justify-center rounded-lg border-2 transition-all touch-manipulation",
                               isPresent
                                 ? "border-emerald-600 bg-emerald-600"
                                 : "border-stone-200 bg-white dark:bg-transparent",

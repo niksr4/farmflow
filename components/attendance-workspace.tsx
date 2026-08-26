@@ -53,7 +53,9 @@ export default function AttendanceWorkspace({ showLaborManagement = false }: Att
                 type="button"
                 onClick={() => setActiveSection(item.value)}
                 className={cn(
-                  "flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-semibold transition-colors",
+                  // min-h-11 (44px) rather than taller type -- these were 30px, and they are how a
+                  // writer gets between the roll and the roster on a phone.
+                  "flex min-h-11 items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-semibold transition-colors",
                   isActive
                     ? SECTION_COLORS[item.value]
                     : "border-stone-200 bg-white text-stone-500 hover:bg-stone-50",

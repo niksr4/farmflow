@@ -4,7 +4,8 @@
  * MobileBottomNav — redesigned for phone-first, low-literacy users.
  *
  * Design principles:
- *  - 5 slots: 4 primary tabs + More. Always visible.
+ *  - 5 slots: exactly 4 primary tabs + More. Always visible. See getMobileBottomNavTabs --
+ *    the four are chosen by what estates actually write, not by what the product has most of.
  *  - Active tab: large filled pill, emerald. Impossible to miss.
  *  - Labels: short (1 word), large enough to read at arm's length.
  *  - Touch targets: full height of the bar (~68px).
@@ -26,6 +27,7 @@ type MobileBottomNavProps = {
 
 const SHORT_LABELS: Record<string, string> = {
   home: "Home",
+  attendance: "Muster",
   accounts: "Costs",
   rainfall: "Rain",
   inventory: "Stock",

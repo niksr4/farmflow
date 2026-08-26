@@ -127,12 +127,25 @@ export function getMobileBottomNavTabs(availableTabs: string[]): string[] {
   const phase = getCurrentEstatePhase()
   const isHarvest = [...HARVEST_SEASONS, ...POST_HARVEST_SEASONS].includes(phase.season)
 
-  // Always show accounts (labour+expenses) and rainfall
-  // In harvest: swap one slot for processing
-  if (isHarvest) {
-    return ["home", "processing", "accounts", "picking", "rainfall"].filter((t) => availableTabs.includes(t))
-  }
-  return ["home", "accounts", "picking", "rainfall", "inventory"].filter((t) => availableTabs.includes(t))
+  /**
+   * Priority order, sliced to four. The bar is four tabs plus More, and it used to be a
+   * five-entry list that happened to come out at four because `picking` filtered away for most
+   * tenants -- so HoneyFarm, who have picking enabled, got a six-item bar on a 390px screen.
+   * Saying "first four available" makes the count a rule rather than a coincidence.
+   *
+   * THE MUSTER WAS NOT ON THE LIST AT ALL. It is now the most-written thing in the product --
+   * 1,021 attendance rows and 181 allocations in sixty days, against 125 rainfall and 88 expenses
+   * -- and reaching it meant opening the drawer past a screen of welcome card. The list predates
+   * the muster existing; nobody moved it when the daily job changed.
+   *
+   * Stock drops to More. It carries about 427 movements across all four tenants for all time,
+   * which is not a daily errand, and something had to give for a fixed four.
+   */
+  const priority = isHarvest
+    ? ["home", "attendance", "processing", "accounts", "picking", "rainfall", "inventory"]
+    : ["home", "attendance", "accounts", "rainfall", "inventory", "picking"]
+
+  return priority.filter((t) => availableTabs.includes(t)).slice(0, 4)
 }
 
 // Peak logging hours from HoneyFarm data: Mon 11am-12pm, Fri 5pm, Sat 10am

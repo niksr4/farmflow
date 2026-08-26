@@ -4385,7 +4385,13 @@ export default function InventorySystem() {
           />
         )}
 
-        {showWelcome && (
+        {/*
+          Orientation belongs on the screen you land on, not on top of the work. This renders above
+          the whole tab region, so on a phone it filled the entire first screen of *every* tab --
+          tap Muster and you got "Start by adding your blocks" with the roll pushed below the fold.
+          A writer opening the muster has already been onboarded by whoever gave them the login.
+        */}
+        {showWelcome && (activeTab === "home" || activeTab === DASHBOARD_LAUNCHER_TAB) && (
           <WelcomeCard
             buildWorkspaceHref={buildWorkspaceHref}
             isAdmin={isAdmin}
