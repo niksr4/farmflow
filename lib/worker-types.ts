@@ -10,6 +10,12 @@
  * These are the names HoneyFarm's own payroll uses, which is the point -- an estate should not have
  * to translate its roster into our vocabulary to file it.
  *
+ * The list is expected to grow. These are estates' own words for how someone is engaged, not a
+ * taxonomy we get to close -- Seshagiri arrived with "Staff/PF" alongside "Staff", the same PF
+ * distinction HoneyFarm draws between "Chkroll/PF" and "Casuals". Adding a value is a widened
+ * CHECK and a line here; flattening two categories into one is unrecoverable, because nothing in
+ * the data afterwards says which of them was on provident fund.
+ *
  * `staff` is the one that carries weight. Staff are paid once a month, so they have no daily rate,
  * so the muster cannot cost their day -- which is correct, not a limitation. Their salary is a
  * separate kind of labour cost that the product does not model yet (see the parked
@@ -25,6 +31,7 @@
 
 export const WORKER_TYPES = [
   { value: "staff", label: "Staff — paid monthly", paidDaily: false },
+  { value: "staff_pf", label: "Staff / PF — paid monthly", paidDaily: false },
   { value: "chkroll_pf", label: "Chkroll / PF", paidDaily: true },
   { value: "casuals", label: "Casuals", paidDaily: true },
   { value: "seasonal_assam", label: "Seasonal / Assam", paidDaily: true },
