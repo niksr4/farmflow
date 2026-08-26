@@ -3,7 +3,7 @@
 One page for the things that are easy to lose track of: what each tenant is doing, what is waiting
 on somebody else, and what has already been decided so it does not get re-argued.
 
-**Last reviewed: 2026-08-25.** Anything with a number in it should be re-checked against the DB
+**Last reviewed: 2026-08-26.** Anything with a number in it should be re-checked against the DB
 before you act on it — `node scripts/dev/referential-audit.mjs prod` and the queries in
 `scripts/dev/` are faster than remembering.
 
@@ -13,34 +13,35 @@ before you act on it — `node scripts/dev/referential-audit.mjs prod` and the q
 
 | | Estates / blocks | Store | Muster | Writer | Waiting on |
 |---|---|---|---|---|---|
-| **Medappa** | Citrus Grove 13, Tirtha 8 | one each | **live 19 Aug** | Gagan Rai | nothing. 30 workers, all rated; 5 days recorded unprompted |
-| **Laxmi** | Laxmi, 5 blocks | 1 | **live 25 Aug** | Nandu | nothing blocking. Day 1 recorded 2 of 21 — watch days 2-5 |
-| **HoneyFarm** | Honeyfarm (HF A/C, HF B), Sidapur (MV, PG) | 1 shared | **date not set** | Dad (`KAB123`) | **28 daily rates.** Roster + fingerprint ids loaded 25 Aug |
-| **Seshagiri** | 6 blocks | 1 | **live 24 Aug** | — | **a worker roster.** Cut over but inert until one exists |
+| **Medappa** | Citrus Grove 13, Tirtha 8 | one each | **live 19 Aug** | Gagan Rai | nothing. 30 workers all rated, 150 allocations, 5 of the last 7 days |
+| **Laxmi** | Laxmi, 5 blocks | 1 | **live 25 Aug** | Nandu | nothing. 21 workers all rated, **6 of the last 7 days** — the day-1 worry is closed |
+| **HoneyFarm** | Honeyfarm (HF A/C, HF B), Sidapur (MV, PG) | 1 shared | **live 24 Aug** | Dad (`KAB123`) | nothing. 36 workers, every daily worker rated, 26 allocations |
+| **Seshagiri** | Seshagiri, 20 blocks / 94.1 ac | 1 | **live 24 Aug** | — | nothing technical. 27 workers, all fingerprinted — **has yet to record a day** |
 | greenvalley | — | — | — | — | one login ever, no records. Not a tenant |
 
 `Estate Mock` is the demo tenant, not a customer.
 
 ### What is actually blocking what
 
-Three of four are on the muster. What is left is two rosters, not two cutovers — and neither is
-something we can do for them.
+**All four are cut over, and three are recording.** Nothing is blocked on a customer any more —
+what is left is one tenant who has not started and a pile of our own work.
 
 ```
-HoneyFarm: 28 rates  ──▶ cutover  ──┐
-                                    ├──▶  delete the old labour write path
-Seshagiri: a roster at all  ────────┘
+Seshagiri: records a first day  ──▶  delete the old labour write path
 ```
 
-**HoneyFarm** is the last cutover and the largest legacy set: 1,024 typed rows, Rs 36,54,523, last
-written 22 Aug, so any date from 23 Aug on orphans nothing. Their 28 employees and fingerprint ids
-are loaded; **every one has no daily rate**, and the assignments route refuses to cost a worker
-without one. Cutting over before the rates land means Dad can mark 27 people present and cost none
-of them. Recoverable — allocations can be backfilled — but it is what he would hit first.
+**Seshagiri** is the only open question and it is not a technical one. They have 27 workers, every
+one with a fingerprint id, 20 blocks and 94.1 acres — the first real acreage in the product. They
+have recorded **zero** days. They were blocked on a roster for the two days after their 24 Aug
+cutover, which is on us, and that is now fixed; whether they use it is the thing to watch. Do not
+read the silence as a bug before checking `labour_assignments` — the muster works, nobody has
+opened it.
 
-**Seshagiri** asked to come back on 25 Aug after three months quiet, and is cut over. They have
-**zero workers**, so typed labour is refused and the muster is empty: they currently cannot record
-labour at all. The cutover changed a flag; the roster is what gives them a workflow.
+**No daily worker anywhere is missing a rate.** Six people across HoneyFarm and Seshagiri have no
+`daily_rate` and all six are `staff`, `staff_pf` or `proprietor` — paid monthly, so a daily rate
+would be wrong rather than absent. What they are missing is a **monthly wage**, which is the parked
+`labour_charges` work below, not a data-collection errand. Anything that counts "unrated workers"
+must read `isPaidDaily` first or it will keep reporting a problem that is a correct state.
 
 **Do not tag HoneyFarm's workers with an estate.** All 28 are NULL, which is what lets any of them
 be allocated to a block on either estate. Dad's rule that a Honeyfarm worker never punches at
@@ -50,24 +51,27 @@ Sidapur is an enrolment decision for the scanners; the app neither knows nor nee
 
 ## Owed to people
 
-- **HoneyFarm — 28 daily rates.** The one thing between them and a cutover. Names and fingerprint
-  ids are already in; this is one number each. Ask for gender at the same time (INDICOFS 4.6.2I) —
-  it is not in their SmartHCM export.
-- **Seshagiri — the four lists.** [docs/ESTATE-DATA-REQUEST.md](docs/ESTATE-DATA-REQUEST.md) has
-  them with a paste-ready paragraph at the bottom: workers and rates, block names and planted acres,
-  current stock, and the past year of rainfall. Plus **kg per bag** for their 5 bag items, which is
-  the last thing holding `bags` in the schema.
-- **Seshagiri — what do they open it for?** 30 of the last 30 days logged in, nothing written since
-  18 May. Three months of daily visits with no entries is not disengagement, and whatever they are
-  looking at is probably the thing to build on.
+- **Monthly wages — 6 people.** Bopaiah, Jeeva, Muthu and Sumant C at HoneyFarm; Nuthan and Eashwar
+  at Seshagiri. One number each, and the column (`monthly_wage`, script 141) is already there. This
+  is the input the parked `labour_charges` work needs, so collecting it early costs nothing.
+- **Seshagiri — the remaining lists.** [docs/ESTATE-DATA-REQUEST.md](docs/ESTATE-DATA-REQUEST.md)
+  has them with a paste-ready paragraph at the bottom. Workers and blocks have since **arrived** —
+  27 people with fingerprint ids, 20 blocks with acres. Still open: current stock, the past year of
+  rainfall, and **kg per bag** for their 5 bag items, which is the last thing holding `bags` in the
+  schema.
+- **Seshagiri — what do they open it for?** Daily logins for months with nothing written. Now that
+  the roster and blocks are in, the same question decides whether they start recording or keep
+  reading; whatever they are looking at is probably the thing to build on.
 - **Nandu — the crew shape.** Rs 650 to Rs 1,300 across six codes, with two different shade rates on
   one day. One crew pricing skilled work differently, or several crews? Decides one gang row or four.
 - **HoneyFarm / Laxmi — inventory prices.** Sheets on the Desktop in `farmflow-stabilization/`,
   asking for the **total paid** and the quantity it bought. Laxmi's 8 items are all unpriced, so
   their expense amounts never derive from stock.
-- **Acreage — 0 of 36 real blocks.** Every per-acre figure in the product divides by a number nobody
-  has entered. Cheapest thing on this list to collect: an owner knows their planted acres without
-  looking anything up. Must go to an **admin**; writers cannot set it.
+- **Acreage — 20 of 50 real blocks.** Seshagiri sent all 20 of theirs (94.1 ac), which is the first
+  real acreage in the product and proves the ask works. The other 30 — Medappa 21, Laxmi 5,
+  HoneyFarm 4 — still divide every per-acre figure by a number nobody has entered. Cheapest thing on
+  this list to collect: an owner knows their planted acres without looking anything up. Must go to
+  an **admin**; writers cannot set it.
 
 ---
 
