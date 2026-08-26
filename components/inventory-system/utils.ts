@@ -8,26 +8,34 @@ export const supportsImportTemplate = (dataset: ExportDatasetId): dataset is key
 
 export function parseCustomDateString(dateString: string | undefined | null): Date | null {
   if (!dateString || typeof dateString !== "string") return null
-  const iso = Date.parse(dateString)
-  if (!isNaN(iso)) return new Date(iso)
 
   const parts = dateString.split(" ")
   const dateParts = parts[0].split("/")
-  const timeParts = parts[1] ? parts[1].split(":") : ["00", "00"]
 
-  if (dateParts.length !== 3) return null
+  // Slash-separated dates are always DD/MM/YYYY in this app (matching the sibling
+  // parseTransactionDate in components/ai-analysis-charts.tsx) -- Date.parse's built-in
+  // heuristics read "03/04/2024" as US-style MM/DD/YYYY, which for any day <= 12 succeeds
+  // silently with the wrong date instead of ever reaching the DD/MM parsing below. Slash
+  // strings must be handled here directly and must never be handed to Date.parse first.
+  if (dateParts.length === 3) {
+    const timeParts = parts[1] ? parts[1].split(":") : ["00", "00"]
+    const day = Number.parseInt(dateParts[0], 10)
+    const month = Number.parseInt(dateParts[1], 10) - 1
+    const year = Number.parseInt(dateParts[2], 10)
+    const hour = Number.parseInt(timeParts[0], 10)
+    const minute = Number.parseInt(timeParts[1], 10)
 
-  const day = Number.parseInt(dateParts[0], 10)
-  const month = Number.parseInt(dateParts[1], 10) - 1
-  const year = Number.parseInt(dateParts[2], 10)
-  const hour = Number.parseInt(timeParts[0], 10)
-  const minute = Number.parseInt(timeParts[1], 10)
+    if (isNaN(day) || isNaN(month) || isNaN(year) || isNaN(hour) || isNaN(minute)) {
+      return null
+    }
 
-  if (isNaN(day) || isNaN(month) || isNaN(year) || isNaN(hour) || isNaN(minute)) {
-    return null
+    return new Date(year, month, day, hour, minute)
   }
 
-  return new Date(year, month, day, hour, minute)
+  const iso = Date.parse(dateString)
+  if (!isNaN(iso)) return new Date(iso)
+
+  return null
 }
 
 export const formatDate = (dateString?: string | null) => {

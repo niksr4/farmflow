@@ -2,9 +2,10 @@ import { useEffect, useRef, useState } from "react"
 import posthog from "posthog-js"
 import type { IntelligenceBrief } from "@/components/inventory-system/types"
 import { parseJsonResponse } from "@/components/inventory-system/utils"
+import type { ActivityModule } from "@/lib/activity-contracts"
 
 type ProactiveInsight = { text: string; severity: "good" | "warning" | "info" }
-type RecentActivityEntry = { module: string; label: string; detail: string; date: string }
+type RecentActivityEntry = { module: ActivityModule; label: string; detail: string; date: string }
 
 export type UseHomeInsightsInput = {
   tenantId: string | null | undefined

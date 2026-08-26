@@ -2,9 +2,10 @@
 
 import React from "react"
 import { cn } from "@/lib/utils"
+import type { ActivityModule } from "@/lib/activity-contracts"
 
 type ActivityEntry = {
-  module: string
+  module: ActivityModule
   label: string
   detail: string
   date: string
@@ -16,7 +17,7 @@ type ModuleStyle = {
   icon: React.ReactNode
 }
 
-const MODULE_STYLES: Record<string, ModuleStyle> = {
+const MODULE_STYLES: Record<ActivityModule, ModuleStyle> = {
   processing: {
     bg: "bg-emerald-50", text: "text-emerald-700",
     icon: (
@@ -41,7 +42,7 @@ const MODULE_STYLES: Record<string, ModuleStyle> = {
       </svg>
     ),
   },
-  labour: {
+  labor: {
     bg: "bg-violet-50", text: "text-violet-700",
     icon: (
       <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
