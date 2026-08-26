@@ -116,7 +116,8 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
      * that hid gender behind an add-only field, and it matters more here because headcount
      * multiplies the day's cost.
      *
-     * Only meaningful for a gang. Sending it for an individual is ignored rather than rejected:
+     * Only meaningful for a gang. Sending it for an individual is ignor
+     * ed rather than rejected:
      * the client does not offer the field there, and a stray value should not fail a save that is
      * otherwise fine.
      */

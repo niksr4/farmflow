@@ -158,6 +158,7 @@ import MobileSidebarDrawer from "@/components/inventory-system/mobile-sidebar-dr
 import PreviewModeBanner from "@/components/inventory-system/preview-mode-banner"
 import EstateFilterBanner from "@/components/inventory-system/estate-filter-banner"
 import WelcomeCard from "@/components/inventory-system/welcome-card"
+import { requestDataRefresh } from "@/hooks/use-data-refresh"
 import DataToolsPanel from "@/components/inventory-system/data-tools-panel"
 import WriteQueueCard from "@/components/inventory-system/write-queue-card"
 import PlatformConsoleCard from "@/components/inventory-system/platform-console-card"
@@ -4454,7 +4455,14 @@ export default function InventorySystem() {
             <Button
               variant="default"
               size="sm"
-              onClick={() => { setIsSyncing(true); refreshData(true).finally(() => setIsSyncing(false)) }}
+              /* refreshData only refetches stock. requestDataRefresh is what tells every other
+                 tab -- Costs, the muster, the rest -- that its data is stale; without it "Sync"
+                 refreshed inventory and quietly left everything else showing yesterday. */
+              onClick={() => {
+                setIsSyncing(true)
+                requestDataRefresh()
+                refreshData(true).finally(() => setIsSyncing(false))
+              }}
               disabled={isSyncing}
               className="flex items-center gap-1"
             >

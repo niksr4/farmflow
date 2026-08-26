@@ -36,6 +36,7 @@ import { Skeleton } from "@/components/ui/skeleton"
 import { EmptyState } from "@/components/ui/empty-state"
 import { trackRecordCreated } from "@/lib/track-action"
 import { useSingleFlight } from "@/hooks/use-single-flight"
+import { useDataRefresh } from "@/hooks/use-data-refresh"
 import AttendanceDeviceSettings from "@/components/attendance-device-settings"
 import ActivityCodeReference from "@/components/attendance/activity-code-reference"
 import WorkerAllocation from "@/components/attendance/worker-allocation"
@@ -118,6 +119,7 @@ function getWeekDays(weekOffset: number): Date[] {
 }
 
 export default function AttendanceTab() {
+  const refreshNonce = useDataRefresh()
   const [weekOffset, setWeekOffset] = useState(0)
   const [selectedDate, setSelectedDate] = useState(dateToStr(new Date()))
   const [workers, setWorkers] = useState<AttendanceWorker[]>([])
@@ -230,7 +232,9 @@ export default function AttendanceTab() {
     [],
   )
 
-  useEffect(() => { void loadSnapshot(selectedDate) }, [selectedDate]) // eslint-disable-line react-hooks/exhaustive-deps
+  // refreshNonce is here so the Sync button reloads the roll. Without it, an admin pressing
+  // Sync after a writer marked attendance saw the old day until a full page reload.
+  useEffect(() => { void loadSnapshot(selectedDate) }, [selectedDate, refreshNonce]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Blocks and activity codes change rarely, so they load once rather than per date. scope=all is
   // deliberate on locations: the allocation sheet must offer every block a worker could have been

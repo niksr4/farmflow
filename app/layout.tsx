@@ -14,6 +14,7 @@ import { Toaster } from "@/components/ui/toaster"
 import { Toaster as SonnerToaster } from "sonner"
 import PwaRegister from "@/components/pwa-register"
 import CrashBeacon from "@/components/crash-beacon"
+import ChunkRecovery from "@/components/chunk-recovery"
 import PostHogAuthSync from "@/components/posthog-auth-sync"
 import SentryAuthSync from "@/components/sentry-auth-sync"
 import WebVitals from "@/components/web-vitals"
@@ -134,6 +135,8 @@ gtag('config', 'G-X0RB06WXE9');`}
               <PwaRegister />
               {/* Detects sessions killed by the OS — see lib/crash-beacon.ts */}
               <CrashBeacon />
+              {/* Reloads a tab left holding chunks a later deploy replaced — see lib/chunk-recovery.ts */}
+              <ChunkRecovery />
               {/* Tags Sentry issues with tenant/user so they can be triaged */}
               <SentryAuthSync />
               <Suspense fallback={null}>
