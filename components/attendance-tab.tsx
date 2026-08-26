@@ -36,7 +36,6 @@ import { Skeleton } from "@/components/ui/skeleton"
 import { EmptyState } from "@/components/ui/empty-state"
 import { trackRecordCreated } from "@/lib/track-action"
 import { useSingleFlight } from "@/hooks/use-single-flight"
-import { useDataRefresh } from "@/hooks/use-data-refresh"
 import AttendanceDeviceSettings from "@/components/attendance-device-settings"
 import ActivityCodeReference from "@/components/attendance/activity-code-reference"
 import WorkerAllocation from "@/components/attendance/worker-allocation"
@@ -119,7 +118,6 @@ function getWeekDays(weekOffset: number): Date[] {
 }
 
 export default function AttendanceTab() {
-  const refreshNonce = useDataRefresh()
   const [weekOffset, setWeekOffset] = useState(0)
   const [selectedDate, setSelectedDate] = useState(dateToStr(new Date()))
   const [workers, setWorkers] = useState<AttendanceWorker[]>([])
@@ -131,6 +129,8 @@ export default function AttendanceTab() {
   // is how an estate ends up with a day's labour recorded and no total that moved.
   const musterRecordsLabour = Boolean(assignmentsFrom) && selectedDate >= String(assignmentsFrom)
   const [presentWorkerIds, setPresentWorkerIds] = useState<string[]>([])
+  // What the server last told us, so an unsaved roll is a comparison and not a guess.
+  const [savedPresentWorkerIds, setSavedPresentWorkerIds] = useState<string[]>([])
   const [weeklySummary, setWeeklySummary] = useState<AttendanceSummaryRow[]>([])
   const [presentRecords, setPresentRecords] = useState<AttendanceRecordDetail[]>([])
   const [showDeviceSettings, setShowDeviceSettings] = useState(false)
@@ -221,10 +221,12 @@ export default function AttendanceTab() {
         // assert it. "All present" is one tap away for the common case, which costs a tap and
         // makes the claim someone's rather than the default's.
         setPresentWorkerIds(fetchedPresent)
+        setSavedPresentWorkerIds(fetchedPresent)
       } catch (e: unknown) {
         setError(e instanceof Error ? e.message : "Failed to load")
         setWorkers([])
         setPresentWorkerIds([])
+        setSavedPresentWorkerIds([])
       } finally {
         setLoading(false)
       }
@@ -232,9 +234,38 @@ export default function AttendanceTab() {
     [],
   )
 
-  // refreshNonce is here so the Sync button reloads the roll. Without it, an admin pressing
-  // Sync after a writer marked attendance saw the old day until a full page reload.
-  useEffect(() => { void loadSnapshot(selectedDate) }, [selectedDate, refreshNonce]) // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { void loadSnapshot(selectedDate) }, [selectedDate]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  /**
+   * Warn before a half-taken roll is thrown away.
+   *
+   * Presence is local state until Save, so anything that replaces the document loses it. Sync is
+   * a full reload (see inventory-system.tsx), and it is exactly the button someone presses
+   * mid-muster to check whether the writer's entries have come through -- which is the moment the
+   * loss would happen.
+   *
+   * `beforeunload` rather than a check inside the Sync handler on purpose: registering it here
+   * covers every way the document can go -- Sync, the browser's own reload, closing the tab,
+   * navigating away -- including paths nobody thought to guard. The browser shows its own
+   * confirmation; the returned string is ignored by modern browsers but is still required to
+   * trigger the prompt at all.
+   */
+  const rollIsUnsaved = useMemo(() => {
+    if (presentWorkerIds.length !== savedPresentWorkerIds.length) return true
+    const saved = new Set(savedPresentWorkerIds)
+    return presentWorkerIds.some((id) => !saved.has(id))
+  }, [presentWorkerIds, savedPresentWorkerIds])
+
+  useEffect(() => {
+    if (!rollIsUnsaved) return
+    const warn = (event: BeforeUnloadEvent) => {
+      event.preventDefault()
+      event.returnValue = ""
+      return ""
+    }
+    window.addEventListener("beforeunload", warn)
+    return () => window.removeEventListener("beforeunload", warn)
+  }, [rollIsUnsaved])
 
   // Blocks and activity codes change rarely, so they load once rather than per date. scope=all is
   // deliberate on locations: the allocation sheet must offer every block a worker could have been

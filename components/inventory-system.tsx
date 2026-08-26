@@ -158,7 +158,6 @@ import MobileSidebarDrawer from "@/components/inventory-system/mobile-sidebar-dr
 import PreviewModeBanner from "@/components/inventory-system/preview-mode-banner"
 import EstateFilterBanner from "@/components/inventory-system/estate-filter-banner"
 import WelcomeCard from "@/components/inventory-system/welcome-card"
-import { requestDataRefresh } from "@/hooks/use-data-refresh"
 import DataToolsPanel from "@/components/inventory-system/data-tools-panel"
 import WriteQueueCard from "@/components/inventory-system/write-queue-card"
 import PlatformConsoleCard from "@/components/inventory-system/platform-console-card"
@@ -4455,13 +4454,32 @@ export default function InventorySystem() {
             <Button
               variant="default"
               size="sm"
-              /* refreshData only refetches stock. requestDataRefresh is what tells every other
-                 tab -- Costs, the muster, the rest -- that its data is stale; without it "Sync"
-                 refreshed inventory and quietly left everything else showing yesterday. */
+              /*
+                Sync reloads the document, which is the only implementation of this button whose
+                correctness does not decay.
+
+                It used to call refreshData(), which refetches /api/inventory-neon and
+                /api/transactions-neon -- both stock. Every other tab loads its own data in its own
+                effect, so a button labelled "Sync" refreshed one tab's worth of the app: a writer
+                saved an expense, an admin pressed Sync, and nothing appeared until the page was
+                reloaded by hand.
+
+                The tempting fix is a refresh signal each tab subscribes to. That was tried and
+                reverted: a new tab that forgets to subscribe is stale with no symptom, which is
+                the same silent-wrong-answer class as the bug being fixed, and it has to be got
+                right again every time a tab is added. A reload cannot be partially wired.
+
+                Removing the button instead is not an option -- the manifest sets
+                display: "standalone", so an installed home-screen PWA has no address bar and no
+                reload control. For the phone users this app is built for, this button is the only
+                way to force fresh data.
+
+                A half-taken muster is protected by a beforeunload guard in attendance-tab.tsx,
+                which also covers the browser's own reload and closing the tab.
+              */
               onClick={() => {
                 setIsSyncing(true)
-                requestDataRefresh()
-                refreshData(true).finally(() => setIsSyncing(false))
+                window.location.reload()
               }}
               disabled={isSyncing}
               className="flex items-center gap-1"

@@ -48,7 +48,6 @@ import { useMediaQuery } from "@/hooks/use-media-query"
 import { useTenantSettings } from "@/hooks/use-tenant-settings"
 import FilterBar from "@/components/filter-bar"
 import { useListControls } from "@/hooks/use-list-controls"
-import { useDataRefresh } from "@/hooks/use-data-refresh"
 
 interface AccountActivity {
   code: string
@@ -143,9 +142,6 @@ export default function AccountsPage({
 }: AccountsPageProps) {
   const isMobile = useMediaQuery("(max-width: 768px)")
   const { isAdmin, isOwner, isAdminOrOwner, user } = useAuth()
-  // Bumped by the Sync button. Present in the data effects below so pressing Sync
-  // refetches this tab too -- it previously only refreshed stock.
-  const refreshNonce = useDataRefresh()
   const canManageActivities = isAdmin || isOwner || user?.role === "user"
   const { settings: tenantSettings } = useTenantSettings()
   const {
@@ -271,7 +267,7 @@ export default function AccountsPage({
     }
 
     fetchTotals()
-  }, [fiscalYearEndDate, fiscalYearStartDate, user?.tenantId, refreshNonce])
+  }, [fiscalYearEndDate, fiscalYearStartDate, user?.tenantId])
 
   useEffect(() => {
     if (!user?.tenantId) {
@@ -314,7 +310,7 @@ export default function AccountsPage({
 
     fetchIntelligence()
     return () => controller.abort()
-  }, [fiscalYearEndDate, fiscalYearStartDate, user?.tenantId, refreshNonce])
+  }, [fiscalYearEndDate, fiscalYearStartDate, user?.tenantId])
 
   const fetchAllActivities = async () => {
     try {
