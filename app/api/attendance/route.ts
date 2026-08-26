@@ -71,6 +71,33 @@ export async function GET(request: Request) {
       ? accountsSql` AND (estate IS NULL OR estate = ${activeEstate})`
       : accountsSql``
 
+    /**
+     * The same predicate, reached through the worker, for the queries that read attendance rather
+     * than the roster.
+     *
+     * Scoping the roll alone is what produced the bug this fixes: the list showed Sidapur's eight
+     * people while "Save · 19 present" kept counting all thirty-six, because presentWorkerIds came
+     * from an unscoped read of attendance_records. Everything the screen derives from a day has to
+     * be cut the same way the roll is, or the totals describe a different set of people than the
+     * rows above them.
+     *
+     * An attendance row has no estate of its own -- presence is a fact about a person, not a place
+     * -- so the filter can only ever be "whose worker belongs here", which is exactly what the PUT
+     * delete already does.
+     */
+    const recordEstateClause = activeEstate
+      ? accountsSql` AND worker_id IN (
+          SELECT id FROM attendance_workers
+          WHERE tenant_id = ${tenantContext.tenantId}
+            AND (estate IS NULL OR estate = ${activeEstate})
+        )`
+      : accountsSql``
+
+    /** Same again for the weekly summary, which aliases the worker table. */
+    const weeklyEstateClause = activeEstate
+      ? accountsSql` AND (w.estate IS NULL OR w.estate = ${activeEstate})`
+      : accountsSql``
+
     const [workersRows, presentRows, pickingRows, weeklyRows, deviceRows, estateRows, assignmentRows] = await runTenantQueries(accountsSql, tenantContext, [
       accountsSql`
         SELECT id, full_name, daily_rate, device_user_code, location_id, created_at,
@@ -89,6 +116,7 @@ export async function GET(request: Request) {
         FROM attendance_records
         WHERE tenant_id = ${tenantContext.tenantId}
           AND attendance_date = ${date}
+          ${recordEstateClause}
       `,
       // Workers who were paid by weight today. Picking is piece-rate labour and lives in its own
       // table; a day-rate allocation for the same worker on the same day is a second pay basis
@@ -99,6 +127,7 @@ export async function GET(request: Request) {
         FROM picking_records
         WHERE tenant_id = ${tenantContext.tenantId}
           AND pick_date = ${date}
+          ${recordEstateClause}
       `,
       accountsSql`
         SELECT
@@ -112,6 +141,7 @@ export async function GET(request: Request) {
          AND ar.attendance_date BETWEEN ${startDate} AND ${endDate}
         WHERE w.tenant_id = ${tenantContext.tenantId}
           AND w.active = TRUE
+          ${weeklyEstateClause}
         GROUP BY w.id, w.full_name, w.created_at
         ORDER BY LOWER(w.full_name), w.created_at ASC
       `,

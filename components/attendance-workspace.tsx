@@ -18,6 +18,8 @@ type AttendanceSection = "attendance" | "workers" | "ledger" | "payroll" | "repo
 
 type AttendanceWorkspaceProps = {
   showLaborManagement?: boolean
+  /** Passed down rather than read from the cookie -- see loadSnapshot in attendance-tab.tsx. */
+  selectedEstate?: string | null
 }
 
 const SECTION_COLORS: Record<AttendanceSection, string> = {
@@ -28,7 +30,7 @@ const SECTION_COLORS: Record<AttendanceSection, string> = {
   report: "bg-slate-700 border-slate-700 text-white",
 }
 
-export default function AttendanceWorkspace({ showLaborManagement = false }: AttendanceWorkspaceProps) {
+export default function AttendanceWorkspace({ showLaborManagement = false, selectedEstate = null }: AttendanceWorkspaceProps) {
   const [activeSection, setActiveSection] = useState<AttendanceSection>("attendance")
 
   const navItems: Array<{ value: AttendanceSection; label: string; icon: React.ComponentType<{ className?: string }> }> = [
@@ -74,7 +76,7 @@ export default function AttendanceWorkspace({ showLaborManagement = false }: Att
         </div>
       )}
 
-      {activeSection === "attendance" && <AttendanceTab />}
+      {activeSection === "attendance" && <AttendanceTab selectedEstate={selectedEstate} />}
       {showLaborManagement && activeSection === "workers" && (
         <div className="px-3 sm:px-0">
           <WorkerProfilesTab />

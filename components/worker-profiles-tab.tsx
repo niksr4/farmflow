@@ -226,6 +226,7 @@ export default function WorkerProfilesTab() {
           headcount: form.kind === "gang" ? Number(form.headcount) : undefined,
           workerType: form.workerType || null,
           dailyRate: form.dailyRate ? Number(form.dailyRate) : null,
+          monthlyWage: form.monthlyWage ? Number(form.monthlyWage) : null,
           gender: form.gender || null,
           estate: form.estate === UNASSIGNED_ESTATE ? null : form.estate,
           phone: form.phone.trim() || null,
@@ -554,19 +555,47 @@ export default function WorkerProfilesTab() {
                   the work overrides it for jobs that pay differently, and an amount typed on a
                   deployment overrides both for a day that was unusual. Most days fall through to
                   this one, which is how most estates actually pay. */}
-              <div className="space-y-1.5">
-                <FieldLabel
-                  label="Daily wage (₹)"
-                  tooltip="What this worker normally earns for a day. For a contract crew this is the rate PER PERSON — the day's cost is this times the headcount. Work that pays differently can carry its own rate under Costs, and a one-off amount can be typed on the deployment itself; both override this."
-                />
-                <Input
-                  type="number" inputMode="decimal"
-                  min={0}
-                  value={numericInputValue(form.dailyRate)}
-                  onChange={(e) => setForm((f) => ({ ...f, dailyRate: e.target.value }))}
-                  placeholder="500"
-                />
-              </div>
+              {/*
+                The pay field follows the kind of worker, because they are mutually exclusive --
+                the database rejects a row carrying both (scripts/141, one_pay_basis), and a worker
+                with a salary AND a day rate would be costed twice: once by the muster, once by the
+                monthly charge.
+
+                Staff and proprietors used to get the daily-rate box like everyone else, so the only
+                honest thing to do with a salaried worker was leave it blank -- which then listed
+                them under "needs a rate" forever. There was nowhere at all to type a salary on this
+                form; the field existed only in the bulk-edit table, which is not where anyone looks
+                when adding one person.
+              */}
+              {isPaidDaily(form.workerType) ? (
+                <div className="space-y-1.5">
+                  <FieldLabel
+                    label="Daily wage (₹)"
+                    tooltip="What this worker normally earns for a day. For a contract crew this is the rate PER PERSON — the day's cost is this times the headcount. Work that pays differently can carry its own rate under Costs, and a one-off amount can be typed on the deployment itself; both override this."
+                  />
+                  <Input
+                    type="number" inputMode="decimal"
+                    min={0}
+                    value={numericInputValue(form.dailyRate)}
+                    onChange={(e) => setForm((f) => ({ ...f, dailyRate: e.target.value, monthlyWage: "" }))}
+                    placeholder="500"
+                  />
+                </div>
+              ) : (
+                <div className="space-y-1.5">
+                  <FieldLabel
+                    label="Monthly salary (₹)"
+                    tooltip="What this worker is paid each month, regardless of days worked. Staff are paid the same whether they work eighteen days or twenty-four, so they have no daily rate and the muster does not cost their day — marking them present is still worth doing, it just records attendance rather than a wage."
+                  />
+                  <Input
+                    type="number" inputMode="decimal"
+                    min={0}
+                    value={numericInputValue(form.monthlyWage)}
+                    onChange={(e) => setForm((f) => ({ ...f, monthlyWage: e.target.value, dailyRate: "" }))}
+                    placeholder="16000"
+                  />
+                </div>
+              )}
               {showEstateField && (
                 <div className="space-y-1.5">
                   <FieldLabel
@@ -786,7 +815,24 @@ export default function WorkerProfilesTab() {
                               </SelectContent>
                             </Select>
                           )}
-                          <Input value={editForm.dailyRate} onChange={(e) => setEditForm((f) => ({ ...f, dailyRate: e.target.value }))} placeholder={w.kind === "gang" ? "Daily rate per person" : "Daily rate"} inputMode="decimal" />
+                          {/* Same exclusivity as the add form: the pay field follows the type. */}
+                          {isPaidDaily(editForm.workerType) ? (
+                            <Input
+                              value={editForm.dailyRate}
+                              onChange={(e) => setEditForm((f) => ({ ...f, dailyRate: e.target.value, monthlyWage: "" }))}
+                              placeholder={w.kind === "gang" ? "Daily rate per person" : "Daily rate"}
+                              inputMode="decimal"
+                              aria-label={`Daily rate for ${w.name}`}
+                            />
+                          ) : (
+                            <Input
+                              value={editForm.monthlyWage}
+                              onChange={(e) => setEditForm((f) => ({ ...f, monthlyWage: e.target.value, dailyRate: "" }))}
+                              placeholder="Monthly salary"
+                              inputMode="decimal"
+                              aria-label={`Monthly salary for ${w.name}`}
+                            />
+                          )}
                           {/* A crew's size changes between jobs -- 8 in June, 12 in October -- and
                               it was settable at creation and never again. Headcount multiplies the
                               day's cost, so a stale one is not a cosmetic error. */}

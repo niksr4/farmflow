@@ -5163,7 +5163,7 @@ export default function InventorySystem() {
 
           {canShowAttendance && (
             <TabsContent value="attendance" className="space-y-6" forceMount={isTabLoaded("attendance") ? true : undefined}>
-              <AttendanceWorkspace key={estateRemountKey} showLaborManagement={canShowLaborManagement} />
+              <AttendanceWorkspace key={estateRemountKey} showLaborManagement={canShowLaborManagement} selectedEstate={selectedEstate} />
             </TabsContent>
           )}
 

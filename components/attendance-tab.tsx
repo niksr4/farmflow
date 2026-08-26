@@ -11,7 +11,7 @@
  *  - One big save button, always visible at the bottom.
  */
 
-import { useCallback, useEffect, useMemo, useState } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { addDays, format, isToday, isFuture, startOfWeek } from "date-fns"
 import {
   Check,
@@ -121,7 +121,20 @@ function getWeekDays(weekOffset: number): Date[] {
   return Array.from({ length: 7 }, (_, i) => addDays(start, i))
 }
 
-export default function AttendanceTab() {
+type AttendanceTabProps = {
+  /**
+   * The estate the workspace header is currently showing, or null for "All estates".
+   *
+   * Passed in rather than left to the SELECTED_ESTATE_COOKIE. The cookie is written by an effect
+   * in the parent (inventory-system.tsx) while this component's own load effect runs on remount --
+   * and child effects run before parent effects in the same commit, so the fetch could go out
+   * carrying the previous estate's cookie. Sending it in the URL means the request states which
+   * estate it is for, and cannot disagree with the screen that asked for it.
+   */
+  selectedEstate?: string | null
+}
+
+export default function AttendanceTab({ selectedEstate = null }: AttendanceTabProps) {
   const [weekOffset, setWeekOffset] = useState(0)
   const [selectedDate, setSelectedDate] = useState(dateToStr(new Date()))
   const [workers, setWorkers] = useState<AttendanceWorker[]>([])
@@ -135,6 +148,21 @@ export default function AttendanceTab() {
   const [presentWorkerIds, setPresentWorkerIds] = useState<string[]>([])
   // What the server last told us, so an unsaved roll is a comparison and not a guess.
   const [savedPresentWorkerIds, setSavedPresentWorkerIds] = useState<string[]>([])
+  /** Monotonic id of the newest in-flight load; older responses are discarded. */
+  const loadSequenceRef = useRef(0)
+  /**
+   * The estate, as a query string, for every request this component makes.
+   *
+   * THE SAVE MUST NAME THE SAME ESTATE THE ROLL DID. PUT deletes attendance for anyone on the
+   * scoped roll who is not in presentWorkerIds; if the roll was built for Sidapur and the save
+   * resolves to Honeyfarm, that delete cuts a set the user never saw. Reading the estate from the
+   * cookie on one and the URL on the other is exactly how those two drift apart, so both read
+   * this.
+   */
+  const estateQuery = useMemo(
+    () => (selectedEstate ? `?estate=${encodeURIComponent(selectedEstate)}` : "?scope=all"),
+    [selectedEstate],
+  )
   const [weeklySummary, setWeeklySummary] = useState<AttendanceSummaryRow[]>([])
   const [presentRecords, setPresentRecords] = useState<AttendanceRecordDetail[]>([])
   const [showDeviceSettings, setShowDeviceSettings] = useState(false)
@@ -221,12 +249,24 @@ export default function AttendanceTab() {
   }, [weekOffset])
 
   const loadSnapshot = useCallback(
-    async (date: string) => {
+    async (date: string, estate: string | null) => {
+      // Out-of-order responses were the other half of this bug. Two loads can be in flight at once
+      // -- switch estate while the previous fetch is still running -- and whichever resolved last
+      // won, which is why the wrong roster appeared at random rather than consistently. The
+      // sequence number means only the newest request is allowed to write state.
+      const requestId = ++loadSequenceRef.current
       setLoading(true)
       try {
-        const res = await fetch(`/api/attendance?date=${date}`, { cache: "no-store" })
+        // ?scope=all is the explicit "every estate" signal; an empty ?estate= deliberately falls
+        // back to the cookie in resolveActiveEstate, which is exactly what must not happen here.
+        const scope = estate ? `&estate=${encodeURIComponent(estate)}` : "&scope=all"
+        const res = await fetch(`/api/attendance?date=${date}${scope}`, { cache: "no-store" })  // eslint-disable-line
         const data = await res.json().catch(() => ({}))
         if (!res.ok || !data?.success) throw new Error(data?.error || "Failed to load")
+
+        // A superseded response must not paint. Returning here rather than at the top of the
+        // state writes also leaves `loading` alone -- the newer request owns it.
+        if (requestId !== loadSequenceRef.current) return
 
         const fetchedWorkers: AttendanceWorker[] = Array.isArray(data.workers) ? data.workers : []
         const fetchedPresent: string[] = Array.isArray(data.presentWorkerIds) ? data.presentWorkerIds : []
@@ -255,18 +295,20 @@ export default function AttendanceTab() {
         setPresentWorkerIds(fetchedPresent)
         setSavedPresentWorkerIds(fetchedPresent)
       } catch (e: unknown) {
+        // A stale failure must not blank a roll the newer request already filled.
+        if (requestId !== loadSequenceRef.current) return
         setError(e instanceof Error ? e.message : "Failed to load")
         setWorkers([])
         setPresentWorkerIds([])
         setSavedPresentWorkerIds([])
       } finally {
-        setLoading(false)
+        if (requestId === loadSequenceRef.current) setLoading(false)
       }
     },
     [],
   )
 
-  useEffect(() => { void loadSnapshot(selectedDate) }, [selectedDate]) // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { void loadSnapshot(selectedDate, selectedEstate) }, [selectedDate, selectedEstate]) // eslint-disable-line react-hooks/exhaustive-deps
 
   /**
    * Warn before a half-taken roll is thrown away.
@@ -346,7 +388,7 @@ export default function AttendanceTab() {
       // Presence is staged locally until Save, but the server will not accept work for anyone it
       // cannot see on the muster. Persist the roll first so ticking someone present and setting
       // their work in one motion behaves the way it reads.
-      const presence = await fetch("/api/attendance", {
+      const presence = await fetch(`/api/attendance${estateQuery}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ date: selectedDate, presentWorkerIds }),
@@ -371,7 +413,7 @@ export default function AttendanceTab() {
           })
       const data = await res.json().catch(() => ({}))
       if (!res.ok || !data?.success) throw new Error(data?.error || "Could not save the work")
-      await loadSnapshot(selectedDate)
+      await loadSnapshot(selectedDate, selectedEstate)
       return true
     } catch (e: unknown) {
       toast.error(e instanceof Error ? e.message : "Could not save the work")
@@ -468,7 +510,7 @@ export default function AttendanceTab() {
   const handleSaveUnguarded = async () => {
     setIsSaving(true)
     try {
-      const res = await fetch("/api/attendance", {
+      const res = await fetch(`/api/attendance${estateQuery}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ date: selectedDate, presentWorkerIds }),
@@ -477,7 +519,7 @@ export default function AttendanceTab() {
       if (!res.ok || !data?.success) throw new Error(data?.error || "Failed to save")
       trackRecordCreated("attendance", { present_count: presentCount, date: selectedDate })
       toast.success(`Saved — ${presentCount} present`)
-      await loadSnapshot(selectedDate)
+      await loadSnapshot(selectedDate, selectedEstate)
     } catch (e: unknown) {
       toast.error(e instanceof Error ? e.message : "Failed to save")
     } finally {
@@ -563,7 +605,7 @@ export default function AttendanceTab() {
       // Reloading used to have to clear the auto-tick flag so a newly added worker would also get
       // pre-ticked. Nothing is pre-ticked now, so a new worker simply appears, absent, like
       // everyone else -- which is the honest state for someone the roll has not been taken for.
-      await loadSnapshot(selectedDate)
+      await loadSnapshot(selectedDate, selectedEstate)
     } catch (e: unknown) {
       toast.error(e instanceof Error ? e.message : "Failed to add")
     } finally {

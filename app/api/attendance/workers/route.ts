@@ -82,6 +82,31 @@ export async function POST(request: Request) {
       : null
     const dailyRate = body?.dailyRate != null && !Number.isNaN(Number(body.dailyRate)) ? Number(body.dailyRate) : null
 
+    /**
+     * A salaried worker's pay, which a day rate cannot express.
+     *
+     * Accepted on create, not only on edit. It was PATCH-only, so the only way to record a staff
+     * member's salary was to add them with no pay at all and then go back and edit -- and every
+     * such worker sat in the roster's "needs a rate" list in between, which is where real numbers
+     * get lost.
+     *
+     * The two are mutually exclusive, and the database says so as well (scripts/141,
+     * attendance_workers_one_pay_basis). Rejected here rather than at the constraint so the caller
+     * gets a sentence instead of a Postgres error, and because a worker carrying both would have
+     * their day costed twice over -- once by the muster, once by the monthly charge.
+     */
+    const monthlyWage =
+      body?.monthlyWage != null && !Number.isNaN(Number(body.monthlyWage)) ? Number(body.monthlyWage) : null
+    if (monthlyWage !== null && monthlyWage <= 0) {
+      return NextResponse.json({ success: false, error: "A monthly wage must be more than zero" }, { status: 400 })
+    }
+    if (monthlyWage !== null && dailyRate) {
+      return NextResponse.json(
+        { success: false, error: "A worker is paid either a daily rate or a monthly wage, not both" },
+        { status: 400 },
+      )
+    }
+
     // Estate is what the roster filters on; location_id stays accepted for the transition.
     const estate = await validateEstateForTenant(accountsSql, tenantContext, body?.estate ? String(body.estate) : null)
     if (body?.estate && estate === null) {
@@ -117,6 +142,7 @@ export async function POST(request: Request) {
           full_name,
           worker_type,
           daily_rate,
+          monthly_wage,
           gender,
           kind,
           headcount,
@@ -133,6 +159,7 @@ export async function POST(request: Request) {
           ${name},
           ${workerType},
           ${dailyRate},
+          ${monthlyWage},
           ${gender},
           ${kind},
           ${headcount},
@@ -144,7 +171,7 @@ export async function POST(request: Request) {
           ${bankAccount},
           ${bankIfsc}
         )
-        RETURNING id, full_name, worker_type, daily_rate, gender, kind, headcount, location_id, estate,
+        RETURNING id, full_name, worker_type, daily_rate, monthly_wage, gender, kind, headcount, location_id, estate,
                   device_user_code, phone, bank_name, bank_account, bank_ifsc, created_at
       `,
     )
@@ -176,6 +203,7 @@ export async function POST(request: Request) {
             name: String(worker.full_name || ""),
             workerType: worker.worker_type ? String(worker.worker_type) : null,
             dailyRate: worker.daily_rate != null ? Number(worker.daily_rate) : null,
+            monthlyWage: worker.monthly_wage != null ? Number(worker.monthly_wage) : null,
             gender: worker.gender ? String(worker.gender) : null,
             kind: worker.kind ? String(worker.kind) : "individual",
             headcount: worker.headcount != null ? Number(worker.headcount) : null,

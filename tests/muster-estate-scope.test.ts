@@ -33,6 +33,37 @@ describe("the roll is scoped", () => {
   })
 })
 
+/**
+ * Reported 2026-08-26 and the reason this block exists: the roll showed Sidapur's eight people
+ * while "Save · 19 present" kept counting all thirty-six. Only the workers query carried the
+ * estate clause; everything the screen derives from the day -- presence, picking, the weekly
+ * summary -- read the whole tenant. The totals described a different set of people than the rows
+ * above them.
+ */
+describe("everything the day derives is cut the same way the roll is", () => {
+  it("scopes the presence read, which is where the save-bar count comes from", () => {
+    const q = route.slice(route.indexOf("FROM attendance_records"), route.indexOf("FROM picking_records"))
+    expect(q).toContain("${recordEstateClause}")
+  })
+
+  it("scopes picking the same way", () => {
+    const q = route.slice(route.indexOf("FROM picking_records"))
+    expect(q.slice(0, 400)).toContain("${recordEstateClause}")
+  })
+
+  it("scopes the weekly summary, which aliases the worker table", () => {
+    expect(route).toContain("const weeklyEstateClause = activeEstate")
+    const q = route.slice(route.indexOf("COUNT(ar.id)::int"), route.indexOf("GROUP BY w.id"))
+    expect(q).toContain("${weeklyEstateClause}")
+  })
+
+  it("reaches the estate through the worker, since attendance has no estate of its own", () => {
+    const clause = route.slice(route.indexOf("const recordEstateClause"), route.indexOf("const weeklyEstateClause"))
+    expect(clause).toContain("FROM attendance_workers")
+    expect(clause).toContain("(estate IS NULL OR estate = ${activeEstate})")
+  })
+})
+
 describe("the delete is scoped in lockstep, or attendance disappears", () => {
   it("the delete clause is not empty", () => {
     expect(route).not.toContain("const estateWorkerScopeClause = accountsSql``\n")
