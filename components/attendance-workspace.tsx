@@ -1,19 +1,20 @@
 "use client"
 
 import { useState } from "react"
-import { Check, Users, BookOpen, IndianRupee } from "lucide-react"
+import { Check, Users, BookOpen, IndianRupee, CalendarRange } from "lucide-react"
 import { cn } from "@/lib/utils"
 import AttendanceTab from "./attendance-tab"
 import WorkerProfilesTab from "./worker-profiles-tab"
 import WorkerLedgerTab from "./worker-ledger-tab"
 import PayrollSummaryTab from "./payroll-summary-tab"
+import AttendanceReportTab from "./attendance-report-tab"
 
 // TEMPORARY: Ledger crashes for some tenants in production — taken offline until
 // the underlying issue is fixed. Keep in sync with the equivalent flag that used
 // to live in accounts-page.tsx before Workers/Ledger/Payroll moved here.
 const LEDGER_TAB_DISABLED = true
 
-type AttendanceSection = "attendance" | "workers" | "ledger" | "payroll"
+type AttendanceSection = "attendance" | "workers" | "ledger" | "payroll" | "report"
 
 type AttendanceWorkspaceProps = {
   showLaborManagement?: boolean
@@ -24,6 +25,7 @@ const SECTION_COLORS: Record<AttendanceSection, string> = {
   workers: "bg-cyan-600 border-cyan-600 text-white",
   ledger: "bg-indigo-600 border-indigo-600 text-white",
   payroll: "bg-purple-600 border-purple-600 text-white",
+  report: "bg-slate-700 border-slate-700 text-white",
 }
 
 export default function AttendanceWorkspace({ showLaborManagement = false }: AttendanceWorkspaceProps) {
@@ -36,6 +38,9 @@ export default function AttendanceWorkspace({ showLaborManagement = false }: Att
           { value: "workers" as AttendanceSection, label: "Workers", icon: Users },
           ...(!LEDGER_TAB_DISABLED ? [{ value: "ledger" as AttendanceSection, label: "Ledger", icon: BookOpen }] : []),
           { value: "payroll" as AttendanceSection, label: "Payroll", icon: IndianRupee },
+          // Sits beside Payroll because it answers the same shape of question over the same
+          // period -- who was here, for how long -- and is what gets checked when a wage is queried.
+          { value: "report" as AttendanceSection, label: "Attendance", icon: CalendarRange },
         ]
       : []),
   ]
@@ -83,6 +88,12 @@ export default function AttendanceWorkspace({ showLaborManagement = false }: Att
       {showLaborManagement && activeSection === "payroll" && (
         <div className="px-3 sm:px-0">
           <PayrollSummaryTab />
+        </div>
+      )}
+
+      {showLaborManagement && activeSection === "report" && (
+        <div className="px-3 sm:px-0">
+          <AttendanceReportTab />
         </div>
       )}
     </div>
