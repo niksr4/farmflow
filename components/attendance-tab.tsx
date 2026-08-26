@@ -36,6 +36,7 @@ import { Skeleton } from "@/components/ui/skeleton"
 import { EmptyState } from "@/components/ui/empty-state"
 import { trackRecordCreated } from "@/lib/track-action"
 import { useSingleFlight } from "@/hooks/use-single-flight"
+import { isPaidDaily } from "@/lib/worker-types"
 import AttendanceDeviceSettings from "@/components/attendance-device-settings"
 import ActivityCodeReference from "@/components/attendance/activity-code-reference"
 import WorkerAllocation from "@/components/attendance/worker-allocation"
@@ -49,6 +50,9 @@ type AttendanceWorker = {
   kind?: "individual" | "gang"
   headcount?: number | null
   estate?: string | null
+  /** How they are paid. The route has always sent this; nothing read it until the "No work set"
+      count needed to know who a day's work is even expected from. */
+  workerType?: string | null
 }
 /** One row per job, so a worker who split their day appears more than once. */
 type LabourAssignment = {
@@ -179,6 +183,34 @@ export default function AttendanceTab() {
   const [batchIds, setBatchIds] = useState<string[]>([])
   const batchSet = useMemo(() => new Set(batchIds), [batchIds])
   const exitBatch = useCallback(() => { setBatchMode(false); setBatchIds([]) }, [])
+
+  /**
+   * The only way a row opens the allocation sheet.
+   *
+   * In batch mode it selects the worker instead. Batch mode exists because the same job is being
+   * given to several people at once; opening a one-person sheet from inside it abandons the
+   * selection silently -- you tap "Set work" on the third of six people you had picked, fill the
+   * sheet in, and the other five were never given anything. That is what the row-level buttons
+   * did, because each called setAllocatingWorkerId directly and none of them knew about batch
+   * mode.
+   *
+   * Routed through one function rather than a `batchMode &&` at each call site: there were three
+   * such sites (the work cell, an existing job's label, "Another job"), and a rule written three
+   * times is a rule enforced twice.
+   */
+  const openAllocation = useCallback(
+    (workerId: string, assignment: LabourAssignment | null) => {
+      if (batchMode) {
+        setBatchIds((cur) =>
+          cur.includes(workerId) ? cur.filter((id) => id !== workerId) : [...cur, workerId],
+        )
+        return
+      }
+      setEditingAssignment(assignment)
+      setAllocatingWorkerId(workerId)
+    },
+    [batchMode],
+  )
   const [editingAssignment, setEditingAssignment] = useState<LabourAssignment | null>(null)
 
   const weekDays = useMemo(() => getWeekDays(weekOffset), [weekOffset])
@@ -377,10 +409,26 @@ export default function AttendanceTab() {
   // shown -- an estate that only takes attendance should not be told daily that its labour cost
   // nothing and that four people are unaccounted for.
   const allocatesWork = assignments.length > 0
+  /**
+   * Present, but nothing recorded for them to have done -- for the people a day's work is
+   * actually expected from.
+   *
+   * Monthly staff are excluded, and that is the point. A staff member or proprietor is paid the
+   * same whether or not a job is booked against their name, so they have no daily rate and the
+   * muster cannot cost their day. Counting them here produced an amber "No work set" that could
+   * never be cleared: the only way to clear it would be to invent an allocation for someone whose
+   * pay does not work that way. A warning that cannot be acted on trains people to ignore the
+   * warning, which is worse than not having one -- and it is the same amber that means something
+   * real when a daily worker has been forgotten.
+   *
+   * isPaidDaily is the shared predicate (lib/worker-types.ts), so this cannot drift from the
+   * roster's own idea of who earns a daily wage.
+   */
   const unallocatedCount = useMemo(() => {
     const withWork = new Set(assignments.map((a) => a.workerId))
-    return presentWorkerIds.filter((id) => !withWork.has(id)).length
-  }, [assignments, presentWorkerIds])
+    const paidDailyById = new Map(workers.map((w) => [w.id, isPaidDaily(w.workerType)]))
+    return presentWorkerIds.filter((id) => !withWork.has(id) && (paidDailyById.get(id) ?? true)).length
+  }, [assignments, presentWorkerIds, workers])
   const noRateWorkers = workers.filter((w) => w.dailyRate === null)
   // Only meaningful on a multi-estate tenant: an unassigned worker appears under every estate,
   // so the estate selector silently has no effect on the roster and nothing says why.
@@ -865,8 +913,7 @@ export default function AttendanceTab() {
                             aria-label={`Edit ${a.activityName || a.activityCode}`}
                             onClick={(event) => {
                               event.stopPropagation()
-                              setEditingAssignment(a)
-                              setAllocatingWorkerId(worker.id)
+                              openAllocation(worker.id, a)
                             }}
                             className="block w-full truncate text-left text-[11px] font-bold leading-tight text-stone-700 underline decoration-dotted decoration-stone-300 underline-offset-2 dark:text-stone-200"
                           >
@@ -880,14 +927,14 @@ export default function AttendanceTab() {
                             <span className="sm:hidden"> · {a.dayFraction}d · ₹{a.totalCost.toLocaleString("en-IN")}</span>
                           </p>
                         </>
-                      ) : isPresent && activities.length > 0 && musterRecordsLabour ? (
+                      ) : isPresent && activities.length > 0 && musterRecordsLabour && !batchMode ? (
                         // In the Work column, not in a band underneath it: this is the cell that
                         // is about to hold the answer, and it is the one tap the day needs. Full
                         // cell width and 32px tall, because the previous 113x22 target was not
                         // something to hit with dirty hands.
                         <button
                           type="button"
-                          onClick={(event) => { event.stopPropagation(); setEditingAssignment(null); setAllocatingWorkerId(worker.id) }}
+                          onClick={(event) => { event.stopPropagation(); openAllocation(worker.id, null) }}
                           className="flex h-8 w-full items-center justify-center gap-1 rounded-lg border border-dashed border-emerald-300 text-[11px] font-bold text-emerald-700 touch-manipulation active:bg-emerald-100 dark:border-emerald-500/40 dark:text-emerald-400"
                         >
                           <Plus className="h-3 w-3" /> Set work
@@ -966,14 +1013,14 @@ export default function AttendanceTab() {
 
                 {/* A second job is the exception, so it is offered once beneath a worker who
                     already has one rather than advertised on every row of the roll. */}
-                {isPresent && rows.length > 0 && activities.length > 0 && allocatingWorkerId !== worker.id && (
+                {isPresent && rows.length > 0 && activities.length > 0 && allocatingWorkerId !== worker.id && !batchMode && (
                   <div className={cn(MUSTER_GRID, "px-2 pb-1 sm:px-3")}>
                     <span />
                     {/* Spans work and block: the label will not fit in a 68px column on a phone,
                         and a wrapped two-line "Another job" reads as a rendering fault. */}
                     <button
                       type="button"
-                      onClick={(event) => { event.stopPropagation(); setEditingAssignment(null); setAllocatingWorkerId(worker.id) }}
+                      onClick={(event) => { event.stopPropagation(); openAllocation(worker.id, null) }}
                       className="col-span-2 flex h-7 w-full items-center justify-center gap-1 whitespace-nowrap rounded-lg text-[10px] font-bold text-stone-400 touch-manipulation active:bg-stone-100 dark:active:bg-white/[0.06]"
                     >
                       <Plus className="h-3 w-3" /> Another job
