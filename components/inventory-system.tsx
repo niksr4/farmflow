@@ -90,6 +90,7 @@ import { getCurrentFiscalYear } from "@/lib/fiscal-year-utils"
 import { getCurrentEstatePhase } from "@/lib/coffee-estate-calendar"
 import { normalizeInventoryItemType } from "@/lib/inventory-item-type"
 import { isRestockType, projectSlotBalance, requiresRestockUnitPrice } from "@/lib/inventory-edit-rules"
+import { checkRestockCost } from "@/lib/price-sanity"
 import { ASSISTANT_PROMPT_EVENT, type AssistantPromptEventDetail } from "@/lib/assistant-events"
 import { getModuleDefaultEnabled } from "@/lib/modules"
 import { appendOwnerPreviewContext, normalizeOwnerPreviewContext } from "@/lib/owner-preview"
@@ -454,6 +455,13 @@ export default function InventorySystem() {
   const [transactionLocationId, setTransactionLocationId] = useState<string>(LOCATION_UNASSIGNED)
   const [inventoryEditLocationId, setInventoryEditLocationId] = useState<string>(LOCATION_UNASSIGNED)
   const [loading, setLoading] = useState(false)
+  /**
+   * Which restock the cost warning has already been shown for.
+   *
+   * Keyed on the entry itself, not a boolean: dismissing the warning for one item must not silence
+   * it for the next, which is what a plain "already warned" flag would do.
+   */
+  const costWarningAcceptedRef = useRef<string | null>(null)
   const [isSyncing, setIsSyncing] = useState(false)
   const [syncError, setSyncError] = useState<string | null>(null)
   const [lastSync, setLastSync] = useState<Date | null>(null)
@@ -2290,6 +2298,33 @@ export default function InventorySystem() {
       })
       return
     }
+    /**
+     * Does the amount make sense against what this item has always cost?
+     *
+     * Warns once and lets the next submit through, because the estate may well be right -- a bulk
+     * buy, a bad year, a different supplier. What it stops is the silent case: since 2026-08-24
+     * this box wants the invoice TOTAL, and someone typing the per-unit rate they are used to
+     * values fifty bags at the price of one. That understates the books rather than inflating
+     * them, so nothing looks wrong until a depletion books almost nothing.
+     */
+    const costWarningKey = `${tx.item_type}|${normalizedQty}|${tx.price}`
+    if (String(tx.transaction_type).toLowerCase().includes("restock")) {
+      // InventoryItem.name is the item type; there is no item_type field on it.
+      const usual = inventory.find(
+        (item) => normalizeInventoryItemType(item.name) === normalizeInventoryItemType(tx.item_type),
+      )?.avg_price
+      const verdict = checkRestockCost(Number(tx.price) || 0, normalizedQty, Number(usual) || null, tx.unit || "unit")
+      if (verdict.level === "warn" && costWarningAcceptedRef.current !== costWarningKey) {
+        costWarningAcceptedRef.current = costWarningKey
+        toast({
+          title: verdict.direction === "low" ? "That looks too cheap" : "That looks too dear",
+          description: `${verdict.message} Submit again to record it as entered.`,
+          variant: "destructive",
+        })
+        return
+      }
+    }
+
     tx.quantity = normalizedQty
     const normalizedTransactionDate = buildTransactionDateFromInput(transactionDateToInputValue(tx.transaction_date))
     if (!normalizedTransactionDate) {
