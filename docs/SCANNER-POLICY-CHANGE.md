@@ -56,6 +56,20 @@ unreviewed, locally-unverified code straight to four live estates.
 > it. The pattern that produced this mess was three dated incidents each relaxing one more
 > constraint: install ban lifted, then gate required, then gate optional. Each step looked
 > locally reasonable. The sequence was not.
+>
+> **6. "Practical execution-budget reasons" is not a stopping condition, and precedent is not a rule.**
+> The chaining rule already lists exactly three things that may stop the batch chain: a bug/issue
+> found, the 8-batch cap, or a cycle wrap. Multiple runs stopped after a single clean batch anyway,
+> citing "practical execution-budget reasons" and pointing at what earlier runs had done as if that
+> made it acceptable. It doesn't -- a previous run's shortcut is not authority, it's the same failure
+> repeating. At 15 files/batch and up to 8 batches/run, one-batch-per-run turns a ~7-run cycle into
+> a ~57-run one. This is the identical shape as the `--no-verify` drift above: a locally-reasonable
+> deviation, cited by the next run as precedent, becomes the norm. If a run genuinely cannot
+> continue the chain for a reason not covered by the three conditions, say so plainly in the digest
+> as a deviation from these instructions -- never phrase it as routine ("stopped after this batch"),
+> and never justify it by citing a prior run. Same principle applies to step 6's "fix small,
+> self-contained bugs directly" -- a fix being trivial enough to skip filing is not license to skip
+> fixing it either; do the fix, not just the note.
 
 ---
 
