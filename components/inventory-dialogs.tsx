@@ -335,8 +335,12 @@ export default function InventoryDialogs(p: DialogProps) {
                 <SelectContent className="max-h-[40vh] overflow-y-auto">
                   {/* Legacy rows written before stores existed still carry no location, so the
                       option stays reachable to describe them -- it is just no longer offered as a
-                      destination for anything new. */}
-                  <SelectItem value={LOCATION_UNASSIGNED}>{UNASSIGNED_LABEL}</SelectItem>
+                      destination for anything new. A picker that cannot show a row's current value
+                      is how a save writes a placeholder over real data, so it is hidden only when
+                      the row is not itself unassigned AND there is a real store to choose instead. */}
+                  {(!p.editingTransaction.location_id || locations.length === 0) && (
+                    <SelectItem value={LOCATION_UNASSIGNED}>{UNASSIGNED_LABEL}</SelectItem>
+                  )}
                   {locations.map((loc) => <SelectItem key={loc.id} value={loc.id}>{formatLocationLabel(loc, locations)}</SelectItem>)}
                 </SelectContent>
               </Select>
@@ -424,7 +428,12 @@ export default function InventoryDialogs(p: DialogProps) {
               <Select value={p.inventoryEditLocationId} onValueChange={p.setInventoryEditLocationId}>
                 <SelectTrigger id="edit-item-location" className="w-full"><SelectValue placeholder="Which storehouse?" /></SelectTrigger>
                 <SelectContent className="max-h-[40vh] overflow-y-auto">
-                  <SelectItem value={LOCATION_UNASSIGNED}>{UNASSIGNED_LABEL}</SelectItem>
+                  {/* Offered only while it is the current value or there is nowhere else to put
+                      stock. "Unassigned" is not a place; stock sitting there is invisible to every
+                      per-store total. */}
+                  {(p.inventoryEditLocationId === LOCATION_UNASSIGNED || locations.length === 0) && (
+                    <SelectItem value={LOCATION_UNASSIGNED}>{UNASSIGNED_LABEL}</SelectItem>
+                  )}
                   {locations.map((loc) => <SelectItem key={loc.id} value={loc.id}>{formatLocationLabel(loc, locations)}</SelectItem>)}
                 </SelectContent>
               </Select>

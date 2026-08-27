@@ -1097,13 +1097,23 @@ export default function InventorySystem() {
   // against the whole list a tenant with one block and no store would have seated its stock
   // movements on the block, which is the confusion scripts/128 exists to end.
   useEffect(() => {
-    if (
-      transactionLocationId !== LOCATION_UNASSIGNED &&
-      transactionLocationId !== LOCATION_ALL &&
-      !storeLocations.find((loc) => loc.id === transactionLocationId)
-    ) {
-      setTransactionLocationId(storeLocations.length === 1 ? storeLocations[0].id : LOCATION_UNASSIGNED)
-    }
+    const isRealStore = storeLocations.some((loc) => loc.id === transactionLocationId)
+    if (isRealStore || transactionLocationId === LOCATION_ALL) return
+
+    /**
+     * With one storehouse, that is where stock goes. Anything else is a slip.
+     *
+     * This used to skip LOCATION_UNASSIGNED entirely -- the condition began
+     * `transactionLocationId !== LOCATION_UNASSIGNED` -- so the initial value, which IS
+     * unassigned, was the one case never corrected. Stock therefore defaulted to nowhere and
+     * stayed there unless someone actively picked the store. HoneyFarm restocked two items on
+     * 2026-08-27 that way, Rs 13.9 lakh of it, and it sat in a second pile beside Main store that
+     * no report added back.
+     *
+     * With several stores it stays unassigned, because guessing which one would be worse than
+     * asking. With none, there is nothing to point at.
+     */
+    setTransactionLocationId(storeLocations.length === 1 ? storeLocations[0].id : LOCATION_UNASSIGNED)
   }, [storeLocations, transactionLocationId])
 
   /**
