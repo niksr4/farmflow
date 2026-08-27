@@ -271,6 +271,19 @@ const ACCOUNTS_WORKSPACE_TABS: AccountsWorkspaceTab[] = [
 const isAccountsWorkspaceTab = (value: string | null | undefined): value is AccountsWorkspaceTab =>
   ACCOUNTS_WORKSPACE_TABS.includes(String(value || "").trim() as AccountsWorkspaceTab)
 
+/**
+ * Writes the estate the server should scope to.
+ *
+ * Read by every route that calls resolveActiveEstate (lib/estate-filter.ts) -- the ~12 tabs that
+ * fetch independently rather than through this component's shared state.
+ */
+function writeEstateCookie(estate: string | null) {
+  if (typeof document === "undefined") return
+  document.cookie = estate
+    ? `${SELECTED_ESTATE_COOKIE}=${encodeURIComponent(estate)}; path=/; max-age=${180 * 24 * 60 * 60}; SameSite=Lax`
+    : `${SELECTED_ESTATE_COOKIE}=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT; SameSite=Lax`
+}
+
 export default function InventorySystem() {
   type InventoryWorkspaceView = "inventory" | "transactions"
   type SalesWorkspaceView = "coffee" | "other-sales"
@@ -798,14 +811,33 @@ export default function InventorySystem() {
   // Server-side switch for the ~12 tabs that fetch /api/locations independently rather than
   // through the shared `locations` state below -- see that route for the read side. 180 days
   // so a field device holds its estate across normal day-to-day use.
+  //
+  // Module scope, not a callback: it is called from an effect and from the change handler below,
+  // and two copies of a cookie-writing line is how one of them drifts.
+  
   useEffect(() => {
-    if (typeof document === "undefined") return
-    if (selectedEstate) {
-      document.cookie = `${SELECTED_ESTATE_COOKIE}=${encodeURIComponent(selectedEstate)}; path=/; max-age=${180 * 24 * 60 * 60}; SameSite=Lax`
-      return
-    }
-    document.cookie = `${SELECTED_ESTATE_COOKIE}=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT; SameSite=Lax`
+    writeEstateCookie(selectedEstate)
   }, [selectedEstate])
+
+  /**
+   * Change the estate, cookie first.
+   *
+   * THE ORDER IS THE WHOLE POINT. Fifteen tabs are keyed on `estateRemountKey`, so switching estate
+   * unmounts and remounts them, and each refetches on mount reading this cookie server-side. The
+   * cookie used to be written only by the effect above -- and effects run child-first, so every one
+   * of those remounted children fired its fetch while the cookie still held the PREVIOUS estate.
+   * The request went out for the estate you just left.
+   *
+   * Writing it here, synchronously, before setState means the re-render that remounts them happens
+   * with the cookie already correct. `document.cookie` is synchronous, so there is no window.
+   *
+   * The effect stays as the backstop -- it covers the first load and any path that sets the estate
+   * without coming through this handler.
+   */
+  const handleEstateChange = useCallback((estate: string | null) => {
+    writeEstateCookie(estate)
+    setSelectedEstate(estate)
+  }, [])
 
   const loadWorkspaceBootstrap = useCallback(async () => {
     if (!tenantId || isOwner || isPreviewMode) {
@@ -4394,7 +4426,7 @@ export default function InventorySystem() {
           onOpenSidebar={() => setIsMobileSidebarOpen(true)}
           availableEstates={availableEstates}
           selectedEstate={selectedEstate}
-          onEstateChange={setSelectedEstate}
+          onEstateChange={handleEstateChange}
         />
         {/* ── Mobile sidebar drawer ── */}
         {isMobile && (
