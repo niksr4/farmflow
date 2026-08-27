@@ -1072,13 +1072,31 @@ export default function WorkerProfilesTab() {
                           </TableCell>
                         )}
                         <TableCell>
-                          <Input
-                            type="number" inputMode="decimal"
-                            value={numericInputValue(editForm.dailyRate)}
-                            onChange={(e) => setEditForm((f) => ({ ...f, dailyRate: e.target.value }))}
-                            className="h-8 w-24"
-                            placeholder="₹/day"
-                          />
+                          {/* The desktop table is a second edit surface, and it was missed when the
+                              mobile card learned this: staff are paid monthly, so offering them a
+                              day rate here asked for a number that cannot exist. The pay basis is
+                              exclusive and the database enforces it (scripts/141, one_pay_basis) --
+                              a row carrying both would be costed twice, once by the muster and once
+                              by the monthly charge. */}
+                          {isPaidDaily(editForm.workerType) ? (
+                            <Input
+                              type="number" inputMode="decimal"
+                              value={numericInputValue(editForm.dailyRate)}
+                              onChange={(e) => setEditForm((f) => ({ ...f, dailyRate: e.target.value, monthlyWage: "" }))}
+                              className="h-8 w-24"
+                              placeholder="₹/day"
+                              aria-label={`Daily rate for ${w.name}`}
+                            />
+                          ) : (
+                            <Input
+                              type="number" inputMode="decimal"
+                              value={numericInputValue(editForm.monthlyWage)}
+                              onChange={(e) => setEditForm((f) => ({ ...f, monthlyWage: e.target.value, dailyRate: "" }))}
+                              className="h-8 w-24"
+                              placeholder="₹/month"
+                              aria-label={`Monthly salary for ${w.name}`}
+                            />
+                          )}
                         </TableCell>
                         <TableCell className="hidden lg:table-cell">
                           <Select
