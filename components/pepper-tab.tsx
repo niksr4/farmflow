@@ -1,6 +1,6 @@
 "use client"
 
-import { useCallback, useEffect, useState } from "react"
+import { useCallback, useEffect, useMemo, useState } from "react"
 import { useSingleFlight } from "@/hooks/use-single-flight"
 import Link from "next/link"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -84,6 +84,10 @@ export function PepperTab() {
   const [isDeletingRecordId, setIsDeletingRecordId] = useState<number | null>(null)
   const selectedLocation = locations.find((loc) => loc.id === selectedLocationId) || null
   const canDeleteRecord = user?.role === "admin" || user?.role === "owner" || user?.role === "user"
+  const hasUnassignedRecords = useMemo(
+    () => recentRecords.some((r) => !r.location_id),
+    [recentRecords],
+  )
   const showLocationColumn = selectedLocationId === LOCATION_ALL || selectedLocationId === LOCATION_UNASSIGNED
   const scrollToEntryForm = useCallback(() => {
     if (typeof window !== "undefined") {
@@ -506,7 +510,15 @@ export function PepperTab() {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value={LOCATION_ALL}>All locations</SelectItem>
-                  <SelectItem value={LOCATION_UNASSIGNED}>{UNASSIGNED_LABEL}</SelectItem>
+                  {/* Offered only while some record actually has no location, the same data-driven
+                      rule the stock tab follows. It was unconditional, so every tenant saw a
+                      "legacy" filter that selected nothing -- no pepper record on any tenant has
+                      ever been unassigned. A filter that is always empty teaches people the screen
+                      is broken. It stays reachable if such a row ever appears, because a row no
+                      filter can reach is worse than a filter nobody needs. */}
+                  {(hasUnassignedRecords || selectedLocationId === LOCATION_UNASSIGNED) && (
+                    <SelectItem value={LOCATION_UNASSIGNED}>{UNASSIGNED_LABEL}</SelectItem>
+                  )}
                   {locations.map((loc) => (
                     <SelectItem key={loc.id} value={loc.id}>
                       {formatLocationLabel(loc, locations)}

@@ -219,9 +219,24 @@ export async function GET(request: NextRequest) {
           AND location_id IS NULL
       `
     } else {
-      // Items with location_id IS NULL are the global/shared pool — visible under
-      // any location filter. This handles the common pattern of one central warehouse
-      // with location tags only on processing/dispatch/sales records.
+      /**
+       * A named storehouse shows what is in that storehouse, and nothing else.
+       *
+       * This used to add `OR location_id IS NULL`, on the reasoning that untagged stock was a
+       * shared pool belonging to everyone -- reasonable when most tenants kept one warehouse and
+       * only tagged processing and dispatch records. It stopped being true once stock had to live
+       * in a store, and it read as a straightforward lie: HoneyFarm's Main store showed 759.5 kg
+       * of calcium nitrate, which was 9.5 kg actually in the store plus 750 kg sitting unassigned,
+       * summed and presented as one figure. The average price came out at Rs 1,828/kg -- a blend
+       * of Rs 120 and Rs 1,850 that matched no invoice and no shelf.
+       *
+       * Worse, it disagreed with the app itself: repricing that item scoped properly and found the
+       * real 9.5 kg, so the list and the edit dialog told the user different things about the same
+       * stock on the same screen.
+       *
+       * Unassigned stock is legacy debris now, not a pool. It is reachable through its own filter,
+       * which disappears for a tenant once they have none left.
+       */
       inventoryQuery = inventorySql`
         SELECT
           item_type,
@@ -234,7 +249,7 @@ export async function GET(request: NextRequest) {
           END as avg_price
         FROM current_inventory
         WHERE tenant_id = ${tenantContext.tenantId}
-          AND (location_id = ${locationFilter} OR location_id IS NULL)
+          AND location_id = ${locationFilter}
         GROUP BY item_type, unit
         ORDER BY item_type
       `
@@ -245,7 +260,7 @@ export async function GET(request: NextRequest) {
           COALESCE(SUM(quantity), 0) as total_quantity
         FROM current_inventory
         WHERE tenant_id = ${tenantContext.tenantId}
-          AND (location_id = ${locationFilter} OR location_id IS NULL)
+          AND location_id = ${locationFilter}
       `
     }
 
