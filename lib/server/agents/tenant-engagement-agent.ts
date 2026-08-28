@@ -2,6 +2,14 @@ import "server-only"
 
 import { DEFAULT_ALERT_EMAIL_FROM, DEFAULT_SUPPORT_EMAIL } from "@/lib/email-addresses"
 import { classifyTenantGuidance, type TenantGuidanceSummary } from "@/lib/tenant-guidance"
+/**
+ * The same activity signal the digest and dormancy probe read.
+ *
+ * Reused rather than re-queried: tenant-dormancy.ts is the single source of truth for "has this
+ * estate gone quiet?", and this agent having its own login-only opinion is exactly how it came to
+ * report Medappa as QUIET while they were recording labour daily.
+ */
+import { fetchTenantActivitySignals } from "@/lib/server/agents/tenant-dormancy"
 import { getCurrentEstatePhase } from "@/lib/coffee-estate-calendar"
 // This agent runs from cron across every tenant, not inside a per-request handler, so it uses
 // the RLS-bypassing owner connection rather than app_runtime, which requires a per-request
@@ -299,9 +307,12 @@ export async function runTenantEngagementAgent(input?: {
   dryRun: boolean
 }> {
   const dryRun = Boolean(input?.dryRun)
-  const [rows, yesterdayActivity] = await Promise.all([
+  const [rows, yesterdayActivity, activitySignals] = await Promise.all([
     fetchTenantEngagementData(),
     fetchYesterdayActivity(),
+    // Fails open: if the signal query errors we fall back to the login-only rule rather than
+    // reporting every tenant as active or crashing the report.
+    fetchTenantActivitySignals().catch(() => new Map()),
   ])
   const summaries = rows.map((row) => ({
     ...row,
@@ -309,6 +320,7 @@ export async function runTenantEngagementAgent(input?: {
       daysSinceCreated: row.daysSinceCreated,
       totalLogins: row.totalLogins,
       daysSinceLastLogin: row.daysSinceLastLogin,
+      daysSinceAnyActivity: activitySignals.get(row.tenantId)?.daysSinceAnyActivity ?? null,
       operationalDataCount: row.operationalDataCount,
       accountCodesCount: row.accountCodesCount,
     }),

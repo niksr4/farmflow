@@ -119,3 +119,53 @@ describe("tenant guidance", () => {
     expect(hintsAt4[0]?.type).toBe("warning")
   })
 })
+
+/**
+ * Reported 2026-08-28: the engagement report listed Medappa Estates as QUIET, "No login for 20
+ * days" — while they had 680 data writes in the preceding 21 days and had recorded attendance the
+ * day before. The login was genuinely 20 days old and entirely irrelevant: sessions last 30 days
+ * by design, so a writer logs in once and works from that session for weeks.
+ *
+ * This is the same defect already fixed in tenant-dormancy.ts, which stopped probing on login
+ * alone after it nudged Medappa on 2026-08-12 for the identical reason. The probe was corrected;
+ * this surface was not. Both now read the same signal.
+ */
+describe("a tenant that is writing data is not quiet", () => {
+  const busyEstate = {
+    daysSinceCreated: 200,
+    totalLogins: 12,
+    daysSinceLastLogin: 20,
+    operationalDataCount: 680,
+    accountCodesCount: 80,
+  }
+
+  it("does not call Medappa quiet when they recorded yesterday", () => {
+    const summary = classifyTenantGuidance({ ...busyEstate, daysSinceAnyActivity: 1 })
+    expect(summary.status).toBe("active")
+    expect(summary.flags).toEqual([])
+  })
+
+  it("still calls a genuinely silent tenant quiet", () => {
+    // Neither logging in nor writing. This is what the flag is for.
+    const summary = classifyTenantGuidance({ ...busyEstate, daysSinceAnyActivity: 30 })
+    expect(summary.status).toBe("quiet")
+    expect(summary.flags[0]).toContain("Nothing recorded for 30 days")
+  })
+
+  it("says what actually went quiet, not that they did not log in", () => {
+    const summary = classifyTenantGuidance({ ...busyEstate, daysSinceAnyActivity: 30 })
+    expect(summary.flags[0]).not.toContain("No login")
+  })
+
+  it("falls back to the login rule when no activity signal is supplied", () => {
+    // Callers that have nothing better keep the old behaviour rather than silently going active.
+    const summary = classifyTenantGuidance(busyEstate)
+    expect(summary.status).toBe("quiet")
+    expect(summary.flags[0]).toContain("No login for 20 days")
+  })
+
+  it("holds the seven-day line on the activity signal", () => {
+    expect(classifyTenantGuidance({ ...busyEstate, daysSinceAnyActivity: 7 }).status).toBe("active")
+    expect(classifyTenantGuidance({ ...busyEstate, daysSinceAnyActivity: 8 }).status).toBe("quiet")
+  })
+})

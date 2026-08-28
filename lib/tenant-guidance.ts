@@ -20,6 +20,19 @@ export type TenantGuidanceMetrics = {
   daysSinceCreated?: number
   totalLogins: number
   daysSinceLastLogin?: number | null
+  /**
+   * Days since the most recent login OR data write, whichever is newer.
+   *
+   * Sessions last 30 days by design, so a tenant entering data every single day can still show a
+   * three-week-old login. Judging quiet on the login alone calls the busiest estates dormant:
+   * Medappa were labelled QUIET / "No login for 20 days" on 2026-08-28 with 680 data writes in
+   * the preceding 21 days and attendance recorded the day before.
+   *
+   * Optional so existing callers keep compiling; when absent the old login-only rule applies,
+   * which is wrong in the same way but is at least not a silent behaviour change for a caller
+   * that has no write data to offer.
+   */
+  daysSinceAnyActivity?: number | null
   operationalDataCount: number
   accountCodesCount: number
   locationCount?: number
@@ -43,6 +56,10 @@ export function classifyTenantGuidance(metrics: TenantGuidanceMetrics): TenantGu
   const totalLogins = Math.max(0, Number(metrics.totalLogins) || 0)
   const operationalDataCount = Math.max(0, Number(metrics.operationalDataCount) || 0)
   const daysSinceLastLogin = metrics.daysSinceLastLogin == null ? null : Math.max(0, Number(metrics.daysSinceLastLogin) || 0)
+  const daysSinceAnyActivity =
+    metrics.daysSinceAnyActivity == null ? null : Math.max(0, Number(metrics.daysSinceAnyActivity) || 0)
+  // Prefer the real signal; fall back to logins only when the caller has nothing better.
+  const daysSinceQuiet = daysSinceAnyActivity ?? daysSinceLastLogin
 
   if (daysSinceCreated < 3) {
     status = "new"
@@ -52,9 +69,19 @@ export function classifyTenantGuidance(metrics: TenantGuidanceMetrics): TenantGu
   } else if (totalLogins >= 3 && operationalDataCount === 0) {
     status = "stuck"
     flags.push(`${totalLogins} logins, zero data entered`)
-  } else if (daysSinceLastLogin !== null && daysSinceLastLogin > 7 && totalLogins > 0) {
+  } else if (daysSinceQuiet !== null && daysSinceQuiet > 7 && totalLogins > 0) {
     status = "quiet"
-    flags.push(`No login for ${daysSinceLastLogin} days`)
+    /**
+     * Report what actually went quiet. "No login for 20 days" was technically true of Medappa and
+     * completely misleading -- they were recording labour daily from a session opened three weeks
+     * earlier. A flag a human cannot act on is worse than no flag: it puts the most engaged tenant
+     * on the needs-attention list and teaches whoever reads that list to distrust it.
+     */
+    flags.push(
+      daysSinceAnyActivity !== null
+        ? `Nothing recorded for ${daysSinceQuiet} days`
+        : `No login for ${daysSinceQuiet} days`,
+    )
   }
 
   if (metrics.accountCodesCount === 0 && daysSinceCreated >= 3 && totalLogins >= 1) {
