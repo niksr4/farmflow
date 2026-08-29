@@ -62,6 +62,25 @@ describe("escapeHtmlAttributeUrl", () => {
     const escaped = escapeHtmlAttributeUrl("x@y.com<script>")
     expect(escaped).not.toContain("<")
   })
+
+  // Regression test: this function used to run the value through `encodeURI`, which
+  // deliberately does NOT touch `?`, `&`, `=`, or `#` (it assumes its input is already a
+  // full, valid URI). That meant the exact header-injection payload this function's own
+  // docstring describes -- `mailto:x@y?bcc=attacker@evil` -- sailed through completely
+  // unescaped. Assert the actual URL-syntax characters are neutralized, not just `<`/`"`.
+  it("percent-encodes ? & = so a mailto value cannot add mail headers", () => {
+    const escaped = escapeHtmlAttributeUrl("x@y.com?bcc=attacker@evil.com&subject=hi")
+    expect(escaped).not.toContain("?")
+    expect(escaped).not.toContain("&")
+    expect(escaped).not.toContain("=")
+    expect(escaped).toBe("x@y.com%3Fbcc%3Dattacker@evil.com%26subject%3Dhi")
+  })
+
+  it("still leaves an ordinary address byte-for-byte readable", () => {
+    expect(escapeHtmlAttributeUrl("estate.manager@thefarmflow.in")).toBe(
+      "estate.manager@thefarmflow.in",
+    )
+  })
 })
 
 describe("sanitizeEmailHeaderValue", () => {
