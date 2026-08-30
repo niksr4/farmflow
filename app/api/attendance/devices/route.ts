@@ -24,6 +24,11 @@ const toDeviceResponse = (row: any) => {
     lastSeenAt,
     isOnline,
     createdAt: row.created_at ? String(row.created_at) : null,
+    // Which estate the terminal physically stands on. scripts/143 added the column and nothing
+    // has ever written it, so every device reads as "serves every estate" -- which is the right
+    // default for a single-estate tenant and useless for HoneyFarm's two. Null keeps the
+    // always-shows convention the rest of the app uses (lib/estate-filter.ts).
+    estate: row.estate ? String(row.estate) : null,
   }
 }
 
@@ -36,7 +41,7 @@ export async function GET() {
       accountsSql,
       tenantContext,
       accountsSql`
-        SELECT id, label, serial_number, active, last_seen_at, created_at
+        SELECT id, label, serial_number, active, last_seen_at, created_at, estate
         FROM biometric_devices
         WHERE tenant_id = ${tenantContext.tenantId}
         ORDER BY created_at ASC
@@ -67,6 +72,9 @@ export async function POST(request: Request) {
     const body = await request.json().catch(() => ({}))
     const serialNumber = normalizeSerialNumber(body?.serialNumber)
     const label = String(body?.label || "").trim().slice(0, 120)
+    // Optional. Empty means the terminal serves every estate, the same always-shows convention
+    // workers and locations follow -- which is exactly right for a single-estate tenant.
+    const estate = String(body?.estate || "").trim().slice(0, 120) || null
 
     if (!isValidSerialNumber(serialNumber)) {
       return NextResponse.json(
@@ -86,9 +94,9 @@ export async function POST(request: Request) {
         accountsSql,
         tenantContext,
         accountsSql`
-          INSERT INTO biometric_devices (tenant_id, serial_number, label)
-          VALUES (${tenantContext.tenantId}, ${serialNumber}, ${label})
-          RETURNING id, label, serial_number, active, last_seen_at, created_at
+          INSERT INTO biometric_devices (tenant_id, serial_number, label, estate)
+          VALUES (${tenantContext.tenantId}, ${serialNumber}, ${label}, ${estate})
+          RETURNING id, label, serial_number, active, last_seen_at, created_at, estate
         `,
       )
     } catch (error) {

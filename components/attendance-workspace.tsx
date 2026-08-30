@@ -1,20 +1,34 @@
 "use client"
 
 import { useState } from "react"
-import { Check, Users, BookOpen, IndianRupee, CalendarRange } from "lucide-react"
+import { Check, Users, BookOpen, IndianRupee, CalendarRange, Fingerprint } from "lucide-react"
 import { cn } from "@/lib/utils"
 import AttendanceTab from "./attendance-tab"
 import WorkerProfilesTab from "./worker-profiles-tab"
 import WorkerLedgerTab from "./worker-ledger-tab"
 import PayrollSummaryTab from "./payroll-summary-tab"
 import AttendanceReportTab from "./attendance-report-tab"
+import AttendanceScannerTab from "./attendance-scanner-tab"
 
 // TEMPORARY: Ledger crashes for some tenants in production — taken offline until
 // the underlying issue is fixed. Keep in sync with the equivalent flag that used
 // to live in accounts-page.tsx before Workers/Ledger/Payroll moved here.
 const LEDGER_TAB_DISABLED = true
 
-type AttendanceSection = "attendance" | "workers" | "ledger" | "payroll" | "report"
+/**
+ * Scanner setup is local-only for now.
+ *
+ * It is a real screen against real data, not a mock — it registers devices and maps codes on the
+ * tenant you are signed in as. But no estate has a terminal installed yet, and the enrolment id
+ * blocks are not agreed, so shipping a self-service wizard would invite somebody to commission
+ * hardware on rules nobody has settled. Delete this constant when the first terminal ships.
+ *
+ * NODE_ENV is inlined at build time, so this is a compile-time exclusion, not a runtime check a
+ * user could flip: `vercel --prod` and every deployed build has it "production".
+ */
+const SCANNER_TAB_ENABLED = process.env.NODE_ENV !== "production"
+
+type AttendanceSection = "attendance" | "workers" | "ledger" | "payroll" | "report" | "scanner"
 
 type AttendanceWorkspaceProps = {
   showLaborManagement?: boolean
@@ -28,6 +42,7 @@ const SECTION_COLORS: Record<AttendanceSection, string> = {
   ledger: "bg-indigo-600 border-indigo-600 text-white",
   payroll: "bg-purple-600 border-purple-600 text-white",
   report: "bg-slate-700 border-slate-700 text-white",
+  scanner: "bg-emerald-700 border-emerald-700 text-white",
 }
 
 export default function AttendanceWorkspace({ showLaborManagement = false, selectedEstate = null }: AttendanceWorkspaceProps) {
@@ -43,6 +58,11 @@ export default function AttendanceWorkspace({ showLaborManagement = false, selec
           // Sits beside Payroll because it answers the same shape of question over the same
           // period -- who was here, for how long -- and is what gets checked when a wage is queried.
           { value: "report" as AttendanceSection, label: "Attendance", icon: CalendarRange },
+          // Sits last because it is a one-off: you commission a terminal once and then never
+          // open this again, unlike everything to its left.
+          ...(SCANNER_TAB_ENABLED
+            ? [{ value: "scanner" as AttendanceSection, label: "Scanner", icon: Fingerprint }]
+            : []),
         ]
       : []),
   ]
@@ -96,6 +116,12 @@ export default function AttendanceWorkspace({ showLaborManagement = false, selec
       {showLaborManagement && activeSection === "report" && (
         <div className="px-3 sm:px-0">
           <AttendanceReportTab />
+        </div>
+      )}
+
+      {SCANNER_TAB_ENABLED && showLaborManagement && activeSection === "scanner" && (
+        <div className="px-3 sm:px-0">
+          <AttendanceScannerTab />
         </div>
       )}
     </div>

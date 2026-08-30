@@ -41,6 +41,12 @@ export async function GET() {
         punchCount: Number(row.punch_count) || 0,
         firstSeenAt: row.first_seen_at ? String(row.first_seen_at) : null,
         lastSeenAt: row.last_seen_at ? String(row.last_seen_at) : null,
+        // The query has selected this from the start and the settings panel has always declared
+        // and rendered it -- the response simply never carried it, so "Code 5 -- SUM" has only
+        // ever displayed as "Code 5". A column fetched and then dropped on the way out fails
+        // silently in exactly this way: nothing errors, the screen is just less useful than the
+        // code says it is.
+        enrolledName: row.enrolled_name ? String(row.enrolled_name) : null,
       })),
     })
   } catch (error) {

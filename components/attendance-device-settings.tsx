@@ -18,17 +18,10 @@ import { EmptyState } from "@/components/ui/empty-state"
 import { StatTile } from "@/components/ui/stat-tile"
 import { useSingleFlight } from "@/hooks/use-single-flight"
 
-/**
- * Where terminals send their punches.
- *
- * NOT the FarmFlow domain. These devices have no TLS stack — verified against a BioMax N-WL20 on
- * 2026-08-10: every connection was plain HTTP even when pointed at a TLS port — and Vercel serves
- * HTTPS only, 308-redirecting plain HTTP, which the firmware does not follow. So traffic goes via
- * a plain-HTTP relay that forwards to FarmFlow over TLS. This panel previously told estates to use
- * port 443, which cannot work with this hardware.
- */
-const RELAY_HOST = process.env.NEXT_PUBLIC_BIOMETRIC_RELAY_HOST || "140.245.251.148"
-const RELAY_PORT = process.env.NEXT_PUBLIC_BIOMETRIC_RELAY_PORT || "8001"
+// Two screens now show the relay address. One definition, in lib/scanner-setup.ts, so they cannot
+// drift -- a relay that is right on the muster panel and stale on the scanner tab is worse than
+// having only one screen.
+import { BIOMETRIC_RELAY_HOST as RELAY_HOST, BIOMETRIC_RELAY_PORT as RELAY_PORT } from "@/lib/scanner-setup"
 
 
 type BiometricDevice = {
