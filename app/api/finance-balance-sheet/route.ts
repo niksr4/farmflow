@@ -246,6 +246,11 @@ export async function GET(request: Request) {
             -- against the ledger exactly, so recomputing them would break a working stock count
             -- to tidy a display.
             AND COALESCE(notes, '') NOT ILIKE 'Price updated%'
+          -- "Price correction" is what the revalue block writes today; "Price updated" is
+          -- what older rows carry. Excluding only the old spelling counted every recent
+          -- revaluation as stock purchased -- Rs 64.42 crore of phantom purchases on
+          -- HoneyFarm alone, from one item being repriced three times.
+          AND COALESCE(notes, '') NOT ILIKE 'Price correction%'
             ${inventoryDateClause}
             ${estateClause}
         `,
