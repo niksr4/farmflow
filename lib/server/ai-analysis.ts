@@ -3,7 +3,7 @@ import { getFiscalYearDateRange, getCurrentFiscalYear, type FiscalYear } from "@
 import { normalizeTenantContext, runTenantQuery } from "@/lib/server/tenant-db"
 import { logServerError } from "@/lib/server/safe-logging"
 import type { InventoryItem, Transaction } from "@/lib/inventory-types"
-import { CROP_LABEL, mergeTenantEstateProfile } from "@/lib/tenant-estate-profile"
+import { CROP_LABEL } from "@/lib/tenant-estate-profile"
 
 type TenantContext = ReturnType<typeof normalizeTenantContext>
 
@@ -89,7 +89,7 @@ export async function buildTenantAiDataSummary({
       fetchDispatchData(startDate, endDate, tenantContext),
       fetchSalesData(startDate, endDate, tenantContext),
       fetchTransactionHistory(startDate, endDate, tenantContext),
-      fetchCropProfile(tenantContext),
+      fetchCropProfile(),
     ])
 
   const normalizedTransactions = transactions.map((transaction) => ({
@@ -120,22 +120,13 @@ export async function buildTenantAiDataSummary({
   }
 }
 
-async function fetchCropProfile(tenantContext: TenantContext): Promise<{ cropFamily: string | null; primaryVarieties: string[] }> {
-  try {
-    const rows = await runTenantQuery(
-      sql,
-      tenantContext,
-      sql`SELECT ui_preferences FROM tenants WHERE id = ${tenantContext.tenantId} LIMIT 1`,
-    ) as Array<{ ui_preferences?: unknown }>
-    const raw = rows[0]?.ui_preferences
-    const prefs = raw && typeof raw === "object" ? raw as Record<string, unknown> : {}
-    const profile = mergeTenantEstateProfile(
-      prefs.estateProfile && typeof prefs.estateProfile === "object" ? prefs.estateProfile as Record<string, unknown> : null,
-    )
-    return { cropFamily: CROP_LABEL, primaryVarieties: [] as string[] }
-  } catch {
-    return { cropFamily: CROP_LABEL, primaryVarieties: [] as string[] }
-  }
+// The crop is not a per-tenant setting (see lib/tenant-estate-profile.ts's CROP_LABEL docstring)
+// -- every tenant is "coffee". This used to fetch the tenant's ui_preferences.estateProfile and run
+// it through mergeTenantEstateProfile, but the result was never read before returning the constant
+// below -- a wasted DB round-trip on every AI data summary build (every assistant question,
+// analysis, proactive insight, and weekly digest). No longer async / no I/O.
+function fetchCropProfile(): { cropFamily: string; primaryVarieties: string[] } {
+  return { cropFamily: CROP_LABEL, primaryVarieties: [] }
 }
 
 async function fetchInventorySnapshot(tenantContext: TenantContext): Promise<InventoryItem[]> {
