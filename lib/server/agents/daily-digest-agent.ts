@@ -1,6 +1,7 @@
 import "server-only"
 
 import { DEFAULT_DAILY_DIGEST_EMAIL_FROM, EMAIL_BCC_MONITORING } from "@/lib/email-addresses"
+import { escapeHtml } from "@/lib/html-escape"
 // This agent runs from cron across every tenant, not inside a per-request handler, so it uses
 // the RLS-bypassing owner connection rather than app_runtime, which requires a per-request
 // app.tenant_id session context this code never has.
@@ -36,8 +37,10 @@ const toRows = <T = any>(value: unknown): T[] => {
 const IST_OFFSET_MS = 5.5 * 60 * 60 * 1000
 const istDateString = (date: Date): string => new Date(date.getTime() + IST_OFFSET_MS).toISOString().split("T")[0]
 
-const htmlEscape = (value: string): string =>
-  value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
+// Shared with the rest of the codebase (lib/html-escape.ts) rather than a local
+// re-implementation, so this template can never drift from the one every other outbound
+// email in the app uses.
+const htmlEscape = (value: string): string => escapeHtml(value)
 
 // ---------------------------------------------------------------------------
 // Yesterday's activity
