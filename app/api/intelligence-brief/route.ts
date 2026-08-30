@@ -166,25 +166,20 @@ export async function GET(request: Request) {
           `,
           sql`
             SELECT
-              coffee_type,
+              produce_type AS coffee_type,
               bag_type,
-              COALESCE(
-                SUM(
-                  COALESCE(
-                    NULLIF(kgs_received, 0),
-                    NULLIF(kgs, 0),
-                    NULLIF(weight_kgs, 0),
-                    NULLIF(kgs_sent, 0),
-                    bags_sold * ${bagWeightKg}
-                  )
-                ),
-                0
-              ) AS sold_kgs
-            -- booked_revenue: see scripts/121. sales_records alone omits pepper.
+              -- The view already resolves kgs_received/kgs/weight_kgs/kgs_sent into one column;
+              -- asking for them by name here is what made this route 500. scripts/144.
+              COALESCE(SUM(COALESCE(NULLIF(kgs, 0), bags_sold * ${bagWeightKg})), 0) AS sold_kgs
+            -- booked_revenue for the definition, source = 'sale' for the question. This block
+            -- reconciles what was sold against what was dispatched and received, and pepper is
+            -- never dispatched -- counting it here reads as coffee sold out of stock that does
+            -- not exist. Revenue totals elsewhere do want both arms. scripts/121, scripts/144.
             FROM booked_revenue
             WHERE tenant_id = ${tenantContext.tenantId}
               AND sale_date >= ${startDateIso}::date
               AND sale_date <= ${endDateIso}::date
+              AND source = 'sale'
               ${dispatchEstateFilter}
             GROUP BY 1, 2
           `,

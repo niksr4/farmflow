@@ -267,7 +267,7 @@ export async function GET(request: Request) {
           SELECT
             COALESCE(l.name, l.code, sr.estate, 'Unknown') AS location_name,
             COALESCE(l.code, '') AS location_code,
-            sr.coffee_type,
+            sr.produce_type AS coffee_type,
             sr.bag_type,
             COALESCE(SUM(sr.bags_sold), 0) AS bags_sold,
             COALESCE(
@@ -280,6 +280,12 @@ export async function GET(request: Request) {
           WHERE sr.tenant_id = $1
             AND sr.sale_date >= $2::date
             AND sr.sale_date <= $3::date
+            -- Coffee only. Every alert downstream compares these rows against dispatch and
+            -- processing records, so a pepper sale here would be weighed against coffee that was
+            -- never meant to cover it -- and "sold volume exceeds processed output" would fire on
+            -- an estate that simply sold pepper. produce_type is the coffee type once source is
+            -- pinned to 'sale'. scripts/144.
+            AND sr.source = 'sale'
           GROUP BY 1, 2, 3, 4
           `,
         [tenantContext.tenantId, toDateString(windowStart), toDateString(windowEnd)],
@@ -289,7 +295,7 @@ export async function GET(request: Request) {
           SELECT
             COALESCE(l.name, l.code, sr.estate, 'Unknown') AS location_name,
             COALESCE(l.code, '') AS location_code,
-            sr.coffee_type,
+            sr.produce_type AS coffee_type,
             sr.bag_type,
             COALESCE(SUM(sr.bags_sold), 0) AS bags_sold,
             COALESCE(
@@ -302,6 +308,12 @@ export async function GET(request: Request) {
           WHERE sr.tenant_id = $1
             AND sr.sale_date >= $2::date
             AND sr.sale_date <= $3::date
+            -- Coffee only. Every alert downstream compares these rows against dispatch and
+            -- processing records, so a pepper sale here would be weighed against coffee that was
+            -- never meant to cover it -- and "sold volume exceeds processed output" would fire on
+            -- an estate that simply sold pepper. produce_type is the coffee type once source is
+            -- pinned to 'sale'. scripts/144.
+            AND sr.source = 'sale'
           GROUP BY 1, 2, 3, 4
           `,
         [tenantContext.tenantId, toDateString(priorStart), toDateString(priorEnd)],

@@ -154,23 +154,25 @@ export async function GET(request: NextRequest) {
       sql.query(
         `
         SELECT
-          coffee_type,
+          source,
+          produce_type,
           bag_type,
           COALESCE(SUM(bags_sold), 0) AS bags_sold,
-          COALESCE(
-            SUM(COALESCE(NULLIF(kgs_received, 0), NULLIF(kgs, 0), NULLIF(weight_kgs, 0), NULLIF(kgs_sent, 0), bags_sold * ${bagWeightKg})),
-            0
-          ) AS sold_kgs,
+          -- The view already resolves kgs_received/kgs/weight_kgs/kgs_sent into one kgs column.
+          -- Bags stay here because bag weight is a per-tenant setting the view cannot know.
+          COALESCE(SUM(COALESCE(NULLIF(kgs, 0), COALESCE(bags_sold, 0) * ${bagWeightKg})), 0) AS sold_kgs,
           COALESCE(SUM(revenue), 0) AS revenue
         -- booked_revenue unions sales_records with other_sales_records under one revenue
         -- definition. Reading sales_records directly drops pepper and contract sales. scripts/121.
+        -- The source column splits them back apart: coffee flows through the processing breakdown
+        -- below, pepper and arecanut do not and are reported on their own. scripts/144.
         FROM booked_revenue
         WHERE tenant_id = $1
           AND sale_date >= $2::date
           AND sale_date <= $3::date
           ${estateFilterSql(4)}
-        GROUP BY coffee_type, bag_type
-        ORDER BY coffee_type, bag_type
+        GROUP BY source, produce_type, bag_type
+        ORDER BY source, produce_type, bag_type
         `,
         activeEstate ? [tenantContext.tenantId, fiscalYearStart, fiscalYearEnd, activeEstate] : [tenantContext.tenantId, fiscalYearStart, fiscalYearEnd],
       ),
@@ -299,24 +301,23 @@ export async function GET(request: NextRequest) {
         `
         SELECT
           lot_id,
-          coffee_type,
+          produce_type,
           bag_type,
           COALESCE(SUM(bags_sold), 0) AS bags_sold,
-          COALESCE(
-            SUM(COALESCE(NULLIF(kgs_received, 0), NULLIF(kgs, 0), NULLIF(weight_kgs, 0), NULLIF(kgs_sent, 0), bags_sold * ${bagWeightKg})),
-            0
-          ) AS sold_kgs,
+          COALESCE(SUM(COALESCE(NULLIF(kgs, 0), COALESCE(bags_sold, 0) * ${bagWeightKg})), 0) AS sold_kgs,
           COALESCE(SUM(revenue), 0) AS revenue
         -- booked_revenue unions sales_records with other_sales_records under one revenue
         -- definition. Reading sales_records directly drops pepper and contract sales. scripts/121.
+        -- Lots are coffee-only -- the other arm carries lot_id NULL -- so the filter below is
+        -- also what keeps pepper out of a lot breakdown it has no place in. scripts/144.
         FROM booked_revenue
         WHERE tenant_id = $1
           AND sale_date >= $2::date
           AND sale_date <= $3::date
           AND lot_id IS NOT NULL
           AND lot_id <> ''
-        GROUP BY lot_id, coffee_type, bag_type
-        ORDER BY lot_id, coffee_type, bag_type
+        GROUP BY lot_id, produce_type, bag_type
+        ORDER BY lot_id, produce_type, bag_type
         `,
         [tenantContext.tenantId, fiscalYearStart, fiscalYearEnd],
       ),
@@ -618,9 +619,28 @@ export async function GET(request: NextRequest) {
       processingByType.set(coffeeType, { crop, ripe, dry })
     })
 
+    // Coffee runs processing -> dispatch -> sale, and the breakdown below is that flow. Pepper,
+    // arecanut and whatever else the planter sells never enters it, so folding those sales in
+    // would invent a "Pepper / Dry Parchment" row with nothing processed against it and would drag
+    // pepper kilos into coffee's price per kg. Both halves are real revenue; only one is coffee.
+    const coffeeSalesRows = (salesRows || []).filter((row: any) => row.source !== "other_sale")
+    const otherSalesRows = (salesRows || []).filter((row: any) => row.source === "other_sale")
+
+    const otherSalesMap = new Map<string, { produceType: string; soldKgs: number; revenue: number }>()
+    otherSalesRows.forEach((row: any) => {
+      const produceType = String(row.produce_type || "Other")
+      const record = otherSalesMap.get(produceType) || { produceType, soldKgs: 0, revenue: 0 }
+      // A lump-sum contract has no kilos at all, which is why this can be revenue with zero weight.
+      record.soldKgs += Number(row.sold_kgs) || 0
+      record.revenue += Number(row.revenue) || 0
+      otherSalesMap.set(produceType, record)
+    })
+    const otherSales = Array.from(otherSalesMap.values()).sort((a, b) => b.revenue - a.revenue)
+    const otherSalesRevenue = otherSales.reduce((sum, row) => sum + row.revenue, 0)
+
     const salesByType = new Map<string, { soldKgs: number; revenue: number }>()
-    ;(salesRows || []).forEach((row: any) => {
-      const coffeeType = String(row.coffee_type || "Unknown")
+    coffeeSalesRows.forEach((row: any) => {
+      const coffeeType = String(row.produce_type || "Unknown")
       const soldKgs = resolveSalesKgs(row, bagWeightKg)
       const revenue = Number(row.revenue) || 0
       const current = salesByType.get(coffeeType) || { soldKgs: 0, revenue: 0 }
@@ -651,8 +671,8 @@ export async function GET(request: NextRequest) {
       record.receivedKgs += receivedKgs
     })
 
-    salesRows?.forEach((row: any) => {
-      const coffeeType = String(row.coffee_type || "Unknown")
+    coffeeSalesRows.forEach((row: any) => {
+      const coffeeType = String(row.produce_type || "Unknown")
       const bagType = normalizeBagType(row.bag_type)
       const soldBags = Number(row.bags_sold) || 0
       const revenue = Number(row.revenue) || 0
@@ -765,7 +785,7 @@ export async function GET(request: NextRequest) {
     salesLotRows?.forEach((row: any) => {
       const lotId = String(row.lot_id || "").trim()
       if (!lotId) return
-      const coffeeType = String(row.coffee_type || "Unknown")
+      const coffeeType = String(row.produce_type || "Unknown")
       const bagType = normalizeBagType(row.bag_type)
       const revenue = Number(row.revenue) || 0
       const soldKgs = resolveSalesKgs(row, bagWeightKg)
@@ -821,6 +841,12 @@ export async function GET(request: NextRequest) {
       acc[normalizedType].revenue += row.revenue
       return acc
     }, {} as Record<string, any>)
+
+    // Two different questions, two different numbers. Everything per-kilo below divides by coffee
+    // kilos, so it must divide coffee revenue -- `totals.revenue` stays coffee. Everything about
+    // money earned is the whole estate, pepper included, which is what scripts/121 was written for.
+    const coffeeRevenue = totals.revenue
+    const bookedRevenue = coffeeRevenue + otherSalesRevenue
 
     const laborTotal = Number(laborRows?.[0]?.total_cost) || 0
     const expenseTotal = Number(expenseRows?.[0]?.total_amount) || 0
@@ -1013,8 +1039,12 @@ export async function GET(request: NextRequest) {
       success: true,
       bagWeightKg,
       fiscalYear: { startDate: fiscalYearStart, endDate: fiscalYearEnd },
-      totals,
+      // The revenue tile is what the estate earned, all of it. The kilo columns beside it are the
+      // coffee flow, so the two halves are also published separately rather than left to be
+      // reverse-engineered by whoever reads this next.
+      totals: { ...totals, revenue: bookedRevenue, coffeeRevenue, otherSalesRevenue },
       totalsByCoffeeType,
+      otherSales,
       costs: {
         labor: laborTotal,
         expenses: expenseTotal,
@@ -1027,9 +1057,9 @@ export async function GET(request: NextRequest) {
         costPerSoldKg,
       },
       cash: {
-        cashIn: totals.revenue,
+        cashIn: bookedRevenue,
         cashOut: totalCost,
-        net: totals.revenue - totalCost,
+        net: bookedRevenue - totalCost,
         receivablesOutstanding: receivablesKpis.totalOutstanding,
       },
       moduleKpis: {

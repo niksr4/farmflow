@@ -119,9 +119,15 @@ type SeasonSummary = {
     availableKgs: number
     availableToSellKgs: number
     soldBags: number
+    // Everything the estate booked. The kilo figures above it are the coffee flow only, so the
+    // two halves are published separately rather than left to be inferred.
     revenue: number
+    coffeeRevenue?: number
+    otherSalesRevenue?: number
   }
   totalsByCoffeeType: Record<string, SeasonCoffeeTotals>
+  // Pepper, arecanut, whatever else the planter sells. Never enters the coffee breakdown.
+  otherSales?: Array<{ produceType: string; soldKgs: number; revenue: number }>
   costs: {
     labour: number
     expenses: number
@@ -993,7 +999,12 @@ export default function SeasonDashboard() {
     {
       label: "Revenue",
       value: summary ? formatCurrency(summary.totals.revenue) : loading ? "Loading..." : "No data",
-      detail: "Realized commercial value to date",
+      // Say so when the headline is not all coffee. Otherwise it silently disagrees with the
+      // coffee breakdown below by exactly the pepper, and looks like an arithmetic bug.
+      detail:
+        summary && (summary.totals.otherSalesRevenue || 0) > 0
+          ? `Coffee ${formatCurrency(summary.totals.coffeeRevenue || 0)} + other produce ${formatCurrency(summary.totals.otherSalesRevenue || 0)}`
+          : "Realized commercial value to date",
       tone: summary && summary.totals.revenue > 0 ? ("positive" as const) : ("default" as const),
       tooltip: "Actual sales revenue recognized from confirmed dispatches and sales records this fiscal year.",
     },
@@ -2027,6 +2038,45 @@ export default function SeasonDashboard() {
               </Table>
             </CardContent>
           </Card>
+
+          {summary.otherSales && summary.otherSales.length > 0 && (
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <BarChart3 className="h-4 w-4" />
+                  Other produce sold
+                </CardTitle>
+                <CardDescription>
+                  Pepper, arecanut and anything else sold outside the coffee flow. Counted in revenue
+                  above, kept out of the coffee stock breakdown because it was never processed as coffee.
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Produce</TableHead>
+                      <TableHead className="text-right">Sold (KGs)</TableHead>
+                      <TableHead className="text-right">Revenue</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {summary.otherSales.map((row) => (
+                      <TableRow key={row.produceType}>
+                        <TableCell className="font-medium">{row.produceType}</TableCell>
+                        <TableCell className="text-right">
+                          {/* A lump-sum contract has revenue and no weight at all. Printing 0 KGs
+                              would read as a failed sale rather than a sale priced another way. */}
+                          {row.soldKgs > 0 ? formatNumber(row.soldKgs) : "—"}
+                        </TableCell>
+                        <TableCell className="text-right">{formatCurrency(row.revenue)}</TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </CardContent>
+            </Card>
+          )}
 
           <Card>
             <CardHeader>
