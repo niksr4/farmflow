@@ -83,10 +83,13 @@ export default function HomeTab({
               <div className="mt-6 flex flex-wrap gap-2.5 border-t border-white/10 pt-5">
                 <button
                   type="button"
-                  onClick={() => onDrilldown({ tab: "accounts", panel: "labour" })}
+                  /* The muster, not the old typed labour form under Costs. All four estates
+                     record per person now, and that form is refused for any date past their
+                     cutover -- sending them there is sending them to a dead end. */
+                  onClick={() => onDrilldown({ tab: "attendance" })}
                   className="flex min-h-[44px] items-center gap-2 rounded-lg bg-emerald-600 px-5 py-3 text-sm font-semibold text-white transition-colors hover:bg-emerald-500 active:scale-[0.98] touch-manipulation"
                 >
-                  👷 Log labour
+                  👷 Log Muster
                 </button>
                 <button
                   type="button"

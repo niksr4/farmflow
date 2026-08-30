@@ -1337,8 +1337,15 @@ export default function AttendanceTab({ selectedEstate = null }: AttendanceTabPr
         )}
       </div>
 
-      {/* Sticky save bar */}
-      {!loading && workers.length > 0 && !error && (
+      {/*
+        Only when there is something to save.
+ 
+        It used to sit there permanently, so a saved-and-untouched roll still showed
+        "Save · 21 present" -- which reads as work outstanding on a day already recorded, and
+        trains people to press it again to find out. rollIsUnsaved is the same comparison the
+        beforeunload guard uses: the roll differs from what the server last returned.
+      */}
+      {!loading && workers.length > 0 && !error && rollIsUnsaved && (
         <div className="fixed bottom-16 inset-x-0 px-3 pb-2 pt-2 bg-white/95 backdrop-blur-sm border-t border-stone-100 z-30">
           <button
             type="button"
