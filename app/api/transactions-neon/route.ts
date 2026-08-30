@@ -21,7 +21,7 @@ import {
   STOCK_LOSS_ACTIVITY,
   STOCK_LOSS_CODE,
   buildStockLossNote,
-  isExpenseOriginatedDepletion,
+  shouldSkipStockLoss,
   isUnvaluedLoss,
 } from "@/lib/stock-loss"
 
@@ -737,7 +737,7 @@ export async function POST(request: NextRequest) {
     // matching cost line under 124. Expense-originated depletions already have one -- minting a
     // second here would double-count the same fertiliser and, worse, is self-feeding.
     let stockLoss: { expenseId: number | null; amount: number; unvalued: boolean } | null = null
-    if (normalizedType === "deplete" && !isExpenseOriginatedDepletion(notesValue)) {
+    if (normalizedType === "deplete" && !shouldSkipStockLoss(notesValue)) {
       try {
         // 129 only seeded 124 for tenants that already had 134/154, so a tenant provisioned
         // outside that shape can reach here without the code. Create it rather than dropping the

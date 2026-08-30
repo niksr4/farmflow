@@ -35,6 +35,34 @@ export const isExpenseOriginatedDepletion = (notes: string | null | undefined) =
   EXPENSE_TAG_REGEX.test(String(notes || ""))
 
 /**
+ * A revaluation is not a loss, and must never mint a cost line.
+ *
+ * Correcting an item's price is written as a deplete-then-restock pair of the SAME quantity at the
+ * old then the new price (see the revalue block in inventory-system.tsx). Nothing leaves the shed;
+ * the two halves cancel. But the deplete half looks exactly like any other depletion to the rule
+ * below, so it was expensing the entire value of the stock every time somebody fixed a price.
+ *
+ * HoneyFarm on 2026-08-29: three attempts to correct one calcium-nitrate price produced three
+ * stock-loss expenses of Rs 41.25 crore, Rs 64.38 crore and Rs 21,512 -- Rs 105.64 crore against
+ * an estate whose real annual costs are around Rs 36 lakh. Each retry made it worse, because each
+ * correction depleted at the previous (already wrong) price.
+ *
+ * The season summary and the balance sheet already exclude these movements by note prefix; this
+ * rule did not. Matching on the note is fragile and matching on nothing was catastrophic -- the
+ * note is written by one place (the revalue block) and read by three, so it is at least a contract
+ * with a single author. Both spellings are covered: "Price correction" is current, "Price updated"
+ * is what older rows carry.
+ */
+const REVALUATION_NOTE_REGEX = /^\s*price\s+(correction|updated)/i
+
+export const isRevaluationDepletion = (notes: string | null | undefined) =>
+  REVALUATION_NOTE_REGEX.test(String(notes || ""))
+
+/** Every reason a depletion must NOT book a cost line. */
+export const shouldSkipStockLoss = (notes: string | null | undefined) =>
+  isExpenseOriginatedDepletion(notes) || isRevaluationDepletion(notes)
+
+/**
  * Why the stock left, in the estate's words. Free text was the alternative and it would have gone
  * mostly empty -- these are the four cases that actually came up in HoneyFarm's existing notes.
  */

@@ -68,7 +68,8 @@ describe("the expense/stock loop is cut", () => {
       routeSource.indexOf("INSERT INTO expense_transactions"),
     )
     expect(insert).toBeTruthy()
-    const guardIndex = routeSource.indexOf("isExpenseOriginatedDepletion")
+    // shouldSkipStockLoss wraps isExpenseOriginatedDepletion plus the revaluation check.
+    const guardIndex = routeSource.indexOf("shouldSkipStockLoss")
     const insertIndex = routeSource.indexOf("INSERT INTO expense_transactions")
     expect(guardIndex).toBeGreaterThan(-1)
     expect(guardIndex).toBeLessThan(insertIndex)
@@ -101,7 +102,10 @@ describe("a depletion cannot silently reach nothing", () => {
     const insertIndex = routeSource.indexOf("INSERT INTO expense_transactions")
     // `[^)]*` cannot express this condition -- it contains parentheses of its own.
     const guards = [...routeSource.slice(0, insertIndex).matchAll(/if \(normalizedType === "deplete" && (.+)\) \{$/gm)]
-    expect(guards.at(-1)?.[1]).toBe("!isExpenseOriginatedDepletion(notesValue)")
+    // Widened 2026-08-30: the guard now also skips revaluations. A price correction is written
+    // as a deplete-then-restock pair of the same quantity, and the deplete half was booking the
+    // full value as a loss -- Rs 105.64 crore on HoneyFarm from three retries of one correction.
+    expect(guards.at(-1)?.[1]).toBe("!shouldSkipStockLoss(notesValue)")
   })
 
   it("does not fail the depletion when the cost line cannot be written", () => {
