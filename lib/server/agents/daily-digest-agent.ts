@@ -49,6 +49,14 @@ type YesterdayActivity = {
   laborEntries: number
   laborCost: number
   laborWorkers: number
+  /**
+   * Yesterday's labour split by what the work actually was, dearest first.
+   *
+   * "42 entries, Rs 18,775" tells an owner the total and nothing about whether it was spent
+   * where they wanted it spent. The codes are the whole point of the muster -- an estate that
+   * meant to weed and finds it paid for lining wants to know on the day, not at year end.
+   */
+  laborByCode: Array<{ code: string; activity: string; workers: number; cost: number }>
   expenseTotal: number
   expenseEntries: number
   salesRevenue: number
@@ -57,9 +65,46 @@ type YesterdayActivity = {
   pickingEntries: number
 }
 
+/**
+ * Joined to account_activities so the digest names the work rather than reciting a number. A code
+ * with no matching activity still appears -- falling back to the bare code keeps the money visible,
+ * which is the opposite of dropping the row and quietly under-reporting the day.
+ */
+async function fetchLaborByCode(
+  tenantId: string,
+  yesterdayDate: string,
+): Promise<Array<{ code: string; activity: string; workers: number; cost: number }>> {
+  if (!sql) return []
+  try {
+    const rows = await sql.query(
+      `SELECT lc.activity_code AS code,
+              COALESCE(aa.activity, lc.activity_code)                      AS activity,
+              COALESCE(SUM(lc.estate_laborers + lc.contract_laborers), 0) AS workers,
+              COALESCE(SUM(lc.total_cost), 0)                             AS cost
+         FROM labour_cost lc
+         LEFT JOIN account_activities aa
+           ON aa.tenant_id = lc.tenant_id AND aa.code = lc.activity_code
+        WHERE lc.tenant_id = $1
+          AND (lc.work_date AT TIME ZONE 'Asia/Kolkata')::date = $2::date
+        GROUP BY lc.activity_code, aa.activity
+        ORDER BY cost DESC`,
+      [tenantId, yesterdayDate],
+    )
+    return (Array.isArray(rows) ? rows : (rows as any)?.rows ?? []).map((r: any) => ({
+      code: String(r.code ?? ""),
+      activity: String(r.activity ?? r.code ?? ""),
+      workers: Number(r.workers) || 0,
+      cost: Number(r.cost) || 0,
+    }))
+  } catch {
+    // The digest is worth sending without the breakdown; it is not worth failing over one.
+    return []
+  }
+}
+
 async function fetchYesterdayActivity(tenantId: string, yesterdayDate: string): Promise<YesterdayActivity> {
   const empty: YesterdayActivity = {
-    processingKg: 0, processingDays: 0, laborEntries: 0, laborCost: 0, laborWorkers: 0,
+    processingKg: 0, processingDays: 0, laborEntries: 0, laborCost: 0, laborWorkers: 0, laborByCode: [],
     expenseTotal: 0, expenseEntries: 0, salesRevenue: 0, dispatchBags: 0, rainfallInches: 0, pickingEntries: 0,
   }
   if (!sql) return empty
@@ -104,6 +149,7 @@ async function fetchYesterdayActivity(tenantId: string, yesterdayDate: string): 
       dispatchBags: Number(row.dispatch_bags) || 0,
       rainfallInches: Number(row.rainfall_inches) || 0,
       pickingEntries: Number(row.picking_entries) || 0,
+      laborByCode: await fetchLaborByCode(tenantId, yesterdayDate),
     }
   } catch {
     return empty
@@ -114,7 +160,17 @@ function buildYesterdaySection(a: YesterdayActivity, dateLabel: string): string 
   const lines: string[] = [`## Yesterday (${dateLabel})`]
   if (a.processingKg > 0) lines.push(`- Cherry processed: ${a.processingKg.toFixed(1)} kg`)
   if (a.pickingEntries > 0) lines.push(`- Picking entries recorded: ${a.pickingEntries}`)
-  if (a.laborEntries > 0) lines.push(`- Labour deployments: ${a.laborEntries} entries, ${a.laborWorkers} worker-days, ₹${a.laborCost.toLocaleString("en-IN")} cost`)
+  if (a.laborEntries > 0) {
+    lines.push(`- Labour deployments: ${a.laborEntries} entries, ${a.laborWorkers} worker-days, ₹${a.laborCost.toLocaleString("en-IN")} cost`)
+    // Indented beneath the total so the digest still scans as one line per activity, with the
+    // detail available to anyone who reads on. Dearest first: that is the one an owner questions.
+    for (const c of a.laborByCode) {
+      // Half-days are real (0.5), whole days are the norm -- so trim the trailing zeros rather
+      // than rounding, which would turn 0.5 into 1 and overstate the day.
+      const days = Number(c.workers.toFixed(2)).toLocaleString("en-IN")
+      lines.push(`    - ${c.code} ${c.activity}: ${days} worker-days, ₹${c.cost.toLocaleString("en-IN")}`)
+    }
+  }
   if (a.expenseEntries > 0) lines.push(`- Other expenses: ₹${a.expenseTotal.toLocaleString("en-IN")} across ${a.expenseEntries} entries`)
   if (a.salesRevenue > 0) lines.push(`- Sales revenue: ₹${a.salesRevenue.toLocaleString("en-IN")}`)
   if (a.dispatchBags > 0) lines.push(`- Bags dispatched: ${a.dispatchBags.toFixed(1)}`)
