@@ -1,4 +1,5 @@
 import "server-only"
+import { escapeHtml } from "@/lib/html-escape"
 
 import { DEFAULT_DAILY_DIGEST_EMAIL_FROM, EMAIL_BCC_MONITORING } from "@/lib/email-addresses"
 // This agent runs from cron across every tenant, not inside a per-request handler, so it uses
@@ -36,8 +37,15 @@ const toRows = <T = any>(value: unknown): T[] => {
 const IST_OFFSET_MS = 5.5 * 60 * 60 * 1000
 const istDateString = (date: Date): string => new Date(date.getTime() + IST_OFFSET_MS).toISOString().split("T")[0]
 
-const htmlEscape = (value: string): string =>
-  value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
+/**
+ * The shared helper, not a local near-copy.
+ *
+ * This file carried its own htmlEscape that handled only & < >, missing the quote characters
+ * lib/html-escape.ts also covers. Every call site here writes into a text node, so it was not
+ * exploitable -- but two almost-identical escapers is the drift that produced the duplicate
+ * use-toast module, and the safe one should be the one that is easy to reach for.
+ */
+const htmlEscape = escapeHtml
 
 // ---------------------------------------------------------------------------
 // Yesterday's activity
@@ -304,6 +312,12 @@ function buildDailyDigestBodyHtml(sections: string[]): string {
         .map((line) => {
           if (line.startsWith("## ")) {
             return `<p style="margin:20px 0 4px;font-size:11px;font-weight:600;letter-spacing:0.1em;text-transform:uppercase;color:#6b7280;">${htmlEscape(line.slice(3))}</p>`
+          }
+          // Nested detail, e.g. the per-activity labour breakdown. Written with four leading
+          // spaces so plain text reads as an outline; HTML collapses whitespace, so the nesting
+          // has to become margin or it renders flat at the parent's level.
+          if (line.startsWith("    - ")) {
+            return `<p style="margin:2px 0 2px 34px;font-size:13px;line-height:1.5;color:#6b7280;">· ${htmlEscape(line.trim().slice(2))}</p>`
           }
           if (line.startsWith("- ")) {
             return `<p style="margin:4px 0 4px 16px;font-size:14px;line-height:1.5;color:#374151;">· ${htmlEscape(line.slice(2))}</p>`
