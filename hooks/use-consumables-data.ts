@@ -214,6 +214,11 @@ export function useConsumablesData(locationId?: string, options: ConsumablesData
     try {
       const response = await fetch(`/api/expenses-neon?id=${id}${locationId ? `&locationId=${locationId}` : ""}`, {
         method: "DELETE",
+        // keepalive so the request survives the document being torn down. deleteWithUndo can
+        // fire this from a pagehide handler when the user leaves inside the 5s undo window, and
+        // without the flag the browser cancels it mid-flight -- which is the same silent
+        // "it said deleted and came back" the flush was added to stop.
+        keepalive: true,
       })
 
       const data = await response.json()

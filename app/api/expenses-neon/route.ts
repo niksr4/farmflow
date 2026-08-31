@@ -893,8 +893,23 @@ function buildRecalculateInventoryStatement(
   tenantId: string,
   pair: { itemType: string; locationId: string | null },
 ): ParameterizedStatement {
+  // Both arms MUST carry the index's own WHERE clause. The unique indexes on current_inventory are
+  // partial -- uq_current_inventory_item_tenant_location is `... WHERE location_id IS NOT NULL` --
+  // and Postgres only matches a partial index when the conflict target repeats its predicate.
+  // Without it the statement fails at PLAN time with "there is no unique or exclusion constraint
+  // matching the ON CONFLICT specification", the surrounding transaction rolls back, and the whole
+  // mutation 500s as "Failed to process expense".
+  //
+  // That is what HoneyFarm hit on 2026-08-29: deleting an expense appeared to work (the row hides
+  // behind the undo toast) and was back on reload, and editing one failed outright. It only bites
+  // when the stock line HAS a location -- which, since the legacy unassigned pool was merged into
+  // named stores, is now every line on every tenant. The NULL arm was always correct, which is why
+  // this survived: it worked for exactly as long as stock sat unassigned.
+  //
+  // The other five sites that write this ON CONFLICT (inventory-neon x4, import-bulk x4,
+  // seed-tenant) all include the predicate. This was the one that did not.
   const conflictTarget = pair.locationId
-    ? `(item_type, tenant_id, location_id)`
+    ? `(item_type, tenant_id, location_id) WHERE location_id IS NOT NULL`
     : `(item_type, tenant_id) WHERE location_id IS NULL`
 
   return {
