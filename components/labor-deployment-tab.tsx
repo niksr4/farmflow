@@ -36,6 +36,7 @@ import QuickLogPanel from "@/components/quick-log-panel"
 import LabourCostSummary from "@/components/accounts/labour-cost-summary"
 import { trackClick, reportActionFailure, reportActionError } from "@/lib/track-action"
 import { deleteWithUndo } from "@/lib/undo-delete"
+import { EditRecordDialog } from "@/components/ui/edit-record-dialog"
 import { formatLocationLabel } from "@/lib/location-label"
 import { numericInputValue } from "@/lib/number-input"
 import { useSingleFlight } from "@/hooks/use-single-flight"
@@ -426,7 +427,7 @@ export default function LaborDeploymentTab({
 
   const startEdit = (deployment: any) => {
     trackClick("labor_edit", { id: deployment.id })
-    setActiveSection("form")
+    // No section switch: the record opens over the list, so the writer keeps their place.
     const sets: LaborSet[] = (deployment.laborEntries || []).map((e: any) => ({
       label: normalizeSetLabel(e.name),
       laborers: Number(e.laborCount) || 0,
@@ -538,141 +539,16 @@ export default function LaborDeploymentTab({
     defaultSort: "date",
   })
 
-  return (
-    <>
-    {savedConfirm && (
-      <div
-        className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-emerald-700 touch-manipulation"
-        onClick={() => setSavedConfirm(null)}
-      >
-        <div className="flex h-24 w-24 items-center justify-center rounded-full bg-white/20 mb-6">
-          <Save className="h-12 w-12 text-white" />
-        </div>
-        <p className="text-4xl font-black text-white mb-2">Saved!</p>
-        <p className="text-lg font-semibold text-white/90 mb-1">{savedConfirm.reference}</p>
-        {savedConfirm.total > 0 && (
-          <p className="text-base text-white/70">{formatCurrency(savedConfirm.total)}</p>
-        )}
-        <p className="mt-8 text-xs text-white/40">Tap anywhere to continue</p>
-      </div>
-    )}
-    <div className="space-y-4">
-      <InPageNav items={
-        // An estate that records labour on the muster has no "Log Entry" to offer: the server
-        // refuses anything dated on or after the switch, and letting someone fill in the whole
-        // form before saying so is a worse way to deliver the same no. History stays -- their
-        // older entries are still theirs to read and correct.
-        cutoverReached
-          ? [{ label: "History", active: true, onClick: () => setActiveSection("history") }]
-          : [
-              { label: "Log Entry", active: activeSection === "form", onClick: () => setActiveSection("form") },
-              { label: "History", active: activeSection === "history", onClick: () => setActiveSection("history") },
-            ]
-      } />
-
-      {cutoverReached && (
-        <div className="flex flex-wrap items-center gap-x-2 gap-y-1 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm dark:border-emerald-500/20 dark:bg-emerald-500/10">
-          <span className="font-semibold text-emerald-900 dark:text-emerald-200">
-            Labour is recorded on the muster roll from {assignmentsFrom}.
-          </span>
-          <a href="/dashboard?tab=attendance" className="font-bold text-emerald-700 underline underline-offset-2 dark:text-emerald-400">
-            Open Attendance
-          </a>
-          <span className="w-full text-xs text-emerald-800/80 dark:text-emerald-300/80">
-            Entries before that date are still listed below and can be edited here.
-          </span>
-        </div>
-      )}
-
-      {/* Cutover announced but not yet arrived: the form still works, and saying so beats letting
-          them find out on the day. Amber rather than emerald -- this is a heads-up, not a state. */}
-      {assignmentsFrom && !cutoverReached && (
-        <div className="flex flex-wrap items-center gap-x-2 gap-y-1 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm dark:border-amber-500/20 dark:bg-amber-500/10">
-          <span className="font-semibold text-amber-900 dark:text-amber-200">
-            From {assignmentsFrom}, labour moves to the muster roll.
-          </span>
-          <span className="w-full text-xs text-amber-800/80 dark:text-amber-300/80">
-            Until then nothing changes — keep logging here as usual. Worth setting each worker&apos;s
-            daily wage on the Workers tab before that date, since work cannot be allocated without one.
-          </span>
-        </div>
-      )}
-      {/* Mobile: QuickLogPanel tiles as default entry — full form opens via "More details" */}
-      {!cutoverReached && activeSection === "form" && isMobile && !isAdding && (
-        <QuickLogPanel
-          locationId={formLocationId || undefined}
-          onNavigateToFull={openNewForm}
-        />
-      )}
-
-      {/* Desktop: traditional add button */}
-      {!cutoverReached && activeSection === "form" && !isMobile && !isAdding && (
-        <button
-          type="button"
-          onClick={openNewForm}
-          className="flex h-14 w-full items-center justify-center gap-2 rounded-2xl bg-emerald-700 text-base font-bold text-white shadow-md shadow-emerald-100 transition-colors hover:bg-emerald-600 active:scale-[0.98] touch-manipulation"
-        >
-          <PlusCircle className="h-5 w-5" /> Log labour entry
-        </button>
-      )}
-
-      {activeSection === "form" && !loading && activities.length === 0 && (
-        <TaskGuideCard
-          tone="finance"
-          eyebrow="Simple start"
-          title="Start with a few simple work codes"
-          description="You do not need a full chart of accounts before logging labour. If you already know the estate codes, use them. If not, type a short code and work name now, then tidy the Codes tab later."
-          bullets={[
-            "Use short, stable work codes your team will actually remember.",
-            "Type the code and category name directly here if no saved list exists yet.",
-            "Use Codes later when you want autocomplete and cleaner exports.",
-          ]}
-          tip="A simple code like HARVEST, WEEDING, or PRUNING is better than waiting for a perfect accounting structure."
-        />
-      )}
-      {activeSection === "form" && <Card ref={formSectionRef} className={cn("border-stone-200 bg-white shadow-sm dark:border-white/[0.06] dark:bg-card", isMobile && !isAdding && "hidden")}>
-        <CardHeader className="border-b border-stone-100 dark:border-white/[0.05]">
-          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-            <div>
-              <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-stone-400">Labour</p>
-              <CardTitle className="mt-0.5 text-xl">{editingId ? "Edit labour entry" : "Log labour entry"}</CardTitle>
-              <CardDescription>
-                {editingId
-                  ? "Change what you need, then Update entry to save it."
-                  : "One day · one activity code · in-house and outside workers separately."}
-              </CardDescription>
-            </div>
-            <div className="rounded-xl border border-stone-100 bg-stone-50 px-5 py-3 text-right dark:border-white/[0.05] dark:bg-white/[0.03]">
-              <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-stone-400">FY total</p>
-              <p className="mt-0.5 text-2xl font-black tabular-nums text-stone-900 dark:text-white">{formatCurrency(totalDeploymentCost)}</p>
-              {resolvedTotalCount > deployments.length && (
-                <p className="text-[10px] text-stone-400 mt-0.5">
-                  Showing {deployments.length} of {resolvedTotalCount}
-                </p>
-              )}
-            </div>
-          </div>
-        </CardHeader>
-        <CardContent className="pt-5">
-          {!isAdding && (
-            <div className="mb-5 grid gap-2 md:grid-cols-3">
-              <div className="rounded-lg border border-stone-200 bg-stone-50 p-3 dark:border-white/[0.05] dark:bg-white/[0.02]">
-                <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-stone-400">Rule</p>
-                <p className="mt-1 text-sm font-semibold text-stone-800 dark:text-stone-200">One day, one activity code</p>
-              </div>
-              <div className="rounded-lg border border-stone-200 bg-stone-50 p-3 dark:border-white/[0.05] dark:bg-white/[0.02]">
-                <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-stone-400">In-house</p>
-                <p className="mt-1 text-sm font-semibold text-stone-800 dark:text-stone-200">Workers paid by the estate</p>
-              </div>
-              <div className="rounded-lg border border-stone-200 bg-stone-50 p-3 dark:border-white/[0.05] dark:bg-white/[0.02]">
-                <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-stone-400">Outside</p>
-                <p className="mt-1 text-sm font-semibold text-stone-800 dark:text-stone-200">Contract or outside workers</p>
-              </div>
-            </div>
-          )}
-
-          {isAdding ? (
-            <form onSubmit={handleSubmit} className="space-y-4 rounded-xl border border-stone-200 p-4 bg-stone-50/40 dark:border-white/[0.06] dark:bg-white/[0.02]" /* form opens via top-level button */>
+  /**
+   * One form, two frames — inline when adding, in a dialog when editing.
+   *
+   * startEdit used to setActiveSection("form"), which works but takes the writer out of the
+   * records list and loses their place in it. Same node in both frames, never a second copy: an
+   * edit form that drifts from the entry form is how a field saves on one screen and not the
+   * other. See tests/edit-opens-the-record.test.ts.
+   */
+  const labourFormNode = (
+    <form onSubmit={handleSubmit} className="space-y-4 rounded-xl border border-stone-200 p-4 bg-stone-50/40 dark:border-white/[0.06] dark:bg-white/[0.02]" /* form opens via top-level button */>
               {prefilled && (
                 <div className="flex items-center justify-between rounded-xl border border-blue-200 bg-blue-50/80 px-4 py-2.5 text-sm text-blue-800">
                   <span>Prefilled from your last entry — update as needed.</span>
@@ -1043,7 +919,143 @@ export default function LaborDeploymentTab({
                 </button>
               </div>
             </form>
-          ) : null}
+  )
+
+  return (
+    <>
+    {savedConfirm && (
+      <div
+        className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-emerald-700 touch-manipulation"
+        onClick={() => setSavedConfirm(null)}
+      >
+        <div className="flex h-24 w-24 items-center justify-center rounded-full bg-white/20 mb-6">
+          <Save className="h-12 w-12 text-white" />
+        </div>
+        <p className="text-4xl font-black text-white mb-2">Saved!</p>
+        <p className="text-lg font-semibold text-white/90 mb-1">{savedConfirm.reference}</p>
+        {savedConfirm.total > 0 && (
+          <p className="text-base text-white/70">{formatCurrency(savedConfirm.total)}</p>
+        )}
+        <p className="mt-8 text-xs text-white/40">Tap anywhere to continue</p>
+      </div>
+    )}
+    <div className="space-y-4">
+      <InPageNav items={
+        // An estate that records labour on the muster has no "Log Entry" to offer: the server
+        // refuses anything dated on or after the switch, and letting someone fill in the whole
+        // form before saying so is a worse way to deliver the same no. History stays -- their
+        // older entries are still theirs to read and correct.
+        cutoverReached
+          ? [{ label: "History", active: true, onClick: () => setActiveSection("history") }]
+          : [
+              { label: "Log Entry", active: activeSection === "form", onClick: () => setActiveSection("form") },
+              { label: "History", active: activeSection === "history", onClick: () => setActiveSection("history") },
+            ]
+      } />
+
+      {cutoverReached && (
+        <div className="flex flex-wrap items-center gap-x-2 gap-y-1 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm dark:border-emerald-500/20 dark:bg-emerald-500/10">
+          <span className="font-semibold text-emerald-900 dark:text-emerald-200">
+            Labour is recorded on the muster roll from {assignmentsFrom}.
+          </span>
+          <a href="/dashboard?tab=attendance" className="font-bold text-emerald-700 underline underline-offset-2 dark:text-emerald-400">
+            Open Attendance
+          </a>
+          <span className="w-full text-xs text-emerald-800/80 dark:text-emerald-300/80">
+            Entries before that date are still listed below and can be edited here.
+          </span>
+        </div>
+      )}
+
+      {/* Cutover announced but not yet arrived: the form still works, and saying so beats letting
+          them find out on the day. Amber rather than emerald -- this is a heads-up, not a state. */}
+      {assignmentsFrom && !cutoverReached && (
+        <div className="flex flex-wrap items-center gap-x-2 gap-y-1 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm dark:border-amber-500/20 dark:bg-amber-500/10">
+          <span className="font-semibold text-amber-900 dark:text-amber-200">
+            From {assignmentsFrom}, labour moves to the muster roll.
+          </span>
+          <span className="w-full text-xs text-amber-800/80 dark:text-amber-300/80">
+            Until then nothing changes — keep logging here as usual. Worth setting each worker&apos;s
+            daily wage on the Workers tab before that date, since work cannot be allocated without one.
+          </span>
+        </div>
+      )}
+      {/* Mobile: QuickLogPanel tiles as default entry — full form opens via "More details" */}
+      {!cutoverReached && activeSection === "form" && isMobile && !isAdding && (
+        <QuickLogPanel
+          locationId={formLocationId || undefined}
+          onNavigateToFull={openNewForm}
+        />
+      )}
+
+      {/* Desktop: traditional add button */}
+      {!cutoverReached && activeSection === "form" && !isMobile && !isAdding && (
+        <button
+          type="button"
+          onClick={openNewForm}
+          className="flex h-14 w-full items-center justify-center gap-2 rounded-2xl bg-emerald-700 text-base font-bold text-white shadow-md shadow-emerald-100 transition-colors hover:bg-emerald-600 active:scale-[0.98] touch-manipulation"
+        >
+          <PlusCircle className="h-5 w-5" /> Log labour entry
+        </button>
+      )}
+
+      {activeSection === "form" && !loading && activities.length === 0 && (
+        <TaskGuideCard
+          tone="finance"
+          eyebrow="Simple start"
+          title="Start with a few simple work codes"
+          description="You do not need a full chart of accounts before logging labour. If you already know the estate codes, use them. If not, type a short code and work name now, then tidy the Codes tab later."
+          bullets={[
+            "Use short, stable work codes your team will actually remember.",
+            "Type the code and category name directly here if no saved list exists yet.",
+            "Use Codes later when you want autocomplete and cleaner exports.",
+          ]}
+          tip="A simple code like HARVEST, WEEDING, or PRUNING is better than waiting for a perfect accounting structure."
+        />
+      )}
+      {activeSection === "form" && <Card ref={formSectionRef} className={cn("border-stone-200 bg-white shadow-sm dark:border-white/[0.06] dark:bg-card", isMobile && !isAdding && "hidden")}>
+        <CardHeader className="border-b border-stone-100 dark:border-white/[0.05]">
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-stone-400">Labour</p>
+              <CardTitle className="mt-0.5 text-xl">{editingId ? "Edit labour entry" : "Log labour entry"}</CardTitle>
+              <CardDescription>
+                {editingId
+                  ? "Change what you need, then Update entry to save it."
+                  : "One day · one activity code · in-house and outside workers separately."}
+              </CardDescription>
+            </div>
+            <div className="rounded-xl border border-stone-100 bg-stone-50 px-5 py-3 text-right dark:border-white/[0.05] dark:bg-white/[0.03]">
+              <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-stone-400">FY total</p>
+              <p className="mt-0.5 text-2xl font-black tabular-nums text-stone-900 dark:text-white">{formatCurrency(totalDeploymentCost)}</p>
+              {resolvedTotalCount > deployments.length && (
+                <p className="text-[10px] text-stone-400 mt-0.5">
+                  Showing {deployments.length} of {resolvedTotalCount}
+                </p>
+              )}
+            </div>
+          </div>
+        </CardHeader>
+        <CardContent className="pt-5">
+          {!isAdding && (
+            <div className="mb-5 grid gap-2 md:grid-cols-3">
+              <div className="rounded-lg border border-stone-200 bg-stone-50 p-3 dark:border-white/[0.05] dark:bg-white/[0.02]">
+                <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-stone-400">Rule</p>
+                <p className="mt-1 text-sm font-semibold text-stone-800 dark:text-stone-200">One day, one activity code</p>
+              </div>
+              <div className="rounded-lg border border-stone-200 bg-stone-50 p-3 dark:border-white/[0.05] dark:bg-white/[0.02]">
+                <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-stone-400">In-house</p>
+                <p className="mt-1 text-sm font-semibold text-stone-800 dark:text-stone-200">Workers paid by the estate</p>
+              </div>
+              <div className="rounded-lg border border-stone-200 bg-stone-50 p-3 dark:border-white/[0.05] dark:bg-white/[0.02]">
+                <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-stone-400">Outside</p>
+                <p className="mt-1 text-sm font-semibold text-stone-800 dark:text-stone-200">Contract or outside workers</p>
+              </div>
+            </div>
+          )}
+
+          {/* Inline only for a NEW entry. An edit opens in the dialog, over the records list. */}
+          {isAdding && !editingId ? labourFormNode : null}
         </CardContent>
       </Card>}
 
@@ -1299,6 +1311,15 @@ export default function LaborDeploymentTab({
         />
       ))}
     </div>
+    <EditRecordDialog
+      open={editingId != null}
+      onClose={resetForm}
+      title="Edit labour entry"
+      description="Change the code, the block, the headcount or the rate. Saving replaces the entry and recosts the day."
+    >
+      {labourFormNode}
+    </EditRecordDialog>
+
     </>
   )
 }
