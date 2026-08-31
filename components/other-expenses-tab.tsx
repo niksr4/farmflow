@@ -22,6 +22,7 @@ import type { LocationOption } from "@/components/inventory-system/types"
 import { Textarea } from "@/components/ui/textarea"
 import { Badge } from "@/components/ui/badge"
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
+import { EditRecordDialog } from "@/components/ui/edit-record-dialog"
 import { formatDateOnly, todayIso } from "@/lib/date-utils"
 import { formatCurrency } from "@/lib/format"
 import { SkeletonTable } from "@/components/ui/skeleton"
@@ -440,72 +441,24 @@ export default function OtherExpensesTab({
   useEffect(() => {
     if (!savedConfirm) return
     const t = setTimeout(() => setSavedConfirm(null), 2000)
-    return () => clearTimeout(t)
+      return () => clearTimeout(t)
   }, [savedConfirm])
 
-  return (
-    <>
-    {savedConfirm && (
-      <div
-        className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-emerald-700 touch-manipulation"
-        onClick={() => setSavedConfirm(null)}
-      >
-        <div className="flex h-24 w-24 items-center justify-center rounded-full bg-white/20 mb-6">
-          <Check className="h-14 w-14 text-white stroke-[3]" />
-        </div>
-        <p className="text-4xl font-black text-white mb-2">Saved!</p>
-        <p className="text-lg font-semibold text-white/90 mb-1">{savedConfirm.reference}</p>
-        {savedConfirm.total > 0 && (
-          <p className="text-base text-white/70">{formatCurrency(savedConfirm.total)}</p>
-        )}
-        <p className="mt-8 text-xs text-white/40">Tap anywhere to continue</p>
-      </div>
-    )}
-    <div className="space-y-4">
-      <InPageNav items={[
-        { label: "Log Expense", active: activeSection === "form", onClick: () => setActiveSection("form") },
-        { label: "History", active: activeSection === "history", onClick: () => setActiveSection("history") },
-      ]} />
-      {/* Add entry button */}
-      {activeSection === "form" && !isAdding && (
-        <button
-          type="button"
-          onClick={openNewExpenseForm}
-          className="flex h-14 w-full items-center justify-center gap-2 rounded-2xl bg-emerald-700 text-base font-bold text-white shadow-md shadow-emerald-100 active:scale-[0.98] transition-transform touch-manipulation hover:bg-emerald-600"
-        >
-          <PlusCircle className="h-5 w-5" /> Log non-labour expense
-        </button>
-      )}
-
-      {activeSection === "form" && <Card ref={formSectionRef}>
-        <CardHeader>
-          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-            <div>
-              <CardTitle className="text-xl sm:text-2xl">💸 Non-Labour Expenses</CardTitle>
-              <CardDescription className="text-sm">Track real spend with a simple estate code and category</CardDescription>
-            </div>
-            <div className="text-left sm:text-right">
-              <p className="text-sm font-medium text-muted-foreground">Total Non-Labour Expenses</p>
-              <p className="text-xl sm:text-2xl font-bold">{formatCurrency(totalExpenses)}</p>
-              {resolvedTotalCount > deployments.length && (
-                <p className="text-xs text-muted-foreground mt-1">
-                  Showing {deployments.length} of {resolvedTotalCount}
-                </p>
-              )}
-            </div>
-          </div>
-        </CardHeader>
-        <CardContent>
-          {activities.length === 0 && !isAdding && (
-            <div className="mb-4 rounded-xl border border-amber-200 bg-amber-50/60 p-4">
-              <p className="text-sm font-semibold text-amber-900">No saved codes yet</p>
-              <p className="mt-1 text-xs text-amber-800">
-                You can still log the expense now. Type a short estate code and a plain category name here, then clean it up in Codes later.
-              </p>
-            </div>
-          )}
-          {isAdding ? (
-            <form onSubmit={handleSubmit} className="space-y-4 border rounded-lg p-3 sm:p-4 bg-muted/50">
+  /**
+   * One form, rendered in one of two frames.
+   *
+   * Reported by HoneyFarm 2026-08-31: pressing Edit on a history row appeared to do nothing.
+   * startEdit filled this form and set isAdding, but the form lives in the "form" section and the
+   * writer was standing in "history" -- so the record loaded somewhere they could not see, and
+   * they had to work out for themselves that they should navigate back to the log form.
+   *
+   * Editing now opens the record where it was clicked, in a dialog. Deliberately the SAME node,
+   * not a second copy of the form: an edit form that drifts from the entry form is how a field
+   * ends up saving on one screen and not the other, which this file has already been bitten by
+   * twice (the block picker, and the pay basis on the roster).
+   */
+  const expenseFormNode = (
+    <form onSubmit={handleSubmit} className="space-y-4 border rounded-lg p-3 sm:p-4 bg-muted/50">
               <div className="grid gap-4 sm:grid-cols-2">
                 <div className="space-y-2">
                   <Label htmlFor="expense-date" className="text-base">
@@ -831,7 +784,71 @@ export default function OtherExpensesTab({
                 </button>
               </div>
             </form>
-          ) : null}
+  )
+
+  return (
+    <>
+    {savedConfirm && (
+      <div
+        className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-emerald-700 touch-manipulation"
+        onClick={() => setSavedConfirm(null)}
+      >
+        <div className="flex h-24 w-24 items-center justify-center rounded-full bg-white/20 mb-6">
+          <Check className="h-14 w-14 text-white stroke-[3]" />
+        </div>
+        <p className="text-4xl font-black text-white mb-2">Saved!</p>
+        <p className="text-lg font-semibold text-white/90 mb-1">{savedConfirm.reference}</p>
+        {savedConfirm.total > 0 && (
+          <p className="text-base text-white/70">{formatCurrency(savedConfirm.total)}</p>
+        )}
+        <p className="mt-8 text-xs text-white/40">Tap anywhere to continue</p>
+      </div>
+    )}
+    <div className="space-y-4">
+      <InPageNav items={[
+        { label: "Log Expense", active: activeSection === "form", onClick: () => setActiveSection("form") },
+        { label: "History", active: activeSection === "history", onClick: () => setActiveSection("history") },
+      ]} />
+      {/* Add entry button */}
+      {activeSection === "form" && !isAdding && (
+        <button
+          type="button"
+          onClick={openNewExpenseForm}
+          className="flex h-14 w-full items-center justify-center gap-2 rounded-2xl bg-emerald-700 text-base font-bold text-white shadow-md shadow-emerald-100 active:scale-[0.98] transition-transform touch-manipulation hover:bg-emerald-600"
+        >
+          <PlusCircle className="h-5 w-5" /> Log non-labour expense
+        </button>
+      )}
+
+      {activeSection === "form" && <Card ref={formSectionRef}>
+        <CardHeader>
+          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+            <div>
+              <CardTitle className="text-xl sm:text-2xl">💸 Non-Labour Expenses</CardTitle>
+              <CardDescription className="text-sm">Track real spend with a simple estate code and category</CardDescription>
+            </div>
+            <div className="text-left sm:text-right">
+              <p className="text-sm font-medium text-muted-foreground">Total Non-Labour Expenses</p>
+              <p className="text-xl sm:text-2xl font-bold">{formatCurrency(totalExpenses)}</p>
+              {resolvedTotalCount > deployments.length && (
+                <p className="text-xs text-muted-foreground mt-1">
+                  Showing {deployments.length} of {resolvedTotalCount}
+                </p>
+              )}
+            </div>
+          </div>
+        </CardHeader>
+        <CardContent>
+          {activities.length === 0 && !isAdding && (
+            <div className="mb-4 rounded-xl border border-amber-200 bg-amber-50/60 p-4">
+              <p className="text-sm font-semibold text-amber-900">No saved codes yet</p>
+              <p className="mt-1 text-xs text-amber-800">
+                You can still log the expense now. Type a short estate code and a plain category name here, then clean it up in Codes later.
+              </p>
+            </div>
+          )}
+          {/* Inline only for a NEW entry. An edit opens in the dialog below, where it was clicked. */}
+          {isAdding && !editingId ? expenseFormNode : null}
         </CardContent>
       </Card>}
 
@@ -1031,6 +1048,15 @@ export default function OtherExpensesTab({
         />
       ))}
     </div>
+    <EditRecordDialog
+      open={editingId != null}
+      onClose={resetForm}
+      title="Edit expense"
+      description="Change the code, the block, the amount or the stock used. Saving replaces the record and recalculates the stock it drew on."
+    >
+      {expenseFormNode}
+    </EditRecordDialog>
+
     </>
   )
 }
