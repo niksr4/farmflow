@@ -81,6 +81,14 @@ export const ACCOUNT_ACTIVITY_SUGGESTIONS: AccountActivitySuggestion[] = [
   { code: "162", reference: "Robusta Curing" },
   { code: "163", reference: "Robusta Irrigation" },
   { code: "164", reference: "Robusta Harvesting incentive" },
+  // Asked for by Medappa's writer on 2026-08-31. 165 rather than a slot in the 210-222 new-field
+  // block because that block is the *stages* of establishing a planting (Nursery, Lining, Pitting,
+  // Mulching) and is variety-neutral -- a Robusta-specific job belongs with the other Robusta
+  // work, and the block runs contiguous to 164 with no gap left inside it.
+  //
+  // There is deliberately no Arabica counterpart: nobody has asked for one, and a code nobody
+  // uses is a line every estate scrolls past forever. Add 142 if and when one is wanted.
+  { code: "165", reference: "Robusta Planting" },
   { code: "181", reference: "Pepper Planting, Upkeep" },
   { code: "182", reference: "Pepper Manuring" },
   { code: "183", reference: "Pepper Pest & Disease Cont." },
