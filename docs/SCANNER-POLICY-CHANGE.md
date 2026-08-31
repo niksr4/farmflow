@@ -100,12 +100,19 @@ unreviewed, locally-unverified code straight to four live estates.
 > anyway and say which files you reached outside the batch.
 >
 > **10. Report a blocked gate as the headline, not the footnote.**
-> The sandbox disk has been full since 2026-08-06 and has blocked the pre-push gate for a week
-> straight, so nothing has shipped in that time. It is reported at the bottom of the digest under
-> testing notes. Put it first, state how many consecutive runs have been unable to push, and name
-> the specific ask — this needs someone with host access to reclaim the nobody-owned leftovers from
-> previous clones, which the run's own user cannot delete. A constraint that silently costs a week
-> of output is not an environment note.
+> The ENOSPC failure on the sandbox's shared 9.6G root filesystem has recurred roughly eleven times
+> since 2026-08-06. It is reported at the bottom of the digest under testing notes. Put it first,
+> state how many *consecutive* runs have been unable to push and how many distinct occurrences there
+> have been, and name the specific ask — someone with host access has to reclaim the nobody-owned
+> leftover clones, `node_modules` and caches from prior sessions, which the run's own user cannot
+> delete and whose own footprint (~130MB) is nowhere near enough to matter.
+>
+> Both counts, because they mean different things and this instruction was first written with them
+> confused: I described it as blocking "a week straight", which was wrong — the two runs before
+> 2026-08-31 pushed cleanly, so it was the first consecutive failure and the eleventh occurrence.
+> Consecutive tells you whether output is stopped right now; distinct tells you whether the host is
+> degrading. Reporting either one alone lets a reader draw the wrong conclusion, and the scanner
+> was right to correct it.
 
 ---
 
