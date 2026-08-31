@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input"
 import { EmptyState } from "@/components/ui/empty-state"
 import { cn } from "@/lib/utils"
 import { formatWorkedHours, shiftStatusLabel, type ShiftStatus } from "@/lib/attendance-hours"
+import AttendanceMonthlyGrid from "@/components/attendance-monthly-grid"
 import { workerTypeLabel, isPaidDaily } from "@/lib/worker-types"
 
 /**
@@ -68,6 +69,42 @@ const firstOfMonth = () => {
 }
 const today = () => new Date().toISOString().slice(0, 10)
 
+type ReportView = "grid" | "hours"
+
+/**
+ * Two questions, one tab.
+ *
+ * The grid is the sheet the estate office already reads and checks wages against, so it is what
+ * you land on. The hours view is the one FarmFlow can answer and SmartOffice cannot -- what the
+ * terminal clocked against what the manager allocated -- and it stays one tap away rather than
+ * being replaced by the format request.
+ */
+function ViewToggle({ view, onChange }: { view: ReportView; onChange: (next: ReportView) => void }) {
+  const options: Array<{ value: ReportView; label: string }> = [
+    { value: "grid", label: "Monthly grid" },
+    { value: "hours", label: "Hours & allocation" },
+  ]
+  return (
+    <div className="flex gap-1.5">
+      {options.map((option) => (
+        <button
+          key={option.value}
+          type="button"
+          onClick={() => onChange(option.value)}
+          className={cn(
+            "min-h-11 rounded-lg border px-3 text-xs font-semibold transition-colors",
+            view === option.value
+              ? "border-slate-700 bg-slate-700 text-white"
+              : "border-stone-200 bg-white text-stone-500 hover:bg-stone-50",
+          )}
+        >
+          {option.label}
+        </button>
+      ))}
+    </div>
+  )
+}
+
 const STATUS_TONE: Record<ShiftStatus, string> = {
   full: "text-emerald-700 dark:text-emerald-400",
   half: "text-amber-700 dark:text-amber-500",
@@ -85,6 +122,8 @@ export default function AttendanceReportTab() {
   const [error, setError] = useState<string | null>(null)
   const [expanded, setExpanded] = useState<string | null>(null)
   const [ran, setRan] = useState(false)
+  // The grid is the default: it is the layout the estate office already checks wages against.
+  const [view, setView] = useState<ReportView>("grid")
 
   const run = useCallback(async () => {
     setLoading(true)
@@ -126,8 +165,18 @@ export default function AttendanceReportTab() {
     URL.revokeObjectURL(url)
   }, [workers, startDate, endDate])
 
+  if (view === "grid") {
+    return (
+      <div className="space-y-4">
+        <ViewToggle view={view} onChange={setView} />
+        <AttendanceMonthlyGrid />
+      </div>
+    )
+  }
+
   return (
     <div className="space-y-4">
+      <ViewToggle view={view} onChange={setView} />
       <div className="flex flex-wrap items-end gap-2">
         <div className="min-w-[8.5rem] flex-1">
           <label htmlFor="att-from" className="mb-1 block text-[10px] font-black uppercase tracking-wider text-stone-400">From</label>
