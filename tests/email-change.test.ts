@@ -68,7 +68,7 @@ describe("email change tokens", () => {
     // In practice expires_at is always set by resolveEmailChangeExpiry() at insert time, so this
     // is currently unreachable via the app's own write path, but it's a silent fail-open if that
     // ever changes (e.g. a manual DB edit, a future code path that inserts without it). Worth
-    // deciding whether this should fail closed instead. See findings_log.md, files 428-442/729.
+    // deciding whether this should fail closed instead.
     expect(getEmailChangeStateError({ consumedAt: null, expiresAt: undefined, nowMs: NOW })).toBeNull()
     expect(getEmailChangeStateError({ consumedAt: null, expiresAt: "", nowMs: NOW })).toBeNull()
     expect(getEmailChangeStateError({ consumedAt: null, expiresAt: "not-a-date", nowMs: NOW })).toBeNull()

@@ -118,8 +118,8 @@ describe("buildSmartNextSteps", () => {
     expect(steps.some((s) => s.id === "first-live-record")).toBe(true)
   })
 
-  // Documents a real behavior found during a 2026-07-30 code scan (see findings_log.md,
-  // "files 211-225" entry): addStep() dedupes candidate steps by `actionTab` as well as
+  // Documents a real behavior found during a 2026-07-30 code scan: addStep() dedupes candidate
+  // steps by `actionTab` as well as
   // `id`. pickTab() falls back to "home" whenever none of its preferred tabs are visible,
   // and the guaranteed "stuck-help" fallback card is hardcoded to actionTab: "home" too.
   // So whenever an earlier step (like first-live-record, here) also resolves to "home",

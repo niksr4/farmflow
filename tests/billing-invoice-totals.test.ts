@@ -28,7 +28,7 @@ describe("isInterStateSupply", () => {
     // Characterisation test: documents current behaviour, which is arguably wrong.
     // Nothing validates the incoming strings against GST_STATES, so "karnataka" vs
     // "Karnataka" (or code "29" vs name "Karnataka") is classified as INTER-state and
-    // charged IGST. See findings_log.md, cycle 1 files 31-45.
+    // charged IGST.
     expect(isInterStateSupply("karnataka", "Karnataka")).toBe(true)
     expect(isInterStateSupply("29", "Karnataka")).toBe(true)
   })
@@ -129,7 +129,7 @@ describe("computeInvoiceTotals", () => {
     // while taxTotal is rounded once from the unrounded sum. For amounts whose half lands
     // on a sub-paisa boundary the two disagree by 0.01 in either direction, so the tax
     // breakup printed on a GST invoice does not add up to the tax actually charged.
-    // See findings_log.md, cycle 1 files 31-45.
+    //
     const roundsUp = computeInvoiceTotals(
       [{ description: "x", quantity: 1, unitPrice: 1, taxRate: 5 }],
       "Karnataka",

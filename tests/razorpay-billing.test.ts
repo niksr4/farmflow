@@ -102,7 +102,7 @@ describe("razorpay billing helpers", () => {
   it("throws rather than returning null for an out-of-range timestamp (known edge)", () => {
     // Characterisation test: a finite but absurd value passes the guard and then blows up in
     // toISOString(). The webhook route calls this six times on provider-supplied fields, so a
-    // malformed value fails the whole event. See findings_log.md, cycle 1 files 31-45.
+    // malformed value fails the whole event.
     expect(() => unixSecondsToIso(1e15)).toThrow(RangeError)
   })
 
@@ -134,7 +134,7 @@ describe("razorpay billing helpers — known limitations", () => {
     // as "monthly" instead of throwing or looking up a distinct *_YEARLY_ID key. Harmless today
     // because RazorpayBillingCycle only has one member ("monthly"), but it's dead code that would
     // misroute plan ids the moment a second cycle (e.g. "yearly") is added without also fixing this
-    // ternary. See findings_log.md, files 428-442/729.
+    // ternary.
     const env = {
       RAZORPAY_PLAN_CORE_MONTHLY_ID: "plan_core_monthly_123",
     }

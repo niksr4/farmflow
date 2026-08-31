@@ -130,7 +130,7 @@ describe("import bulk utils — field normalization", () => {
     // would either silently swap day and month for genuinely ambiguous dates (e.g. "03/04/2026"
     // -> is that Mar 4 or Apr 3?) or fail the >12 sanity check implicitly via Date parsing
     // downstream. Worth a QA case with a real US-exported CSV before assuming all imports are
-    // day-first. See findings_log.md, files 428-442/729.
+    // day-first.
     expect(parseDate("03/04/2026")).toBe("2026-04-03") // interpreted as 3 April, not 4 March
   })
 
@@ -142,7 +142,7 @@ describe("import bulk utils — field normalization", () => {
     // day 45) round-trips straight through as a "valid" parsed date. Downstream this becomes a
     // Postgres date literal and would fail at insert time with a DB-level error rather than the
     // friendly per-row validation message this module exists to produce — a confusing failure
-    // mode for a bulk CSV import. See findings_log.md, files 428-442/729.
+    // mode for a bulk CSV import.
     expect(parseDate("2026-13-45")).toBe("2026-13-45")
   })
 
@@ -160,8 +160,7 @@ describe("import bulk utils — field normalization", () => {
     // (e.g. "Feb 24, 2026") would silently import as Feb 23 on a server running IST, while the
     // exact same file would import correctly as Feb 24 on a server running UTC or a negative
     // offset. Confirmed the runtime's TZ env var is what drives this (not fixed at process start)
-    // via a standalone node -e check across UTC / Asia/Calcutta / America/Los_Angeles. See
-    // findings_log.md, files 428-442/729.
+    // via a standalone node -e check across UTC / Asia/Calcutta / America/Los_Angeles.
     const originalTZ = process.env.TZ
     try {
       process.env.TZ = "UTC"

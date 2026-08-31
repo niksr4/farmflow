@@ -51,7 +51,7 @@ const TENANT_TABLE_RE = new RegExp(`\\b(?:FROM|INTO|UPDATE|JOIN)\\s+(?:${TENANT_
  * Every entry is a confirmed or strongly-suspected silent-empty-read bug, not an approved
  * exemption. Three were verified directly against the dev database (the query returns 0 rows as
  * `app_runtime` and the true count when wrapped); the rest match the same shape and are pending
- * confirmation. See .farmflow-scanner/findings_log.md, cycle 1 files 61-75.
+ * confirmation.
  *
  * This list must only ever shrink. If a fix removes a route from it, delete the entry here too.
  */
