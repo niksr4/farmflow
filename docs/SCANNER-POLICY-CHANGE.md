@@ -71,6 +71,42 @@ unreviewed, locally-unverified code straight to four live estates.
 > self-contained bugs directly" -- a fix being trivial enough to skip filing is not license to skip
 > fixing it either; do the fix, not just the note.
 
+> **7. Confirm the ref you scan is the one that ships.**
+> Do not assume `main`. On 2026-08-31 a run scanned `main @ 4c8c1b40` and reported "no new commits
+> since 2026-08-27" — true of `main`, and false of the product. Sixteen commits of live work sat on
+> `feature/biometric-attendance`, which is what production was actually serving, including three
+> customer-facing bug fixes and a database migration. A whole run was spent reviewing a tree nobody
+> deploys, and none of the real changes have ever been scanned.
+> Before scanning, resolve which ref is deployed and scan that. If it is not `main`, say which ref
+> you used in the digest. If `main` is behind the deployed ref by more than a day or two, report
+> that as a finding in its own right — a reviewer pointed at a stale tree produces confident,
+> worthless output, which is worse than no reviewer.
+>
+> **8. Advance the cursor only for work that landed.**
+> The same run advanced the cursor 467→482, then discarded the clone because the pre-push gate
+> could not run. Those fifteen files are now recorded as reviewed, produced nothing, and will never
+> be revisited — the next run starts at 483. That is the worst of both outcomes: it reads as
+> progress in the digest and leaves nothing behind.
+> The cursor records what has been reviewed *and delivered*. If the work does not land, roll the
+> cursor back to where the run started and say so. Rule 2 (do not push without a gate) is right and
+> stays; it just has to be paired with this, or refusing to push quietly destroys the work instead
+> of deferring it.
+>
+> **9. Fix the whole class, not the instances you happened to open.**
+> That run found dangling `findings_log.md` pointers in three test files, fixed those three, and
+> noted four more for "a future pass". There were seven. Once you can name the pattern you can grep
+> for it, and the grep is cheaper than the second pass you are deferring it to — deferring is how a
+> class survives being found. If the remaining instances genuinely belong to another batch, fix them
+> anyway and say which files you reached outside the batch.
+>
+> **10. Report a blocked gate as the headline, not the footnote.**
+> The sandbox disk has been full since 2026-08-06 and has blocked the pre-push gate for a week
+> straight, so nothing has shipped in that time. It is reported at the bottom of the digest under
+> testing notes. Put it first, state how many consecutive runs have been unable to push, and name
+> the specific ask — this needs someone with host access to reclaim the nobody-owned leftovers from
+> previous clones, which the run's own user cannot delete. A constraint that silently costs a week
+> of output is not an environment note.
+
 ---
 
 ## Still worth doing, separately
