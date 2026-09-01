@@ -92,3 +92,19 @@ describe("the route explains the cap rather than leaking the trigger", () => {
     expect(route).not.toContain("more than two days in one day")
   })
 })
+
+describe("an already over-booked day is visible, so it can be corrected", () => {
+  it("marks the worker with the total, not just the two job rows", () => {
+    // KAB is going back through five days to delete the wrong job per person. Without this he is
+    // hunting: two jobs at a full day each look exactly like a legitimate split, and the sum --
+    // the only thing that distinguishes them -- was never on the screen.
+    expect(muster).toContain("dayBooked > 1.0001")
+    expect(muster).toContain("{dayBooked} days")
+  })
+
+  it("only flags over a day, so a normal 0.5 + 0.5 split stays quiet", () => {
+    // Flagging every split would make the badge noise and it would stop being read.
+    expect(muster).not.toContain("dayBooked > 0.5")
+    expect(muster).not.toContain("rows.length > 1 &&")
+  })
+})

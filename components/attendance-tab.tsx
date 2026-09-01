@@ -932,6 +932,7 @@ export default function AttendanceTab({ selectedEstate = null }: AttendanceTabPr
             // Only someone present can be given work, so batch mode simply ignores the absent --
             // the same rule the single-worker path already enforces server-side.
             const batchSelected = batchMode && batchSet.has(worker.id)
+            const dayBooked = dayUsedByWorker.get(worker.id) ?? 0
             return (
               // Tapping anywhere on the row still toggles presence -- that is the whole point on a
               // phone. But the row is not itself a button: it contains a delete button, a dismiss
@@ -968,6 +969,17 @@ export default function AttendanceTab({ selectedEstate = null }: AttendanceTabPr
                             <span className="truncate">{worker.name}</span>
                             {worker.kind === "gang" && (
                               <span className="shrink-0 text-[10px] font-black text-stone-400">×{worker.headcount ?? 1}</span>
+                            )}
+                            {/* The number that was missing. Nothing on this screen ever added a
+                                person's day up, so two jobs at a full day each looked exactly like
+                                two jobs -- and three estates booked 135 worker-days nobody worked.
+                                New entries cannot do this any more (scripts/145); this is for the
+                                days already recorded, so the rows to correct can be seen rather
+                                than hunted for one worker at a time. */}
+                            {dayBooked > 1.0001 && (
+                              <span className="shrink-0 rounded px-1 py-px text-[9px] font-black uppercase tracking-wide text-white bg-red-600">
+                                {dayBooked} days
+                              </span>
                             )}
                           </p>
                           <p className="mt-0.5 flex items-center gap-1 truncate text-[11px] font-medium text-stone-400">
