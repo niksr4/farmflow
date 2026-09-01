@@ -49,7 +49,18 @@ export default function WorkerAllocation({
   activities: ActivityOption[]
   saving: boolean
   /** An existing job being corrected, or null when setting a new one. */
-  editing: { id: string; activityCode: string; locationId: string | null; dayFraction: number } | null
+  editing: {
+    id: string
+    activityCode: string
+    locationId: string | null
+    dayFraction: number
+    /**
+     * Carried so an edit can prefill it. The PUT route treats an absent lumpSum as "price this per
+     * day after all" -- which is what makes clearing the field work -- so a panel that did not
+     * prefill would silently wipe the contract price of every row it touched.
+     */
+    lumpSum?: number | null
+  } | null
   /** A gang carries its crew size; an individual is always one. */
   headcount: number
   /** The estate's normal wage for this person -- the base of the rate chain. */
@@ -84,6 +95,8 @@ export default function WorkerAllocation({
     dayFraction: number
     payMultiplier: number
     rate: number | null
+    /** A contract price for the whole job. Null means price it per head. */
+    lumpSum: number | null
     headcount?: number
     driverCharge?: number | null
     supervisorCharge?: number | null
@@ -109,6 +122,17 @@ export default function WorkerAllocation({
   // Blank means "whatever this work pays"; typing here prices this one entry differently without
   // changing the code for everyone.
   const [rateOverride, setRateOverride] = useState("")
+  /**
+   * A job priced as a whole rather than per head -- "Rathi & Team, Rs 70,000 to clear the block".
+   *
+   * The column, the route and the roster's "Contract crew" have all existed since the muster
+   * shipped; this input never did, so lump_sum has 0 rows across all four estates while the old
+   * Labour tab still holds real contract entries of Rs 70,000. That gap is what keeps the old
+   * labour write path alive.
+   */
+  const [contractPrice, setContractPrice] = useState(
+    editing?.lumpSum != null ? String(editing.lumpSum) : "",
+  )
   const [crew, setCrew] = useState(String(headcount || 1))
   const [driver, setDriver] = useState("")
   const [supervisor, setSupervisor] = useState("")
@@ -119,13 +143,18 @@ export default function WorkerAllocation({
   // priced on the day rather than kept in a rate table: the exceptions vary by day, gang and
   // season, so a stored rate would be stale more often than right. Shown before saving, because
   // a cost nobody can see is a cost nobody checks.
+  const lumpSum = contractPrice.trim() !== "" && Number(contractPrice) >= 0 ? Number(contractPrice) : null
+  const isContract = lumpSum != null
   const typed = rateOverride.trim() !== "" ? Number(rateOverride) : null
   const effectiveRate = typed ?? workerRate
   const rateSource = typed != null ? "this entry" : workerRate != null ? "daily wage" : null
   const heads = isGang ? Math.max(1, Number(crew) || 1) : 1
   const extras = [driver, supervisor, vehicle].reduce((sum, v) => sum + (Number(v) || 0), 0)
-  const total =
-    effectiveRate == null || !Number.isFinite(effectiveRate)
+  // Mirrors the generated column exactly: COALESCE(lump_sum, rate x headcount x day_fraction).
+  // A preview that disagrees with what gets stored is worse than no preview.
+  const total = isContract
+    ? (lumpSum as number)
+    : effectiveRate == null || !Number.isFinite(effectiveRate)
       ? null
       : effectiveRate * heads * dayFraction * payMultiplier + extras
 
@@ -136,6 +165,11 @@ export default function WorkerAllocation({
    */
   const batchPricing = (() => {
     if (!batchWorkers || batchWorkers.length === 0) return null
+    // A contract is one price for the job, so nobody's daily wage enters into it -- and a missing
+    // wage is not a problem to warn about.
+    if (isContract) {
+      return { unpaid: [], sum: lumpSum, sharedRate: null, count: batchWorkers.length }
+    }
     const priced = batchWorkers.map((w) => ({ name: w.name, rate: typed ?? w.rate }))
     const unpaid = priced.filter((w) => !(Number(w.rate) > 0)).map((w) => w.name)
     const rates = priced.map((w) => Number(w.rate))
@@ -185,6 +219,7 @@ export default function WorkerAllocation({
       dayFraction,
       payMultiplier,
       rate: rateOverride.trim() !== "" ? Number(rateOverride) : null,
+      lumpSum,
       ...(isGang ? { headcount: heads } : {}),
       driverCharge: Number(driver) || null,
       supervisorCharge: Number(supervisor) || null,
@@ -193,6 +228,7 @@ export default function WorkerAllocation({
     setBusy(false)
     if (ok) {
       setActivityCode("")
+      setContractPrice("")
       setLocationId("")
       setDayFraction(1)
       onClose()
@@ -317,8 +353,27 @@ export default function WorkerAllocation({
           type="number" inputMode="decimal" min={0}
           value={rateOverride}
           onChange={(e) => setRateOverride(e.target.value)}
-          placeholder={effectiveRate != null ? String(effectiveRate) : "no rate yet"}
+          placeholder={isContract ? "not used on a contract" : effectiveRate != null ? String(effectiveRate) : "no rate yet"}
           aria-label="Rate per day"
+          disabled={isContract}
+          className={cn(
+            "h-8 flex-1 rounded-lg border border-stone-200 px-2 text-xs tabular-nums placeholder:text-stone-400 dark:border-white/[0.1] dark:bg-transparent",
+            isContract && "cursor-not-allowed opacity-45",
+          )}
+        />
+      </label>
+
+      {/* Priced as a whole, not per head. The two are exclusive by construction -- total_cost is
+          COALESCE(lump_sum, rate x headcount x day_fraction), so a contract price silently wins
+          over the rate. Disabling the rate above says that out loud instead. */}
+      <label className="flex items-center gap-2 text-[11px] font-semibold text-stone-500">
+        <span className="w-20 shrink-0">Contract</span>
+        <input
+          type="number" inputMode="decimal" min={0}
+          value={contractPrice}
+          onChange={(e) => setContractPrice(e.target.value)}
+          placeholder={batchWorkers && batchWorkers.length > 1 ? "whole job, for all of them" : "whole job, not per day"}
+          aria-label="Contract price for the whole job"
           className="h-8 flex-1 rounded-lg border border-stone-200 px-2 text-xs tabular-nums placeholder:text-stone-400 dark:border-white/[0.1] dark:bg-transparent"
         />
       </label>
@@ -359,14 +414,26 @@ export default function WorkerAllocation({
               <span className="text-stone-700 dark:text-stone-200">
                 ₹{Math.round(batchPricing.sum as number).toLocaleString("en-IN")}
               </span>
-              <span className="ml-1 font-medium text-stone-400">
-                = {batchPricing.count} {batchPricing.count === 1 ? "worker" : "workers"}
-                {batchPricing.sharedRate != null
-                  ? ` at ₹${batchPricing.sharedRate}${typed != null ? " (this entry)" : " (daily wage)"}`
-                  : " at their own daily wage"}
-                {dayFraction !== 1 ? ` × ${dayFraction}` : ""}
-                {payMultiplier !== 1 ? ` × ${payMultiplier} holiday` : ""}
-              </span>
+              {isContract ? (
+                /* The split is shown because it is what gets stored -- one row per person. Without
+                   it, "Rs 70,000" beside twenty names reads as either the job or each of them, and
+                   the difference is Rs 13 lakh. */
+                <span className="ml-1 font-medium text-stone-400">
+                  contract for the whole job
+                  {batchPricing.count > 1
+                    ? ` — ₹${Math.round((lumpSum as number) / batchPricing.count).toLocaleString("en-IN")} each across ${batchPricing.count}`
+                    : ""}
+                </span>
+              ) : (
+                <span className="ml-1 font-medium text-stone-400">
+                  = {batchPricing.count} {batchPricing.count === 1 ? "worker" : "workers"}
+                  {batchPricing.sharedRate != null
+                    ? ` at ₹${batchPricing.sharedRate}${typed != null ? " (this entry)" : " (daily wage)"}`
+                    : " at their own daily wage"}
+                  {dayFraction !== 1 ? ` × ${dayFraction}` : ""}
+                  {payMultiplier !== 1 ? ` × ${payMultiplier} holiday` : ""}
+                </span>
+              )}
             </>
           )
         ) : total == null ? (

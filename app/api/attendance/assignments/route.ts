@@ -226,6 +226,24 @@ export async function POST(request: Request) {
       )
     }
 
+    /**
+     * A CONTRACT PRICE IS THE PRICE OF THE JOB, NOT OF EACH PERSON ON IT.
+     *
+     * This route writes one row per worker, and lump_sum went onto every one of them unchanged --
+     * so a Rs 70,000 contract set for a crew of twenty would have stored Rs 14,00,000. Nothing
+     * would have complained: the day cap counts days, not money, and the generated total_cost
+     * would have been faithfully wrong twenty times over.
+     *
+     * It has never fired, because until now no screen could send a lump sum at all (0 rows across
+     * every tenant). It would have fired the first time somebody used the new field on a group.
+     *
+     * The usual shape is one "Contract crew" roster row with a headcount, which lands here as a
+     * single worker and divides by one. Splitting evenly is for the case where somebody selects
+     * the people individually instead -- the total stays the contract price either way, which is
+     * the invariant that matters. The panel shows the per-person share before saving.
+     */
+    const lumpSumEach = lumpSum == null ? null : rows.length > 0 ? lumpSum / rows.length : lumpSum
+
     // One transaction: a bulk assign either lands for the whole selection or not at all. Half a
     // crew allocated is worse than none, because it looks finished.
     try {
@@ -237,7 +255,7 @@ export async function POST(request: Request) {
                                             driver_charge, supervisor_charge, vehicle_charge,
                                             notes, recorded_by)
             VALUES (${tenantContext.tenantId}, ${r.workerId}, ${date}, ${activityCode}, ${locationId},
-                    ${dayFraction}, ${r.rate}, ${r.headcount}, ${lumpSum}, ${payMultiplier},
+                    ${dayFraction}, ${r.rate}, ${r.headcount}, ${lumpSumEach}, ${payMultiplier},
                     ${extras.driver}, ${extras.supervisor}, ${extras.vehicle},
                     ${String(body?.notes || "").trim() || null}, ${sessionUser.username || "system"})
           `,
@@ -364,6 +382,23 @@ export async function PUT(request: Request) {
     }
     const editCrew = body?.headcount == null || body.headcount === "" ? null : Math.max(1, num(body.headcount, 1))
 
+    /**
+     * The contract price, correctable -- and clearable.
+     *
+     * The edit path never touched lump_sum, so a contract row kept its original price forever: a
+     * job agreed at Rs 70,000 and settled at Rs 65,000 could not be corrected, and switching a row
+     * back to per-head pricing was impossible because the stored lump sum keeps winning inside
+     * COALESCE(lump_sum, rate x headcount x day_fraction).
+     *
+     * Absent means absent here, not "leave it alone": an edit sends the whole row, and the panel
+     * clearing the field is exactly how somebody says "price this per day after all". No division
+     * on this path -- an edit addresses one row, which already holds its own share.
+     */
+    const editLumpSum = body?.lumpSum == null || body.lumpSum === "" ? null : num(body.lumpSum, -1)
+    if (editLumpSum !== null && editLumpSum < 0) {
+      return NextResponse.json({ success: false, error: "A contract amount cannot be negative" }, { status: 400 })
+    }
+
     try {
       const updated = await runTenantQuery(
         accountsSql,
@@ -376,6 +411,7 @@ export async function PUT(request: Request) {
               rate              = COALESCE(${overrideRate}, rate),
               pay_multiplier    = ${editMultiplier},
               headcount         = COALESCE(${editCrew}, headcount),
+              lump_sum          = ${editLumpSum},
               driver_charge     = ${editExtras.driver},
               supervisor_charge = ${editExtras.supervisor},
               vehicle_charge    = ${editExtras.vehicle},

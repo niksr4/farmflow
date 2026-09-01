@@ -1021,6 +1021,11 @@ export default function AttendanceTab({ selectedEstate = null }: AttendanceTabPr
                               show the same numbers. */}
                           <p className="truncate text-[10px] leading-tight text-stone-400">
                             <span className="font-mono">{a.activityCode}</span>
+                            {/* Otherwise a Rs 70,000 contract beside "1d" reads as a day rate of
+                                seventy thousand rupees. It is the price of the job. */}
+                            {a.lumpSum != null && (
+                              <span className="ml-1 font-bold uppercase tracking-wide text-sky-600">contract</span>
+                            )}
                             <span className="sm:hidden"> · {a.dayFraction}d · ₹{a.totalCost.toLocaleString("en-IN")}</span>
                           </p>
                         </>
