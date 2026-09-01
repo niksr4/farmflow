@@ -22,6 +22,7 @@ import { fetchTenantOwnersWithVerifiedEmail, fetchRecentRainfallSummary, type Te
 import { fetchTenantActivitySignals, evaluateDigestDormancy } from "@/lib/server/agents/tenant-dormancy"
 import { fetchTenantEstateNames, fetchActivityByEstate, buildEstateBreakdownSection } from "@/lib/server/agents/digest-estate-breakdown"
 import { escapeHtml } from "@/lib/html-escape"
+import { formatCurrency } from "@/lib/format"
 
 type DigestResult = {
   tenantId: string
@@ -129,9 +130,9 @@ function buildLastWeekSection(w: LastWeekActivity): string {
   const lines: string[] = [`## Last Week (${w.weekLabel})`]
   if (w.processingKg > 0) lines.push(`- Cherry processed: ${w.processingKg.toFixed(1)} kg over ${w.processingDays} day(s)`)
   if (w.pickingEntries > 0) lines.push(`- Picking entries recorded: ${w.pickingEntries}`)
-  if (w.laborEntries > 0) lines.push(`- Labour deployments: ${w.laborEntries} entries, ${w.laborWorkers} worker-days, ₹${w.laborCost.toLocaleString("en-IN")} cost`)
-  if (w.expenseEntries > 0) lines.push(`- Other expenses: ₹${w.expenseTotal.toLocaleString("en-IN")} across ${w.expenseEntries} entries`)
-  if (w.salesRevenue > 0) lines.push(`- Sales revenue: ₹${w.salesRevenue.toLocaleString("en-IN")}`)
+  if (w.laborEntries > 0) lines.push(`- Labour deployments: ${w.laborEntries} entries, ${w.laborWorkers} worker-days, ${formatCurrency(w.laborCost)} cost`)
+  if (w.expenseEntries > 0) lines.push(`- Other expenses: ${formatCurrency(w.expenseTotal)} across ${w.expenseEntries} entries`)
+  if (w.salesRevenue > 0) lines.push(`- Sales revenue: ${formatCurrency(w.salesRevenue)}`)
   if (w.dispatchBags > 0) lines.push(`- Bags dispatched: ${w.dispatchBags.toFixed(1)}`)
   if (w.rainfallInches > 0) lines.push(`- Rainfall recorded: ${w.rainfallInches.toFixed(2)} inches`)
   if (lines.length === 1) lines.push("- No activity recorded last week.")
@@ -274,7 +275,7 @@ async function fetchSeasonCostBasis(tenantId: string): Promise<SeasonCostBasis |
 }
 
 function buildSeasonCostBasisSection(basis: SeasonCostBasis): string {
-  const fmt = (n: number) => `₹${Math.round(n).toLocaleString("en-IN")}`
+  const fmt = (n: number) => formatCurrency(n)
   const lines: string[] = ["## Season Cost Basis"]
 
   lines.push(`- Fiscal year: ${basis.fyLabel}`)

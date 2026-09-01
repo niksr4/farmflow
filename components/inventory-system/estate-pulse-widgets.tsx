@@ -25,7 +25,7 @@ import {
 } from "lucide-react"
 import { ChartContainer, ChartTooltip, ChartTooltipContent, type ChartConfig } from "@/components/ui/chart"
 import { cn } from "@/lib/utils"
-import { formatNumber, formatCurrency } from "@/lib/format"
+import { formatNumber, formatCurrency, formatUnitPrice } from "@/lib/format"
 
 const fmtKg = (n: number) => `${formatNumber(n, 0)} kg`
 
@@ -156,12 +156,12 @@ export function CostRevenueCard({
           <div>
             <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-stone-500">Cost / kg vs Revenue / kg</p>
             <p className="text-sm font-bold text-stone-900 dark:text-white">
-              {formatCurrency(costPerKg ?? 0, 2)} cost · {formatCurrency(revenuePerKg ?? 0, 2)} revenue
+              {formatUnitPrice(costPerKg ?? 0)} cost · {formatUnitPrice(revenuePerKg ?? 0)} revenue
             </p>
           </div>
           <div className={cn("flex items-center gap-1 text-lg font-black tabular-nums", profitable ? "text-emerald-700 dark:text-emerald-400" : "text-rose-700")}>
             {profitable ? <TrendingUp className="h-5 w-5" /> : <TrendingDown className="h-5 w-5" />}
-            {profitable ? "+" : ""}{formatCurrency(marginPerKg ?? 0, 2)}/kg
+            {profitable ? "+" : ""}{formatUnitPrice(marginPerKg ?? 0)}/kg
           </div>
         </div>
       )}

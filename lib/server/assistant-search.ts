@@ -4,6 +4,7 @@ import { sql } from "@/lib/server/db"
 import type { AssistantSearchResult } from "@/lib/ai-assistant"
 import { logServerError } from "@/lib/server/safe-logging"
 import { normalizeTenantContext, runTenantQuery } from "@/lib/server/tenant-db"
+import { formatCurrency } from "@/lib/format"
 
 type AssistantSearchInput = {
   tenantId: string
@@ -30,7 +31,7 @@ const formatDateLabel = (value: unknown) =>
     ? value.toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" })
     : String(value || "").slice(0, 10)
 
-const formatAmount = (value: unknown) => `₹${(Number(value) || 0).toLocaleString("en-IN")}`
+const formatAmount = (value: unknown) => formatCurrency(Number(value) || 0)
 
 const formatQuantity = (value: unknown, unit: unknown) => {
   const numeric = Number(value) || 0

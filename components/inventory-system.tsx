@@ -84,7 +84,7 @@ import Link from "next/link"
 import Image from "next/image"
 import { isWithinLast24Hours, todayIso } from "@/lib/date-utils"
 import { kgFromBags } from "@/lib/inventory-units"
-import { formatCurrency, formatNumber } from "@/lib/format"
+import { formatCurrency, formatNumber, formatUnitPrice } from "@/lib/format"
 import { type AccountsExportFormat } from "@/lib/accounts-export"
 import { getCurrentFiscalYear } from "@/lib/fiscal-year-utils"
 import { getCurrentEstatePhase } from "@/lib/coffee-estate-calendar"
@@ -2056,7 +2056,7 @@ export default function InventorySystem() {
                   <div className="rounded-md border border-black/5 bg-white px-2 py-1.5">
                     <p className="text-[11px] uppercase tracking-wide text-muted-foreground">Price</p>
                     <p className="font-medium text-neutral-900">
-                      {transaction.price ? formatCurrency(Number(transaction.price) || 0) : "-"}
+                      {transaction.price ? formatUnitPrice(Number(transaction.price) || 0) : "-"}
                     </p>
                   </div>
                   <div className="rounded-md border border-black/5 bg-white px-2 py-1.5">
@@ -2157,7 +2157,7 @@ export default function InventorySystem() {
                       </Badge>
                     </td>
                     <td className="py-4 px-4">
-                      {transaction.price ? formatCurrency(Number(transaction.price) || 0) : "-"}
+                      {transaction.price ? formatUnitPrice(Number(transaction.price) || 0) : "-"}
                     </td>
                     <td className="py-4 px-4 max-w-xs">
                       {transaction.notes ? (
@@ -2701,7 +2701,7 @@ export default function InventorySystem() {
         const revalueBody = {
           item_type: originalName,
           quantity: originalQty,
-          notes: `Price correction (${formatCurrency(originalAvgPrice)} -> ${formatCurrency(nextAvgPrice)} per ${originalUnit})`,
+          notes: `Price correction (${formatUnitPrice(originalAvgPrice)} -> ${formatUnitPrice(nextAvgPrice)} per ${originalUnit})`,
           user_id: user?.username || "system",
           location_id: adjustmentLocationId,
         }
@@ -5107,7 +5107,7 @@ export default function InventorySystem() {
                                         <Tooltip>
                                           <TooltipTrigger asChild>
                                             <span className="cursor-default underline decoration-dotted decoration-stone-300">
-                                              Avg cost {formatCurrency(avgPrice)}/{item.unit || "unit"}
+                                              Avg cost {formatUnitPrice(avgPrice)}/{item.unit || "unit"}
                                             </span>
                                           </TooltipTrigger>
                                           <TooltipContent className="max-w-[230px] text-xs leading-relaxed">

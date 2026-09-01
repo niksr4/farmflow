@@ -395,26 +395,30 @@ export default function BillingTab({ showDataToolsControls = false }: BillingTab
                 <CardTitle className="text-lg">Totals</CardTitle>
                 <CardDescription>Calculated GST split</CardDescription>
               </CardHeader>
+              {/* Paise, deliberately, unlike every other money figure in the app. These five lines
+                  have to add up in front of a tax officer: rounding each to the rupee on its own
+                  lets subtotal + CGST + SGST drift from the total by a rupee or two, and an invoice
+                  whose parts do not sum to its whole is the one place that actually matters. */}
               <CardContent className="space-y-2 text-sm">
                 <div className="flex items-center justify-between">
                   <span>Subtotal</span>
-                  <span>{formatCurrency(totals.subtotal)}</span>
+                  <span>{formatCurrency(totals.subtotal, 2)}</span>
                 </div>
                 <div className="flex items-center justify-between">
                   <span>CGST</span>
-                  <span>{formatCurrency(totals.cgstAmount)}</span>
+                  <span>{formatCurrency(totals.cgstAmount, 2)}</span>
                 </div>
                 <div className="flex items-center justify-between">
                   <span>SGST</span>
-                  <span>{formatCurrency(totals.sgstAmount)}</span>
+                  <span>{formatCurrency(totals.sgstAmount, 2)}</span>
                 </div>
                 <div className="flex items-center justify-between">
                   <span>IGST</span>
-                  <span>{formatCurrency(totals.igstAmount)}</span>
+                  <span>{formatCurrency(totals.igstAmount, 2)}</span>
                 </div>
                 <div className="flex items-center justify-between font-semibold">
                   <span>Total</span>
-                  <span>{formatCurrency(totals.total)}</span>
+                  <span>{formatCurrency(totals.total, 2)}</span>
                 </div>
               </CardContent>
             </Card>

@@ -10,7 +10,7 @@ import { Textarea } from "@/components/ui/textarea"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { useToast } from "@/hooks/use-toast"
 import { useAuth } from "@/hooks/use-auth"
-import { formatCurrency, formatNumber } from "@/lib/format"
+import { formatCurrency, formatNumber, formatUnitPrice } from "@/lib/format"
 import { formatDateOnly, todayIso } from "@/lib/date-utils"
 import { canAcceptNonNegative, isBlockedNumericKey, numericInputValue } from "@/lib/number-input"
 import { Pencil, Save, Trash2 } from "lucide-react"
@@ -385,7 +385,7 @@ export default function OtherSalesTab({
             </div>
             <div>
               <p className="text-xs text-muted-foreground">Per-kg revenue</p>
-              <p className="text-lg font-semibold text-emerald-700">{formatCurrency(totals.perKgRevenue)}</p>
+              <p className="text-lg font-semibold text-emerald-700">{formatUnitPrice(totals.perKgRevenue)}</p>
             </div>
             <div>
               <p className="text-xs text-muted-foreground">Contract revenue</p>
@@ -652,15 +652,15 @@ export default function OtherSalesTab({
                       </TableCell>
                       <TableCell className="text-right">
                         {record.rate_per_kg !== null && record.rate_per_kg !== undefined
-                          ? formatCurrency(record.rate_per_kg, 2)
+                          ? formatUnitPrice(record.rate_per_kg)
                           : "-"}
                       </TableCell>
                       <TableCell className="text-right">
                         {record.contract_amount !== null && record.contract_amount !== undefined
-                          ? formatCurrency(record.contract_amount, 2)
+                          ? formatCurrency(record.contract_amount)
                           : "-"}
                       </TableCell>
-                      <TableCell className="text-right font-medium">{formatCurrency(record.revenue, 2)}</TableCell>
+                      <TableCell className="text-right font-medium">{formatCurrency(record.revenue)}</TableCell>
                       <TableCell>{record.buyer_name || "-"}</TableCell>
                       <TableCell>{record.bank_account || "-"}</TableCell>
                       <TableCell className="max-w-[260px] truncate">{record.notes || "-"}</TableCell>

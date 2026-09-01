@@ -19,6 +19,7 @@ import {
 } from "@/lib/server/agents/digest-shared"
 import { fetchTenantActivitySignals, evaluateDigestDormancy } from "@/lib/server/agents/tenant-dormancy"
 import { fetchTenantEstateNames, fetchActivityByEstate, buildEstateBreakdownSection } from "@/lib/server/agents/digest-estate-breakdown"
+import { formatCurrency } from "@/lib/format"
 
 type DigestResult = {
   tenantId: string
@@ -169,14 +170,14 @@ function buildYesterdaySection(a: YesterdayActivity, dateLabel: string): string 
   if (a.processingKg > 0) lines.push(`- Cherry processed: ${a.processingKg.toFixed(1)} kg`)
   if (a.pickingEntries > 0) lines.push(`- Picking entries recorded: ${a.pickingEntries}`)
   if (a.laborEntries > 0) {
-    lines.push(`- Labour deployments: ${a.laborEntries} entries, ${a.laborWorkers} worker-days, ₹${a.laborCost.toLocaleString("en-IN")} cost`)
+    lines.push(`- Labour deployments: ${a.laborEntries} entries, ${a.laborWorkers} worker-days, ${formatCurrency(a.laborCost)} cost`)
     // Indented beneath the total so the digest still scans as one line per activity, with the
     // detail available to anyone who reads on. Dearest first: that is the one an owner questions.
     for (const c of a.laborByCode) {
       // Half-days are real (0.5), whole days are the norm -- so trim the trailing zeros rather
       // than rounding, which would turn 0.5 into 1 and overstate the day.
       const days = Number(c.workers.toFixed(2)).toLocaleString("en-IN")
-      lines.push(`    - ${c.code} ${c.activity}: ${days} worker-days, ₹${c.cost.toLocaleString("en-IN")}`)
+      lines.push(`    - ${c.code} ${c.activity}: ${days} worker-days, ${formatCurrency(c.cost)}`)
     }
   }
   if (a.expenseEntries > 0) lines.push(`- Other expenses: ₹${a.expenseTotal.toLocaleString("en-IN")} across ${a.expenseEntries} entries`)

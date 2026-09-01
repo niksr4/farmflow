@@ -29,9 +29,17 @@ describe("a scanner setup step is done only on evidence", () => {
     expect(scannerSetupState(signals())).toEqual({
       registered: false,
       reachedUs: false,
+      rosterHasIds: false,
       punchesArriving: false,
       allMapped: false,
     })
+  })
+
+  it("the roster step waits for a fingerprint id, not for a device", () => {
+    // It is the step you can do before the hardware arrives, and the numbers you enrol come from
+    // it -- so owning a terminal must not tick it and not owning one must not block it.
+    expect(scannerSetupState(signals({ deviceCount: 1, anyDeviceSeen: true })).rosterHasIds).toBe(false)
+    expect(scannerSetupState(signals({ mappedWorkerCount: 1 })).rosterHasIds).toBe(true)
   })
 
   it("does not call the roster matched when no punch has ever arrived", () => {
@@ -76,6 +84,34 @@ describe("the relay address has one definition", () => {
       expect(source).not.toMatch(/NEXT_PUBLIC_BIOMETRIC_RELAY/)
       expect(source).toContain("@/lib/scanner-setup")
     }
+  })
+})
+
+describe("the instructions only promise what the ingest can do", () => {
+  const tab = readFileSync(resolve(__dirname, "../components/attendance-scanner-tab.tsx"), "utf8")
+
+  it("does not claim FarmFlow reads a name typed on the terminal", () => {
+    // It does not. recordEnrollment fires only on the hdata.aspx realtimeEnroll message, and the
+    // iclock/ADMS path this hardware speaks has no enrolment message -- biometric_enrollments is
+    // empty in both databases. An instruction whose next step depends on a message that never
+    // arrives is worse than no instruction: the estate does as told and blames itself.
+    expect(tab).not.toContain("FarmFlow reads that name back")
+    expect(tab).toContain("FarmFlow shows the name from your")
+  })
+
+  it("assigns the ids in FarmFlow before asking anyone to enrol a finger", () => {
+    // Order is the fix. Enrol-first needs the device to tell us who code 7 is; roster-first never
+    // asks, because the estate already said.
+    const assign = tab.indexOf("Give each worker a fingerprint ID in FarmFlow")
+    const enrol = tab.indexOf("Enrol the same IDs on the terminal")
+    expect(assign).toBeGreaterThan(-1)
+    expect(enrol).toBeGreaterThan(-1)
+    expect(assign).toBeLessThan(enrol)
+  })
+
+  it("still tells estates to keep per-estate id blocks", () => {
+    // Two terminals issuing "7" to different people is unrecoverable after the fact.
+    expect(tab).toContain("1–99 for one, 101–199 for the next")
   })
 })
 

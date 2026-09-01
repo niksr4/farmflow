@@ -3,7 +3,7 @@
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
-import { formatCurrency, formatNumber } from "@/lib/format"
+import { formatCurrency, formatNumber, formatUnitPrice } from "@/lib/format"
 import { formatDate } from "@/components/inventory-system/utils"
 import type { InventoryItem, Transaction } from "@/lib/inventory-types"
 
@@ -70,7 +70,7 @@ export default function InventoryDrilldownPanel({
               </div>
               <div className="mt-3 flex flex-wrap gap-2 text-xs">
                 <span className="rounded-full border border-white/80 bg-white px-3 py-1.5 text-neutral-700">
-                  Avg cost {formatCurrency(selectedValue?.avgPrice || 0)}
+                  Avg cost {formatUnitPrice(selectedValue?.avgPrice || 0)}
                 </span>
                 <span className="rounded-full border border-white/80 bg-white px-3 py-1.5 text-amber-700">
                   Value {formatCurrency(selectedValue?.totalValue || 0)}

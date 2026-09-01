@@ -7,6 +7,7 @@ import "server-only"
 // numbers to the estate that actually produced them instead of quietly blending e.g. Citrus
 // Grove and Tirtha Estate into one figure a reader would assume came from a single property.
 import { adminSql as sql } from "@/lib/server/db"
+import { formatCurrency } from "@/lib/format"
 
 const toRows = <T = any>(value: unknown): T[] => {
   if (Array.isArray(value)) return value as T[]
@@ -126,10 +127,10 @@ export function buildEstateBreakdownSection(title: string, breakdown: EstateActi
   for (const e of breakdown) {
     const parts: string[] = []
     if (e.processingKg > 0) parts.push(`${e.processingKg.toFixed(1)} kg processed`)
-    if (e.laborCost > 0) parts.push(`₹${e.laborCost.toLocaleString("en-IN")} labour`)
-    if (e.expenseTotal > 0) parts.push(`₹${e.expenseTotal.toLocaleString("en-IN")} other expenses`)
+    if (e.laborCost > 0) parts.push(`${formatCurrency(e.laborCost)} labour`)
+    if (e.expenseTotal > 0) parts.push(`${formatCurrency(e.expenseTotal)} other expenses`)
     if (e.dispatchBags > 0) parts.push(`${e.dispatchBags.toFixed(1)} bags dispatched`)
-    if (e.salesRevenue > 0) parts.push(`₹${e.salesRevenue.toLocaleString("en-IN")} sales revenue`)
+    if (e.salesRevenue > 0) parts.push(`${formatCurrency(e.salesRevenue)} sales revenue`)
     lines.push(`- ${e.estate}: ${parts.length > 0 ? parts.join(", ") : "no activity recorded"}`)
   }
   return lines.join("\n")

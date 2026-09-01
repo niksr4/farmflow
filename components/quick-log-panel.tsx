@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
 import { reportActionError } from "@/lib/track-action"
 import { useLocale } from "@/components/locale-provider"
-import { formatCurrency } from "@/lib/format"
+import { formatCurrency, formatUnitPrice } from "@/lib/format"
 import { useTenantSettings } from "@/hooks/use-tenant-settings"
 import { format, subDays } from "date-fns"
 import { toast } from "sonner"
@@ -414,7 +414,7 @@ export default function QuickLogPanel({ onNavigateToFull, locationId, className 
                 {/* Cost line */}
                 {wage > 0 && workers > 0 && (
                   <p className="text-sm text-stone-500 text-right">
-                    {workers} × {formatCurrency(wage)} ={" "}
+                    {workers} × {formatUnitPrice(wage)} ={" "}
                     <span className="font-bold text-stone-900">{formatCurrency(total)}</span>
                   </p>
                 )}

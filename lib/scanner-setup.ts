@@ -32,6 +32,8 @@ export type ScannerSignals = {
 export type ScannerSetupState = {
   registered: boolean
   reachedUs: boolean
+  /** Somebody on the roster carries a fingerprint id -- the numbers to enrol on the terminal. */
+  rosterHasIds: boolean
   punchesArriving: boolean
   allMapped: boolean
 }
@@ -49,10 +51,17 @@ export type ScannerSetupState = {
  *   has never received a punch looks like, and a green tick there says the roster is linked when
  *   nothing has been linked at all -- the same "empty means done" mistake the onboarding checklist
  *   made when it went green on the first priced item out of forty.
+ *
+ * `rosterHasIds` is deliberately "any", not "all", which breaks the house rule that a step is done
+ * only when every row is done. The rule applies where the number is a denominator, and here it is
+ * not knowable: an estate can quite reasonably keep a contract gang off the terminal entirely, so
+ * there is no count of workers who *should* carry an id to divide by. The tab shows the raw "N of M
+ * have one" instead and lets the estate decide whether the gap is a gap.
  */
 export const scannerSetupState = (signals: ScannerSignals): ScannerSetupState => ({
   registered: signals.deviceCount > 0,
   reachedUs: signals.anyDeviceSeen || signals.anyDeviceOnline,
+  rosterHasIds: signals.mappedWorkerCount > 0,
   punchesArriving: signals.punchCount > 0,
   allMapped: signals.unmappedCount === 0 && signals.mappedWorkerCount > 0,
 })

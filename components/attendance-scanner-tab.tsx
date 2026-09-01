@@ -40,6 +40,18 @@ import {
  *
  * So every step here reads its own state from live data rather than telling the estate what to do
  * and hoping. A step goes green because the thing actually happened.
+ *
+ * THE ROSTER COMES BEFORE THE TERMINAL (changed 2026-09-01). The first version had estates enrol
+ * people on the device, type a name there, and match the numbers up afterwards -- and it promised
+ * FarmFlow would read that typed name back. It cannot. `biometric_enrollments` is empty in both
+ * databases because `recordEnrollment` only fires on the hdata.aspx `realtimeEnroll` message, and
+ * the iclock/ADMS path this hardware speaks has no enrolment message at all. So the screen said
+ * "code 7 -- SUM" would appear and it only ever said "code 7".
+ *
+ * Assigning the ids in FarmFlow first makes that promise unnecessary rather than fixing it: the
+ * name comes from the estate's own roster, matched on the number, so a punch is a person from the
+ * first one. Matching unknown codes is now the exception path (step 5) instead of the main road,
+ * which is also the honest description -- an unmatched code means somebody mistyped a number.
  */
 
 type BiometricDevice = {
@@ -229,6 +241,7 @@ export default function AttendanceScannerTab() {
     [devices, punches, unmappedCodes, workers],
   )
   const steps = scannerSetupState(signals)
+  const workersWithoutId = useMemo(() => workers.filter((w) => !w.deviceUserCode), [workers])
 
   const handleAddDeviceUnguarded = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -436,15 +449,48 @@ export default function AttendanceScannerTab() {
         </div>
       </Step>
 
-      <Step number={3} title="Enrol fingers on the terminal" done={steps.punchesArriving}>
+      <Step number={3} title="Give each worker a fingerprint ID in FarmFlow" done={steps.rosterHasIds}>
         <p>
-          Enrol each person on the device itself (<span className="font-semibold">Menu → User → New User</span>), and
-          type their name when it asks. FarmFlow reads that name back, which is what turns &ldquo;code 7 punched&rdquo;
-          into a person you recognise on the next step.
+          Decide the numbers <span className="font-semibold">here first</span>, before touching the terminal. Open{" "}
+          <span className="font-semibold">Workers</span> and fill in the <span className="font-semibold">Finger ID</span>{" "}
+          column — one number per person, any number you like, as long as no two people share one.
         </p>
         <p className="text-xs text-stone-400">
-          Give each estate its own block of ID numbers — 1–99 for one, 101–199 for the next — so two terminals never
-          issue the same number to different people.
+          Give each estate its own block — 1–99 for one, 101–199 for the next — so two terminals never issue the same
+          number to different people.
+        </p>
+        <div
+          className={cn(
+            "rounded-xl px-3 py-2.5 text-xs font-semibold",
+            steps.rosterHasIds
+              ? "bg-emerald-50 text-emerald-800 dark:bg-emerald-500/10 dark:text-emerald-300"
+              : "bg-stone-50 text-stone-500 dark:bg-stone-800",
+          )}
+        >
+          {workers.length === 0
+            ? "No workers on the roster yet — add them under Workers first."
+            : `${signals.mappedWorkerCount} of ${workers.length} workers have a fingerprint ID.`}
+          {/* Named, not just counted. "22 of 28" sends someone scrolling a roster looking for the
+              six; the six are right here. Capped because a fresh estate would otherwise print its
+              whole roster into a setup step. */}
+          {workersWithoutId.length > 0 && (
+            <span className="mt-1 block font-normal text-stone-500 dark:text-stone-400">
+              Still without one: {workersWithoutId.slice(0, 6).map((w) => w.name).join(", ")}
+              {workersWithoutId.length > 6 ? ` and ${workersWithoutId.length - 6} more` : ""}.
+            </span>
+          )}
+        </div>
+      </Step>
+
+      <Step number={4} title="Enrol the same IDs on the terminal" done={steps.punchesArriving}>
+        <p>
+          On the device: <span className="font-semibold">Menu → User → New User</span>. Set the{" "}
+          <span className="font-semibold">User ID to exactly the Finger ID</span> you gave that person above, then
+          register their finger. Same person, same number, both places — that is the whole trick.
+        </p>
+        <p className="text-xs text-stone-400">
+          The name you type on the terminal is for the device&apos;s own screen. FarmFlow shows the name from your
+          roster, matched on the number, so it does not matter if you skip it or spell it differently.
         </p>
         <div
           className={cn(
@@ -460,18 +506,19 @@ export default function AttendanceScannerTab() {
         </div>
       </Step>
 
-      <Step number={4} title="Match each code to a person" done={steps.allMapped}>
+      <Step number={5} title="Anything that did not match" done={steps.allMapped}>
         <p>
-          A punch arrives as a number. Match it once and every past punch from that number is backfilled onto the
-          muster — nothing recorded before the match is lost.
+          If a number punches that nobody on the roster carries, it waits here. The usual cause is a typo — the ID
+          enrolled on the terminal is not the Finger ID in FarmFlow. Match it once and every past punch from that
+          number is backfilled onto the muster; nothing recorded before the match is lost.
         </p>
         {unmappedCodes.length === 0 ? (
           <EmptyState
-            title={signals.mappedWorkerCount > 0 ? "Every code is matched" : "Nothing to match yet"}
+            title={signals.mappedWorkerCount > 0 ? "Nothing outstanding" : "Nothing to match yet"}
             description={
               signals.mappedWorkerCount > 0
-                ? `${signals.mappedWorkerCount} people are linked to a fingerprint id.`
-                : "Codes appear here the first time somebody punches."
+                ? `Every number that has punched belongs to somebody. ${signals.mappedWorkerCount} people are linked.`
+                : "Unrecognised numbers would appear here. None have."
             }
             size="sm"
           />
@@ -527,7 +574,7 @@ export default function AttendanceScannerTab() {
         )}
       </Step>
 
-      <Step number={5} title="Watch it work" done={steps.punchesArriving}>
+      <Step number={6} title="Watch it work" done={steps.punchesArriving}>
         <p className="text-xs text-stone-400">
           The last twenty punches, newest first. This list is the proof — if a punch is here, FarmFlow has it.
         </p>
@@ -570,6 +617,11 @@ export default function AttendanceScannerTab() {
           <li>
             Nothing at all, but the device says it connected — the serial registered above does not match the serial on
             the device. Compare them character by character; O and 0 are the usual culprits.
+          </li>
+          <li>
+            Punches arrive but show as an unmatched number — the User ID enrolled on the terminal is not the Finger ID
+            that person carries in FarmFlow. Fix whichever is wrong, or match it in step 5; either way the punches
+            already taken are kept.
           </li>
         </ul>
       </section>

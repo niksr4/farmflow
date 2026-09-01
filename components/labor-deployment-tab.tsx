@@ -25,7 +25,7 @@ import { Badge } from "@/components/ui/badge"
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
 import { formatDateOnly, todayIso } from "@/lib/date-utils"
 import { cn } from "@/lib/utils"
-import { formatCurrency, formatNumber } from "@/lib/format"
+import { formatCurrency, formatNumber, formatUnitPrice } from "@/lib/format"
 import { SkeletonTable } from "@/components/ui/skeleton"
 import TaskGuideCard from "@/components/task-guide-card"
 import WorkflowEmptyState from "@/components/workflow-empty-state"
@@ -1159,7 +1159,7 @@ export default function LaborDeploymentTab({
                                 {normalizeSetLabel(entry.name)}
                               </span>
                               <span className="text-stone-800 font-medium">
-                                {formatLaborCount(Number(entry.laborCount))} × {formatCurrency(entry.costPerLabor)}
+                                {formatLaborCount(Number(entry.laborCount))} × {formatUnitPrice(entry.costPerLabor)}
                               </span>
                             </div>
                           ) : null
@@ -1234,7 +1234,7 @@ export default function LaborDeploymentTab({
                                 <span className="text-muted-foreground text-xs">
                                   {normalizeSetLabel(entry.name)}:
                                 </span>{" "}
-                                {formatLaborCount(Number(entry.laborCount))} @ {formatCurrency(entry.costPerLabor)}
+                                {formatLaborCount(Number(entry.laborCount))} @ {formatUnitPrice(entry.costPerLabor)}
                               </div>
                             ) : null
                           )}

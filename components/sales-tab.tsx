@@ -23,7 +23,7 @@ import { DEFAULT_COFFEE_VARIETIES } from "@/lib/crop-config"
 import { useAuth } from "@/hooks/use-auth"
 import { useTenantSettings } from "@/hooks/use-tenant-settings"
 import { formatDateOnly } from "@/lib/date-utils"
-import { formatCurrency, formatNumber } from "@/lib/format"
+import { formatCurrency, formatNumber, formatUnitPrice } from "@/lib/format"
 import { canAcceptNonNegative, isBlockedNumericKey } from "@/lib/number-input"
 import { buildSalesCsv } from "@/lib/sales-export"
 import { resolveDispatchReceivedKgs as resolveDispatchReceivedKgsValue, resolveSalesKgs } from "@/lib/sales-math"
@@ -840,7 +840,7 @@ export default function SalesTab({
         })
         setSaveFeedback({
           type: "success",
-          message: `Saved ${formatNumber(kgsValue)} KGs at ${formatCurrency(priceValue)} per bag.`,
+          message: `Saved ${formatNumber(kgsValue)} KGs at ${formatUnitPrice(priceValue)} per bag.`,
         })
         posthog.capture(wasEditing ? "sale_updated" : "sale_recorded", {
           coffee_type: coffeeType,
@@ -1332,7 +1332,7 @@ export default function SalesTab({
           <div className="rounded-lg border border-stone-200 bg-stone-50 p-3 dark:border-white/[0.05] dark:bg-white/[0.02]">
             <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-emerald-700 dark:text-emerald-500">Est. revenue</p>
             <p className="mt-1 text-sm font-black tabular-nums text-emerald-700 dark:text-emerald-400">{formatCurrency(calculatedRevenue)}</p>
-            <p className="mt-1 text-xs text-stone-400 dark:text-stone-500">Price: {formatCurrency(pricePerBagValue)}</p>
+            <p className="mt-1 text-xs text-stone-400 dark:text-stone-500">Price: {formatUnitPrice(pricePerBagValue)}</p>
           </div>
           <div className="rounded-lg border border-stone-200 bg-stone-50 p-3 dark:border-white/[0.05] dark:bg-white/[0.02]">
             <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-emerald-700 dark:text-emerald-500">Other stock</p>
@@ -1474,19 +1474,19 @@ export default function SalesTab({
             <div className="grid grid-cols-2 gap-3 text-sm">
               <div className="rounded-lg border border-stone-200 bg-stone-50 p-2 dark:border-white/[0.05] dark:bg-white/[0.02]">
                 <div className="text-xs text-stone-400">Arabica · Parchment</div>
-                <div className="text-lg font-black tabular-nums">{formatCurrency(pricePerBagByType.arabicaParchment)}</div>
+                <div className="text-lg font-black tabular-nums">{formatUnitPrice(pricePerBagByType.arabicaParchment)}</div>
               </div>
               <div className="rounded-lg border border-stone-200 bg-stone-50 p-2 dark:border-white/[0.05] dark:bg-white/[0.02]">
                 <div className="text-xs text-stone-400">Arabica · Cherry</div>
-                <div className="text-lg font-black tabular-nums">{formatCurrency(pricePerBagByType.arabicaCherry)}</div>
+                <div className="text-lg font-black tabular-nums">{formatUnitPrice(pricePerBagByType.arabicaCherry)}</div>
               </div>
               <div className="rounded-lg border border-stone-200 bg-stone-50 p-2 dark:border-white/[0.05] dark:bg-white/[0.02]">
                 <div className="text-xs text-stone-400">Robusta · Parchment</div>
-                <div className="text-lg font-black tabular-nums">{formatCurrency(pricePerBagByType.robustaParchment)}</div>
+                <div className="text-lg font-black tabular-nums">{formatUnitPrice(pricePerBagByType.robustaParchment)}</div>
               </div>
               <div className="rounded-lg border border-stone-200 bg-stone-50 p-2 dark:border-white/[0.05] dark:bg-white/[0.02]">
                 <div className="text-xs text-stone-400">Robusta · Cherry</div>
-                <div className="text-lg font-black tabular-nums">{formatCurrency(pricePerBagByType.robustaCherry)}</div>
+                <div className="text-lg font-black tabular-nums">{formatUnitPrice(pricePerBagByType.robustaCherry)}</div>
               </div>
             </div>
             <div className="mt-2 text-xs text-stone-400">Weighted by bags sold across recorded sales.</div>
@@ -1930,7 +1930,7 @@ export default function SalesTab({
               <div className="mt-1 grid gap-2 text-xs text-muted-foreground sm:grid-cols-2 lg:grid-cols-4">
                 <p>Bags: {formatNumber(selectedSalesBags)}</p>
                 <p>KGs: {formatNumber(selectedSalesKgs)}</p>
-                <p>Price/KG: {formatCurrency(selectedSalesPricePerKg)}</p>
+                <p>Price/KG: {formatUnitPrice(selectedSalesPricePerKg)}</p>
                 <p className="font-medium text-emerald-700">Revenue: {formatCurrency(selectedSalesRevenue, 0)}</p>
               </div>
             </div>
@@ -2071,7 +2071,7 @@ export default function SalesTab({
                         <TableCell className="text-right">
                           {formatNumber(resolveSalesRecordKgs(record, bagWeightKg))}
                         </TableCell>
-                        <TableCell className="text-right">{formatCurrency(Number(record.price_per_bag) || 0)}</TableCell>
+                        <TableCell className="text-right">{formatUnitPrice(Number(record.price_per_bag) || 0)}</TableCell>
                         <TableCell className="text-right font-medium text-emerald-700">
                           {formatCurrency(Number(record.revenue) || 0, 0)}
                         </TableCell>
