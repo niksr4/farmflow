@@ -79,17 +79,25 @@ describe("the relay address has one definition", () => {
   })
 })
 
-describe("the scanner tab does not ship to production", () => {
+describe("the scanner tab ships", () => {
   const workspace = readFileSync(resolve(__dirname, "../components/attendance-workspace.tsx"), "utf8")
 
-  it("gates on NODE_ENV, which is inlined at build time", () => {
-    // A runtime flag a signed-in user could flip is not the same promise. This is compile-time:
-    // every deployed build, including `vercel --prod --skip-domain`, has NODE_ENV=production.
-    expect(workspace).toContain('const SCANNER_TAB_ENABLED = process.env.NODE_ENV !== "production"')
+  it("is no longer gated on NODE_ENV", () => {
+    // Dev-only until 2026-09-01, while no estate had hardware. HoneyFarm's terminal went in and
+    // the gate came out.
+    expect(workspace).not.toContain("SCANNER_TAB_ENABLED")
   })
 
-  it("gates the nav entry and the panel, not just one of them", () => {
-    // Gating only the button leaves the section reachable by any other path that sets the state.
-    expect((workspace.match(/SCANNER_TAB_ENABLED/g) ?? []).length).toBe(3)
+  it("does not require the tenant to already own a device", () => {
+    // The muster's collapsed panel gates on hasBiometricDevices, which is right for a settings
+    // panel and fatal for a setup wizard -- the screen for registering your FIRST device cannot
+    // require you to have one. That chicken-and-egg is what this tab exists to remove.
+    const scannerBlock = workspace.slice(workspace.indexOf('activeSection === "scanner"'))
+    expect(scannerBlock).not.toContain("hasBiometricDevices")
+    expect(workspace).toContain('{ value: "scanner" as AttendanceSection, label: "Scanner", icon: Fingerprint }')
+  })
+
+  it("still sits behind labour management, like every other roster screen", () => {
+    expect(workspace).toContain('showLaborManagement && activeSection === "scanner"')
   })
 })

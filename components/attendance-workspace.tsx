@@ -16,17 +16,23 @@ import AttendanceScannerTab from "./attendance-scanner-tab"
 const LEDGER_TAB_DISABLED = true
 
 /**
- * Scanner setup is local-only for now.
+ * Live as of 2026-09-01, when HoneyFarm's terminal went in.
  *
- * It is a real screen against real data, not a mock — it registers devices and maps codes on the
- * tenant you are signed in as. But no estate has a terminal installed yet, and the enrolment id
- * blocks are not agreed, so shipping a self-service wizard would invite somebody to commission
- * hardware on rules nobody has settled. Delete this constant when the first terminal ships.
+ * This was dev-only while no estate had hardware and the enrolment id ranges were unsettled.
+ * Both conditions are now met: a terminal is installed, and HoneyFarm's 28 workers already carry
+ * fingerprint ids 1-104 loaded from their payroll export, so the numbering question answered
+ * itself for the estate that needed it first.
  *
- * NODE_ENV is inlined at build time, so this is a compile-time exclusion, not a runtime check a
- * user could flip: `vercel --prod` and every deployed build has it "production".
+ * Deliberately NOT gated on the tenant already having a device, unlike the collapsed panel inside
+ * the muster (see hasBiometricDevices in app/api/attendance/route.ts). That gate exists to keep
+ * biometrics out of sight for estates with no hardware, which is reasonable for a settings panel
+ * and self-defeating for a setup wizard: the screen for registering your first device cannot
+ * require you to already have one. That chicken-and-egg is the whole reason a terminal could not
+ * be commissioned without help, and it is what this tab exists to remove.
+ *
+ * The muster's panel is now a strict subset of this tab and should be retired -- left in place for
+ * today so nothing changes underneath an estate mid-setup.
  */
-const SCANNER_TAB_ENABLED = process.env.NODE_ENV !== "production"
 
 type AttendanceSection = "attendance" | "workers" | "ledger" | "payroll" | "report" | "scanner"
 
@@ -60,9 +66,7 @@ export default function AttendanceWorkspace({ showLaborManagement = false, selec
           { value: "report" as AttendanceSection, label: "Attendance", icon: CalendarRange },
           // Sits last because it is a one-off: you commission a terminal once and then never
           // open this again, unlike everything to its left.
-          ...(SCANNER_TAB_ENABLED
-            ? [{ value: "scanner" as AttendanceSection, label: "Scanner", icon: Fingerprint }]
-            : []),
+          { value: "scanner" as AttendanceSection, label: "Scanner", icon: Fingerprint },
         ]
       : []),
   ]
@@ -119,7 +123,7 @@ export default function AttendanceWorkspace({ showLaborManagement = false, selec
         </div>
       )}
 
-      {SCANNER_TAB_ENABLED && showLaborManagement && activeSection === "scanner" && (
+      {showLaborManagement && activeSection === "scanner" && (
         <div className="px-3 sm:px-0">
           <AttendanceScannerTab />
         </div>
