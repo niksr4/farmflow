@@ -248,8 +248,13 @@ export async function POST(request: Request) {
         return NextResponse.json(
           {
             success: false,
+            // Says what to DO, not just what went wrong. The trigger (scripts/145) fires when a
+            // batch lands on people who already have a job -- which is how HoneyFarm booked 81
+            // worker-days that were never worked: "Select all present" twice in one morning, a
+            // full day each time, and nothing added the day up out loud.
             error:
-              "That would book someone for more than two days in one day. Reduce the day share, or check what they are already assigned to.",
+              "Some of these people already have a job today, and this would take them past a full day. " +
+              "Two jobs in a day is half a day each — set this one to Half and correct the first one too.",
           },
           { status: 409 },
         )

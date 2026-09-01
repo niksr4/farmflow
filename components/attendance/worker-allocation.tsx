@@ -42,7 +42,7 @@ const DAY_SHARES = [
 
 export default function WorkerAllocation({
   workerEstate, locations, activities, saving, editing, headcount, isGang, workerRate, batchWorkers,
-  onAdd, onClose,
+  dayAlreadyUsed = 0, onAdd, onClose,
 }: {
   workerEstate: string | null
   locations: LocationOption[]
@@ -66,6 +66,16 @@ export default function WorkerAllocation({
    * then override the roster for all of them.
    */
   batchWorkers?: Array<{ name: string; rate: number | null }>
+  /**
+   * How much of this person's day is already booked to other jobs (the most-booked person, in a
+   * batch). Drives the default share and the warning below it.
+   *
+   * A full day was the default whoever you were, so giving somebody a second job gave them a
+   * second full day and said nothing. HoneyFarm booked 81 worker-days nobody worked that way
+   * between 27 Aug and 1 Sep 2026 -- Rs 38,824. The day cap in scripts/145 is the wall; this is
+   * the part that stops anyone walking into it.
+   */
+  dayAlreadyUsed?: number
   isGang: boolean
   onAdd: (payload: {
     id?: string
@@ -90,7 +100,11 @@ export default function WorkerAllocation({
   // "No particular block" stays in the list, because maintenance and carpentry genuinely are not
   // block work and forcing a block there would just make people lie. It simply has to be chosen.
   const [locationId, setLocationId] = useState(editing?.locationId ?? "")
-  const [dayFraction, setDayFraction] = useState(editing?.dayFraction ?? 1)
+  // Half when somebody already has work today, full otherwise. Two jobs in a day is half a day
+  // each; that should be what you get by touching nothing, not what you have to remember.
+  const alreadyBooked = Number(dayAlreadyUsed) > 0.001
+  const remaining = Math.max(0, 1 - Number(dayAlreadyUsed || 0))
+  const [dayFraction, setDayFraction] = useState(editing?.dayFraction ?? (alreadyBooked ? 0.5 : 1))
   const [payMultiplier, setPayMultiplier] = useState(1)
   // Blank means "whatever this work pays"; typing here prices this one entry differently without
   // changing the code for everyone.
@@ -160,6 +174,9 @@ export default function WorkerAllocation({
 
   const submit = async () => {
     if (!activityCode) return
+    // The day cap in scripts/145 would reject this anyway; refusing here means a clear sentence
+    // instead of a 409 after a round trip.
+    if (dayFraction > remaining + 0.0001) return
     setBusy(true)
     const ok = await onAdd({
       ...(editing ? { id: editing.id } : {}),
@@ -246,16 +263,21 @@ export default function WorkerAllocation({
       <div className="flex items-center gap-1">
         {DAY_SHARES.map((share) => {
           const active = dayFraction === share.value && payMultiplier === share.multiplier
+          // A share that would take the day past one. Shown greyed rather than hidden, so the
+          // reason is visible: the button is there, it just does not fit in what is left.
+          const overruns = share.value > remaining + 0.0001
           return (
             <button
               key={share.label}
               type="button"
+              disabled={overruns}
               onClick={() => { setDayFraction(share.value); setPayMultiplier(share.multiplier) }}
               className={cn(
                 "h-8 flex-1 rounded-lg border text-[11px] font-bold touch-manipulation",
                 active
                   ? "border-emerald-600 bg-emerald-600 text-white"
                   : "border-stone-200 bg-white text-stone-600 dark:border-white/[0.1] dark:bg-transparent",
+                overruns && "cursor-not-allowed opacity-35",
               )}
             >
               {share.label}
@@ -263,6 +285,14 @@ export default function WorkerAllocation({
           )
         })}
       </div>
+
+      {alreadyBooked && (
+        <p className="rounded-lg bg-amber-50 px-2.5 py-1.5 text-[11px] font-semibold text-amber-800 dark:bg-amber-500/10 dark:text-amber-300">
+          {remaining > 0.001
+            ? `Already booked ${dayAlreadyUsed} of the day — ${remaining} left. Two jobs in a day is half a day each.`
+            : "This person's day is already full. Correct the job they have instead of adding another."}
+        </p>
+      )}
 
       {/* A gang is one line on the roll, so the crew size is the thing that changes day to day --
           eleven booked, eight turned up. */}
@@ -358,7 +388,7 @@ export default function WorkerAllocation({
       <div className="flex gap-1.5">
         <button
           type="button"
-          disabled={!activityCode || !locationId || busy || saving}
+          disabled={!activityCode || !locationId || busy || saving || dayFraction > remaining + 0.0001}
           onClick={submit}
           className="h-9 flex-1 rounded-lg bg-emerald-600 text-xs font-bold text-white disabled:opacity-40 touch-manipulation"
         >

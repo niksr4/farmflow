@@ -373,6 +373,22 @@ export default function AttendanceTab({ selectedEstate = null }: AttendanceTabPr
     return map
   }, [assignments])
 
+  /**
+   * How much of each person's day is already spoken for.
+   *
+   * The number nobody was adding up. HoneyFarm booked 81 worker-days that were never worked
+   * between 27 Aug and 1 Sep 2026 -- Rs 38,824 -- by running "Select all present" twice in one
+   * morning for two different jobs, a full day each time. Both actions looked right on their own;
+   * only the sum was wrong, and nothing on the screen ever showed the sum.
+   */
+  const dayUsedByWorker = useMemo(() => {
+    const map = new Map<string, number>()
+    for (const a of assignments) map.set(a.workerId, (map.get(a.workerId) ?? 0) + a.dayFraction)
+    return map
+  }, [assignments])
+
+  const isFullyBooked = useCallback((id: string) => (dayUsedByWorker.get(id) ?? 0) >= 0.999, [dayUsedByWorker])
+
   // One worker, one job, one deliberate act -- individual rather than bulk, at the estate
   // owner's request. Returns whether it landed so the row can keep its dropdowns open on failure
   // instead of silently discarding what was typed.
@@ -809,10 +825,16 @@ export default function AttendanceTab({ selectedEstate = null }: AttendanceTabPr
               <div className="ml-auto flex items-center gap-2">
                 <button
                   type="button"
-                  onClick={() => setBatchIds(workers.filter((w) => presentSet.has(w.id)).map((w) => w.id))}
+                  // "All present" means everyone still free, not everyone here. Tapping this twice
+                  // in one morning for two different jobs is exactly how 81 worker-days got booked
+                  // at HoneyFarm that nobody worked: the second tap silently re-selected the
+                  // twenty-odd people who had just been given a full day.
+                  onClick={() =>
+                    setBatchIds(workers.filter((w) => presentSet.has(w.id) && !isFullyBooked(w.id)).map((w) => w.id))
+                  }
                   className="rounded-lg px-2 py-1 text-xs font-bold text-sky-700 active:bg-sky-100 dark:text-sky-300"
                 >
-                  Select all present
+                  Select all free
                 </button>
                 <button
                   type="button"
@@ -843,6 +865,10 @@ export default function AttendanceTab({ selectedEstate = null }: AttendanceTabPr
                     // from its own worker's wage server-side; the panel says so now instead of
                     // contradicting it.
                     workerRate={null}
+                    // The most-booked person in the selection. If anyone here already has a job,
+                    // the panel opens on Half rather than Full -- the default that made two full
+                    // days the easy answer is the default that produced the over-booking.
+                    dayAlreadyUsed={Math.max(0, ...batchIds.map((id) => dayUsedByWorker.get(id) ?? 0))}
                     batchWorkers={batchIds.map((id) => {
                       const w = workers.find((x) => x.id === id)
                       return { name: w?.name ?? "Unnamed", rate: w?.dailyRate ?? null }
@@ -1103,6 +1129,11 @@ export default function AttendanceTab({ selectedEstate = null }: AttendanceTabPr
                       headcount={worker.kind === "gang" ? Math.max(1, Number(worker.headcount) || 1) : 1}
                       isGang={worker.kind === "gang"}
                       workerRate={worker.dailyRate ?? null}
+                      // Editing an existing job must not count itself, or correcting a full day
+                      // would look like adding a second one.
+                      dayAlreadyUsed={
+                        (dayUsedByWorker.get(worker.id) ?? 0) - (editingAssignment?.dayFraction ?? 0)
+                      }
                       onAdd={(payload) => handleAddAssignment(worker.id, payload)}
                       onClose={() => { setAllocatingWorkerId(null); setEditingAssignment(null) }}
                     />
