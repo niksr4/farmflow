@@ -522,8 +522,20 @@ export default function AttendanceTab({ selectedEstate = null }: AttendanceTabPr
       })
       const data = await res.json().catch(() => ({}))
       if (!res.ok || !data?.success) throw new Error(data?.error || "Failed to save")
-      trackRecordCreated("attendance", { present_count: presentCount, date: selectedDate })
-      toast.success(`Saved — ${presentCount} present`)
+      // The server keeps anyone the fingerprint terminal saw, even if this sheet left them out --
+      // usually because the page was opened before they punched. Say so: the roll is about to
+      // reload with more people on it than were ticked, and an unexplained extra name on a wage
+      // sheet is the kind of thing that gets the whole muster distrusted.
+      const kept: string[] = Array.isArray(data?.keptWithPunches) ? data.keptWithPunches : []
+      const savedCount = Number.isFinite(data?.presentCount) ? Number(data.presentCount) : presentCount
+      trackRecordCreated("attendance", { present_count: savedCount, date: selectedDate })
+      toast.success(`Saved — ${savedCount} present`, {
+        description: kept.length
+          ? `${kept.slice(0, 3).join(", ")}${kept.length > 3 ? ` and ${kept.length - 3} more` : ""} ${
+              kept.length === 1 ? "was" : "were"
+            } kept — punched in on the scanner.`
+          : undefined,
+      })
       await loadSnapshot(selectedDate, selectedEstate)
     } catch (e: unknown) {
       toast.error(e instanceof Error ? e.message : "Failed to save")

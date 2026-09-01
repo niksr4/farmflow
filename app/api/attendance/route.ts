@@ -344,6 +344,41 @@ export async function PUT(request: Request) {
         )`
       : accountsSql``
 
+    // A PUNCH IS EVIDENCE. Whoever the manual sheet leaves out, the delete will not touch a row a
+    // fingerprint terminal wrote. check_in_time is written by exactly one thing -- the ingest in
+    // lib/server/biometric-attendance.ts -- and a manual row never carries one, so "has a check-in"
+    // is precisely "a terminal watched this person turn up".
+    //
+    // Found on HoneyFarm's first live scanner day, 2026-09-01. Bopaiah punched four times from
+    // 16:28. The muster was saved at 17:10 from a page loaded before those punches existed, so he
+    // was absent from presentWorkerIds and his biometric row -- check-in time and all -- was
+    // deleted. Nobody decided that; a stale tab did. He only survived as present because the
+    // manager happened to re-save with him ticked two minutes later, as an ordinary manual row.
+    //
+    // Note the comment below already claimed this diff existed to stop precisely this. It guarded
+    // the INSERT arm and never the DELETE arm -- the intent was written down and half-built, the
+    // same shape as the ON CONFLICT that was right in five places and wrong in one.
+    //
+    // Unticking someone who punched now leaves them present. That is the intended reading of the
+    // conflict, not an oversight: the roll is a claim about the day, the punch is a record of it.
+    // The response names anyone kept this way so the screen can say so rather than quietly
+    // disagreeing with the person who just pressed save.
+    const keptRows = await runTenantQuery(
+      accountsSql,
+      tenantContext,
+      accountsSql`
+        SELECT w.full_name
+        FROM attendance_records r
+        JOIN attendance_workers w ON w.id = r.worker_id
+        WHERE r.tenant_id = ${tenantContext.tenantId}
+          AND r.attendance_date = ${date}
+          AND NOT (worker_id = ANY(${presentWorkerIds}))
+          AND r.check_in_time IS NOT NULL
+          ${estateWorkerScopeClause}
+        ORDER BY w.full_name
+      `,
+    )
+
     // Diff, not replace: only remove rows for workers no longer present, and insert new
     // present workers with ON CONFLICT DO NOTHING. A blanket delete-then-reinsert would
     // silently wipe check_in_time/check_out_time/source on any row a biometric device
@@ -354,6 +389,7 @@ export async function PUT(request: Request) {
         WHERE tenant_id = ${tenantContext.tenantId}
           AND attendance_date = ${date}
           AND NOT (worker_id = ANY(${presentWorkerIds}))
+          AND check_in_time IS NULL
           ${estateWorkerScopeClause}
       `,
     ]
@@ -393,10 +429,15 @@ export async function PUT(request: Request) {
       },
     })
 
+    const keptWithPunches = keptRows.map((row: any) => String(row.full_name))
+
     return NextResponse.json({
       success: true,
       date,
-      presentCount: presentWorkerIds.length,
+      // Counts the punched-but-unticked people the save kept, so the number the screen shows
+      // matches the number of rows that now exist for the date.
+      presentCount: presentWorkerIds.length + keptWithPunches.length,
+      keptWithPunches,
     })
   } catch (error) {
     if (isModuleAccessError(error)) {
