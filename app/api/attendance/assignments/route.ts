@@ -101,9 +101,12 @@ export async function POST(request: Request) {
     }
 
     const dayFraction = num(body?.dayFraction, 1)
-    if (!(dayFraction > 0 && dayFraction <= 2)) {
+    // At most one day. The old bound was 2, matching a ceiling that scripts/145 removed -- so this
+    // message promised something the trigger would then refuse, which is a worse failure than the
+    // refusal itself. Overtime is pay_multiplier; it does not lengthen the day.
+    if (!(dayFraction > 0 && dayFraction <= 1)) {
       return NextResponse.json(
-        { success: false, error: "A day's share must be more than 0 and at most 2 (a full day plus overtime)" },
+        { success: false, error: "A day's share must be more than 0 and at most a full day" },
         { status: 400 },
       )
     }
@@ -356,9 +359,12 @@ export async function PUT(request: Request) {
     }
 
     const dayFraction = num(body?.dayFraction, 1)
-    if (!(dayFraction > 0 && dayFraction <= 2)) {
+    // At most one day. The old bound was 2, matching a ceiling that scripts/145 removed -- so this
+    // message promised something the trigger would then refuse, which is a worse failure than the
+    // refusal itself. Overtime is pay_multiplier; it does not lengthen the day.
+    if (!(dayFraction > 0 && dayFraction <= 1)) {
       return NextResponse.json(
-        { success: false, error: "A day's share must be more than 0 and at most 2 (a full day plus overtime)" },
+        { success: false, error: "A day's share must be more than 0 and at most a full day" },
         { status: 400 },
       )
     }

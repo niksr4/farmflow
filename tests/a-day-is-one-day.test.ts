@@ -55,12 +55,14 @@ describe("the panel does not let you walk into the wall", () => {
   })
 
   it("disables a share that would not fit in what is left of the day", () => {
-    expect(panel).toContain("const overruns = share.value > remaining + 0.0001")
+    // Bound is allowedShare, not remaining -- see the correction-path block below for why.
+    expect(panel).toContain("const overruns = share.value > allowedShare + 0.0001")
     expect(panel).toContain("disabled={overruns}")
+    expect(panel).toContain("const remaining = Math.max(0, 1 - Number(dayAlreadyUsed || 0))")
   })
 
   it("refuses to submit one, so the message is a sentence and not a 409", () => {
-    expect(panel).toContain("if (dayFraction > remaining + 0.0001) return")
+    expect(panel).toContain("if (dayFraction > allowedShare + 0.0001) return")
   })
 
   it("says what is already booked instead of leaving the total invisible", () => {
@@ -106,5 +108,55 @@ describe("an already over-booked day is visible, so it can be corrected", () => 
     // Flagging every split would make the badge noise and it would stop being read.
     expect(muster).not.toContain("dayBooked > 0.5")
     expect(muster).not.toContain("rows.length > 1 &&")
+  })
+})
+
+describe("the correction path is not blocked by the guard that created it", () => {
+  it("the panel mirrors the database's downward-edit exemption", () => {
+    // Shipped without this and the panel locked solid on exactly the rows it exists to repair:
+    // editing either job of a 2 x full day left remaining = 0, disabling every share AND the save
+    // button, so delete-and-retype was the only way out. 135 worker-days across three estates.
+    expect(panel).toContain(
+      "const allowedShare = editing?.dayFraction != null ? Math.max(remaining, editing.dayFraction) : remaining",
+    )
+  })
+
+  it("every gate uses the edit-aware bound, not the raw remainder", () => {
+    expect(panel).toContain("if (dayFraction > allowedShare + 0.0001) return")
+    expect(panel).toContain("const overruns = share.value > allowedShare + 0.0001")
+    expect(panel).toContain("dayFraction > allowedShare + 0.0001}")
+    // The raw remainder must not still be gating anything.
+    expect(panel).not.toContain("> remaining + 0.0001")
+  })
+
+  it("adding NEW work to a full day is still refused", () => {
+    // allowedShare falls back to `remaining` when nothing is being edited, so the guard holds.
+    expect(panel).toContain(": remaining")
+  })
+
+  it("the route no longer promises a two-day share the trigger would refuse", () => {
+    expect(route).not.toContain("at most 2 (a full day plus overtime)")
+    expect(route).toContain("at most a full day")
+    expect((route.match(/dayFraction <= 1\)/g) ?? []).length).toBe(2)
+  })
+})
+
+describe("the batch panel does not lose what was typed into it", () => {
+  it("has a stable key, so tapping one more person keeps the code and the contract price", () => {
+    expect(muster).toContain('key="batch"')
+    expect(muster).not.toContain("key={`batch-${batchIds.length}`}")
+  })
+
+  it("clamps the share itself instead, since it no longer remounts to re-default", () => {
+    expect(panel).toContain("if (dayFraction > allowedShare + 0.0001) setDayFraction(")
+  })
+})
+
+describe("the muster follows the app's money rule", () => {
+  it("costs go through formatCurrency, not a bare toLocaleString", () => {
+    // Rounding to the rupee was applied app-wide today; the muster's own rows were still printing
+    // raw, so the day total rounded and the lines under it did not.
+    expect(muster).toContain("formatCurrency(a.totalCost)")
+    expect(muster).not.toContain('a.totalCost.toLocaleString("en-IN")')
   })
 })

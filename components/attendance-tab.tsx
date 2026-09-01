@@ -37,6 +37,7 @@ import { EmptyState } from "@/components/ui/empty-state"
 import { trackRecordCreated } from "@/lib/track-action"
 import { useSingleFlight } from "@/hooks/use-single-flight"
 import { isPaidDaily } from "@/lib/worker-types"
+import { formatCurrency } from "@/lib/format"
 import AttendanceDeviceSettings from "@/components/attendance-device-settings"
 import ActivityCodeReference from "@/components/attendance/activity-code-reference"
 import WorkerAllocation from "@/components/attendance/worker-allocation"
@@ -778,7 +779,7 @@ export default function AttendanceTab({ selectedEstate = null }: AttendanceTabPr
       {!loading && workers.length > 0 && allocatesWork && (
         <div className="grid grid-cols-2 gap-px overflow-hidden rounded-xl border border-stone-200 bg-stone-200 mx-3 mt-3 dark:border-white/[0.08] dark:bg-white/[0.08]">
           {[
-            { label: "Cost today", value: `₹${Math.round(dayCost).toLocaleString("en-IN")}`, tone: "clay" as const },
+            { label: "Cost today", value: formatCurrency(dayCost), tone: "clay" as const },
             { label: "No work set", value: String(unallocatedCount), tone: unallocatedCount > 0 ? ("amber" as const) : ("plain" as const) },
           ].map((tile) => (
             <div key={tile.label} className="bg-white px-2 py-2.5 text-center dark:bg-card">
@@ -847,7 +848,12 @@ export default function AttendanceTab({ selectedEstate = null }: AttendanceTabPr
               {batchIds.length > 0 && (
                 <div className="w-full">
                   <WorkerAllocation
-                    key={`batch-${batchIds.length}`}
+                    // Stable, deliberately. It was `batch-${batchIds.length}`, which remounts the
+                    // panel every time somebody taps one more person -- wiping the code, the block
+                    // and now a typed contract price. The panel reads the selection as props and
+                    // re-derives from them; it clamps the day share itself when the selection
+                    // brings in someone with less of their day left.
+                    key="batch"
                     workerEstate={null}
                     locations={locations}
                     activities={activities}
@@ -1026,7 +1032,7 @@ export default function AttendanceTab({ selectedEstate = null }: AttendanceTabPr
                             {a.lumpSum != null && (
                               <span className="ml-1 font-bold uppercase tracking-wide text-sky-600">contract</span>
                             )}
-                            <span className="sm:hidden"> · {a.dayFraction}d · ₹{a.totalCost.toLocaleString("en-IN")}</span>
+                            <span className="sm:hidden"> · {a.dayFraction}d · {formatCurrency(a.totalCost)}</span>
                           </p>
                         </>
                       ) : isPresent && activities.length > 0 && musterRecordsLabour && !batchMode ? (
@@ -1070,7 +1076,7 @@ export default function AttendanceTab({ selectedEstate = null }: AttendanceTabPr
                       {a ? `${a.dayFraction}d` : ""}
                     </span>
                     <span className="hidden text-right text-[11px] font-semibold tabular-nums text-stone-600 sm:block dark:text-stone-300">
-                      {a ? `₹${a.totalCost.toLocaleString("en-IN")}` : ""}
+                      {a ? formatCurrency(a.totalCost) : ""}
                     </span>
 
                     {/* gap-0.5 put a 32px delete 2px from a 32px present toggle. On a phone that is

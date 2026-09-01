@@ -15,7 +15,7 @@
  * demands. Their own estate's blocks are listed first, everything else after -- guided, not fenced.
  */
 
-import { useMemo, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import { Loader2 } from "lucide-react"
 import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Input } from "@/components/ui/input"
@@ -117,6 +117,17 @@ export default function WorkerAllocation({
   // each; that should be what you get by touching nothing, not what you have to remember.
   const alreadyBooked = Number(dayAlreadyUsed) > 0.001
   const remaining = Math.max(0, 1 - Number(dayAlreadyUsed || 0))
+  /**
+   * A CORRECTION IS ALWAYS ALLOWED TO GO DOWN -- the same exemption the day cap carries
+   * (scripts/145), and for the same reason: tightening a limit must never make the rows that broke
+   * it the only rows nobody can fix.
+   *
+   * Without this the panel locks solid on precisely the days it exists to repair. Editing either
+   * job of a 2 x full day leaves remaining = 0, which disables every share AND the save button, so
+   * the only way out is delete-and-retype -- losing the block and code someone chose on the day.
+   * Three estates have 135 such worker-days waiting.
+   */
+  const allowedShare = editing?.dayFraction != null ? Math.max(remaining, editing.dayFraction) : remaining
   const [dayFraction, setDayFraction] = useState(editing?.dayFraction ?? (alreadyBooked ? 0.5 : 1))
   const [payMultiplier, setPayMultiplier] = useState(1)
   // Blank means "whatever this work pays"; typing here prices this one entry differently without
@@ -183,6 +194,18 @@ export default function WorkerAllocation({
     }
   })()
 
+  /**
+   * Keep the chosen share inside what the day can still take.
+   *
+   * The batch panel no longer remounts when the selection changes (that was wiping the typed
+   * contract price), so a share picked while everyone was free has to come down by itself when
+   * somebody with half a day already gone is added to the group. The save is guarded anyway --
+   * this is so the buttons never show a selected share that is also disabled.
+   */
+  useEffect(() => {
+    if (dayFraction > allowedShare + 0.0001) setDayFraction(allowedShare > 0 ? Math.min(0.5, allowedShare) : 0)
+  }, [allowedShare, dayFraction])
+
   const [workQuery, setWorkQuery] = useState("")
 
   // Matches the code OR its description, and on every word typed rather than as a prefix, so
@@ -210,7 +233,7 @@ export default function WorkerAllocation({
     if (!activityCode) return
     // The day cap in scripts/145 would reject this anyway; refusing here means a clear sentence
     // instead of a 409 after a round trip.
-    if (dayFraction > remaining + 0.0001) return
+    if (dayFraction > allowedShare + 0.0001) return
     setBusy(true)
     const ok = await onAdd({
       ...(editing ? { id: editing.id } : {}),
@@ -301,7 +324,7 @@ export default function WorkerAllocation({
           const active = dayFraction === share.value && payMultiplier === share.multiplier
           // A share that would take the day past one. Shown greyed rather than hidden, so the
           // reason is visible: the button is there, it just does not fit in what is left.
-          const overruns = share.value > remaining + 0.0001
+          const overruns = share.value > allowedShare + 0.0001
           return (
             <button
               key={share.label}
@@ -326,7 +349,9 @@ export default function WorkerAllocation({
         <p className="rounded-lg bg-amber-50 px-2.5 py-1.5 text-[11px] font-semibold text-amber-800 dark:bg-amber-500/10 dark:text-amber-300">
           {remaining > 0.001
             ? `Already booked ${dayAlreadyUsed} of the day — ${remaining} left. Two jobs in a day is half a day each.`
-            : "This person's day is already full. Correct the job they have instead of adding another."}
+            : editing
+              ? `This day is booked at ${Number(dayAlreadyUsed) + Number(editing.dayFraction)} days, which is more than one. Lower this job to Half — you can only bring it down from here.`
+              : "This person's day is already full. Correct the job they have instead of adding another."}
         </p>
       )}
 
@@ -455,7 +480,7 @@ export default function WorkerAllocation({
       <div className="flex gap-1.5">
         <button
           type="button"
-          disabled={!activityCode || !locationId || busy || saving || dayFraction > remaining + 0.0001}
+          disabled={!activityCode || !locationId || busy || saving || dayFraction > allowedShare + 0.0001}
           onClick={submit}
           className="h-9 flex-1 rounded-lg bg-emerald-600 text-xs font-bold text-white disabled:opacity-40 touch-manipulation"
         >
