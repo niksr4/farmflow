@@ -188,7 +188,7 @@ const EN_TRANSLATIONS: TranslationTree = {
       people: "people",
     },
     home: {
-      logLabour: "Log Labour",
+      logLabour: "Log Muster",
       otherExpense: "Other Expense",
       rainfall: "Rainfall",
       inventory: "Inventory",
@@ -634,7 +634,7 @@ const KN_TRANSLATIONS: TranslationTree = {
       people: "ಜನ",
     },
     home: {
-      logLabour: "ಕೂಲಿ ದಾಖಲಿಸಿ",
+      logLabour: "ಹಾಜರಾತಿ ದಾಖಲಿಸಿ",
       otherExpense: "ಇತರ ಖರ್ಚು",
       rainfall: "ಮಳೆ",
       inventory: "ದಾಸ್ತಾನು",

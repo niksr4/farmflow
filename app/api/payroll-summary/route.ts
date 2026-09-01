@@ -1,4 +1,6 @@
 import { NextResponse } from "next/server"
+
+import { isPaidDaily } from "@/lib/worker-types"
 import { cookies } from "next/headers"
 import { accountsSql } from "@/lib/server/db"
 import { requireModuleAccess, isModuleAccessError } from "@/lib/server/module-access"
@@ -147,7 +149,10 @@ export async function GET(request: Request) {
       deductions: Number(r.deductions) || 0,
       adjustments: Number(r.adjustments) || 0,
       netPayable: Number(r.net_payable) || 0,
-      missingDailyRate: r.daily_rate == null && Number(r.days_present) > 0,
+      // Monthly staff have no daily rate on purpose, so "missing" is the wrong word for them --
+      // same fix as the muster's own banner in attendance-tab.tsx. Kept in step with lib/worker-types.
+      missingDailyRate:
+        isPaidDaily(r.worker_type) && r.daily_rate == null && Number(r.days_present) > 0,
       /** True when this line came from allocated work rather than days-times-rate. */
       fromMuster: Boolean(r.from_muster),
     }))

@@ -471,7 +471,12 @@ export default function AttendanceTab({ selectedEstate = null }: AttendanceTabPr
     const paidDailyById = new Map(workers.map((w) => [w.id, isPaidDaily(w.workerType)]))
     return presentWorkerIds.filter((id) => !withWork.has(id) && (paidDailyById.get(id) ?? true)).length
   }, [assignments, presentWorkerIds, workers])
-  const noRateWorkers = workers.filter((w) => w.dailyRate === null)
+  // Only people who are SUPPOSED to have a day rate. Staff, staff_pf and proprietors are paid a
+  // monthly salary and carry no daily rate by design -- the DB even forbids both (scripts/141,
+  // attendance_workers_one_pay_basis). Counting them as "missing" told HoneyFarm to go and fix
+  // six workers who were already correct, and a warning that is wrong is a warning people learn
+  // to dismiss.
+  const noRateWorkers = workers.filter((w) => isPaidDaily(w.workerType) && w.dailyRate === null)
   // Only meaningful on a multi-estate tenant: an unassigned worker appears under every estate,
   // so the estate selector silently has no effect on the roster and nothing says why.
 
