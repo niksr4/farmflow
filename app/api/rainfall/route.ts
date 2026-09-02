@@ -6,6 +6,9 @@ import { canDeleteModule, canWriteModule } from "@/lib/permissions"
 import { logAuditEvent } from "@/lib/server/audit-log"
 import { logRouteMutationFailure } from "@/lib/server/route-error-events"
 import { sanitizeRouteError } from "@/lib/server/sanitize-route-error"
+import { cookies } from "next/headers"
+import { resolveActiveEstate } from "@/lib/server/estate-filter"
+import { SELECTED_ESTATE_COOKIE } from "@/lib/server/estate-cookie"
 
 export const dynamic = "force-dynamic"
 export const revalidate = 0
@@ -17,16 +20,50 @@ const parseWholeNonNegative = (value: unknown) => {
   return numeric
 }
 
-export async function GET(_request: NextRequest) {
+/**
+ * Which estate a reading was taken at. Blank means the whole place.
+ *
+ * Free text is checked against the tenant's own estates rather than trusted, because a typo
+ * ("Tirtha" for "Tirtha Estate") does not fail -- it silently creates a third estate that exists
+ * only in the rainfall table and is invisible to the estate selector.
+ */
+async function resolveEstate(
+  tenantContext: { tenantId: string; role: string },
+  raw: unknown,
+): Promise<{ estate: string | null } | { error: string }> {
+  const value = String(raw ?? "").trim()
+  if (!value) return { estate: null }
+  const known = await runTenantQuery(
+    sql,
+    tenantContext,
+    sql`SELECT 1 FROM locations
+        WHERE tenant_id = ${tenantContext.tenantId} AND estate = ${value} LIMIT 1`,
+  )
+  if (!known?.length) return { error: `"${value}" is not one of your estates` }
+  return { estate: value }
+}
+
+export async function GET(request: NextRequest) {
   try {
     const sessionUser = await requireModuleAccess("rainfall")
     const tenantContext = normalizeTenantContext(sessionUser.tenantId, sessionUser.role)
+    // A reading with no estate is the whole property's, so it counts wherever you are standing --
+    // the same rule every other estate-scoped read follows. Dropping those would empty the tab for
+    // every tenant who has ever recorded rain without splitting it, which is all of them.
+    const activeEstate = resolveActiveEstate(
+      new URL(request.url).searchParams,
+      (await cookies()).get(SELECTED_ESTATE_COOKIE)?.value || null,
+    )
+    const estateFilter = activeEstate
+      ? sql` AND (estate IS NULL OR estate = ${activeEstate})`
+      : sql``
     const records = await runTenantQuery(
       sql,
       tenantContext,
       sql`
         SELECT * FROM rainfall_records
         WHERE tenant_id = ${tenantContext.tenantId}
+        ${estateFilter}
         ORDER BY record_date DESC
         LIMIT 3650
       `,
@@ -43,6 +80,7 @@ export async function GET(_request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   let tenantId: string | null = null
+  let attemptedEstate: string | null = null
   try {
     const sessionUser = await requireModuleAccess("rainfall")
     if (!canWriteModule(sessionUser.role, "rainfall")) {
@@ -50,7 +88,8 @@ export async function POST(request: NextRequest) {
     }
     tenantId = sessionUser.tenantId
     const tenantContext = normalizeTenantContext(sessionUser.tenantId, sessionUser.role)
-    const { record_date, inches, cents, notes } = await request.json()
+    const body = await request.json()
+    const { record_date, inches, cents, notes } = body
 
     if (!record_date) {
       return NextResponse.json({ success: false, error: "Date is required" }, { status: 400 })
@@ -74,18 +113,25 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    const resolved = await resolveEstate(tenantContext, body?.estate)
+    attemptedEstate = "estate" in resolved ? resolved.estate : null
+    if ("error" in resolved) {
+      return NextResponse.json({ success: false, error: resolved.error }, { status: 400 })
+    }
+
     const result = await runTenantQuery(
       sql,
       tenantContext,
       sql`
-        INSERT INTO rainfall_records (record_date, inches, cents, notes, user_id, tenant_id)
+        INSERT INTO rainfall_records (record_date, inches, cents, notes, user_id, tenant_id, estate)
         VALUES (
           ${record_date},
           ${inchesValue},
           ${centsValue},
           ${notes || ""},
           ${sessionUser.username || "system"},
-          ${tenantContext.tenantId}
+          ${tenantContext.tenantId},
+          ${resolved.estate}
         )
         RETURNING *
       `,
@@ -104,8 +150,15 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: false, error: "Module access disabled" }, { status: 403 })
     }
     if (String(error?.code) === "23505") {
+      // One reading per day per estate, not one per day. Saying "for this date" to a two-estate
+      // tenant reads as "you already did today" when they have only done the other estate.
       return NextResponse.json(
-        { success: false, error: "A rainfall record for this date already exists. Delete the existing entry first if you want to replace it." },
+        {
+          success: false,
+          error: attemptedEstate
+            ? `A rainfall record for this date already exists for ${attemptedEstate}. Edit that one, or record the other estate instead.`
+            : "A rainfall record for this date already exists. Delete the existing entry first if you want to replace it.",
+        },
         { status: 409 },
       )
     }
@@ -130,7 +183,8 @@ export async function PUT(request: NextRequest) {
     }
     tenantId = sessionUser.tenantId
     const tenantContext = normalizeTenantContext(sessionUser.tenantId, sessionUser.role)
-    const { id, record_date, inches, cents, notes } = await request.json()
+    const editBody = await request.json()
+    const { id, record_date, inches, cents, notes } = editBody
 
     if (!id) {
       return NextResponse.json({ success: false, error: "ID is required" }, { status: 400 })
@@ -157,6 +211,11 @@ export async function PUT(request: NextRequest) {
       )
     }
 
+    const editEstate = await resolveEstate(tenantContext, editBody?.estate)
+    if ("error" in editEstate) {
+      return NextResponse.json({ success: false, error: editEstate.error }, { status: 400 })
+    }
+
     const existing = await runTenantQuery(
       sql,
       tenantContext,
@@ -178,7 +237,8 @@ export async function PUT(request: NextRequest) {
       tenantContext,
       sql`
         UPDATE rainfall_records
-        SET record_date = ${record_date}, inches = ${inchesValue}, cents = ${centsValue}, notes = ${notes || ""}
+        SET record_date = ${record_date}, inches = ${inchesValue}, cents = ${centsValue},
+            notes = ${notes || ""}, estate = ${editEstate.estate}
         WHERE id = ${id} AND tenant_id = ${tenantContext.tenantId}
         RETURNING *
       `,

@@ -30,6 +30,8 @@ type RainfallRecord = {
   record_date: string
   inches: number
   cents: number
+  /** Where it was measured. Null means the whole property, which is how most estates record. */
+  estate?: string | null
   notes?: string
   user_id: string
 }
@@ -119,6 +121,17 @@ export default function RainfallTab({ username, showDataToolsControls = false }:
   const [cm, setCm] = useState("")
   const [mm, setMm] = useState("")
   const [notes, setNotes] = useState("")
+  /**
+   * Which estate this reading was taken at.
+   *
+   * Asked for by Medappa 2026-09-02 -- two properties, two rain gauges, and until now one row per
+   * day for the whole account, so the Citrus reading had nowhere to go and lived on paper. Blank
+   * stays the default and stays valid: measuring in one place and calling it the estate's rainfall
+   * is what most growers do, and the picker only appears at all for tenants who have more than one
+   * estate to choose between.
+   */
+  const [estate, setEstate] = useState("")
+  const [estates, setEstates] = useState<string[]>([])
   const [loading, setLoading] = useState(false)
   const [editingId, setEditingId] = useState<number | null>(null)
   const [drilldownMonthIndex, setDrilldownMonthIndex] = useState<number | null>(null)
@@ -213,8 +226,27 @@ export default function RainfallTab({ username, showDataToolsControls = false }:
     fetchRecords()
   }, [])
 
+  useEffect(() => {
+    // Same source the estate selector uses, so the names always agree -- the route rejects an
+    // estate it does not recognise, and a picker offering a name the server would refuse is worse
+    // than no picker.
+    let ignore = false
+    void fetch("/api/locations", { cache: "no-store" })
+      .then((r) => r.json())
+      .then((d) => {
+        if (ignore) return
+        const rows: Array<{ estate?: string | null }> = Array.isArray(d?.locations) ? d.locations : []
+        setEstates([...new Set(rows.map((l) => l.estate).filter((e): e is string => Boolean(e)))].sort())
+      })
+      .catch(() => {})
+    return () => {
+      ignore = true
+    }
+  }, [])
+
   const resetForm = () => {
     setEditingId(null)
+    setEstate("")
     setInches("")
     setCents("")
     setCm("")
@@ -237,6 +269,7 @@ export default function RainfallTab({ username, showDataToolsControls = false }:
     setCm(String(converted.cm))
     setMm(String(converted.mm))
     setNotes(record.notes || "")
+    setEstate(record.estate || "")
     if (isMobile) setMobileSection("log")
   }
 
@@ -282,6 +315,7 @@ export default function RainfallTab({ username, showDataToolsControls = false }:
           inches: inchesNum,
           cents: centsNum,
           notes,
+          estate: estate || null,
           user_id: username,
         }),
       })
@@ -925,6 +959,23 @@ export default function RainfallTab({ username, showDataToolsControls = false }:
             <p className="text-2xl font-black text-sky-700 tabular-nums">{totalDisplay}</p>
           </div>
 
+          {/* Only for tenants who actually have more than one estate -- the same test the muster
+              applies. One estate means the answer is never interesting, and an extra field on the
+              screen a writer fills in every morning is a cost with no return. */}
+          {estates.length > 1 && (
+            <select
+              value={estate}
+              onChange={(e) => setEstate(e.target.value)}
+              aria-label="Where this rain was measured"
+              className="w-full h-11 rounded-xl border border-stone-200 px-4 text-base mb-4 focus:outline-none focus:ring-2 focus:ring-sky-400"
+            >
+              <option value="">Whole property</option>
+              {estates.map((e) => (
+                <option key={e} value={e}>{e}</option>
+              ))}
+            </select>
+          )}
+
           {/* Notes */}
           <input
             type="text"
@@ -962,7 +1013,16 @@ export default function RainfallTab({ username, showDataToolsControls = false }:
               {[...records].sort((a, b) => b.record_date.localeCompare(a.record_date)).slice(0, 20).map((record) => (
                 <div key={record.id} className="rounded-2xl bg-white shadow-sm px-4 py-3 flex items-center justify-between">
                   <div>
-                    <p className="text-sm font-bold text-stone-800">{formatDateOnly(record.record_date)}</p>
+                    <p className="flex items-center gap-1.5 text-sm font-bold text-stone-800">
+                      {formatDateOnly(record.record_date)}
+                      {/* Two estates can now both record the same day, so without this the list
+                          shows the date twice and reads as a duplicate somebody should delete. */}
+                      {record.estate && (
+                        <span className="rounded bg-sky-100 px-1.5 py-px text-[10px] font-bold uppercase tracking-wide text-sky-700">
+                          {record.estate}
+                        </span>
+                      )}
+                    </p>
                     {record.notes && <p className="text-xs text-stone-400 mt-0.5">{record.notes}</p>}
                   </div>
                   <div className="flex items-center gap-2">
@@ -1279,6 +1339,22 @@ export default function RainfallTab({ username, showDataToolsControls = false }:
                 </PopoverContent>
               </Popover>
             </div>
+            {estates.length > 1 && (
+              <div className="mb-4">
+                <label className="mb-2 block text-sm font-medium">Measured at</label>
+                <select
+                  value={estate}
+                  onChange={(e) => setEstate(e.target.value)}
+                  aria-label="Where this rain was measured"
+                  className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
+                >
+                  <option value="">Whole property</option>
+                  {estates.map((e) => (
+                    <option key={e} value={e}>{e}</option>
+                  ))}
+                </select>
+              </div>
+            )}
             <div>
               <label className="mb-2 block text-sm font-medium">Notes (optional)</label>
               <Input placeholder="e.g., Heavy rain in afternoon" value={notes} onChange={(e) => setNotes(e.target.value)} />
@@ -1464,6 +1540,7 @@ export default function RainfallTab({ username, showDataToolsControls = false }:
                     <div className="text-sm font-semibold text-stone-900 dark:text-white">{formatDateOnly(record.record_date)}</div>
                     <div className="text-xs text-stone-500 dark:text-stone-400">
                       <span className="font-semibold text-stone-800 dark:text-stone-200">{formatNumber(record.inches + record.cents / 100, 2)}&quot;</span>
+                      {record.estate && <span className="ml-2 font-semibold text-sky-700 dark:text-sky-400">{record.estate}</span>}
                       {record.notes && <span className="ml-2">• {record.notes}</span>}
                     </div>
                   </div>
