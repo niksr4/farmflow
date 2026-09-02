@@ -162,11 +162,13 @@ export async function GET(request: Request) {
         `,
         ["processing_records", "locations"],
       ),
-      tryQuery<{ record_date: string; inches: number; cents: number }>(
+      tryQuery<{ record_date: string; rainfall_inches: number }>(
         context,
         sql!`
-          SELECT record_date::text AS record_date, inches, cents
-          FROM rainfall_records
+          -- One row a day, averaged across gauges (scripts/147). The Map below keys on the date,
+          -- so raw rows meant an arbitrary gauge won and the other estate's reading vanished.
+          SELECT record_date::text AS record_date, rainfall_inches
+          FROM rainfall_daily
           WHERE tenant_id = ${context.tenantId}
             AND record_date >= CURRENT_DATE - INTERVAL '13 days'
             AND record_date <= CURRENT_DATE
@@ -275,7 +277,7 @@ export async function GET(request: Request) {
 
     // ── Rainfall + field signal ──────────────────────────────────────
     const rainfallByDate = new Map(
-      rainfallResult.rows.map((r) => [String(r.record_date).slice(0, 10), Number(r.inches) + Number(r.cents) / 100]),
+      rainfallResult.rows.map((r) => [String(r.record_date).slice(0, 10), Number(r.rainfall_inches) || 0]),
     )
     const rainfallDays: Array<{ day: string; inches: number }> = []
     for (let i = 13; i >= 0; i--) {

@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react"
 import type { ExceptionSummaryAlert } from "@/components/inventory-system/types"
+import { collapseRainfallByDate } from "@/lib/rainfall"
 
 type FiscalYear = { startDate: string; endDate: string }
 
@@ -383,15 +384,12 @@ export function useHeroTotals({
         // Rainfall is tracked by calendar year (logbook convention), not fiscal year,
         // to match the Rain & Weather tab's "Annual total" figure.
         const currentYear = String(new Date().getFullYear())
-        let totalInches = 0, totalRecords = 0
-        let latestDate: string | null = null
-        for (const record of records) {
-          const recordDateStr = String(record?.record_date || "").slice(0, 10)
-          if (!recordDateStr || !recordDateStr.startsWith(currentYear)) continue
-          totalInches += (Number(record?.inches) || 0) + (Number(record?.cents) || 0) / 100
-          totalRecords += 1
-          if (!latestDate || recordDateStr > String(latestDate).slice(0, 10)) latestDate = String(record?.record_date || "")
-        }
+        // Days, not rows -- and each day counted once. The hero's "Annual total" has to agree with
+        // the Rain & Weather tab, and the tab collapses two gauges into one figure (lib/rainfall.ts).
+        const thisYear = collapseRainfallByDate(records).filter((d) => d.isoDate.startsWith(currentYear))
+        const totalInches = thisYear.reduce((sum, d) => sum + d.inches, 0)
+        const totalRecords = thisYear.length
+        const latestDate: string | null = thisYear.length ? thisYear[thisYear.length - 1].isoDate : null
         if (!controller.signal.aborted) { setRainfallHeroTotals({ totalRecords, totalInches, latestDate, loading: false, error: null }); rainfallLoadedRef.current = tenantId }
       } catch (error: any) {
         if (!controller.signal.aborted) setRainfallHeroTotals((prev) => ({ ...prev, loading: false, error: error?.message || "Failed to load rainfall totals" }))

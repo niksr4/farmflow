@@ -38,7 +38,7 @@ interface DataSummaryInput {
       dry_cherry_bags: number
     }>
   >
-  rainfallData: Array<{ record_date: string; inches: number; cents: number }>
+  rainfallData: Array<{ record_date: string; rainfall_inches: number }>
   expenseData: Array<{ entry_date: string; code: string; total_amount: number }>
   dispatchData: Array<{ dispatch_date: string; location: string; coffee_type: string; bag_type: string; bags_dispatched: number }>
   salesData: Array<{
@@ -254,9 +254,11 @@ async function fetchRainfallData(tenantContext: TenantContext) {
       sql`
         SELECT
           record_date,
-          inches,
-          cents
-        FROM rainfall_records
+          -- One row a day, already averaged across whatever gauges reported it (scripts/147).
+          -- Handed over as a single depth rather than inches/cents so nothing downstream is
+          -- tempted to add the two halves of a reading back together per row.
+          rainfall_inches
+        FROM rainfall_daily
         WHERE record_date BETWEEN ${yearStart}::date AND ${yearEnd}::date
           AND tenant_id = ${tenantId}
         ORDER BY record_date DESC
@@ -519,14 +521,13 @@ function buildDataSummary(data: DataSummaryInput): string {
 
   if (data.rainfallData && data.rainfallData.length > 0) {
     sections.push("\n## Rainfall Data")
-    const totalRainfall = data.rainfallData.reduce((sum, rainfall) => {
-      return sum + (Number(rainfall.inches) || 0) + (Number(rainfall.cents) || 0) / 100
-    }, 0)
+    // One row per day already, so this is days added together -- not gauges.
+    const totalRainfall = data.rainfallData.reduce((sum, rainfall) => sum + (Number(rainfall.rainfall_inches) || 0), 0)
     const monthlyRain: Record<string, number> = {}
     data.rainfallData.forEach((rainfall) => {
       const month = new Date(rainfall.record_date).toLocaleString("default", { month: "short" })
       if (!monthlyRain[month]) monthlyRain[month] = 0
-      monthlyRain[month] += (Number(rainfall.inches) || 0) + (Number(rainfall.cents) || 0) / 100
+      monthlyRain[month] += Number(rainfall.rainfall_inches) || 0
     })
     sections.push(`- Total rainfall this year: ${totalRainfall.toFixed(2)} inches`)
     sections.push(`- Recording days: ${data.rainfallData.length}`)

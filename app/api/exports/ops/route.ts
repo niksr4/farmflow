@@ -165,7 +165,7 @@ const buildRainfallMatrixCsv = (
   startDate: string,
   endDate: string,
 ) => {
-  const valuesByYear = new Map<number, Map<string, { display: string; value: number }>>()
+  const valuesByYear = new Map<number, Map<string, { display: string; value: number; n: number }>>()
   rows.forEach((row) => {
     const isoDate = String((row as any).record_date || "").slice(0, 10)
     if (!DATE_PATTERN.test(isoDate)) return
@@ -179,9 +179,22 @@ const buildRainfallMatrixCsv = (
     const cents = Math.max(0, Math.min(99, centsRaw))
     const value = inches + cents / 100
     const display = `${inches}.${String(cents).padStart(2, "0")}`
-    const yearValues = valuesByYear.get(year) || new Map<string, { display: string; value: number }>()
-    if (!yearValues.has(isoDate)) {
-      yearValues.set(isoDate, { display, value })
+    const yearValues = valuesByYear.get(year) || new Map<string, { display: string; value: number; n: number }>()
+    // Average the gauges. This was first-one-wins, which printed one estate's reading as the
+    // property's and dropped the other without trace -- in a file somebody archives. A day x month
+    // matrix has one cell per date, so the collapse has to happen here (scripts/147, lib/rainfall.ts).
+    const prior = yearValues.get(isoDate)
+    if (prior) {
+      const n = prior.n + 1
+      const mean = Math.round(((prior.value * prior.n + value) / n) * 100) / 100
+      const whole = Math.trunc(mean)
+      yearValues.set(isoDate, {
+        display: `${whole}.${String(Math.round((mean - whole) * 100)).padStart(2, "0")}`,
+        value: mean,
+        n,
+      })
+    } else {
+      yearValues.set(isoDate, { display, value, n: 1 })
     }
     valuesByYear.set(year, yearValues)
   })

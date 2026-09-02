@@ -21,6 +21,7 @@ import { cn } from "@/lib/utils"
 import { formatCurrency, formatNumber } from "@/lib/format"
 import { getSeasonBadge } from "@/lib/season-utils"
 import { isNetworkError } from "@/lib/network-error"
+import { totalRainfallBetween } from "@/lib/rainfall"
 
 type GapDay = { date: string; label: string; isToday: boolean }
 
@@ -81,18 +82,13 @@ export default function TodayGapsCard({ onNavigate, className }: Props) {
         for (const dep of expenseData.deployments) expenseCost += Number(dep.amount) || 0
       }
 
+      // One figure per day however many estates reported it -- adding the rows doubles the week
+      // for anyone measuring in two places, and counts one wet day as two. See lib/rainfall.ts.
       let rainfallInches = 0, rainfallDays = 0
       if (rainData.success && Array.isArray(rainData.records)) {
-        const weekRain = rainData.records.filter((r: { record_date?: string }) =>
-          String(r.record_date || "").slice(0, 10) >= startDate &&
-          String(r.record_date || "").slice(0, 10) <= endDate,
-        )
-        rainfallDays = weekRain.length
-        rainfallInches = weekRain.reduce(
-          (s: number, r: { inches?: number; cents?: number }) =>
-            s + (Number(r.inches) || 0) + (Number(r.cents) || 0) / 100,
-          0,
-        )
+        const week = totalRainfallBetween(rainData.records, startDate, endDate)
+        rainfallInches = week.inches
+        rainfallDays = week.days
       }
 
       setStats({ laborCost, expenseCost, rainfallInches, rainfallDays })

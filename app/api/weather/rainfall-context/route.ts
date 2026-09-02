@@ -97,8 +97,10 @@ export async function GET(request: NextRequest) {
       sql`
         SELECT
           record_date::text AS record_date,
-          COALESCE(inches, 0)::numeric + (COALESCE(cents, 0)::numeric / 100.0) AS rainfall_inches
-        FROM rainfall_records
+          rainfall_inches
+        -- rainfall_daily, not the raw rows: this is reduced per row downstream, so two gauges on a
+        -- date would double the 7-day figure and skew the daily average (scripts/147).
+        FROM rainfall_daily
         WHERE tenant_id = ${sessionUser.tenantId}
           AND record_date >= ${past30Iso}::date
           AND record_date <= ${todayIso}::date

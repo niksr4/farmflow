@@ -7,6 +7,7 @@ import { cn } from "@/lib/utils"
 import { formatCurrency, formatNumber } from "@/lib/format"
 import { getSeasonBadge, getSeasonContextLine, isBatchLoggingWindow } from "@/lib/season-utils"
 import { format, startOfWeek, endOfWeek } from "date-fns"
+import { totalRainfallBetween } from "@/lib/rainfall"
 
 type WeekSummary = {
   laborCost: number
@@ -88,16 +89,12 @@ export default function DailyPulseCard({ onNavigate, className }: DailyPulseCard
         expenseCost = expenseData.deployments.reduce((s: number, d: any) => s + (Number(d.amount) || 0), 0)
       }
 
+      // Collapsed by day first: two gauges on one date is one wet day of one depth, not two.
       let rainfallInches = 0, rainfallDays = 0
       if (rainData.success && Array.isArray(rainData.records)) {
-        const weekRecords = rainData.records.filter((r: any) => {
-          const d = String(r.record_date || "").slice(0, 10)
-          return d >= week.startDate && d <= week.endDate
-        })
-        rainfallDays = weekRecords.length
-        rainfallInches = weekRecords.reduce((s: number, r: any) => {
-          return s + (Number(r.inches) || 0) + (Number(r.cents) || 0) / 100
-        }, 0)
+        const rain = totalRainfallBetween(rainData.records, week.startDate, week.endDate)
+        rainfallInches = rain.inches
+        rainfallDays = rain.days
       }
 
       setSummary({ laborCost, laborEntries, expenseCost, expenseEntries, rainfallInches, rainfallDays, loading: false })
