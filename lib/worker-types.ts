@@ -62,3 +62,15 @@ export const workerTypeLabel = (value: unknown): string =>
  */
 export const isPaidDaily = (value: unknown): boolean =>
   WORKER_TYPES.find((t) => t.value === value)?.paidDaily ?? true
+
+/**
+ * The types paid a monthly salary rather than a daily wage.
+ *
+ * Derived from the table above rather than typed out again, and exported so SQL can be handed the
+ * list instead of hardcoding one. Payroll has to answer "salary or days?" in the query itself, and
+ * a second copy of this list living in a WHERE clause is how the two come to disagree the next time
+ * a type is added -- which the note at the top of this file says will keep happening.
+ */
+export const MONTHLY_PAID_WORKER_TYPES: readonly WorkerType[] = WORKER_TYPES.filter(
+  (t) => !t.paidDaily,
+).map((t) => t.value)

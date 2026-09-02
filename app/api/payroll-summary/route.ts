@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server"
 
-import { isPaidDaily } from "@/lib/worker-types"
+import { isPaidDaily, MONTHLY_PAID_WORKER_TYPES } from "@/lib/worker-types"
 import { cookies } from "next/headers"
 import { accountsSql } from "@/lib/server/db"
 import { requireModuleAccess, isModuleAccessError } from "@/lib/server/module-access"
@@ -89,6 +89,41 @@ export async function GET(request: Request) {
             AND pick_date BETWEEN ${startDate}::date AND ${endDate}::date
           GROUP BY worker_id
         ),
+        /**
+         * What a monthly-salaried worker earned over this period.
+         *
+         * They had been earning nothing. net_payable was picking + days x daily_rate + adjustments
+         * - deductions, and staff carry no daily_rate BY DESIGN (the database forbids both,
+         * scripts/141) -- so every term was zero and payroll paid eight real people Rs 0 across
+         * three estates. Two of them, at Laxmi, have salaries of Rs 17,000 and Rs 16,000 sitting in
+         * the roster: somebody typed those in and payroll still said zero. monthly_wage was
+         * stored, validated and editable, and read by nothing that pays anyone.
+         *
+         * PRO-RATED BY THE PERIOD'S SHARE OF EACH CALENDAR MONTH, a day at a time, so a full month
+         * pays exactly the salary and a part-month pays its fraction. Summing per day rather than
+         * dividing by an assumed 30 keeps February honest and handles a range spanning two months
+         * of different lengths.
+         *
+         * NOT DOCKED FOR ABSENCE, deliberately. A salary is not attendance-driven -- that is what
+         * being salaried means -- and FarmFlow cannot tell approved leave from a no-show, because
+         * it does not record leave at all (see lib/attendance-monthly.ts). Reducing somebody's pay
+         * from data that cannot support the distinction would be a confident wrong answer on a
+         * wage sheet. When leave exists, this is where it gets subtracted.
+         */
+        salary_earnings AS (
+          SELECT w.id AS worker_id,
+                 SUM(
+                   w.monthly_wage
+                   / EXTRACT(DAY FROM (date_trunc('month', d) + INTERVAL '1 month' - INTERVAL '1 day'))
+                 )::numeric AS salary_total
+          FROM attendance_workers w
+          CROSS JOIN generate_series(${startDate}::date, ${endDate}::date, INTERVAL '1 day') AS d
+          WHERE w.tenant_id = ${tenantContext.tenantId}
+            AND w.active = TRUE
+            AND w.monthly_wage IS NOT NULL
+            AND w.worker_type = ANY(${MONTHLY_PAID_WORKER_TYPES as unknown as string[]})
+          GROUP BY w.id
+        ),
         ledger_totals AS (
           SELECT
             worker_id,
@@ -108,13 +143,21 @@ export async function GET(request: Request) {
           COALESCE(m.muster_days, a.days_present, 0)                                                AS days_present,
           COALESCE(p.picking_total, 0)                                                              AS picking_earnings,
           COALESCE(p.total_kg, 0)                                                                   AS picking_kg,
-          COALESCE(m.muster_total, COALESCE(a.days_present, 0) * COALESCE(w.daily_rate, 0))         AS attendance_earnings,
-          (m.muster_total IS NOT NULL)                                                              AS from_muster,
+          -- A salary replaces the day-rate arithmetic rather than adding to it: a monthly worker
+          -- who somehow carries an allocated job would otherwise be paid twice for the same month.
+          COALESCE(
+            s.salary_total,
+            m.muster_total,
+            COALESCE(a.days_present, 0) * COALESCE(w.daily_rate, 0)
+          )                                                                                         AS attendance_earnings,
+          (s.salary_total IS NOT NULL)                                                              AS from_salary,
+          w.monthly_wage                                                                            AS monthly_wage,
+          (m.muster_total IS NOT NULL AND s.salary_total IS NULL)                                    AS from_muster,
           COALESCE(l.total_deductions, 0)                                                           AS deductions,
           COALESCE(l.total_adjustments, 0)                                                          AS adjustments,
           (
             COALESCE(p.picking_total, 0)
-            + COALESCE(m.muster_total, COALESCE(a.days_present, 0) * COALESCE(w.daily_rate, 0))
+            + COALESCE(s.salary_total, m.muster_total, COALESCE(a.days_present, 0) * COALESCE(w.daily_rate, 0))
             + COALESCE(l.total_adjustments, 0)
             - COALESCE(l.total_deductions, 0)
           )                                                                                         AS net_payable
@@ -122,6 +165,7 @@ export async function GET(request: Request) {
         LEFT JOIN attendance_days  a ON a.worker_id = w.id
         LEFT JOIN muster_earnings  m ON m.worker_id = w.id
         LEFT JOIN picking_earnings p ON p.worker_id = w.id
+        LEFT JOIN salary_earnings  s ON s.worker_id = w.id
         LEFT JOIN ledger_totals    l ON l.worker_id = w.id
         WHERE w.tenant_id = ${tenantContext.tenantId}
           AND w.active = TRUE
@@ -132,6 +176,12 @@ export async function GET(request: Request) {
             OR COALESCE(p.picking_total, 0) > 0
             OR COALESCE(l.total_deductions, 0) > 0
             OR COALESCE(l.total_adjustments, 0) > 0
+            -- Owed regardless of the roll. A salaried writer nobody ticked is still owed their
+            -- month, and leaving them off the sheet is how they get missed on payday.
+            OR s.salary_total IS NOT NULL
+            -- And the ones with no salary recorded, so the gap is visible instead of being an
+            -- absence from the list. missingMonthlyWage flags them below.
+            OR (w.worker_type = ANY(${MONTHLY_PAID_WORKER_TYPES as unknown as string[]}) AND COALESCE(a.days_present, 0) > 0)
           )
         ORDER BY LOWER(w.full_name)
       `,
@@ -153,6 +203,15 @@ export async function GET(request: Request) {
       // same fix as the muster's own banner in attendance-tab.tsx. Kept in step with lib/worker-types.
       missingDailyRate:
         isPaidDaily(r.worker_type) && r.daily_rate == null && Number(r.days_present) > 0,
+      monthlyWage: r.monthly_wage != null ? Number(r.monthly_wage) : null,
+      /**
+       * The other half of the same question. A monthly worker with no salary recorded still earns
+       * nothing here -- but now that is a gap somebody can see and fill, rather than a zero that
+       * looks like a settled figure. Six of the eight are in this state today.
+       */
+      missingMonthlyWage: !isPaidDaily(r.worker_type) && r.monthly_wage == null,
+      /** True when this line is a pro-rated monthly salary rather than days or allocated work. */
+      fromSalary: Boolean(r.from_salary),
       /** True when this line came from allocated work rather than days-times-rate. */
       fromMuster: Boolean(r.from_muster),
     }))

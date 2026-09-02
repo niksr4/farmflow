@@ -29,6 +29,11 @@ type PayrollWorker = {
   adjustments: number
   netPayable: number
   missingDailyRate: boolean
+  monthlyWage: number | null
+  /** Paid monthly, but no salary recorded — so this line is Rs 0 and shouldn't be. */
+  missingMonthlyWage: boolean
+  /** This line is a pro-rated monthly salary, not days x rate. */
+  fromSalary: boolean
 }
 
 type Totals = {
@@ -122,6 +127,9 @@ export default function PayrollSummaryTab() {
   }
 
   const missingRateCount = workers.filter((w) => w.missingDailyRate).length
+  // Payroll paid these people Rs 0 in silence until now. The number is small and the money is not:
+  // Laxmi's two carry Rs 17,000 and Rs 16,000 in the roster.
+  const missingSalaryCount = workers.filter((w) => w.missingMonthlyWage).length
 
   return (
     <div className="space-y-4">
@@ -180,6 +188,17 @@ export default function PayrollSummaryTab() {
             </div>
           )}
 
+          {missingSalaryCount > 0 && (
+            <div className="flex items-start gap-2 rounded-lg border border-amber-400/20 bg-amber-400/[0.06] px-3 py-2 text-sm text-amber-300">
+              <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" />
+              <span>
+                {missingSalaryCount} monthly-paid worker{missingSalaryCount !== 1 ? "s have" : " has"} no salary
+                recorded — {missingSalaryCount !== 1 ? "those lines are" : "that line is"} ₹0.{" "}
+                Set the monthly salary in the <strong>Workers</strong> tab.
+              </span>
+            </div>
+          )}
+
           {!hasGenerated ? (
             <EmptyStateTable title="Select a date range and click Generate to compute payroll." />
           ) : workers.length === 0 ? (
@@ -194,6 +213,21 @@ export default function PayrollSummaryTab() {
                       <div>
                         <div className="font-medium text-sm flex items-center gap-1.5">
                           {w.name}
+                          {w.missingMonthlyWage && (
+                            <TooltipProvider>
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <AlertTriangle className="h-3.5 w-3.5 text-amber-400" />
+                                </TooltipTrigger>
+                                <TooltipContent>Paid monthly, but no salary recorded — this line is ₹0</TooltipContent>
+                              </Tooltip>
+                            </TooltipProvider>
+                          )}
+                          {w.fromSalary && (
+                            <span className="rounded bg-sky-500/15 px-1.5 py-px text-[10px] font-bold uppercase tracking-wide text-sky-400">
+                              salary
+                            </span>
+                          )}
                           {w.missingDailyRate && (
                             <TooltipProvider>
                               <Tooltip>
@@ -305,10 +339,23 @@ export default function PayrollSummaryTab() {
                     </TableHeader>
                     <TableBody>
                       {workers.map((w) => (
-                        <TableRow key={w.id} className={w.missingDailyRate ? "bg-amber-400/[0.03]" : undefined}>
+                        <TableRow key={w.id} className={w.missingDailyRate || w.missingMonthlyWage ? "bg-amber-400/[0.03]" : undefined}>
                           <TableCell className="font-medium text-sm">
                             <span className="flex items-center gap-1.5">
                               {w.name}
+                              {w.fromSalary && (
+                                <span className="rounded bg-sky-500/15 px-1.5 py-px text-[10px] font-bold uppercase tracking-wide text-sky-400">
+                                  salary
+                                </span>
+                              )}
+                              {w.missingMonthlyWage && (
+                                <Tooltip>
+                                  <TooltipTrigger asChild>
+                                    <AlertTriangle className="h-3.5 w-3.5 text-amber-400 cursor-default" />
+                                  </TooltipTrigger>
+                                  <TooltipContent>Paid monthly, but no salary recorded — this line is ₹0. Set it in the Workers tab.</TooltipContent>
+                                </Tooltip>
+                              )}
                               {w.missingDailyRate && (
                                 <Tooltip>
                                   <TooltipTrigger asChild>
