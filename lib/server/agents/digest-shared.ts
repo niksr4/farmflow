@@ -73,10 +73,12 @@ export async function fetchRecentRainfallSummary(tenantId: string): Promise<Rece
   try {
     const result = await sql.query(`
       SELECT
-        COALESCE(SUM(CASE WHEN record_date >= NOW() - INTERVAL '7 days'  THEN inches + cents::numeric/100 END), 0) AS last7,
-        COALESCE(SUM(CASE WHEN record_date >= NOW() - INTERVAL '30 days' THEN inches + cents::numeric/100 END), 0) AS last30,
+        COALESCE(SUM(CASE WHEN record_date >= NOW() - INTERVAL '7 days'  THEN rainfall_inches END), 0) AS last7,
+        COALESCE(SUM(CASE WHEN record_date >= NOW() - INTERVAL '30 days' THEN rainfall_inches END), 0) AS last30,
         COUNT(CASE  WHEN record_date >= NOW() - INTERVAL '30 days' THEN 1 END) AS logged30
-      FROM rainfall_records
+      -- rainfall_daily, not rainfall_records: one figure per day however many gauges reported it.
+      -- Summing the raw rows doubles the rain for any estate measuring in two places (scripts/147).
+      FROM rainfall_daily
       WHERE tenant_id = $1
     `, [tenantId])
     const row = (Array.isArray(result) ? result[0] : (result as any)?.rows?.[0]) ?? {}

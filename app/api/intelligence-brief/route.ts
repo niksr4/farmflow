@@ -677,8 +677,9 @@ Respond ONLY with a JSON array, no prose, no markdown:
         sql,
         tenantContext,
         sql`
-          SELECT COALESCE(SUM(inches + cents::numeric / 100), 0) AS total_inches
-          FROM rainfall_records
+          SELECT COALESCE(SUM(rainfall_inches), 0) AS total_inches
+          -- One figure per day, not one per gauge -- see scripts/147.
+          FROM rainfall_daily
           WHERE tenant_id = ${tenantContext.tenantId}
             AND record_date >= (CURRENT_DATE - INTERVAL '7 days')
         `,

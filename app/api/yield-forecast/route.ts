@@ -172,8 +172,9 @@ export async function GET(request: NextRequest) {
           `
             SELECT
               record_date::date::text AS record_date,
-              COALESCE(SUM(COALESCE(inches, 0) + (COALESCE(cents, 0) / 100.0)), 0) AS rainfall_inches
-            FROM rainfall_records
+              COALESCE(SUM(rainfall_inches), 0) AS rainfall_inches
+            -- One figure per day however many gauges reported it (scripts/147).
+            FROM rainfall_daily
             WHERE tenant_id = $1
               AND record_date >= $2::date
               AND record_date <= $3::date

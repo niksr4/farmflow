@@ -137,3 +137,66 @@ describe("two gauges on one day is not twice the rain", () => {
     expect(tab).not.toMatch(/averagedDayCount >= 0/)
   })
 })
+
+/**
+ * Fixing the tab was half the job.
+ *
+ * Migration 146 broke an assumption every reader of rainfall_records shared -- one row per day per
+ * tenant -- and a sweep found five more places that simply added whatever rows they were handed.
+ * Three of them post the number to a customer by email, where a doubled figure is one the estate
+ * reads and believes. This is the same shape as the missing-rate check that two screens got wrong
+ * the same way, and the ON CONFLICT that was right in five places and wrong in one.
+ *
+ * scripts/147 defines the collapse once, as a view, so the sixth consumer inherits it instead of
+ * having to remember.
+ */
+const VIEW_SQL = readFileSync("scripts/147-rainfall-daily-view.sql", "utf8")
+const RAINFALL_AGGREGATORS = [
+  "lib/server/agents/digest-shared.ts",
+  "lib/server/agents/weekly-digest-agent.ts",
+  "lib/server/agents/daily-digest-agent.ts",
+  "app/api/intelligence-brief/route.ts",
+  "app/api/yield-forecast/route.ts",
+]
+
+describe("nothing sums rainfall rows behind the view's back", () => {
+  it("the view averages the gauges rather than adding them", () => {
+    expect(VIEW_SQL).toContain("AVG(inches + cents::numeric / 100)")
+    expect(VIEW_SQL).not.toMatch(/SUM\(inches/)
+  })
+
+  it("runs as the caller, so it is not an RLS bypass wearing a helpful name", () => {
+    expect(VIEW_SQL).toContain("security_invoker = true")
+    expect(VIEW_SQL).toContain("147: rainfall_daily must be security_invoker")
+  })
+
+  it("every aggregating consumer reads the view", () => {
+    for (const file of RAINFALL_AGGREGATORS) {
+      expect(readFileSync(file, "utf8"), `${file} should aggregate rainfall_daily`).toContain("rainfall_daily")
+    }
+  })
+
+  it("and none of them still adds the raw rows", () => {
+    // The whole-app check, not just the known five: a new caller summing rainfall_records is the
+    // same bug again, and it will not announce itself.
+    const offenders: string[] = []
+    for (const dir of ["app", "lib", "components"]) {
+      const walk = (d: string): string[] => {
+        const { readdirSync, statSync } = require("node:fs") as typeof import("node:fs")
+        const { resolve } = require("node:path") as typeof import("node:path")
+        const out: string[] = []
+        for (const entry of readdirSync(d)) {
+          const p = resolve(d, entry)
+          if (statSync(p).isDirectory()) out.push(...walk(p))
+          else if (/\.tsx?$/.test(entry)) out.push(p)
+        }
+        return out
+      }
+      for (const file of walk(dir)) {
+        const src = readFileSync(file, "utf8")
+        if (/SUM\(\s*(COALESCE\()?inches/i.test(src)) offenders.push(file.slice(file.indexOf(dir)))
+      }
+    }
+    expect(offenders, "these add rainfall rows together; rain is a depth, not a quantity").toEqual([])
+  })
+})

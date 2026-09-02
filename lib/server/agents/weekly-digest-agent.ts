@@ -98,7 +98,10 @@ async function fetchLastWeekActivity(tenantId: string): Promise<LastWeekActivity
           WHERE tenant_id = $1 AND sale_date BETWEEN $2 AND $3)     AS sales_revenue,
         (SELECT COALESCE(SUM(bags_dispatched), 0) FROM dispatch_records
           WHERE tenant_id = $1 AND dispatch_date BETWEEN $2 AND $3) AS dispatch_bags,
-        (SELECT COALESCE(SUM(inches + cents::numeric / 100), 0) FROM rainfall_records
+        -- rainfall_daily: one figure a day whatever number of gauges reported it. Summing the
+        -- raw rows doubles the week's rain for an estate measuring in two places (scripts/147),
+        -- and this line goes out to the customer by email.
+        (SELECT COALESCE(SUM(rainfall_inches), 0) FROM rainfall_daily
           WHERE tenant_id = $1 AND record_date BETWEEN $2 AND $3)   AS rainfall_inches,
         (SELECT COUNT(*) FROM picking_records
           WHERE tenant_id = $1 AND pick_date BETWEEN $2 AND $3)  AS picking_entries
