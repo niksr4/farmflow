@@ -19,7 +19,7 @@ import { canWriteModule } from "../lib/permissions"
  * `requireModuleAccess("market-pricing")` check; `app/api/compliance/route.ts` POST has the identical
  * shape for certifications/checklist items. Neither "market-pricing" nor "compliance" is in
  * USER_MUTATION_MODULES, so per the app's own model a "user"-role account should not be able to
- * write to either — but both routes let them. See .farmflow-scanner/findings_log.md for detail.
+ * write to either — but both routes let them.
  *
  * This list must only ever shrink. If a fix adds the missing role check, delete the entry here too.
  */
