@@ -41,6 +41,8 @@ type NormalizedRainfallRecord = {
   date: Date
   isoDate: string
   rainfallInches: number
+  /** How many estates reported this day. >1 means rainfallInches is an average. */
+  gaugeCount?: number
   notes?: string
 }
 
@@ -372,7 +374,7 @@ export default function RainfallTab({ username, showDataToolsControls = false }:
   }
 
   const exportToCSV = () => {
-    const rainfallValuesByYear = new Map<number, Map<string, { display: string; value: number }>>()
+    const rainfallValuesByYear = new Map<number, Map<string, { display: string; value: number; n: number }>>()
     const currentYear = new Date().getFullYear()
     const yearsWithData = new Set<number>()
 
@@ -386,9 +388,22 @@ export default function RainfallTab({ username, showDataToolsControls = false }:
       const centsValue = Math.max(0, Math.min(99, Math.trunc(Number(record.cents) || 0)))
       const parsedValue = round2(inchesValue + centsValue / 100)
       const displayValue = `${inchesValue}.${String(centsValue).padStart(2, "0")}`
-      const yearMap = rainfallValuesByYear.get(year) || new Map<string, { display: string; value: number }>()
-      if (!yearMap.has(dateKey)) {
-        yearMap.set(dateKey, { display: displayValue, value: parsedValue })
+      const yearMap = rainfallValuesByYear.get(year) || new Map<string, { display: string; value: number; n: number }>()
+      // Average the gauges, like the screen does. This was "first one wins", which silently threw
+      // away the second estate's reading and printed one gauge's number as the property's -- a
+      // spreadsheet somebody files, with no hint that half the measurements were dropped.
+      const prior = yearMap.get(dateKey)
+      if (prior) {
+        const n = prior.n + 1
+        const mean = round2((prior.value * prior.n + parsedValue) / n)
+        const whole = Math.trunc(mean)
+        yearMap.set(dateKey, {
+          display: `${whole}.${String(Math.round((mean - whole) * 100)).padStart(2, "0")}`,
+          value: mean,
+          n,
+        })
+      } else {
+        yearMap.set(dateKey, { display: displayValue, value: parsedValue, n: 1 })
       }
       rainfallValuesByYear.set(year, yearMap)
     })
@@ -396,7 +411,7 @@ export default function RainfallTab({ username, showDataToolsControls = false }:
     const years = yearsWithData.size > 0 ? [...yearsWithData].sort((a, b) => a - b) : [currentYear]
     const csvRows: string[] = []
     years.forEach((year, yearIndex) => {
-      const yearlyValues = rainfallValuesByYear.get(year) || new Map<string, { display: string; value: number }>()
+      const yearlyValues = rainfallValuesByYear.get(year) || new Map<string, { display: string; value: number; n: number }>()
       const monthlyTotals = Array.from({ length: 12 }, () => 0)
       csvRows.push(`Year,${year}`)
       csvRows.push(["Day", ...MONTHS].join(","))
@@ -444,24 +459,58 @@ export default function RainfallTab({ username, showDataToolsControls = false }:
   const currentYear = now.getFullYear()
   const currentMonthIndex = now.getMonth()
 
+  /**
+   * One figure per day, whatever number of gauges reported it.
+   *
+   * RAINFALL IS A DEPTH, NOT A QUANTITY. Two inches at Tirtha and two at Citrus is two inches of
+   * rain on the property, not four. Every figure on this tab -- the monthly bars, the annual
+   * total, the dry-spell analysis, the calendar -- was built when the database allowed exactly one
+   * record per day per tenant, so all of them simply added whatever rows they were given. The
+   * moment migration 146 let a second estate record the same day, that addition became a doubled
+   * rainfall figure delivered with total confidence: 62 inches reported for a month that had 31.
+   *
+   * Averaging is the honest collapse. It is what a property-level figure can mean when two gauges
+   * disagree, and it is a no-op the rest of the time -- with an estate selected the route returns
+   * one row per day, and a single-estate tenant never had more.
+   *
+   * `gaugeCount` is carried so the screen can say when it is averaging rather than quietly
+   * presenting a derived number as a measured one.
+   */
   const normalizedRecords = useMemo<NormalizedRainfallRecord[]>(() => {
-    const parsedRecords: NormalizedRainfallRecord[] = []
+    const byDate = new Map<string, { date: Date; values: number[]; id: number; notes?: string }>()
 
     records.forEach((record) => {
       const date = parseRecordDate(record.record_date)
       if (!date) return
-
-      parsedRecords.push({
-        id: record.id,
-        date,
-        isoDate: toIsoDate(date),
-        rainfallInches: round2((Number(record.inches) || 0) + (Number(record.cents) || 0) / 100),
-        notes: record.notes,
-      })
+      const isoDate = toIsoDate(date)
+      const value = round2((Number(record.inches) || 0) + (Number(record.cents) || 0) / 100)
+      const existing = byDate.get(isoDate)
+      if (existing) {
+        existing.values.push(value)
+        // Keep the first note rather than concatenating: these are separate observations, and
+        // gluing "heavy in the afternoon" onto another gauge's note invents a sentence nobody wrote.
+      } else {
+        byDate.set(isoDate, { date, values: [value], id: record.id, notes: record.notes })
+      }
     })
+
+    const parsedRecords: NormalizedRainfallRecord[] = [...byDate.entries()].map(([isoDate, entry]) => ({
+      id: entry.id,
+      date: entry.date,
+      isoDate,
+      rainfallInches: round2(entry.values.reduce((sum, v) => sum + v, 0) / entry.values.length),
+      gaugeCount: entry.values.length,
+      notes: entry.notes,
+    }))
 
     return parsedRecords.sort((a, b) => a.date.getTime() - b.date.getTime())
   }, [records])
+
+  /** Days where more than one estate reported, so the figures above are averages. */
+  const averagedDayCount = useMemo(
+    () => normalizedRecords.filter((r) => (r.gaugeCount ?? 1) > 1).length,
+    [normalizedRecords],
+  )
 
   const monthlyTotalsData = useMemo(() => {
     const totals = Array.from({ length: 12 }, () => 0)
@@ -696,6 +745,15 @@ export default function RainfallTab({ username, showDataToolsControls = false }:
           <>
             <div className="px-3 pt-4">
               <p className="text-sm font-black text-stone-700 mb-3">{currentYear} rainfall</p>
+              {/* An averaged number must not be presented as a measured one. Only appears when two
+                  gauges actually reported the same day -- which is only ever a two-estate tenant
+                  viewing all estates at once, and never when one estate is selected. */}
+              {averagedDayCount > 0 && (
+                <p className="mb-3 rounded-lg bg-sky-50 px-3 py-2 text-[11px] font-semibold text-sky-800">
+                  {averagedDayCount} {averagedDayCount === 1 ? "day has" : "days have"} readings from more than one
+                  estate — those days show the average, not the sum. Pick an estate above to see its own figures.
+                </p>
+              )}
               <div className="grid grid-cols-2 gap-2">
                 <StatTile
                   tone="sky"
@@ -1137,6 +1195,12 @@ export default function RainfallTab({ username, showDataToolsControls = false }:
           </div>
         </div>
         <div className="space-y-4 p-5">
+          {averagedDayCount > 0 && (
+            <p className="rounded-lg bg-sky-50 px-3 py-2 text-xs font-semibold text-sky-800 dark:bg-sky-500/10 dark:text-sky-300">
+              {averagedDayCount} {averagedDayCount === 1 ? "day has" : "days have"} readings from more than one estate —
+              those days show the average, not the sum. Select an estate to see its own figures.
+            </p>
+          )}
           <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
             <div className="rounded-lg border border-stone-200 bg-stone-50 p-4 dark:border-white/[0.05] dark:bg-white/[0.02]">
               <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-emerald-700">Annual rainfall</p>

@@ -98,3 +98,42 @@ describe("the form only asks when there is something to ask", () => {
     expect((tab.match(/record\.estate &&/g) ?? []).length).toBe(2)
   })
 })
+
+/**
+ * Every figure on this tab was written when the database allowed exactly one record per day per
+ * tenant, so all of them simply added whatever rows they were handed. Migration 146 removed that
+ * constraint an hour before this was caught.
+ *
+ * RAINFALL IS A DEPTH, NOT A QUANTITY. Two inches at Tirtha and two at Citrus is two inches of
+ * rain on the property, not four. Simulated against a week of both Medappa gauges reporting:
+ * 12.25" of actual rain was being reported as 24.50", and a month of it as 108.5" against 54.25".
+ * Delivered with total confidence, on the tab of the tenant who asked for the feature.
+ */
+describe("two gauges on one day is not twice the rain", () => {
+  it("collapses the day to one figure instead of summing rows", () => {
+    expect(tab).toContain("const byDate = new Map<string,")
+    expect(tab).toContain("entry.values.reduce((sum, v) => sum + v, 0) / entry.values.length")
+  })
+
+  it("the export averages too, rather than keeping whichever row came first", () => {
+    // Was `if (!yearMap.has(dateKey))` — one gauge's number printed as the property's, in a
+    // spreadsheet somebody files, with no hint that half the readings were dropped.
+    expect(tab).not.toContain("if (!yearMap.has(dateKey))")
+    expect(tab).toContain("const prior = yearMap.get(dateKey)")
+  })
+
+  it("counts how many days were averaged, so the screen can say so", () => {
+    expect(tab).toContain("const averagedDayCount")
+    expect(tab).toContain("(r.gaugeCount ?? 1) > 1")
+  })
+
+  it("discloses it on both layouts rather than passing an average off as a measurement", () => {
+    expect((tab.match(/averagedDayCount > 0 &&/g) ?? []).length).toBe(2)
+    expect((tab.match(/the average, not the sum/g) ?? []).length).toBe(2)
+  })
+
+  it("stays silent when nothing was averaged", () => {
+    // A single-estate tenant, or any estate actually selected, must see no notice at all.
+    expect(tab).not.toMatch(/averagedDayCount >= 0/)
+  })
+})
