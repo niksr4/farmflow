@@ -3,7 +3,7 @@
 One page for the things that are easy to lose track of: what each tenant is doing, what is waiting
 on somebody else, and what has already been decided so it does not get re-argued.
 
-**Last reviewed: 2026-08-26.** Anything with a number in it should be re-checked against the DB
+**Last reviewed: 2026-09-02.** Anything with a number in it should be re-checked against the DB
 before you act on it — `node scripts/dev/referential-audit.mjs prod` and the queries in
 `scripts/dev/` are faster than remembering.
 
@@ -46,6 +46,85 @@ must read `isPaidDaily` first or it will keep reporting a problem that is a corr
 **Do not tag HoneyFarm's workers with an estate.** All 28 are NULL, which is what lets any of them
 be allocated to a block on either estate. Dad's rule that a Honeyfarm worker never punches at
 Sidapur is an enrolment decision for the scanners; the app neither knows nor needs it.
+
+---
+
+## Where each tab stands
+
+Row counts are production, all tenants, **2026-09-02**. "Last" is the newest record, which is the
+only honest measure of whether a tab is alive — a tab with rows and a March date is a tab somebody
+used once.
+
+| Tab | Rows | Last | State |
+|---|---|---|---|
+| **Muster** | 1,789 attendance · 744 allocations | **today** | The load-bearing tab. Three tenants write it daily |
+| **Rain & Weather** | 464 | **yesterday** | Healthy. Per-estate recording added 2 Sep |
+| **Costs** (labour + expenses) | 550 expenses | 28 Aug | Healthy |
+| **Stock & Inventory** | 59 items · 466 moves | 29 Aug | Healthy |
+| **Scanner** (in Muster) | 64 punches | **today** | HoneyFarm's terminal live 1 Sep. First real estate |
+| **Picking Log** | **0** | never | Enabled for all tenants 2 Sep. Nobody has used it yet |
+| **Payroll** (in Muster) | — | — | Reads the four sources. Monthly salaries fixed 2 Sep |
+| Processing | 78 | **28 Jan** | Dormant seven months. Harvest will decide |
+| Dispatch | 20 | 23 Mar | Dormant |
+| Sales | 19 | 26 Mar | Dormant |
+| Other Sales | 2 | 18 Mar | Dormant |
+| Journal | 1 | 9 May | Effectively unused |
+| Worker Ledger | **0** | never | Never used by anyone. Where retention and advances will live |
+| Receivables | **0** | never | Enterprise tier, no tenant on it |
+| Curing · Quality · Documents | **0** | never | Enterprise tier. See "Built But Unadopted" in CLAUDE.md |
+
+**The shape of the year is in that table.** Everything with a date this week is people-and-money;
+everything dormant is crop-and-customer, and stopped in March when last season's harvest ended.
+That is seasonality, not abandonment — but it means **nothing downstream of the field has been
+exercised in seven months**, and the first estate to process a bag this year will be finding bugs
+nobody has hit since January. Worth a deliberate pass before the harvest rather than during it.
+
+### Per-tab, what is actually next
+
+**Muster** — the most complete tab, and the one still moving.
+- Picking entry on the row (Manoj asked; design agreed, not built). Needs the either/or guard:
+  give picking a `day_fraction` so the day cap already in `scripts/145` refuses a day-rate job on
+  top of a picked day. Closes the double-count parked in `scripts/116` since the muster shipped.
+- **Leave is not recorded at all.** Codes `106 Leave With Wages` and `107 Sickness Benifit` are
+  seeded in all five tenants and used **zero** times, because there is nowhere to mark it. This is
+  what keeps the LOP/CL/PL/SL columns blank on HoneyFarm's monthly report (`lib/attendance-monthly.ts`
+  says so at the top). Biggest remaining gap.
+- 135 worker-days across three estates are still booked over one day, 27 Aug – 1 Sep. Writers are
+  correcting them by hand; the red "2 days" badge on the row is how they find them.
+- The muster's collapsed device panel is now a strict subset of the Scanner tab. Retire it.
+
+**Payroll** — three rules short of usable.
+- Monthly salaries now paid, pro-rated per calendar month (2 Sep). Six people still have no salary
+  recorded, flagged in the UI.
+- **Retention** — Medappa deduct 20% of each day's pay, settled when someone leaves. Needs a rule
+  on the worker, applied by payroll, with a running balance. Call pending; one ambiguity to settle
+  first (percentage of the day's pay, or a fixed rupee figure).
+- **Cash advances** — same machinery, opposite direction. `worker_ledger` exists, has 0 rows.
+- **PF** — a label on the worker and nothing else. No rate, no amount, no calculation. Deferred:
+  Medappa do not pay it, nobody else has asked.
+
+**Picking Log** — live but untried.
+- Manoj wants kgs entered on the muster row, not here. This tab becomes the log and the report.
+- Rate varies by **crop and by quality** (ripe-only vs strip). Quality is not recordable today.
+  Likely shape: named per-tenant rates, the way activity codes work — the estate defines its own,
+  and one that just types a number never opens the screen.
+
+**Scanner** — works end to end, one estate.
+- Enrolled names never arrive: `biometric_enrollments` is empty in both databases because the
+  iclock/ADMS path this hardware speaks has no enrolment message. The roster-first instructions
+  (1 Sep) make that promise unnecessary rather than fixing it.
+- A second-hand terminal is still a dead end — serials are globally unique and neither estate can
+  release one. Moving HoneyFarm's device needed a hand-written transaction.
+
+**Rain & Weather** — sound as of 2 Sep.
+- Per-estate recording, one figure a day however many gauges report, and nine consumers corrected.
+- Medappa's 29 existing records stay "whole property" at their request; 1 January is their start
+  line for accounts and costing.
+
+**Everything dormant** — do not rank a finding there without checking adoption first. An endpoint
+returning nothing is almost always "no data exists". A 2026-07-28 QA cycle raised
+`app/api/lots/[lotId]` as a red finding; it was fixed, then reverted, once the data showed it 404s
+for every possible input.
 
 ---
 
@@ -113,7 +192,15 @@ One thing to settle first: if a salaried person is also marked present on the mu
 double count arriving through a different door. Either salaried staff stay off the roster, or they
 are marked present with no rate.
 
-**Parked until all four tenants are recording normally.** Revisit with the edge cases, not before.
+**PARTLY OVERTAKEN, 2026-09-02.** Monthly salaries are no longer nowhere — payroll pays them from
+`monthly_wage`, pro-rated a day at a time by each calendar month's own length, and a salary
+*replaces* the day-rate arithmetic rather than adding to it, which is the double count above
+answered. It is deliberately **not docked for absence**, because FarmFlow cannot tell approved leave
+from a no-show; when leave exists, the `salary_earnings` CTE is where it gets subtracted.
+
+What is still parked is the rest of the shape: **bonuses and harvest incentives** have nowhere to
+live, and those are the large numbers (Laxmi's single Rs 18,00,000 bonus on 30 May). The
+`labour_charges` table above is still the answer for those. Revisit with the edge cases, not before.
 
 ---
 
@@ -140,6 +227,10 @@ per acre, and eventually agronomic advice. The short version:
 | Do the tenant shapes still hold? | `pnpm vitest run tests/tenant-shapes.test.ts` |
 | Is X actually live? | check Vercel, not `git log` — local branches drift |
 | Which stock has no price? | `node scripts/dev/unpriced-stock-report.mjs` |
+| Is any worker booked over one day? | `node scripts/dev/overbooked-batches.mjs` (prod env) |
+| Which tabs are actually alive? | count rows + `max(date)` per table — a March date is a dead tab |
+| Is the scanner still calling in? | `biometric_devices.last_seen_at`; punches land in `biometric_punches` |
+| Does a rainfall change affect anyone? | compare `SUM` over `rainfall_records` vs `rainfall_daily` per tenant |
 
 There are ~45 harnesses in `scripts/dev/`. If you are about to hand-write a query to answer a
 question about production, look there first — it has probably been asked before.
@@ -152,8 +243,11 @@ question about production, look there first — it has probably been asked befor
   `attendance_date`, `process_date`, `pick_date`, `sale_date`, `dispatch_date`, `record_date`,
   `transaction_date`. Nothing breaks; it is a reliable source of wrong-column errors when writing
   cross-table queries. Renaming touches everything, so it is deliberate or nothing.
-- **Rainfall has no `location_id`** — a two-estate tenant cannot record rain per estate. Matters
-  more than per-estate weather coordinates, because the gauge is the truth and the forecast is not.
+- ~~**Rainfall has no `location_id`**~~ — **fixed 2026-09-02** (`scripts/146`, `147`). Rainfall
+  carries an optional `estate`; the blocker was never the missing column but `UNIQUE (record_date,
+  tenant_id)`, which refused the second reading whatever the screen offered. NULL still means the
+  whole property and is still the default. A day's figure is the **average** of the gauges that
+  reported it, never the sum — rain is a depth. Nine consumers were adding the rows together.
 - **Lot traceability is dormant** — 0 rows across all tenants. Check adoption before ranking any
   finding there.
 - **Migration 90** is recorded as applied on prod without its DELETE having run. Correct. Leave it.
