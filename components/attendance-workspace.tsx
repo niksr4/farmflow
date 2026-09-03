@@ -10,10 +10,24 @@ import PayrollSummaryTab from "./payroll-summary-tab"
 import AttendanceReportTab from "./attendance-report-tab"
 import AttendanceScannerTab from "./attendance-scanner-tab"
 
-// TEMPORARY: Ledger crashes for some tenants in production — taken offline until
-// the underlying issue is fixed. Keep in sync with the equivalent flag that used
-// to live in accounts-page.tsx before Workers/Ledger/Payroll moved here.
-const LEDGER_TAB_DISABLED = true
+/**
+ * The Ledger is back, and the flag that hid it is gone rather than flipped.
+ *
+ * It was switched off on 2026-07-25 alongside Picking, both "crashing for some tenants". The cause
+ * was the same for both: a bare date column comes back from the Neon driver as a JS Date, which
+ * `String()`s to "Wed Jan 28 2026 00:00:00 GMT+0530", and the client renders `.slice(0, 10)` of
+ * that -- "Wed Jan 28" -- into an `<input type="date">`. Some tenants meant the ones with any
+ * records. `entry_date::text` in app/api/worker-ledger/route.ts fixed it, and the comment there
+ * says so; nobody flipped the switch back.
+ *
+ * SO THE TABLE READ AS UNADOPTED. `worker_ledger` has 0 rows across every tenant, which was taken
+ * as a product signal -- including in STATUS.md -- when it was the flag: no screen, no rows, no
+ * way to notice. A kill switch with no owner and no date outlives the memory of why it was set,
+ * and then the emptiness it causes becomes evidence for leaving it alone.
+ *
+ * Verified end to end against dev before removing: three entries round-trip as "2026-01-28", and
+ * the balances payroll reads come back correct.
+ */
 
 /**
  * Live as of 2026-09-01, when HoneyFarm's terminal went in.
@@ -59,7 +73,7 @@ export default function AttendanceWorkspace({ showLaborManagement = false, selec
     ...(showLaborManagement
       ? [
           { value: "workers" as AttendanceSection, label: "Workers", icon: Users },
-          ...(!LEDGER_TAB_DISABLED ? [{ value: "ledger" as AttendanceSection, label: "Ledger", icon: BookOpen }] : []),
+          { value: "ledger" as AttendanceSection, label: "Ledger", icon: BookOpen },
           { value: "payroll" as AttendanceSection, label: "Payroll", icon: IndianRupee },
           // Sits beside Payroll because it answers the same shape of question over the same
           // period -- who was here, for how long -- and is what gets checked when a wage is queried.
@@ -106,7 +120,7 @@ export default function AttendanceWorkspace({ showLaborManagement = false, selec
           <WorkerProfilesTab />
         </div>
       )}
-      {!LEDGER_TAB_DISABLED && showLaborManagement && activeSection === "ledger" && (
+      {showLaborManagement && activeSection === "ledger" && (
         <div className="px-3 sm:px-0">
           <WorkerLedgerTab />
         </div>

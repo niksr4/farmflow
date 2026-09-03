@@ -69,7 +69,7 @@ used once.
 | Sales | 19 | 26 Mar | Dormant |
 | Other Sales | 2 | 18 Mar | Dormant |
 | Journal | 1 | 9 May | Effectively unused |
-| Worker Ledger | **0** | never | Never used by anyone. Where retention and advances will live |
+| Worker Ledger | **0** | never | **Not unadopted — the subtab was switched off.** Re-enabled 3 Sep |
 | Receivables | **0** | never | Enterprise tier, no tenant on it |
 | Curing · Quality · Documents | **0** | never | Enterprise tier. See "Built But Unadopted" in CLAUDE.md |
 
@@ -99,7 +99,10 @@ nobody has hit since January. Worth a deliberate pass before the harvest rather 
 - **Retention** — Medappa deduct 20% of each day's pay, settled when someone leaves. Needs a rule
   on the worker, applied by payroll, with a running balance. Call pending; one ambiguity to settle
   first (percentage of the day's pay, or a fixed rupee figure).
-- **Cash advances** — same machinery, opposite direction. `worker_ledger` exists, has 0 rows.
+- **Cash advances** — same machinery, opposite direction. `worker_ledger` had 0 rows because the
+  Ledger subtab was disabled on 2026-07-25 behind a flag, for a date-serialisation crash that was
+  fixed the same week. The flag never moved and the emptiness was read as a product signal — by
+  this file, the day before. Re-enabled 2026-09-03, flag removed rather than flipped.
 - **PF** — a label on the worker and nothing else. No rate, no amount, no calculation. Deferred:
   Medappa do not pay it, nobody else has asked.
 
