@@ -1,7 +1,9 @@
 # Picking, payroll and the rules an estate sets for itself
 
-Written 2026-09-03. The three pieces of work in front of us, in the order they unblock each other.
-[STATUS.md](../STATUS.md) says where every tab stands; this says where these three are going.
+Written 2026-09-03, extended the same day. The work in front of us, in the order it unblocks each
+other — picking's rules, the guard that keeps a day honest, payroll's deductions, and the join that
+finally connects the field to the pulper.
+[STATUS.md](../STATUS.md) says where every tab stands; this says where they are going.
 
 ---
 
@@ -90,8 +92,10 @@ them will be forgotten.
 **What is asked for:** advances and PF withheld **per worker**, set somewhere durable.
 
 **What exists:** `worker_ledger` (`worker_id, entry_date, entry_type, amount, description`) with
-**0 rows across every tenant**. It is not the wrong table — it is the right table for *events*.
-What is missing is the **rule** that generates them.
+**0 rows across every tenant** — because the Ledger subtab was switched off on 2026-07-25 behind a
+flag, for a crash fixed the same week. Re-enabled 2026-09-03. The emptiness was never a product
+signal; there was no screen. It is the right table for *events*; what is missing is the **rule**
+that generates them.
 
 **The split that matters.** A rule is not an entry:
 
@@ -118,7 +122,63 @@ PF is deferred: Medappa do not pay it and nobody else has asked.
 
 ---
 
-## 4 · Rainfall — what is left
+## 4 · Picking → Processing — connecting the chain
+
+**The socket already exists.** `processing_records.crop_today` *is* the picked weight — it is the
+head of the entire downstream chain:
+
+```
+crop_today ──▶ ripe / green / float ──▶ wet_parchment ──▶ dry_parch ──▶ bags ──▶ dispatch ──▶ sales
+```
+
+Today somebody types it by hand while `picking_records` sits in another table with **no reference
+in either direction**. The same day's harvest is recorded twice, by two people, and nothing
+reconciles them.
+
+### Three obstacles, and only one is hard
+
+**Variety, and this is the blocker.** Picking records `crop` as coffee-or-pepper. Processing records
+`coffee_type` as **Arabica or Robusta** (43 and 35 rows in production). `locations` has no crop type
+at all, so a block does not say which it is planted with — a roll-up from picking cannot tell which
+processing row a day's kilos belong to.
+
+Fix: **put the variety on the block.** A block is planted with one or the other, it is a fact that
+does not change week to week, and it is the same column the per-acre yield work needs. Cheapest
+thing here and it unblocks two things at once.
+
+**They are not the same measurement.** Picked weight is at the field; crop received is at the
+pulper. There is shrinkage, spillage, and crop that never went through the muster at all — a
+contract gang paid outside the system, or fruit bought in. Picking must not *set* `crop_today` or a
+derived number quietly overwrites a measured one.
+
+**Ripe and green mean different things at each end.** At picking it is how they were *told* to pick
+— a rate decision, Manoj's higher price for ripe-only. At processing it is what actually *arrived*
+after sorting — a quality measurement. Conflating them puts a pay decision in a quality field.
+
+### The shape
+
+**Picking proposes; the pulper confirms.** Open processing for a block and a date and it says
+*"picking recorded 1,150 kg here today"*, offered rather than filled in. Accept it, or type what the
+scale said.
+
+**The difference is the feature.** A persistent gap between picked and received is field-to-pulper
+variance — weighing error, spillage, crop going missing — and today nobody can see it because the
+two numbers never meet. Over a season it is a real figure. Same principle as the muster's day cap:
+two correct-looking entries whose *sum* is the thing worth checking.
+
+**Steps**
+1. `crop_type` on `locations` (Arabica / Robusta / neither), set from the block editor.
+2. A read-only "picked here today" figure on the processing form, with the block's own total.
+3. Accept-or-override, storing which was used, so the variance is queryable afterwards.
+4. A variance line in the season report once there is a season's worth to look at.
+
+**Bigger than the link.** Processing has not been touched since **28 January**, dispatch and sales
+since March. Everything downstream of the field was last exercised a season ago and wakes up
+together. This link is the leading edge of that, and the canary for the rest.
+
+---
+
+## 5 · Rainfall — what is left
 
 The tab is sound as of 2026-09-02. What remains is small:
 
@@ -137,10 +197,20 @@ The tab is sound as of 2026-09-02. What remains is small:
 
 1. **The either/or guard.** Only item with a deadline: it stops being theoretical the day Medappa
    record a kilo, and Manoj has already given the rule.
-2. **The rate card.** Unblocks real picking entry, and is the pattern the other two borrow.
-3. **Payroll rules.** Largest, and half of it is waiting on a phone call.
+2. **`crop_type` on the block.** Smallest change on this page, and it unblocks both the
+   picking → processing link and the per-acre yield work that has been waiting on acreage. Do it
+   early precisely because it is cheap and two things need it.
+3. **The rate card.** Unblocks real picking entry, and is the pattern the others borrow.
+4. **Payroll rules.** Largest, and half of it is waiting on a phone call.
+5. **Picking → processing.** After the rate card, because picking has to be recording something
+   before proposing it to anyone.
 
 Rainfall's remainder is a browser pass and a message to KAB, not a build.
+
+**The season is the reason for this order.** Picking runs about four weeks a year and everything
+behind it — processing, dispatch, sales — wakes at the same time. Every guard here fires during the
+estate's busiest weeks and is untestable the rest of the year. September is the calm month; a
+harvest-time bug in a wage sheet or a crop weight is found by an estate that has no time to look.
 
 ---
 

@@ -126,6 +126,14 @@ nobody has hit since January. Worth a deliberate pass before the harvest rather 
 - Medappa's 29 existing records stay "whole property" at their request; 1 January is their start
   line for accounts and costing.
 
+**Processing / Dispatch / Sales** — dormant, and the chain is not connected.
+- `processing_records.crop_today` is the picked weight and the head of the whole downstream chain,
+  typed by hand with **no reference to `picking_records` in either direction**. The same day's
+  harvest is recorded twice by two people and nothing reconciles them. Plan section 4.
+- Blocked on a smaller thing than it looks: `locations` has no crop type, so nothing says whether a
+  block is Arabica or Robusta — and processing splits by exactly that. Putting variety on the block
+  unblocks this *and* the per-acre yield work.
+
 **Everything dormant** — do not rank a finding there without checking adoption first. An endpoint
 returning nothing is almost always "no data exists". A 2026-07-28 QA cycle raised
 `app/api/lots/[lotId]` as a red finding; it was fixed, then reverted, once the data showed it 404s
