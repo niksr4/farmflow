@@ -82,9 +82,9 @@ nobody has hit since January. Worth a deliberate pass before the harvest rather 
 ### Per-tab, what is actually next
 
 **Muster** — the most complete tab, and the one still moving.
-- Picking entry on the row (Manoj asked; design agreed, not built). Needs the either/or guard:
-  give picking a `day_fraction` so the day cap already in `scripts/145` refuses a day-rate job on
-  top of a picked day. Closes the double-count parked in `scripts/116` since the muster shipped.
+- **Picking stays out of it** (decided 2026-09-03, see below). The either/or guard still has to
+  exist though: a picked day and a day-rate job for the same person is paying twice for one day.
+  Answer is a shared day budget across the two tables, not a shared screen.
 - **Leave is not recorded at all.** Codes `106 Leave With Wages` and `107 Sickness Benifit` are
   seeded in all five tenants and used **zero** times, because there is nowhere to mark it. This is
   what keeps the LOP/CL/PL/SL columns blank on HoneyFarm's monthly report (`lib/attendance-monthly.ts`
@@ -103,8 +103,9 @@ nobody has hit since January. Worth a deliberate pass before the harvest rather 
 - **PF** — a label on the worker and nothing else. No rate, no amount, no calculation. Deferred:
   Medappa do not pay it, nobody else has asked.
 
-**Picking Log** — live but untried.
-- Manoj wants kgs entered on the muster row, not here. This tab becomes the log and the report.
+**Picking Log** — live but untried, and now the only place picking is entered.
+- Populated from the day's present workers, so the muster still feeds it — the roll says who was
+  there, this tab says what they picked.
 - Rate varies by **crop and by quality** (ripe-only vs strip). Quality is not recordable today.
   Likely shape: named per-tenant rates, the way activity codes work — the estate defines its own,
   and one that just types a number never opens the screen.
@@ -168,6 +169,15 @@ for every possible input.
 - **Inventory units are kg and L.** A bag is a different weight for every commodity.
 - **Writers get Language and Security in Settings, nothing else.** Acreage deliberately excluded —
   it needs a narrower permission than "edit location".
+- **Picking is its own tab, not a muster row.** Decided 2026-09-03, reversing a design agreed with
+  Medappa two days earlier — Manoj asked for kgs against the name on the muster and that was the
+  right instinct for *entry*, but picking carries crop, quality (ripe-only vs strip), weight and a
+  rate that moves with all three, plus rules nobody has finished writing down. Bending the muster
+  around the tab with the most open questions would cost the muster its one virtue: it is simple
+  enough that a writer fills it in every morning without thinking. The Picking tab is **populated
+  from the day's present workers**, so the roll still feeds it; what it does not do is live inside
+  it. Revisit only if picking's rules turn out to be simpler than they look, which is not the way
+  that ever goes.
 
 ---
 
