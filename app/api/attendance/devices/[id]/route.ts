@@ -21,7 +21,7 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
       accountsSql,
       tenantContext,
       accountsSql`
-        SELECT id, label, active FROM biometric_devices
+        SELECT id, label, active, estate FROM biometric_devices
         WHERE id = ${id}::uuid AND tenant_id = ${tenantContext.tenantId}
         LIMIT 1
       `,
@@ -36,6 +36,40 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
     }
     const active = typeof body?.active === "boolean" ? body.active : undefined
 
+    /**
+     * Which estate the terminal stands on, changeable after the fact.
+     *
+     * It could be set when registering and never again -- so a terminal put in under the default
+     * "serves every estate" was stuck there, and the only way to correct it was a hand-written SQL
+     * transaction. That is exactly the intervention the Scanner tab exists to remove, and it is how
+     * HoneyFarm's first device had to be moved between tenants on 2026-09-01.
+     *
+     * Explicit null clears it back to serving every estate; omitting the field leaves it alone. A
+     * name is checked against the tenant's own estates because a typo does not fail -- it invents an
+     * estate that exists only on this row and matches no worker.
+     */
+    let estate: string | null | undefined
+    if (body?.estate !== undefined) {
+      const requested = String(body.estate ?? "").trim().slice(0, 120)
+      if (!requested) {
+        estate = null
+      } else {
+        const known = await runTenantQuery(
+          accountsSql,
+          tenantContext,
+          accountsSql`SELECT 1 FROM locations
+                      WHERE tenant_id = ${tenantContext.tenantId} AND estate = ${requested} LIMIT 1`,
+        )
+        if (!known.length) {
+          return NextResponse.json(
+            { success: false, error: `"${requested}" is not one of your estates` },
+            { status: 400 },
+          )
+        }
+        estate = requested
+      }
+    }
+
     await runTenantQuery(
       accountsSql,
       tenantContext,
@@ -43,7 +77,10 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
         UPDATE biometric_devices
         SET
           label  = COALESCE(${label}, label),
-          active = CASE WHEN ${active !== undefined} THEN ${active ?? null} ELSE active END
+          active = CASE WHEN ${active !== undefined} THEN ${active ?? null} ELSE active END,
+          -- Not COALESCE: null is a real value here ("serves every estate") and COALESCE would
+          -- make clearing it impossible, the same trap the rainfall edit path had.
+          estate = CASE WHEN ${estate !== undefined} THEN ${estate ?? null} ELSE estate END
         WHERE id = ${id}::uuid AND tenant_id = ${tenantContext.tenantId}
       `,
     )
@@ -53,7 +90,7 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
       entityType: "biometric_devices",
       entityId: id,
       before: existing[0] as any,
-      after: { label, active },
+      after: { label, active, estate },
     })
 
     return NextResponse.json({ success: true })

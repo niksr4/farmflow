@@ -137,3 +137,54 @@ describe("the scanner tab ships", () => {
     expect(workspace).toContain('showLaborManagement && activeSection === "scanner"')
   })
 })
+
+/**
+ * A registered terminal stays editable.
+ *
+ * Reported 2026-09-03 while commissioning HoneyFarm's second scanner: the estate could be chosen
+ * when registering and never afterwards, and a terminal could not be removed at all. Both routes
+ * existed — PUT ignored `estate`, DELETE was never called by anything.
+ *
+ * Neither is cosmetic. A serial typed with one character wrong is permanent, and the tab sits on
+ * "waiting for the terminal to call in" forever with no way to correct it — the single most likely
+ * mistake at this step. And a terminal stuck on the default "serves every estate" is how a finger
+ * id enrolled at Sidapur collides with the same number at Honeyfarm and the punch lands on the
+ * wrong person. Correcting either meant a hand-written SQL transaction, which is exactly the
+ * intervention this tab exists to remove.
+ */
+describe("a terminal can be corrected after it is registered", () => {
+  const tab = readFileSync(resolve(__dirname, "../components/attendance-scanner-tab.tsx"), "utf8")
+  const route = readFileSync(resolve(__dirname, "../app/api/attendance/devices/[id]/route.ts"), "utf8")
+
+  it("the edit route accepts an estate at all", () => {
+    expect(route).toContain("body?.estate !== undefined")
+    expect(route).toContain("estate = CASE WHEN ${estate !== undefined}")
+  })
+
+  it("clearing the estate is possible, so COALESCE is not used", () => {
+    // null is a real value here — "serves every estate" — and COALESCE would make it unreachable,
+    // the same trap the rainfall edit path had.
+    expect(route).not.toContain("estate = COALESCE(")
+  })
+
+  it("validates the name against the tenant's own estates", () => {
+    // A typo does not fail; it invents an estate that exists on this row and matches no worker.
+    expect(route).toContain("is not one of your estates")
+  })
+
+  it("the tab lets you change it and remove the terminal", () => {
+    expect(tab).toContain("handleSetEstate")
+    expect(tab).toContain("handleRemoveDevice")
+    expect(tab).toContain('method: "DELETE"')
+  })
+
+  it("warns before removing, and says punches are kept", () => {
+    expect(tab).toContain("Punches already received are kept")
+  })
+
+  it("only asks about estates when the tenant has more than one", () => {
+    const block = tab.slice(tab.indexOf("handleSetEstate(device.id"))
+    expect(tab).toContain("isMultiEstate && estates.length > 0 && (")
+    expect(block.length).toBeGreaterThan(0)
+  })
+})

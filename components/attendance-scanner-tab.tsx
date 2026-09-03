@@ -8,6 +8,7 @@ import {
   Link2,
   Loader2,
   RefreshCw,
+  Trash2,
   Wifi,
   WifiOff,
 } from "lucide-react"
@@ -160,6 +161,7 @@ export default function AttendanceScannerTab() {
   const [newEstate, setNewEstate] = useState("")
   const [isAddingDevice, setIsAddingDevice] = useState(false)
   const [assigningCode, setAssigningCode] = useState<string | null>(null)
+  const [busyDeviceId, setBusyDeviceId] = useState<string | null>(null)
   const [selectedWorkerByCode, setSelectedWorkerByCode] = useState<Record<string, string>>({})
 
   // Ref, not state: the poller reads it to decide whether to skip a tick, and putting it in state
@@ -273,6 +275,63 @@ export default function AttendanceScannerTab() {
   // entered this handler. See lib/single-flight.ts.
   const handleAddDevice = useSingleFlight(handleAddDeviceUnguarded)
 
+  /**
+   * Move a terminal to a different estate after it is registered.
+   *
+   * The estate could be chosen when registering and never afterwards, so a device put in under the
+   * default "serves every estate" was stuck there. That matters for HoneyFarm specifically: with
+   * two terminals and one of them unscoped, a finger id enrolled at Sidapur collides with the same
+   * number at Honeyfarm and the punch lands on the wrong person.
+   */
+  const handleSetEstate = async (deviceId: string, nextEstate: string) => {
+    setBusyDeviceId(deviceId)
+    busyRef.current = true
+    try {
+      const res = await fetch(`/api/attendance/devices/${deviceId}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ estate: nextEstate || null }),
+      })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok || !data?.success) throw new Error(data?.error || "Could not change the estate")
+      toast.success(nextEstate ? `Now serving ${nextEstate}` : "Now serving every estate")
+      await load()
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : "Could not change the estate")
+    } finally {
+      setBusyDeviceId(null)
+      busyRef.current = false
+    }
+  }
+
+  /**
+   * De-register a terminal, so a wrong serial can be retyped.
+   *
+   * The route has always existed; nothing called it. A serial typed with one character wrong was
+   * therefore permanent -- the tab would sit on "waiting for the terminal to call in" forever with
+   * no way to correct it, which is the single most likely mistake at this step.
+   *
+   * Punches already received are kept (biometric_punches.device_id is ON DELETE SET NULL), so this
+   * removes the registration and not the attendance it produced.
+   */
+  const handleRemoveDevice = async (deviceId: string, label: string) => {
+    if (!window.confirm(`Remove "${label}"? Punches already received are kept. The serial becomes free to register again.`)) return
+    setBusyDeviceId(deviceId)
+    busyRef.current = true
+    try {
+      const res = await fetch(`/api/attendance/devices/${deviceId}`, { method: "DELETE" })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok || !data?.success) throw new Error(data?.error || "Could not remove the terminal")
+      toast.success(`${label} removed`)
+      await load()
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : "Could not remove the terminal")
+    } finally {
+      setBusyDeviceId(null)
+      busyRef.current = false
+    }
+  }
+
   const handleAssignCode = async (code: string) => {
     const workerId = selectedWorkerByCode[code]
     if (!workerId) {
@@ -350,26 +409,54 @@ export default function AttendanceScannerTab() {
         {devices.length > 0 && (
           <div className="space-y-2">
             {devices.map((device) => (
-              <div
-                key={device.id}
-                className="flex items-center justify-between rounded-xl bg-stone-50 px-3 py-2.5 dark:bg-stone-800"
-              >
-                <div className="min-w-0">
-                  <p className="truncate text-sm font-bold text-stone-700 dark:text-stone-200">{device.label}</p>
-                  <p className="font-mono text-xs text-stone-400">
-                    {device.serialNumber}
-                    {device.estate ? ` · ${device.estate}` : ""}
-                  </p>
+              <div key={device.id} className="space-y-2 rounded-xl bg-stone-50 px-3 py-2.5 dark:bg-stone-800">
+                <div className="flex items-center justify-between gap-2">
+                  <div className="min-w-0">
+                    <p className="truncate text-sm font-bold text-stone-700 dark:text-stone-200">{device.label}</p>
+                    <p className="font-mono text-xs text-stone-400">{device.serialNumber}</p>
+                  </div>
+                  <span
+                    className={cn(
+                      "flex shrink-0 items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-bold uppercase",
+                      device.isOnline ? "bg-emerald-100 text-emerald-700" : "bg-stone-100 text-stone-400",
+                    )}
+                  >
+                    {device.isOnline ? <Wifi className="h-3 w-3" /> : <WifiOff className="h-3 w-3" />}
+                    {device.isOnline ? "Online" : device.lastSeenAt ? `Last seen ${clockTime(device.lastSeenAt)}` : "Never seen"}
+                  </span>
                 </div>
-                <span
-                  className={cn(
-                    "flex shrink-0 items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-bold uppercase",
-                    device.isOnline ? "bg-emerald-100 text-emerald-700" : "bg-stone-100 text-stone-400",
+
+                <div className="flex items-center gap-2">
+                  {/* Changeable after registration. It was set-once, so a terminal put in under the
+                      default served every estate forever -- and with two terminals that is how a
+                      finger id at one estate collides with the same number at the other. */}
+                  {isMultiEstate && estates.length > 0 && (
+                    <select
+                      value={device.estate ?? ""}
+                      onChange={(e) => void handleSetEstate(device.id, e.target.value)}
+                      disabled={busyDeviceId === device.id}
+                      aria-label={`Estate for ${device.label}`}
+                      className="h-9 flex-1 rounded-lg border border-stone-200 bg-white px-2 text-xs dark:border-stone-700 dark:bg-stone-900"
+                    >
+                      <option value="">Serves every estate</option>
+                      {estates.map((estate) => (
+                        <option key={estate} value={estate}>
+                          {estate}
+                        </option>
+                      ))}
+                    </select>
                   )}
-                >
-                  {device.isOnline ? <Wifi className="h-3 w-3" /> : <WifiOff className="h-3 w-3" />}
-                  {device.isOnline ? "Online" : device.lastSeenAt ? `Last seen ${clockTime(device.lastSeenAt)}` : "Never seen"}
-                </span>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    disabled={busyDeviceId === device.id}
+                    onClick={() => void handleRemoveDevice(device.id, device.label)}
+                    className="ml-auto h-9 shrink-0 rounded-lg px-2 text-xs text-stone-500 hover:text-red-600"
+                  >
+                    {busyDeviceId === device.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}
+                  </Button>
+                </div>
               </div>
             ))}
           </div>
