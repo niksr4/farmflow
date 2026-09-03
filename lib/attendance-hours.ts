@@ -33,8 +33,17 @@
  */
 export const MIN_SHIFT_GAP_MINUTES = 15
 
-/** A full day's hours, and the floor below which a day is not even half. Tenant-overridable. */
-export const DEFAULT_FULL_DAY_HOURS = 7
+/**
+ * A full day's hours, and the floor below which a day is not even half. Tenant-overridable via
+ * `tenants.full_day_hours` / `half_day_hours`.
+ *
+ * SIX, not seven, from 2026-09-03: an estate day that ends inside six hours of the first punch is
+ * a half day. Seven was a guess made before any estate had a terminal; six is the number asked
+ * for once one did. It only moves the full/half boundary -- the band below `halfDayHours` still
+ * reports `short` rather than rounding up, because paying half for ninety minutes and paying
+ * nothing for it are both decisions the estate should make rather than inherit.
+ */
+export const DEFAULT_FULL_DAY_HOURS = 6
 export const DEFAULT_HALF_DAY_HOURS = 3.5
 
 export type ShiftThresholds = {
@@ -88,8 +97,19 @@ export function resolveShiftThresholds(input?: Partial<ShiftThresholds> | null):
   const fullDayHours = Number.isFinite(full) && full > 0 ? full : DEFAULT_FULL_DAY_HOURS
   // A half threshold at or above the full one would make "half" unreachable, and a negative one
   // makes every shift full. Fall back rather than honour a nonsense pair.
+  //
+  // The fallback was `Math.min(DEFAULT_HALF_DAY_HOURS, fullDayHours / 2)`, which was only ever
+  // right by coincidence: the default full day was 7 and 7/2 is exactly 3.5, so the halving never
+  // bit. Moving the default to 6 made it bite -- the default half-day floor silently became 3,
+  // disagreeing with DEFAULT_SHIFT_THRESHOLDS one line above it and quietly paying half a day for
+  // a three-hour shift. Halving is a last resort for a tenant who sets a full day shorter than the
+  // default floor, not the normal path.
   const halfDayHours =
-    Number.isFinite(half) && half > 0 && half < fullDayHours ? half : Math.min(DEFAULT_HALF_DAY_HOURS, fullDayHours / 2)
+    Number.isFinite(half) && half > 0 && half < fullDayHours
+      ? half
+      : DEFAULT_HALF_DAY_HOURS < fullDayHours
+        ? DEFAULT_HALF_DAY_HOURS
+        : fullDayHours / 2
   return { fullDayHours, halfDayHours }
 }
 

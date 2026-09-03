@@ -93,7 +93,7 @@ nobody has hit since January. Worth a deliberate pass before the harvest rather 
   correcting them by hand; the red "2 days" badge on the row is how they find them.
 - The muster's collapsed device panel is now a strict subset of the Scanner tab. Retire it.
 
-**Payroll** — three rules short of usable.
+**Payroll** — three rules short of usable. Plan: [docs/PICKING-PAYROLL-PLAN.md](docs/PICKING-PAYROLL-PLAN.md).
 - Monthly salaries now paid, pro-rated per calendar month (2 Sep). Six people still have no salary
   recorded, flagged in the UI.
 - **Retention** — Medappa deduct 20% of each day's pay, settled when someone leaves. Needs a rule
@@ -104,6 +104,7 @@ nobody has hit since January. Worth a deliberate pass before the harvest rather 
   Medappa do not pay it, nobody else has asked.
 
 **Picking Log** — live but untried, and now the only place picking is entered.
+- Plan, with the open questions and the order: [docs/PICKING-PAYROLL-PLAN.md](docs/PICKING-PAYROLL-PLAN.md).
 - Populated from the day's present workers, so the muster still feeds it — the roll says who was
   there, this tab says what they picked.
 - Rate varies by **crop and by quality** (ripe-only vs strip). Quality is not recordable today.

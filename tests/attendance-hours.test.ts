@@ -21,13 +21,14 @@ describe("assessShift against the real relay-test punches", () => {
     expect(a.suggestedDayFraction).toBe(0)
   })
 
-  it("worker 1, 11 Aug: 06:40:19 -> 13:09:01 is a half day, not a full one", () => {
+  it("worker 1, 11 Aug: 06:40:19 -> 13:09:01 is a full day", () => {
     const a = assessShift("2026-08-11T06:40:19", "2026-08-11T13:09:01")
     expect(a.hours).toBeCloseTo(6.478, 2)
-    // 6h29m against a 7h full day: the estate can still allocate a full day, but the hours alone
-    // do not claim one.
-    expect(a.status).toBe("half")
-    expect(a.suggestedDayFraction).toBe(0.5)
+    // 6h29m. This read `half` until 2026-09-03, when the full day moved from 7 hours to 6 at the
+    // estate's request -- the clearest example of what that change does to real punches, which is
+    // why it is kept as the assertion rather than adjusted away.
+    expect(a.status).toBe("full")
+    expect(a.suggestedDayFraction).toBe(1)
   })
 
   /**
@@ -77,6 +78,17 @@ describe("assessShift edges", () => {
     expect(at(MIN_SHIFT_GAP_MINUTES).status).toBe("short")
   })
 
+  it("a day that ends inside six hours is half, which is the rule as asked for", () => {
+    // "For punch outs less than 6 hours after the punch, it should be a half day" -- 2026-09-03.
+    const at = (h: number) =>
+      assessShift("2026-08-10T07:00:00", new Date(new Date("2026-08-10T07:00:00").getTime() + h * 3_600_000)).status
+    expect(at(5.99)).toBe("half")
+    expect(at(6)).toBe("full")
+    // The band below the half-day floor still reports short rather than rounding up: paying half
+    // for ninety minutes is a decision the estate makes, not one it inherits.
+    expect(at(2)).toBe("short")
+  })
+
   it("holds the line exactly at each hour threshold", () => {
     const { fullDayHours, halfDayHours } = DEFAULT_SHIFT_THRESHOLDS
     const base = new Date("2026-08-10T06:00:00").getTime()
@@ -89,7 +101,7 @@ describe("assessShift edges", () => {
 
   it("accepts Date objects and ISO strings alike", () => {
     const a = assessShift(new Date("2026-08-11T06:40:19"), new Date("2026-08-11T13:09:01"))
-    expect(a.status).toBe("half")
+    expect(a.status).toBe("full")
   })
 
   it("ignores unparseable timestamps rather than producing NaN hours", () => {
