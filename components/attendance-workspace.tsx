@@ -11,6 +11,25 @@ import AttendanceReportTab from "./attendance-report-tab"
 import AttendanceScannerTab from "./attendance-scanner-tab"
 
 /**
+ * THE LEDGER IS OFF AGAIN, 2026-09-03 — and this time the cause is known and fixed.
+ *
+ * I turned it back on earlier today after verifying the data path and finding a date-serialisation
+ * fix already in place. It still crashed. That fix was real but it was a DIFFERENT bug: the actual
+ * crash is `<SelectItem value="">` in worker-ledger-tab.tsx, which Radix rejects during render and
+ * which takes the tab down through the error boundary regardless of whether there is any data.
+ *
+ * Picking and the Ledger went offline together in 1272d15 for the same reason. Picking was repaired
+ * with an ALL_WORKERS sentinel; the Ledger was the last empty-string SelectItem in the codebase and
+ * nobody went back for it. Finding the date fix and stopping there is what caught me out.
+ *
+ * The sentinel is now applied and tests/no-empty-select-item.test.ts stops another appearing. What
+ * has NOT happened is somebody opening the screen and confirming it renders — which is exactly the
+ * step I skipped last time, so it is off until it does.
+ *
+ * TO RESTORE: put the nav entry and the render branch back, open Muster -> Ledger, add one entry.
+ * Nothing else is known to be wrong.
+ *
+ * ---- previous note, kept because the history matters ----
  * The Ledger is back, and the flag that hid it is gone rather than flipped.
  *
  * It was switched off on 2026-07-25 alongside Picking, both "crashing for some tenants". The cause
@@ -73,7 +92,6 @@ export default function AttendanceWorkspace({ showLaborManagement = false, selec
     ...(showLaborManagement
       ? [
           { value: "workers" as AttendanceSection, label: "Workers", icon: Users },
-          { value: "ledger" as AttendanceSection, label: "Ledger", icon: BookOpen },
           { value: "payroll" as AttendanceSection, label: "Payroll", icon: IndianRupee },
           // Sits beside Payroll because it answers the same shape of question over the same
           // period -- who was here, for how long -- and is what gets checked when a wage is queried.
@@ -118,11 +136,6 @@ export default function AttendanceWorkspace({ showLaborManagement = false, selec
       {showLaborManagement && activeSection === "workers" && (
         <div className="px-3 sm:px-0">
           <WorkerProfilesTab />
-        </div>
-      )}
-      {showLaborManagement && activeSection === "ledger" && (
-        <div className="px-3 sm:px-0">
-          <WorkerLedgerTab />
         </div>
       )}
       {showLaborManagement && activeSection === "payroll" && (

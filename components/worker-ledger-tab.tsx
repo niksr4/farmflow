@@ -50,6 +50,9 @@ const TYPE_COLORS: Record<EntryType, string> = {
 const today = () => todayIso()
 const firstOfMonth = () => new Date().toISOString().slice(0, 7) + "-01"
 
+/** Sentinel for "no worker filter". Must not be "" -- see the note on filterWorker below. */
+const ALL_WORKERS = "all"
+
 const EMPTY_FORM = { workerId: "", entryDate: today(), entryType: "" as EntryType | "", amount: "", description: "" }
 
 export default function WorkerLedgerTab() {
@@ -72,7 +75,10 @@ export default function WorkerLedgerTab() {
   const [loading, setLoading] = useState(true)
   const [startDate, setStartDate] = useState(firstOfMonth())
   const [endDate, setEndDate] = useState(today())
-  const [filterWorker, setFilterWorker] = useState("")
+  // Radix throws on <SelectItem value="">, which takes the whole tab down via the error boundary --
+  // the same crash picking-log-tab.tsx fixed with this sentinel on 2026-07-25. Both tabs went
+  // offline together in 1272d15; only picking got repaired, and this was the last one left.
+  const [filterWorker, setFilterWorker] = useState(ALL_WORKERS)
   const [workerBalance, setWorkerBalance] = useState<{ totalDeductions: number; totalAdjustments: number } | null>(null)
 
   const [isAdding, setIsAdding] = useState(false)
@@ -93,7 +99,10 @@ export default function WorkerLedgerTab() {
     setLoading(true)
     try {
       const params = new URLSearchParams({ startDate, endDate })
-      if (filterWorker) params.set("workerId", filterWorker)
+      // The sentinel is truthy, unlike the "" it replaced, so every guard on it has to say what it
+      // means rather than lean on falsiness. Sending workerId=all would be silently dropped by the
+      // route's UUID check -- no crash, but the filter would look applied and do nothing.
+      if (filterWorker && filterWorker !== ALL_WORKERS) params.set("workerId", filterWorker)
       const res = await fetch(`/api/worker-ledger?${params}`)
       const data = await res.json()
       if (data.success) {
@@ -201,7 +210,7 @@ export default function WorkerLedgerTab() {
             </CardTitle>
             <CardDescription>
               Track advances paid, deductions, and adjustments from the shared worker roster. Use this only if you want these balances reflected in payroll.
-              {filterWorker && workerBalance && (
+              {filterWorker !== ALL_WORKERS && workerBalance && (
                 <span className="ml-2 text-xs">
                   Deductions: <span className="font-medium text-rose-400">{formatCurrency(workerBalance.totalDeductions)}</span>
                   {" · "}Adjustments: <span className="font-medium text-sky-400">{formatCurrency(workerBalance.totalAdjustments)}</span>
@@ -232,7 +241,7 @@ export default function WorkerLedgerTab() {
             <Select value={filterWorker} onValueChange={setFilterWorker}>
               <SelectTrigger className="h-8 w-40 sm:w-44 text-sm"><SelectValue placeholder="All workers" /></SelectTrigger>
               <SelectContent>
-                <SelectItem value="">All workers</SelectItem>
+                <SelectItem value={ALL_WORKERS}>All workers</SelectItem>
                 {workers.map((w) => <SelectItem key={w.id} value={w.id}>{w.name}</SelectItem>)}
               </SelectContent>
             </Select>
