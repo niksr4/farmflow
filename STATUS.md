@@ -179,6 +179,17 @@ for every possible input.
 - **A crew's rate is per person**, multiplied by headcount.
 - **Stock leaves through an expense.** Manual depletion books a `124 Stock Loss & Wastage` cost line.
 - **Inventory units are kg and L.** A bag is a different weight for every commodity.
+- ⚠ **The expense form promises ad-hoc codes the database forbids.** Unresolved, 2026-09-04.
+  `other-expenses-tab.tsx` takes free text and its comment says "Expenses allow ad-hoc codes that
+  aren't in the saved list yet"; `expense_transactions` carries
+  `FOREIGN KEY (code, tenant_id) REFERENCES account_activities`, so a code that is not already
+  saved is refused. HoneyFarm hit it on 3 Sep — six failed saves in eight minutes, all 22001
+  because the column was `varchar(10)` and the placeholder invites a word ("Maintenance" is
+  eleven). Script 148 widened it to 64, which only moved the failure to the FK, since all 87 of
+  their codes are numeric. Both errors now return a message naming the field. **The product
+  decision is still open:** either the route creates the code when it is new (and the curated
+  87-code list fills with "Fertilzer" and "fertiliser"), or the field becomes a picker with an
+  explicit "add a new code" action. Do not resolve this by guessing.
 - **Writers get Language and Security in Settings, nothing else.** Acreage deliberately excluded —
   it needs a narrower permission than "edit location".
 - **Picking is its own tab, not a muster row.** Decided 2026-09-03, reversing a design agreed with

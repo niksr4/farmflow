@@ -106,6 +106,27 @@ const buildLegacyExpenseInventoryNotes = (code: string, notes: string | null | u
   return [`Used in expense: ${code} - ${suffix}`, `Used in expense: ${code} — ${suffix}`]
 }
 
+/**
+ * The typed code is not one of this tenant's activity codes.
+ *
+ * expense_transactions carries FOREIGN KEY (code, tenant_id) REFERENCES account_activities, so a
+ * code that is not already saved is refused outright. The expense form does not know that -- it
+ * takes free text and its comment says "Expenses allow ad-hoc codes that aren't in the saved list
+ * yet", which the database has never permitted.
+ *
+ * Surfaced by HoneyFarm on 2026-09-03. Six saves failed in eight minutes on a code longer than the
+ * old varchar(10); widening it in scripts/148 moved the failure here rather than removing it,
+ * because all 87 of their codes are numeric. Both errors reached the writer as "Failed to process
+ * expense", which is why the same save was attempted six times.
+ */
+const isUnknownActivityCodeError = (error: unknown) => {
+  const code = String((error as any)?.code || "")
+  const message = String((error as any)?.message || "")
+  return code === "23503" && message.includes("expense_transactions_code_tenant_id_fkey")
+}
+
+const isCodeTooLongError = (error: unknown) => String((error as any)?.code || "") === "22001"
+
 const isInventoryUnderflowError = (error: unknown) => {
   const code = String((error as any)?.code || "")
   const message = String((error as any)?.message || "").toLowerCase()
@@ -1418,6 +1439,23 @@ export async function POST(request: Request) {
         { status: 409 },
       )
     }
+    // Name the field and say what to do. "Failed to process expense" is what got typed six times.
+    if (isUnknownActivityCodeError(error)) {
+      return NextResponse.json(
+        {
+          success: false,
+          error:
+            "That expense code is not on your list yet. Pick an existing code, or add it under Activity Codes first.",
+        },
+        { status: 400 },
+      )
+    }
+    if (isCodeTooLongError(error)) {
+      return NextResponse.json(
+        { success: false, error: "That expense code is too long — keep it under 64 characters." },
+        { status: 400 },
+      )
+    }
     await logRouteMutationFailure({
       tenantId,
       source: "api/expenses-neon",
@@ -1614,6 +1652,24 @@ export async function PUT(request: Request) {
         { status: 409 },
       )
     }
+    // Same two walls as create -- an edit that changes the code hits them identically, and the
+    // writer sees the same unhelpful sentence. See tests/expense-code-errors.test.ts.
+    if (isUnknownActivityCodeError(error)) {
+      return NextResponse.json(
+        {
+          success: false,
+          error:
+            "That expense code is not on your list yet. Pick an existing code, or add it under Activity Codes first.",
+        },
+        { status: 400 },
+      )
+    }
+    if (isCodeTooLongError(error)) {
+      return NextResponse.json(
+        { success: false, error: "That expense code is too long — keep it under 64 characters." },
+        { status: 400 },
+      )
+    }
     await logRouteMutationFailure({
       tenantId,
       source: "api/expenses-neon",
@@ -1719,6 +1775,24 @@ export async function DELETE(request: Request) {
     console.error("❌ Error deleting expense:", error.message)
     if (isModuleAccessError(error)) {
       return NextResponse.json({ success: false, error: "Module access disabled" }, { status: 403 })
+    }
+    // Same two walls as create -- an edit that changes the code hits them identically, and the
+    // writer sees the same unhelpful sentence. See tests/expense-code-errors.test.ts.
+    if (isUnknownActivityCodeError(error)) {
+      return NextResponse.json(
+        {
+          success: false,
+          error:
+            "That expense code is not on your list yet. Pick an existing code, or add it under Activity Codes first.",
+        },
+        { status: 400 },
+      )
+    }
+    if (isCodeTooLongError(error)) {
+      return NextResponse.json(
+        { success: false, error: "That expense code is too long — keep it under 64 characters." },
+        { status: 400 },
+      )
     }
     await logRouteMutationFailure({
       tenantId,
