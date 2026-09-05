@@ -224,7 +224,7 @@ export function buildHeroContent(p: BuildHeroContentParams): HeroContent {
     ? [
         { label: `Rainfall (${currentCalendarYear})`, value: rainErr ? (rainfallHeroTotals.loading ? "Loading..." : "Unavailable") : `${fmt(rainfallHeroTotals.totalInches, 2)} in`, metricValue: rainErr ? null : rainfallHeroTotals.totalInches },
         { label: "Rain logs", value: rainErr ? (rainfallHeroTotals.loading ? "Loading..." : "Unavailable") : fmtCount(rainfallHeroTotals.totalRecords), metricValue: rainErr ? null : rainfallHeroTotals.totalRecords },
-        { label: "Latest rain log", value: rainfallHeroTotals.loading ? "Loading..." : rainfallHeroTotals.error ? "Unavailable" : latestRainLabel, metricValue: rainErr ? null : rainfallHeroTotals.totalRecords },
+        { label: "Latest rain log", value: rainfallHeroTotals.loading ? "Loading..." : rainfallHeroTotals.error ? "Unavailable" : latestRainLabel, metricValue: null },
       ]
     : [
         { label: "Forecast horizon", value: "8 days", metricValue: 8 },
@@ -343,7 +343,7 @@ export function buildHeroContent(p: BuildHeroContentParams): HeroContent {
   const chipsRainfall: HeroChip[] = showRainfallMetrics
     ? [
         { icon: CloudRain, label: rainErr ? (rainfallHeroTotals.loading ? "Rainfall totals loading..." : "Rainfall totals unavailable") : `Rain logs: ${fmtCount(rainfallHeroTotals.totalRecords)}`, metricValue: rainErr ? null : rainfallHeroTotals.totalRecords },
-        { icon: CloudRain, label: rainErr ? (rainfallHeroTotals.loading ? "Latest rain loading..." : "Latest rain unavailable") : `Latest log: ${latestRainLabel}`, metricValue: rainErr ? null : rainfallHeroTotals.totalRecords },
+        { icon: CloudRain, label: rainErr ? (rainfallHeroTotals.loading ? "Latest rain loading..." : "Latest rain unavailable") : `Latest log: ${latestRainLabel}`, metricValue: null },
       ]
     : [
         { icon: CloudRain, label: "Forecast source: Weather API", metricValue: null },

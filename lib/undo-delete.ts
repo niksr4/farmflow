@@ -44,7 +44,15 @@ export function deleteWithUndo({
     if (undone || fired) return
     fired = true
     clearTimeout(timer)
-    void onDelete()
+    // onHide() already removed the row from the UI and the toast already said "Deleted" --
+    // if the real request now fails, that's the other half of the HoneyFarm report above: a
+    // failure here previously had nowhere to go (an unhandled rejection) and the row stayed
+    // hidden even though nothing was ever written. Put it back and say so.
+    Promise.resolve(onDelete()).catch((err) => {
+      onRestore()
+      toast.error(`Couldn't delete ${description}. It's been restored -- please try again.`)
+      console.error(`[deleteWithUndo] onDelete failed for "${description}"`, err)
+    })
   }
 
   const timer = setTimeout(flush, UNDO_WINDOW_MS)
