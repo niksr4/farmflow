@@ -61,7 +61,6 @@ const KNOWN_RAW_ERROR_LEAKS = [
   "app/api/cron/data-integrity/route.ts",
   "app/api/cron/log-anomalies/route.ts",
   "app/api/cron/orchestrator/route.ts",
-  "app/api/cron/retention/route.ts",
   "app/api/cron/tenant-dormancy-probe/route.ts",
   "app/api/cron/tenant-engagement/route.ts",
   "app/api/cron/tenant-smoke/route.ts",

@@ -3,6 +3,7 @@ import { runRetentionCleanup } from "@/lib/server/privacy"
 import { runImportJobRetentionCleanup } from "@/lib/server/import-jobs"
 import { extractBearerToken, sharedSecretMatches } from "@/lib/server/request-security"
 import { logServerError } from "@/lib/server/safe-logging"
+import { sanitizeRouteError } from "@/lib/server/sanitize-route-error"
 
 export const dynamic = "force-dynamic"
 export const maxDuration = 300
@@ -32,7 +33,7 @@ async function handleCronInvocation(request: Request) {
   } catch (error: any) {
     logServerError("Retention cron invocation failed", error)
     return NextResponse.json(
-      { success: false, error: error.message || "Retention cleanup failed" },
+      { success: false, error: sanitizeRouteError(error, "Retention cleanup failed") },
       { status: 500 },
     )
   }
