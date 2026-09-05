@@ -109,12 +109,40 @@ that generates them.
 Setting the rule *inside* a payroll run would mean re-running last month picks up today's
 percentage, and history stops being reproducible.
 
+### Where each piece lives — decided 2026-09-05
+
+**The Ledger subtab does not come back.** It bundled three things that belong in different places,
+and splitting them removes a subtab rather than moving one.
+
+| | Home | Why |
+|---|---|---|
+| **Rules** — retention %, PF % | **Workers**, beside daily rate and monthly wage | A rule is a property of a person, and that screen already holds every other property of a person: worker type, rates, estate, bank details, fingerprint id. There is no argument for anywhere else, and payroll cannot apply a rule that has no home. |
+| **History** — what Ravi has taken | **Workers**, with Ravi | Same subject. "Everything about this person in one place." |
+| **Entry** — "Ravi took Rs 2,000 today" | An inline action on **both** the Payroll row and the Workers row | Same table, two entry points, no tab. |
+
+**The entry point is deliberately in two places**, because the two moments are different: an advance
+happens on the 12th and payroll runs on the 30th. Recording it from Workers covers the first;
+recording it from the payroll row covers "I am looking at Ravi's Rs 12,000 and remembering his
+advance", which is when it is most often noticed.
+
+**This trades away a property worth naming.** Payroll writes nothing today — no POST, PUT or DELETE
+— which means it can be handed to somebody to check without their being able to change it. An
+inline entry action ends that. It is a deliberate trade for context at the moment of use, not an
+oversight; if the read-only property turns out to matter for an estate that separates who computes
+payroll from who authorises advances, the Workers entry point alone is sufficient and the payroll
+one can go.
+
+**What is lost:** bulk entry. Five advances is five rows rather than one flat list. Advances are
+individual and occasional ("Ravi asked"), so this looks like a fair price — revisit if an estate
+turns out to do them in batches at month end.
+
 **Steps**
-1. Per-worker rule fields with a tenant default (retention %, PF %, both nullable = not applicable).
+1. Per-worker rule fields on **Workers**, with a tenant default (retention %, PF %, both nullable =
+   not applicable, so an estate that uses neither never sees them).
 2. Payroll applies them, showing gross → deductions → net rather than a single figure.
-3. A running held-balance per worker, settled on exit.
-4. Advances stay manual entries against the same ledger — the machinery is identical, pointed the
-   other way.
+3. A running held-balance per worker, shown on Workers, settled on exit.
+4. Inline add-advance / add-deduction on the Payroll row and the Workers row. Both write
+   `worker_ledger`, which is unchanged — it was always the right table for events.
 
 **Open:** Medappa said "a flat amount for every day worked" — **20% of the day's pay, or a fixed
 rupee figure per day?** Both are easy and they diverge fast. Settle on the call before building.

@@ -94,6 +94,8 @@ nobody has hit since January. Worth a deliberate pass before the harvest rather 
 - The muster's collapsed device panel is now a strict subset of the Scanner tab. Retire it.
 
 **Payroll** — three rules short of usable. Plan: [docs/PICKING-PAYROLL-PLAN.md](docs/PICKING-PAYROLL-PLAN.md).
+- Placement decided 2026-09-05: rules and history on **Workers**, entry inline on Workers and
+  Payroll, no Ledger subtab. The Ledger stays out of the nav until that is built.
 - Monthly salaries now paid, pro-rated per calendar month (2 Sep). Six people still have no salary
   recorded, flagged in the UI.
 - **Retention** — Medappa deduct 20% of each day's pay, settled when someone leaves. Needs a rule
@@ -192,6 +194,14 @@ for every possible input.
   explicit "add a new code" action. Do not resolve this by guessing.
 - **Writers get Language and Security in Settings, nothing else.** Acreage deliberately excluded —
   it needs a narrower permission than "edit location".
+- **No Ledger subtab. Rules and history go on Workers; entry is inline on Workers and Payroll.**
+  Decided 2026-09-05. The Ledger bundled three things with different homes — a rule is a property
+  of a person and belongs beside their daily rate, a worker's advance history belongs with the
+  worker, and the entry itself belongs wherever you are when you notice it. Splitting them removes
+  a subtab instead of relocating one, and puts retention where payroll can actually apply it across
+  periods. `worker_ledger` is unchanged and still the right table for events. Knowingly trades
+  payroll's read-only property; see [docs/PICKING-PAYROLL-PLAN.md](docs/PICKING-PAYROLL-PLAN.md)
+  for what that costs and when to take the payroll entry point back out.
 - **Picking is its own tab, not a muster row.** Decided 2026-09-03, reversing a design agreed with
   Medappa two days earlier — Manoj asked for kgs against the name on the muster and that was the
   right instinct for *entry*, but picking carries crop, quality (ripe-only vs strip), weight and a
