@@ -53,7 +53,11 @@ describe("the unallocated-work flag only counts people who earn a daily wage", (
   it("excludes monthly staff via the shared predicate", () => {
     const block = source.slice(source.indexOf("const unallocatedCount"), source.indexOf("const unallocatedCount") + 600)
     expect(block).toContain("isPaidDaily")
-    expect(source).toContain('import { isPaidDaily } from "@/lib/worker-types"')
+    // Imported from the shared module, however many other names come with it. Pinning the whole
+    // import line made this fail the day a second export was added alongside it -- the assertion
+    // was about the import statement rather than about the predicate being shared, which is the
+    // thing that actually matters here.
+    expect(source).toMatch(/import \{[^}]*\bisPaidDaily\b[^}]*\} from "@\/lib\/worker-types"/)
   })
 
   it("agrees with the roster about who is paid daily", () => {

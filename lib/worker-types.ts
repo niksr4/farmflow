@@ -55,6 +55,32 @@ export const workerTypeLabel = (value: unknown): string =>
   WORKER_TYPES.find((t) => t.value === value)?.label ?? String(value ?? "")
 
 /**
+ * The estate's own word for the category, with the pay basis stripped out.
+ *
+ * `label` is written for a dropdown, where "Staff — paid monthly" is exactly the right amount of
+ * explaining. It is the wrong length for a count line read at a glance: "Staff — paid monthly 2 ·
+ * Chkroll / PF 5 · Seasonal / Assam 11" is a paragraph. These are what the estate calls them.
+ */
+const SHORT_LABELS: Record<string, string> = {
+  staff: "Staff",
+  staff_pf: "Staff/PF",
+  chkroll_pf: "Chkroll",
+  casuals: "Casuals",
+  seasonal_assam: "Seasonal",
+  proprietor: "Proprietor",
+  permanent: "Permanent",
+  seasonal: "Seasonal",
+  contractor: "Contract",
+}
+
+export const workerTypeShortLabel = (value: unknown): string => {
+  const key = String(value ?? "")
+  // An unknown or unset type is still somebody standing on the estate, so it gets a name rather
+  // than being dropped from the count -- Seshagiri has one worker with a null type today.
+  return SHORT_LABELS[key] ?? (key ? key.replace(/_/g, " ") : "Unspecified")
+}
+
+/**
  * Whether someone of this type earns a daily wage at all.
  *
  * Staff and proprietors do not, so a missing daily_rate on them is the correct state rather than

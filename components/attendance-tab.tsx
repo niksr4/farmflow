@@ -36,7 +36,7 @@ import { Skeleton } from "@/components/ui/skeleton"
 import { EmptyState } from "@/components/ui/empty-state"
 import { trackRecordCreated } from "@/lib/track-action"
 import { useSingleFlight } from "@/hooks/use-single-flight"
-import { isPaidDaily } from "@/lib/worker-types"
+import { isPaidDaily, workerTypeShortLabel } from "@/lib/worker-types"
 import { formatCurrency } from "@/lib/format"
 import AttendanceDeviceSettings from "@/components/attendance-device-settings"
 import ActivityCodeReference from "@/components/attendance/activity-code-reference"
@@ -457,6 +457,7 @@ export default function AttendanceTab({ selectedEstate = null }: AttendanceTabPr
     [presentRecords],
   )
   const presentCount = presentWorkerIds.length
+
   const absentCount = workers.length - presentCount
 
   // What the day has cost so far, and how much of it is still unaccounted for. The second number
@@ -498,6 +499,38 @@ export default function AttendanceTab({ selectedEstate = null }: AttendanceTabPr
   // so the estate selector silently has no effect on the roster and nothing says why.
 
   const workersById = useMemo(() => new Map(workers.map((w) => [w.id, w])), [workers])
+
+  /**
+   * Who is on the estate today, by category — the question an owner opens this tab to answer.
+   *
+   * HEADS, NOT ROWS. A contract crew is one roster row carrying a headcount, so counting rows says
+   * "1" for eleven people standing in a field. The total above this line counts rows because that
+   * is what the save writes; this line counts people, and says so when the two differ rather than
+   * quietly showing a second, smaller number beside the first.
+   *
+   * Only the categories actually present appear. A fixed list would print "Seasonal 0" through the
+   * eight months nobody seasonal is on the estate, and a column of zeroes is read once and then
+   * never again.
+   */
+  const presenceByType = useMemo(() => {
+    const heads = new Map<string, number>()
+    let totalHeads = 0
+    for (const id of presentWorkerIds) {
+      const worker = workersById.get(id)
+      if (!worker) continue
+      const n = worker.kind === "gang" ? Math.max(1, Number(worker.headcount) || 1) : 1
+      const key = worker.workerType ?? ""
+      heads.set(key, (heads.get(key) ?? 0) + n)
+      totalHeads += n
+    }
+    return {
+      totalHeads,
+      // Biggest group first: an estate reads "Casuals 11" before it reads "Proprietor 1".
+      rows: [...heads.entries()]
+        .map(([type, count]) => ({ label: workerTypeShortLabel(type), count }))
+        .sort((a, b) => b.count - a.count || a.label.localeCompare(b.label)),
+    }
+  }, [presentWorkerIds, workersById])
   const weeklyReportRows = useMemo(
     () =>
       weeklySummary.map((row) => {
@@ -759,6 +792,31 @@ export default function AttendanceTab({ selectedEstate = null }: AttendanceTabPr
                 <Download className="h-3.5 w-3.5" />
               </button>
             </div>
+          </div>
+        )}
+
+        {/* The breakdown, and only the breakdown.
+            "X in / Y out" is already on the line above and the save bar says it again at the
+            bottom -- a bordered tile repeating it a third time is what was deliberately removed
+            from this screen once already (see the note further down). What an owner cannot get
+            anywhere today is the SHAPE of the day: eleven seasonal pickers and two staff is a
+            different morning from thirteen casuals, and the roll only tells you that by being
+            read row by row. */}
+        {!loading && presenceByType.rows.length > 0 && (
+          <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1 px-3 pb-2 sm:px-0">
+            {presenceByType.rows.map((row) => (
+              <span key={row.label} className="text-[11px] font-semibold text-stone-500 dark:text-stone-400">
+                {row.label} <span className="font-black tabular-nums text-stone-700 dark:text-stone-200">{row.count}</span>
+              </span>
+            ))}
+            {/* Only when a crew is out, and only then. On every other day the two agree and saying
+                so would be noise; on the day they differ, "9 in" against eleven people in a field
+                is the kind of quiet disagreement that gets noticed a month later in a wage query. */}
+            {presenceByType.totalHeads !== presentCount && (
+              <span className="text-[11px] font-semibold text-amber-700 dark:text-amber-500">
+                {presenceByType.totalHeads} people · {presentCount} entries
+              </span>
+            )}
           </div>
         )}
       </div>
