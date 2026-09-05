@@ -81,9 +81,9 @@ describe("tenant guidance", () => {
     expect(summary.flags).toContain("No account codes - labour & expense entry blocked")
   })
 
-  it("documents a threshold mismatch: classifyTenantGuidance flags 'stuck' at totalLogins>=3, but buildTenantWorkspaceHints only softens its own copy to the warning tone at totalLogins>3", () => {
-    // At exactly 3 logins with zero operational data, classifyTenantGuidance already
-    // considers the tenant "stuck" (see lib/tenant-guidance.ts's `totalLogins >= 3` check).
+  it("agrees with classifyTenantGuidance's 'stuck' threshold at exactly totalLogins===3 (fixed 2026-09-04, was a mismatch)", () => {
+    // At exactly 3 logins with zero operational data, classifyTenantGuidance considers the
+    // tenant "stuck" (see lib/tenant-guidance.ts's `totalLogins >= 3` check).
     const summary = classifyTenantGuidance({
       daysSinceCreated: 10,
       totalLogins: 3,
@@ -94,21 +94,21 @@ describe("tenant guidance", () => {
     expect(summary.status).toBe("stuck")
     expect(summary.flags).toContain("3 logins, zero data entered")
 
-    // But buildTenantWorkspaceHints's own local `isStuck` uses `totalLogins > 3` (strictly
-    // greater), so at the same totalLogins=3 it still returns the gentler "welcome-get-started"
-    // tip rather than the "warning"-toned "no-data-entered" hint classifyTenantGuidance's status
-    // would suggest. This test characterizes the CURRENT (inconsistent) behavior -- see the
-    // scanner findings log / Linear for the suggested fix (align both on the same threshold).
-    const hints = buildTenantWorkspaceHints({
+    // buildTenantWorkspaceHints's own thresholds used to be totalLogins <= 3 / > 3 (one login
+    // out of step with classifyTenantGuidance's >= 3), so at totalLogins===3 the owner-facing
+    // status already said "stuck" while the tenant's own dashboard still showed the gentle
+    // "welcome-get-started" tip instead of the "warning"-toned "no-data-entered" hint. Both are
+    // now keyed off totalLogins >= 3, so they agree at the boundary.
+    const hintsAt3 = buildTenantWorkspaceHints({
       totalLogins: 3,
       operationalDataCount: 0,
       accountCodesCount: 1,
       locationCount: 1,
     })
-    expect(hints[0]?.id).toBe("welcome-get-started")
-    expect(hints[0]?.type).toBe("tip")
+    expect(hintsAt3[0]?.id).toBe("no-data-entered")
+    expect(hintsAt3[0]?.type).toBe("warning")
 
-    // One login past the boundary, the two finally agree.
+    // And still agree one login past the boundary.
     const hintsAt4 = buildTenantWorkspaceHints({
       totalLogins: 4,
       operationalDataCount: 0,
@@ -117,6 +117,17 @@ describe("tenant guidance", () => {
     })
     expect(hintsAt4[0]?.id).toBe("no-data-entered")
     expect(hintsAt4[0]?.type).toBe("warning")
+
+    // Below the boundary (2 logins), the gentle tip still applies -- this isn't a "warn on
+    // every login" change, just a boundary alignment.
+    const hintsAt2 = buildTenantWorkspaceHints({
+      totalLogins: 2,
+      operationalDataCount: 0,
+      accountCodesCount: 1,
+      locationCount: 1,
+    })
+    expect(hintsAt2[0]?.id).toBe("welcome-get-started")
+    expect(hintsAt2[0]?.type).toBe("tip")
   })
 })
 

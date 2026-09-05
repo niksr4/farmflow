@@ -139,7 +139,11 @@ export function buildTenantWorkspaceHints(
   const operationalDataCount = Math.max(0, Number(metrics.operationalDataCount) || 0)
   const accountCodeGap = hasAccountCodeGap(metrics)
   const locationGap = hasLocationGap(metrics)
-  const isStuck = totalLogins > 3 && operationalDataCount === 0
+  // Aligned with classifyTenantGuidance's "stuck" status, which flags totalLogins >= 3 with
+  // zero operational data -- this threshold used to be totalLogins > 3, so a tenant with exactly
+  // 3 dataless logins was already reported "stuck" to the owner but still saw the gentler,
+  // non-warning-toned hint copy on their own dashboard. See tests/tenant-guidance.test.ts.
+  const isStuck = totalLogins >= 3 && operationalDataCount === 0
   const hints: WorkspaceHint[] = []
 
   if (accountCodeGap) {
@@ -175,7 +179,7 @@ export function buildTenantWorkspaceHints(
   const phase = getEstatePhaseForMonth(now.getMonth() + 1)
   const seasonHint = SEASON_FIRST_ENTRY_HINT[phase.season]
 
-  if (totalLogins >= 1 && totalLogins <= 3) {
+  if (totalLogins >= 1 && totalLogins <= 2) {
     hints.push({
       id: "welcome-get-started",
       type: "tip",
@@ -183,7 +187,7 @@ export function buildTenantWorkspaceHints(
       body: seasonHint?.body ?? "Open Accounts and log today's labour or an expense. If your team is already pulping, you can start there instead.",
       action: seasonHint?.action ?? { label: "Open Accounts", tab: "accounts", panel: "labor" },
     })
-  } else if (totalLogins > 3) {
+  } else if (totalLogins >= 3) {
     hints.push({
       id: "no-data-entered",
       type: "warning",
