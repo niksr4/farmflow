@@ -49,12 +49,30 @@ describe("the package manager is pinned to a major that does not eat the lockfil
     expect(pkg.engines?.pnpm).toBe(">=10 <11")
   })
 
-  it("stays in step with CI, which pins the same major", () => {
+  it("is the ONLY place a pnpm version is stated", () => {
+    /**
+     * This test asserted the opposite three days ago, and that assertion is what broke CI.
+     *
+     * It required `version: 10` in ci.yml *as well as* the packageManager pin, on the reasoning
+     * that two pins are safer than one. pnpm/action-setup@v4 disagrees: specifying both is a hard
+     * error -- "Multiple versions of pnpm specified" -- and it fails at Setup pnpm in under fifteen
+     * seconds, before lint, typecheck, tests or build run at all.
+     *
+     * So from 2026-09-02, the day the pin landed, every push to main went red for a reason that
+     * had nothing to do with the code, and the local pre-push gate kept passing, so nobody looked.
+     * Belt and braces is not free when the belt and the braces are checked against each other.
+     *
+     * One source of truth, and it is package.json: exact (10.28.2, not 10), read by
+     * action-setup in CI, and the field that governs local installs -- which is the whole point,
+     * since pnpm 11 strips the overrides above on install.
+     */
     const ci = readFileSync(resolve(__dirname, "../.github/workflows/ci.yml"), "utf8")
-    // Two setup steps, both pinned. A pin on one and not the other is how they drift.
     expect((ci.match(/pnpm\/action-setup@v4/g) ?? []).length).toBeGreaterThan(0)
-    expect(ci).toMatch(/version:\s*10/)
-    expect(ci).not.toMatch(/version:\s*(11|latest)/)
+    // Any pnpm version in the workflow now conflicts with packageManager, whatever it says.
+    const setupBlocks = ci.split("pnpm/action-setup@v4").slice(1)
+    for (const block of setupBlocks) {
+      expect(block.slice(0, 200), "a version beside packageManager is a hard error").not.toMatch(/^\s*with:[\s\S]*version:/)
+    }
   })
 })
 

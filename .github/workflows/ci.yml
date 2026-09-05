@@ -35,8 +35,16 @@ jobs:
 
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
-        with:
-          version: 10
+        # No `version:` here on purpose. package.json's "packageManager": "pnpm@10.28.2" is the
+        # single source of truth and action-setup reads it. Specifying both is now a hard error
+        # ("Multiple versions of pnpm specified"), which killed every CI run from 2026-09-02 --
+        # the day the packageManager pin was added -- until 2026-09-05. It failed at Setup pnpm in
+        # under fifteen seconds, before lint, typecheck, tests or build had a chance to run, so
+        # three days of pushes reported red for a reason that had nothing to do with the code.
+        #
+        # packageManager wins over a version here because it is exact (10.28.2, not 10) and it is
+        # the field that also governs local installs -- which is the whole reason it exists: pnpm
+        # 11 silently strips this repo's security overrides on install.
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -91,8 +99,16 @@ jobs:
 
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
-        with:
-          version: 10
+        # No `version:` here on purpose. package.json's "packageManager": "pnpm@10.28.2" is the
+        # single source of truth and action-setup reads it. Specifying both is now a hard error
+        # ("Multiple versions of pnpm specified"), which killed every CI run from 2026-09-02 --
+        # the day the packageManager pin was added -- until 2026-09-05. It failed at Setup pnpm in
+        # under fifteen seconds, before lint, typecheck, tests or build had a chance to run, so
+        # three days of pushes reported red for a reason that had nothing to do with the code.
+        #
+        # packageManager wins over a version here because it is exact (10.28.2, not 10) and it is
+        # the field that also governs local installs -- which is the whole reason it exists: pnpm
+        # 11 silently strips this repo's security overrides on install.
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
