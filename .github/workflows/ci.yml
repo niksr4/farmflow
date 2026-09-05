@@ -2,7 +2,16 @@ name: CI
 
 on:
   push:
-    branches: [main]
+    # scanner/** matters as much as main here.
+    #
+    # This was `[main]` alone, and the QA scanner pushes to scanner/<date> branches and then tries
+    # to open a PR. Its token lacks `Pull requests: write`, so the PR 403s -- which meant neither
+    # trigger ever fired and NO scanner branch had been checked by CI, ever. Confirmed on
+    # 2026-09-05: total_count 0 for every run keyed to those branches, across all history.
+    #
+    # Fixing the token would make `pull_request` fire, but this is the trigger that does not depend
+    # on a credential someone has to remember to widen. Both now cover it.
+    branches: [main, 'scanner/**']
   pull_request:
   workflow_dispatch:
 
