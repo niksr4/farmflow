@@ -7,28 +7,52 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { useAuth } from "@/hooks/use-auth"
+import { useToast } from "@/hooks/use-toast"
 
 export default function ModuleTabTemplate() {
   const { user } = useAuth()
+  const { toast } = useToast()
   const [records, setRecords] = useState<any[]>([])
+  const [isLoading, setIsLoading] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
+  const [metricA, setMetricA] = useState("")
+  const [metricB, setMetricB] = useState("")
 
   useEffect(() => {
     if (!user?.tenantId) return
+    setIsLoading(true)
     fetch("/api/__MODULE_ID__")
       .then((res) => res.json())
       .then((data) => setRecords(data.records || []))
-      .catch(() => setRecords([]))
-  }, [user?.tenantId])
+      .catch((error) => {
+        console.error("Failed to load records", error)
+        toast({ title: "Error", description: "Failed to load records", variant: "destructive" })
+        setRecords([])
+      })
+      .finally(() => setIsLoading(false))
+  }, [user?.tenantId, toast])
 
   const handleSave = async () => {
     setIsSaving(true)
     try {
-      await fetch("/api/__MODULE_ID__", {
+      const response = await fetch("/api/__MODULE_ID__", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ record_date: new Date().toISOString().slice(0, 10) }),
+        body: JSON.stringify({
+          record_date: new Date().toISOString().slice(0, 10),
+          metric_a: metricA,
+          metric_b: metricB,
+        }),
       })
+      const data = await response.json()
+      if (!response.ok || !data.success) {
+        throw new Error(data.error || "Failed to save record")
+      }
+      setMetricA("")
+      setMetricB("")
+    } catch (error: any) {
+      console.error("Failed to save record", error)
+      toast({ title: "Error", description: error.message || "Failed to save record", variant: "destructive" })
     } finally {
       setIsSaving(false)
     }
@@ -44,11 +68,11 @@ export default function ModuleTabTemplate() {
         <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
           <div className="space-y-2">
             <Label htmlFor="metric-a">Metric A</Label>
-            <Input id="metric-a" placeholder="0" />
+            <Input id="metric-a" placeholder="0" value={metricA} onChange={(e) => setMetricA(e.target.value)} />
           </div>
           <div className="space-y-2">
             <Label htmlFor="metric-b">Metric B</Label>
-            <Input id="metric-b" placeholder="0" />
+            <Input id="metric-b" placeholder="0" value={metricB} onChange={(e) => setMetricB(e.target.value)} />
           </div>
           <div className="flex items-end">
             <Button onClick={handleSave} disabled={isSaving} className="w-full">
@@ -67,7 +91,13 @@ export default function ModuleTabTemplate() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {records.length === 0 ? (
+              {isLoading ? (
+                <TableRow>
+                  <TableCell colSpan={3} className="text-center text-muted-foreground">
+                    Loading records...
+                  </TableCell>
+                </TableRow>
+              ) : records.length === 0 ? (
                 <TableRow>
                   <TableCell colSpan={3} className="text-center text-muted-foreground">
                     No records yet.

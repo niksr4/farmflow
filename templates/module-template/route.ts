@@ -2,6 +2,7 @@ import { NextResponse } from "next/server"
 import { sql } from "@/lib/server/db"
 import { requireModuleAccess, isModuleAccessError } from "@/lib/server/module-access"
 import { normalizeTenantContext, runTenantQuery } from "@/lib/server/tenant-db"
+import { sanitizeRouteError } from "@/lib/server/sanitize-route-error"
 
 export async function GET() {
   try {
@@ -24,7 +25,10 @@ export async function GET() {
     if (isModuleAccessError(error)) {
       return NextResponse.json({ success: false, error: "Module access disabled" }, { status: 403 })
     }
-    return NextResponse.json({ success: false, error: error instanceof Error ? error.message : "Unknown error" }, { status: 500 })
+    return NextResponse.json(
+      { success: false, error: sanitizeRouteError(error, "Failed to load records") },
+      { status: 500 },
+    )
   }
 }
 
@@ -49,6 +53,9 @@ export async function POST(request: Request) {
     if (isModuleAccessError(error)) {
       return NextResponse.json({ success: false, error: "Module access disabled" }, { status: 403 })
     }
-    return NextResponse.json({ success: false, error: error instanceof Error ? error.message : "Unknown error" }, { status: 500 })
+    return NextResponse.json(
+      { success: false, error: sanitizeRouteError(error, "Failed to save record") },
+      { status: 500 },
+    )
   }
 }
