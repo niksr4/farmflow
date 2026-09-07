@@ -3,6 +3,7 @@ import { requireModuleAccess, isModuleAccessError } from "@/lib/server/module-ac
 import { normalizeTenantContext, runTenantQuery } from "@/lib/server/tenant-db"
 import { logServerError } from "@/lib/server/safe-logging"
 import { getClaudeClient, isClaudeConfigured, extractClaudeText, CLAUDE_HAIKU } from "@/lib/server/claude"
+import { sanitizeRouteError } from "@/lib/server/sanitize-route-error"
 
 export const dynamic = "force-dynamic"
 export const revalidate = 0
@@ -118,7 +119,7 @@ export async function POST(req: Request) {
       return Response.json({ success: false, error: "Module access disabled" }, { status: 403 })
     }
     return Response.json(
-      { success: false, error: error instanceof Error ? error.message : "Failed to check anomaly" },
+      { success: false, error: sanitizeRouteError(error, "Failed to check anomaly") },
       { status: 500 },
     )
   }
