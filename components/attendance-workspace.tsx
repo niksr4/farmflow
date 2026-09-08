@@ -5,47 +5,44 @@ import { Check, Users, BookOpen, IndianRupee, CalendarRange, Fingerprint } from 
 import { cn } from "@/lib/utils"
 import AttendanceTab from "./attendance-tab"
 import WorkerProfilesTab from "./worker-profiles-tab"
-import WorkerLedgerTab from "./worker-ledger-tab"
 import PayrollSummaryTab from "./payroll-summary-tab"
 import AttendanceReportTab from "./attendance-report-tab"
 import AttendanceScannerTab from "./attendance-scanner-tab"
 
 /**
- * THE LEDGER IS OFF AGAIN, 2026-09-03 — and this time the cause is known and fixed.
+ * THE LEDGER IS GONE, 2026-09-08 — deleted, not disabled, and not coming back.
  *
- * I turned it back on earlier today after verifying the data path and finding a date-serialisation
- * fix already in place. It still crashed. That fix was real but it was a DIFFERENT bug: the actual
- * crash is `<SelectItem value="">` in worker-ledger-tab.tsx, which Radix rejects during render and
- * which takes the tab down through the error boundary regardless of whether there is any data.
+ * It bundled three things that belong in different places, and splitting them removes a subtab
+ * rather than relocating one (decided 2026-09-05, see STATUS.md):
  *
- * Picking and the Ledger went offline together in 1272d15 for the same reason. Picking was repaired
- * with an ALL_WORKERS sentinel; the Ledger was the last empty-string SelectItem in the codebase and
- * nobody went back for it. Finding the date fix and stopping there is what caught me out.
+ *   a rule    ("hold 20% of every day")  -> Workers, beside the daily rate. A rule is a property
+ *                                           of a person, and payroll cannot apply one with no home.
+ *   a history ("what Ravi has taken")    -> Workers, with Ravi. One subject, one place.
+ *   an entry  ("Ravi took Rs 2,000")     -> inline on the Workers row AND the Payroll row, because
+ *                                           an advance happens on the 12th and payroll runs on the
+ *                                           30th, and both are moments you notice it.
  *
- * The sentinel is now applied and tests/no-empty-select-item.test.ts stops another appearing. What
- * has NOT happened is somebody opening the screen and confirming it renders — which is exactly the
- * step I skipped last time, so it is off until it does.
+ * WHAT IS LOST: bulk entry. Five advances is five rows rather than one flat list. Advances are
+ * individual and occasional, so that is a fair price — revisit if an estate does them in batches.
  *
- * TO RESTORE: put the nav entry and the render branch back, open Muster -> Ledger, add one entry.
- * Nothing else is known to be wrong.
+ * `worker_ledger` is unchanged and still the right table for events; `/api/worker-ledger` still
+ * reads and writes it. Only the tab is gone. It had been off the nav since 2026-09-03 and was
+ * therefore already unreachable — deleting it removes 425 lines nobody could open but which still
+ * had to be updated on every payload change, which is what dead code costs.
  *
- * ---- previous note, kept because the history matters ----
- * The Ledger is back, and the flag that hid it is gone rather than flipped.
+ * ⚠ UNTIL THE WORKERS MONEY PANEL LANDS, `worker_ledger` HAS NO SCREEN. Payroll's deductions term
+ * is fed by a table with no way in — the exact state tests/payroll-sources-are-reachable.test.ts
+ * was written to catch, and it still asserts it, loudly, rather than going green on the deletion.
+ * The panel is step 4 in docs/PAYROLL-RULES-PLAN.md. Point that test at it when it exists.
  *
- * It was switched off on 2026-07-25 alongside Picking, both "crashing for some tenants". The cause
- * was the same for both: a bare date column comes back from the Neon driver as a JS Date, which
- * `String()`s to "Wed Jan 28 2026 00:00:00 GMT+0530", and the client renders `.slice(0, 10)` of
- * that -- "Wed Jan 28" -- into an `<input type="date">`. Some tenants meant the ones with any
- * records. `entry_date::text` in app/api/worker-ledger/route.ts fixed it, and the comment there
- * says so; nobody flipped the switch back.
- *
- * SO THE TABLE READ AS UNADOPTED. `worker_ledger` has 0 rows across every tenant, which was taken
- * as a product signal -- including in STATUS.md -- when it was the flag: no screen, no rows, no
- * way to notice. A kill switch with no owner and no date outlives the memory of why it was set,
- * and then the emptiness it causes becomes evidence for leaving it alone.
- *
- * Verified end to end against dev before removing: three entries round-trip as "2026-01-28", and
- * the balances payroll reads come back correct.
+ * ---- history, kept because it is the reason for the paragraph above ----
+ * Switched off 2026-07-25 alongside Picking, both "crashing for some tenants", behind
+ * LEDGER_TAB_DISABLED. The cause was a bare date column arriving from the Neon driver as a JS
+ * Date. Picking was repaired with an ALL_WORKERS sentinel; the Ledger was not, and stayed dark for
+ * six weeks while its table's emptiness was read as "nobody uses advances" — in STATUS.md, wrongly.
+ * Re-enabled 2026-09-03 after verifying the data path; it crashed on the first click, because the
+ * real cause was a second, different bug: `<SelectItem value="">`, which Radix rejects during
+ * render. Finding one real fix and stopping there is what cost the second attempt.
  */
 
 /**

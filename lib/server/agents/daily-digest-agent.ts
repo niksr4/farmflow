@@ -243,13 +243,36 @@ async function fetchTodayWeather(locationQuery: string): Promise<TodayWeather | 
   }
 }
 
-function buildTodayWeatherSection(weather: TodayWeather | null): string {
+/**
+ * Say when the forecast is not actually theirs.
+ *
+ * `weatherLocationQuery ?? DEFAULT_WEATHER_QUERY` is a silent fallback, and on 2026-09-08 three of
+ * the four live tenants -- Medappa, Laxmi and Seshagiri -- had no location set, so all three were
+ * sent the same coordinates (12.4244,75.7382, Madikeri) and got a byte-identical "Today's Weather"
+ * and "Advice for Today", every day. It read as the weather API being vague. It was not: the input
+ * was literally the same for all three.
+ *
+ * The fallback itself is right -- an approximate forecast beats no forecast, and Kodagu is one
+ * district. What was wrong is printing it under a heading that claims it is their estate's. Kodagu
+ * still spans enough ground for Madikeri and Virajpet to differ on a given morning, which is the
+ * whole reason the field exists.
+ *
+ * Not fixed by withholding the section: that removes a useful signal and explains nothing. Same
+ * rule as the rainfall tab -- nothing derived is presented as measured.
+ */
+function buildTodayWeatherSection(weather: TodayWeather | null, usingDefaultLocation: boolean): string {
   const lines: string[] = ["## Today's Weather"]
   if (!weather) {
     lines.push("- Weather forecast unavailable (no API key or estate location configured).")
     return lines.join("\n")
   }
   if (weather.locationLabel) lines.push(`- Location: ${weather.locationLabel}`)
+  if (usingDefaultLocation) {
+    lines.push(
+      `- ⚠ This is the default Kodagu location, not your estate. Pin your own in Settings → Estate ` +
+        `profile and this forecast becomes local to you.`,
+    )
+  }
   if (weather.current) {
     lines.push(`- Right now: ${weather.current.tempC.toFixed(1)}°C${weather.current.conditionText ? `, ${weather.current.conditionText}` : ""}, ${weather.current.humidityPct}% humidity`)
   }
@@ -495,6 +518,8 @@ export async function runDailyDigestAgent(input?: {
     const batchResults = await Promise.allSettled(
       batch.map(async (tenant): Promise<DigestResult> => {
         try {
+          // Remember whether this is theirs or the shared Kodagu default -- the section says so.
+          const usingDefaultLocation = !tenant.weatherLocationQuery
           const locationQuery = tenant.weatherLocationQuery ?? DEFAULT_WEATHER_QUERY
           const [activity, rainfall, weather, estateNames] = await Promise.all([
             fetchYesterdayActivity(tenant.tenantId, yesterdayDate),
@@ -512,7 +537,7 @@ export async function runDailyDigestAgent(input?: {
           const estateBreakdownSection = buildEstateBreakdownSection("Yesterday — By Estate", estateBreakdown)
 
           const sections = [
-            buildTodayWeatherSection(weather),
+            buildTodayWeatherSection(weather, usingDefaultLocation),
             buildAdviceSection({ rainfall, weather }),
             buildYesterdaySection(activity, yesterdayLabel),
             ...(estateBreakdownSection ? [estateBreakdownSection] : []),
