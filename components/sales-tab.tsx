@@ -2083,6 +2083,7 @@ export default function SalesTab({
                               <Tooltip>
                                 <TooltipTrigger asChild>
                                   <Button
+                                    aria-label="Edit sale"
                                     variant="ghost"
                                     size="sm"
                                     onClick={(event) => {
@@ -2101,6 +2102,7 @@ export default function SalesTab({
                                 <Tooltip>
                                   <TooltipTrigger asChild>
                                     <Button
+                                      aria-label="Delete sale"
                                       variant="ghost"
                                       size="sm"
                                       onClick={(event) => {

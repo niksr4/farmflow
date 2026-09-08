@@ -739,7 +739,7 @@ export default function DispatchTab({ showDataToolsControls = false }: DispatchT
         record.notes || "",
       ])
 
-      const csvContent = [headers.join(","), ...rows.map((row: string[]) => row.map((cell) => `"${cell}"`).join(","))].join(
+      const csvContent = [headers.join(","), ...rows.map((row: string[]) => row.map((cell) => `"${cell.replace(/"/g, '""')}"`).join(","))].join(
         "\n",
       )
 
