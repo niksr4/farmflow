@@ -80,15 +80,51 @@ export async function GET(request: Request) {
           LIMIT ${limit} OFFSET ${offset}
         `,
       ),
+      /**
+       * TWO TOTALS, EACH SAYING WHICH WINDOW IT MEANS.
+       *
+       * This was one figure called `total_deductions`, summed over ALL time while the `entries`
+       * beside it in the same response honoured ?startDate/?endDate. So one payload carried two
+       * different time ranges under the same vocabulary, and payroll-summary's own `ledger_totals`
+       * CTE -- which IS period-scoped -- used the same words for the narrower thing. Three surfaces,
+       * two meanings, no label. Invisible so far only because worker_ledger has 0 rows in every
+       * tenant; the first real advance is what makes it visible, and it makes it visible as money.
+       *
+       * Both windows are wanted, which is why the fix is not simply to add the date filter:
+       *   period   -- what this run deducts. Must match payroll-summary exactly or a wage slip and
+       *               the screen behind it disagree.
+       *   lifetime -- what the worker still owes, for the Workers panel and the exit settlement.
+       *               Deliberately unscoped, and named so nobody has to guess that.
+       *
+       * Advances are split from one-off deductions because they are not the same obligation: an
+       * advance is money the worker holds and pays back, a deduction (damage, a fine) is money that
+       * is simply withheld. Adding them was what made a single "deductions" figure meaningless.
+       * See docs/PAYROLL-RULES-PLAN.md.
+       */
       workerId
         ? runTenantQuery(
             accountsSql, tenantContext,
             accountsSql`
+              WITH scoped AS (
+                SELECT
+                  entry_type,
+                  amount,
+                  -- A missing bound means "no bound on that side", so an unfiltered request gets
+                  -- period == lifetime rather than an empty period. COALESCE against the row's own
+                  -- date is what makes each side independently optional.
+                  (entry_date >= COALESCE(${startDate}::date, entry_date)
+                   AND entry_date <= COALESCE(${endDate}::date, entry_date)) AS in_period
+                FROM worker_ledger
+                WHERE tenant_id = ${tenantContext.tenantId} AND worker_id = ${workerId}::uuid
+              )
               SELECT
-                COALESCE(SUM(CASE WHEN entry_type IN ('advance','deduction') THEN amount ELSE 0 END), 0) AS total_deductions,
-                COALESCE(SUM(CASE WHEN entry_type = 'adjustment' THEN amount ELSE 0 END), 0) AS total_adjustments
-              FROM worker_ledger
-              WHERE tenant_id = ${tenantContext.tenantId} AND worker_id = ${workerId}::uuid
+                COALESCE(SUM(amount) FILTER (WHERE entry_type = 'advance'    AND in_period), 0) AS period_advances,
+                COALESCE(SUM(amount) FILTER (WHERE entry_type = 'deduction'  AND in_period), 0) AS period_deductions,
+                COALESCE(SUM(amount) FILTER (WHERE entry_type = 'adjustment' AND in_period), 0) AS period_adjustments,
+                COALESCE(SUM(amount) FILTER (WHERE entry_type = 'advance'),    0) AS lifetime_advances,
+                COALESCE(SUM(amount) FILTER (WHERE entry_type = 'deduction'),  0) AS lifetime_deductions,
+                COALESCE(SUM(amount) FILTER (WHERE entry_type = 'adjustment'), 0) AS lifetime_adjustments
+              FROM scoped
             `,
           )
         : Promise.resolve([]),
@@ -111,9 +147,19 @@ export async function GET(request: Request) {
       totalCount,
       ...(balance
         ? {
-            workerBalance: {
-              totalDeductions: Number(balance.total_deductions) || 0,
-              totalAdjustments: Number(balance.total_adjustments) || 0,
+            // Named windows. `period` is what this run deducts and must agree with
+            // payroll-summary's ledger_totals; `lifetime` is what is still outstanding.
+            workerTotals: {
+              period: {
+                advances: Number(balance.period_advances) || 0,
+                deductions: Number(balance.period_deductions) || 0,
+                adjustments: Number(balance.period_adjustments) || 0,
+              },
+              lifetime: {
+                advances: Number(balance.lifetime_advances) || 0,
+                deductions: Number(balance.lifetime_deductions) || 0,
+                adjustments: Number(balance.lifetime_adjustments) || 0,
+              },
             },
           }
         : {}),

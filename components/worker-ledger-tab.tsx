@@ -79,7 +79,8 @@ export default function WorkerLedgerTab() {
   // the same crash picking-log-tab.tsx fixed with this sentinel on 2026-07-25. Both tabs went
   // offline together in 1272d15; only picking got repaired, and this was the last one left.
   const [filterWorker, setFilterWorker] = useState(ALL_WORKERS)
-  const [workerBalance, setWorkerBalance] = useState<{ totalDeductions: number; totalAdjustments: number } | null>(null)
+  type LedgerTotals = { advances: number; deductions: number; adjustments: number }
+  const [workerTotals, setWorkerTotals] = useState<{ period: LedgerTotals; lifetime: LedgerTotals } | null>(null)
 
   const [isAdding, setIsAdding] = useState(false)
   const [editingId, setEditingId] = useState<string | null>(null)
@@ -107,7 +108,7 @@ export default function WorkerLedgerTab() {
       const data = await res.json()
       if (data.success) {
         setEntries(data.entries || [])
-        setWorkerBalance(data.workerBalance || null)
+        setWorkerTotals(data.workerTotals || null)
       }
     } catch {
       toast.error("Failed to load ledger")
@@ -210,11 +211,17 @@ export default function WorkerLedgerTab() {
             </CardTitle>
             <CardDescription>
               Track advances paid, deductions, and adjustments from the shared worker roster. Use this only if you want these balances reflected in payroll.
-              {filterWorker !== ALL_WORKERS && workerBalance && (
+              {filterWorker !== ALL_WORKERS && workerTotals && (
                 <span className="ml-2 text-xs">
-                  Deductions: <span className="font-medium text-rose-400">{formatCurrency(workerBalance.totalDeductions)}</span>
-                  {" · "}Adjustments: <span className="font-medium text-sky-400">{formatCurrency(workerBalance.totalAdjustments)}</span>
-                  <span className="text-muted-foreground"> (filtered period)</span>
+                  {/* This said "(filtered period)" while the query behind it had no date filter at
+                      all -- the label asserted the one thing that was false. Both windows are now
+                      shown, each named, because the outstanding figure is the one worth knowing. */}
+                  Advances: <span className="font-medium text-rose-400">{formatCurrency(workerTotals.period.advances)}</span>
+                  {" · "}Deductions: <span className="font-medium text-rose-400">{formatCurrency(workerTotals.period.deductions)}</span>
+                  {" · "}Adjustments: <span className="font-medium text-sky-400">{formatCurrency(workerTotals.period.adjustments)}</span>
+                  <span className="text-muted-foreground"> in this period</span>
+                  {" · "}outstanding all time:{" "}
+                  <span className="font-medium text-rose-400">{formatCurrency(workerTotals.lifetime.advances)}</span>
                 </span>
               )}
             </CardDescription>
