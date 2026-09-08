@@ -28,7 +28,11 @@ export const revalidate = 0
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
 
-/** Postgres raises this from the day-cap trigger in scripts/116. */
+/**
+ * Postgres raises this from the day-cap trigger — introduced in scripts/116, and since replaced by
+ * scripts/145, which lowered the ceiling from two days to one. Match on the prefix, not the whole
+ * sentence: 145 rewrote the wording and would have silently stopped matching a stricter test.
+ */
 const isDayCapError = (error: unknown) =>
   String((error as Error)?.message || "").includes("labour_assignments: worker")
 
@@ -443,8 +447,26 @@ export async function PUT(request: Request) {
     } catch (error) {
       // The same ceiling the insert honours: editing a half day up to a full one can overflow a
       // worker's day just as easily as adding a second job.
+      //
+      // This branch used to return the trigger's own message verbatim, which put the table name
+      // and a raw worker uuid on a writer's screen: "labour_assignments: worker 3f2a9c1e-...
+      // already has 1.0 of a day booked on ...". A leak, and the QA scanner was right to flag it.
+      //
+      // It is NOT fixed by routing through sanitizeRouteError, which is what a leak normally
+      // deserves. THIS IS THE CORRECTION PATH -- the endpoint somebody hits while fixing a day
+      // that is already over-booked, which is precisely when they most need to be told what to do
+      // about it. A generic "Could not update the work" would leave them re-trying the same edit.
+      // Say the same thing POST says, in the singular, and name nothing the trigger knows.
       if (isDayCapError(error)) {
-        return NextResponse.json({ success: false, error: String((error as Error).message) }, { status: 409 })
+        return NextResponse.json(
+          {
+            success: false,
+            error:
+              "This would take them past a full day. Two jobs in a day is half a day each — " +
+              "set this one to Half, and check the other job on this date too.",
+          },
+          { status: 409 },
+        )
       }
       throw error
     }

@@ -47,7 +47,6 @@ const KNOWN_RAW_ERROR_LEAKS = [
   "app/api/ai-proactive-insights/route.ts",
   "app/api/attendance/devices/[id]/route.ts",
   "app/api/attendance/devices/route.ts",
-  "app/api/attendance/assignments/route.ts",
   "app/api/attendance/route.ts",
   "app/api/attendance/unmapped-codes/route.ts",
   "app/api/attendance/workers/[id]/route.ts",
