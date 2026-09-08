@@ -265,3 +265,78 @@ describe("the ways an estate can hurt itself, and what happens", () => {
     expect(w.shortfall).toBe(2000)
   })
 })
+
+describe("MEDAPPA AS MANOJ ACTUALLY STATED IT, 2026-09-08", () => {
+  /**
+   * His answers, verbatim, turned into the rule row scripts/dev/seed-payroll-demo.mjs writes:
+   *
+   *   "Retention percentage remains at 20% of the daily rate irrespective of the wage increases"
+   *   "if some one works half a day it is 20% of the applicable half day wage"
+   *   "my normal work is 8 hours"
+   *   "don't tie the OT to the number of hours worked during the day. let it be a separate entry
+   *    at a muster level ... against the name of the worker"
+   *   "all workers are on daily wages and are paid weekly on a Saturday"
+   *   "every daily rate worker will get the deductions"
+   *
+   * Pinned here so a later edit to a default cannot quietly change what his estate is paid.
+   */
+  const medappa = rule({
+    effectiveFrom: "2026-04-01",
+    retentionMode: "percent_of_day",
+    retentionValue: 20,
+    overtimeMode: "multiplier_of_hourly",
+    overtimeValue: 1.2,
+    fullDayHours: 8,
+  })
+
+  it("holds 20% of a Rs 600 day", () => {
+    expect(retentionForDay(medappa, 600, 1)).toBe(120)
+  })
+
+  it("holds 20% of the HALF-DAY wage on a half day — his words", () => {
+    // Rs 300 earned, Rs 60 held. Not Rs 120, and not Rs 600 x 20% x anything else.
+    expect(retentionForDay(medappa, 600, 0.5)).toBe(60)
+  })
+
+  it("keeps the PERCENTAGE fixed across a wage rise, so the rupees move", () => {
+    // "remains at 20% ... irrespective of the wage increases" -- the 20 is what is constant.
+    expect(retentionForDay(medappa, 700, 1)).toBe(140)
+    expect(retentionForDay(medappa, 800, 1)).toBe(160)
+  })
+
+  it("pays overtime at Rs 90 an hour: Rs 600 over an EIGHT hour day, times 1.2", () => {
+    expect(overtimePay(medappa, { dayRate: 600, hours: 1 })).toBe(90)
+    expect(overtimePay(medappa, { dayRate: 600, hours: 3 })).toBe(270)
+  })
+
+  it("does NOT use the six-hour attendance threshold as the pay divisor", () => {
+    // lib/attendance-hours.ts's DEFAULT_FULL_DAY_HOURS is 6 and decides whether a PUNCH PAIR counts
+    // as a full day. Only HoneyFarm has a terminal; Medappa's 787 attendance rows carry zero punch
+    // times. Using 6 here would price overtime at Rs 120/hour instead of Rs 90 -- a third too high
+    // on every payment, from a number belonging to a different estate's hardware.
+    expect(overtimePay(medappa, { dayRate: 600, hours: 1 })).not.toBe(120)
+  })
+
+  it("a full week with three hours of overtime", () => {
+    const w = runWeek({
+      rules: [medappa],
+      workerId: "ravi",
+      weekStart: "2026-08-03",
+      days: [1, 1, 1, 1, 1, 1],
+      dayRate: 600,
+      overtimeHours: 3,
+    })
+    expect(w.gross).toBe(3870) // 3600 + 270
+    // Retention follows the days worked, not the overtime -- the extra hours are pay, not a day.
+    expect(w.retention).toBe(720)
+    expect(w.net).toBe(3150)
+  })
+
+  it("every daily-rate worker is covered, with no exemptions to configure", () => {
+    // "every daily rate worker will get the deductions" -- the estate-wide default with no
+    // overrides is exactly that, and it costs one row rather than twenty-nine.
+    for (const worker of ["ravi", "suma", "ganesh", "anyone-at-all"]) {
+      expect(resolveRuleForDate([medappa], worker, "2026-08-03")?.retentionValue).toBe(20)
+    }
+  })
+})

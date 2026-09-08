@@ -1186,9 +1186,29 @@ export default function WorkerProfilesTab() {
                           </div>
                         </TableCell>
                       </TableRow>
-                    ) : (
+                    ) : [
                       <TableRow key={w.id}>
-                        <TableCell className="font-medium">{w.name}</TableCell>
+                        <TableCell className="font-medium">
+                          {/* A crew is paid as a job, so it has no personal balance to open. */}
+                          {w.kind !== "gang" ? (
+                            <button
+                              type="button"
+                              className="flex items-center gap-1.5 text-left hover:underline"
+                              onClick={() => setExpandedWorkerId(expandedWorkerId === w.id ? null : w.id)}
+                              aria-expanded={expandedWorkerId === w.id}
+                              aria-label={`${expandedWorkerId === w.id ? "Hide" : "Show"} money history for ${w.name}`}
+                            >
+                              {expandedWorkerId === w.id ? (
+                                <ChevronUp className="h-3.5 w-3.5 shrink-0 text-stone-400" />
+                              ) : (
+                                <ChevronDown className="h-3.5 w-3.5 shrink-0 text-stone-400" />
+                              )}
+                              {w.name}
+                            </button>
+                          ) : (
+                            w.name
+                          )}
+                        </TableCell>
                         <TableCell>
                           {w.workerType ? (
                             <Badge variant="outline" className={`text-xs ${(WORKER_TYPE_COLORS[w.workerType] ?? WORKER_TYPE_FALLBACK)}`}>
@@ -1254,8 +1274,32 @@ export default function WorkerProfilesTab() {
                             </TooltipProvider>
                           </TableCell>
                         )}
-                      </TableRow>
-                    ),
+                      </TableRow>,
+                      /**
+                       * PARITY, NOT A DESKTOP EXTRA.
+                       *
+                       * The money panel went into the mobile card list first and was invisible on a
+                       * laptop -- which is where an estate admin actually sits to hand out an
+                       * advance. Layouts may differ between the two; the data shown must not, and
+                       * nothing enforces that but noticing.
+                       *
+                       * Keyed separately from the row above because React needs both siblings keyed,
+                       * and only mounted when open so the roster does not fire one ledger fetch per
+                       * worker on load.
+                       */
+                      expandedWorkerId === w.id && w.kind !== "gang" ? (
+                        <TableRow key={`${w.id}-money`} className="bg-stone-50/60 hover:bg-stone-50/60 dark:bg-white/[0.02]">
+                          <TableCell colSpan={20} className="p-0">
+                            <WorkerMoneyPanel
+                              workerId={w.id}
+                              workerName={w.name}
+                              dailyRate={w.dailyRate ?? null}
+                              canAdmin={isAdmin}
+                            />
+                          </TableCell>
+                        </TableRow>
+                      ) : null,
+                    ],
                   )}
                 </TableBody>
               </Table>
