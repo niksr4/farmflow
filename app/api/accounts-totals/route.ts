@@ -5,6 +5,7 @@ import { requireModuleAccess, isModuleAccessError } from "@/lib/server/module-ac
 import { resolveActiveEstate } from "@/lib/server/estate-filter"
 import { SELECTED_ESTATE_COOKIE } from "@/lib/server/estate-cookie"
 import { normalizeTenantContext, runTenantQuery } from "@/lib/server/tenant-db"
+import { sanitizeRouteError } from "@/lib/server/sanitize-route-error"
 
 export const dynamic = "force-dynamic"
 export const revalidate = 0
@@ -118,7 +119,7 @@ export async function GET(request: Request) {
     return NextResponse.json(
       {
         success: false,
-        error: error.message,
+        error: sanitizeRouteError(error, "Failed to fetch accounts totals"),
         laborTotal: 0,
         otherTotal: 0,
         grandTotal: 0,

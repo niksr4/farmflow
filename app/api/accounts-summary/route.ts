@@ -5,6 +5,7 @@ import { requireModuleAccess, isModuleAccessError } from "@/lib/server/module-ac
 import { resolveActiveEstate } from "@/lib/server/estate-filter"
 import { SELECTED_ESTATE_COOKIE } from "@/lib/server/estate-cookie"
 import { normalizeTenantContext, runTenantQueries, runTenantQuery } from "@/lib/server/tenant-db"
+import { sanitizeRouteError } from "@/lib/server/sanitize-route-error"
 
 export const dynamic = "force-dynamic"
 export const revalidate = 0
@@ -200,7 +201,7 @@ export async function GET(request: Request) {
       {
         success: false,
         error: "Failed to fetch expenditure summary",
-        message: error?.message || String(error),
+        message: sanitizeRouteError(error, "Failed to fetch expenditure summary"),
         summaries: [],
         count: 0,
       },

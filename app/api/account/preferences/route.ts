@@ -4,6 +4,7 @@ import { normalizeAppLocale } from "@/lib/i18n"
 import { requireSessionUser } from "@/lib/server/auth"
 import { sql } from "@/lib/server/db"
 import { normalizeTenantContext, runTenantQuery } from "@/lib/server/tenant-db"
+import { sanitizeRouteError } from "@/lib/server/sanitize-route-error"
 
 const preferencesBodySchema = z.object({
   preferredLocale: z.string().trim().min(1, "Preferred language is required").optional(),
@@ -39,7 +40,7 @@ export async function GET() {
       },
     })
   } catch (error: any) {
-    const message = error?.message || "Failed to load account preferences"
+    const message = sanitizeRouteError(error, "Failed to load account preferences")
     return NextResponse.json({ success: false, error: message }, { status: message === "Unauthorized" ? 401 : 500 })
   }
 }
@@ -89,7 +90,7 @@ export async function PUT(request: Request) {
 
     return NextResponse.json({ success: true })
   } catch (error: any) {
-    const message = error?.message || "Failed to update account preferences"
+    const message = sanitizeRouteError(error, "Failed to update account preferences")
     return NextResponse.json({ success: false, error: message }, { status: message === "Unauthorized" ? 401 : 500 })
   }
 }
