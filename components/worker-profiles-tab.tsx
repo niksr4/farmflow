@@ -14,7 +14,7 @@ import { EmptyStateTable } from "@/components/ui/empty-state"
 import { FieldLabel } from "@/components/ui/field-label"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import { toast } from "sonner"
-import { canWriteModule, type UserRole } from "@/lib/permissions"
+import { canWriteModule, isAdminRole, type UserRole } from "@/lib/permissions"
 import { useAuth } from "@/hooks/use-auth"
 import FilterBar from "@/components/filter-bar"
 import { useListControls } from "@/hooks/use-list-controls"
@@ -24,6 +24,7 @@ import { UNSET_FACET_VALUE } from "@/lib/list-controls"
 import { numericInputValue } from "@/lib/number-input"
 import type { LocationOption } from "@/components/inventory-system/types"
 import { formatLocationLabel } from "@/lib/location-label"
+import WorkerMoneyPanel from "@/components/workers/worker-money-panel"
 
 // Imported, not redeclared. See lib/worker-types.ts.
 
@@ -107,6 +108,9 @@ const EMPTY_FORM = {
 export default function WorkerProfilesTab() {
   const { user } = useAuth()
   const canWrite = canWriteModule((user?.role ?? "user") as UserRole, "accounts")
+  // Advances and repayments are money changing hands, so the money panel gates them on this
+  // rather than on canWrite -- "accounts" is a user-mutation module, so a writer passes that.
+  const isAdmin = isAdminRole(user?.role)
 
   const [workers, setWorkers] = useState<Worker[]>([])
   const workerControls = useListControls(workers, {
@@ -891,6 +895,22 @@ export default function WorkerProfilesTab() {
                             <MobileField label="Estate" value={estate ?? "Unassigned"} />
                           )}
                           {showFingerIds && <MobileField label="Finger ID" value={w.deviceUserCode || "—"} mono />}
+
+                          {/* Retention held, advances owed, and the history behind both. Rendered
+                              only when the card is genuinely open, so opening the roster does not
+                              fire a ledger fetch per worker. A crew is paid as a job, not a person,
+                              so it has no personal balance to show. */}
+                          {isExpanded && w.kind !== "gang" && (
+                            <div className="-mx-1 mt-2 border-t border-stone-200 pt-1 dark:border-white/[0.06]">
+                              <WorkerMoneyPanel
+                                workerId={w.id}
+                                workerName={w.name}
+                                dailyRate={w.dailyRate ?? null}
+                                canAdmin={isAdmin}
+                              />
+                            </div>
+                          )}
+
                           {canWrite && (
                             <div className="flex gap-2 pt-2">
                               <Button size="sm" variant="outline" className="flex-1" onClick={() => startEdit(w)}>

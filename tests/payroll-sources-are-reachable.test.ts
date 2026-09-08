@@ -27,27 +27,16 @@ const SOURCES = [
   { table: "attendance_records", writtenBy: "app/api/attendance/route.ts", screen: "components/attendance-tab.tsx" },
   { table: "labour_assignments", writtenBy: "app/api/attendance/assignments/route.ts", screen: "components/attendance/worker-allocation.tsx" },
   { table: "picking_records", writtenBy: "app/api/picking-records/route.ts", screen: "components/picking-log-tab.tsx" },
-  // worker_ledger is deliberately absent from this list as of 2026-09-08 -- see the block below.
+  /**
+   * Back in the checked list on 2026-09-08, the same day it left it.
+   *
+   * The Ledger tab was deleted that morning and worker_ledger spent a few hours as a source
+   * payroll deducted from with no way in -- named in an exemption, with a test that failed the
+   * moment its replacement existed rather than a comment that would have rotted. It fired, and
+   * this is the entry it demanded. The exemption is gone; the ordinary rule applies again.
+   */
+  { table: "worker_ledger", writtenBy: "app/api/worker-ledger/route.ts", screen: "components/workers/worker-money-panel.tsx" },
 ]
-
-/**
- * The source that currently has NO screen, stated rather than quietly dropped.
- *
- * components/worker-ledger-tab.tsx was deleted on 2026-09-08. That is a decision, not a
- * regression: its three jobs move to Workers and Payroll (docs/PAYROLL-RULES-PLAN.md). But the
- * decision does not change the arithmetic -- payroll still sums `worker_ledger`, and right now
- * nothing renders a way to write it.
- *
- * That is the precise state this whole file exists to catch, so removing the entry from SOURCES
- * and moving on would be the file deleting its own point. It is named here instead, with the thing
- * that has to exist before it goes back in the list above.
- */
-const SOURCE_AWAITING_A_SCREEN = {
-  table: "worker_ledger",
-  writtenBy: "app/api/worker-ledger/route.ts",
-  plannedScreen: "components/workers/worker-money-panel.tsx",
-  plan: "docs/PAYROLL-RULES-PLAN.md",
-}
 
 /**
  * The fifth source is a column, not a table — the salary lives on the worker.
@@ -70,8 +59,6 @@ describe("payroll's sources each have a way in", () => {
       expect(payroll, `payroll should read ${table}`).toContain(table)
     }
     expect(payroll, "payroll should read the monthly salary").toContain(SALARY_SOURCE.column)
-    // Still a source, still summed, still counted -- just without a screen for the moment.
-    expect(payroll).toContain(SOURCE_AWAITING_A_SCREEN.table)
   })
 
   it("the salary column is written from the roster, and shown on it", () => {
@@ -98,48 +85,24 @@ describe("payroll's sources each have a way in", () => {
     }
   })
 
-  it("worker_ledger still has a route that writes it, even with no screen", () => {
-    // The way in is gone; the way through is not. If this ever fails, the table is unreachable
-    // from both ends and payroll is summing something nothing can produce.
-    const route = read(SOURCE_AWAITING_A_SCREEN.writtenBy)
-    expect(route).toMatch(new RegExp(`INSERT INTO\\s+${SOURCE_AWAITING_A_SCREEN.table}`))
-  })
-
-  it("says out loud that worker_ledger has no screen, and where the replacement is going", () => {
-    /**
-     * THIS TEST IS SUPPOSED TO BE UNCOMFORTABLE. Payroll deducts from a table a human cannot
-     * currently write to. That was true from 2026-07-25 to 2026-09-08 by accident, behind a
-     * forgotten flag, and the resulting emptiness got written into STATUS.md as a product signal.
-     * It is true again now on purpose, for a few days, while the entry points move to Workers.
-     *
-     * The difference between the two is entirely whether it is written down, so that is what is
-     * asserted: the deletion has a date, a reason, and a named file it is waiting on.
-     */
-    const workspace = read("components/attendance-workspace.tsx")
-    expect(workspace, "the deletion needs a date").toMatch(/THE LEDGER IS GONE, \d{4}-\d{2}-\d{2}/)
-    expect(workspace, "and the plan it is waiting on").toContain(SOURCE_AWAITING_A_SCREEN.plan)
-    expect(workspace, "and the screen that replaces it").toContain("MONEY PANEL")
-  })
-
-  it("goes back in SOURCES the moment that panel exists", () => {
-    /**
-     * A self-deleting exemption. The moment components/workers/worker-money-panel.tsx is created,
-     * this fails and whoever added it has to move worker_ledger back into SOURCES above -- where
-     * the normal "has a screen" assertion applies to it again.
-     *
-     * Without this, the exemption outlives its reason, which is exactly how LEDGER_TAB_DISABLED
-     * survived six weeks.
-     */
-    let panelExists = true
-    try {
-      read(SOURCE_AWAITING_A_SCREEN.plannedScreen)
-    } catch {
-      panelExists = false
+  it("money leaving the estate's hand is an admin's to record", () => {
+    // `accounts` is in USER_MUTATION_MODULES, so canWriteModule alone would let the daily muster
+    // writer hand out an advance against wages. Gagan marks attendance every morning at Medappa;
+    // Manoj asked for the money to be his. A deduction or a correction stays ordinary bookkeeping.
+    const route = read("app/api/worker-ledger/route.ts")
+    expect(route).toContain("ADMIN_ONLY_ENTRY_TYPES")
+    expect(route).toContain("isAdminRole(sessionUser.role)")
+    for (const t of ["advance", "repayment", "retention_payout"]) {
+      expect(route, `${t} should be admin-only`).toMatch(new RegExp(`ADMIN_ONLY_ENTRY_TYPES[\\s\\S]{0,160}"${t}"`))
     }
-    expect(
-      panelExists,
-      `${SOURCE_AWAITING_A_SCREEN.plannedScreen} now exists — move worker_ledger back into SOURCES and delete this test`,
-    ).toBe(false)
+  })
+
+  it("retention accrual cannot be typed by hand", () => {
+    // It is derived from days worked and the rule in force. A hand-typed one is a figure with no
+    // working behind it that payroll would then add to its own — the same money, counted twice.
+    const route = read("app/api/worker-ledger/route.ts")
+    const typed = route.slice(route.indexOf("const TYPED_ENTRY_TYPES"), route.indexOf("const ADMIN_ONLY_ENTRY_TYPES"))
+    expect(typed).not.toContain("retention_accrual")
   })
 })
 

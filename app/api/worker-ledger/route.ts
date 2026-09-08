@@ -5,7 +5,7 @@ import { accountsSql } from "@/lib/server/db"
 import { requireModuleAccess, isModuleAccessError } from "@/lib/server/module-access"
 import { resolveActiveEstate } from "@/lib/server/estate-filter"
 import { SELECTED_ESTATE_COOKIE } from "@/lib/server/estate-cookie"
-import { canWriteModule } from "@/lib/permissions"
+import { canWriteModule, isAdminRole } from "@/lib/permissions"
 import { logAuditEvent } from "@/lib/server/audit-log"
 import { normalizeTenantContext, runTenantQuery } from "@/lib/server/tenant-db"
 import { logServerError } from "@/lib/server/safe-logging"
@@ -15,12 +15,39 @@ export const revalidate = 0
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
 
+/**
+ * `retention_accrual` is deliberately NOT accepted here. It is derived from days worked and the
+ * rule in force, so a hand-typed one would be a figure with no working behind it that payroll would
+ * then add to its own — the same money counted twice, from two directions.
+ */
+const TYPED_ENTRY_TYPES = ["advance", "deduction", "adjustment", "repayment", "retention_payout"] as const
+
+/**
+ * Money leaving the estate's hand, or coming back, is an owner's decision.
+ *
+ * Note this is a deliberate RESTRICTION: `accounts` is in USER_MUTATION_MODULES, so canWriteModule
+ * lets a writer through today. Gagan marks the muster every morning at Medappa; handing out an
+ * advance against wages is not the same act, and Manoj asked for it to be his.
+ *
+ * Deductions and adjustments stay on the ordinary module permission — a fine or a correction is
+ * bookkeeping, not a payment.
+ */
+const ADMIN_ONLY_ENTRY_TYPES = new Set<string>(["advance", "repayment", "retention_payout"])
+
 const ledgerBodySchema = z.object({
   workerId: z.string().uuid("Invalid worker ID"),
   entryDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "entryDate must be YYYY-MM-DD"),
-  entryType: z.enum(["advance", "deduction", "adjustment"]),
+  entryType: z.enum(TYPED_ENTRY_TYPES),
   amount: z.number().positive("Amount must be positive").max(999999),
   description: z.string().max(300).nullable().optional(),
+  /**
+   * How many payroll runs this advance is recovered across. 1 (the default) reproduces the
+   * behaviour every existing row already has: taken in full, in its own period.
+   *
+   * Capped at 60 so a typo cannot spread Rs 20,000 over a lifetime at Rs 3 a week.
+   */
+  recoverOverPeriods: z.number().int().min(1).max(60).optional(),
+  recoverFrom: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional(),
 })
 
 export async function GET(request: Request) {
@@ -185,7 +212,25 @@ export async function POST(request: Request) {
     if (!parsed.success) {
       return NextResponse.json({ success: false, error: parsed.error.issues[0]?.message || "Invalid request" }, { status: 400 })
     }
-    const { workerId, entryDate, entryType, amount, description } = parsed.data
+    const { workerId, entryDate, entryType, amount, description, recoverOverPeriods, recoverFrom } = parsed.data
+
+    // Checked after parsing so the message names the act, not the permission.
+    if (ADMIN_ONLY_ENTRY_TYPES.has(entryType) && !isAdminRole(sessionUser.role)) {
+      return NextResponse.json(
+        { success: false, error: "Only an estate admin can record money paid to or returned by a worker" },
+        { status: 403 },
+      )
+    }
+
+    // A schedule on anything but an advance is meaningless -- there is nothing to recover from a
+    // fine or a repayment. Refused rather than ignored: a caller that sent one believed something
+    // about how this row would behave.
+    if (entryType !== "advance" && (recoverOverPeriods != null || recoverFrom != null)) {
+      return NextResponse.json(
+        { success: false, error: "Only an advance can be recovered over several periods" },
+        { status: 400 },
+      )
+    }
 
     const workerRows = await runTenantQuery(
       accountsSql, tenantContext,
@@ -198,8 +243,14 @@ export async function POST(request: Request) {
     const inserted = await runTenantQuery(
       accountsSql, tenantContext,
       accountsSql`
-        INSERT INTO worker_ledger (tenant_id, worker_id, entry_date, entry_type, amount, description)
-        VALUES (${tenantContext.tenantId}, ${workerId}::uuid, ${entryDate}::date, ${entryType}, ${amount}, ${description ?? null})
+        INSERT INTO worker_ledger (
+          tenant_id, worker_id, entry_date, entry_type, amount, description,
+          recover_over_periods, recover_from, created_by
+        )
+        VALUES (
+          ${tenantContext.tenantId}, ${workerId}::uuid, ${entryDate}::date, ${entryType}, ${amount}, ${description ?? null},
+          ${recoverOverPeriods ?? 1}, ${recoverFrom ?? null}::date, ${sessionUser.username || sessionUser.role || null}
+        )
         RETURNING id
       `,
     )
@@ -208,7 +259,7 @@ export async function POST(request: Request) {
       action: "create",
       entityType: "worker_ledger",
       entityId: (inserted as any[])[0]?.id ?? null,
-      after: { workerId, entryDate, entryType, amount, description },
+      after: { workerId, entryDate, entryType, amount, description, recoverOverPeriods: recoverOverPeriods ?? 1, recoverFrom: recoverFrom ?? null },
     })
 
     return NextResponse.json({ success: true, id: String((inserted as any[])[0]?.id) })
