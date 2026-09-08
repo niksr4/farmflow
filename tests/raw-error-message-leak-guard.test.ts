@@ -67,7 +67,6 @@ const KNOWN_RAW_ERROR_LEAKS = [
   "app/api/inventory-summary/route.ts",
   "app/api/market-pricing/route.ts",
   "app/api/plant-health/route.ts",
-  "app/api/processing-records/check-anomaly/route.ts",
   "app/api/recent-activity/route.ts",
   "app/api/register-interest/route.ts",
 ].sort()
