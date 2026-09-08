@@ -8,6 +8,7 @@ import { logSecurityEvent } from "@/lib/server/security-events"
 import { buildRateLimitHeaders, checkRateLimit, isRateLimitUnavailableError } from "@/lib/rate-limit"
 import { extractClientIp } from "@/lib/server/request-security"
 import { logServerWarning } from "@/lib/server/safe-logging"
+import { sanitizeRouteError } from "@/lib/server/sanitize-route-error"
 
 export async function POST(request: Request) {
   try {
@@ -140,7 +141,7 @@ export async function POST(request: Request) {
 
     return NextResponse.json({ success: true })
   } catch (error: any) {
-    const message = error?.message || "Failed to update password"
+    const message = sanitizeRouteError(error, "Failed to update password")
     if (message === "Unauthorized") {
       return NextResponse.json({ success: false, error: message }, { status: 401 })
     }
