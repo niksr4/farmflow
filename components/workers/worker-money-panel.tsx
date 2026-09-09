@@ -11,6 +11,7 @@ import { toast } from "sonner"
 import { formatCurrency } from "@/lib/format"
 import { todayIso } from "@/lib/date-utils"
 import { outstandingAdvance, retentionHeld, type LedgerEntry, type PayRule } from "@/lib/pay-rules"
+import PayRuleForm from "@/components/workers/pay-rule-form"
 
 /**
  * Everything about one worker's money, in the one place that already holds every other fact about
@@ -63,6 +64,7 @@ export default function WorkerMoneyPanel({ workerId, workerName, dailyRate, canA
    * not be a database query. The route gates both on the same admin check as creating one -- a
    * permission that stops at creation is not a permission.
    */
+  const [editingRule, setEditingRule] = useState(false)
   const [editingId, setEditingId] = useState<string | null>(null)
   const [editForm, setEditForm] = useState({ amount: "", entryDate: "", description: "", recoverOverPeriods: "1" })
 
@@ -262,8 +264,27 @@ export default function WorkerMoneyPanel({ workerId, workerName, dailyRate, canA
           ) : (
             <p className="mt-1 text-sm text-muted-foreground">No retention set.</p>
           )}
+          {canAdmin && (
+            <button
+              type="button"
+              className="mt-2 self-start text-xs font-medium text-emerald-700 underline-offset-2 hover:underline dark:text-emerald-400"
+              onClick={() => setEditingRule((v) => !v)}
+            >
+              {rule?.retentionMode ? "Change rule" : "Set a rule"}
+            </button>
+          )}
         </div>
       </div>
+
+      {editingRule && canAdmin && (
+        <PayRuleForm
+          workerId={workerId}
+          dailyRate={dailyRate}
+          current={rule}
+          onSaved={() => { setEditingRule(false); load() }}
+          onCancel={() => setEditingRule(false)}
+        />
+      )}
 
       <div>
         <div className="mb-2 flex items-center justify-between">

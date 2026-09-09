@@ -13,6 +13,7 @@ import { EmptyStateTable } from "@/components/ui/empty-state"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import { toast } from "sonner"
 import { formatCurrency } from "@/lib/format"
+import { weekRangeFor } from "@/lib/payroll-period"
 import { useTenantSettings } from "@/hooks/use-tenant-settings"
 import { buildXlsxArrayBufferFromCsv, XLSX_MIME_TYPE } from "@/lib/spreadsheet"
 
@@ -69,6 +70,25 @@ export default function PayrollSummaryTab() {
   const { settings: tenantSettings } = useTenantSettings()
   const [startDate, setStartDate] = useState(firstOfMonth())
   const [endDate, setEndDate] = useState(today())
+
+  /**
+   * Medappa pay weekly on a Saturday, so a week here runs Sunday to Saturday.
+   *
+   * The API has always accepted any range; what was missing was a way to ask for the range an
+   * estate actually pays on. Stepping by whole weeks also keeps advance instalments landing one
+   * per run -- an arbitrary 9-day range would take one instalment for nine days of work.
+   *
+   * Not a per-estate setting yet: Saturday is Medappa's payday and the only one anybody has stated.
+   * When a second estate says otherwise it belongs in ui_preferences beside the estate profile,
+   * not in a constant here.
+   */
+  const shiftWeek = (by: number) => {
+    const anchor = new Date(`${endDate || today()}T00:00:00Z`)
+    anchor.setUTCDate(anchor.getUTCDate() + by * 7)
+    const { start, end } = weekRangeFor(anchor.toISOString().slice(0, 10))
+    setStartDate(start)
+    setEndDate(end)
+  }
   const [workers, setWorkers] = useState<PayrollWorker[]>([])
   const [totals, setTotals] = useState<Totals | null>(null)
   /**
@@ -164,6 +184,21 @@ export default function PayrollSummaryTab() {
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
+          {/* Whole weeks, Sunday to Saturday, because that is the range an estate paying on a
+              Saturday actually runs. Stepping by whole weeks also keeps one advance instalment per
+              run — an arbitrary nine-day range would take a single instalment for nine days' work. */}
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-xs font-medium text-muted-foreground">Pay week</span>
+            <Button size="sm" variant="outline" className="h-8" onClick={() => shiftWeek(-1)}>
+              ← Previous
+            </Button>
+            <Button size="sm" variant="outline" className="h-8" onClick={() => shiftWeek(0)}>
+              This week
+            </Button>
+            <Button size="sm" variant="outline" className="h-8" onClick={() => shiftWeek(1)}>
+              Next →
+            </Button>
+          </div>
           <div className="flex flex-col sm:flex-row sm:flex-wrap sm:items-end gap-3">
             <div className="flex items-center gap-3 sm:block sm:space-y-1.5">
               <Label className="text-xs shrink-0">Start date</Label>

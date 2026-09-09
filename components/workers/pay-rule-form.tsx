@@ -1,0 +1,234 @@
+"use client"
+
+import { useMemo, useState } from "react"
+import { Loader2 } from "lucide-react"
+
+import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { toast } from "sonner"
+import { formatCurrency } from "@/lib/format"
+import { todayIso } from "@/lib/date-utils"
+import type { PayRule } from "@/lib/pay-rules"
+
+/**
+ * Setting what an estate holds back, and what it pays for overtime.
+ *
+ * One form for both subjects: `workerId = null` writes the estate-wide default, a value writes an
+ * override for that person. Medappa set 20% once rather than twenty-nine times; "everyone except
+ * two" costs two more rows.
+ *
+ * THE EFFECTIVE-FROM DATE IS SHOWN AND EXPLAINED, NOT HIDDEN. It is the whole reason a payslip
+ * printed in June still matches the screen in December: saving ADDS a rule from that date rather
+ * than editing the one before it. A form that hid the field would leave somebody expecting an edit
+ * and quietly getting a new period instead.
+ *
+ * "None" is a real choice, not an empty one — it is how an estate stops retaining from a date
+ * without erasing what already accrued under the old rule.
+ */
+
+type Props = {
+  /** null = the estate-wide default. */
+  workerId: string | null
+  /** For the live preview only; a rule is a percentage, not a rupee figure. */
+  dailyRate?: number | null
+  current?: PayRule | null
+  onSaved: () => void
+  onCancel: () => void
+}
+
+const RETENTION_MODES = [
+  { value: "none", label: "No retention" },
+  { value: "percent_of_day", label: "% of the day's pay" },
+  { value: "flat_per_day", label: "Fixed ₹ per day worked" },
+] as const
+
+const OVERTIME_MODES = [
+  { value: "none", label: "No overtime rule" },
+  { value: "multiplier_of_hourly", label: "× the hourly rate" },
+  { value: "multiplier_of_day", label: "× the whole day (holiday pay)" },
+  { value: "explicit_hourly", label: "A fixed ₹ per hour" },
+] as const
+
+export default function PayRuleForm({ workerId, dailyRate, current, onSaved, onCancel }: Props) {
+  const [saving, setSaving] = useState(false)
+  const [form, setForm] = useState({
+    effectiveFrom: todayIso(),
+    retentionMode: current?.retentionMode ?? "none",
+    retentionValue: current?.retentionValue != null ? String(current.retentionValue) : "",
+    overtimeMode: current?.overtimeMode ?? "none",
+    overtimeValue: current?.overtimeValue != null ? String(current.overtimeValue) : "",
+    fullDayHours: current?.fullDayHours != null ? String(current.fullDayHours) : "8",
+  })
+
+  /** What the rule does to a real day, so nobody has to work it out from a percentage. */
+  const preview = useMemo(() => {
+    const rate = Number(dailyRate) || 0
+    const rv = Number(form.retentionValue)
+    const ov = Number(form.overtimeValue)
+    const hours = Number(form.fullDayHours) || 8
+    const lines: string[] = []
+
+    if (form.retentionMode === "percent_of_day" && rv > 0 && rate > 0) {
+      lines.push(`Holds ${formatCurrency((rate * rv) / 100)} on a full day, ${formatCurrency((rate * rv) / 200)} on a half.`)
+    } else if (form.retentionMode === "flat_per_day" && rv > 0) {
+      lines.push(`Holds ${formatCurrency(rv)} on a full day, ${formatCurrency(rv / 2)} on a half.`)
+    }
+
+    if (form.overtimeMode === "multiplier_of_hourly" && ov > 0 && rate > 0 && hours > 0) {
+      lines.push(`Overtime at ${formatCurrency((rate / hours) * ov)} an hour — ${formatCurrency(rate)} over ${hours} hours, × ${ov}.`)
+    } else if (form.overtimeMode === "explicit_hourly" && ov > 0) {
+      lines.push(`Overtime at ${formatCurrency(ov)} an hour, whatever the daily rate.`)
+    } else if (form.overtimeMode === "multiplier_of_day" && ov > 1 && rate > 0) {
+      lines.push(`A day marked as overtime pays ${formatCurrency(rate * ov)} instead of ${formatCurrency(rate)}. Hours are not counted.`)
+    }
+
+    return lines
+  }, [form, dailyRate])
+
+  const save = async () => {
+    const retentionValue = form.retentionMode === "none" ? null : Number(form.retentionValue)
+    const overtimeValue = form.overtimeMode === "none" ? null : Number(form.overtimeValue)
+
+    if (form.retentionMode !== "none" && !(Number.isFinite(retentionValue) && (retentionValue as number) > 0)) {
+      toast.error("Enter a retention amount greater than zero, or choose No retention")
+      return
+    }
+    if (form.overtimeMode !== "none" && !(Number.isFinite(overtimeValue) && (overtimeValue as number) > 0)) {
+      toast.error("Enter an overtime amount greater than zero, or choose No overtime rule")
+      return
+    }
+    if (form.retentionMode === "percent_of_day" && (retentionValue as number) > 100) {
+      toast.error("A percentage of the day's pay cannot be more than 100")
+      return
+    }
+
+    setSaving(true)
+    try {
+      const res = await fetch("/api/worker-pay-rules", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          workerId,
+          effectiveFrom: form.effectiveFrom,
+          retentionMode: form.retentionMode === "none" ? null : form.retentionMode,
+          retentionValue,
+          overtimeMode: form.overtimeMode === "none" ? null : form.overtimeMode,
+          overtimeValue,
+          // Only meaningful for the hourly-derived mode; sending it otherwise stores a number
+          // nothing reads, which is how a field starts lying about what it controls.
+          fullDayHours: form.overtimeMode === "multiplier_of_hourly" ? Number(form.fullDayHours) || null : null,
+        }),
+      })
+      const data = await res.json()
+      if (!res.ok || !data.success) throw new Error(data.error || "Could not save the rule")
+      toast.success(workerId ? "Rule set for this worker" : "Estate rule set")
+      onSaved()
+    } catch (error: any) {
+      toast.error(error?.message || "Could not save the rule")
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <div className="space-y-4 rounded-lg border bg-muted/30 p-4">
+      <div className="grid gap-4 sm:grid-cols-2">
+        <div className="space-y-1">
+          <Label className="text-xs">Retention</Label>
+          <Select value={form.retentionMode} onValueChange={(v) => setForm((p) => ({ ...p, retentionMode: v as any }))}>
+            <SelectTrigger><SelectValue /></SelectTrigger>
+            <SelectContent>
+              {RETENTION_MODES.map((m) => <SelectItem key={m.value} value={m.value}>{m.label}</SelectItem>)}
+            </SelectContent>
+          </Select>
+        </div>
+
+        {form.retentionMode !== "none" && (
+          <div className="space-y-1">
+            <Label className="text-xs">{form.retentionMode === "percent_of_day" ? "Percentage" : "Rupees per day"}</Label>
+            <Input
+              inputMode="decimal"
+              placeholder={form.retentionMode === "percent_of_day" ? "20" : "100"}
+              value={form.retentionValue}
+              onChange={(e) => setForm((p) => ({ ...p, retentionValue: e.target.value }))}
+            />
+          </div>
+        )}
+
+        <div className="space-y-1">
+          <Label className="text-xs">Overtime</Label>
+          <Select value={form.overtimeMode} onValueChange={(v) => setForm((p) => ({ ...p, overtimeMode: v as any }))}>
+            <SelectTrigger><SelectValue /></SelectTrigger>
+            <SelectContent>
+              {OVERTIME_MODES.map((m) => <SelectItem key={m.value} value={m.value}>{m.label}</SelectItem>)}
+            </SelectContent>
+          </Select>
+        </div>
+
+        {form.overtimeMode !== "none" && (
+          <div className="space-y-1">
+            <Label className="text-xs">
+              {form.overtimeMode === "explicit_hourly" ? "Rupees per hour" : "Multiplier"}
+            </Label>
+            <Input
+              inputMode="decimal"
+              placeholder={form.overtimeMode === "explicit_hourly" ? "90" : "1.2"}
+              value={form.overtimeValue}
+              onChange={(e) => setForm((p) => ({ ...p, overtimeValue: e.target.value }))}
+            />
+          </div>
+        )}
+
+        {form.overtimeMode === "multiplier_of_hourly" && (
+          <div className="space-y-1">
+            <Label className="text-xs">Hours in a normal working day</Label>
+            <Input
+              inputMode="decimal"
+              value={form.fullDayHours}
+              onChange={(e) => setForm((p) => ({ ...p, fullDayHours: e.target.value }))}
+            />
+            <p className="text-[11px] text-muted-foreground">
+              This divides the daily rate to get an hourly one. ₹600 over 8 hours is ₹75; over 6 it is ₹100.
+            </p>
+          </div>
+        )}
+
+        <div className="space-y-1">
+          <Label className="text-xs">In force from</Label>
+          <Input
+            type="date"
+            value={form.effectiveFrom}
+            onChange={(e) => setForm((p) => ({ ...p, effectiveFrom: e.target.value }))}
+          />
+        </div>
+      </div>
+
+      {preview.length > 0 && (
+        <div className="rounded border-l-2 border-emerald-600 bg-emerald-50 px-3 py-2 text-xs text-emerald-900 dark:bg-emerald-950/40 dark:text-emerald-200">
+          {preview.map((line) => <div key={line}>{line}</div>)}
+        </div>
+      )}
+
+      {/*
+        Said plainly, because the alternative is somebody expecting an edit. Saving adds a rule from
+        the chosen date; every period before it keeps computing at whatever was in force then, which
+        is what makes a printed wage sheet still match the screen months later.
+      */}
+      <p className="text-[11px] leading-relaxed text-muted-foreground">
+        Saving adds a rule <strong>from that date onwards</strong>. Weeks already paid keep the rule that applied
+        then, so old wage sheets do not change. To stop retaining, set it to <strong>No retention</strong> from the
+        date it should stop — what has already been held stays held.
+      </p>
+
+      <div className="flex gap-2">
+        <Button size="sm" onClick={save} disabled={saving}>
+          {saving ? <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" /> : null}
+          {workerId ? "Save rule for this worker" : "Save estate rule"}
+        </Button>
+        <Button size="sm" variant="ghost" onClick={onCancel}>Cancel</Button>
+      </div>
+    </div>
+  )
+}

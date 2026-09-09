@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react"
 import { todayIso } from "@/lib/date-utils"
-import { Plus, Pencil, UserX, Check, X, Loader2, ChevronDown, ChevronUp } from "lucide-react"
+import { Plus, Pencil, UserX, Check, X, Loader2, ChevronDown, ChevronUp, IndianRupee } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
@@ -25,6 +25,8 @@ import { numericInputValue } from "@/lib/number-input"
 import type { LocationOption } from "@/components/inventory-system/types"
 import { formatLocationLabel } from "@/lib/location-label"
 import WorkerMoneyPanel from "@/components/workers/worker-money-panel"
+import PayRuleForm from "@/components/workers/pay-rule-form"
+import { resolveRuleForDate, type PayRule } from "@/lib/pay-rules"
 
 // Imported, not redeclared. See lib/worker-types.ts.
 
@@ -140,6 +142,9 @@ export default function WorkerProfilesTab() {
   // the device you would actually call a worker from. The mobile list shows the essentials
   // and puts the rest one tap away rather than dropping them or cramming eight columns in.
   const [expandedWorkerId, setExpandedWorkerId] = useState<string | null>(null)
+  const [editingEstateRule, setEditingEstateRule] = useState(false)
+  /** The default in force today, so the form opens showing what it is rather than blank. */
+  const [estateRule, setEstateRule] = useState<PayRule | null>(null)
   const [saving, setSaving] = useState(false)
   const [form, setForm] = useState(EMPTY_FORM)
   // Same data-driven gate as the attendance tab: estates without a terminal see no
@@ -212,10 +217,33 @@ export default function WorkerProfilesTab() {
     }
   }, [])
 
+  /**
+   * The estate-wide rule in force today. `worker_id IS NULL` rows only — a per-worker override is
+   * that worker's business and is loaded by their own panel.
+   *
+   * Fetched so the form opens showing what the rule already is. A blank form on an estate that has
+   * a rule invites somebody to retype it slightly differently and date it today, which quietly
+   * splits one rule into two periods.
+   */
+  const loadEstateRule = useCallback(async () => {
+    if (!isAdmin) return
+    try {
+      const res = await fetch("/api/worker-pay-rules")
+      const data = await res.json()
+      if (!data?.success) return
+      const defaults = (data.rules || []).filter((r: PayRule) => r.workerId == null)
+      setEstateRule(resolveRuleForDate(defaults, "__estate__", todayIso()))
+    } catch {
+      // A failed load and "no rule set" both open the form blank, which is the safe direction:
+      // it cannot show a stale rule as current.
+    }
+  }, [isAdmin])
+
   useEffect(() => {
     fetchWorkers()
     fetchLocations()
-  }, [fetchWorkers, fetchLocations])
+    loadEstateRule()
+  }, [fetchWorkers, fetchLocations, loadEstateRule])
 
   const handleAdd = async () => {
     if (!form.name.trim()) return
@@ -435,6 +463,15 @@ export default function WorkerProfilesTab() {
           </div>
           {canWrite && !isAdding && !bulkEditing && (
             <div className="flex shrink-0 gap-2">
+              {/* The estate-wide rule: one row that covers everybody, with per-worker overrides
+                  opened from a worker's own panel. Medappa set 20% once rather than 29 times.
+                  Admin only -- what every worker is held back is not the daily writer's decision. */}
+              {isAdmin && (
+                <Button size="sm" variant="outline" onClick={() => setEditingEstateRule((v) => !v)}>
+                  <IndianRupee className="mr-1.5 h-4 w-4" />
+                  Pay rules
+                </Button>
+              )}
               {workers.length > 1 && (
                 <Button size="sm" variant="outline" onClick={startBulkEdit}>
                   <Pencil className="mr-1.5 h-4 w-4" />
@@ -462,6 +499,21 @@ export default function WorkerProfilesTab() {
             </div>
           )}
         </CardHeader>
+
+        {editingEstateRule && isAdmin && (
+          <CardContent className="border-t border-border/50 pt-4">
+            <p className="mb-3 text-sm text-muted-foreground">
+              Applies to every worker who has no rule of their own. Open a worker to override them.
+            </p>
+            <PayRuleForm
+              workerId={null}
+              dailyRate={workers.find((w) => Number(w.dailyRate) > 0)?.dailyRate ?? null}
+              current={estateRule}
+              onSaved={() => { setEditingEstateRule(false); loadEstateRule() }}
+              onCancel={() => setEditingEstateRule(false)}
+            />
+          </CardContent>
+        )}
 
         {isAdding && (
           <CardContent className="border-t border-border/50 pt-4">
