@@ -28,6 +28,13 @@ type PayrollWorker = {
   deductions: number
   adjustments: number
   netPayable: number
+  /** All absent, and every line below hidden, for an estate that has set no rules. */
+  overtime?: number
+  retention?: number
+  advanceRecovered?: number
+  advanceShortfall?: number
+  heldAfter?: number
+  owedAfter?: number
   missingDailyRate: boolean
   monthlyWage: number | null
   /** Paid monthly, but no salary recorded — so this line is Rs 0 and shouldn't be. */
@@ -43,6 +50,10 @@ type Totals = {
   pickingKg: number
   deductions: number
   adjustments: number
+  overtime?: number
+  retention?: number
+  advanceRecovered?: number
+  advanceShortfall?: number
   netPayable: number
 }
 
@@ -60,6 +71,14 @@ export default function PayrollSummaryTab() {
   const [endDate, setEndDate] = useState(today())
   const [workers, setWorkers] = useState<PayrollWorker[]>([])
   const [totals, setTotals] = useState<Totals | null>(null)
+  /**
+   * Whether this estate uses retention, overtime or advances at all. The API decides it (see
+   * periodUsesRules) rather than the UI inferring it from zeroes -- a real Rs 0 retention week and
+   * an estate that has never set a rule look identical in the numbers and are not the same thing.
+   *
+   * False for three of the four live tenants, who therefore see exactly the table they always have.
+   */
+  const [showRuleColumns, setShowRuleColumns] = useState(false)
   const [loading, setLoading] = useState(false)
   const [hasGenerated, setHasGenerated] = useState(false)
 
@@ -72,6 +91,7 @@ export default function PayrollSummaryTab() {
       if (!res.ok || !data.success) throw new Error(data.error || "Failed to generate payroll")
       setWorkers(data.workers || [])
       setTotals(data.totals || null)
+      setShowRuleColumns(Boolean(data.usesRules))
       setHasGenerated(true)
     } catch (err: any) {
       toast.error(err?.message || "Failed to generate payroll summary")
@@ -266,8 +286,31 @@ export default function PayrollSummaryTab() {
                         <span className="text-right text-sky-400">+{formatCurrency(w.adjustments)}</span>
                       </>}
                       {w.deductions > 0 && <>
-                        <span className="text-muted-foreground">Advances & deductions</span>
+                        <span className="text-muted-foreground">Deductions</span>
                         <span className="text-right text-rose-400">-{formatCurrency(w.deductions)}</span>
+                      </>}
+                      {/* Each of these appears only when the estate's own rules produced it, so a
+                          tenant that has set nothing sees exactly the card it saw before. */}
+                      {Number(w.overtime) > 0 && <>
+                        <span className="text-muted-foreground">Overtime</span>
+                        <span className="text-right text-emerald-400">+{formatCurrency(Number(w.overtime))}</span>
+                      </>}
+                      {Number(w.retention) > 0 && <>
+                        <span className="text-muted-foreground">Retention held</span>
+                        <span className="text-right text-rose-400">-{formatCurrency(Number(w.retention))}</span>
+                      </>}
+                      {Number(w.advanceRecovered) > 0 && <>
+                        <span className="text-muted-foreground">Advance recovered</span>
+                        <span className="text-right text-rose-400">-{formatCurrency(Number(w.advanceRecovered))}</span>
+                      </>}
+                      {Number(w.advanceShortfall) > 0 && <>
+                        {/* Stated, never carried into next week. The estate decides what to do. */}
+                        <span className="text-amber-600 dark:text-amber-500">Could not recover</span>
+                        <span className="text-right text-amber-600 dark:text-amber-500">{formatCurrency(Number(w.advanceShortfall))}</span>
+                      </>}
+                      {Number(w.owedAfter) > 0 && <>
+                        <span className="text-muted-foreground">Still owes after this</span>
+                        <span className="text-right text-muted-foreground">{formatCurrency(Number(w.owedAfter))}</span>
                       </>}
                     </div>
                   </div>
@@ -334,6 +377,30 @@ export default function PayrollSummaryTab() {
                             <TooltipContent>Advances paid + deductions (food, accommodation, loans) from Advances & Deductions ledger</TooltipContent>
                           </Tooltip>
                         </TableHead>
+                        {/* Parity with the mobile card above: same data, different layout. Each
+                            appears only when the estate's own rules produced it. */}
+                        {showRuleColumns && (
+                          <>
+                            <TableHead className="text-right">
+                              <Tooltip>
+                                <TooltipTrigger className="cursor-default underline decoration-dotted underline-offset-2">Overtime</TooltipTrigger>
+                                <TooltipContent>Hours recorded on the muster, priced by this estate&apos;s overtime rule</TooltipContent>
+                              </Tooltip>
+                            </TableHead>
+                            <TableHead className="text-right">
+                              <Tooltip>
+                                <TooltipTrigger className="cursor-default underline decoration-dotted underline-offset-2">Retention</TooltipTrigger>
+                                <TooltipContent>Held back this period under the estate&apos;s retention rule. Paid out when the worker leaves.</TooltipContent>
+                              </Tooltip>
+                            </TableHead>
+                            <TableHead className="text-right">
+                              <Tooltip>
+                                <TooltipTrigger className="cursor-default underline decoration-dotted underline-offset-2">Advance</TooltipTrigger>
+                                <TooltipContent>Recovered this period from outstanding advances. Amber means it could not all be taken.</TooltipContent>
+                              </Tooltip>
+                            </TableHead>
+                          </>
+                        )}
                         <TableHead className="text-right font-semibold">Net Payable</TableHead>
                       </TableRow>
                     </TableHeader>
@@ -393,6 +460,15 @@ export default function PayrollSummaryTab() {
                           <TableCell className="text-right text-sm">{formatCurrency(totals.pickingEarnings)}</TableCell>
                           <TableCell className="text-right text-sm text-sky-400">+{formatCurrency(totals.adjustments)}</TableCell>
                           <TableCell className="text-right text-sm text-rose-400">-{formatCurrency(totals.deductions)}</TableCell>
+                          {/* Must match the header and body cell counts exactly, or every figure in
+                              the footer shifts one column left and lands under the wrong heading. */}
+                          {showRuleColumns && (
+                            <>
+                              <TableCell className="text-right text-sm text-emerald-400">+{formatCurrency(Number(totals.overtime) || 0)}</TableCell>
+                              <TableCell className="text-right text-sm text-rose-400">-{formatCurrency(Number(totals.retention) || 0)}</TableCell>
+                              <TableCell className="text-right text-sm text-rose-400">-{formatCurrency(Number(totals.advanceRecovered) || 0)}</TableCell>
+                            </>
+                          )}
                           <TableCell className="text-right text-sm text-emerald-400">{formatCurrency(totals.netPayable)}</TableCell>
                         </TableRow>
                       </TableFooter>
