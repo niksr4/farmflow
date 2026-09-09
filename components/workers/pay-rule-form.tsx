@@ -35,8 +35,11 @@ type Props = {
   dailyRate?: number | null
   current?: PayRule | null
   /**
-   * The row id behind `current`, when there is one. Present = this rule can be corrected in place
-   * or removed; absent = the form only adds.
+   * The row id to correct or remove — and it MUST belong to this form's own subject.
+   *
+   * Present = that rule can be corrected in place or removed; absent = the form only adds. For a
+   * per-worker form, pass the worker's OWN rule row, never the estate rule they are inheriting;
+   * `editableRow` below refuses the mismatch rather than trusting the caller.
    *
    * Correcting matters because saving normally ADDS a dated rule: somebody who typed 2 instead of
    * 20 a minute ago wants that row fixed, not a second period stacked on the first. PUT and DELETE
@@ -70,6 +73,16 @@ export default function PayRuleForm({ workerId, dailyRate, current, currentRuleI
    * week, whereas correcting one does by design. Somebody who means to correct has to say so.
    */
   const [mode, setMode] = useState<"add" | "correct">("add")
+  /**
+   * Correcting and removing are offered only when the row in hand is the SAME SUBJECT as this form.
+   *
+   * The caller decides which id to pass, and one of them passed the wrong one: a worker's panel
+   * handed over the ESTATE rule's id whenever that worker had no override, so Remove deleted the
+   * rule for all of them and Correct rewrote what all of them were held back. Checking it here as
+   * well means the invariant holds whatever the next caller does, rather than resting on the fix
+   * one caller received.
+   */
+  const editableRow = Boolean(currentRuleId) && (current == null || (current.workerId ?? null) === (workerId ?? null))
   const [form, setForm] = useState({
     effectiveFrom: todayIso(),
     retentionMode: current?.retentionMode ?? "none",
@@ -123,7 +136,7 @@ export default function PayRuleForm({ workerId, dailyRate, current, currentRuleI
 
     setSaving(true)
     try {
-      const correcting = mode === "correct" && currentRuleId
+      const correcting = mode === "correct" && editableRow && currentRuleId
       const res = await fetch(correcting ? `/api/worker-pay-rules/${currentRuleId}` : "/api/worker-pay-rules", {
         method: correcting ? "PUT" : "POST",
         headers: { "Content-Type": "application/json" },
@@ -141,7 +154,7 @@ export default function PayRuleForm({ workerId, dailyRate, current, currentRuleI
       })
       const data = await res.json()
       if (!res.ok || !data.success) throw new Error(data.error || "Could not save the rule")
-      toast.success(mode === "correct" ? "Rule corrected" : workerId ? "Rule set for this worker" : "Estate rule set")
+      toast.success(correcting ? "Rule corrected" : workerId ? "Rule set for this worker" : "Estate rule set")
       onSaved()
     } catch (error: any) {
       toast.error(error?.message || "Could not save the rule")
@@ -151,7 +164,7 @@ export default function PayRuleForm({ workerId, dailyRate, current, currentRuleI
   }
 
   const remove = async () => {
-    if (!currentRuleId) return
+    if (!currentRuleId || !editableRow) return
     // Names what disappears and what happens next, because "delete rule?" does not say that the
     // previous rule takes over, nor that money already held stays held.
     if (
@@ -268,11 +281,11 @@ export default function PayRuleForm({ workerId, dailyRate, current, currentRuleI
       <div className="flex flex-wrap items-center gap-2">
         <Button size="sm" onClick={save} disabled={saving}>
           {saving ? <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" /> : null}
-          {mode === "correct" ? "Correct this rule" : workerId ? "Save rule for this worker" : "Save estate rule"}
+          {mode === "correct" && editableRow ? "Correct this rule" : workerId ? "Save rule for this worker" : "Save estate rule"}
         </Button>
         <Button size="sm" variant="ghost" onClick={onCancel}>Cancel</Button>
 
-        {currentRuleId && (
+        {editableRow && (
           <>
             <button
               type="button"
@@ -293,7 +306,7 @@ export default function PayRuleForm({ workerId, dailyRate, current, currentRuleI
         )}
       </div>
 
-      {mode === "correct" && (
+      {mode === "correct" && editableRow && (
         <p className="rounded border-l-2 border-amber-500 bg-amber-50 px-3 py-2 text-[11px] leading-relaxed text-amber-900 dark:bg-amber-950/40 dark:text-amber-200">
           Correcting changes the rule <strong>for every week it already covers</strong>, so wage sheets already
           printed for those weeks will no longer match. Use it to fix a mistake, not to change policy — for a

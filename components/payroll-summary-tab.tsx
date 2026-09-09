@@ -261,7 +261,7 @@ export default function PayrollSummaryTab() {
                     Generate
                   </Button>
                 </TooltipTrigger>
-                <TooltipContent>Computes days present × daily rate, total picking earnings, plus adjustments minus advances and deductions for each worker</TooltipContent>
+                <TooltipContent>Computes what each worker earned over this range — allocated work or salary, plus picking, plus any bonus — then applies this estate&apos;s own rules: overtime, retention, advance instalments and deductions</TooltipContent>
               </Tooltip>
             </TooltipProvider>
             {hasGenerated && workers.length > 0 && (
@@ -415,8 +415,27 @@ export default function PayrollSummaryTab() {
                         <span className="text-right text-sky-400">+{formatCurrency(totals.adjustments)}</span>
                       </>}
                       {totals.deductions > 0 && <>
-                        <span className="text-muted-foreground">Advances & deductions</span>
+                        <span className="text-muted-foreground">Deductions</span>
                         <span className="text-right text-rose-400">-{formatCurrency(totals.deductions)}</span>
+                      </>}
+                      {/* The worker cards above itemise all three; without them here the total was
+                          a net nobody could arrive at from the lines beneath it — the same failure
+                          the export had, on the layout a phone actually shows. */}
+                      {Number(totals.overtime) > 0 && <>
+                        <span className="text-muted-foreground">Overtime</span>
+                        <span className="text-right text-emerald-400">+{formatCurrency(Number(totals.overtime))}</span>
+                      </>}
+                      {Number(totals.retention) > 0 && <>
+                        <span className="text-muted-foreground">Retention held</span>
+                        <span className="text-right text-rose-400">-{formatCurrency(Number(totals.retention))}</span>
+                      </>}
+                      {Number(totals.advanceRecovered) > 0 && <>
+                        <span className="text-muted-foreground">Advance recovered</span>
+                        <span className="text-right text-rose-400">-{formatCurrency(Number(totals.advanceRecovered))}</span>
+                      </>}
+                      {Number(totals.advanceShortfall) > 0 && <>
+                        <span className="text-amber-600 dark:text-amber-500">Could not recover</span>
+                        <span className="text-right text-amber-600 dark:text-amber-500">{formatCurrency(Number(totals.advanceShortfall))}</span>
                       </>}
                     </div>
                   </div>
@@ -435,7 +454,12 @@ export default function PayrollSummaryTab() {
                         <TableHead className="text-right">
                           <Tooltip>
                             <TooltipTrigger className="cursor-default underline decoration-dotted underline-offset-2">Attendance</TooltipTrigger>
-                            <TooltipContent>Days present × daily rate</TooltipContent>
+                            {/* Three sources, not one. The muster's own total wins where there is
+                                one, a salary replaces it for monthly staff, and days × rate is only
+                                the fallback for an estate that ticks attendance and allocates
+                                nothing. Saying "days present × daily rate" made a gang of eleven
+                                look like an arithmetic error rather than a lump sum. */}
+                            <TooltipContent>What the muster says the work cost. A monthly salary replaces it for staff; days present × daily rate is the fallback where no work was allocated.</TooltipContent>
                           </Tooltip>
                         </TableHead>
                         <TableHead className="text-right">Picking kg</TableHead>
@@ -448,13 +472,18 @@ export default function PayrollSummaryTab() {
                         <TableHead className="text-right">
                           <Tooltip>
                             <TooltipTrigger className="cursor-default underline decoration-dotted underline-offset-2">Bonus</TooltipTrigger>
-                            <TooltipContent>Adjustments (bonuses or corrections) from Advances & Deductions ledger</TooltipContent>
+                            <TooltipContent>Adjustments (bonuses or corrections) recorded against a worker in the Workers tab</TooltipContent>
                           </Tooltip>
                         </TableHead>
                         <TableHead className="text-right">
                           <Tooltip>
                             <TooltipTrigger className="cursor-default underline decoration-dotted underline-offset-2">Deductions</TooltipTrigger>
-                            <TooltipContent>Advances paid + deductions (food, accommodation, loans) from Advances & Deductions ledger</TooltipContent>
+                            {/* NOT advances. An advance is recovered on a schedule and has its own
+                                column; it stopped being counted here when scripts/149 made recovery
+                                an instalment plan, and this tooltip went on saying otherwise —
+                                describing money as deducted twice, in a hint about what a figure
+                                means. */}
+                            <TooltipContent>One-off amounts withheld — a fine, damage, food or accommodation. Advances are not here; they have their own column.</TooltipContent>
                           </Tooltip>
                         </TableHead>
                         {/* Parity with the mobile card above: same data, different layout. Each
@@ -526,6 +555,50 @@ export default function PayrollSummaryTab() {
                           <TableCell className="text-right text-sm">{w.pickingEarnings > 0 ? formatCurrency(w.pickingEarnings) : "—"}</TableCell>
                           <TableCell className="text-right text-sm text-sky-400">{w.adjustments > 0 ? `+${formatCurrency(w.adjustments)}` : "—"}</TableCell>
                           <TableCell className="text-right text-sm text-rose-400">{w.deductions > 0 ? `-${formatCurrency(w.deductions)}` : "—"}</TableCell>
+                          {/*
+                            THE THREE RULE COLUMNS, WHICH THE BODY DID NOT HAVE.
+
+                            The header grew them and the footer grew them; every worker row stayed at
+                            nine cells against a twelve-cell header. HTML does not complain — it just
+                            packs the cells left, so each worker's NET PAYABLE rendered underneath the
+                            heading "Overtime", and the three columns to its right were blank. The
+                            one figure an estate reads off this screen, printed under the wrong word,
+                            on the only layout an admin actually uses to run payroll.
+
+                            The footer already carried a comment warning that the counts must match.
+                            It was written on the footer, and the body was left out of it.
+                          */}
+                          {showRuleColumns && (
+                            <>
+                              <TableCell className="text-right text-sm text-emerald-400">
+                                {Number(w.overtime) > 0 ? `+${formatCurrency(Number(w.overtime))}` : "—"}
+                              </TableCell>
+                              <TableCell className="text-right text-sm text-rose-400">
+                                {Number(w.retention) > 0 ? `-${formatCurrency(Number(w.retention))}` : "—"}
+                              </TableCell>
+                              <TableCell className="text-right text-sm">
+                                {Number(w.advanceRecovered) > 0 || Number(w.advanceShortfall) > 0 ? (
+                                  <span className={Number(w.advanceShortfall) > 0 ? "text-amber-600 dark:text-amber-500" : "text-rose-400"}>
+                                    -{formatCurrency(Number(w.advanceRecovered) || 0)}
+                                    {Number(w.advanceShortfall) > 0 ? (
+                                      // The header tooltip promises amber means "could not all be
+                                      // taken", so the figure it could not take has to be here.
+                                      <Tooltip>
+                                        <TooltipTrigger className="ml-1 cursor-default underline decoration-dotted underline-offset-2">
+                                          ({formatCurrency(Number(w.advanceShortfall))} short)
+                                        </TooltipTrigger>
+                                        <TooltipContent>
+                                          This week&apos;s wage could not cover the instalment. Not carried forward — the estate decides.
+                                        </TooltipContent>
+                                      </Tooltip>
+                                    ) : null}
+                                  </span>
+                                ) : (
+                                  "—"
+                                )}
+                              </TableCell>
+                            </>
+                          )}
                           <TableCell className="text-right font-semibold text-sm text-emerald-400">{formatCurrency(w.netPayable)}</TableCell>
                         </TableRow>
                       ))}

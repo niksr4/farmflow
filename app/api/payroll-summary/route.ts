@@ -1,11 +1,8 @@
 import { NextResponse } from "next/server"
 
 import { isPaidDaily, MONTHLY_PAID_WORKER_TYPES } from "@/lib/worker-types"
-import { cookies } from "next/headers"
 import { accountsSql } from "@/lib/server/db"
 import { requireModuleAccess, isModuleAccessError } from "@/lib/server/module-access"
-import { resolveActiveEstate } from "@/lib/server/estate-filter"
-import { SELECTED_ESTATE_COOKIE } from "@/lib/server/estate-cookie"
 import { normalizeTenantContext, runTenantQuery } from "@/lib/server/tenant-db"
 import { logServerError } from "@/lib/server/safe-logging"
 import { computeWorkerPay, periodUsesRules } from "@/lib/payroll-period"
@@ -35,12 +32,6 @@ export async function GET(request: Request) {
       return NextResponse.json({ success: false, error: "startDate must be on or before endDate" }, { status: 400 })
     }
 
-    // Workers, not their individual transaction rows, are the join key here -- filter on the
-    // worker's own estate assignment (scripts/112-attendance-workers-location.sql). A worker
-    // with no estate assigned yet must still show regardless of which estate is active, same
-    // convention as everywhere else the estate filter is wired in.
-    const cookieEstate = (await cookies()).get(SELECTED_ESTATE_COOKIE)?.value || null
-    const activeEstate = resolveActiveEstate(searchParams, cookieEstate)
     // Payroll is not estate-scoped, on purpose.
     //
     // It keyed off attendance_workers.location_id, which scripts/115 superseded when a worker
@@ -221,14 +212,28 @@ export async function GET(request: Request) {
           FROM worker_pay_rules WHERE tenant_id = ${tenantContext.tenantId}
         `,
       ),
-      // One row per worker per DAY. Retention is applied day by day, not to the period total, so a
-      // half day holds half and a rule that changes mid-period changes mid-period.
+      /**
+       * One row per worker per DAY. Retention is applied day by day, not to the period total, so a
+       * half day holds half and a rule that changes mid-period changes mid-period.
+       *
+       * THE RATE IS WHAT THE DAY ACTUALLY EARNED, DIVIDED BY THE DAY WORKED — not MAX(rate), which
+       * is what this took before. Since retentionForDay multiplies rate x day_fraction straight back
+       * up, this makes retention exactly "20% of what the muster says they earned that day", which
+       * is both the sentence Manoj said and the only definition that cannot drift from the labour
+       * figures on every other screen.
+       *
+       * MAX(rate) was right only while nothing varied within a day. total_cost already carries
+       * pay_multiplier (holiday pay), lump_sum (contract work) and headcount, and the muster lets a
+       * worker take two jobs at two rates — so the moment any of those is used, retention would have
+       * been computed against a rate the worker was not paid. Latent today: prod has 1,303
+       * allocations, no lump sums, no multipliers, and no mixed-rate days. Latent is not fixed.
+       */
       runTenantQuery(
         accountsSql, tenantContext,
         accountsSql`
           SELECT worker_id, work_date::text AS work_date,
                  SUM(day_fraction)::numeric AS day_fraction,
-                 MAX(rate)::numeric         AS rate
+                 (SUM(total_cost) / NULLIF(SUM(day_fraction), 0))::numeric AS rate
           FROM labour_assignments
           WHERE tenant_id = ${tenantContext.tenantId}
             AND work_date BETWEEN ${startDate}::date AND ${endDate}::date
@@ -291,11 +296,18 @@ export async function GET(request: Request) {
         recoverFrom: r.recover_from ? String(r.recover_from) : null,
       })),
       /**
-       * The run's own first day. Recovery is anchored to each advance's start date, so nothing here
-       * has to invent "which period this is" -- and an advance cannot be recovered from a week that
-       * ended before it was given, which is what an invented ordinal allowed.
+       * The range's own first and last day. Recovery is anchored to each advance's start date, so
+       * nothing here has to invent "which period this is" -- and an advance cannot be recovered from
+       * a week that ended before it was given, which is what an invented ordinal allowed.
+       *
+       * BOTH ENDS MATTER. Only periodStart was passed, with the run length left at its default of 7,
+       * so a month-long range -- which is what the screen opens on -- recovered a single weekly
+       * instalment for four weeks of work and then reported the worker still owing the three it had
+       * skipped. Given the end date, the range recovers every instalment inside it and a month
+       * agrees with the four weekly runs it contains.
        */
       periodStart: startDate,
+      periodEnd: endDate,
     }
 
     // False for every tenant that has set nothing, which keeps their payload exactly as it was.
@@ -341,6 +353,9 @@ export async function GET(request: Request) {
         // netPayable is untouched -- which is what keeps three of four estates unchanged.
         const pay = computeWorkerPay(periodInput, w.id, w.attendanceEarnings + w.pickingEarnings, {
           isGang: gangIds.has(w.id),
+          // For pricing overtime on a day the muster has nothing to say about — three of the four
+          // live estates mark attendance without allocating work.
+          fallbackDayRate: w.dailyRate,
         })
         const net =
           w.attendanceEarnings + w.pickingEarnings + w.adjustments - w.deductions

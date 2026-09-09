@@ -1,8 +1,9 @@
 import {
   applyDeductions,
-  instalmentDueInPeriod,
+  instalmentsDueInRange,
   outstandingAdvance,
   overtimePay,
+  recoveredBeforeDate,
   resolveRuleForDate,
   retentionForDay,
   retentionHeld,
@@ -62,7 +63,21 @@ export type PeriodInput = {
    * — hence periodDays. The unit is a payroll run, never a calendar month.
    */
   periodStart: string
-  /** Length of a run in days. 7 for a weekly payroll; set it for anything else. */
+  /**
+   * The last day of the range being computed.
+   *
+   * A RANGE IS NOT ALWAYS ONE RUN, and pretending otherwise cost real money. The screen opens on
+   * month-to-date and its date boxes accept anything, while the run length below was left at its
+   * default of 7 by every caller -- so August took a single weekly instalment for a month's work,
+   * and then reported the worker still owing the three instalments it had skipped. The comment on
+   * the screen even said an arbitrary range would do this; nothing acted on it.
+   *
+   * Given, the range recovers every instalment falling inside it, so a month agrees with the four
+   * weekly runs it contains. Omitted, it is derived as one run from periodStart, which is what every
+   * existing caller and test means.
+   */
+  periodEnd?: string
+  /** Length of a payroll RUN in days — 7 for a weekly payroll. Not the length of the range. */
   periodDays?: number
 }
 
@@ -82,11 +97,11 @@ export type WorkerPay = {
 
 const round = (n: number) => Math.round(n * 100) / 100
 
-/** The run before this one, so "recovered so far" can exclude the run being computed. */
-const previousPeriodStart = (periodStart: string, periodDays: number): string => {
+/** One run from the start, for callers that give a start date and mean a single payroll run. */
+const impliedPeriodEnd = (periodStart: string, periodDays: number): string => {
   const t = Date.parse(`${periodStart}T00:00:00Z`)
   if (!Number.isFinite(t)) return periodStart
-  return new Date(t - periodDays * 86400000).toISOString().slice(0, 10)
+  return new Date(t + (periodDays - 1) * 86400000).toISOString().slice(0, 10)
 }
 
 /**
@@ -111,12 +126,17 @@ export function computeWorkerPay(
    * roster. Latent is not fixed.
    *
    * Overtime is excluded for the same reason: a crew has no hourly rate to multiply.
+   *
+   * `fallbackDayRate` is the worker's roster rate, used to price overtime on a day the muster has
+   * nothing to say about — see the overtime loop below for why the alternative was worse.
    */
-  options?: { isGang?: boolean },
+  options?: { isGang?: boolean; fallbackDayRate?: number | null },
 ): WorkerPay {
   const days = input.workedDays.filter((d) => d.workerId === workerId)
   const ot = input.overtimeDays.filter((d) => d.workerId === workerId)
   const entries = input.ledger.filter((e) => e.workerId === workerId)
+  const runDays = input.periodDays ?? 7
+  const periodEnd = input.periodEnd ?? impliedPeriodEnd(input.periodStart, runDays)
 
   let retention = 0
   let hasRule = false
@@ -133,20 +153,37 @@ export function computeWorkerPay(
   for (const day of rulesApply ? ot : []) {
     const rule = resolveRuleForDate(input.rules, workerId, day.workDate)
     if (rule?.overtimeMode) hasRule = true
+    /**
+     * The rate on THAT day, or the worker's roster rate — never another day's.
+     *
+     * This fell back to `days[0].rate`, which is whichever worked day the query happened to return
+     * first. An estate that marks attendance without allocating work (three of the four live ones)
+     * has no muster row for the day, so every overtime payment would have been priced off an
+     * unrelated day at an unrelated rate, and off nothing at all — Rs 0 — for a worker with no
+     * allocations in the period. Both are confident wrong answers on a wage sheet.
+     */
     const rateThatDay =
       days.find((d) => d.workDate === day.workDate)?.rate ??
-      days[0]?.rate ??
-      0
+      (options?.fallbackDayRate != null ? Number(options.fallbackDayRate) : 0)
     overtime += overtimePay(rule, { dayRate: rateThatDay, hours: day.hours })
   }
 
+  // Every instalment inside the range, so a month agrees with the four weekly runs it contains.
   const advanceDue = entries.reduce(
-    (sum, e) => sum + instalmentDueInPeriod(e, input.periodStart, input.periodDays ?? 7),
+    (sum, e) => sum + instalmentsDueInRange(e, input.periodStart, periodEnd, runDays),
     0,
   )
 
-  // Overtime is earnings, so it is deducted FROM -- an estate that pays overtime and then holds
-  // nothing against it would be retaining a smaller share than the rule says.
+  /**
+   * Overtime is earnings, so it is deducted FROM -- an estate that pays overtime and then holds
+   * nothing against it would be retaining a smaller share than the rule says.
+   *
+   * ⚠ CAPPING IS PER RANGE, NOT PER RUN. Over one week that is the same thing. Over a month it is
+   * not: four weekly runs each cap recovery at their own thin week, whereas the month caps once
+   * against the whole month's earnings, so a month view can report less shortfall than the four
+   * weeks inside it did. The money recovered is identical either way; only the "could not recover"
+   * line differs. Pay from the week, reconcile with the month.
+   */
   const applied = applyDeductions({ gross: gross + overtime, retention, advanceDue })
 
   return {
@@ -173,8 +210,11 @@ export function computeWorkerPay(
      * What is still owed after this run: everything advanced, less cash repaid, less what has
      * ACTUALLY been recovered.
      *
-     * Scheduled recovery up to the PREVIOUS run, plus what this run genuinely took -- which is not
-     * always the instalment, because a thin week caps recovery at the wage.
+     * Scheduled recovery BEFORE this range began, plus what this range genuinely took -- which is
+     * not always the instalment, because a thin week caps recovery at the wage.
+     *
+     * Measured from the range's own start date rather than "the previous run", which only had a
+     * meaning while every range happened to be exactly one run long.
      *
      * ⚠ THE HONEST LIMIT OF A DERIVED BALANCE. If an EARLIER run was also short, this still assumes
      * it recovered its full instalment, so the figure is optimistic by that shortfall. It cannot be
@@ -186,7 +226,8 @@ export function computeWorkerPay(
     owedAfter: round(
       Math.max(
         0,
-        outstandingAdvance(entries, previousPeriodStart(input.periodStart, input.periodDays ?? 7), input.periodDays ?? 7) -
+        outstandingAdvance(entries) -
+          entries.reduce((sum, e) => sum + recoveredBeforeDate(e, input.periodStart, runDays), 0) -
           applied.advanceRecovered,
       ),
     ),

@@ -18,6 +18,7 @@ import { canWriteModule, isAdminRole, type UserRole } from "@/lib/permissions"
 import { useAuth } from "@/hooks/use-auth"
 import FilterBar from "@/components/filter-bar"
 import { useListControls } from "@/hooks/use-list-controls"
+import { useMediaQuery } from "@/hooks/use-media-query"
 import { cn } from "@/lib/utils"
 import { WORKER_TYPES, workerTypeLabel, isPaidDaily, type WorkerType } from "@/lib/worker-types"
 import { UNSET_FACET_VALUE } from "@/lib/list-controls"
@@ -145,6 +146,19 @@ export default function WorkerProfilesTab() {
   const [editingEstateRule, setEditingEstateRule] = useState(false)
   /** The default in force today, so the form opens showing what it is rather than blank. */
   const [estateRule, setEstateRule] = useState<(PayRule & { id?: string }) | null>(null)
+  /**
+   * Which of the two rosters is actually on screen.
+   *
+   * `sm:hidden` and `hidden sm:block` only decide what is PAINTED -- both trees mount, so an
+   * expanded worker mounted the money panel twice and fired four requests for two endpoints, on
+   * the phone connection this product is mostly used over. The panel is not idempotent to look at
+   * either: two copies hold two independent edit states over one worker's ledger.
+   *
+   * Matches the Tailwind `sm` breakpoint exactly. It renders false on the server and on the first
+   * client paint, which is harmless here because the panel only ever mounts after somebody has
+   * tapped a row.
+   */
+  const isWideRoster = useMediaQuery("(min-width: 640px)")
   const [saving, setSaving] = useState(false)
   const [form, setForm] = useState(EMPTY_FORM)
   // Same data-driven gate as the attendance tab: estates without a terminal see no
@@ -955,7 +969,7 @@ export default function WorkerProfilesTab() {
                               only when the card is genuinely open, so opening the roster does not
                               fire a ledger fetch per worker. A crew is paid as a job, not a person,
                               so it has no personal balance to show. */}
-                          {isExpanded && w.kind !== "gang" && (
+                          {isExpanded && !isWideRoster && w.kind !== "gang" && (
                             <div className="-mx-1 mt-2 border-t border-stone-200 pt-1 dark:border-white/[0.06]">
                               <WorkerMoneyPanel
                                 workerId={w.id}
@@ -1342,7 +1356,7 @@ export default function WorkerProfilesTab() {
                        * and only mounted when open so the roster does not fire one ledger fetch per
                        * worker on load.
                        */
-                      expandedWorkerId === w.id && w.kind !== "gang" ? (
+                      expandedWorkerId === w.id && isWideRoster && w.kind !== "gang" ? (
                         <TableRow key={`${w.id}-money`} className="bg-stone-50/60 hover:bg-stone-50/60 dark:bg-white/[0.02]">
                           <TableCell colSpan={20} className="p-0">
                             <WorkerMoneyPanel

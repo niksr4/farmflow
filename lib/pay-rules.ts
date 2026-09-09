@@ -199,6 +199,63 @@ export function instalmentDueInPeriod(entry: LedgerEntry, periodStart: string, p
 }
 
 /**
+ * Every instalment falling inside a date range, not just the one belonging to a single run.
+ *
+ * ⚠ WHY THIS EXISTS. instalmentDueInPeriod answers "what does THIS RUN take", which is right for the
+ * week an estate actually pays. But the payroll screen opens on month-to-date and its date boxes
+ * accept anything, and the run length was hard-coded to 7 everywhere -- so asking for August took
+ * ONE weekly instalment for a whole month's work. Four weekly runs recover Rs 8,000; the same month
+ * viewed in one go recovered Rs 2,000 and reported the worker still owing the difference. Both
+ * figures came from the same code, and nothing on the screen said which unit was in play.
+ *
+ * An instalment is due on `from + k x runDays`, and is counted when that date falls inside the
+ * range. On a single aligned run this is exactly instalmentDueInPeriod -- asserted directly in
+ * tests/pay-rules.test.ts across a sweep of offsets, because a generalisation that quietly disagrees
+ * with the thing it generalises is worse than the bug it replaces.
+ */
+export function instalmentsDueInRange(
+  entry: LedgerEntry,
+  startDate: string,
+  endDate: string,
+  runDays = 7,
+): number {
+  if (entry.entryType !== "advance") return 0
+  const periods = Math.max(1, Math.floor(num(entry.recoverOverPeriods) || 1))
+  const from = Date.parse(`${entry.recoverFrom || entry.entryDate}T00:00:00Z`)
+  const start = Date.parse(`${startDate}T00:00:00Z`)
+  const end = Date.parse(`${endDate}T00:00:00Z`)
+  if (!Number.isFinite(from) || !Number.isFinite(start) || !Number.isFinite(end) || runDays <= 0) return 0
+  if (end < start) return 0
+
+  const step = runDays * 86400000
+  // The first instalment not before the range, and the last not after it. Clamped to the schedule
+  // so an advance stops on its own rather than on somebody closing it.
+  const firstK = Math.max(0, Math.ceil((start - from) / step))
+  const lastK = Math.min(periods - 1, Math.floor((end - from) / step))
+  if (lastK < firstK) return 0
+  return money(instalmentAmount(entry) * (lastK - firstK + 1))
+}
+
+/**
+ * What an advance had already given up before a date — every instalment due strictly before it.
+ *
+ * Replaces measuring "as of the previous run", which only had a meaning while every range was
+ * exactly one run long.
+ */
+export function recoveredBeforeDate(entry: LedgerEntry, date: string, runDays = 7): number {
+  if (entry.entryType !== "advance") return 0
+  const periods = Math.max(1, Math.floor(num(entry.recoverOverPeriods) || 1))
+  const from = Date.parse(`${entry.recoverFrom || entry.entryDate}T00:00:00Z`)
+  const at = Date.parse(`${date}T00:00:00Z`)
+  if (!Number.isFinite(from) || !Number.isFinite(at) || runDays <= 0) return 0
+
+  const step = runDays * 86400000
+  // Instalment k is due on from + k*step, so the ones strictly before `at` are k < (at - from)/step.
+  const count = Math.min(periods, Math.max(0, Math.ceil((at - from) / step)))
+  return money(instalmentAmount(entry) * count)
+}
+
+/**
  * How much of an advance has been recovered by the end of a given period. Derived, never stored.
  */
 export function recoveredByPeriod(entry: LedgerEntry, periodStart: string, periodDays = 7): number {

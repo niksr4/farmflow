@@ -104,7 +104,31 @@ export async function GET(request: Request) {
     return NextResponse.json({
       success: true,
       rules,
-      ...(workerId ? { effectiveRule: resolveRuleForDate(rules, workerId, asOfDate) } : {}),
+      ...(workerId
+        ? {
+            /** What actually applies to this worker — their own override, or the estate default. */
+            effectiveRule: resolveRuleForDate(rules, workerId, asOfDate),
+            /**
+             * THIS WORKER'S OWN ROW, null when they are simply inheriting the estate default.
+             *
+             * The distinction is the whole point. effectiveRule carries the ESTATE rule's row id
+             * when a worker has no override of their own, and the Workers panel handed that id
+             * straight to the correct-and-remove controls — so "Remove" on one worker's card
+             * deleted the rule for every worker on the estate, and "Correct" rewrote what all of
+             * them were held back, retroactively, for every week the rule already covered. The
+             * screen said "this worker" throughout.
+             *
+             * Resolved here rather than by the client filtering `rules` itself, for the same reason
+             * effectiveRule is: re-deriving which row is in force is what goes wrong the moment two
+             * rules share an effective_from.
+             */
+            workerRule: resolveRuleForDate(
+              rules.filter((r) => r.workerId === workerId),
+              workerId,
+              asOfDate,
+            ),
+          }
+        : {}),
       // The estate-wide rule in force, so a caller that is not asking about one worker still knows
       // what the default is -- and which row to correct.
       estateRule: resolveRuleForDate(rules.filter((r) => r.workerId === null), "__estate__", asOfDate),

@@ -2,6 +2,8 @@ import { readFileSync } from "node:fs"
 import { resolve } from "node:path"
 import { describe, expect, it } from "vitest"
 
+import { resolveRuleForDate, type PayRule } from "@/lib/pay-rules"
+
 /**
  * A rule an estate cannot set is a feature nobody has.
  *
@@ -92,6 +94,77 @@ describe("the form tells the truth about what saving does", () => {
     // full_day_hours divides the daily rate for the hourly-derived mode and is meaningless for the
     // other two. Storing it regardless makes a field that looks like it controls something.
     expect(form).toContain('form.overtimeMode === "multiplier_of_hourly" ? Number(form.fullDayHours)')
+  })
+})
+
+describe("one worker's card cannot change what every worker is held back", () => {
+  /**
+   * THE BUG. resolveRuleForDate falls back to the estate-wide default when a worker has no override
+   * of their own — correctly, that is what "effective" means. The Workers panel then handed that
+   * rule's row id straight to the correct-and-remove controls. So on any worker who was simply
+   * inheriting the estate rule, which is all of them until somebody sets an override:
+   *
+   *   "Remove"  deleted the retention rule for the entire estate
+   *   "Correct" rewrote what every worker was held back, retroactively, for every week it covered
+   *
+   * Under a heading naming one person, on a card showing one person's balances, with a confirm
+   * saying "whatever applied before it takes over again". Twenty-nine people's pay, changed from a
+   * screen about one of them.
+   */
+  const route = read("app/api/worker-pay-rules/route.ts")
+
+  it("the route says which rule is the worker's OWN, separately from what applies to them", () => {
+    expect(route).toContain("effectiveRule:")
+    expect(route).toContain("workerRule:")
+    // Resolved from the worker's own rows only, so an inherited estate rule cannot come back as
+    // theirs. Server-side for the same reason effectiveRule is: re-deriving it in the client is
+    // what breaks when two rules share an effective_from.
+    expect(route).toMatch(/rules\.filter\(\(r\) => r\.workerId === workerId\)/)
+  })
+
+  it("the panel offers editing only against the worker's own row", () => {
+    expect(panel).toContain("currentRuleId={ownRule?.id ?? null}")
+    expect(panel).not.toContain("currentRuleId={rule?.id ?? null}")
+  })
+
+  it("and says which of the two the worker is on, rather than showing a bare percentage", () => {
+    expect(panel).toMatch(/Inherited from the estate rule/)
+    expect(panel).toMatch(/Set for this worker/)
+  })
+
+  it("the form refuses the mismatch itself, whatever a caller passes", () => {
+    // A second line of defence on purpose. The fix one caller received does not protect the next
+    // one; this holds the invariant where the correct-and-remove controls actually live.
+    expect(form).toContain("editableRow")
+    expect(form).toMatch(/\(current\.workerId \?\? null\) === \(workerId \?\? null\)/)
+    // Both destructive paths, not just the button's visibility.
+    expect(form).toMatch(/const correcting = mode === "correct" && editableRow/)
+    expect(form).toMatch(/if \(!currentRuleId \|\| !editableRow\) return/)
+  })
+
+  it("the estate form still edits the estate rule, which is the case that must keep working", () => {
+    // workerId null on both sides, so editableRow is true and the roster keeps its Remove.
+    expect(roster).toContain("workerId={null}")
+    expect(roster).toContain("currentRuleId={estateRule?.id ?? null}")
+  })
+
+  it("filtering to the worker's own rows is what makes the two answers differ", () => {
+    // The arithmetic behind the fix, not just its wiring. Same call, same date, same worker --
+    // the only difference is which rows it is allowed to see.
+    const rules: PayRule[] = [
+      {
+        workerId: null,
+        effectiveFrom: "2026-06-01",
+        retentionMode: "percent_of_day",
+        retentionValue: 20,
+        overtimeMode: null,
+        overtimeValue: null,
+        fullDayHours: null,
+        pfPercent: null,
+      },
+    ]
+    expect(resolveRuleForDate(rules, "w1", "2026-08-10")?.retentionValue).toBe(20)
+    expect(resolveRuleForDate(rules.filter((r) => r.workerId === "w1"), "w1", "2026-08-10")).toBeNull()
   })
 })
 

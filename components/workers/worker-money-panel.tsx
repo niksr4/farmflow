@@ -54,7 +54,16 @@ const CREDITS = new Set(["retention_accrual", "repayment"])
 
 export default function WorkerMoneyPanel({ workerId, workerName, dailyRate, canAdmin }: Props) {
   const [entries, setEntries] = useState<EntryRow[]>([])
+  /** What applies to this worker — which may be the estate default they are inheriting. */
   const [rule, setRule] = useState<(PayRule & { id?: string }) | null>(null)
+  /**
+   * This worker's OWN rule row, null while they inherit the estate default.
+   *
+   * Kept apart from `rule` because only this one may be corrected or removed from here. Passing the
+   * effective rule's id to those controls meant a worker's card could delete the estate-wide rule
+   * for everybody, under a heading naming one person. See workerRule in the route.
+   */
+  const [ownRule, setOwnRule] = useState<(PayRule & { id?: string }) | null>(null)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [adding, setAdding] = useState(false)
@@ -86,7 +95,10 @@ export default function WorkerMoneyPanel({ workerId, workerName, dailyRate, canA
       const ledger = await ledgerRes.json()
       const rules = await rulesRes.json()
       if (ledger?.success) setEntries(ledger.entries || [])
-      if (rules?.success) setRule(rules.effectiveRule ?? null)
+      if (rules?.success) {
+        setRule(rules.effectiveRule ?? null)
+        setOwnRule(rules.workerRule ?? null)
+      }
     } catch {
       // A panel that cannot load must say so. Rendering empty reads as "this worker has no
       // advances", which is the same shape as the bug that hid worker_ledger for six weeks.
@@ -260,6 +272,12 @@ export default function WorkerMoneyPanel({ workerId, workerName, dailyRate, canA
                 {retentionPerDay != null ? `${formatCurrency(retentionPerDay)} on a full day · ` : ""}
                 in force since {rule.effectiveFrom}
               </p>
+              {/* Which rule this is, said plainly. "20% since 1 June" on somebody's card reads as
+                  a decision made about them, and acting on it as though it were is how the estate
+                  rule got changed from a single worker's screen. */}
+              <p className="mt-1 text-[11px] text-muted-foreground">
+                {ownRule ? "Set for this worker." : "Inherited from the estate rule — the same for everyone."}
+              </p>
             </>
           ) : (
             <p className="mt-1 text-sm text-muted-foreground">No retention set.</p>
@@ -270,7 +288,7 @@ export default function WorkerMoneyPanel({ workerId, workerName, dailyRate, canA
               className="mt-2 self-start text-xs font-medium text-emerald-700 underline-offset-2 hover:underline dark:text-emerald-400"
               onClick={() => setEditingRule((v) => !v)}
             >
-              {rule?.retentionMode ? "Change rule" : "Set a rule"}
+              {ownRule ? "Change this worker's rule" : "Set a rule for this worker"}
             </button>
           )}
         </div>
@@ -280,8 +298,10 @@ export default function WorkerMoneyPanel({ workerId, workerName, dailyRate, canA
         <PayRuleForm
           workerId={workerId}
           dailyRate={dailyRate}
+          // The effective rule seeds the fields, so an override starts from what the worker is on
+          // today rather than from blank -- but only their OWN row may be corrected or removed.
           current={rule}
-          currentRuleId={rule?.id ?? null}
+          currentRuleId={ownRule?.id ?? null}
           onSaved={() => { setEditingRule(false); load() }}
           onCancel={() => setEditingRule(false)}
         />
