@@ -114,6 +114,14 @@ async function main() {
     [ganesh.id, "2026-08-20", "advance", 1500, `Advance ${TAG}`, 1],
   ]
 
+  /**
+   * Idempotent, because it is not: running this twice doubled every ledger row and the panel
+   * dutifully reported Rs 30,000 owed against a Rs 20,000 advance. The rules above used ON CONFLICT
+   * and were fine; the entries below just inserted. A seed script that cannot be re-run is one
+   * somebody re-runs by accident and then debugs the wrong thing.
+   */
+  await sql`DELETE FROM worker_ledger WHERE tenant_id = ${tenant.id} AND created_by = ${TAG}`
+
   for (const [workerId, date, type, amount, description, periods] of entries) {
     await sql`
       INSERT INTO worker_ledger (tenant_id, worker_id, entry_date, entry_type, amount, description, recover_over_periods, created_by)
