@@ -7,11 +7,12 @@ import { normalizeTenantContext, runTenantQuery } from "@/lib/server/tenant-db"
 import {
   ATTENDANCE_SCHEMA_ERROR_HELP,
   HEARTBEAT_STALE_AFTER_MS,
+  isMissingBiometricSchemaError,
   isValidSerialNumber,
-  normalizeBiometricSchemaError,
   normalizeSerialNumber,
 } from "@/lib/biometric-attendance"
 import { logServerError } from "@/lib/server/safe-logging"
+import { sanitizeRouteError } from "@/lib/server/sanitize-route-error"
 
 const toDeviceResponse = (row: any) => {
   const lastSeenAt = row.last_seen_at ? String(row.last_seen_at) : null
@@ -53,11 +54,14 @@ export async function GET() {
     if (isModuleAccessError(error)) {
       return NextResponse.json({ success: false, error: "Module access disabled" }, { status: 403 })
     }
-    const normalized = normalizeBiometricSchemaError(error)
-    logServerError("Failed to list biometric devices", normalized)
+    logServerError("Failed to list biometric devices", error)
+    const isSchemaError = isMissingBiometricSchemaError(error)
     return NextResponse.json(
-      { success: false, error: normalized.message },
-      { status: normalized.message === ATTENDANCE_SCHEMA_ERROR_HELP ? 503 : 500 },
+      {
+        success: false,
+        error: isSchemaError ? ATTENDANCE_SCHEMA_ERROR_HELP : sanitizeRouteError(error, "Failed to list devices"),
+      },
+      { status: isSchemaError ? 503 : 500 },
     )
   }
 }
@@ -123,11 +127,14 @@ export async function POST(request: Request) {
     if (isModuleAccessError(error)) {
       return NextResponse.json({ success: false, error: "Module access disabled" }, { status: 403 })
     }
-    const normalized = normalizeBiometricSchemaError(error)
-    logServerError("Failed to register biometric device", normalized)
+    logServerError("Failed to register biometric device", error)
+    const isSchemaError = isMissingBiometricSchemaError(error)
     return NextResponse.json(
-      { success: false, error: normalized.message },
-      { status: normalized.message === ATTENDANCE_SCHEMA_ERROR_HELP ? 503 : 500 },
+      {
+        success: false,
+        error: isSchemaError ? ATTENDANCE_SCHEMA_ERROR_HELP : sanitizeRouteError(error, "Failed to register device"),
+      },
+      { status: isSchemaError ? 503 : 500 },
     )
   }
 }

@@ -6,6 +6,7 @@ import { isDbConfigured } from "@/lib/server/db"
 import { verifySignupToken } from "@/lib/server/onboarding/provision-tenant"
 import { normalizeOnboardingError, SIGNUP_VERIFICATION_ALREADY_USED_MESSAGE } from "@/lib/server/onboarding/utils"
 import { databaseNotConfiguredResponse } from "@/lib/server/route-utils"
+import { sanitizeRouteError } from "@/lib/server/sanitize-route-error"
 
 const verifyBodySchema = z.object({
   token: z.string().trim().min(1, "Verification token is required"),
@@ -62,16 +63,22 @@ export async function POST(request: Request) {
       { headers },
     )
   } catch (error) {
+    // Same repo-wide normalizeOnboardingError passthrough gap as resend-verification and signup
+    // (found in the same batch): unmatched errors pass through unchanged, so their raw `.message`
+    // -- including a genuine DB/connection failure -- would otherwise reach the client. Status
+    // classification still uses the raw message server-side only; sanitizeRouteError decides what
+    // actually gets sent.
     const normalizedError = normalizeOnboardingError(error)
-    const message = normalizedError.message || "Failed to verify email"
+    const rawMessage = normalizedError.message || "Failed to verify email"
     const status =
-      message === "Verification token is required" || message === "Verification link is invalid" || message.includes("expired")
+      rawMessage === "Verification token is required" || rawMessage === "Verification link is invalid" || rawMessage.includes("expired")
         ? 400
-        : message === SIGNUP_VERIFICATION_ALREADY_USED_MESSAGE
+        : rawMessage === SIGNUP_VERIFICATION_ALREADY_USED_MESSAGE
           ? 409
-        : message === "This email is already linked to another tenant"
+        : rawMessage === "This email is already linked to another tenant"
           ? 409
           : 500
+    const message = sanitizeRouteError(normalizedError, "Failed to verify email")
 
     return NextResponse.json({ success: false, error: message }, { status, headers })
   }
