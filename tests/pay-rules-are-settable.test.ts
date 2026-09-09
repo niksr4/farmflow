@@ -21,8 +21,28 @@ const roster = read("components/worker-profiles-tab.tsx")
 
 describe("an estate can set its own rules from the app", () => {
   it("something actually POSTs a rule", () => {
-    expect(form).toContain('fetch("/api/worker-pay-rules"')
-    expect(form).toContain('method: "POST"')
+    // Matched loosely on purpose: the URL is now chosen between adding and correcting, so pinning
+    // the literal string broke on a change that made the form strictly better.
+    expect(form).toContain("/api/worker-pay-rules")
+    expect(form).toContain('"POST"')
+  })
+
+  it("and an existing rule can be corrected in place or removed", () => {
+    // PUT and DELETE existed on the route with nothing calling them — the same unreachable-back-end
+    // failure as the route nothing called at all, one level down. Correcting is deliberately NOT
+    // the default: adding a dated rule never rewrites a paid week; correcting one does by design.
+    expect(form).toContain('"PUT"')
+    expect(form).toContain('method: "DELETE"')
+    expect(form).toMatch(/setMode\("add" \| "correct"|useState<"add" \| "correct">\("add"\)/)
+  })
+
+  it("warns before correcting, because it changes weeks already paid", () => {
+    expect(form).toMatch(/for every week it already covers/i)
+  })
+
+  it("says what removing a rule does, rather than just asking twice", () => {
+    expect(form).toMatch(/takes over again/i)
+    expect(form).toMatch(/stays held/i)
   })
 
   it("the estate-wide default is reachable, with worker_id null", () => {

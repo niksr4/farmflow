@@ -34,6 +34,16 @@ type Props = {
   /** For the live preview only; a rule is a percentage, not a rupee figure. */
   dailyRate?: number | null
   current?: PayRule | null
+  /**
+   * The row id behind `current`, when there is one. Present = this rule can be corrected in place
+   * or removed; absent = the form only adds.
+   *
+   * Correcting matters because saving normally ADDS a dated rule: somebody who typed 2 instead of
+   * 20 a minute ago wants that row fixed, not a second period stacked on the first. PUT and DELETE
+   * existed on the route and nothing called them, which is the same failure as the route nothing
+   * called at all — one level down.
+   */
+  currentRuleId?: string | null
   onSaved: () => void
   onCancel: () => void
 }
@@ -51,8 +61,15 @@ const OVERTIME_MODES = [
   { value: "explicit_hourly", label: "A fixed ₹ per hour" },
 ] as const
 
-export default function PayRuleForm({ workerId, dailyRate, current, onSaved, onCancel }: Props) {
+export default function PayRuleForm({ workerId, dailyRate, current, currentRuleId, onSaved, onCancel }: Props) {
   const [saving, setSaving] = useState(false)
+  /**
+   * Add a new dated rule, or correct the one already in force.
+   *
+   * Defaults to adding, because that is the safe direction: a new period never rewrites a paid
+   * week, whereas correcting one does by design. Somebody who means to correct has to say so.
+   */
+  const [mode, setMode] = useState<"add" | "correct">("add")
   const [form, setForm] = useState({
     effectiveFrom: todayIso(),
     retentionMode: current?.retentionMode ?? "none",
@@ -106,11 +123,12 @@ export default function PayRuleForm({ workerId, dailyRate, current, onSaved, onC
 
     setSaving(true)
     try {
-      const res = await fetch("/api/worker-pay-rules", {
-        method: "POST",
+      const correcting = mode === "correct" && currentRuleId
+      const res = await fetch(correcting ? `/api/worker-pay-rules/${currentRuleId}` : "/api/worker-pay-rules", {
+        method: correcting ? "PUT" : "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          workerId,
+          ...(correcting ? {} : { workerId }),
           effectiveFrom: form.effectiveFrom,
           retentionMode: form.retentionMode === "none" ? null : form.retentionMode,
           retentionValue,
@@ -123,10 +141,35 @@ export default function PayRuleForm({ workerId, dailyRate, current, onSaved, onC
       })
       const data = await res.json()
       if (!res.ok || !data.success) throw new Error(data.error || "Could not save the rule")
-      toast.success(workerId ? "Rule set for this worker" : "Estate rule set")
+      toast.success(mode === "correct" ? "Rule corrected" : workerId ? "Rule set for this worker" : "Estate rule set")
       onSaved()
     } catch (error: any) {
       toast.error(error?.message || "Could not save the rule")
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const remove = async () => {
+    if (!currentRuleId) return
+    // Names what disappears and what happens next, because "delete rule?" does not say that the
+    // previous rule takes over, nor that money already held stays held.
+    if (
+      !window.confirm(
+        "Remove this rule? Whatever applied before it takes over again, and retention already held stays held.",
+      )
+    ) {
+      return
+    }
+    setSaving(true)
+    try {
+      const res = await fetch(`/api/worker-pay-rules/${currentRuleId}`, { method: "DELETE" })
+      const data = await res.json()
+      if (!res.ok || !data.success) throw new Error(data.error || "Could not remove the rule")
+      toast.success("Rule removed")
+      onSaved()
+    } catch (error: any) {
+      toast.error(error?.message || "Could not remove the rule")
     } finally {
       setSaving(false)
     }
@@ -222,13 +265,41 @@ export default function PayRuleForm({ workerId, dailyRate, current, onSaved, onC
         date it should stop — what has already been held stays held.
       </p>
 
-      <div className="flex gap-2">
+      <div className="flex flex-wrap items-center gap-2">
         <Button size="sm" onClick={save} disabled={saving}>
           {saving ? <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" /> : null}
-          {workerId ? "Save rule for this worker" : "Save estate rule"}
+          {mode === "correct" ? "Correct this rule" : workerId ? "Save rule for this worker" : "Save estate rule"}
         </Button>
         <Button size="sm" variant="ghost" onClick={onCancel}>Cancel</Button>
+
+        {currentRuleId && (
+          <>
+            <button
+              type="button"
+              className="ml-auto text-xs text-muted-foreground underline-offset-2 hover:underline"
+              onClick={() => setMode((m) => (m === "add" ? "correct" : "add"))}
+            >
+              {mode === "add" ? "Correct the current rule instead" : "Add a new rule instead"}
+            </button>
+            <button
+              type="button"
+              className="text-xs text-destructive underline-offset-2 hover:underline"
+              onClick={remove}
+              disabled={saving}
+            >
+              Remove
+            </button>
+          </>
+        )}
       </div>
+
+      {mode === "correct" && (
+        <p className="rounded border-l-2 border-amber-500 bg-amber-50 px-3 py-2 text-[11px] leading-relaxed text-amber-900 dark:bg-amber-950/40 dark:text-amber-200">
+          Correcting changes the rule <strong>for every week it already covers</strong>, so wage sheets already
+          printed for those weeks will no longer match. Use it to fix a mistake, not to change policy — for a
+          change, add a new rule from the date it starts.
+        </p>
+      )}
     </div>
   )
 }

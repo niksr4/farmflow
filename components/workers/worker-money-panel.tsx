@@ -54,7 +54,7 @@ const CREDITS = new Set(["retention_accrual", "repayment"])
 
 export default function WorkerMoneyPanel({ workerId, workerName, dailyRate, canAdmin }: Props) {
   const [entries, setEntries] = useState<EntryRow[]>([])
-  const [rule, setRule] = useState<PayRule | null>(null)
+  const [rule, setRule] = useState<(PayRule & { id?: string }) | null>(null)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [adding, setAdding] = useState(false)
@@ -281,6 +281,7 @@ export default function WorkerMoneyPanel({ workerId, workerName, dailyRate, canA
           workerId={workerId}
           dailyRate={dailyRate}
           current={rule}
+          currentRuleId={rule?.id ?? null}
           onSaved={() => { setEditingRule(false); load() }}
           onCancel={() => setEditingRule(false)}
         />

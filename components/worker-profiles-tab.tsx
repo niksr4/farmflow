@@ -26,7 +26,7 @@ import type { LocationOption } from "@/components/inventory-system/types"
 import { formatLocationLabel } from "@/lib/location-label"
 import WorkerMoneyPanel from "@/components/workers/worker-money-panel"
 import PayRuleForm from "@/components/workers/pay-rule-form"
-import { resolveRuleForDate, type PayRule } from "@/lib/pay-rules"
+import type { PayRule } from "@/lib/pay-rules"
 
 // Imported, not redeclared. See lib/worker-types.ts.
 
@@ -144,7 +144,7 @@ export default function WorkerProfilesTab() {
   const [expandedWorkerId, setExpandedWorkerId] = useState<string | null>(null)
   const [editingEstateRule, setEditingEstateRule] = useState(false)
   /** The default in force today, so the form opens showing what it is rather than blank. */
-  const [estateRule, setEstateRule] = useState<PayRule | null>(null)
+  const [estateRule, setEstateRule] = useState<(PayRule & { id?: string }) | null>(null)
   const [saving, setSaving] = useState(false)
   const [form, setForm] = useState(EMPTY_FORM)
   // Same data-driven gate as the attendance tab: estates without a terminal see no
@@ -231,8 +231,10 @@ export default function WorkerProfilesTab() {
       const res = await fetch("/api/worker-pay-rules")
       const data = await res.json()
       if (!data?.success) return
-      const defaults = (data.rules || []).filter((r: PayRule) => r.workerId == null)
-      setEstateRule(resolveRuleForDate(defaults, "__estate__", todayIso()))
+      // The route resolves this itself now, so the client is not re-deriving "which rule is in
+      // force" a second way. Two implementations of that question is how a screen and a wage sheet
+      // come to disagree about which rule applied.
+      setEstateRule(data.estateRule ?? null)
     } catch {
       // A failed load and "no rule set" both open the form blank, which is the safe direction:
       // it cannot show a stale rule as current.
@@ -509,6 +511,7 @@ export default function WorkerProfilesTab() {
               workerId={null}
               dailyRate={workers.find((w) => Number(w.dailyRate) > 0)?.dailyRate ?? null}
               current={estateRule}
+              currentRuleId={estateRule?.id ?? null}
               onSaved={() => { setEditingEstateRule(false); loadEstateRule() }}
               onCancel={() => setEditingEstateRule(false)}
             />

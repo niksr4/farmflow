@@ -120,22 +120,67 @@ export default function PayrollSummaryTab() {
     }
   }, [startDate, endDate])
 
+  /**
+   * THE EXPORT IS WHAT AN ESTATE ACTUALLY PAYS FROM, so it must reconcile.
+   *
+   * It carried Worker, Days, Attendance, Picking, Adjustments, Deductions and Net Payable -- and
+   * once rules landed, Net Payable stopped being the sum of the columns beside it. Overtime,
+   * retention and advance recovery were all applied and none were exported, so a wage sheet handed
+   * to somebody counting cash showed a net that could not be arrived at from the figures on the
+   * page, with nothing to explain the difference.
+   *
+   * The rule columns appear only when the estate uses them, exactly as on screen -- an estate with
+   * no rules gets the file it has always had, byte for byte.
+   */
   const buildPayrollExportCsv = () => {
-    const header = ["Worker", "Type", "Days Present", "Daily Rate (₹)", "Attendance Earnings (₹)", "Picking (kg)", "Picking Earnings (₹)", "Adjustments (₹)", "Deductions (₹)", "Net Payable (₹)"]
+    const header = [
+      "Worker", "Type", "Days Present", "Daily Rate (₹)", "Attendance Earnings (₹)",
+      "Picking (kg)", "Picking Earnings (₹)", "Adjustments (₹)", "Deductions (₹)",
+      ...(showRuleColumns
+        ? ["Overtime (₹)", "Retention Held (₹)", "Advance Recovered (₹)", "Advance Not Recovered (₹)", "Still Owed (₹)"]
+        : []),
+      "Net Payable (₹)",
+    ]
     const rows = workers.map((w) => [
       w.name,
       w.workerType || "",
       w.daysPresent,
-      w.dailyRate ?? "",
+      w.dailyRate != null ? w.dailyRate.toFixed(2) : "",
       w.attendanceEarnings.toFixed(2),
       w.pickingKg.toFixed(3),
       w.pickingEarnings.toFixed(2),
       w.adjustments.toFixed(2),
       w.deductions.toFixed(2),
+      ...(showRuleColumns
+        ? [
+            (Number(w.overtime) || 0).toFixed(2),
+            (Number(w.retention) || 0).toFixed(2),
+            (Number(w.advanceRecovered) || 0).toFixed(2),
+            (Number(w.advanceShortfall) || 0).toFixed(2),
+            (Number(w.owedAfter) || 0).toFixed(2),
+          ]
+        : []),
       w.netPayable.toFixed(2),
     ])
     if (totals) {
-      rows.push(["TOTAL", "", totals.daysPresent, "", totals.attendanceEarnings.toFixed(2), totals.pickingKg.toFixed(3), totals.pickingEarnings.toFixed(2), totals.adjustments.toFixed(2), totals.deductions.toFixed(2), totals.netPayable.toFixed(2)])
+      rows.push([
+        "TOTAL", "", totals.daysPresent, "",
+        totals.attendanceEarnings.toFixed(2),
+        totals.pickingKg.toFixed(3),
+        totals.pickingEarnings.toFixed(2),
+        totals.adjustments.toFixed(2),
+        totals.deductions.toFixed(2),
+        ...(showRuleColumns
+          ? [
+              (Number(totals.overtime) || 0).toFixed(2),
+              (Number(totals.retention) || 0).toFixed(2),
+              (Number(totals.advanceRecovered) || 0).toFixed(2),
+              (Number(totals.advanceShortfall) || 0).toFixed(2),
+              "",
+            ]
+          : []),
+        totals.netPayable.toFixed(2),
+      ])
     }
     return [header, ...rows].map((r) => r.map(escapeCsv).join(",")).join("\n")
   }

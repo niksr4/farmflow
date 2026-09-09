@@ -195,3 +195,40 @@ describe("which run this is", () => {
     expect(first).toBe(again)
   })
 })
+
+describe("a contract crew is not a person", () => {
+  /**
+   * Manoj, on the call and unprompted: "Contract gangs do NOT receive retention."
+   *
+   * Nothing implemented it. computeWorkerPay never saw a worker's `kind`, so a crew with
+   * allocations would have been held back 20% of a LUMP SUM as though it were somebody's wage —
+   * and the estate would be withholding money with no one to settle it with, since a gang has no
+   * person to pay out when they leave.
+   *
+   * Latent when found: no tenant has a gang on its roster today. Latent is not fixed.
+   */
+  const crewWeek = base({ workedDays: week([1, 1, 1, 1, 1, 1]) })
+
+  it("is held nothing, even under an estate rule that covers everyone", () => {
+    expect(computeWorkerPay(crewWeek, "ravi", 70000, { isGang: true }).retention).toBe(0)
+  })
+
+  it("and is paid no overtime, because a crew has no hourly rate to multiply", () => {
+    const withOt = base({ overtimeDays: [{ workerId: "ravi", workDate: "2026-08-05", hours: 4 }] })
+    expect(computeWorkerPay(withOt, "ravi", 70000, { isGang: true }).overtime).toBe(0)
+  })
+
+  it("while the same input for a person is retained normally", () => {
+    // The only difference is the flag, so this fails if the exclusion is ever applied too widely.
+    expect(computeWorkerPay(crewWeek, "ravi", 3600).retention).toBe(720)
+  })
+
+  it("still has its advance recovered — a crew can be advanced money like anyone", () => {
+    // The exclusion is about RULES, not about the ledger. An advance to a crew is still a debt.
+    const ledger = [{
+      workerId: "ravi", id: "a1", entryType: "advance" as const,
+      entryDate: "2026-08-03", amount: 4000, recoverOverPeriods: 2, recoverFrom: null,
+    }]
+    expect(computeWorkerPay(base({ ledger }), "ravi", 70000, { isGang: true }).advanceRecovered).toBe(2000)
+  })
+})

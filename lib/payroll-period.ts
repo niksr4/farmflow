@@ -97,14 +97,31 @@ const previousPeriodStart = (periodStart: string, periodDays: number): string =>
  * percentage would be right only while nothing ever changes, which is the assumption that makes
  * payroll bugs invisible until somebody's rate moves.
  */
-export function computeWorkerPay(input: PeriodInput, workerId: string, gross: number): WorkerPay {
+export function computeWorkerPay(
+  input: PeriodInput,
+  workerId: string,
+  gross: number,
+  /**
+   * A contract crew is paid for a JOB, not for a person's day, so no rule applies to it.
+   *
+   * Manoj, unprompted, on the call: "Contract gangs do NOT receive retention." Nothing implemented
+   * it -- computeWorkerPay never saw a worker's `kind`, so a crew with allocations would have been
+   * held back 20% of a lump sum as though it were somebody's wage, and the estate would have been
+   * withholding money it has no one to settle with. Latent today: no tenant has a gang on its
+   * roster. Latent is not fixed.
+   *
+   * Overtime is excluded for the same reason: a crew has no hourly rate to multiply.
+   */
+  options?: { isGang?: boolean },
+): WorkerPay {
   const days = input.workedDays.filter((d) => d.workerId === workerId)
   const ot = input.overtimeDays.filter((d) => d.workerId === workerId)
   const entries = input.ledger.filter((e) => e.workerId === workerId)
 
   let retention = 0
   let hasRule = false
-  for (const day of days) {
+  const rulesApply = !options?.isGang
+  for (const day of rulesApply ? days : []) {
     const rule = resolveRuleForDate(input.rules, workerId, day.workDate)
     if (rule?.retentionMode) hasRule = true
     retention += retentionForDay(rule, day.rate, day.dayFraction)
@@ -113,7 +130,7 @@ export function computeWorkerPay(input: PeriodInput, workerId: string, gross: nu
   // Overtime is priced by the rule in force on the day it was worked, and by that day's rate --
   // not the worker's current one, for the same reason retention uses the stored rate.
   let overtime = 0
-  for (const day of ot) {
+  for (const day of rulesApply ? ot : []) {
     const rule = resolveRuleForDate(input.rules, workerId, day.workDate)
     if (rule?.overtimeMode) hasRule = true
     const rateThatDay =

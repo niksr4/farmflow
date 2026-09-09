@@ -90,16 +90,24 @@ export async function GET(request: Request) {
       `,
     )
 
-    const rules = (rows as any[]).map(toRule)
+    /**
+     * Carries the row id, because the client needs it to correct or remove the rule it is looking
+     * at. resolveRuleForDate takes PayRule, and the extra field rides along untouched -- without it
+     * the client would have to match a rule back to its row by comparing dates, which is exactly
+     * the kind of re-derivation that goes wrong when two rules share an effective_from.
+     */
+    const rules = (rows as any[]).map((r) => ({ ...toRule(r), id: String(r.id), createdBy: r.created_by ?? null }))
 
     // The whole history is returned, not just the current rule, because "why was I held Rs 120 in
     // June" is the question this table exists to answer.
+    const asOfDate = asOf && DATE.test(asOf) ? asOf : new Date().toISOString().slice(0, 10)
     return NextResponse.json({
       success: true,
-      rules: (rows as any[]).map((r, i) => ({ id: String(r.id), ...rules[i], createdBy: r.created_by ?? null })),
-      ...(workerId
-        ? { effectiveRule: resolveRuleForDate(rules, workerId, asOf && DATE.test(asOf) ? asOf : new Date().toISOString().slice(0, 10)) }
-        : {}),
+      rules,
+      ...(workerId ? { effectiveRule: resolveRuleForDate(rules, workerId, asOfDate) } : {}),
+      // The estate-wide rule in force, so a caller that is not asking about one worker still knows
+      // what the default is -- and which row to correct.
+      estateRule: resolveRuleForDate(rules.filter((r) => r.workerId === null), "__estate__", asOfDate),
     })
   } catch (error) {
     if (isModuleAccessError(error)) {

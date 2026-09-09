@@ -301,6 +301,13 @@ export async function GET(request: Request) {
     // False for every tenant that has set nothing, which keeps their payload exactly as it was.
     const usesRules = periodUsesRules(periodInput)
 
+    // A crew is paid for a job, not for a person's day, so no rule touches it -- see computeWorkerPay.
+    const gangRows = await runTenantQuery(
+      accountsSql, tenantContext,
+      accountsSql`SELECT id FROM attendance_workers WHERE tenant_id = ${tenantContext.tenantId} AND kind = 'gang'`,
+    )
+    const gangIds = new Set((gangRows as any[]).map((r) => String(r.id)))
+
     const workers = (rows as any[]).map((r) => ({
       id: String(r.id),
       name: String(r.full_name || ""),
@@ -332,7 +339,9 @@ export async function GET(request: Request) {
       .map((w) => {
         // Rules applied per worker. For a tenant with none, every figure below is zero and
         // netPayable is untouched -- which is what keeps three of four estates unchanged.
-        const pay = computeWorkerPay(periodInput, w.id, w.attendanceEarnings + w.pickingEarnings)
+        const pay = computeWorkerPay(periodInput, w.id, w.attendanceEarnings + w.pickingEarnings, {
+          isGang: gangIds.has(w.id),
+        })
         const net =
           w.attendanceEarnings + w.pickingEarnings + w.adjustments - w.deductions
           + pay.overtime - pay.retention - pay.advanceRecovered
