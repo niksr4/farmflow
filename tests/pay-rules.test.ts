@@ -176,35 +176,61 @@ describe("overtime: the three readings differ by 3x", () => {
 })
 
 describe("an advance recovers itself and then stops", () => {
+  /**
+   * Weeks measured from the advance's own date (2026-08-12), because that is what the function now
+   * anchors to. It used to take a bare ordinal supplied by the caller, so "period 0" meant whatever
+   * the caller called first -- and an advance was recovered from weeks that ended before it was
+   * given. tests/payroll-month-report.test.ts caught it; these pin it.
+   */
+  const wk = (n: number) => {
+    const d = new Date("2026-08-12T00:00:00Z")
+    d.setUTCDate(d.getUTCDate() + n * 7)
+    return d.toISOString().slice(0, 10)
+  }
+
   it("comes off in full in its own period by default", () => {
     const e = entry({ amount: 2000, recoverOverPeriods: 1 })
-    expect(instalmentDueInPeriod(e, 0)).toBe(2000)
+    expect(instalmentDueInPeriod(e, wk(0))).toBe(2000)
+  })
+
+  it("takes nothing from a run that ended before the money was given", () => {
+    // THE BUG THIS REPLACED. An advance on the 12th being docked from the week of the 2nd is a wage
+    // already paid, reduced for a loan that did not exist yet.
+    const e = entry({ amount: 2000, recoverOverPeriods: 1 })
+    expect(instalmentDueInPeriod(e, wk(-1))).toBe(0)
+    expect(instalmentDueInPeriod(e, "2026-07-01")).toBe(0)
+  })
+
+  it("honours recover_from when the estate sets a later start", () => {
+    const e = entry({ amount: 2000, recoverOverPeriods: 1, recoverFrom: "2026-09-02" })
+    expect(instalmentDueInPeriod(e, wk(0))).toBe(0)
+    expect(instalmentDueInPeriod(e, "2026-09-02")).toBe(2000)
   })
 
   it("and is not deducted again the period after — with nothing to tick", () => {
     // THE QUESTION THIS WHOLE DESIGN ANSWERS. No settlement flag: forgetting one deducts the same
     // advance twice, silently, on a person's wages.
     const e = entry({ amount: 2000, recoverOverPeriods: 1 })
-    expect(instalmentDueInPeriod(e, 1)).toBe(0)
-    expect(instalmentDueInPeriod(e, 12)).toBe(0)
+    expect(instalmentDueInPeriod(e, wk(1))).toBe(0)
+    expect(instalmentDueInPeriod(e, wk(12))).toBe(0)
   })
 
   it("splits evenly across the instalments asked for", () => {
     const e = entry({ amount: 20000, recoverOverPeriods: 10 })
     expect(instalmentAmount(e)).toBe(2000)
-    expect(instalmentDueInPeriod(e, 0)).toBe(2000)
-    expect(instalmentDueInPeriod(e, 9)).toBe(2000)
-    expect(instalmentDueInPeriod(e, 10)).toBe(0)
+    expect(instalmentDueInPeriod(e, wk(0))).toBe(2000)
+    expect(instalmentDueInPeriod(e, wk(9))).toBe(2000)
+    expect(instalmentDueInPeriod(e, wk(10))).toBe(0)
   })
 
   it("never recovers against a repayment or a retention row", () => {
-    expect(instalmentDueInPeriod(entry({ entryType: "repayment" }), 0)).toBe(0)
-    expect(instalmentDueInPeriod(entry({ entryType: "retention_accrual" }), 0)).toBe(0)
+    expect(instalmentDueInPeriod(entry({ entryType: "repayment" }), wk(0))).toBe(0)
+    expect(instalmentDueInPeriod(entry({ entryType: "retention_accrual" }), wk(0))).toBe(0)
   })
 
   it("treats a missing or nonsense schedule as one instalment", () => {
-    expect(instalmentDueInPeriod(entry({ recoverOverPeriods: null, amount: 500 }), 0)).toBe(500)
-    expect(instalmentDueInPeriod(entry({ recoverOverPeriods: 0, amount: 500 }), 0)).toBe(500)
+    expect(instalmentDueInPeriod(entry({ recoverOverPeriods: null, amount: 500 }), wk(0))).toBe(500)
+    expect(instalmentDueInPeriod(entry({ recoverOverPeriods: 0, amount: 500 }), wk(0))).toBe(500)
   })
 })
 
@@ -214,17 +240,17 @@ describe("what a worker owes, and what is held for them", () => {
       entry({ id: "a", amount: 2000 }),
       entry({ id: "b", amount: 3000, entryDate: "2026-08-20" }),
     ]
-    expect(outstandingAdvance(entries, 0)).toBe(5000)
+    expect(outstandingAdvance(entries)).toBe(5000)
   })
 
   it("a cash repayment reduces it, without any flag", () => {
     const entries = [entry({ id: "a", amount: 2000 }), entry({ id: "r", entryType: "repayment", amount: 1000 })]
-    expect(outstandingAdvance(entries, 0)).toBe(1000)
+    expect(outstandingAdvance(entries)).toBe(1000)
   })
 
   it("never goes negative when more is repaid than was taken", () => {
     const entries = [entry({ id: "a", amount: 1000 }), entry({ id: "r", entryType: "repayment", amount: 1500 })]
-    expect(outstandingAdvance(entries, 0)).toBe(0)
+    expect(outstandingAdvance(entries)).toBe(0)
   })
 
   it("held retention grows on accrual and falls on payout", () => {
@@ -244,7 +270,7 @@ describe("what a worker owes, and what is held for them", () => {
       entry({ id: "2", entryType: "advance", amount: 2000 }),
     ]
     expect(retentionHeld(entries)).toBe(14400)
-    expect(outstandingAdvance(entries, 0)).toBe(2000)
+    expect(outstandingAdvance(entries)).toBe(2000)
   })
 })
 

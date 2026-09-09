@@ -100,11 +100,13 @@ export default function WorkerMoneyPanel({ workerId, workerName, dailyRate, canA
 
   const held = useMemo(() => retentionHeld(entries), [entries])
   /**
-   * Recovered-to-date is 0 until payroll writes its accruals, so this is what has been ADVANCED
-   * less what has been repaid in cash — deliberately the larger, more cautious figure. It cannot
-   * silently under-report a debt; it can only over-report one until the payroll side lands.
+   * Everything advanced, less cash repaid — deliberately WITHOUT netting off instalments recovered
+   * so far, because this panel does not know which payroll runs have happened.
+   *
+   * The cautious direction on purpose: it can over-report a debt, never under-report one. Payroll
+   * shows the figure net of recovery for the run it is computing; this shows the ceiling.
    */
-  const owed = useMemo(() => outstandingAdvance(entries, 0), [entries])
+  const owed = useMemo(() => outstandingAdvance(entries), [entries])
 
   const retentionPerDay = useMemo(() => {
     if (!rule?.retentionMode || rule.retentionValue == null) return null

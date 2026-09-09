@@ -40,7 +40,7 @@ const base = (over: Partial<PeriodInput> = {}): PeriodInput => ({
   workedDays: week([1, 1, 1, 1, 1, 1]),
   overtimeDays: [],
   ledger: [],
-  periodIndex: 0,
+  periodStart: "2026-08-03",
   ...over,
 })
 
@@ -112,19 +112,19 @@ describe("advances across runs", () => {
   ]
 
   it("takes one instalment in run 0 and leaves the balance standing", () => {
-    const p = computeWorkerPay(base({ ledger, periodIndex: 0 }), "ravi", 3600)
+    const p = computeWorkerPay(base({ ledger, periodStart: "2026-08-12" }), "ravi", 3600)
     expect(p.advanceDue).toBe(2000)
     expect(p.advanceRecovered).toBe(2000)
     expect(p.owedAfter).toBe(18000)
   })
 
   it("stops after the tenth run with nothing to switch off", () => {
-    expect(computeWorkerPay(base({ ledger, periodIndex: 9 }), "ravi", 3600).advanceRecovered).toBe(2000)
-    expect(computeWorkerPay(base({ ledger, periodIndex: 10 }), "ravi", 3600).advanceRecovered).toBe(0)
+    expect(computeWorkerPay(base({ ledger, periodStart: "2026-10-14" }), "ravi", 3600).advanceRecovered).toBe(2000)
+    expect(computeWorkerPay(base({ ledger, periodStart: "2026-10-21" }), "ravi", 3600).advanceRecovered).toBe(0)
   })
 
   it("recovers what it can on a thin week and states the rest", () => {
-    const p = computeWorkerPay(base({ ledger, workedDays: week([1, 1]), periodIndex: 0 }), "ravi", 1200)
+    const p = computeWorkerPay(base({ ledger, workedDays: week([1, 1]), periodStart: "2026-08-12" }), "ravi", 1200)
     expect(p.retention).toBe(240)
     expect(p.advanceRecovered).toBe(960)
     expect(p.shortfall).toBe(1040)
@@ -134,7 +134,7 @@ describe("advances across runs", () => {
 })
 
 describe("an estate that uses none of it", () => {
-  const bare: PeriodInput = { rules: [], workedDays: week([1, 1, 1]), overtimeDays: [], ledger: [], periodIndex: 0 }
+  const bare: PeriodInput = { rules: [], workedDays: week([1, 1, 1]), overtimeDays: [], ledger: [], periodStart: "2026-08-03" }
 
   it("holds nothing, pays no overtime, and reports no rule", () => {
     const p = computeWorkerPay(bare, "ravi", 1800)

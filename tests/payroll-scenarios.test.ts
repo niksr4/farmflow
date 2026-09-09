@@ -38,7 +38,9 @@ const rule = (over: Partial<PayRule> = {}): PayRule => ({
 const advance = (amount: number, periods = 1, id = "adv"): LedgerEntry => ({
   id,
   entryType: "advance",
-  entryDate: "2026-08-12",
+  // Same week runWeek computes by default, so recovery starts in the run under test. Recovery is
+  // anchored to the advance's own date now, so a fixture dated outside the week correctly yields 0.
+  entryDate: "2026-08-03",
   amount,
   recoverOverPeriods: periods,
   recoverFrom: null,
@@ -53,15 +55,17 @@ function runWeek(input: {
   dayRate: number
   overtimeHours?: number
   advances?: LedgerEntry[]
-  periodIndex?: number
+  periodStart?: string
 }) {
   const r = resolveRuleForDate(input.rules, input.workerId, input.weekStart)
   const gross =
     input.days.reduce((sum, f) => sum + input.dayRate * f, 0) +
     overtimePay(r, { dayRate: input.dayRate, hours: input.overtimeHours ?? 0 })
   const retention = input.days.reduce((sum, f) => sum + retentionForDay(r, input.dayRate, f), 0)
+  // Anchored to each advance's own start date, so a week that ended before the money was given
+  // cannot be docked for it. `weekStart` is the run being computed.
   const advanceDue = (input.advances ?? []).reduce(
-    (sum, a) => sum + instalmentDueInPeriod(a, input.periodIndex ?? 0),
+    (sum, a) => sum + instalmentDueInPeriod(a, input.periodStart ?? input.weekStart),
     0,
   )
   return { rule: r, gross, ...applyDeductions({ gross, retention, advanceDue }) }
@@ -89,7 +93,7 @@ describe("MEDAPPA — 29 daily workers at Rs 600, paid weekly, 20% retention", (
   it("Rs 20,000 over ten runs takes Rs 2,000 a week and then stops", () => {
     const adv = [advance(20000, 10)]
     const week = (i: number) =>
-      runWeek({ rules, workerId: "ravi", weekStart: "2026-08-03", days: [1, 1, 1, 1, 1, 1], dayRate: 600, advances: adv, periodIndex: i })
+      runWeek({ rules, workerId: "ravi", weekStart: "2026-08-03", days: [1, 1, 1, 1, 1, 1], dayRate: 600, advances: adv, periodStart: new Date(Date.parse("2026-08-03T00:00:00Z") + i * 7 * 86400000).toISOString().slice(0, 10) })
 
     expect(week(0).advanceRecovered).toBe(2000)
     expect(week(0).net).toBe(880)
@@ -206,9 +210,9 @@ describe("A YEAR IN ONE WORKER'S LIFE", () => {
       advance(20000, 10),
       { id: "rep", entryType: "repayment", entryDate: "2026-09-01", amount: 5000 },
     ]
-    expect(outstandingAdvance(ledger, 0)).toBe(15000)
+    expect(outstandingAdvance(ledger)).toBe(15000)
     // The instalment is still Rs 2,000 -- repaying early shortens the tail, it does not re-plan it.
-    expect(instalmentDueInPeriod(ledger[0], 3)).toBe(2000)
+    expect(instalmentDueInPeriod(ledger[0], "2026-08-24")).toBe(2000)
   })
 
   it("leaving: held and owed are settled against each other, and only there", () => {
@@ -218,7 +222,7 @@ describe("A YEAR IN ONE WORKER'S LIFE", () => {
       advance(2000),
     ]
     const held = retentionHeld(ledger)
-    const owed = outstandingAdvance(ledger, 0)
+    const owed = outstandingAdvance(ledger)
     expect(held).toBe(14400)
     expect(owed).toBe(2000)
     // Neither figure was ever shown as the other, and the settlement is the difference.
@@ -238,7 +242,7 @@ describe("the ways an estate can hurt itself, and what happens", () => {
   it("two advances at once are both tracked and both recovered", () => {
     const rules = [rule({ retentionMode: "percent_of_day", retentionValue: 20 })]
     const two = [advance(2000, 1, "a1"), advance(3000, 1, "a2")]
-    expect(outstandingAdvance(two, 0)).toBe(5000)
+    expect(outstandingAdvance(two)).toBe(5000)
     const w = runWeek({ rules, workerId: "ravi", weekStart: "2026-08-03", days: [1, 1, 1, 1, 1, 1], dayRate: 600, advances: two })
     expect(w.advanceRecovered).toBe(2880)
     expect(w.shortfall).toBe(2120)

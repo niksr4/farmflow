@@ -164,19 +164,52 @@ export function instalmentAmount(entry: LedgerEntry): number {
 /**
  * Which instalment, if any, a period owes for an advance.
  *
- * Returns 0 outside the window, so an advance stops applying WITHOUT anybody closing it. That is
- * the entire reason there is no "mark as settled" action: a tick-box somebody forgets deducts the
- * same advance twice, silently, on a person's wages.
+ * ANCHORED TO THE ADVANCE'S OWN START, NOT TO A GLOBAL COUNTER. This took a period ordinal supplied
+ * by the caller and only checked it against the instalment count -- so an advance handed over on the
+ * 10th was recovered from the week of the 2nd, a week that had already been paid before the money
+ * existed. Every advance began recovering from whatever the caller happened to call period 0.
  *
- * `periodIndex` is supplied by the caller rather than derived from dates, because payroll accepts
- * any range and "how many periods since August" is only answerable once the caller knows how long
- * its own periods are.
+ * Found by tests/payroll-month-report.test.ts on its first run, which is the argument for
+ * simulating a whole month rather than testing one week: a single period cannot tell a global
+ * ordinal from a relative one, because in a single period they are the same number.
+ *
+ * Returns 0 before the advance starts and 0 after its instalments are done, so an advance applies
+ * to exactly the runs it should and stops without anybody closing it.
  */
-export function instalmentDueInPeriod(entry: LedgerEntry, periodIndex: number): number {
+export function instalmentDueInPeriod(entry: LedgerEntry, periodStart: string, periodDays = 7): number {
   if (entry.entryType !== "advance") return 0
   const periods = Math.max(1, Math.floor(num(entry.recoverOverPeriods) || 1))
-  if (periodIndex < 0 || periodIndex >= periods) return 0
+
+  // recover_from wins when set; otherwise recovery starts from the period the advance falls in.
+  const from = Date.parse(`${entry.recoverFrom || entry.entryDate}T00:00:00Z`)
+  const here = Date.parse(`${periodStart}T00:00:00Z`)
+  if (!Number.isFinite(from) || !Number.isFinite(here) || periodDays <= 0) return 0
+
+  // CEIL, NOT FLOOR. A run whose start is before the advance but whose end is after it -- money
+  // handed over on Wednesday, wages paid that Saturday -- is that advance's FIRST instalment, and
+  // floor pushed it to the following week. The comment here said Wednesday-to-Saturday all along
+  // while the arithmetic did the opposite; the month simulation is what showed the two disagreeing.
+  //
+  //   from Wed 12th, run starts Sun 9th   ceil(-3/7)  =  0   → recovered this Saturday ✓
+  //   from Wed 12th, run starts Sun 16th  ceil( 4/7)  =  1   → second instalment ✓
+  //   from Wed 12th, run starts Sun 2nd   ceil(-10/7) = -1   → before it existed, nothing ✓
+  const index = Math.ceil((here - from) / (periodDays * 86400000))
+  if (index < 0 || index >= periods) return 0
   return instalmentAmount(entry)
+}
+
+/**
+ * How much of an advance has been recovered by the end of a given period. Derived, never stored.
+ */
+export function recoveredByPeriod(entry: LedgerEntry, periodStart: string, periodDays = 7): number {
+  if (entry.entryType !== "advance") return 0
+  const periods = Math.max(1, Math.floor(num(entry.recoverOverPeriods) || 1))
+  const from = Date.parse(`${entry.recoverFrom || entry.entryDate}T00:00:00Z`)
+  const here = Date.parse(`${periodStart}T00:00:00Z`)
+  if (!Number.isFinite(from) || !Number.isFinite(here) || periodDays <= 0) return 0
+  const elapsed = Math.ceil((here - from) / (periodDays * 86400000)) + 1
+  const taken = Math.min(Math.max(0, elapsed), periods)
+  return money(instalmentAmount(entry) * taken)
 }
 
 /**
@@ -186,14 +219,29 @@ export function instalmentDueInPeriod(entry: LedgerEntry, periodIndex: number): 
  * behind it, and the only thing worse than not knowing what somebody owes is confidently showing
  * the wrong figure.
  */
-export function outstandingAdvance(entries: readonly LedgerEntry[], recoveredToDate: number): number {
+export function outstandingAdvance(
+  entries: readonly LedgerEntry[],
+  /**
+   * The period to measure as of. Omit for "everything advanced, less cash repaid" -- the cautious
+   * figure the Workers panel shows before payroll has run.
+   *
+   * Passing it makes recovery CUMULATIVE. It used to take a single `recoveredToDate` number that
+   * callers had no way to compute, so every one of them passed 0 and the balance never fell as
+   * instalments came off. A worker four weeks into a ten-week advance still showed the full amount.
+   */
+  asOfPeriodStart?: string,
+  periodDays = 7,
+): number {
   const advanced = entries
     .filter((e) => e.entryType === "advance")
     .reduce((sum, e) => sum + Math.max(0, num(e.amount)), 0)
   const repaid = entries
     .filter((e) => e.entryType === "repayment")
     .reduce((sum, e) => sum + Math.max(0, num(e.amount)), 0)
-  return money(Math.max(0, advanced - repaid - Math.max(0, num(recoveredToDate))))
+  const recovered = asOfPeriodStart
+    ? entries.reduce((sum, e) => sum + recoveredByPeriod(e, asOfPeriodStart, periodDays), 0)
+    : 0
+  return money(Math.max(0, advanced - repaid - recovered))
 }
 
 /** Retention held for a worker: accruals in, payouts out. Grows until they leave. */

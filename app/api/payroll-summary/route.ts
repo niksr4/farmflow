@@ -8,7 +8,7 @@ import { resolveActiveEstate } from "@/lib/server/estate-filter"
 import { SELECTED_ESTATE_COOKIE } from "@/lib/server/estate-cookie"
 import { normalizeTenantContext, runTenantQuery } from "@/lib/server/tenant-db"
 import { logServerError } from "@/lib/server/safe-logging"
-import { computeWorkerPay, periodIndexFor, periodUsesRules } from "@/lib/payroll-period"
+import { computeWorkerPay, periodUsesRules } from "@/lib/payroll-period"
 import type { PayRule } from "@/lib/pay-rules"
 
 export const dynamic = "force-dynamic"
@@ -290,15 +290,12 @@ export async function GET(request: Request) {
         recoverOverPeriods: r.recover_over_periods == null ? 1 : Number(r.recover_over_periods),
         recoverFrom: r.recover_from ? String(r.recover_from) : null,
       })),
-      periodIndex: periodIndexFor(
-        // Counted from the earliest advance, so the ordinal is stable: re-running a closed week
-        // gives the instalment it gave the first time, whatever else has happened since.
-        (ledgerRows as any[])
-          .filter((r) => r.entry_type === "advance")
-          .map((r) => String(r.recover_from || r.entry_date))
-          .sort()[0] || startDate,
-        startDate,
-      ),
+      /**
+       * The run's own first day. Recovery is anchored to each advance's start date, so nothing here
+       * has to invent "which period this is" -- and an advance cannot be recovered from a week that
+       * ended before it was given, which is what an invented ordinal allowed.
+       */
+      periodStart: startDate,
     }
 
     // False for every tenant that has set nothing, which keeps their payload exactly as it was.

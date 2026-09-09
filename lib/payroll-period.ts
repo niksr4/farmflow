@@ -46,13 +46,24 @@ export type PeriodInput = {
   /** Every ledger entry for the worker, all time — balances need history, not just this period. */
   ledger: readonly (LedgerEntry & { workerId: string })[]
   /**
-   * Which payroll run this is, counted from the first. Advances recover across runs, so an
-   * instalment needs to know which one it is looking at.
+   * The first day of this payroll run.
    *
-   * Manoj pays weekly on a Saturday and wants deductions taken weekly, so for Medappa a period is
-   * a week. The unit is deliberately "a payroll run" rather than a month — see scripts/149.
+   * A DATE, NOT AN ORDINAL. This was an index counted from "the first run", which every caller had
+   * to invent — and an advance handed over on the 10th was then recovered from the week starting
+   * the 2nd, because index 0 meant "the caller's first period" rather than "this advance's first
+   * period". A week already paid, docked for money not yet given.
+   *
+   * Anchoring to the advance's own start makes recovering-before-lending impossible rather than
+   * merely unlikely. Found by tests/payroll-month-report.test.ts on its first run: a single week
+   * cannot tell a global ordinal from a relative one, because over one period they are the same
+   * number. A month can.
+   *
+   * Manoj pays weekly on a Saturday and takes deductions weekly, so for Medappa a period is a week
+   * — hence periodDays. The unit is a payroll run, never a calendar month.
    */
-  periodIndex: number
+  periodStart: string
+  /** Length of a run in days. 7 for a weekly payroll; set it for anything else. */
+  periodDays?: number
 }
 
 export type WorkerPay = {
@@ -70,6 +81,13 @@ export type WorkerPay = {
 }
 
 const round = (n: number) => Math.round(n * 100) / 100
+
+/** The run before this one, so "recovered so far" can exclude the run being computed. */
+const previousPeriodStart = (periodStart: string, periodDays: number): string => {
+  const t = Date.parse(`${periodStart}T00:00:00Z`)
+  if (!Number.isFinite(t)) return periodStart
+  return new Date(t - periodDays * 86400000).toISOString().slice(0, 10)
+}
 
 /**
  * Retention, overtime and advance recovery for one worker over one period.
@@ -105,7 +123,10 @@ export function computeWorkerPay(input: PeriodInput, workerId: string, gross: nu
     overtime += overtimePay(rule, { dayRate: rateThatDay, hours: day.hours })
   }
 
-  const advanceDue = entries.reduce((sum, e) => sum + instalmentDueInPeriod(e, input.periodIndex), 0)
+  const advanceDue = entries.reduce(
+    (sum, e) => sum + instalmentDueInPeriod(e, input.periodStart, input.periodDays ?? 7),
+    0,
+  )
 
   // Overtime is earnings, so it is deducted FROM -- an estate that pays overtime and then holds
   // nothing against it would be retaining a smaller share than the rule says.
@@ -118,8 +139,40 @@ export function computeWorkerPay(input: PeriodInput, workerId: string, gross: nu
     advanceDue: round(advanceDue),
     advanceRecovered: applied.advanceRecovered,
     shortfall: applied.shortfall,
+    /**
+     * What the estate holds after this run.
+     *
+     * retentionHeld() sums `retention_accrual` ROWS, and there are none -- retention is derived,
+     * not written (the decision recorded in docs/PAYROLL-NEXT-STEPS.md step 1). So this is only
+     * ever this period's retention plus any accrual somebody recorded by hand, and a month of
+     * weekly runs shows one week's worth rather than four.
+     *
+     * Correct for a single run, WRONG as a running balance, and the caller cannot tell which it is
+     * getting. The Workers panel therefore derives the held figure from the full ledger itself
+     * rather than reading this. Fixing it properly is the derive-or-write decision, not a patch.
+     */
     heldAfter: round(retentionHeld(entries) + applied.retention),
-    owedAfter: round(Math.max(0, outstandingAdvance(entries, 0) - applied.advanceRecovered)),
+    /**
+     * What is still owed after this run: everything advanced, less cash repaid, less what has
+     * ACTUALLY been recovered.
+     *
+     * Scheduled recovery up to the PREVIOUS run, plus what this run genuinely took -- which is not
+     * always the instalment, because a thin week caps recovery at the wage.
+     *
+     * ⚠ THE HONEST LIMIT OF A DERIVED BALANCE. If an EARLIER run was also short, this still assumes
+     * it recovered its full instalment, so the figure is optimistic by that shortfall. It cannot be
+     * otherwise without recording what each run actually took — which is precisely the
+     * derive-or-write decision in docs/PAYROLL-NEXT-STEPS.md, arriving with a concrete cost rather
+     * than as a preference. Until then the shortfall is shown on the run it happened, so the
+     * discrepancy is visible on the sheet rather than only in the balance.
+     */
+    owedAfter: round(
+      Math.max(
+        0,
+        outstandingAdvance(entries, previousPeriodStart(input.periodStart, input.periodDays ?? 7), input.periodDays ?? 7) -
+          applied.advanceRecovered,
+      ),
+    ),
     hasRule,
   }
 }
