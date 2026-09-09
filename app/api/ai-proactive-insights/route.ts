@@ -1,6 +1,7 @@
 import { buildRateLimitHeaders, checkRateLimit } from "@/lib/rate-limit"
 import { buildTenantAiDataSummary } from "@/lib/server/ai-analysis"
 import { buildClaudeRouteErrorResponse, classifyClaudeRouteError } from "@/lib/server/claude-errors"
+import { sanitizeRouteError } from "@/lib/server/sanitize-route-error"
 import { requireModuleAccess, isModuleAccessError } from "@/lib/server/module-access"
 import { logServerError, logServerWarning } from "@/lib/server/safe-logging"
 import { CLAUDE_HAIKU } from "@/lib/server/claude"
@@ -121,7 +122,7 @@ export async function GET() {
     }
     logServerError("Proactive insights error", error)
     return Response.json(
-      { success: false, error: error instanceof Error ? error.message : "Failed to generate insights" },
+      { success: false, error: sanitizeRouteError(error, "Failed to generate insights") },
       { status: 500, headers: rateHeaders },
     )
   }

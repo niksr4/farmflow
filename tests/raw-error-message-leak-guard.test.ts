@@ -37,9 +37,6 @@ import { describe, expect, it } from "vitest"
  * automatically).
  */
 const KNOWN_RAW_ERROR_LEAKS = [
-  "app/api/admin/weekly-summary/route.ts",
-  "app/api/ai-analysis/route.ts",
-  "app/api/ai-proactive-insights/route.ts",
   "app/api/attendance/devices/[id]/route.ts",
   "app/api/attendance/devices/route.ts",
   "app/api/attendance/route.ts",
