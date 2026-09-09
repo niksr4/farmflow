@@ -1,5 +1,22 @@
 -- 150: overtime hours, recorded once a day against a name.
 --
+-- ⚠ PROVISIONAL AS OF 2026-09-09, AND EXPECTED TO BE SUPERSEDED. Do not build an entry screen
+-- against this column.
+--
+-- Manoj asked, the day after this landed, for overtime to carry FIVE things: the worker, the
+-- location or lot number, the type of work, the hours, and its own rate -- because most of his
+-- processing cost arrives as overtime and he wants it attributable. Three of those five have
+-- nowhere to live here. What he is describing is not a modifier on a day; it is a piece of work,
+-- which is the shape labour_assignments already has.
+--
+-- Left in place rather than reverted because it holds zero rows, exists only on dev, and no screen
+-- writes to it -- so it costs nothing, and dropping it belongs in the same migration that
+-- introduces the real shape rather than in one of its own.
+--
+-- Blocked on one question with him: whether a lot number is a different thing from a block. That
+-- answer also decides whether picking_records needs a lot, so it is being asked before the picking
+-- work rather than after. See docs/PAYROLL-NEXT-STEPS.md.
+--
 -- Manoj, 2026-09-08: "my normal work is 8 hours. However please don't tie the OT to the number of
 -- hours worked during the day. let it be a separate entry at a muster level where the writer enters
 -- the day and the number of hours on any day against the name of the worker on the day overtime is

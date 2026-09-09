@@ -13,10 +13,12 @@ terms rather than because somebody ticked a box.
 |---|---|
 | `scripts/149` | `worker_pay_rules`, effective-dated. `worker_ledger` gains `recover_over_periods`, `recover_from`, `created_by` and three entry types. RLS enabled, forced and policied inline. **Dev only — prod not migrated.** |
 | `lib/pay-rules.ts` | Rule resolution, retention, all three overtime readings, instalments, balances, deduction capping. 34 unit tests. |
-| `/api/worker-pay-rules` | GET + POST. No PUT, no DELETE — a change inserts a dated row. Admin-only. |
+| `/api/worker-pay-rules` | GET, POST, and PUT/DELETE on `[id]`. Admin-only. The first version had no edit path, on reasoning that turned out to be wrong — see `[id]/route.ts`. |
 | `/api/worker-ledger` | Advances, repayments and retention payouts gated on `isAdminRole`. `retention_accrual` refused outright. |
 | `components/workers/worker-money-panel.tsx` | Held / owed / rule, history, admin-gated entry. Wired into the roster's expanded row. |
-| Tests | 18 whole-estate scenarios, 7 guarding the isolation prover, plus the unit set. **1,921 total.** |
+| `lib/payroll-period.ts` | Joins the database to the rules. Retention day by day, overtime at the day's stored rate, instalments per run. |
+| Payroll UI | Overtime / retention / advance columns on table and card, shown only when the estate uses rules. |
+| Tests | 18 whole-estate scenarios, 19 period tests, 13 on editability, 7 guarding the isolation prover. **1,960 total.** |
 
 **Every tenant still sees today's product.** No tenant has a rule row, and the scenario suite has a
 case asserting gross equals net when none exist.
@@ -77,11 +79,31 @@ changes the architecture rather than extending it — do not build it speculativ
 This is a report, not a build, and it is the thing most likely to make an estate want to give you
 acreage — which is what everything downstream of it is waiting on.
 
-### 6 · Overtime — **blocked on Manoj**
+### 6 · Overtime — **deliberately parked, 2026-09-09**
 
-The column (`labour_assignments.overtime_hours`) and the rule storage both exist. What is missing is
-which of three readings "1.2×" means, and how long a working day is. If he answers *whole-day
-uplift*, `pay_multiplier` already implements it and this is a UI change only.
+Answered and then reopened on the same day. He confirmed 8-hour days and 1.2×, which unblocked the
+arithmetic — and then asked for overtime to carry the **worker, the location or lot number, the type
+of work, the hours, and its own rate**, because most of his processing cost arrives as overtime and
+he wants it attributable to a lot.
+
+`scripts/150` put the hours on `attendance_records`: worker, date, hours. Three of his five have
+nowhere to go there. What he describes is a piece of work — a person, a place, a task, a quantity, a
+price — which is the shape `labour_assignments` already has. The blocker there is one CHECK,
+`day_fraction > 0`: night pulping is not a fraction of a normal day, so an overtime-only row is
+currently refused.
+
+**Parked rather than rebuilt, on purpose.** Nobody records overtime today, migration 150 is dev-only
+with zero rows, and no screen writes to it — so the cost of waiting is zero and the cost of building
+an entry form on the wrong shape is a data migration later.
+
+**One question is being asked now, not later:** is a lot number a different thing from a block? That
+answer decides whether `picking_records` needs a `lot_id` too, and picking is the next tab — so it is
+worth having before that work starts rather than after.
+
+⚠ **A customer has asked for lot traceability.** CLAUDE.md's "Built But Unadopted" section says not
+to invest there until one does. `lot_id` sits on seven tables with one stray row between them, and
+there is no screen anywhere that creates a lot. That is now a real requirement rather than dormant
+code, and it should be re-read with that in mind before the processing work.
 
 ### 7 · Exit settlement — *after the above*
 
@@ -96,9 +118,11 @@ somebody.
 
 | Blocked | On | Consequence if guessed |
 |---|---|---|
-| Overtime arithmetic | Manoj: 1.2× of what, and how many hours is a day | Three answers, 3× apart. ₹240 vs ₹720 on the same input |
-| Flat retention on a half day | Manoj: ₹60 or ₹120 | Currently prorates; one `* share` to change |
-| Instalment unit | Manoj: one week a month, or spread across every week | Ten monthly instalments ≈ forty weekly ones |
+| ~~Overtime arithmetic~~ | ~~1.2× of what~~ | **Answered 2026-09-08**: 8-hour day, 1.2× the hourly — ₹90/hr on a ₹600 day |
+| ~~Flat retention on a half day~~ | — | **Answered**: it is a percentage, and a half day holds 20% of the half-day wage |
+| ~~Instalment unit~~ | — | **Answered**: weekly, paid Saturday |
+| **Is a lot a different thing from a block?** | Manoj | Decides the overtime record's shape AND whether `picking_records` needs a `lot_id`. Asked before the picking work, not after |
+| Overtime rate by type of work | Manoj | "may pay skilled work more than 1.2×" — a third axis beyond per-worker. Answer is to store the applied rate on the row, as everywhere else |
 | Picking threshold rules | Manoj, and a kilo existing | `picking_records` has 0 rows ever |
 | Cost per acre | 49 of 69 blocks have no acreage | Medappa: 0 of 25 |
 | Cost per plant | Nobody has counted | No column, no census |
