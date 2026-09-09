@@ -14,10 +14,14 @@ import { resolveRuleForDate, type PayRule } from "@/lib/pay-rules"
  *
  * Storage and reasoning: scripts/149, docs/PAYROLL-RULES-PLAN.md.
  *
- * THERE IS NO PUT AND NO DELETE, AND THAT IS THE DESIGN. A rule change inserts a row with a new
- * effective_from; editing one in place would silently rewrite what every past payroll cost, and a
- * payslip printed in June would stop matching the screen in December. To stop retaining, post a
- * row with the rule fields empty -- that ends it from a date without erasing what accrued before.
+ * A rule change normally INSERTS a row with a new effective_from, which is what keeps a payslip
+ * printed in June matching the screen in December. To stop retaining, post a row with the rule
+ * fields empty: that ends it from a date without erasing what accrued before.
+ *
+ * Correcting or removing an individual rule lives in [id]/route.ts. This route deliberately had
+ * neither at first, on the reasoning that an editable rule rewrites history -- which is wrong, and
+ * is written up in that file. Editing a row changes only the span it governs; what protects
+ * reproducibility is that a rule is dated, not that it cannot be fixed.
  *
  * ADMIN ONLY. `accounts` is in USER_MUTATION_MODULES, so canWriteModule would let a writer through;
  * this deliberately does not use it. Setting what every worker is held back is an owner's decision,

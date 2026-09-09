@@ -1,7 +1,7 @@
 "use client"
 
 import { useCallback, useEffect, useMemo, useState } from "react"
-import { Loader2, Plus, ShieldAlert } from "lucide-react"
+import { Check, Loader2, Pencil, Plus, ShieldAlert, Trash2, X } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -57,6 +57,14 @@ export default function WorkerMoneyPanel({ workerId, workerName, dailyRate, canA
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [adding, setAdding] = useState(false)
+  /**
+   * Every record here is editable and removable, like everything else in this product. An advance
+   * mistyped as Rs 20,000 instead of Rs 2,000 is a thing that happens on a phone, and the fix must
+   * not be a database query. The route gates both on the same admin check as creating one -- a
+   * permission that stops at creation is not a permission.
+   */
+  const [editingId, setEditingId] = useState<string | null>(null)
+  const [editForm, setEditForm] = useState({ amount: "", entryDate: "", description: "", recoverOverPeriods: "1" })
 
   const [form, setForm] = useState({
     entryType: "advance",
@@ -138,6 +146,68 @@ export default function WorkerMoneyPanel({ workerId, workerName, dailyRate, canA
       load()
     } catch (error: any) {
       toast.error(error?.message || "Could not save")
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const startEdit = (e: EntryRow) => {
+    setEditingId(e.id)
+    setEditForm({
+      amount: String(e.amount),
+      entryDate: String(e.entryDate).slice(0, 10),
+      description: e.description || "",
+      recoverOverPeriods: String(e.recoverOverPeriods ?? 1),
+    })
+  }
+
+  const saveEdit = async (entry: EntryRow) => {
+    const amount = Number(editForm.amount)
+    if (!Number.isFinite(amount) || amount <= 0) {
+      toast.error("Enter an amount greater than zero")
+      return
+    }
+    setSaving(true)
+    try {
+      const body: Record<string, unknown> = {
+        amount,
+        entryDate: editForm.entryDate,
+        description: editForm.description.trim() || null,
+      }
+      if (entry.entryType === "advance") {
+        body.recoverOverPeriods = Math.max(1, Number(editForm.recoverOverPeriods) || 1)
+      }
+      const res = await fetch(`/api/worker-ledger/${entry.id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      })
+      const data = await res.json()
+      if (!res.ok || !data.success) throw new Error(data.error || "Could not update")
+      toast.success("Updated")
+      setEditingId(null)
+      load()
+    } catch (error: any) {
+      toast.error(error?.message || "Could not update")
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const remove = async (entry: EntryRow) => {
+    // Says what disappears and what it was, because the balances above move as a result and a
+    // half-remembered "delete entry?" is how the wrong row goes.
+    const label = `${ENTRY_LABELS[entry.entryType] || entry.entryType} of ${formatCurrency(entry.amount)} on ${String(entry.entryDate).slice(0, 10)}`
+    if (!window.confirm(`Remove this ${label}? The balances above will change to match.`)) return
+    setSaving(true)
+    try {
+      const res = await fetch(`/api/worker-ledger/${entry.id}`, { method: "DELETE" })
+      const data = await res.json()
+      if (!res.ok || !data.success) throw new Error(data.error || "Could not remove")
+      toast.success("Removed")
+      load()
+    } catch (error: any) {
+      toast.error(error?.message || "Could not remove")
     } finally {
       setSaving(false)
     }
@@ -270,26 +340,69 @@ export default function WorkerMoneyPanel({ workerId, workerName, dailyRate, canA
           </p>
         ) : (
           <div className="divide-y rounded-lg border">
-            {entries.map((e) => (
-              <div key={e.id} className="flex items-center justify-between gap-3 px-3 py-2 text-sm">
-                <span className="w-20 shrink-0 text-xs text-muted-foreground">{String(e.entryDate).slice(0, 10)}</span>
-                <span className="flex-1 truncate text-muted-foreground">
-                  {ENTRY_LABELS[e.entryType] || e.entryType}
-                  {e.description ? ` · ${e.description}` : ""}
-                  {e.entryType === "advance" && (e.recoverOverPeriods ?? 1) > 1
-                    ? ` · over ${e.recoverOverPeriods} runs`
-                    : ""}
-                </span>
-                <span
-                  className={`font-mono font-semibold tabular-nums ${
-                    CREDITS.has(e.entryType) ? "text-emerald-700 dark:text-emerald-400" : "text-rose-700 dark:text-rose-400"
-                  }`}
-                >
-                  {CREDITS.has(e.entryType) ? "+" : "−"}
-                  {formatCurrency(e.amount)}
-                </span>
-              </div>
-            ))}
+            {entries.map((e) =>
+              editingId === e.id ? (
+                <div key={e.id} className="space-y-2 bg-muted/40 px-3 py-2">
+                  <div className="grid gap-2 sm:grid-cols-3">
+                    <Input type="date" value={editForm.entryDate} onChange={(ev) => setEditForm((p) => ({ ...p, entryDate: ev.target.value }))} />
+                    <Input inputMode="decimal" value={editForm.amount} onChange={(ev) => setEditForm((p) => ({ ...p, amount: ev.target.value }))} />
+                    {e.entryType === "advance" ? (
+                      <Input
+                        inputMode="numeric"
+                        value={editForm.recoverOverPeriods}
+                        onChange={(ev) => setEditForm((p) => ({ ...p, recoverOverPeriods: ev.target.value }))}
+                        aria-label="Recover over how many payroll runs"
+                      />
+                    ) : null}
+                  </div>
+                  <Input
+                    value={editForm.description}
+                    placeholder="Note"
+                    onChange={(ev) => setEditForm((p) => ({ ...p, description: ev.target.value }))}
+                  />
+                  <div className="flex gap-2">
+                    <Button size="sm" onClick={() => saveEdit(e)} disabled={saving}>
+                      <Check className="mr-1 h-3.5 w-3.5" /> Save
+                    </Button>
+                    <Button size="sm" variant="ghost" onClick={() => setEditingId(null)}>
+                      <X className="mr-1 h-3.5 w-3.5" /> Cancel
+                    </Button>
+                  </div>
+                </div>
+              ) : (
+                <div key={e.id} className="flex items-center justify-between gap-3 px-3 py-2 text-sm">
+                  <span className="w-20 shrink-0 text-xs text-muted-foreground">{String(e.entryDate).slice(0, 10)}</span>
+                  <span className="flex-1 truncate text-muted-foreground">
+                    {ENTRY_LABELS[e.entryType] || e.entryType}
+                    {e.description ? ` · ${e.description}` : ""}
+                    {e.entryType === "advance" && (e.recoverOverPeriods ?? 1) > 1
+                      ? ` · over ${e.recoverOverPeriods} runs`
+                      : ""}
+                  </span>
+                  <span
+                    className={`font-mono font-semibold tabular-nums ${
+                      CREDITS.has(e.entryType) ? "text-emerald-700 dark:text-emerald-400" : "text-rose-700 dark:text-rose-400"
+                    }`}
+                  >
+                    {CREDITS.has(e.entryType) ? "+" : "−"}
+                    {formatCurrency(e.amount)}
+                  </span>
+                  {/* A retention accrual is derived from days worked and the rule in force, so it is
+                      not a row anybody typed and not one to hand-edit -- correct the rule or the
+                      muster instead. Everything a person entered is editable and removable. */}
+                  {canAdmin && e.entryType !== "retention_accrual" ? (
+                    <span className="flex shrink-0 gap-0.5">
+                      <Button size="icon" variant="ghost" className="h-6 w-6" onClick={() => startEdit(e)} aria-label={`Edit this ${ENTRY_LABELS[e.entryType] || e.entryType}`}>
+                        <Pencil className="h-3 w-3" />
+                      </Button>
+                      <Button size="icon" variant="ghost" className="h-6 w-6 text-destructive" onClick={() => remove(e)} aria-label={`Remove this ${ENTRY_LABELS[e.entryType] || e.entryType}`}>
+                        <Trash2 className="h-3 w-3" />
+                      </Button>
+                    </span>
+                  ) : null}
+                </div>
+              ),
+            )}
           </div>
         )}
       </div>

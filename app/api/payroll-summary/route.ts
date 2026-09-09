@@ -8,6 +8,8 @@ import { resolveActiveEstate } from "@/lib/server/estate-filter"
 import { SELECTED_ESTATE_COOKIE } from "@/lib/server/estate-cookie"
 import { normalizeTenantContext, runTenantQuery } from "@/lib/server/tenant-db"
 import { logServerError } from "@/lib/server/safe-logging"
+import { computeWorkerPay, periodIndexFor, periodUsesRules } from "@/lib/payroll-period"
+import type { PayRule } from "@/lib/pay-rules"
 
 export const dynamic = "force-dynamic"
 export const revalidate = 0
@@ -124,11 +126,26 @@ export async function GET(request: Request) {
             AND w.worker_type = ANY(${MONTHLY_PAID_WORKER_TYPES as unknown as string[]})
           GROUP BY w.id
         ),
+        /**
+         * ADVANCES ARE NO LONGER SUBTRACTED HERE, and that is not an omission.
+         *
+         * This used to take the FULL amount of any advance dated inside the period. That is right
+         * only for an advance recovered in one go, and scripts/149 made recovery an instalment
+         * schedule -- Rs 20,000 over ten weekly runs takes Rs 2,000, not Rs 20,000, from the week it
+         * was handed over. Leaving it here as well would subtract both.
+         *
+         * Recovery is now computed once, in lib/payroll-period.ts, from the schedule on the entry.
+         * Safe to change: worker_ledger has 0 advance rows in every tenant, so no existing figure
+         * moves -- this is the model arriving before the data rather than after it.
+         *
+         * A one-off deduction (a fine, damage) still belongs here: it is money simply withheld,
+         * in full, in the period it was recorded -- no schedule, because there is nothing to recover.
+         */
         ledger_totals AS (
           SELECT
             worker_id,
-            COALESCE(SUM(CASE WHEN entry_type IN ('advance','deduction') THEN amount ELSE 0 END), 0) AS total_deductions,
-            COALESCE(SUM(CASE WHEN entry_type = 'adjustment' THEN amount ELSE 0 END), 0)             AS total_adjustments
+            COALESCE(SUM(CASE WHEN entry_type = 'deduction' THEN amount ELSE 0 END), 0)  AS total_deductions,
+            COALESCE(SUM(CASE WHEN entry_type = 'adjustment' THEN amount ELSE 0 END), 0) AS total_adjustments
           FROM worker_ledger
           WHERE tenant_id = ${tenantContext.tenantId}
             AND entry_date BETWEEN ${startDate}::date AND ${endDate}::date
@@ -187,6 +204,106 @@ export async function GET(request: Request) {
       `,
     )
 
+    /**
+     * The estate's own rules, and the raw material they act on.
+     *
+     * Fetched separately and applied in JavaScript rather than folded into the query above, because
+     * the alternative is a second implementation of effective-dated rule resolution written in SQL
+     * that must agree with lib/pay-rules.ts forever. Four small reads against a period's worth of
+     * rows is the cheaper half of that trade.
+     */
+    const [ruleRows, workedRows, overtimeRows, ledgerRows] = await Promise.all([
+      runTenantQuery(
+        accountsSql, tenantContext,
+        accountsSql`
+          SELECT worker_id, effective_from::text AS effective_from, retention_mode, retention_value,
+                 overtime_mode, overtime_value, full_day_hours, pf_percent
+          FROM worker_pay_rules WHERE tenant_id = ${tenantContext.tenantId}
+        `,
+      ),
+      // One row per worker per DAY. Retention is applied day by day, not to the period total, so a
+      // half day holds half and a rule that changes mid-period changes mid-period.
+      runTenantQuery(
+        accountsSql, tenantContext,
+        accountsSql`
+          SELECT worker_id, work_date::text AS work_date,
+                 SUM(day_fraction)::numeric AS day_fraction,
+                 MAX(rate)::numeric         AS rate
+          FROM labour_assignments
+          WHERE tenant_id = ${tenantContext.tenantId}
+            AND work_date BETWEEN ${startDate}::date AND ${endDate}::date
+          GROUP BY worker_id, work_date
+        `,
+      ),
+      runTenantQuery(
+        accountsSql, tenantContext,
+        accountsSql`
+          SELECT worker_id, attendance_date::text AS work_date, overtime_hours
+          FROM attendance_records
+          WHERE tenant_id = ${tenantContext.tenantId}
+            AND attendance_date BETWEEN ${startDate}::date AND ${endDate}::date
+            AND overtime_hours IS NOT NULL
+        `,
+      ),
+      // ALL TIME, not the period. A balance is history; an instalment needs the entry that started
+      // it, which is usually dated before the run being computed.
+      runTenantQuery(
+        accountsSql, tenantContext,
+        accountsSql`
+          SELECT id, worker_id, entry_type, entry_date::text AS entry_date, amount,
+                 recover_over_periods, recover_from::text AS recover_from
+          FROM worker_ledger WHERE tenant_id = ${tenantContext.tenantId}
+        `,
+      ),
+    ])
+
+    const rules: PayRule[] = (ruleRows as any[]).map((r) => ({
+      workerId: r.worker_id ? String(r.worker_id) : null,
+      effectiveFrom: String(r.effective_from),
+      retentionMode: r.retention_mode ?? null,
+      retentionValue: r.retention_value == null ? null : Number(r.retention_value),
+      overtimeMode: r.overtime_mode ?? null,
+      overtimeValue: r.overtime_value == null ? null : Number(r.overtime_value),
+      fullDayHours: r.full_day_hours == null ? null : Number(r.full_day_hours),
+      pfPercent: r.pf_percent == null ? null : Number(r.pf_percent),
+    }))
+
+    const periodInput = {
+      rules,
+      workedDays: (workedRows as any[]).map((r) => ({
+        workerId: String(r.worker_id),
+        workDate: String(r.work_date),
+        dayFraction: Number(r.day_fraction) || 0,
+        rate: Number(r.rate) || 0,
+      })),
+      overtimeDays: (overtimeRows as any[]).map((r) => ({
+        workerId: String(r.worker_id),
+        workDate: String(r.work_date),
+        hours: Number(r.overtime_hours) || 0,
+      })),
+      ledger: (ledgerRows as any[]).map((r) => ({
+        workerId: String(r.worker_id),
+        id: String(r.id),
+        entryType: r.entry_type,
+        entryDate: String(r.entry_date),
+        amount: Number(r.amount) || 0,
+        recoverOverPeriods: r.recover_over_periods == null ? 1 : Number(r.recover_over_periods),
+        recoverFrom: r.recover_from ? String(r.recover_from) : null,
+      })),
+      periodIndex: periodIndexFor(
+        // Counted from the earliest advance, so the ordinal is stable: re-running a closed week
+        // gives the instalment it gave the first time, whatever else has happened since.
+        (ledgerRows as any[])
+          .filter((r) => r.entry_type === "advance")
+          .map((r) => String(r.recover_from || r.entry_date))
+          .sort()[0] || startDate,
+        startDate,
+      ),
+    }
+
+    // False for every tenant that has set nothing, which keeps their payload exactly as it was.
+    const usesRules = periodUsesRules(periodInput)
+
     const workers = (rows as any[]).map((r) => ({
       id: String(r.id),
       name: String(r.full_name || ""),
@@ -215,6 +332,26 @@ export async function GET(request: Request) {
       /** True when this line came from allocated work rather than days-times-rate. */
       fromMuster: Boolean(r.from_muster),
     }))
+      .map((w) => {
+        // Rules applied per worker. For a tenant with none, every figure below is zero and
+        // netPayable is untouched -- which is what keeps three of four estates unchanged.
+        const pay = computeWorkerPay(periodInput, w.id, w.attendanceEarnings + w.pickingEarnings)
+        const net =
+          w.attendanceEarnings + w.pickingEarnings + w.adjustments - w.deductions
+          + pay.overtime - pay.retention - pay.advanceRecovered
+        return {
+          ...w,
+          overtime: pay.overtime,
+          retention: pay.retention,
+          advanceDue: pay.advanceDue,
+          advanceRecovered: pay.advanceRecovered,
+          /** Stated, never carried into the next run. The estate decides what to do about it. */
+          advanceShortfall: pay.shortfall,
+          heldAfter: pay.heldAfter,
+          owedAfter: pay.owedAfter,
+          netPayable: Math.max(0, Math.round(net * 100) / 100),
+        }
+      })
 
     const totals = workers.reduce(
       (acc, w) => ({
@@ -224,9 +361,17 @@ export async function GET(request: Request) {
         pickingKg: acc.pickingKg + w.pickingKg,
         deductions: acc.deductions + w.deductions,
         adjustments: acc.adjustments + w.adjustments,
+        overtime: acc.overtime + w.overtime,
+        retention: acc.retention + w.retention,
+        advanceRecovered: acc.advanceRecovered + w.advanceRecovered,
+        advanceShortfall: acc.advanceShortfall + w.advanceShortfall,
         netPayable: acc.netPayable + w.netPayable,
       }),
-      { daysPresent: 0, attendanceEarnings: 0, pickingEarnings: 0, pickingKg: 0, deductions: 0, adjustments: 0, netPayable: 0 },
+      {
+        daysPresent: 0, attendanceEarnings: 0, pickingEarnings: 0, pickingKg: 0,
+        deductions: 0, adjustments: 0, overtime: 0, retention: 0,
+        advanceRecovered: 0, advanceShortfall: 0, netPayable: 0,
+      },
     )
 
     return NextResponse.json({
@@ -235,6 +380,12 @@ export async function GET(request: Request) {
       endDate,
       workers,
       totals,
+      /**
+       * Whether this estate uses any of it. The UI shows the retention / overtime / advance columns
+       * only when this is true, so a tenant that has set nothing sees the payroll they saw before
+       * any of this existed -- which is three of the four live ones.
+       */
+      usesRules,
     })
   } catch (error) {
     if (isModuleAccessError(error)) {
