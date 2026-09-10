@@ -107,6 +107,12 @@ import AppSidebar from "@/components/app-sidebar"
 import { Skeleton, SkeletonCard, SkeletonTable } from "@/components/ui/skeleton"
 import { toast } from "@/components/ui/use-toast"
 import { roleLabel } from "@/lib/roles"
+import {
+  seasonProgress as deriveSeasonProgress,
+  filterEmptyMetrics as deriveFilterEmptyMetrics,
+  availableExportDatasets as deriveExportDatasets,
+  estateFilteredLocations as deriveEstateFilteredLocations,
+} from "@/components/inventory-system/derivations"
 import { buildHeroContent, type BuildHeroContentParams } from "@/lib/workspace-hero-content"
 import WorkflowEmptyState from "@/components/workflow-empty-state"
 import {
@@ -454,7 +460,7 @@ export default function InventorySystem() {
   )
 
   const estateFilteredLocations = useMemo(
-    () => (canSelectEstate && selectedEstate ? blockLocations.filter((loc) => loc.estate === selectedEstate) : blockLocations),
+    () => deriveEstateFilteredLocations(blockLocations, { canSelectEstate, selectedEstate }),
     [canSelectEstate, selectedEstate, blockLocations],
   )
   useEffect(() => {
@@ -650,14 +656,7 @@ export default function InventorySystem() {
   const isStandaloneMobileApp = isMobile && isStandaloneMode
   const { theme, setTheme } = useTheme()
   const currentFiscalYear = useMemo(() => getCurrentFiscalYear(), [])
-  const seasonProgress = useMemo(() => {
-    const start = new Date(currentFiscalYear.startDate).getTime()
-    const end = new Date(currentFiscalYear.endDate).getTime()
-    const now = Date.now()
-    const pct = Math.min(100, Math.max(0, Math.round(((now - start) / (end - start)) * 100)))
-    const daysRemaining = Math.max(0, Math.ceil((end - now) / 86_400_000))
-    return { pct, daysRemaining }
-  }, [currentFiscalYear])
+  const seasonProgress = useMemo(() => deriveSeasonProgress(currentFiscalYear), [currentFiscalYear])
   const showTransactionHistory = isModuleEnabled("transactions")
   const canShowInventory = isModuleEnabled("inventory")
   const canShowAccounts = isModuleEnabled("accounts")
@@ -1678,11 +1677,7 @@ export default function InventorySystem() {
   const recentActivityLabel = `24h activity: ${formatCount(estateMetrics.recentActivity)}`
 
   const filterEmptyMetrics = useCallback(
-    <T extends { metricValue?: number | null }>(items: T[]) => {
-      if (!hideEmptyMetrics) return items
-      const filtered = items.filter((item) => item.metricValue === undefined || item.metricValue === null || item.metricValue !== 0)
-      return filtered.length ? filtered : items
-    },
+    <T extends { metricValue?: number | null }>(items: T[]) => deriveFilterEmptyMetrics(items, hideEmptyMetrics) as T[],
     [hideEmptyMetrics],
   )
 
@@ -3004,24 +2999,13 @@ export default function InventorySystem() {
       return parsed.getTime() >= cutoff
     })
   }, [transactions])
-  const availableExportDatasetCount = useMemo(() => {
-    const datasets = new Set<string>()
-    if (canShowProcessing) datasets.add("processing")
-    if (canShowDispatch) datasets.add("dispatch")
-    if (canShowSales) datasets.add("sales")
-    if (canShowPepper) datasets.add("pepper")
-    if (canShowRainfall) datasets.add("rainfall")
-    if (showTransactionHistory) datasets.add("transactions")
-    if (canShowInventory) datasets.add("inventory")
-    if (canShowAccounts) {
-      datasets.add("labour")
-      datasets.add("expenses")
-    }
-    if (canShowDispatch || canShowSales || canShowSeason) datasets.add("reconciliation")
-    if (canShowReceivables) datasets.add("receivables-aging")
-    if (canShowAccounts || canShowSales || canShowSeason) datasets.add("pnl-monthly")
-    return datasets.size
-  }, [
+  const availableExportDatasetCount = useMemo(
+    () =>
+      deriveExportDatasets({
+        canShowProcessing, canShowDispatch, canShowSales, canShowPepper, canShowRainfall,
+        showTransactionHistory, canShowInventory, canShowAccounts, canShowSeason, canShowReceivables,
+      }).size,
+    [
     canShowAccounts,
     canShowDispatch,
     canShowInventory,
