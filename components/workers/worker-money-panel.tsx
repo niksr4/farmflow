@@ -10,8 +10,9 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { toast } from "sonner"
 import { formatCurrency } from "@/lib/format"
 import { todayIso } from "@/lib/date-utils"
-import { outstandingAdvance, retentionHeld, type LedgerEntry, type PayRule } from "@/lib/pay-rules"
+import { outstandingAdvance, type LedgerEntry, type PayRule } from "@/lib/pay-rules"
 import PayRuleForm from "@/components/workers/pay-rule-form"
+import { useSingleFlight } from "@/hooks/use-single-flight"
 
 /**
  * Everything about one worker's money, in the one place that already holds every other fact about
@@ -64,6 +65,17 @@ export default function WorkerMoneyPanel({ workerId, workerName, dailyRate, canA
    * for everybody, under a heading naming one person. See workerRule in the route.
    */
   const [ownRule, setOwnRule] = useState<(PayRule & { id?: string }) | null>(null)
+  /**
+   * Retention held, DERIVED SERVER-SIDE from days worked x the rule in force on each of them.
+   *
+   * This used to be retentionHeld(entries) — the sum of `retention_accrual` rows — and nothing in
+   * the product writes one. The route refuses to create them (they are derived, and a typed one
+   * would be counted twice), payroll derives rather than writes, and the only inserter anywhere is
+   * the dev seeder. So this card read Rs 0 on every real estate, forever, while payroll took 20%
+   * of every day. Deriving it in the client instead would need every assignment the worker has
+   * ever had, which is a query, which belongs on the server.
+   */
+  const [held, setHeld] = useState(0)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [adding, setAdding] = useState(false)
@@ -94,7 +106,10 @@ export default function WorkerMoneyPanel({ workerId, workerName, dailyRate, canA
       ])
       const ledger = await ledgerRes.json()
       const rules = await rulesRes.json()
-      if (ledger?.success) setEntries(ledger.entries || [])
+      if (ledger?.success) {
+        setEntries(ledger.entries || [])
+        setHeld(Number(ledger.retentionHeldToDate) || 0)
+      }
       if (rules?.success) {
         setRule(rules.effectiveRule ?? null)
         setOwnRule(rules.workerRule ?? null)
@@ -112,7 +127,6 @@ export default function WorkerMoneyPanel({ workerId, workerName, dailyRate, canA
     load()
   }, [load])
 
-  const held = useMemo(() => retentionHeld(entries), [entries])
   /**
    * Everything advanced, less cash repaid — deliberately WITHOUT netting off instalments recovered
    * so far, because this panel does not know which payroll runs have happened.
@@ -129,7 +143,7 @@ export default function WorkerMoneyPanel({ workerId, workerName, dailyRate, canA
     return (dailyRate * rule.retentionValue) / 100
   }, [rule, dailyRate])
 
-  const submit = async () => {
+  const submitUnguarded = async () => {
     const amount = Number(form.amount)
     if (!Number.isFinite(amount) || amount <= 0) {
       toast.error("Enter an amount greater than zero")
@@ -177,7 +191,7 @@ export default function WorkerMoneyPanel({ workerId, workerName, dailyRate, canA
     })
   }
 
-  const saveEdit = async (entry: EntryRow) => {
+  const saveEditUnguarded = async (entry: EntryRow) => {
     const amount = Number(editForm.amount)
     if (!Number.isFinite(amount) || amount <= 0) {
       toast.error("Enter an amount greater than zero")
@@ -210,7 +224,7 @@ export default function WorkerMoneyPanel({ workerId, workerName, dailyRate, canA
     }
   }
 
-  const remove = async (entry: EntryRow) => {
+  const removeUnguarded = async (entry: EntryRow) => {
     // Says what disappears and what it was, because the balances above move as a result and a
     // half-remembered "delete entry?" is how the wrong row goes.
     const label = `${ENTRY_LABELS[entry.entryType] || entry.entryType} of ${formatCurrency(entry.amount)} on ${String(entry.entryDate).slice(0, 10)}`
@@ -228,6 +242,18 @@ export default function WorkerMoneyPanel({ workerId, workerName, dailyRate, canA
       setSaving(false)
     }
   }
+
+  /**
+   * A double-tap must not hand out the advance twice.
+   *
+   * `disabled={saving}` only takes effect on the NEXT render; a ref inside the runner is set in the
+   * same tick. lib/single-flight.ts exists for exactly this and fourteen other components already
+   * use it — the two handling money did not, and an advance is the most expensive row in the
+   * product to duplicate. On a phone, on a slow connection, two taps is not an unusual thing to do.
+   */
+  const submit = useSingleFlight(submitUnguarded)
+  const saveEdit = useSingleFlight(saveEditUnguarded)
+  const remove = useSingleFlight(removeUnguarded)
 
   const instalment =
     form.entryType === "advance" && Number(form.amount) > 0
@@ -248,7 +274,11 @@ export default function WorkerMoneyPanel({ workerId, workerName, dailyRate, canA
         <div className="rounded-lg border p-3">
           <div className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Held for them</div>
           <div className="mt-1 font-mono text-xl font-semibold tabular-nums">{formatCurrency(held)}</div>
-          <p className="mt-1 text-xs text-muted-foreground">Retention. Paid out when they leave.</p>
+          <p className="mt-1 text-xs text-muted-foreground">
+            {rule?.retentionMode
+              ? "Retention on every day worked. Paid out when they leave."
+              : "Retention. Paid out when they leave."}
+          </p>
         </div>
 
         <div className="rounded-lg border p-3">

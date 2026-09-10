@@ -100,16 +100,25 @@ async function main() {
     DO UPDATE SET created_by = EXCLUDED.created_by
   `
 
+  /**
+   * ONE OPENING BALANCE EACH, DATED BEFORE THE MUSTER — not a monthly accrual per month.
+   *
+   * Retention held is DERIVED from days worked x the rule in force, and any retention_accrual rows
+   * are added on top as an opening balance (what the estate already held before FarmFlow). The seed
+   * used to write an accrual for June, July and August alongside assignments in those same months,
+   * so the demo counted August twice: once from the row and once from the day. A demo that
+   * double-counts is worse than no demo, because it is the number somebody checks against.
+   *
+   * Dating them to the day before the muster begins is also the honest illustration of the only
+   * path these rows have — an estate arriving mid-year with money already held.
+   */
   const entries = [
-    // Ravi: retention building up, an advance being recovered over ten runs, one cash repayment.
-    [ravi.id, "2026-06-30", "retention_accrual", 2760, `Retention · June ${TAG}`, 1],
-    [ravi.id, "2026-07-31", "retention_accrual", 2880, `Retention · July ${TAG}`, 1],
+    // Ravi: an opening balance, an advance recovered over ten runs, one cash repayment.
+    [ravi.id, "2026-05-31", "retention_accrual", 8280, `Held before FarmFlow ${TAG}`, 1],
     [ravi.id, "2026-08-12", "advance", 20000, `School fees ${TAG}`, 10],
-    [ravi.id, "2026-08-31", "retention_accrual", 2640, `Retention · August ${TAG}`, 1],
     [ravi.id, "2026-09-01", "repayment", 5000, `Returned in cash ${TAG}`, 1],
     // Suma: retention only, nothing owed — the ordinary case.
-    [suma.id, "2026-07-31", "retention_accrual", 2520, `Retention · July ${TAG}`, 1],
-    [suma.id, "2026-08-31", "retention_accrual", 2520, `Retention · August ${TAG}`, 1],
+    [suma.id, "2026-05-31", "retention_accrual", 5040, `Held before FarmFlow ${TAG}`, 1],
     // Ganesh: exempt from retention, but has taken a small advance recovered in one go.
     [ganesh.id, "2026-08-20", "advance", 1500, `Advance ${TAG}`, 1],
   ]

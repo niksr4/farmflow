@@ -27,6 +27,15 @@ type PayrollWorker = {
   pickingKg: number
   pickingEarnings: number
   deductions: number
+  /**
+   * What was ACTUALLY withheld, which is not always what was recorded.
+   *
+   * A Rs 500 fine against a Rs 300 week withholds Rs 300. Showing the recorded Rs 500 beside a net
+   * of Rs 0 is a row that does not add up, and the Rs 200 it cannot explain used to vanish into a
+   * `Math.max(0, …)` on the net.
+   */
+  deductionsTaken?: number
+  deductionShortfall?: number
   adjustments: number
   netPayable: number
   /** All absent, and every line below hidden, for an estate that has set no rules. */
@@ -50,6 +59,7 @@ type Totals = {
   pickingEarnings: number
   pickingKg: number
   deductions: number
+  deductionShortfall?: number
   adjustments: number
   overtime?: number
   retention?: number
@@ -57,6 +67,9 @@ type Totals = {
   advanceShortfall?: number
   netPayable: number
 }
+
+/** What was actually withheld. Falls back to the recorded figure for an older payload. */
+const withheld = (w: PayrollWorker) => Number(w.deductionsTaken ?? w.deductions) || 0
 
 const today = () => todayIso()
 const firstOfMonth = () => todayIso().slice(0, 7) + "-01"
@@ -137,7 +150,7 @@ export default function PayrollSummaryTab() {
       "Worker", "Type", "Days Present", "Daily Rate (₹)", "Attendance Earnings (₹)",
       "Picking (kg)", "Picking Earnings (₹)", "Adjustments (₹)", "Deductions (₹)",
       ...(showRuleColumns
-        ? ["Overtime (₹)", "Retention Held (₹)", "Advance Recovered (₹)", "Advance Not Recovered (₹)", "Still Owed (₹)"]
+        ? ["Overtime (₹)", "Retention Held (₹)", "Advance Recovered (₹)", "Advance Not Recovered (₹)", "Deduction Not Taken (₹)", "Still Owed (₹)"]
         : []),
       "Net Payable (₹)",
     ]
@@ -150,13 +163,14 @@ export default function PayrollSummaryTab() {
       w.pickingKg.toFixed(3),
       w.pickingEarnings.toFixed(2),
       w.adjustments.toFixed(2),
-      w.deductions.toFixed(2),
+      withheld(w).toFixed(2),
       ...(showRuleColumns
         ? [
             (Number(w.overtime) || 0).toFixed(2),
             (Number(w.retention) || 0).toFixed(2),
             (Number(w.advanceRecovered) || 0).toFixed(2),
             (Number(w.advanceShortfall) || 0).toFixed(2),
+            (Number(w.deductionShortfall) || 0).toFixed(2),
             (Number(w.owedAfter) || 0).toFixed(2),
           ]
         : []),
@@ -176,6 +190,7 @@ export default function PayrollSummaryTab() {
               (Number(totals.retention) || 0).toFixed(2),
               (Number(totals.advanceRecovered) || 0).toFixed(2),
               (Number(totals.advanceShortfall) || 0).toFixed(2),
+              (Number(totals.deductionShortfall) || 0).toFixed(2),
               "",
             ]
           : []),
@@ -365,9 +380,13 @@ export default function PayrollSummaryTab() {
                         <span className="text-muted-foreground">Bonus / adjustment</span>
                         <span className="text-right text-sky-400">+{formatCurrency(w.adjustments)}</span>
                       </>}
-                      {w.deductions > 0 && <>
+                      {withheld(w) > 0 && <>
                         <span className="text-muted-foreground">Deductions</span>
-                        <span className="text-right text-rose-400">-{formatCurrency(w.deductions)}</span>
+                        <span className="text-right text-rose-400">-{formatCurrency(withheld(w))}</span>
+                      </>}
+                      {Number(w.deductionShortfall) > 0 && <>
+                        <span className="text-amber-600 dark:text-amber-500">Could not deduct</span>
+                        <span className="text-right text-amber-600 dark:text-amber-500">{formatCurrency(Number(w.deductionShortfall))}</span>
                       </>}
                       {/* Each of these appears only when the estate's own rules produced it, so a
                           tenant that has set nothing sees exactly the card it saw before. */}
@@ -436,6 +455,10 @@ export default function PayrollSummaryTab() {
                       {Number(totals.advanceShortfall) > 0 && <>
                         <span className="text-amber-600 dark:text-amber-500">Could not recover</span>
                         <span className="text-right text-amber-600 dark:text-amber-500">{formatCurrency(Number(totals.advanceShortfall))}</span>
+                      </>}
+                      {Number(totals.deductionShortfall) > 0 && <>
+                        <span className="text-amber-600 dark:text-amber-500">Could not deduct</span>
+                        <span className="text-right text-amber-600 dark:text-amber-500">{formatCurrency(Number(totals.deductionShortfall))}</span>
                       </>}
                     </div>
                   </div>
@@ -554,7 +577,25 @@ export default function PayrollSummaryTab() {
                           <TableCell className="text-right text-sm">{w.pickingKg > 0 ? w.pickingKg.toLocaleString("en-IN", { maximumFractionDigits: 1 }) : "—"}</TableCell>
                           <TableCell className="text-right text-sm">{w.pickingEarnings > 0 ? formatCurrency(w.pickingEarnings) : "—"}</TableCell>
                           <TableCell className="text-right text-sm text-sky-400">{w.adjustments > 0 ? `+${formatCurrency(w.adjustments)}` : "—"}</TableCell>
-                          <TableCell className="text-right text-sm text-rose-400">{w.deductions > 0 ? `-${formatCurrency(w.deductions)}` : "—"}</TableCell>
+                          <TableCell className="text-right text-sm">
+                            {withheld(w) > 0 || Number(w.deductionShortfall) > 0 ? (
+                              <span className={Number(w.deductionShortfall) > 0 ? "text-amber-600 dark:text-amber-500" : "text-rose-400"}>
+                                -{formatCurrency(withheld(w))}
+                                {Number(w.deductionShortfall) > 0 ? (
+                                  <Tooltip>
+                                    <TooltipTrigger className="ml-1 cursor-default underline decoration-dotted underline-offset-2">
+                                      ({formatCurrency(Number(w.deductionShortfall))} short)
+                                    </TooltipTrigger>
+                                    <TooltipContent>
+                                      More was recorded than this period&apos;s wage could cover. Not carried forward — the estate decides.
+                                    </TooltipContent>
+                                  </Tooltip>
+                                ) : null}
+                              </span>
+                            ) : (
+                              "—"
+                            )}
+                          </TableCell>
                           {/*
                             THE THREE RULE COLUMNS, WHICH THE BODY DID NOT HAVE.
 

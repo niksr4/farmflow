@@ -9,6 +9,7 @@ import { canWriteModule, isAdminRole } from "@/lib/permissions"
 import { logAuditEvent } from "@/lib/server/audit-log"
 import { normalizeTenantContext, runTenantQuery } from "@/lib/server/tenant-db"
 import { logServerError } from "@/lib/server/safe-logging"
+import { resolveRuleForDate, retentionForDay, type PayRule } from "@/lib/pay-rules"
 
 export const dynamic = "force-dynamic"
 export const revalidate = 0
@@ -150,7 +151,11 @@ export async function GET(request: Request) {
                 COALESCE(SUM(amount) FILTER (WHERE entry_type = 'adjustment' AND in_period), 0) AS period_adjustments,
                 COALESCE(SUM(amount) FILTER (WHERE entry_type = 'advance'),    0) AS lifetime_advances,
                 COALESCE(SUM(amount) FILTER (WHERE entry_type = 'deduction'),  0) AS lifetime_deductions,
-                COALESCE(SUM(amount) FILTER (WHERE entry_type = 'adjustment'), 0) AS lifetime_adjustments
+                COALESCE(SUM(amount) FILTER (WHERE entry_type = 'adjustment'), 0) AS lifetime_adjustments,
+                -- Accruals are derived, not written, so these are normally zero. Kept so an estate
+                -- can record what it already held before FarmFlow, and so a payout comes off.
+                COALESCE(SUM(amount) FILTER (WHERE entry_type = 'retention_accrual'), 0) AS lifetime_retention_accrual,
+                COALESCE(SUM(amount) FILTER (WHERE entry_type = 'retention_payout'),  0) AS lifetime_retention_payout
               FROM scoped
             `,
           )
@@ -159,6 +164,74 @@ export async function GET(request: Request) {
 
     const totalCount = Number((countRows as any[])[0]?.count) || 0
     const balance = (balanceRows as any[])[0]
+
+    /**
+     * WHAT THE ESTATE IS ACTUALLY HOLDING FOR THIS WORKER. Derived from every day they have worked
+     * and the rule in force on each of those days.
+     *
+     * The panel computed this as retentionHeld(entries) — the sum of `retention_accrual` ROWS —
+     * and nothing in the product has ever written one. This route refuses to create them on
+     * purpose (they are derived, and a hand-typed one would be counted twice), payroll derives
+     * retention rather than writing it, and the only code anywhere that inserts one is the dev
+     * seeder. So "Held for them" read Rs 0 on every real estate, permanently, while payroll
+     * deducted 20% of every day's wage. The one screen a worker would be shown to answer "how much
+     * are you keeping for me" gave a confident zero.
+     *
+     * DERIVED, NOT WRITTEN, which is the decision recorded in docs/PAYROLL-NEXT-STEPS.md step 1:
+     * payroll stays read-only and a closed month can be re-run to the same answer. The cost is this
+     * query over the worker's whole history — trivial at Medappa's eleven recorded days, and the
+     * trigger to revisit is a single worker exceeding about a season of daily rows.
+     *
+     * Any `retention_accrual` rows that DO exist are added on top rather than ignored, so an estate
+     * can record an opening balance for retention held before FarmFlow, and the dev seed still
+     * reads correctly. Payouts come off. Never below zero.
+     */
+    let retentionHeldToDate: number | null = null
+    if (workerId) {
+      const [ruleRows, dayRows] = await Promise.all([
+        runTenantQuery(
+          accountsSql, tenantContext,
+          accountsSql`
+            SELECT worker_id, effective_from::text AS effective_from, retention_mode, retention_value,
+                   overtime_mode, overtime_value, full_day_hours, pf_percent
+            FROM worker_pay_rules WHERE tenant_id = ${tenantContext.tenantId}
+          `,
+        ),
+        // Same shape as payroll's own read, so the two cannot drift: the day's actual cost divided
+        // by the day worked, which retentionForDay multiplies straight back up.
+        runTenantQuery(
+          accountsSql, tenantContext,
+          accountsSql`
+            SELECT work_date::text AS work_date,
+                   SUM(day_fraction)::numeric AS day_fraction,
+                   (SUM(total_cost) / NULLIF(SUM(day_fraction), 0))::numeric AS rate
+            FROM labour_assignments
+            WHERE tenant_id = ${tenantContext.tenantId} AND worker_id = ${workerId}::uuid
+            GROUP BY work_date
+          `,
+        ),
+      ])
+
+      const rules: PayRule[] = (ruleRows as any[]).map((r) => ({
+        workerId: r.worker_id ? String(r.worker_id) : null,
+        effectiveFrom: String(r.effective_from),
+        retentionMode: r.retention_mode ?? null,
+        retentionValue: r.retention_value == null ? null : Number(r.retention_value),
+        overtimeMode: r.overtime_mode ?? null,
+        overtimeValue: r.overtime_value == null ? null : Number(r.overtime_value),
+        fullDayHours: r.full_day_hours == null ? null : Number(r.full_day_hours),
+        pfPercent: r.pf_percent == null ? null : Number(r.pf_percent),
+      }))
+
+      const accrued = (dayRows as any[]).reduce((sum, d) => {
+        const rule = resolveRuleForDate(rules, workerId, String(d.work_date))
+        return sum + retentionForDay(rule, Number(d.rate) || 0, Number(d.day_fraction) || 0)
+      }, 0)
+
+      const manual = Number(balance?.lifetime_retention_accrual) || 0
+      const paidOut = Number(balance?.lifetime_retention_payout) || 0
+      retentionHeldToDate = Math.max(0, Math.round((accrued + manual - paidOut) * 100) / 100)
+    }
 
     return NextResponse.json({
       success: true,
@@ -172,6 +245,11 @@ export async function GET(request: Request) {
         description: r.description ? String(r.description) : null,
       })),
       totalCount,
+      /**
+       * Derived from days worked x the rule in force, never from stored rows. null when the request
+       * was not about one worker.
+       */
+      retentionHeldToDate,
       ...(balance
         ? {
             // Named windows. `period` is what this run deducts and must agree with

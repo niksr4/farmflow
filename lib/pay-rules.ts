@@ -327,12 +327,24 @@ export function applyDeductions(input: {
   retention: number
   advanceDue: number
   otherDeductions?: number
-}): { retention: number; advanceRecovered: number; otherDeductions: number; net: number; shortfall: number } {
+}): {
+  retention: number
+  advanceRecovered: number
+  otherDeductions: number
+  net: number
+  shortfall: number
+  /** A fine or damage the wage could not cover. Stated for the same reason as `shortfall`. */
+  otherShortfall: number
+  /** Retention the wage could not cover — a thin week holds less than the rule asks. */
+  retentionShortfall: number
+} {
   const gross = Math.max(0, num(input.gross))
-  const retention = Math.min(Math.max(0, num(input.retention)), gross)
+  const retentionDue = Math.max(0, num(input.retention))
+  const retention = Math.min(retentionDue, gross)
 
   let remaining = gross - retention
-  const other = Math.min(Math.max(0, num(input.otherDeductions)), remaining)
+  const otherDue = Math.max(0, num(input.otherDeductions))
+  const other = Math.min(otherDue, remaining)
   remaining -= other
 
   const advanceDue = Math.max(0, num(input.advanceDue))
@@ -345,5 +357,7 @@ export function applyDeductions(input: {
     otherDeductions: money(other),
     net: money(remaining),
     shortfall: money(advanceDue - advanceRecovered),
+    otherShortfall: money(otherDue - other),
+    retentionShortfall: money(retentionDue - retention),
   }
 }

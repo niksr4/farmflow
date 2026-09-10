@@ -11,6 +11,7 @@ import { toast } from "sonner"
 import { formatCurrency } from "@/lib/format"
 import { todayIso } from "@/lib/date-utils"
 import type { PayRule } from "@/lib/pay-rules"
+import { useSingleFlight } from "@/hooks/use-single-flight"
 
 /**
  * Setting what an estate holds back, and what it pays for overtime.
@@ -117,7 +118,7 @@ export default function PayRuleForm({ workerId, dailyRate, current, currentRuleI
     return lines
   }, [form, dailyRate])
 
-  const save = async () => {
+  const saveUnguarded = async () => {
     const retentionValue = form.retentionMode === "none" ? null : Number(form.retentionValue)
     const overtimeValue = form.overtimeMode === "none" ? null : Number(form.overtimeValue)
 
@@ -163,7 +164,7 @@ export default function PayRuleForm({ workerId, dailyRate, current, currentRuleI
     }
   }
 
-  const remove = async () => {
+  const removeUnguarded = async () => {
     if (!currentRuleId || !editableRow) return
     // Names what disappears and what happens next, because "delete rule?" does not say that the
     // previous rule takes over, nor that money already held stays held.
@@ -187,6 +188,10 @@ export default function PayRuleForm({ workerId, dailyRate, current, currentRuleI
       setSaving(false)
     }
   }
+
+  // Saving twice writes two dated rules, or corrects the same row twice — see the money panel.
+  const save = useSingleFlight(saveUnguarded)
+  const remove = useSingleFlight(removeUnguarded)
 
   return (
     <div className="space-y-4 rounded-lg border bg-muted/30 p-4">

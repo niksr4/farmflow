@@ -158,6 +158,18 @@ describe("cost is never counted by halves", () => {
       "labor-neon/route.ts",
       "payroll-summary/route.ts",
       "reconciliation/route.ts",
+      /**
+       * worker-ledger derives retention held: what the estate is keeping back for ONE worker,
+       * day by day, under the rule in force on each day.
+       *
+       * It cannot go through labour_cost for two independent reasons, and the second is the
+       * interesting one. The view carries no `day_fraction`, and a rule that holds half on a half
+       * day needs it. And the pre-muster arm of that view — labor_transactions — has no worker_id
+       * at all; it records headcounts (hf_laborers, outside_laborers), not people. So there is no
+       * per-worker labour before an estate's cutover to be blind to. Retention necessarily begins
+       * at the muster, which is the same reasoning that exempts payroll-summary above.
+       */
+      "worker-ledger/route.ts",
     ])
 
     const offenders = routes

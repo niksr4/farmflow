@@ -351,15 +351,29 @@ export async function GET(request: Request) {
       .map((w) => {
         // Rules applied per worker. For a tenant with none, every figure below is zero and
         // netPayable is untouched -- which is what keeps three of four estates unchanged.
-        const pay = computeWorkerPay(periodInput, w.id, w.attendanceEarnings + w.pickingEarnings, {
-          isGang: gangIds.has(w.id),
-          // For pricing overtime on a day the muster has nothing to say about — three of the four
-          // live estates mark attendance without allocating work.
-          fallbackDayRate: w.dailyRate,
-        })
-        const net =
-          w.attendanceEarnings + w.pickingEarnings + w.adjustments - w.deductions
-          + pay.overtime - pay.retention - pay.advanceRecovered
+        /**
+         * EVERY OBLIGATION CAPPED AGAINST THE SAME WAGE, IN ONE PLACE.
+         *
+         * A bonus is money to pay from, so it joins gross; a fine is money withheld, so it goes in
+         * as otherDeductions rather than being subtracted here afterwards. This route used to do
+         * the second half itself and got the order wrong — retention and advance were capped
+         * against a gross the fine had not yet come out of, the fine was then taken raw on top, and
+         * `Math.max(0, …)` swallowed whatever was left over. Rs 1,800 earned paid out Rs 2,300 of
+         * obligations, and owedAfter went on to report a balance assuming an advance instalment
+         * that was never actually recovered.
+         */
+        const pay = computeWorkerPay(
+          periodInput,
+          w.id,
+          w.attendanceEarnings + w.pickingEarnings + w.adjustments,
+          {
+            isGang: gangIds.has(w.id),
+            // For pricing overtime on a day the muster has nothing to say about — three of the four
+            // live estates mark attendance without allocating work.
+            fallbackDayRate: w.dailyRate,
+            otherDeductions: w.deductions,
+          },
+        )
         return {
           ...w,
           overtime: pay.overtime,
@@ -368,9 +382,14 @@ export async function GET(request: Request) {
           advanceRecovered: pay.advanceRecovered,
           /** Stated, never carried into the next run. The estate decides what to do about it. */
           advanceShortfall: pay.shortfall,
+          /** The same honesty for a fine the wage could not cover, and for retention. */
+          deductionShortfall: pay.otherShortfall,
+          retentionShortfall: pay.retentionShortfall,
+          /** What was actually withheld, which is not always what was recorded. */
+          deductionsTaken: pay.otherDeductions,
           heldAfter: pay.heldAfter,
           owedAfter: pay.owedAfter,
-          netPayable: Math.max(0, Math.round(net * 100) / 100),
+          netPayable: pay.net,
         }
       })
 
@@ -380,18 +399,21 @@ export async function GET(request: Request) {
         attendanceEarnings: acc.attendanceEarnings + w.attendanceEarnings,
         pickingEarnings: acc.pickingEarnings + w.pickingEarnings,
         pickingKg: acc.pickingKg + w.pickingKg,
-        deductions: acc.deductions + w.deductions,
+        // What was actually withheld, not what was recorded -- so the column sums to the net beside
+        // it. A fine bigger than the week's wage is reported on deductionShortfall instead.
+        deductions: acc.deductions + w.deductionsTaken,
         adjustments: acc.adjustments + w.adjustments,
         overtime: acc.overtime + w.overtime,
         retention: acc.retention + w.retention,
         advanceRecovered: acc.advanceRecovered + w.advanceRecovered,
         advanceShortfall: acc.advanceShortfall + w.advanceShortfall,
+        deductionShortfall: acc.deductionShortfall + w.deductionShortfall,
         netPayable: acc.netPayable + w.netPayable,
       }),
       {
         daysPresent: 0, attendanceEarnings: 0, pickingEarnings: 0, pickingKg: 0,
         deductions: 0, adjustments: 0, overtime: 0, retention: 0,
-        advanceRecovered: 0, advanceShortfall: 0, netPayable: 0,
+        advanceRecovered: 0, advanceShortfall: 0, deductionShortfall: 0, netPayable: 0,
       },
     )
 

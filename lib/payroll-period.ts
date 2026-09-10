@@ -88,6 +88,23 @@ export type WorkerPay = {
   advanceDue: number
   advanceRecovered: number
   shortfall: number
+  /** One-off amounts withheld — a fine, damage — capped at what there was to withhold from. */
+  otherDeductions: number
+  /** The part of a fine the wage could not cover. Stated, never carried. */
+  otherShortfall: number
+  /** The part of the retention rule a thin week could not cover. */
+  retentionShortfall: number
+  /**
+   * WHAT THE WORKER IS HANDED. Computed here, once, in one order.
+   *
+   * The route used to re-derive this by subtracting each figure from gross itself, and got the
+   * order wrong: retention and advance were capped against a gross that had not yet had the
+   * one-off deductions taken out of it, then the deductions were subtracted raw on top and the
+   * result clamped at zero. Rs 1,800 earned could pay out Rs 2,300 of obligations, with the
+   * Rs 500 that did not exist simply disappearing into the clamp -- and owedAfter then reported
+   * an advance balance assuming money that was never recovered.
+   */
+  net: number
   /** Balances as they stand after this run. */
   heldAfter: number
   owedAfter: number
@@ -130,7 +147,18 @@ export function computeWorkerPay(
    * `fallbackDayRate` is the worker's roster rate, used to price overtime on a day the muster has
    * nothing to say about — see the overtime loop below for why the alternative was worse.
    */
-  options?: { isGang?: boolean; fallbackDayRate?: number | null },
+  options?: {
+    isGang?: boolean
+    fallbackDayRate?: number | null
+    /**
+     * One-off amounts withheld this period — a fine, damage, food. NOT advances, which recover on
+     * their own schedule.
+     *
+     * Passed in so every obligation is capped against the same wage in one place. Applying it
+     * outside is what let three deductions each be taken from the full gross independently.
+     */
+    otherDeductions?: number
+  },
 ): WorkerPay {
   const days = input.workedDays.filter((d) => d.workerId === workerId)
   const ot = input.overtimeDays.filter((d) => d.workerId === workerId)
@@ -184,7 +212,12 @@ export function computeWorkerPay(
    * weeks inside it did. The money recovered is identical either way; only the "could not recover"
    * line differs. Pay from the week, reconcile with the month.
    */
-  const applied = applyDeductions({ gross: gross + overtime, retention, advanceDue })
+  const applied = applyDeductions({
+    gross: gross + overtime,
+    retention,
+    advanceDue,
+    otherDeductions: options?.otherDeductions ?? 0,
+  })
 
   return {
     workerId,
@@ -193,6 +226,10 @@ export function computeWorkerPay(
     advanceDue: round(advanceDue),
     advanceRecovered: applied.advanceRecovered,
     shortfall: applied.shortfall,
+    otherDeductions: applied.otherDeductions,
+    otherShortfall: applied.otherShortfall,
+    retentionShortfall: applied.retentionShortfall,
+    net: applied.net,
     /**
      * What the estate holds after this run.
      *
