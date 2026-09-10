@@ -10,7 +10,7 @@ import { normalizeInventoryItemType } from "@/lib/inventory-item-type"
 import { requiresRestockUnitPrice } from "@/lib/inventory-edit-rules"
 import { logRouteMutationFailure } from "@/lib/server/route-error-events"
 import { sanitizeRouteError } from "@/lib/server/sanitize-route-error"
-import { stockPriceLooksWrong, resolveStockCost } from "@/lib/stock-cost"
+import { resolveStockCost } from "@/lib/stock-cost"
 
 export const dynamic = "force-dynamic"
 
@@ -293,53 +293,6 @@ export async function PUT(request: NextRequest) {
       (await loadAnyInventorySlotByNormalizedItem(tenantContext, requestedItemType))
 
     const canonicalItemType = effectiveSlotMatch?.item_type || requestedItemType
-
-    /**
-     * The same twenty-times check the create path runs, because an edit is the other way in.
-     *
-     * It is also the way OUT of the mistake: correcting HoneyFarm's Rs 4,480-a-litre petrol row is
-     * an edit. So this compares against the item's average EXCLUDING the row being edited -- with it
-     * included, the bad row inflates the very average it would be measured against, and the
-     * correction back down to Rs 112 would look twenty times too cheap and be refused. A guard that
-     * blocks the fix for the thing it is guarding against is worse than no guard.
-     */
-    if (normalizedType === "restock") {
-      const [others] = await runTenantQuery(
-        inventorySql,
-        tenantContext,
-        inventorySql`
-          SELECT COALESCE(SUM(total_cost), 0) / NULLIF(SUM(quantity), 0) AS avg_price
-          FROM transaction_history
-          WHERE tenant_id = ${tenantContext.tenantId}
-            AND item_type = ${canonicalItemType}
-            AND transaction_type = 'restock'
-            AND id <> ${Number(id)}
-            -- Revaluation is not a purchase. A price correction writes a deplete-and-restock pair
-            -- valued at the whole holding, and one tenant's 59 such rows are 70% of the money in
-            -- their ledger -- averaging them in would move the baseline this guard compares
-            -- against by more than the mistake it is looking for. Same exclusion as season-summary.
-            AND COALESCE(notes, '') NOT ILIKE 'Price correction%'
-            AND COALESCE(notes, '') NOT ILIKE 'Price updated%'
-        `,
-      )
-      const suspect = stockPriceLooksWrong({
-        unitPrice: editCost.unitPrice,
-        existingAvgPrice: Number((others as any)?.avg_price) || 0,
-      })
-      if (suspect) {
-        const avg = Number((others as any)?.avg_price) || 0
-        return NextResponse.json(
-          {
-            success: false,
-            message:
-              suspect.direction === "high"
-                ? `That works out to ₹${editCost.unitPrice.toFixed(2)} per unit, about ${Math.round(suspect.ratio)}× what ${canonicalItemType} has cost on every other restock (₹${avg.toFixed(2)}). If you meant the total paid, enter it in the total field instead.`
-                : `That works out to ₹${editCost.unitPrice.toFixed(2)} per unit, about ${Math.round(suspect.ratio)}× cheaper than ${canonicalItemType} has cost on every other restock (₹${avg.toFixed(2)}). Check the quantity and the unit.`,
-          },
-          { status: 400 },
-        )
-      }
-    }
 
     const result = await runTenantQuery(
       inventorySql,

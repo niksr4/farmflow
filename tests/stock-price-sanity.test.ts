@@ -1,127 +1,102 @@
-import { readFileSync } from "node:fs"
+import { readdirSync, readFileSync, statSync } from "node:fs"
 import { resolve } from "node:path"
 import { describe, expect, it } from "vitest"
 
-import { STOCK_PRICE_SANITY_MULTIPLE, stockPriceLooksWrong } from "@/lib/stock-cost"
+import { PRICE_OUTLIER_RATIO, checkRestockCost } from "@/lib/price-sanity"
 
 /**
- * A restock priced twenty times the item's own history is a total in the wrong box.
+ * There is ONE price-sanity rule, it lives in lib/price-sanity.ts, and it WARNS.
  *
- * THE TWO INCIDENTS THIS IS BUILT FROM, both real, both in production:
+ * THE MISTAKE THIS EXISTS FOR IS MINE, on 2026-09-10, and it reached production for about an hour.
  *
- *   HoneyFarm, petrol   Rs 4,480 entered per litre against a real Rs 112.08   —  40x
- *   Seshagiri, DAP      Rs 70,000 entered per bag against a real Rs 1,350     —  52x
+ * Looking at the Rs 4,480-a-litre petrol rows at HoneyFarm and the Rs 70,000-a-bag DAP at
+ * Seshagiri, I concluded the Rs 0 restock guard had never been given its upper half, and added a
+ * server-side check that REFUSED anything twenty times the item's stored average. Three things
+ * were wrong with it, and each is worth keeping written down:
  *
- * Each was the invoice total typed into the per-unit field. Each passed every check the product
- * had — the amount was positive, the quantity was right, the arithmetic was internally consistent —
- * and each silently destroyed the weighted average that every later depletion is costed from.
- * HoneyFarm's petrol stood at Rs 2,172 a litre for two months against a Rs 112 item; Seshagiri's
- * unassigned pile showed Rs 1.03 crore of stock value against roughly Rs 2.6 lakh of purchases.
+ *   1. IT CONTRADICTED A STATED DECISION. lib/price-sanity.ts says in capitals that it warns and
+ *      does not block, because "an estate that gets told no by a form it knows better than will
+ *      work around the form". The client warns once at 3x and lets the next submit through. A
+ *      server that then refuses breaks the promise the toast just made -- "Submit again to record
+ *      it as entered" followed by a hard 400.
  *
- * The existing guard refuses a Rs 0 restock, for exactly the same reason — a zero corrupts the
- * average. It was never given the other half of the range.
+ *   2. IT WAS A SECOND IMPLEMENTATION of a rule that already existed, with a different threshold
+ *      (20 against 3) and different semantics. This codebase has lib/rainfall.ts because nine
+ *      consumers each summed gauges their own way, and lib/inventory-ledger.ts so that the
+ *      inventory rebuild and the reconciliation check measure the same thing. Adding a third
+ *      opinion about price was the same error in a new place.
+ *
+ *   3. IT ANCHORED ON A CORRUPTIBLE VALUE, so the corruption defended itself. The guard compared
+ *      against current_inventory.avg_price -- the exact figure the bad rows had poisoned.
+ *      HoneyFarm's petrol average stood at Rs 2,172, so the guard refused anything under
+ *      Rs 108.62. The correct petrol price is Rs 112.08. A correct restock cleared being
+ *      IMPOSSIBLE TO RECORD by Rs 3.46.
+ *
+ * The real lesson is not about prices. A guard measured against data that the thing it guards
+ * against can move is not a guard.
  */
 
-describe("the two incidents that actually happened", () => {
-  it("catches HoneyFarm's petrol: Rs 4,480 a litre against Rs 112.08", () => {
-    const s = stockPriceLooksWrong({ unitPrice: 4480, existingAvgPrice: 112.08 })
-    expect(s).not.toBeNull()
-    expect(s!.direction).toBe("high")
-    expect(Math.round(s!.ratio)).toBe(40)
+const LIB = resolve(__dirname, "..", "lib")
+const API = resolve(__dirname, "..", "app", "api")
+
+const walk = (dir: string): string[] =>
+  readdirSync(dir).flatMap((e) => {
+    const full = resolve(dir, e)
+    return statSync(full).isDirectory() ? walk(full) : [full]
   })
 
-  it("catches Seshagiri's DAP: Rs 70,000 a bag against Rs 1,350", () => {
-    const s = stockPriceLooksWrong({ unitPrice: 70000, existingAvgPrice: 1350 })
-    expect(s).not.toBeNull()
-    expect(Math.round(s!.ratio)).toBe(52)
+describe("the one rule, and it warns", () => {
+  it("warns rather than blocking, in both directions", () => {
+    const high = checkRestockCost(70000, 1, 1350, "bag")
+    expect(high.level).toBe("warn")
+    expect(high.level === "warn" && high.direction).toBe("high")
+
+    const low = checkRestockCost(112, 60, 6724.8 / 60, "L")
+    expect(low.level).toBe("warn")
+    expect(low.level === "warn" && low.direction).toBe("low")
   })
 
-  it("and the correct entries they should have been", () => {
-    expect(stockPriceLooksWrong({ unitPrice: 112.08, existingAvgPrice: 112.08 })).toBeNull()
-    expect(stockPriceLooksWrong({ unitPrice: 1400, existingAvgPrice: 1350 })).toBeNull()
-  })
-})
-
-describe("it does not fire on prices that genuinely move", () => {
-  it("allows fuel doubling in a year", () => {
-    expect(stockPriceLooksWrong({ unitPrice: 224, existingAvgPrice: 112 })).toBeNull()
+  it("says nothing without a baseline — a first purchase is not evidence", () => {
+    expect(checkRestockCost(4480, 60, null, "L").level).toBe("ok")
+    expect(checkRestockCost(4480, 60, 0, "L").level).toBe("ok")
   })
 
-  it("allows a fertiliser price tripling", () => {
-    expect(stockPriceLooksWrong({ unitPrice: 4050, existingAvgPrice: 1350 })).toBeNull()
+  it("keeps the threshold it documents", () => {
+    expect(PRICE_OUTLIER_RATIO).toBe(3)
   })
 
-  it("allows a tenfold move, which is already beyond anything an estate meets", () => {
-    // Deliberately loose. This catches a category error, not a bad deal.
-    expect(stockPriceLooksWrong({ unitPrice: 1120, existingAvgPrice: 112 })).toBeNull()
-  })
-
-  it("fires just past the stated multiple, and not just before it", () => {
-    const avg = 100
-    expect(stockPriceLooksWrong({ unitPrice: avg * STOCK_PRICE_SANITY_MULTIPLE, existingAvgPrice: avg })).toBeNull()
-    expect(stockPriceLooksWrong({ unitPrice: avg * STOCK_PRICE_SANITY_MULTIPLE + 1, existingAvgPrice: avg })).not.toBeNull()
-  })
-})
-
-describe("absence of history is not evidence of a mistake", () => {
-  it("says nothing about the first restock of a brand new item", () => {
-    // The guard must fire hardest on wrong input, not on input it has nothing to compare against.
-    expect(stockPriceLooksWrong({ unitPrice: 4480, existingAvgPrice: 0 })).toBeNull()
-  })
-
-  it("says nothing when the price itself is zero — that is the other guard's job", () => {
-    expect(stockPriceLooksWrong({ unitPrice: 0, existingAvgPrice: 112 })).toBeNull()
-  })
-
-  it("ignores values that are not numbers rather than guessing", () => {
-    expect(stockPriceLooksWrong({ unitPrice: Number.NaN, existingAvgPrice: 112 })).toBeNull()
-    expect(stockPriceLooksWrong({ unitPrice: 112, existingAvgPrice: Number.NaN })).toBeNull()
-  })
-})
-
-describe("the mirror case: a price far too low", () => {
-  it("catches a per-gram figure entered against a per-kg item", () => {
-    const s = stockPriceLooksWrong({ unitPrice: 1.35, existingAvgPrice: 1350 })
-    expect(s).not.toBeNull()
-    expect(s!.direction).toBe("low")
-    expect(Math.round(s!.ratio)).toBe(1000)
-  })
-})
-
-describe("both write paths carry it, because an edit is the other way in", () => {
-  const read = (p: string) => readFileSync(resolve(__dirname, "..", p), "utf8")
-
-  it("the create path checks before writing", () => {
-    const route = read("app/api/transactions-neon/route.ts")
-    expect(route).toContain("stockPriceLooksWrong")
-    expect(route).toMatch(/If you meant the total paid/)
-  })
-
-  it("the edit path checks too", () => {
-    expect(read("app/api/transactions-neon/update/route.ts")).toContain("stockPriceLooksWrong")
-  })
-
-  it("the edit path excludes the row being edited from the comparison", () => {
-    /**
-     * THE TRAP THIS AVOIDS. Correcting HoneyFarm's Rs 4,480 petrol row is itself an edit. Measured
-     * against an average that still includes the bad row, the correction back down to Rs 112 reads
-     * as twenty times too cheap and gets refused — a guard that blocks the fix for the very thing
-     * it guards against.
-     */
-    const route = read("app/api/transactions-neon/update/route.ts")
-    expect(route).toMatch(/id <> \$\{Number\(id\)\}/)
-    expect(route).toMatch(/transaction_type = 'restock'/)
-  })
-
-  it("only restocks are checked — a depletion is priced by the system, not typed", () => {
-    // Positional rather than a fixed character window: the guard's body grows as it gains
-    // comments, and a window measured in characters starts failing on documentation.
-    for (const p of ["app/api/transactions-neon/route.ts", "app/api/transactions-neon/update/route.ts"]) {
-      const src = read(p)
-      const call = src.indexOf("stockPriceLooksWrong({")
-      expect(call, `${p} never calls the guard`).toBeGreaterThan(-1)
-      const gate = src.lastIndexOf('if (normalizedType === "restock")', call)
-      expect(gate, `${p} calls the guard outside a restock-only branch`).toBeGreaterThan(-1)
+  it("never returns a level that would justify refusing the write", () => {
+    // The whole surface: if a future change adds an "error" level, this fails and asks a human,
+    // rather than a route quietly starting to reject on it.
+    for (const [total, qty, usual] of [[70000, 1, 1350], [1, 60, 112], [6724.8, 60, 112.08], [0, 0, 0]] as const) {
+      expect(["ok", "warn"]).toContain(checkRestockCost(total, qty, usual).level)
     }
+  })
+})
+
+describe("no route may refuse a restock on price grounds", () => {
+  /**
+   * Refusing a Rs 0 restock is the ONE price rule that blocks, and it is different in kind: zero is
+   * not an opinion about whether a price is plausible, it is the absence of a price, and it
+   * corrupts the weighted average for every later depletion. Everything else warns.
+   */
+  const routes = walk(API).filter((f) => f.endsWith("route.ts"))
+
+  it("finds the routes, so a move cannot silently disarm this", () => {
+    expect(routes.length).toBeGreaterThan(80)
+  })
+
+  it("no route imports the price-sanity check to make a blocking decision", () => {
+    // checkRestockCost is a CLIENT-side advisory. A route importing it is almost certainly about
+    // to turn a warning into a 400.
+    const offenders = routes.filter((f) => readFileSync(f, "utf8").includes("checkRestockCost"))
+    expect(offenders.map((f) => f.slice(f.indexOf("app/api")))).toEqual([])
+  })
+
+  it("and there is no second price-sanity module to disagree with the first", () => {
+    const modules = walk(LIB).filter(
+      (f) => f.endsWith(".ts") && /LooksWrong|priceLooksWrong|SANITY_MULTIPLE/.test(readFileSync(f, "utf8")),
+    )
+    expect(modules.map((f) => f.slice(f.indexOf("lib/")))).toEqual([])
   })
 })
