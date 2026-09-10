@@ -21,6 +21,25 @@ import { escapeHtml } from "@/lib/html-escape"
 
 type YesterdayActivity = {
   tenantId: string
+  /**
+   * Distinct days in the last 7 on which somebody at this estate actually recorded something.
+   *
+   * THE FIGURE THIS REPLACED WAS LOGINS, AND LOGINS MEASURE THE WRONG THING. Sessions roll, so an
+   * active writer authenticates once and then works for months without ever logging in again:
+   *
+   *   Gagan Rai (Medappa)  1 login EVER, on 5 Aug        438 writes in the last 7 days
+   *   KAB123 (HoneyFarm)   last login 25 Jul             114 writes in the last 7 days
+   *   nuthan (Seshagiri)   last login 27 Aug              53 writes in the last 7 days
+   *
+   * So "Logins (7d)" read 0 for Medappa and 1 for Seshagiri while both recorded labour on six days
+   * out of seven. The estates that looked engaged were the ones whose ADMIN happens to sign in from
+   * a browser that clears cookies — the column measured cookie hygiene, not use of the product.
+   *
+   * The status badge next to it already knew better: it takes daysSinceAnyActivity from
+   * tenant-dormancy.ts, fixed after a "haven't seen you in a few days" probe went to Medappa while
+   * their writer was marking attendance daily. The column beside it never got the same fix.
+   */
+  activeDaysLast7: number
   loginsYesterday: number
   laborYesterday: number
   processingYesterday: number
@@ -86,6 +105,19 @@ async function fetchYesterdayActivity(): Promise<Map<string, YesterdayActivity>>
           WHERE tenant_id = t.id
             AND created_at >= (CURRENT_DATE - INTERVAL '1 day') AT TIME ZONE 'Asia/Kolkata'
             AND created_at <  CURRENT_DATE AT TIME ZONE 'Asia/Kolkata') AS picking_yesterday,
+        (SELECT COUNT(DISTINCT d) FROM (
+            SELECT work_date AS d FROM labour_cost
+              WHERE tenant_id = t.id AND work_date > CURRENT_DATE - 7
+            UNION
+            SELECT attendance_date FROM attendance_records
+              WHERE tenant_id = t.id AND attendance_date > CURRENT_DATE - 7
+            UNION
+            SELECT entry_date FROM expense_transactions
+              WHERE tenant_id = t.id AND entry_date > CURRENT_DATE - 7
+            UNION
+            SELECT created_at::date FROM processing_records
+              WHERE tenant_id = t.id AND created_at > NOW() - INTERVAL '7 days'
+          ) days)                                    AS active_days_last_7,
         (SELECT COUNT(*) FROM attendance_records
           WHERE tenant_id = t.id
             AND created_at >= (CURRENT_DATE - INTERVAL '1 day') AT TIME ZONE 'Asia/Kolkata'
@@ -97,6 +129,7 @@ async function fetchYesterdayActivity(): Promise<Map<string, YesterdayActivity>>
     for (const row of toRows<any>(result)) {
       map.set(String(row.tenant_id), {
         tenantId: String(row.tenant_id),
+        activeDaysLast7: Number(row.active_days_last_7) || 0,
         loginsYesterday: Number(row.logins_yesterday) || 0,
         laborYesterday: Number(row.labor_yesterday) || 0,
         processingYesterday: Number(row.processing_yesterday) || 0,
@@ -229,7 +262,7 @@ function buildAlertHtml(summaries: Array<TenantEngagementRow & TenantGuidanceSum
       <td style="padding:10px 12px;font-size:14px;font-weight:500;color:#111827;">${escapeHtml(s.tenantName)}</td>
       <td style="padding:10px 12px;">${statusBadge(s.status)}</td>
       <td style="padding:10px 12px;font-size:13px;color:${activityColor};">${activityText}</td>
-      <td style="padding:10px 12px;font-size:13px;color:#374151;">${s.loginsLast7d} this week</td>
+      <td style="padding:10px 12px;font-size:13px;color:#374151;">${activity ? `${activity.activeDaysLast7} of 7` : "—"}${s.loginsLast7d ? ` <span style="color:#9ca3af;">· ${s.loginsLast7d} login${s.loginsLast7d !== 1 ? "s" : ""}</span>` : ""}</td>
       <td style="padding:10px 12px;font-size:13px;color:#374151;">${s.lastLoginAt ? s.lastLoginAt.toLocaleDateString("en-IN") : "—"}</td>
       <td style="padding:10px 12px;font-size:12px;color:#6b7280;">${s.flags.length > 0 ? s.flags.join(" · ") : "—"}</td>
     </tr>
@@ -273,7 +306,7 @@ function buildAlertHtml(summaries: Array<TenantEngagementRow & TenantGuidanceSum
                 <th style="padding:10px 12px;text-align:left;font-size:11px;font-weight:600;color:#6b7280;text-transform:uppercase;">Tenant</th>
                 <th style="padding:10px 12px;text-align:left;font-size:11px;font-weight:600;color:#6b7280;text-transform:uppercase;">Status</th>
                 <th style="padding:10px 12px;text-align:left;font-size:11px;font-weight:600;color:#6b7280;text-transform:uppercase;">Yesterday</th>
-                <th style="padding:10px 12px;text-align:left;font-size:11px;font-weight:600;color:#6b7280;text-transform:uppercase;">Logins (7d)</th>
+                <th style="padding:10px 12px;text-align:left;font-size:11px;font-weight:600;color:#6b7280;text-transform:uppercase;">Active days (7d)</th>
                 <th style="padding:10px 12px;text-align:left;font-size:11px;font-weight:600;color:#6b7280;text-transform:uppercase;">Last login</th>
                 <th style="padding:10px 12px;text-align:left;font-size:11px;font-weight:600;color:#6b7280;text-transform:uppercase;">Flags</th>
               </tr>
