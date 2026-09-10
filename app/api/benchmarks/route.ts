@@ -5,6 +5,7 @@ import { resolveScopedSessionUser } from "@/lib/server/module-access"
 import { getFiscalYearDateRange, getCurrentFiscalYear } from "@/lib/fiscal-year-utils"
 import { mergeTenantEstateProfile, CROP_LABEL } from "@/lib/tenant-estate-profile"
 import { parseJsonObject } from "@/lib/server/tenant-experience-db"
+import { sanitizeRouteError } from "@/lib/server/sanitize-route-error"
 
 export const dynamic = "force-dynamic"
 export const revalidate = 0
@@ -151,6 +152,6 @@ export async function GET(request: Request) {
     return NextResponse.json({ success: true, benchmarkAvailable: true, metrics })
   } catch (error: any) {
     console.error("Error fetching benchmarks:", error)
-    return NextResponse.json({ success: false, error: error.message || "Failed to fetch benchmarks" }, { status: 500 })
+    return NextResponse.json({ success: false, error: sanitizeRouteError(error, "Failed to fetch benchmarks") }, { status: 500 })
   }
 }

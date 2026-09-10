@@ -6,6 +6,7 @@ import { isDbConfigured } from "@/lib/server/db"
 import { createOrRefreshSignupRequest } from "@/lib/server/onboarding/signup"
 import { SIGNUP_EMAIL_PATTERN, normalizeOnboardingError, normalizeSignupEmail } from "@/lib/server/onboarding/utils"
 import { databaseNotConfiguredResponse } from "@/lib/server/route-utils"
+import { sanitizeRouteError } from "@/lib/server/sanitize-route-error"
 
 const signupBodySchema = z.object({
   name: z.string().trim().min(1, "Name is required").max(120, "Name is too long"),
@@ -93,13 +94,17 @@ export async function POST(request: Request) {
     )
   } catch (error) {
     const normalizedError = normalizeOnboardingError(error)
-    const message = normalizedError.message || "Failed to create signup request"
+    const rawMessage = normalizedError.message || "Failed to create signup request"
     const status =
-      message === "An account already exists for this email"
+      rawMessage === "An account already exists for this email"
         ? 409
-        : message.includes("Unable to send verification email")
+        : rawMessage.includes("Unable to send verification email")
           ? 502
           : 400
+    // status is classified from the raw message (server-side only, never sent); the response
+    // field itself always goes through sanitizeRouteError, which passes short, safe, curated
+    // strings through unchanged and only replaces a genuine raw DB/internal error.
+    const message = sanitizeRouteError(normalizedError, "Failed to create signup request")
 
     return NextResponse.json({ success: false, error: message }, { status, headers })
   }

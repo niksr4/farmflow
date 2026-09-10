@@ -6,6 +6,7 @@ import { isDbConfigured } from "@/lib/server/db"
 import { resendSignupVerification } from "@/lib/server/onboarding/signup"
 import { SIGNUP_EMAIL_PATTERN, normalizeOnboardingError, normalizeSignupEmail } from "@/lib/server/onboarding/utils"
 import { databaseNotConfiguredResponse } from "@/lib/server/route-utils"
+import { sanitizeRouteError } from "@/lib/server/sanitize-route-error"
 
 const resendBodySchema = z.object({
   email: z.string().trim().min(1, "Email is required").max(160, "Email is too long"),
@@ -71,15 +72,19 @@ export async function POST(request: Request) {
     )
   } catch (error) {
     const normalizedError = normalizeOnboardingError(error)
-    const message = normalizedError.message || "Failed to resend verification email"
+    const rawMessage = normalizedError.message || "Failed to resend verification email"
     const status =
-      message === "No pending signup found for this email"
+      rawMessage === "No pending signup found for this email"
         ? 404
-        : message === "This account is already verified. Sign in instead."
+        : rawMessage === "This account is already verified. Sign in instead."
           ? 409
-          : message.includes("Unable to send verification email")
+          : rawMessage.includes("Unable to send verification email")
             ? 502
             : 400
+    // status is classified from the raw message (server-side only, never sent); the response
+    // field itself always goes through sanitizeRouteError, which passes short, safe, curated
+    // strings through unchanged and only replaces a genuine raw DB/internal error.
+    const message = sanitizeRouteError(normalizedError, "Failed to resend verification email")
 
     return NextResponse.json({ success: false, error: message }, { status, headers })
   }
