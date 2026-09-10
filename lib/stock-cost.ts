@@ -75,3 +75,47 @@ const round2 = (value: number) => Number(value.toFixed(2))
  * an edit, and the bulk import.
  */
 export const hasStockCost = (cost: StockCost) => cost.totalCost > 0
+
+/**
+ * How far out of line a unit price may be before it is almost certainly a total in the wrong box.
+ *
+ * TWENTY, because both real incidents cleared it by a wide margin and no genuine price move comes
+ * close:
+ *
+ *   HoneyFarm, petrol   Rs 4,480 entered against a real Rs 112.08 a litre   —  40x
+ *   Seshagiri, DAP      Rs 70,000 entered against a real Rs 1,350 a bag     —  52x
+ *
+ * Both were the invoice TOTAL typed into the per-unit field, and both passed every check the
+ * product had: the amount was positive, the quantity was right, the arithmetic was internally
+ * consistent. HoneyFarm's carried Rs 2,172 a litre on a Rs 112 item for two months; Seshagiri's put
+ * Rs 1.03 crore of stock value against roughly Rs 2.6 lakh of purchases.
+ *
+ * Diesel doubling in a year is a 2x move. Twenty is far outside anything an estate will meet, and
+ * deliberately loose -- this exists to catch a category error, not to police prices.
+ */
+export const STOCK_PRICE_SANITY_MULTIPLE = 20
+
+/**
+ * Is this restock's unit price wildly out of line with what the item has always cost?
+ *
+ * Returns null when there is nothing to compare against -- a brand new item, or a slot whose
+ * average is zero. THE ABSENCE OF HISTORY IS NOT EVIDENCE OF A MISTAKE, and refusing the first
+ * restock of an item because it has no past would make the guard fire hardest on correct input.
+ */
+export function stockPriceLooksWrong(input: {
+  unitPrice: number
+  existingAvgPrice: number
+}): { ratio: number; direction: "high" | "low" } | null {
+  const price = num(input.unitPrice)
+  const avg = num(input.existingAvgPrice)
+  if (!(price > 0) || !(avg > 0)) return null
+
+  if (price > avg * STOCK_PRICE_SANITY_MULTIPLE) {
+    return { ratio: price / avg, direction: "high" }
+  }
+  // The mirror case: a total typed into the quantity box, or a per-gram price on a per-kg item.
+  if (price * STOCK_PRICE_SANITY_MULTIPLE < avg) {
+    return { ratio: avg / price, direction: "low" }
+  }
+  return null
+}

@@ -16,7 +16,7 @@ import {
   repairCurrentInventoryUpsertConstraints,
 } from "@/lib/server/current-inventory-constraints"
 import { sanitizeRouteError } from "@/lib/server/sanitize-route-error"
-import { resolveStockCost } from "@/lib/stock-cost"
+import { stockPriceLooksWrong, resolveStockCost } from "@/lib/stock-cost"
 import {
   STOCK_LOSS_ACTIVITY,
   STOCK_LOSS_CODE,
@@ -653,6 +653,40 @@ export async function POST(request: NextRequest) {
     // update_inventory() trigger is about to deduct from current_inventory,
     // instead of being silently recorded as 0.
     const restockCost = resolveStockCost({ quantity: quantityValue, totalPrice: total_price, unitPrice: price })
+
+    /**
+     * A unit price twenty times the item's own history is a total in the wrong box.
+     *
+     * The Rs 0 guard above catches a restock with no cost. It does not catch the opposite, and the
+     * opposite is what actually happened twice: HoneyFarm entered Rs 4,480 a litre for petrol that
+     * costs Rs 112, and Seshagiri Rs 70,000 a bag for DAP that costs Rs 1,350. Both were the
+     * invoice total typed per-unit, both passed every check -- positive amount, right quantity,
+     * consistent arithmetic -- and both silently wrecked the weighted average that every later
+     * depletion is costed from. HoneyFarm's stood at Rs 2,172 a litre for two months.
+     *
+     * Only fires when the item HAS a history to be out of line with, and names both figures plus
+     * the field the number probably belongs in, because "invalid price" tells nobody anything.
+     */
+    if (normalizedType === "restock") {
+      const suspect = stockPriceLooksWrong({
+        unitPrice: restockCost.unitPrice,
+        existingAvgPrice: Number(effectiveSlotMatch?.avg_price) || 0,
+      })
+      if (suspect) {
+        const avg = Number(effectiveSlotMatch?.avg_price) || 0
+        return NextResponse.json(
+          {
+            success: false,
+            message:
+              suspect.direction === "high"
+                ? `That works out to ₹${restockCost.unitPrice.toFixed(2)} per ${unitValue}, about ${Math.round(suspect.ratio)}× what ${canonicalItemType} has cost so far (₹${avg.toFixed(2)}). If you meant the total paid, enter it in the total field instead.`
+                : `That works out to ₹${restockCost.unitPrice.toFixed(2)} per ${unitValue}, about ${Math.round(suspect.ratio)}× cheaper than ${canonicalItemType} has cost so far (₹${avg.toFixed(2)}). Check the quantity and the unit.`,
+          },
+          { status: 400 },
+        )
+      }
+    }
+
     const priceValue =
       normalizedType === "deplete" ? Number(effectiveSlotMatch?.avg_price) || 0 : restockCost.unitPrice
     const total_cost =
