@@ -145,6 +145,61 @@ describe("the screen shows what was taken, not what was typed", () => {
   })
 })
 
+describe("a wage sheet shows everyone who worked", () => {
+  const route = read("app/api/payroll-summary/route.ts")
+
+  /**
+   * THE BUG THIS EXISTS FOR, found by running a real week against production on 2026-09-10.
+   *
+   * payroll-summary filtered `w.active = TRUE`. Deactivating a worker therefore erased every day
+   * they had ever worked from the wage sheet — retrospectively, including weeks already closed.
+   * At Medappa that was not a rounding error:
+   *
+   *   16–22 Aug   14 of 33 workers hidden — Rs 38,200 of Rs 79,600   (48% of the wage bill)
+   *   23–29 Aug   12 of 34 workers hidden — Rs 45,800 of Rs 1,05,200 (44%)
+   *   30 Aug–5 Sep 10 workers hidden      — Rs 10,525
+   *
+   * Only ONE of those worker-days is also recorded against an active row, so it was not work that
+   * moved to another row — it was work no screen could show. And the remaining total looked
+   * entirely plausible, which is why nobody could have noticed from the number alone.
+   */
+  /**
+   * The MAIN query's WHERE only — from its FROM clause onwards.
+   *
+   * Scoped because salary_earnings above it has its own `WHERE w.tenant_id … AND w.active = TRUE`
+   * which is correct and must stay. A file-wide regex cannot tell the two apart, and matched the
+   * one it was meant to protect.
+   */
+  const mainWhere = route.slice(route.indexOf("FROM attendance_workers w\n        LEFT JOIN"))
+
+  it("does not filter the roster down to who is still on it", () => {
+    expect(mainWhere).not.toMatch(/WHERE w\.tenant_id = \$\{tenantContext\.tenantId\}\s*\n\s*AND w\.active = TRUE/)
+    expect(mainWhere).toMatch(/w\.active = TRUE\s*\n\s*OR COALESCE\(m\.muster_total, 0\) > 0/)
+  })
+
+  it("admits a former worker only when they actually worked in this period", () => {
+    // Otherwise deactivating a duplicate repopulates every past week with an empty row.
+    for (const term of ["OR COALESCE(m.muster_total, 0) > 0", "OR COALESCE(a.days_present, 0) > 0", "OR COALESCE(p.picking_total, 0) > 0"]) {
+      expect(route).toContain(term)
+    }
+  })
+
+  it("still refuses to accrue a salary for somebody who has left", () => {
+    // active stays required in salary_earnings: a monthly wage is for being employed, and a former
+    // employee must not keep earning one just because the roster row survives.
+    const salaryCte = route.slice(route.indexOf("salary_earnings AS ("), route.indexOf("ledger_totals AS ("))
+    expect(salaryCte).toContain("AND w.active = TRUE")
+  })
+
+  it("says on the sheet that they have left, rather than including them silently", () => {
+    const tab = read("components/payroll-summary-tab.tsx")
+    expect(route).toContain("onRoster: r.on_roster !== false")
+    expect(tab).toContain("w.onRoster === false")
+    // And on the file an estate pays from, not only the screen.
+    expect(tab).toContain("(left the roster)")
+  })
+})
+
 describe("retention held is derived, because nothing writes it", () => {
   const route = read("app/api/worker-ledger/route.ts")
   const panel = read("components/workers/worker-money-panel.tsx")

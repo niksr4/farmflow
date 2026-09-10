@@ -163,6 +163,7 @@ export async function GET(request: Request) {
           (m.muster_total IS NOT NULL AND s.salary_total IS NULL)                                    AS from_muster,
           COALESCE(l.total_deductions, 0)                                                           AS deductions,
           COALESCE(l.total_adjustments, 0)                                                          AS adjustments,
+          w.active                                                                                  AS on_roster,
           (
             COALESCE(p.picking_total, 0)
             + COALESCE(s.salary_total, m.muster_total, COALESCE(a.days_present, 0) * COALESCE(w.daily_rate, 0))
@@ -176,7 +177,31 @@ export async function GET(request: Request) {
         LEFT JOIN salary_earnings  s ON s.worker_id = w.id
         LEFT JOIN ledger_totals    l ON l.worker_id = w.id
         WHERE w.tenant_id = ${tenantContext.tenantId}
-          AND w.active = TRUE
+          /**
+           * WORK ALREADY DONE IS PAYABLE WHETHER OR NOT THEY ARE STILL ON THE ROSTER.
+           *
+           * This was a flat w.active = TRUE, so deactivating somebody erased every day they had
+           * ever worked from the wage sheet — retrospectively, including periods already closed.
+           * Found by running a real week against production on 2026-09-10: at Medappa, Rs 81,925
+           * of allocated work belongs to fifteen workers with no active roster row, and payroll
+           * could not show a rupee of it under any name. Only ONE of those worker-days is also
+           * recorded against an active row, so this is not work that moved — it is work that
+           * vanished. Seshagiri has a smaller instance of the same thing.
+           *
+           * active means "on today's muster list", not "settled and paid". Somebody who left in
+           * August is still owed for August, and the estate still needs the sheet that proves it.
+           *
+           * They are only admitted when they have REAL ACTIVITY IN THIS PERIOD, so deactivating a
+           * duplicate does not repopulate every past week with an empty row. A monthly salary is
+           * deliberately not one of those conditions — salary_earnings still requires active, and
+           * a former employee must not keep accruing one.
+           */
+          AND (
+            w.active = TRUE
+            OR COALESCE(m.muster_total, 0) > 0
+            OR COALESCE(a.days_present, 0) > 0
+            OR COALESCE(p.picking_total, 0) > 0
+          )
           ${estateFilter}
           AND (
             COALESCE(a.days_present, 0) > 0
@@ -347,6 +372,15 @@ export async function GET(request: Request) {
       fromSalary: Boolean(r.from_salary),
       /** True when this line came from allocated work rather than days-times-rate. */
       fromMuster: Boolean(r.from_muster),
+      /**
+       * False when this worker has been taken off the roster but still worked in this period.
+       *
+       * Surfaced rather than silently included: an estate reading a wage sheet needs to know a name
+       * on it is somebody who has since left, because that is usually a final settlement rather
+       * than an ordinary week — and at Medappa it is just as often a duplicate roster row that
+       * should be merged.
+       */
+      onRoster: r.on_roster !== false,
     }))
       .map((w) => {
         // Rules applied per worker. For a tenant with none, every figure below is zero and

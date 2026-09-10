@@ -51,6 +51,8 @@ type PayrollWorker = {
   missingMonthlyWage: boolean
   /** This line is a pro-rated monthly salary, not days x rate. */
   fromSalary: boolean
+  /** False when they worked this period but have since been taken off the roster. */
+  onRoster?: boolean
 }
 
 type Totals = {
@@ -155,7 +157,7 @@ export default function PayrollSummaryTab() {
       "Net Payable (₹)",
     ]
     const rows = workers.map((w) => [
-      w.name,
+      w.onRoster === false ? `${w.name} (left the roster)` : w.name,
       w.workerType || "",
       w.daysPresent,
       w.dailyRate != null ? w.dailyRate.toFixed(2) : "",
@@ -341,6 +343,11 @@ export default function PayrollSummaryTab() {
                           {w.fromSalary && (
                             <span className="rounded bg-sky-500/15 px-1.5 py-px text-[10px] font-bold uppercase tracking-wide text-sky-400">
                               salary
+                            </span>
+                          )}
+                          {w.onRoster === false && (
+                            <span className="rounded bg-amber-500/15 px-1.5 py-px text-[10px] font-bold uppercase tracking-wide text-amber-600 dark:text-amber-500">
+                              left
                             </span>
                           )}
                           {w.missingDailyRate && (
@@ -546,6 +553,16 @@ export default function PayrollSummaryTab() {
                                 <span className="rounded bg-sky-500/15 px-1.5 py-px text-[10px] font-bold uppercase tracking-wide text-sky-400">
                                   salary
                                 </span>
+                              )}
+                              {w.onRoster === false && (
+                                <Tooltip>
+                                  <TooltipTrigger asChild>
+                                    <span className="rounded bg-amber-500/15 px-1.5 py-px text-[10px] font-bold uppercase tracking-wide text-amber-600 dark:text-amber-500 cursor-default">
+                                      left
+                                    </span>
+                                  </TooltipTrigger>
+                                  <TooltipContent>Worked this period but is no longer on the roster — usually a final settlement, sometimes a duplicate row to merge.</TooltipContent>
+                                </Tooltip>
                               )}
                               {w.missingMonthlyWage && (
                                 <Tooltip>
