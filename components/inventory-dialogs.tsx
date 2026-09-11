@@ -371,7 +371,7 @@ export default function InventoryDialogs(p: DialogProps) {
                 />
                 {editRequiresPrice && (
                   <p id="edit-transaction-price-error" className="text-xs text-destructive">
-                    Restocks need the price paid per unit — ₹0 corrupts the average cost for every future depletion.
+                    Restocks need the total paid — ₹0 corrupts the average cost for every future depletion.
                   </p>
                 )}
                 {editIsRestock && p.editingTransactionIsLegacyZeroPriced && !(Number(p.editingTransaction.price) > 0) && (
