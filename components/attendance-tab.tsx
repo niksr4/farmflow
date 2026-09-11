@@ -261,7 +261,7 @@ export default function AttendanceTab({ selectedEstate = null }: AttendanceTabPr
         // ?scope=all is the explicit "every estate" signal; an empty ?estate= deliberately falls
         // back to the cookie in resolveActiveEstate, which is exactly what must not happen here.
         const scope = estate ? `&estate=${encodeURIComponent(estate)}` : "&scope=all"
-        const res = await fetch(`/api/attendance?date=${date}${scope}`, { cache: "no-store" })  // eslint-disable-line
+        const res = await fetch(`/api/attendance?date=${date}${scope}`, { cache: "no-store" })
         const data = await res.json().catch(() => ({}))
         if (!res.ok || !data?.success) throw new Error(data?.error || "Failed to load")
 
