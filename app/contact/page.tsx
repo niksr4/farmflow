@@ -150,8 +150,9 @@ export default function ContactPage() {
                 <div className="space-y-4">
                   <div className="grid gap-4 sm:grid-cols-2">
                     <div className="space-y-1.5">
-                      <Label className="text-stone-300">Your name</Label>
+                      <Label htmlFor="contact-name" className="text-stone-300">Your name</Label>
                       <Input
+                        id="contact-name"
                         value={form.name}
                         onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
                         placeholder="Ravi Kumar"
@@ -159,8 +160,9 @@ export default function ContactPage() {
                       />
                     </div>
                     <div className="space-y-1.5">
-                      <Label className="text-stone-300">Your email</Label>
+                      <Label htmlFor="contact-email" className="text-stone-300">Your email</Label>
                       <Input
+                        id="contact-email"
                         type="email"
                         value={form.email}
                         onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))}
@@ -171,9 +173,9 @@ export default function ContactPage() {
                   </div>
 
                   <div className="space-y-1.5">
-                    <Label className="text-stone-300">Type of enquiry</Label>
+                    <Label htmlFor="contact-inquiry-type" className="text-stone-300">Type of enquiry</Label>
                     <Select value={form.inquiryType} onValueChange={(v) => setForm((f) => ({ ...f, inquiryType: v }))}>
-                      <SelectTrigger className="border-white/10 bg-white/[0.04] text-stone-100 focus:ring-emerald-300/20">
+                      <SelectTrigger id="contact-inquiry-type" className="border-white/10 bg-white/[0.04] text-stone-100 focus:ring-emerald-300/20">
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent className="border-white/10 bg-[#0d1f1b] text-stone-100">
@@ -187,8 +189,9 @@ export default function ContactPage() {
                   </div>
 
                   <div className="space-y-1.5">
-                    <Label className="text-stone-300">Message</Label>
+                    <Label htmlFor="contact-message" className="text-stone-300">Message</Label>
                     <Textarea
+                      id="contact-message"
                       value={form.message}
                       onChange={(e) => setForm((f) => ({ ...f, message: e.target.value }))}
                       placeholder="Tell us about your estate, what you're looking for, or anything else on your mind."

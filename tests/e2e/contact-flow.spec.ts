@@ -69,4 +69,18 @@ test.describe("public contact form", () => {
     await expect(page.getByText("Message received")).not.toBeVisible()
     await expect(submitButton).toBeEnabled()
   })
+
+  test("every field's label is programmatically associated with its input", async ({ page }) => {
+    // Regression test: the Label elements above each field previously had no htmlFor/id pairing
+    // with their Input/Textarea/SelectTrigger, so a screen reader announced nothing when a field
+    // received focus. getByLabel only resolves when that association is real (htmlFor -> id, or
+    // aria-labelledby), so this fails the same way it would have before the fix.
+    await page.goto("/contact")
+
+    await expect(page.getByLabel("Your name")).toHaveAttribute("placeholder", "Ravi Kumar")
+    await expect(page.getByLabel("Your email")).toHaveAttribute("placeholder", "ravi@yourfarm.com")
+    await expect(page.getByLabel("Message")).toHaveAttribute("placeholder", /tell us about your estate/i)
+    // The Select's trigger button carries the id the Label's htmlFor points at.
+    await expect(page.getByLabel("Type of enquiry")).toBeVisible()
+  })
 })
