@@ -5046,6 +5046,7 @@ export default function InventorySystem() {
           setInventoryEditForm={setInventoryEditForm}
           setInventoryEditLocationId={setInventoryEditLocationId}
           handleSaveInventoryEdit={handleSaveInventoryEdit}
+          onInventoryPricesBackfilled={() => { void refreshData(true) }}
           deleteConfirmDialogOpen={deleteConfirmDialogOpen}
           setDeleteConfirmDialogOpen={setDeleteConfirmDialogOpen}
           setTransactionToDelete={setTransactionToDelete}

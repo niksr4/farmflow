@@ -169,6 +169,30 @@ export function computeWorkerPay(
   let retention = 0
   let hasRule = false
   const rulesApply = !options?.isGang
+  /**
+   * RETENTION IS HELD AGAINST DAYS WORKED, NOT AGAINST A MONTHLY SALARY. Deliberate, not an
+   * oversight — and worth stating because the two are added together into gross a few lines down,
+   * so a reader can reasonably expect both to be retained from.
+   *
+   * The only retention rule any estate has stated is Manoj's: "20% of the day's pay". A day is the
+   * unit; a salaried writer does not have one. retentionForDay wants a rate and a day_fraction,
+   * and a monthly wage supplies neither — inventing them would mean deciding, on the estate's
+   * behalf, whether a salary is 26 days or 30, and whether a staff member on leave is retained
+   * from. Those are the estate's decisions and nobody has been asked yet.
+   *
+   * So a salaried worker is retained from only on the days they also appear on the muster, which
+   * is the same treatment any other worker gets for those days.
+   *
+   * ⚠ THE CONSEQUENCE, STATED PLAINLY: if an estate ever wants retention held against salary, this
+   * will quietly not do it — salary lands in gross, retention stays at zero, and net is higher
+   * than they meant. Nobody is exposed today. Prod carries zero pay rules, and the only two
+   * monthly-paid workers (both at Laxmi) belong to a tenant with none, so retention is zero for
+   * them under any reading. Raised by Greptile on the pay-rules PR, 2026-09-11.
+   *
+   * The fix, when an estate asks for it, is a retention mode that names its own base — not a
+   * default guessed here. tests/salary-retention-is-a-decision.test.ts pins the current behaviour
+   * so that change has to be made on purpose.
+   */
   for (const day of rulesApply ? days : []) {
     const rule = resolveRuleForDate(input.rules, workerId, day.workDate)
     if (rule?.retentionMode) hasRule = true
@@ -197,10 +221,53 @@ export function computeWorkerPay(
   }
 
   // Every instalment inside the range, so a month agrees with the four weekly runs it contains.
-  const advanceDue = entries.reduce(
+  const scheduledThisPeriod = entries.reduce(
     (sum, e) => sum + instalmentsDueInRange(e, input.periodStart, periodEnd, runDays),
     0,
   )
+
+  /**
+   * ⚠ NEVER COLLECT MORE THAN IS STILL OWED.
+   *
+   * The schedule is a plan, not a debt. instalmentsDueInRange answers "what was this advance meant
+   * to give up in these dates", which is a pure function of the amount, the number of periods and
+   * the start date — it has never once looked at whether the worker has already handed the money
+   * back in cash.
+   *
+   * So a Rs 8,000 advance over four Rs 2,000 runs, followed by a Rs 3,000 repayment, went on
+   * taking all four instalments: Rs 11,000 recovered against Rs 8,000 lent. And because owedAfter
+   * clamps at zero, the balance showed a tidy Rs 0 while the worker was Rs 3,000 down. Nothing on
+   * the sheet said otherwise, which is the part that makes it serious — the over-recovery is
+   * invisible at exactly the moment somebody could still catch it.
+   *
+   * Raised by Greptile on the pay-rules PR, 2026-09-11. No estate has recorded an advance yet, so
+   * nobody has been short-paid; the schedule shipped before the first advance did.
+   *
+   * CAPPED PER WORKER, NOT PER ADVANCE, because a repayment is not linked to a particular advance —
+   * worker_ledger has no column for it, and an estate handed a Rs 3,000 note does not say which of
+   * two advances it settles. Pooling is the only honest reading of the rows we have.
+   *
+   * outstandingAdvance(entries) is everything advanced less everything repaid in cash; subtracting
+   * what the schedule already took before this range leaves what recovery can still legitimately
+   * take. It inherits the optimism noted on owedAfter below — an earlier short run is assumed to
+   * have paid its full instalment — so the cap can still be slightly generous. It can no longer be
+   * unbounded, which is the difference between an imprecise figure and a wrong one.
+   */
+  /**
+   * ONLY MONEY THAT HAD ALREADY CHANGED HANDS BY THE END OF THIS RANGE.
+   *
+   * Without the date filter, a repayment made in week four would shrink week one's deduction when
+   * week one is re-printed — quietly disagreeing with the sheet the worker was actually paid from,
+   * and with no way to tell which run produced which figure. A payroll run has to be reproducible
+   * from the rows that existed when it happened.
+   */
+  const knownBy = (entry: { entryDate: string }) => entry.entryDate <= periodEnd
+  const recoverableBeforeThisPeriod = Math.max(
+    0,
+    outstandingAdvance(entries.filter(knownBy)) -
+      entries.reduce((sum, e) => sum + recoveredBeforeDate(e, input.periodStart, runDays), 0),
+  )
+  const advanceDue = Math.min(scheduledThisPeriod, recoverableBeforeThisPeriod)
 
   /**
    * Overtime is earnings, so it is deducted FROM -- an estate that pays overtime and then holds

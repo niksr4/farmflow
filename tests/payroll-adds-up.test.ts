@@ -174,14 +174,43 @@ describe("a wage sheet shows everyone who worked", () => {
 
   it("does not filter the roster down to who is still on it", () => {
     expect(mainWhere).not.toMatch(/WHERE w\.tenant_id = \$\{tenantContext\.tenantId\}\s*\n\s*AND w\.active = TRUE/)
-    expect(mainWhere).toMatch(/w\.active = TRUE\s*\n\s*OR COALESCE\(m\.muster_total, 0\) > 0/)
+    // The roster gate is `active OR <had something happen this period>`. The right-hand side is
+    // now one named fragment rather than an inline list — see below for why.
+    expect(mainWhere).toMatch(/w\.active = TRUE\s*\n\s*OR \$\{workedThisPeriod\}/)
   })
 
   it("admits a former worker only when they actually worked in this period", () => {
     // Otherwise deactivating a duplicate repopulates every past week with an empty row.
-    for (const term of ["OR COALESCE(m.muster_total, 0) > 0", "OR COALESCE(a.days_present, 0) > 0", "OR COALESCE(p.picking_total, 0) > 0"]) {
+    for (const term of ["COALESCE(m.muster_total, 0) > 0", "COALESCE(a.days_present, 0) > 0", "COALESCE(p.picking_total, 0) > 0"]) {
       expect(route).toContain(term)
     }
+  })
+
+  it("counts a ledger entry as activity in BOTH gates, not just the second", () => {
+    /**
+     * THE REGRESSION THIS EXISTS FOR. The two gates were written out separately and drifted: the
+     * roster gate listed muster, attendance and picking, while the has-anything-happened gate four
+     * lines below also counted worker_ledger deductions and adjustments.
+     *
+     * So an INACTIVE worker carrying a deduction and nothing else failed the first gate and
+     * vanished from the sheet — while the second gate said, in as many words, that a ledger entry
+     * is payroll activity. The money was recorded and the worker was not on the list, so the
+     * totals were short by exactly their line.
+     *
+     * Mine, from the fix that stopped `w.active = TRUE` erasing Rs 81,925 of work at Medappa: I
+     * widened the gate for WORK and forgot that money can arrive without work attached. Raised by
+     * Greptile, 2026-09-11. Latent — prod carries no ledger deductions or adjustments at all yet.
+     *
+     * Fixed by naming the condition once and using it in both places, so they cannot disagree
+     * again. This asserts the single definition rather than the two copies.
+     */
+    expect(route).toMatch(/const workedThisPeriod = accountsSql`\(/)
+    const fragment = route.slice(route.indexOf("const workedThisPeriod"), route.indexOf("const rows ="))
+    for (const term of ["l.total_deductions", "l.total_adjustments", "a.days_present", "m.muster_total", "p.picking_total"]) {
+      expect(fragment, `${term} missing from the shared activity definition`).toContain(term)
+    }
+    // Used in both gates, never re-spelt inline in one of them.
+    expect((route.match(/\$\{workedThisPeriod\}/g) ?? []).length).toBe(2)
   })
 
   it("still refuses to accrue a salary for somebody who has left", () => {

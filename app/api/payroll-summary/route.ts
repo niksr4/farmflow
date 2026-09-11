@@ -45,6 +45,36 @@ export async function GET(request: Request) {
     // question for the reports, which scope by the block the work happened on.
     const estateFilter = accountsSql``
 
+    /**
+     * "This worker has something owed or held against them in THIS period."
+     *
+     * Written once because it is asked twice, and the two askings had drifted. The roster gate
+     * below reads `active OR <this>`, and the has-anything-happened gate reads `<this> OR salary`.
+     * When the first listed only muster, attendance and picking while the second also counted
+     * ledger rows, an INACTIVE worker carrying a deduction or an adjustment and nothing else
+     * failed the first gate and vanished — while the second gate, four lines further down, said
+     * in as many words that a ledger entry is payroll activity. The money was recorded, the
+     * worker was gone from the list, and the totals were short by exactly their line.
+     *
+     * Found by Greptile on the pay-rules PR, 2026-09-11. It was mine, from the fix that stopped
+     * `w.active = TRUE` erasing Rs 81,925 of work at Medappa: I widened the gate for work and
+     * forgot that money can arrive without work attached.
+     *
+     * Every term is period-scoped — ledger_totals filters entry_date to the run, so this admits
+     * nobody on the strength of an entry from a closed week.
+     *
+     * A MONTHLY SALARY IS DELIBERATELY NOT HERE. salary_earnings still requires `active`, because
+     * somebody who left in August must not keep accruing September's salary. It appears only in
+     * the second gate, where the worker has already passed the roster test.
+     */
+    const workedThisPeriod = accountsSql`(
+      COALESCE(a.days_present, 0) > 0
+      OR COALESCE(m.muster_total, 0) > 0
+      OR COALESCE(p.picking_total, 0) > 0
+      OR COALESCE(l.total_deductions, 0) <> 0
+      OR COALESCE(l.total_adjustments, 0) <> 0
+    )`
+
     const rows = await runTenantQuery(
       accountsSql,
       tenantContext,
@@ -198,17 +228,11 @@ export async function GET(request: Request) {
            */
           AND (
             w.active = TRUE
-            OR COALESCE(m.muster_total, 0) > 0
-            OR COALESCE(a.days_present, 0) > 0
-            OR COALESCE(p.picking_total, 0) > 0
+            OR ${workedThisPeriod}
           )
           ${estateFilter}
           AND (
-            COALESCE(a.days_present, 0) > 0
-            OR COALESCE(m.muster_total, 0) > 0
-            OR COALESCE(p.picking_total, 0) > 0
-            OR COALESCE(l.total_deductions, 0) > 0
-            OR COALESCE(l.total_adjustments, 0) > 0
+            ${workedThisPeriod}
             -- Owed regardless of the roll. A salaried writer nobody ticked is still owed their
             -- month, and leaving them off the sheet is how they get missed on payday.
             OR s.salary_total IS NOT NULL

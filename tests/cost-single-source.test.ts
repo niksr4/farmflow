@@ -138,8 +138,19 @@ describe("cost is never counted by halves", () => {
 
         const aggregatesMoney = /SUM\s*\(/i.test(selectClause) && /total_cost/i.test(selectClause)
         if (!aggregatesMoney) continue
-        if (/NOT ILIKE 'Price updated%'/.test(whereClause)) continue
-        offenders.push(route.rel)
+        /**
+         * BOTH spellings, or the shared constant that carries both.
+         *
+         * This used to accept `NOT ILIKE 'Price updated%'` alone, which is the OLD format. A query
+         * excluding only that one would have passed the guard while counting every modern
+         * "Price correction" row as a purchase — the exact Rs 64.42 crore mistake the test above
+         * it describes. The guard was shaped like the first bug rather than like the rule.
+         */
+        if (/EXCLUDE_REVALUATION_SQL/.test(whereClause)) continue
+        const excludesOld = /NOT ILIKE 'Price updated%'/.test(whereClause)
+        const excludesNew = /NOT ILIKE 'Price correction%'/.test(whereClause)
+        if (excludesOld && excludesNew) continue
+        offenders.push(`${route.rel}${excludesOld !== excludesNew ? " (excludes only one spelling)" : ""}`)
       }
     }
 
