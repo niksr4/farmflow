@@ -9,6 +9,7 @@ import { EmptyState } from "@/components/ui/empty-state"
 import { cn } from "@/lib/utils"
 import { formatWorkedHours, shiftStatusLabel, type ShiftStatus } from "@/lib/attendance-hours"
 import AttendanceMonthlyGrid from "@/components/attendance-monthly-grid"
+import AttendanceYearlySummary from "@/components/attendance-yearly-summary"
 import { workerTypeLabel, isPaidDaily } from "@/lib/worker-types"
 
 /**
@@ -69,7 +70,7 @@ const firstOfMonth = () => {
 }
 const today = () => new Date().toISOString().slice(0, 10)
 
-type ReportView = "grid" | "hours"
+type ReportView = "grid" | "yearly" | "hours"
 
 /**
  * Two questions, one tab.
@@ -82,6 +83,7 @@ type ReportView = "grid" | "hours"
 function ViewToggle({ view, onChange }: { view: ReportView; onChange: (next: ReportView) => void }) {
   const options: Array<{ value: ReportView; label: string }> = [
     { value: "grid", label: "Monthly grid" },
+    { value: "yearly", label: "Yearly summary" },
     { value: "hours", label: "Hours & allocation" },
   ]
   return (
@@ -170,6 +172,15 @@ export default function AttendanceReportTab() {
       <div className="space-y-4">
         <ViewToggle view={view} onChange={setView} />
         <AttendanceMonthlyGrid />
+      </div>
+    )
+  }
+
+  if (view === "yearly") {
+    return (
+      <div className="space-y-4">
+        <ViewToggle view={view} onChange={setView} />
+        <AttendanceYearlySummary />
       </div>
     )
   }
