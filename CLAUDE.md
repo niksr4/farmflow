@@ -416,8 +416,23 @@ Key env vars:
 no manual promotion gate. The only check is CI (lint → typecheck → unit tests → build → public e2e).
 This is fine for pre-revenue validation but has zero buffer between "pushed" and "live for every tenant."
 
-**A structural git-level gate (stop `main` pushes from auto-shipping) is NOT available on this
-project's plan.** Investigated 2026-07-21:
+**A gate AT VERCEL is not available on this plan. A gate AT GITHUB is — see
+[docs/RELEASE-FLOW.md](docs/RELEASE-FLOW.md).**
+
+⚠ **Written 2026-09-11, NOT YET APPLIED.** `scripts/dev/setup-main-ruleset.mjs` is ready and
+dry-runs clean; applying it needs a token with `Administration: write`. Until somebody runs it with
+`--apply`, `main` is still wide open and every word of "Current state" above is still true. Check
+with `node scripts/dev/setup-main-ruleset.mjs` rather than trusting this paragraph.
+
+This section used to open by saying a structural gate was not available at all, and that reading
+stood for seven weeks. It is wrong in a way worth spelling out: *reaching `main`* and *reaching
+production* are the same event here, so a gate does not have to live at the deploy step. **The
+repository is public**, which makes GitHub rulesets free, and the script requires a pull request
+plus a green `quality` check before anything can land on `main`. Merging is still the release, and
+still needs the human word — but nothing would arrive on `main` unreviewed and untested.
+
+Everything below about Vercel remains true and the domain-`gitBranch` warning still stands.
+Investigated 2026-07-21:
 - Vercel's clean mechanism for this, `deploymentPolicy` (per-branch production gating via the
   Project API), is **Pro/Enterprise only** — confirmed by a clean `pro_plan_required` rejection on
   this Hobby-tier project.
