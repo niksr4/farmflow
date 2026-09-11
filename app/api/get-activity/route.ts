@@ -5,6 +5,7 @@ import { normalizeTenantContext, runTenantQuery } from "@/lib/server/tenant-db"
 import { canDeleteModule, canWriteModule } from "@/lib/permissions"
 import { logAuditEvent } from "@/lib/server/audit-log"
 import { buildMissingAccountActivitySuggestions } from "@/lib/account-activity-suggestions"
+import { sanitizeRouteError } from "@/lib/server/sanitize-route-error"
 
 export const dynamic = "force-dynamic"
 export const revalidate = 0
@@ -102,7 +103,7 @@ export async function GET(_request: Request) {
     return NextResponse.json(
       {
         success: false,
-        error: error.message,
+        error: sanitizeRouteError(error, "Failed to fetch activity codes"),
         activities: [],
       },
       { status: 500 },
@@ -179,7 +180,7 @@ export async function POST(request: Request) {
     return NextResponse.json(
       {
         success: false,
-        error: error.message,
+        error: sanitizeRouteError(error, "Failed to add activity code"),
       },
       { status: 500 },
     )
@@ -282,7 +283,7 @@ export async function PUT(request: Request) {
     return NextResponse.json(
       {
         success: false,
-        error: error.message,
+        error: sanitizeRouteError(error, "Failed to update activity code"),
       },
       { status: 500 },
     )
@@ -416,7 +417,7 @@ export async function DELETE(request: Request) {
     return NextResponse.json(
       {
         success: false,
-        error: error.message,
+        error: sanitizeRouteError(error, "Failed to delete activity code"),
       },
       { status: 500 },
     )

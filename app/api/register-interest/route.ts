@@ -5,6 +5,7 @@ import { sendAgentAlertEmail } from "@/lib/server/agents/alert-email"
 import { buildRateLimitHeaders, checkRateLimit } from "@/lib/rate-limit"
 import { fetchWithTimeout } from "@/lib/server/http"
 import { logServerError, logServerWarning } from "@/lib/server/safe-logging"
+import { sanitizeRouteError } from "@/lib/server/sanitize-route-error"
 
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 
@@ -208,15 +209,17 @@ export async function POST(request: Request) {
     return NextResponse.json({ success: true, notified, emailed })
   } catch (error: any) {
     logServerError("Register interest error", error)
+    // Sanitized like the client-facing field below -- logServerError above already has the raw
+    // error for Sentry, so nothing is lost by keeping this internal ops-log entry DB-internal-free too.
     await logAppErrorEvent({
       source: "register-interest",
       endpoint: "/api/register-interest",
       errorCode: "request_failed",
       severity: "error",
-      message: error?.message || "Failed to register interest",
+      message: sanitizeRouteError(error, "Failed to register interest"),
     })
     return NextResponse.json(
-      { success: false, error: error?.message || "Failed to register interest" },
+      { success: false, error: sanitizeRouteError(error, "Failed to register interest") },
       { status: 500 },
     )
   }

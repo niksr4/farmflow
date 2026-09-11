@@ -59,16 +59,6 @@ const KNOWN_RAW_ERROR_LEAKS = [
   "app/api/cron/tenant-engagement/route.ts",
   "app/api/cron/tenant-smoke/route.ts",
   "app/api/cron/weekly-digest/route.ts",
-  "app/api/documents/[id]/file/route.ts",
-  "app/api/documents/route.ts",
-  "app/api/exports/ops/route.ts",
-  "app/api/finance-balance-sheet/route.ts",
-  "app/api/get-activity/route.ts",
-  "app/api/inventory-summary/route.ts",
-  "app/api/market-pricing/route.ts",
-  "app/api/plant-health/route.ts",
-  "app/api/recent-activity/route.ts",
-  "app/api/register-interest/route.ts",
 ].sort()
 
 // These are the safe ways to put an error in a response. Their PRESENCE no longer exempts a file.

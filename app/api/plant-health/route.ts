@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server"
 import { isModuleAccessError, requireModuleAccess } from "@/lib/server/module-access"
 import { fetchWithTimeout } from "@/lib/server/http"
+import { sanitizeRouteError } from "@/lib/server/sanitize-route-error"
 
 export const dynamic = "force-dynamic"
 
@@ -207,7 +208,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ success: false, error: "Module access disabled" }, { status: 403 })
     }
     return NextResponse.json(
-      { success: false, error: error?.message || "Plant health analysis failed" },
+      { success: false, error: sanitizeRouteError(error, "Plant health analysis failed") },
       { status: 500 },
     )
   }

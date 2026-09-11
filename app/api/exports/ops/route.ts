@@ -11,6 +11,7 @@ import { buildSalesCsv, type SalesExportRecord } from "@/lib/sales-export"
 import { buildXlsxArrayBufferFromCsv, XLSX_MIME_TYPE } from "@/lib/spreadsheet"
 import { computeNetPnl } from "@/lib/server/pnl"
 import { assertValidModuleIds } from "@/lib/modules"
+import { sanitizeRouteError } from "@/lib/server/sanitize-route-error"
 
 const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/
 const MAX_ROWS = 8000
@@ -990,6 +991,6 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    return NextResponse.json({ success: false, error: message }, { status: 500 })
+    return NextResponse.json({ success: false, error: sanitizeRouteError(error, "Failed to export operations data") }, { status: 500 })
   }
 }

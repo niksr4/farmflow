@@ -6,6 +6,7 @@ import { resolveActiveEstate } from "@/lib/server/estate-filter"
 import { SELECTED_ESTATE_COOKIE } from "@/lib/server/estate-cookie"
 import { normalizeTenantContext, runTenantQuery } from "@/lib/server/tenant-db"
 import { computeNetPnl } from "@/lib/server/pnl"
+import { sanitizeRouteError } from "@/lib/server/sanitize-route-error"
 
 export const dynamic = "force-dynamic"
 export const revalidate = 0
@@ -482,7 +483,7 @@ export async function GET(request: Request) {
       return NextResponse.json({ success: false, error: "Module access disabled" }, { status: 403 })
     }
     return NextResponse.json(
-      { success: false, error: error?.message || "Failed to load balance sheet summary" },
+      { success: false, error: sanitizeRouteError(error, "Failed to load balance sheet summary") },
       { status: 500 },
     )
   }
