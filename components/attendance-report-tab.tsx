@@ -87,7 +87,7 @@ function ViewToggle({ view, onChange }: { view: ReportView; onChange: (next: Rep
     { value: "hours", label: "Hours & allocation" },
   ]
   return (
-    <div className="flex gap-1.5">
+    <div className="flex flex-wrap items-center gap-1.5">
       {options.map((option) => (
         <button
           key={option.value}
@@ -103,6 +103,16 @@ function ViewToggle({ view, onChange }: { view: ReportView; onChange: (next: Rep
           {option.label}
         </button>
       ))}
+      {/* A LINK, NOT A FOURTH TAB. The daily sheet is a printable page of its own — one date,
+          everyone, in and out times — so it opens rather than swapping the panel underneath. Put
+          here because "where are the attendance reports" should have one answer, and it was
+          previously reachable only from the muster's own date picker. */}
+      <a
+        href={`/attendance-report?date=${today()}`}
+        className="min-h-11 rounded-lg border border-stone-200 bg-white px-3 text-xs font-semibold leading-[2.75rem] text-stone-500 transition-colors hover:bg-stone-50"
+      >
+        Daily sheet ↗
+      </a>
     </div>
   )
 }
