@@ -140,8 +140,20 @@ export async function POST(request: NextRequest) {
     const plan = planPriceBackfill({ rows, rate })
 
     if (!plan.rowCount) {
-      // Not an error. Every restock already has a price, which is the desired end state — saying
-      // so plainly beats a 400 that reads like the estate did something wrong.
+      /**
+       * Nothing to fill — but STILL REBUILD THE BALANCE before saying so.
+       *
+       * ⚠ THIS PATH IS THE RETRY PATH, and the comment that used to sit below claimed it was the
+       * repair for a failed rebuild: "any later edit to this item recalculates it, and so does
+       * this endpoint on a second run." It does not. Once the rows are priced they are no longer
+       * unpriced, so a second run lands HERE, and the early return skipped the recalculation
+       * entirely. current_inventory would have stayed stale for good, with the endpoint cheerfully
+       * reporting success every time it was asked to fix it.
+       *
+       * Raised by Greptile on the accessibility PR, 2026-09-11 — a correction to the reasoning,
+       * not only to the code. Recalculating here is idempotent and costs one replay of one slot.
+       */
+      await recalculateInventoryForItem(inventorySql, tenantContext, itemType, locationId)
       return NextResponse.json({
         success: true,
         rowsUpdated: 0,
@@ -152,15 +164,20 @@ export async function POST(request: NextRequest) {
     }
 
     /**
-     * One transaction for the rows, then the rebuild.
+     * The rows in one transaction, then the rebuild.
      *
-     * The rebuild is deliberately NOT inside it. recalculateInventoryForItem issues its own
-     * queries through runTenantQuery, and the balance it writes is a pure function of the rows
-     * that just committed — so re-running it is always safe, whereas a half-applied set of row
-     * edits would not be. If the rebuild fails, the rows are correct and the balance is stale;
-     * any later edit to this item recalculates it, and so does this endpoint on a second run.
+     * The rebuild is not inside it: recalculateInventoryForItem issues its own queries through
+     * runTenantQuery, and the balance it writes is a pure function of the rows that just
+     * committed — so re-running it is always safe, whereas a half-applied set of row edits would
+     * not be. If the rebuild fails the rows are correct and the balance is stale, and re-running
+     * this endpoint repairs it via the branch above.
+     *
+     * RETURNING id because the WHERE re-checks that each row is still unpriced. Two tabs, or a
+     * retry racing another edit, can leave fewer rows changed than were planned — and reporting
+     * the PLAN as though it were the outcome would put a number in the audit log that never
+     * happened. What comes back is what was written.
      */
-    await runTenantTransaction(inventorySql, tenantContext, (txn) =>
+    const results = (await runTenantTransaction(inventorySql, tenantContext, (txn) =>
       plan.changes.map(
         (change) => txn`
           UPDATE transaction_history
@@ -170,11 +187,21 @@ export async function POST(request: NextRequest) {
             AND tenant_id = ${tenantContext.tenantId}
             AND LOWER(transaction_type) IN ('restock', 'restocking')
             AND COALESCE(total_cost, 0) <= 0
+          RETURNING id
         `,
       ),
-    )
+    )) as Array<Array<{ id: number | string }>>
 
+    const appliedIds = new Set(results.flat().map((row) => String(row.id)))
+    const applied = plan.changes.filter((change) => appliedIds.has(String(change.id)))
+    const rowsUpdated = applied.length
+    const quantityPriced = Math.round(applied.reduce((sum, c) => sum + c.quantity, 0) * 10000) / 10000
+    const costAdded = Math.round(applied.reduce((sum, c) => sum + (c.newTotalCost - c.previousTotalCost), 0) * 100) / 100
+
+    // Read the slot back rather than trusting the plan's projection: if another writer changed a
+    // row underneath us, the balance below is the one that is actually stored.
     await recalculateInventoryForItem(inventorySql, tenantContext, itemType, locationId)
+    const after = planPriceBackfill({ rows: await slotLedger(tenantContext, itemType, locationId), rate: 0 }).before
 
     // Names every row it touched. This edits history rather than appending a correction, so the
     // audit entry is the only record that the zeroes were ever there.
@@ -187,22 +214,25 @@ export async function POST(request: NextRequest) {
         itemType,
         locationId,
         rate,
-        rowsUpdated: plan.rowCount,
-        quantityPriced: plan.quantity,
-        costAdded: plan.costAdded,
+        rowsUpdated,
+        quantityPriced,
+        costAdded,
         avgPriceBefore: plan.before.avgPrice,
-        avgPriceAfter: plan.after.avgPrice,
-        transactionIds: plan.changes.map((c) => c.id),
+        avgPriceAfter: after.avgPrice,
+        transactionIds: applied.map((c) => c.id),
+        // Recorded when a concurrent writer got to some rows first, so the gap is answerable
+        // later rather than invisible.
+        rowsPlanned: plan.rowCount,
       },
     })
 
     return NextResponse.json({
       success: true,
-      rowsUpdated: plan.rowCount,
-      quantityPriced: plan.quantity,
-      costAdded: plan.costAdded,
+      rowsUpdated,
+      quantityPriced,
+      costAdded,
       before: plan.before,
-      after: plan.after,
+      after,
     })
   } catch (error: any) {
     if (isModuleAccessError(error)) {

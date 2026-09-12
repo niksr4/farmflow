@@ -31,8 +31,20 @@ type Summary = {
   clockedDays: number
 }
 
-const thisYearStart = () => `${new Date().getFullYear()}-01`
-const thisMonth = () => new Date().toISOString().slice(0, 7)
+/**
+ * Both defaults from the ESTATE'S calendar, which is IST — the same clock the API uses.
+ *
+ * ⚠ THESE USED TO DISAGREE WITH EACH OTHER. The start month took the browser's local year and the
+ * end month took the UTC month, so between 00:00 and 05:29 IST on 1 January the start is the new
+ * year and the end is the previous December: an inverted range, which the API correctly rejects,
+ * so the screen opens on an error. At other month boundaries the same mismatch silently drops the
+ * current month from the default view. Raised by Greptile, 2026-09-12.
+ *
+ * Two derivations of "now" in one file is the bug; using one is the fix.
+ */
+const istToday = () => new Date(Date.now() + 5.5 * 3600_000).toISOString().slice(0, 10)
+const thisYearStart = () => `${istToday().slice(0, 4)}-01`
+const thisMonth = () => istToday().slice(0, 7)
 
 /** Whole where it is whole, one decimal where a half day made it not. */
 const days = (n: number) => (Number.isInteger(n) ? String(n) : n.toFixed(1))

@@ -367,3 +367,81 @@ describe("average hours per day", () => {
     expect(csv).toContain("8:30,2")
   })
 })
+
+describe("a worker who has left stops accruing absences", () => {
+  /**
+   * ⚠ THE REPORT INCLUDES ANYONE WITH A RECORD IN THE RANGE, which is right — deactivating
+   * somebody today must not erase the months they worked. But with no end date, a worker
+   * deactivated in March who has a March record appeared in a Jan–Sep report and was marked A for
+   * every working day from April onward: roughly 130 failures to turn up that nobody could have
+   * incurred, and a yearly sheet that disagreed with the monthly ones for those months.
+   *
+   * Raised by Greptile, 2026-09-11.
+   *
+   * We do not know when anyone LEFT — attendance_workers records active and created_at, nothing
+   * else. We know when they were last SEEN. Blank after that says "not on the roll", which the
+   * data supports; "absent" asserts they were expected and did not come, which it does not.
+   */
+  const leaver: YearlyAttendanceInput = {
+    employeeCode: "12",
+    employeeName: "Left in March",
+    creditedByDate: Object.fromEntries(
+      buildMonthDays("2026-03").filter((d) => !d.isWeeklyOff).map((d) => [d.iso, 1]),
+    ),
+    onRosterFrom: "2026-01-01",
+    onRosterUntil: "2026-03-31",
+  }
+
+  const report = buildYearlyAttendance([leaver], ["2026-03", "2026-04", "2026-05"], "2026-09-11")[0]
+
+  it("still shows the months they did work", () => {
+    const march = report.months.find((m) => m.month === "2026-03")!
+    expect(march.present).toBe(26)
+    expect(march.absent).toBe(0)
+  })
+
+  it("records no absence at all for the months after they left", () => {
+    for (const month of ["2026-04", "2026-05"]) {
+      const m = report.months.find((x) => x.month === month)!
+      expect(m.absent, `${month} invented absences for a departed worker`).toBe(0)
+      expect(m.present).toBe(0)
+      // And no pay days either — a blank month is not a paid month.
+      expect(m.payDays).toBe(0)
+      expect(m.weeklyOff).toBe(0)
+    }
+  })
+
+  it("the year totals only what they were actually there for", () => {
+    expect(report.year.absent).toBe(0)
+    expect(report.year.present).toBe(26)
+  })
+
+  it("without an end date the old behaviour returns, which is what made this worth fixing", () => {
+    // Same worker, no onRosterUntil: April and May fill with absences.
+    const { onRosterUntil: _drop, ...noEnd } = leaver
+    const stillListed = buildYearlyAttendance([noEnd], ["2026-04"], "2026-09-11")[0].months[0]
+    expect(stillListed.absent).toBeGreaterThan(20)
+  })
+
+  it("a worker still on the roll is unaffected", () => {
+    const active: YearlyAttendanceInput = {
+      employeeCode: "1",
+      employeeName: "Still here",
+      creditedByDate: { "2026-04-06": 1 },
+      onRosterFrom: "2026-01-01",
+      onRosterUntil: null,
+    }
+    const m = buildYearlyAttendance([active], ["2026-04"], "2026-04-30")[0].months[0]
+    expect(m.present).toBe(1)
+    expect(m.absent).toBeGreaterThan(20)
+  })
+
+  it("the yearly and monthly sheets agree for a departed worker, which they did not before", () => {
+    // The invariant the rest of this file asserts, now checked on the case that broke it.
+    const april = buildMonthlyAttendance([leaver], buildMonthDays("2026-04"), "2026-09-11")[0].totals
+    const fromYear = report.months.find((m) => m.month === "2026-04")!
+    expect(fromYear.absent).toBe(april.absent)
+    expect(fromYear.present).toBe(april.present)
+    expect(fromYear.totalPresent).toBe(april.daysPayable)
+  })
+})

@@ -102,6 +102,28 @@ export async function GET(request: Request) {
           -- Days before a worker existed are blank, not absences. Cast to text so the driver
           -- hands back a string rather than a Date parsed at midnight UTC.
           (w.created_at AT TIME ZONE 'Asia/Kolkata')::date::text AS on_roster_from,
+          /*
+           * The last day a worker who has LEFT the roll was seen — null while they are still on it.
+           *
+           * Days after this are blank rather than absent. Without it, somebody deactivated in March
+           * who has a March record appears in a Jan-Sep report and collects an absence for every
+           * working day from April on: six months of failures to turn up that nobody could have
+           * incurred, and yearly totals that disagree with the monthly ones.
+           *
+           * It is the last day they were SEEN, not the day they left, because the day they left is
+           * not recorded anywhere — attendance_workers carries active and created_at and
+           * nothing else. Saying "not on the roll after this" is what the data supports; saying
+           * "absent" would be a claim it cannot make.
+           */
+          CASE WHEN w.active THEN NULL ELSE (
+            SELECT GREATEST(
+              COALESCE(MAX(ar.attendance_date), '-infinity'::date),
+              COALESCE((SELECT MAX(la.work_date) FROM labour_assignments la
+                        WHERE la.worker_id = w.id AND la.tenant_id = ${tenantContext.tenantId}), '-infinity'::date)
+            )::text
+            FROM attendance_records ar
+            WHERE ar.worker_id = w.id AND ar.tenant_id = ${tenantContext.tenantId}
+          ) END AS on_roster_until,
           COALESCE(
             JSON_OBJECT_AGG(c.attendance_date::text, c.credited)
               FILTER (WHERE c.attendance_date IS NOT NULL),
@@ -128,6 +150,7 @@ export async function GET(request: Request) {
         device_user_code: string | null
         full_name: string
         on_roster_from: string | null
+        on_roster_until: string | null
         credited_by_date: Record<string, number | string>
       }>,
       Array<{ name: string | null }>,
@@ -140,6 +163,7 @@ export async function GET(request: Request) {
         Object.entries(row.credited_by_date || {}).map(([iso, value]) => [iso, Number(value) || 0]),
       ),
       onRosterFrom: row.on_roster_from,
+      onRosterUntil: row.on_roster_until,
     }))
 
     const report = buildMonthlyAttendance(input, days, todayIst)
