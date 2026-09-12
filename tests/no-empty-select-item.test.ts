@@ -64,20 +64,23 @@ describe("no Select offers an empty-string value", () => {
     ).toEqual([])
   })
 
-  it("the two tabs it has already broken both use a sentinel", () => {
-    for (const file of ["components/picking-log-tab.tsx", "components/worker-ledger-tab.tsx"]) {
+  it("the tab it broke that still exists uses a sentinel", () => {
+    // The Ledger was the other one. It was deleted on 2026-09-08 (its jobs moved to Workers and
+    // Payroll), so only Picking is left to name. The repo-wide scan above still covers whatever
+    // replaces it -- that is the guard that matters; this one just pins the known case.
+    for (const file of ["components/picking-log-tab.tsx"]) {
       const source = readFileSync(resolve(__dirname, "..", file), "utf8")
       expect(source, `${file} should define a non-empty sentinel`).toContain('const ALL_WORKERS = "all"')
       expect(source).toContain("<SelectItem value={ALL_WORKERS}>")
     }
   })
 
-  it("the sentinel is not left to falsiness once it stops being an empty string", () => {
-    // "all" is truthy where "" was not, so `if (filterWorker)` silently starts meaning "always".
-    // In the ledger that would have sent workerId=all to a route that drops it on a UUID check —
+  it("a sentinel is not left to falsiness once it stops being an empty string", () => {
+    // "all" is truthy where "" was not, so `if (filterWorker)` silently starts meaning "always" --
     // a filter that looks applied and does nothing, which is worse than the crash it replaced.
-    const ledger = readFileSync(resolve(__dirname, "../components/worker-ledger-tab.tsx"), "utf8")
-    expect(ledger).toContain('filterWorker !== ALL_WORKERS) params.set("workerId", filterWorker)')
-    expect(ledger).not.toMatch(/if \(filterWorker\) params\.set/)
+    // Asserted against picking now; the ledger copy of this went with the file.
+    const picking = readFileSync(resolve(__dirname, "../components/picking-log-tab.tsx"), "utf8")
+    expect(picking).toContain("ALL_WORKERS")
+    expect(picking).not.toMatch(/if \(filterWorker\) params\.set/)
   })
 })

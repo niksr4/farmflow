@@ -75,3 +75,4 @@ const round2 = (value: number) => Number(value.toFixed(2))
  * an edit, and the bulk import.
  */
 export const hasStockCost = (cost: StockCost) => cost.totalCost > 0
+

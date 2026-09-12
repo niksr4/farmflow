@@ -2,6 +2,7 @@ import { NextResponse, type NextRequest } from "next/server"
 import { cookies } from "next/headers"
 import { sql } from "@/lib/server/db"
 import { sanitizeRouteError } from "@/lib/server/sanitize-route-error"
+import { EXCLUDE_REVALUATION_SQL } from "@/lib/revaluation-notes"
 import { requireModuleAccess, isModuleAccessError } from "@/lib/server/module-access"
 import { resolveActiveEstate } from "@/lib/server/estate-filter"
 import { SELECTED_ESTATE_COOKIE } from "@/lib/server/estate-cookie"
@@ -204,14 +205,9 @@ export async function GET(request: NextRequest) {
         FROM transaction_history
         WHERE tenant_id = $1
           AND LOWER(transaction_type) IN ('restock', 'restocking')
-          -- Price corrections were once written as stock movements; they are revaluation, not
-          -- purchases. See the note in finance-balance-sheet.
-          AND COALESCE(notes, '') NOT ILIKE 'Price updated%'
-          -- "Price correction" is what the revalue block writes today; "Price updated" is
-          -- what older rows carry. Excluding only the old spelling counted every recent
-          -- revaluation as stock purchased -- Rs 64.42 crore of phantom purchases on
-          -- HoneyFarm alone, from one item being repriced three times.
-          AND COALESCE(notes, '') NOT ILIKE 'Price correction%'
+          -- Revaluation is not trade. Both note spellings excluded; see lib/revaluation-notes.ts
+          -- for why there are two and what counting them cost.
+          ${EXCLUDE_REVALUATION_SQL}
           AND transaction_date >= $2::date
           AND transaction_date <= $3::date
           ${estateFilterSql(4)}
@@ -246,14 +242,9 @@ export async function GET(request: NextRequest) {
         FROM transaction_history
         WHERE tenant_id = $1
           AND LOWER(transaction_type) IN ('restock', 'restocking')
-          -- Price corrections were once written as stock movements; they are revaluation, not
-          -- purchases. See the note in finance-balance-sheet.
-          AND COALESCE(notes, '') NOT ILIKE 'Price updated%'
-          -- "Price correction" is what the revalue block writes today; "Price updated" is
-          -- what older rows carry. Excluding only the old spelling counted every recent
-          -- revaluation as stock purchased -- Rs 64.42 crore of phantom purchases on
-          -- HoneyFarm alone, from one item being repriced three times.
-          AND COALESCE(notes, '') NOT ILIKE 'Price correction%'
+          -- Revaluation is not trade. Both note spellings excluded; see lib/revaluation-notes.ts
+          -- for why there are two and what counting them cost.
+          ${EXCLUDE_REVALUATION_SQL}
           AND transaction_date >= $2::date
           AND transaction_date <= $3::date
           ${estateFilterSql(4)}

@@ -93,7 +93,14 @@ nobody has hit since January. Worth a deliberate pass before the harvest rather 
   correcting them by hand; the red "2 days" badge on the row is how they find them.
 - The muster's collapsed device panel is now a strict subset of the Scanner tab. Retire it.
 
-**Payroll** — three rules short of usable. Plan: [docs/PICKING-PAYROLL-PLAN.md](docs/PICKING-PAYROLL-PLAN.md).
+**Payroll** — three rules short of usable. Placement: [docs/PICKING-PAYROLL-PLAN.md](docs/PICKING-PAYROLL-PLAN.md).
+Interior — retention, advances, the effective-dated rule model and the full scenario list:
+[docs/PAYROLL-RULES-PLAN.md](docs/PAYROLL-RULES-PLAN.md).
+- **An advance already resets by period** — `payroll-summary` scopes `worker_ledger` to the run's
+  dates, so August's advance is not in September's range. No "mark it resolved" step is needed, and
+  adding one would introduce the double-deduction it appears to prevent. The Ledger route's *own*
+  summary is unscoped though (sums all time), so the two screens already disagree about what "total
+  deductions" means — invisible only because the table has 0 rows. Fix before anyone enters one.
 - Placement decided 2026-09-05: rules and history on **Workers**, entry inline on Workers and
   Payroll, no Ledger subtab. The Ledger stays out of the nav until that is built.
 - Monthly salaries now paid, pro-rated per calendar month (2 Sep). Six people still have no salary

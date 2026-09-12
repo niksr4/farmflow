@@ -157,10 +157,21 @@ async function fetchWeatherForecast(locationQuery: string): Promise<string | nul
 
 function buildWeatherContext(params: {
   locationQuery: string | null
+  usingDefaultLocation?: boolean
   forecastJson: string | null
   rainfall: { last7DaysInches: number; last30DaysInches: number; loggedDaysInLast30: number; recentDailyAverageInches: number }
 }): string {
   const lines: string[] = ["## Weather & Irrigation Context"]
+
+  // Same silent fallback the daily digest had: a tenant with no pinned location gets the shared
+  // Kodagu default, and the forecast reads as theirs. This goes into an LLM prompt, so leaving it
+  // unmarked means the model writes estate-specific advice off a location the estate never chose.
+  if (params.usingDefaultLocation) {
+    lines.push(
+      "- NOTE: this estate has not pinned its own location, so the forecast below is the default " +
+        "Kodagu point, not their land. Do not present it as their local forecast.",
+    )
+  }
 
   lines.push(`- Recorded rainfall last 7 days: ${params.rainfall.last7DaysInches.toFixed(2)} inches`)
   lines.push(`- Recorded rainfall last 30 days: ${params.rainfall.last30DaysInches.toFixed(2)} inches (${params.rainfall.loggedDaysInLast30} logged days)`)
@@ -314,6 +325,7 @@ async function generateWeeklyDigestText(
   tenant: TenantDigestRow,
 ): Promise<{ text: string; weekStart: string; error?: undefined } | { text: null; weekStart?: undefined; error: string }> {
   try {
+    const usingDefaultLocation = !tenant.weatherLocationQuery
     const locationQuery = tenant.weatherLocationQuery ?? DEFAULT_WEATHER_QUERY
     const [{ dataSummary, fiscalYearLabel }, lastWeek, rainfall, forecastJson, coffeePrices, sellableStock, seasonCostBasis, estateNames] = await Promise.all([
       buildTenantAiDataSummary({ tenantId: tenant.tenantId, role: "owner" }),
@@ -372,7 +384,7 @@ async function generateWeeklyDigestText(
     })
     const calendarContext = buildEstateCalendarContext()
     const agronomyContext = buildAgronomyContext()
-    const weatherContext = buildWeatherContext({ locationQuery, forecastJson, rainfall })
+    const weatherContext = buildWeatherContext({ locationQuery, usingDefaultLocation, forecastJson, rainfall })
     const marketTimingSection = coffeePrices
       ? buildMarketTimingSection(coffeePrices, sellableStock)
       : null
