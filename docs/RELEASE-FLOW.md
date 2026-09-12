@@ -82,12 +82,36 @@ the gate does not have to live at Vercel. **This repository is public**, so GitH
 branch protection are free — and stopping bad code from reaching `main` is equivalent to stopping
 it from reaching production, given that `main` auto-deploys.
 
-Apply it with:
+### ⚠ Two GitHub identities, and only one of them can write
+
+This wastes an afternoon if you do not know it. `git push` works; every `gh` write fails.
+
+```
+origin                            git@github.com:niksr4/farmflow.git   (SSH — niksr4's key)
+gh auth status                    Logged in as NikKaoss                (HTTPS)
+gh api repos/niksr4/farmflow      {"admin":false,"pull":true,"push":false,...}
+```
+
+So pushes succeed and `gh pr create` returns *"must be a collaborator"*, while ruleset writes
+403 — which reads as a flaky permission problem rather than as two different accounts. The
+same split the Vercel CLI has.
+
+**Anything that writes through the GitHub API needs a niksr4 token**, or `gh auth login` as
+niksr4. A classic PAT with `repo` covers pull requests; the ruleset additionally needs
+`Administration: write` (fine-grained) or `admin:repo_hook`-level access on a classic token.
+
+Apply the gate with:
 
 ```bash
-node scripts/dev/setup-main-ruleset.mjs          # shows what it will do
-node scripts/dev/setup-main-ruleset.mjs --apply  # writes it
+# uses the gh login, which today is the wrong account
+node scripts/dev/setup-main-ruleset.mjs
+
+# the way that actually works
+GITHUB_ADMIN_TOKEN=<niksr4 pat> node scripts/dev/setup-main-ruleset.mjs --apply
+node scripts/dev/setup-main-ruleset.mjs --apply --token=<niksr4 pat>
 ```
+
+It prints which account it is acting as before doing anything.
 
 What it sets on `main`:
 

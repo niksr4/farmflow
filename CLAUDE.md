@@ -420,9 +420,16 @@ This is fine for pre-revenue validation but has zero buffer between "pushed" and
 [docs/RELEASE-FLOW.md](docs/RELEASE-FLOW.md).**
 
 ⚠ **Written 2026-09-11, NOT YET APPLIED.** `scripts/dev/setup-main-ruleset.mjs` is ready and
-dry-runs clean; applying it needs a token with `Administration: write`. Until somebody runs it with
-`--apply`, `main` is still wide open and every word of "Current state" above is still true. Check
-with `node scripts/dev/setup-main-ruleset.mjs` rather than trusting this paragraph.
+dry-runs clean. Until somebody runs it with `--apply`, `main` is still wide open and every word of
+"Current state" above is still true. Check with `node scripts/dev/setup-main-ruleset.mjs` rather
+than trusting this paragraph.
+
+⚠ **The local `gh` is a DIFFERENT GITHUB ACCOUNT and cannot write here.** `origin` is SSH
+(`git@github.com:niksr4/farmflow.git`) so `git push` uses niksr4's key and works; `gh` is logged in
+as **NikKaoss** with `{"admin":false,"pull":true,"push":false}`, so `gh pr create` returns "must be
+a collaborator" and ruleset writes 403. The same split as the Vercel CLI. Opening a PR or applying
+the ruleset needs a niksr4 token — pass it as `--token=` or `GITHUB_ADMIN_TOKEN`. Discovered
+2026-09-12 after both failures were first mis-attributed to a permission prompt.
 
 This section used to open by saying a structural gate was not available at all, and that reading
 stood for seven weeks. It is wrong in a way worth spelling out: *reaching `main`* and *reaching

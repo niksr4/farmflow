@@ -22,9 +22,43 @@
  * See docs/RELEASE-FLOW.md for what was broken and why this exists.
  */
 import { execFileSync } from "node:child_process"
+import { readFileSync } from "node:fs"
 
 const REPO = "niksr4/farmflow"
 const NAME = "main is production"
+
+/**
+ * ⚠ THE LOCAL `gh` IS THE WRONG ACCOUNT, and this is the thing that wastes an afternoon.
+ *
+ * `git push` works because origin is SSH (git@github.com:niksr4/...) and uses niksr4's key. `gh`
+ * authenticates over HTTPS as **NikKaoss**, which has pull-only access to this repo:
+ *
+ *   gh api repos/niksr4/farmflow --jq .permissions
+ *   {"admin":false,"maintain":false,"pull":true,"push":false,"triage":false}
+ *
+ * So every `gh` write — rulesets, pull requests — 403s while pushes succeed, which reads as a
+ * puzzling intermittent permission problem rather than two different identities. The same split
+ * the Vercel CLI has (see the token note in CLAUDE.md).
+ *
+ * Supply a token for the repo owner instead, either way:
+ *   GITHUB_ADMIN_TOKEN=... node scripts/dev/setup-main-ruleset.mjs --apply
+ *   node scripts/dev/setup-main-ruleset.mjs --apply --token=<pat>
+ *
+ * It needs `Administration: write` on this repo. Without one, the script falls back to `gh` and
+ * says plainly which account it is using.
+ */
+const tokenArg = process.argv.find((a) => a.startsWith("--token="))?.slice("--token=".length)
+const envToken = () => {
+  if (process.env.GITHUB_ADMIN_TOKEN) return process.env.GITHUB_ADMIN_TOKEN
+  for (const f of [".env.local", ".env"]) {
+    try {
+      const m = readFileSync(f, "utf8").match(/^GITHUB_ADMIN_TOKEN=(.*)$/m)
+      if (m) return m[1].trim().replace(/^["']|["']$/g, "")
+    } catch {}
+  }
+  return null
+}
+const TOKEN = tokenArg || envToken()
 
 const APPLY = process.argv.includes("--apply")
 const REMOVE = process.argv.includes("--remove")
@@ -70,14 +104,35 @@ const ruleset = {
   ],
 }
 
-const gh = (args, input) =>
-  execFileSync("gh", args, { input, encoding: "utf8", stdio: ["pipe", "pipe", "pipe"] })
+/** GitHub API call: a supplied token when there is one, otherwise whatever `gh` is logged in as. */
+const api = (path, { method = "GET", body } = {}) => {
+  if (TOKEN) {
+    const args = ["-sS", "-X", method, `https://api.github.com${path}`,
+      "-H", `Authorization: Bearer ${TOKEN}`,
+      "-H", "Accept: application/vnd.github+json",
+      "-H", "X-GitHub-Api-Version: 2022-11-28"]
+    if (body) args.push("-H", "Content-Type: application/json", "-d", "@-")
+    return execFileSync("curl", args, { input: body, encoding: "utf8" })
+  }
+  const args = ["api", path.replace(/^\//, "")]
+  if (method !== "GET") args.push("-X", method)
+  if (body) args.push("--input", "-")
+  return execFileSync("gh", args, { input: body, encoding: "utf8", stdio: ["pipe", "pipe", "pipe"] })
+}
+
+const whoami = () => {
+  try {
+    return TOKEN ? JSON.parse(api("/user")).login : execFileSync("gh", ["api", "user", "--jq", ".login"], { encoding: "utf8" }).trim()
+  } catch {
+    return "(unknown)"
+  }
+}
 
 const existing = () => {
   try {
-    return JSON.parse(gh(["api", `repos/${REPO}/rulesets`])).filter((r) => r.name === NAME)
+    return JSON.parse(api(`/repos/${REPO}/rulesets`)).filter((r) => r.name === NAME)
   } catch (error) {
-    console.error("Could not list rulesets. Is `gh` authenticated for this repo?")
+    console.error("Could not list rulesets.")
     console.error(String(error.stderr || error.message).trim())
     process.exit(1)
   }
@@ -91,7 +146,7 @@ if (REMOVE) {
     process.exit(0)
   }
   for (const r of found) {
-    gh(["api", `repos/${REPO}/rulesets/${r.id}`, "-X", "DELETE"])
+    api(`/repos/${REPO}/rulesets/${r.id}`, { method: "DELETE" })
     console.log(`Removed ruleset ${r.id} (${r.name}).`)
   }
   console.log("\nmain is unprotected again. Direct pushes reach production.")
@@ -99,6 +154,7 @@ if (REMOVE) {
 }
 
 console.log(`Repo:    ${REPO}`)
+console.log(`Acting as: ${whoami()}${TOKEN ? " (supplied token)" : " (gh login)"}`)
 console.log(`Ruleset: "${NAME}" — ${found.length ? `already present (id ${found[0].id})` : "not present"}`)
 console.log(`
 On refs/heads/main this requires:
@@ -117,18 +173,18 @@ if (!APPLY) {
 
 try {
   if (found.length) {
-    gh(["api", `repos/${REPO}/rulesets/${found[0].id}`, "-X", "PUT", "--input", "-"], JSON.stringify(ruleset))
+    api(`/repos/${REPO}/rulesets/${found[0].id}`, { method: "PUT", body: JSON.stringify(ruleset) })
     console.log(`Updated ruleset ${found[0].id}.`)
   } else {
-    const created = JSON.parse(
-      gh(["api", `repos/${REPO}/rulesets`, "-X", "POST", "--input", "-"], JSON.stringify(ruleset)),
-    )
+    const created = JSON.parse(api(`/repos/${REPO}/rulesets`, { method: "POST", body: JSON.stringify(ruleset) }))
     console.log(`Created ruleset ${created.id}.`)
   }
   console.log("\nmain is gated. Undo any time with: node scripts/dev/setup-main-ruleset.mjs --remove")
 } catch (error) {
   console.error("Failed to write the ruleset.")
   console.error(String(error.stderr || error.message).trim())
-  console.error("\nNeeds a token with `Administration: write` on the repo.")
+  console.error("\nNeeds a token with Administration: write on this repo.")
+  console.error("The local gh login is NikKaoss, which has pull-only access — see the note at the")
+  console.error("top of this file. Pass one with --token=<pat> or set GITHUB_ADMIN_TOKEN.")
   process.exit(1)
 }
