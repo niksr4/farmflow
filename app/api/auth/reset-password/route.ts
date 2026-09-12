@@ -63,11 +63,6 @@ export async function POST(request: Request) {
     })
     return NextResponse.json({ success: true, username: result.username }, { headers })
   } catch (error) {
-    // Classification uses the raw message server-side only -- resetPasswordWithToken's queries
-    // aren't individually try/caught, so a genuine DB/connection failure can reach here as a raw
-    // Error alongside the curated RESET_LINK_*/"Reset token is required" strings. sanitizeRouteError
-    // passes the curated ones through unchanged (short, no DB-internal patterns) and replaces
-    // anything that looks like a raw driver error with the fallback, so the client never sees one.
     const rawMessage = (error as Error)?.message || "Failed to reset password"
     const status =
       rawMessage === RESET_LINK_INVALID_MESSAGE || rawMessage === "Reset token is required"
@@ -77,6 +72,9 @@ export async function POST(request: Request) {
           : rawMessage === RESET_LINK_USED_MESSAGE
             ? 409
             : 500
+    // status is classified from the raw message (server-side only, never sent); the response
+    // field itself always goes through sanitizeRouteError, which passes short, safe, curated
+    // strings through unchanged and only replaces a genuine raw DB/internal error.
     const message = sanitizeRouteError(error, "Failed to reset password")
 
     return NextResponse.json({ success: false, error: message }, { status, headers })

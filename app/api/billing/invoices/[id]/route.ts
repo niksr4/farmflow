@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server"
 import { z } from "zod"
 import { sql } from "@/lib/server/db"
+import { sanitizeRouteError } from "@/lib/server/sanitize-route-error"
 import { requireModuleAccess } from "@/lib/server/module-access"
 import { normalizeTenantContext, runTenantQuery } from "@/lib/server/tenant-db"
 import { canWriteModule } from "@/lib/permissions"
@@ -58,7 +59,7 @@ export async function GET(_: Request, context: RouteContext) {
 
     return NextResponse.json({ success: true, invoice: invoiceRows[0], items })
   } catch (error: any) {
-    return NextResponse.json({ success: false, error: error.message || "Failed to load invoice" }, { status: 500 })
+    return NextResponse.json({ success: false, error: sanitizeRouteError(error, "Failed to load invoice") }, { status: 500 })
   }
 }
 
@@ -121,6 +122,14 @@ export async function PATCH(request: Request, context: RouteContext) {
 
     return NextResponse.json({ success: true, invoice: updatedRows?.[0] })
   } catch (error: any) {
-    return NextResponse.json({ success: false, error: error.message || "Failed to update invoice" }, { status: 500 })
+    // updateSchema.parse() throws a ZodError on invalid input -- that's a client mistake (400),
+    // not a server fault, and should never have fallen into the generic 500 branch below.
+    if (error instanceof z.ZodError) {
+      return NextResponse.json(
+        { success: false, error: error.issues[0]?.message || "Invalid request payload" },
+        { status: 400 },
+      )
+    }
+    return NextResponse.json({ success: false, error: sanitizeRouteError(error, "Failed to update invoice") }, { status: 500 })
   }
 }

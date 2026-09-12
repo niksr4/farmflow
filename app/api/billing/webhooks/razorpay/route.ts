@@ -7,6 +7,7 @@ import {
   verifyRazorpayWebhookSignature,
 } from "@/lib/server/billing/razorpay"
 import { logAppErrorEvent } from "@/lib/server/error-events"
+import { sanitizeRouteError } from "@/lib/server/sanitize-route-error"
 import { logProductIntelligenceEvent } from "@/lib/server/product-intelligence-events"
 import { logSecurityEvent } from "@/lib/server/security-events"
 import { isDbConfigured, sql } from "@/lib/server/db"
@@ -204,6 +205,9 @@ export async function POST(request: Request) {
         eventRecordId: eventRecordId || null,
       },
     }).catch(() => undefined)
-    return NextResponse.json({ success: false, error: message }, { status: 500 })
+    // `message` above is kept raw for the internal DB record and error-event log (useful for
+    // debugging a failed webhook) -- but Razorpay itself is an external caller, so the HTTP
+    // response it receives goes through sanitizeRouteError like any other route.
+    return NextResponse.json({ success: false, error: sanitizeRouteError(error, "Razorpay webhook failed") }, { status: 500 })
   }
 }

@@ -71,11 +71,6 @@ export async function POST(request: Request) {
       { headers },
     )
   } catch (error) {
-    // normalizeOnboardingError only special-cases a handful of "schema not migrated" errors; any
-    // other error (including a raw DB/connection failure from resendSignupVerification's queries)
-    // passes through unchanged (`if (error instanceof Error) return error`), so `.message` off it
-    // is exactly as raw as `error.message` would be. Classification below uses that raw message
-    // server-side only; sanitizeRouteError decides what's actually safe to send the client.
     const normalizedError = normalizeOnboardingError(error)
     const rawMessage = normalizedError.message || "Failed to resend verification email"
     const status =
@@ -86,6 +81,9 @@ export async function POST(request: Request) {
           : rawMessage.includes("Unable to send verification email")
             ? 502
             : 400
+    // status is classified from the raw message (server-side only, never sent); the response
+    // field itself always goes through sanitizeRouteError, which passes short, safe, curated
+    // strings through unchanged and only replaces a genuine raw DB/internal error.
     const message = sanitizeRouteError(normalizedError, "Failed to resend verification email")
 
     return NextResponse.json({ success: false, error: message }, { status, headers })

@@ -2,6 +2,7 @@ import { NextResponse } from "next/server"
 import { runLogAnomalyAgent } from "@/lib/server/agents/log-anomaly-agent"
 import { extractBearerToken, sharedSecretMatches } from "@/lib/server/request-security"
 import { logServerError } from "@/lib/server/safe-logging"
+import { sanitizeRouteError } from "@/lib/server/sanitize-route-error"
 
 export const dynamic = "force-dynamic"
 export const maxDuration = 300
@@ -43,9 +44,10 @@ async function handleCronInvocation(request: Request) {
     return NextResponse.json({ success: true, ...result.summary })
   } catch (error: any) {
     logServerError("Log anomaly cron invocation failed", error)
-    const message = error?.message || "Log anomaly agent failed"
-    const status = isAgentTableMissing(error) ? 503 : 500
-    return NextResponse.json({ success: false, error: message }, { status })
+    if (isAgentTableMissing(error)) {
+      return NextResponse.json({ success: false, error: "Agent tables missing. Run scripts/54-agent-ops.sql" }, { status: 503 })
+    }
+    return NextResponse.json({ success: false, error: sanitizeRouteError(error, "Log anomaly agent failed") }, { status: 500 })
   }
 }
 

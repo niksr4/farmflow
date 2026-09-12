@@ -36,15 +36,21 @@ import { describe, expect, it } from "vitest"
  * the safe helpers, delete the entry here too (the second test below also catches a stale entry
  * automatically).
  */
-const KNOWN_RAW_ERROR_LEAKS = [
-  "app/api/benchmarks/route.ts",
-  "app/api/billing/invoices/[id]/route.ts",
-  "app/api/billing/invoices/route.ts",
-  "app/api/billing/webhooks/razorpay/route.ts",
-  "app/api/compliance/route.ts",
-  "app/api/cron/daily-digest/route.ts",
-  "app/api/cron/data-integrity/route.ts",
-  "app/api/cron/log-anomalies/route.ts",
+/**
+ * ⚠ THIS LIST IS NOW EMPTY, AND THAT IS THE POINT OF IT.
+ *
+ * It began as a ratchet: a snapshot of every route that returned a raw error.message, allowed to
+ * shrink and never to grow. The daily scanner worked through it over four days — 2026-09-09 to
+ * 2026-09-12, across PRs #5, #6, #7, #8, #9 and #10 — and the last entry came off today.
+ *
+ * Every route in this application now routes its error responses through sanitizeRouteError or an
+ * equivalent. From here the guard has only one job left, which is the one that matters: fail the
+ * moment a NEW one appears.
+ *
+ * Annotated `string[]` because an empty literal infers `never[]`, and `.includes(someString)` on a
+ * never[] does not compile. Keep the annotation even if an entry is ever added back.
+ */
+const KNOWN_RAW_ERROR_LEAKS: string[] = [
 ].sort()
 
 // These are the safe ways to put an error in a response. Their PRESENCE no longer exempts a file.
