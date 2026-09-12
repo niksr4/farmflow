@@ -105,6 +105,8 @@ export async function GET(request: Request) {
       estate: string | null
       dailyRate: number | null
       daysPresent: number
+      /** Days the terminal produced a duration for — the denominator of averageHours. */
+      clockedDays: number
       fullDays: number
       halfDays: number
       shortDays: number
@@ -137,7 +139,7 @@ export async function GET(request: Request) {
           workerType: row.worker_type ? String(row.worker_type) : null,
           estate: row.estate ? String(row.estate) : null,
           dailyRate: row.daily_rate === null ? null : Number(row.daily_rate),
-          daysPresent: 0, fullDays: 0, halfDays: 0, shortDays: 0, openDays: 0,
+          daysPresent: 0, clockedDays: 0, fullDays: 0, halfDays: 0, shortDays: 0, openDays: 0,
           totalHours: 0, allocatedDays: 0, allocatedCost: 0, unallocatedDays: 0,
           days: [],
         }
@@ -152,7 +154,17 @@ export async function GET(request: Request) {
       else if (shift.status === "half") summary.halfDays += 1
       else if (shift.status === "short") summary.shortDays += 1
       else if (shift.status === "open") summary.openDays += 1
-      if (shift.hours !== null) summary.totalHours += shift.hours
+      /**
+       * Counted alongside the hours, because the average needs BOTH.
+       *
+       * totalHours / daysPresent is the wrong sum: on production only 42% of HoneyFarm's rows
+       * carry both punches and the other three estates carry none, so that division reads 3:38
+       * against a true 8:39, and 0:00 for estates whose muster is full every day.
+       */
+      if (shift.hours !== null) {
+        summary.totalHours += shift.hours
+        summary.clockedDays += 1
+      }
       summary.allocatedDays += allocatedFraction
       summary.allocatedCost += Number(row.allocated_cost) || 0
       if (allocatedFraction === 0 && shift.status !== "open") summary.unallocatedDays += 1
@@ -173,6 +185,7 @@ export async function GET(request: Request) {
       workers: workers.length,
       daysPresent: workers.reduce((s, w) => s + w.daysPresent, 0),
       totalHours: workers.reduce((s, w) => s + w.totalHours, 0),
+      clockedDays: workers.reduce((s, w) => s + w.clockedDays, 0),
       allocatedDays: workers.reduce((s, w) => s + w.allocatedDays, 0),
       allocatedCost: workers.reduce((s, w) => s + w.allocatedCost, 0),
       unallocatedDays: workers.reduce((s, w) => s + w.unallocatedDays, 0),

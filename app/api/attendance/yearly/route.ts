@@ -119,7 +119,35 @@ export async function GET(request: Request) {
             JSON_OBJECT_AGG(c.attendance_date::text, c.credited)
               FILTER (WHERE c.attendance_date IS NOT NULL),
             '{}'::json
-          ) AS credited_by_date
+          ) AS credited_by_date,
+          /*
+           * Hours the terminal actually timed, per day.
+           *
+           * BOTH punches required. A worker who punched in and never out has an unknown finish,
+           * not a zero-hour day — the WHERE below drops those rows entirely rather than storing 0,
+           * so they cannot drag an average down. Three of the four live estates mark attendance by
+           * hand and produce an empty object here, which is why every hours figure downstream is
+           * nullable.
+           *
+           * A SCALAR SUBQUERY, not a join. Joining attendance_records alongside the credited CTE
+           * fans out — every credited day pairs with every timed day for that worker — so both
+           * JSON_OBJECT_AGGs would emit each key once per row of the other side. The values happen
+           * to be identical so JSON.parse would hide it, which is precisely why it is worth not
+           * writing.
+           */
+          COALESCE((
+            SELECT JSON_OBJECT_AGG(
+                     h.attendance_date::text,
+                     ROUND(EXTRACT(EPOCH FROM (h.check_out_time - h.check_in_time)) / 3600.0, 4)
+                   )
+            FROM attendance_records h
+            WHERE h.worker_id = w.id
+              AND h.tenant_id = ${tenantContext.tenantId}
+              AND h.attendance_date BETWEEN ${firstDay}::date AND ${lastDay}::date
+              AND h.check_in_time IS NOT NULL
+              AND h.check_out_time IS NOT NULL
+              AND h.check_out_time > h.check_in_time
+          ), '{}'::json) AS hours_by_date
         FROM attendance_workers w
         LEFT JOIN credited c ON c.worker_id = w.id
         WHERE w.tenant_id = ${tenantContext.tenantId}
@@ -140,6 +168,7 @@ export async function GET(request: Request) {
         full_name: string
         on_roster_from: string | null
         credited_by_date: Record<string, number | string>
+        hours_by_date: Record<string, number | string>
       }>,
       Array<{ name: string | null }>,
     ]
@@ -149,6 +178,9 @@ export async function GET(request: Request) {
       employeeName: row.full_name,
       creditedByDate: Object.fromEntries(
         Object.entries(row.credited_by_date || {}).map(([iso, value]) => [iso, Number(value) || 0]),
+      ),
+      hoursByDate: Object.fromEntries(
+        Object.entries(row.hours_by_date || {}).map(([iso, value]) => [iso, Number(value) || 0]),
       ),
       onRosterFrom: row.on_roster_from,
     }))

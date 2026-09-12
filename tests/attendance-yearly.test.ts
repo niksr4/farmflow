@@ -9,6 +9,7 @@ import {
   type YearlyAttendanceInput,
 } from "@/lib/attendance-yearly"
 import { buildMonthDays, buildMonthlyAttendance } from "@/lib/attendance-monthly"
+import { formatHoursHm } from "@/lib/attendance-hours"
 
 /**
  * The yearly summary, checked against the sheet HoneyFarm already prints.
@@ -227,5 +228,142 @@ describe("the export", () => {
       TODAY,
     )
     expect(yearlyAttendanceToCsv(tricky, ["2026-08"], "Honey Farm")).toContain('"Rao, K"')
+  })
+})
+
+describe("average hours per day", () => {
+  /**
+   * ⚠ THE DENOMINATOR IS THE WHOLE FEATURE.
+   *
+   * Hours exist only where the terminal recorded BOTH punches. Measured on production over 60
+   * days: HoneyFarm 220 of 526 attendance rows (42%) have both; Medappa, Laxmi and Seshagiri have
+   * ZERO, because they mark the muster by hand.
+   *
+   * Dividing total hours by days PRESENT would show HoneyFarm 3:38 against a true 8:39, and would
+   * show the other three estates 0:00 — "nobody works here", about estates whose muster is full
+   * every day. Both are arithmetically defensible and both are lies, which is this codebase's
+   * signature failure.
+   */
+  const dayWithHours = (iso: string, hours: number) => ({ [iso]: hours })
+
+  it("averages over the days that were timed, not the days present", () => {
+    // Four days present, two of them timed at 8:00 and 9:00. The average is 8:30, not 4:15.
+    const worker: YearlyAttendanceInput = {
+      employeeCode: "1",
+      employeeName: "Bopaiah",
+      creditedByDate: {
+        "2026-08-03": 1, "2026-08-04": 1, "2026-08-05": 1, "2026-08-06": 1,
+      },
+      hoursByDate: { ...dayWithHours("2026-08-03", 8), ...dayWithHours("2026-08-04", 9) },
+      onRosterFrom: "2026-01-01",
+    }
+    const m = buildYearlyAttendance([worker], ["2026-08"], "2026-08-31")[0].months[0]
+    expect(m.present).toBe(4)
+    expect(m.clockedDays).toBe(2)
+    expect(m.averageHours).toBe(8.5)
+  })
+
+  it("is null, never zero, for an estate that marks attendance by hand", () => {
+    // Medappa, Laxmi and Seshagiri. 0:00 would read as "worked no hours"; "—" reads as "not timed".
+    const worker: YearlyAttendanceInput = {
+      employeeCode: "7",
+      employeeName: "Manual",
+      creditedByDate: { "2026-08-03": 1, "2026-08-04": 1 },
+      onRosterFrom: "2026-01-01",
+    }
+    const m = buildYearlyAttendance([worker], ["2026-08"], "2026-08-31")[0].months[0]
+    expect(m.present).toBe(2)
+    expect(m.averageHours).toBeNull()
+    expect(m.clockedDays).toBe(0)
+  })
+
+  it("ignores a day with only one punch rather than counting it as zero hours", () => {
+    /**
+     * "Chandra, in 08:03:47, out 00:00" in HoneyFarm's own daily sheet — present, finish never
+     * recorded. Treating that as a zero-hour day would drag a 9-hour average down to 4:30.
+     * The route's WHERE requires both punches, so such days never reach here at all.
+     */
+    const worker: YearlyAttendanceInput = {
+      employeeCode: "3",
+      employeeName: "Chandra",
+      creditedByDate: { "2026-08-03": 1, "2026-08-04": 1 },
+      hoursByDate: dayWithHours("2026-08-03", 9),
+      onRosterFrom: "2026-01-01",
+    }
+    const m = buildYearlyAttendance([worker], ["2026-08"], "2026-08-31")[0].months[0]
+    expect(m.averageHours).toBe(9)
+    expect(m.clockedDays).toBe(1)
+  })
+
+  it("buckets hours into the month they fall in", () => {
+    const worker: YearlyAttendanceInput = {
+      employeeCode: "1",
+      employeeName: "Split",
+      creditedByDate: { "2026-07-06": 1, "2026-08-03": 1 },
+      hoursByDate: { "2026-07-06": 7, "2026-08-03": 9 },
+      onRosterFrom: "2026-01-01",
+    }
+    const [july, august] = buildYearlyAttendance([worker], ["2026-07", "2026-08"], "2026-08-31")[0].months
+    expect(july.averageHours).toBe(7)
+    expect(august.averageHours).toBe(9)
+  })
+
+  it("the year average weights by DAY, not by month", () => {
+    /**
+     * Twenty days at 9h in August and one day at 1h in September. Weighted by day the year is
+     * 8:36; a mean of the two monthly means would be 5:00 — letting a single day outweigh twenty.
+     * The same error as averaging an average price across unequal quantities.
+     */
+    const august = Object.fromEntries(
+      Array.from({ length: 20 }, (_, i) => [`2026-08-${String(i + 3).padStart(2, "0")}`, 9]),
+    )
+    const worker: YearlyAttendanceInput = {
+      employeeCode: "1",
+      employeeName: "Weighted",
+      creditedByDate: { ...Object.fromEntries(Object.keys(august).map((d) => [d, 1])), "2026-09-01": 1 },
+      hoursByDate: { ...august, "2026-09-01": 1 },
+      onRosterFrom: "2026-01-01",
+    }
+    const row = buildYearlyAttendance([worker], ["2026-08", "2026-09"], "2026-09-30")[0]
+    expect(row.year.clockedDays).toBe(21)
+    expect(row.year.averageHours).toBeCloseTo((20 * 9 + 1) / 21, 4)
+    expect(row.year.averageHours).not.toBe(5)
+  })
+
+  it("the estate total is also weighted by day rather than by worker", () => {
+    // One worker with ten timed days at 9h and one with a single 1h day is not a 5h estate.
+    const busy: YearlyAttendanceInput = {
+      employeeCode: "1", employeeName: "Busy", onRosterFrom: "2026-01-01",
+      creditedByDate: Object.fromEntries(Array.from({ length: 10 }, (_, i) => [`2026-08-${String(i + 3).padStart(2, "0")}`, 1])),
+      hoursByDate: Object.fromEntries(Array.from({ length: 10 }, (_, i) => [`2026-08-${String(i + 3).padStart(2, "0")}`, 9])),
+    }
+    const rare: YearlyAttendanceInput = {
+      employeeCode: "2", employeeName: "Rare", onRosterFrom: "2026-01-01",
+      creditedByDate: { "2026-08-03": 1 },
+      hoursByDate: { "2026-08-03": 1 },
+    }
+    const s = summariseYearlyAttendance(buildYearlyAttendance([busy, rare], ["2026-08"], "2026-08-31"))
+    expect(s.clockedDays).toBe(11)
+    expect(s.averageHours).toBeCloseTo((10 * 9 + 1) / 11, 4)
+  })
+
+  it("prints h:mm, the way the estate's existing Duration column does", () => {
+    expect(formatHoursHm(8.5)).toBe("8:30")
+    expect(formatHoursHm(8.65)).toBe("8:39")
+    expect(formatHoursHm(7.75)).toBe("7:45")
+    expect(formatHoursHm(8.0833)).toBe("8:05")
+    // Never a bare 0 for "not measured".
+    expect(formatHoursHm(null)).toBe("—")
+  })
+
+  it("carries the average and its denominator into the CSV", () => {
+    const worker: YearlyAttendanceInput = {
+      employeeCode: "1", employeeName: "Bopaiah", onRosterFrom: "2026-01-01",
+      creditedByDate: { "2026-08-03": 1, "2026-08-04": 1 },
+      hoursByDate: { "2026-08-03": 8, "2026-08-04": 9 },
+    }
+    const csv = yearlyAttendanceToCsv(buildYearlyAttendance([worker], ["2026-08"], "2026-08-31"), ["2026-08"], "Honey Farm")
+    expect(csv).toContain("Avg hrs/day,Days timed")
+    expect(csv).toContain("8:30,2")
   })
 })

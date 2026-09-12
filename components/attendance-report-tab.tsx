@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { EmptyState } from "@/components/ui/empty-state"
 import { cn } from "@/lib/utils"
-import { formatWorkedHours, shiftStatusLabel, type ShiftStatus } from "@/lib/attendance-hours"
+import { averageWorkedHours, formatHoursHm, formatWorkedHours, shiftStatusLabel, type ShiftStatus } from "@/lib/attendance-hours"
 import AttendanceMonthlyGrid from "@/components/attendance-monthly-grid"
 import AttendanceYearlySummary from "@/components/attendance-yearly-summary"
 import { workerTypeLabel, isPaidDaily } from "@/lib/worker-types"
@@ -43,6 +43,7 @@ type WorkerRow = {
   estate: string | null
   dailyRate: number | null
   daysPresent: number
+  clockedDays: number
   fullDays: number
   halfDays: number
   shortDays: number
@@ -57,6 +58,7 @@ type WorkerRow = {
 type Totals = {
   workers: number
   daysPresent: number
+  clockedDays: number
   totalHours: number
   allocatedDays: number
   allocatedCost: number
@@ -159,10 +161,12 @@ export default function AttendanceReportTab() {
   }, [startDate, endDate])
 
   const exportCsv = useCallback(() => {
-    const header = ["Worker", "Type", "Estate", "Days present", "Full", "Half", "Short", "Still in", "Hours", "Days allocated", "Cost"]
+    const header = ["Worker", "Type", "Estate", "Days present", "Full", "Half", "Short", "Still in", "Hours", "Avg hrs/day", "Days timed", "Days allocated", "Cost"]
     const lines = workers.map((w) => [
       w.name, workerTypeLabel(w.workerType), w.estate ?? "", w.daysPresent, w.fullDays, w.halfDays,
-      w.shortDays, w.openDays, w.totalHours.toFixed(2), w.allocatedDays, Math.round(w.allocatedCost),
+      w.shortDays, w.openDays, w.totalHours.toFixed(2),
+      formatHoursHm(w.clockedDays ? w.totalHours / w.clockedDays : null), w.clockedDays,
+      w.allocatedDays, Math.round(w.allocatedCost),
     ])
     const csv = [header, ...lines]
       // Quote everything: worker names contain commas often enough, and a report that opens
@@ -220,11 +224,18 @@ export default function AttendanceReportTab() {
       {error && <p className="px-1 text-sm text-red-600">{error}</p>}
 
       {totals && (
-        <div className="grid grid-cols-2 gap-px overflow-hidden rounded-xl border border-stone-200 bg-stone-200 sm:grid-cols-4 dark:border-white/[0.08] dark:bg-white/[0.08]">
+        <div className="grid grid-cols-2 gap-px overflow-hidden rounded-xl border border-stone-200 bg-stone-200 sm:grid-cols-5 dark:border-white/[0.08] dark:bg-white/[0.08]">
           {[
             { label: "Workers", value: String(totals.workers), icon: Users },
             { label: "Days present", value: String(totals.daysPresent), icon: CalendarDays },
             { label: "Hours clocked", value: formatWorkedHours(totals.totalHours), icon: Clock },
+            {
+              // Over the days the terminal TIMED, never over days present — three of the four live
+              // estates mark by hand and would otherwise read 0:00.
+              label: totals.clockedDays ? `Avg day (${totals.clockedDays} timed)` : "Avg day",
+              value: formatHoursHm(totals.clockedDays ? totals.totalHours / totals.clockedDays : null),
+              icon: Clock,
+            },
             {
               label: "Days not allocated",
               value: String(totals.unallocatedDays),
@@ -257,6 +268,7 @@ export default function AttendanceReportTab() {
                 <th className="px-2 py-2 text-right">Half</th>
                 <th className="px-2 py-2 text-right">Short</th>
                 <th className="px-2 py-2 text-right">Hours</th>
+                <th className="px-2 py-2 text-right" title="Average length of the days the terminal timed (h:mm)">Avg day</th>
                 <th className="px-2 py-2 text-right">Allocated</th>
                 <th className="px-3 py-2 text-right">Cost</th>
               </tr>
@@ -283,6 +295,12 @@ export default function AttendanceReportTab() {
                       <td className="px-2 py-2 text-right tabular-nums text-red-600 dark:text-red-400">{w.shortDays || "—"}</td>
                       <td className="px-2 py-2 text-right tabular-nums text-stone-600 dark:text-stone-300">
                         {formatWorkedHours(w.totalHours || null)}
+                      </td>
+                      <td
+                        className="px-2 py-2 text-right tabular-nums text-stone-600 dark:text-stone-300"
+                        title={w.clockedDays ? `${w.clockedDays} day(s) timed` : "No clocked times — attendance marked by hand"}
+                      >
+                        {formatHoursHm(averageWorkedHours(w.days.map((d) => d.hours)).averageHours)}
                       </td>
                       <td className={cn("px-2 py-2 text-right font-bold tabular-nums",
                         // Only chase people a day's work is expected from. Monthly staff are paid

@@ -5,6 +5,7 @@ import {
   type MonthlyAttendanceInput,
   type MonthlyAttendanceTotals,
 } from "@/lib/attendance-monthly"
+import { averageWorkedHours, formatHoursHm } from "@/lib/attendance-hours"
 
 /**
  * The yearly summary: one row per worker per month, the way the estate already reads it.
@@ -45,7 +46,17 @@ import {
  * count printed under the heading "engagement". When leave is recorded, the columns can be real.
  */
 
-export type YearlyAttendanceInput = MonthlyAttendanceInput
+export type YearlyAttendanceInput = MonthlyAttendanceInput & {
+  /**
+   * ISO date -> hours the terminal clocked that day.
+   *
+   * Only days with BOTH a punch in and a punch out appear. A day with one punch is missing from
+   * the map rather than present as 0 — its finish was never recorded, and counting it as a
+   * zero-hour day is how an average collapses. Manually-marked estates have an empty map, which
+   * is why every hours figure below can be null.
+   */
+  hoursByDate?: Record<string, number>
+}
 
 export type YearlyMonthTotals = {
   /** YYYY-MM */
@@ -66,6 +77,13 @@ export type YearlyMonthTotals = {
   totalPresent: number
   /** What the month pays for: days worked plus the Sundays that are paid regardless. */
   payDays: number
+  /**
+   * Mean hours on the days the terminal timed. Null when it timed none — NOT 0:00, which would
+   * read as "worked no hours" about an estate that simply marks attendance by hand.
+   */
+  averageHours: number | null
+  /** The average's denominator. Shown, because an average of three days is not a month. */
+  clockedDays: number
 }
 
 export type YearlyAttendanceRow = {
@@ -103,7 +121,12 @@ export function monthsBetween(from: string, to: string, limit = 24): string[] {
   })
 }
 
-const monthTotals = (month: string, totals: MonthlyAttendanceTotals): YearlyMonthTotals => {
+const monthTotals = (
+  month: string,
+  totals: MonthlyAttendanceTotals,
+  hoursThisMonth: number[],
+): YearlyMonthTotals => {
+  const clocked = averageWorkedHours(hoursThisMonth)
   // daysPayable is already full + half-at-half + worked Sundays. Naming it totalPresent here keeps
   // the report's own vocabulary without recomputing anything.
   const totalPresent = totals.daysPayable
@@ -117,6 +140,8 @@ const monthTotals = (month: string, totals: MonthlyAttendanceTotals): YearlyMont
     weeklyOffWorked: totals.weeklyOffWorked,
     totalPresent,
     payDays: totalPresent + totals.weeklyOff,
+    averageHours: clocked.averageHours,
+    clockedDays: clocked.daysCounted,
   }
 }
 
@@ -138,7 +163,14 @@ export function buildYearlyAttendance(
   }))
 
   return workers.map((worker, index) => {
-    const monthRows = perMonth.map(({ month, rows }) => monthTotals(month, rows[index].totals))
+    /** This worker's clocked durations, bucketed by the month the date falls in. */
+    const hoursIn = (month: string) =>
+      Object.entries(worker.hoursByDate ?? {})
+        .filter(([iso]) => iso.startsWith(`${month}-`))
+        .map(([, hours]) => Number(hours))
+        .filter((hours) => Number.isFinite(hours) && hours >= 0)
+
+    const monthRows = perMonth.map(({ month, rows }) => monthTotals(month, rows[index].totals, hoursIn(month)))
 
     const year = monthRows.reduce(
       (sum, m) => ({
@@ -153,12 +185,24 @@ export function buildYearlyAttendance(
       { present: 0, halfDays: 0, absent: 0, weeklyOff: 0, weeklyOffWorked: 0, totalPresent: 0, payDays: 0 },
     )
 
+    /**
+     * The year's average is taken over EVERY clocked day, not as the mean of the monthly means.
+     *
+     * Averaging averages weights a three-day month the same as a twenty-six-day one, which is the
+     * same error as averaging an average price across unequal quantities — the mistake script 128
+     * had to correct when merging two stock rows. One month where somebody worked two short days
+     * would drag a whole year down by as much as a full month of normal ones.
+     */
+    const yearClocked = averageWorkedHours(
+      months.flatMap((month) => hoursIn(month)),
+    )
+
     return {
       serial: index + 1,
       employeeCode: String(worker.employeeCode ?? "").trim() || "—",
       employeeName: worker.employeeName,
       months: monthRows,
-      year,
+      year: { ...year, averageHours: yearClocked.averageHours, clockedDays: yearClocked.daysCounted },
     }
   })
 }
@@ -170,6 +214,24 @@ export function summariseYearlyAttendance(rows: readonly YearlyAttendanceRow[]) 
     totalPresent: rows.reduce((sum, r) => sum + r.year.totalPresent, 0),
     payDays: rows.reduce((sum, r) => sum + r.year.payDays, 0),
     absent: rows.reduce((sum, r) => sum + r.year.absent, 0),
+    /**
+     * The estate's average day length, across every clocked day of every worker.
+     *
+     * Weighted by days rather than by worker, for the reason given on the per-worker year average:
+     * a worker with two clocked days must not count as much as one with two hundred.
+     */
+    ...(() => {
+      const across = averageWorkedHours(
+        rows.flatMap((r) =>
+          r.months.flatMap((m) =>
+            m.clockedDays > 0 && m.averageHours !== null
+              ? Array.from({ length: m.clockedDays }, () => m.averageHours as number)
+              : [],
+          ),
+        ),
+      )
+      return { averageHours: across.averageHours, clockedDays: across.daysCounted }
+    })(),
   }
 }
 
@@ -189,7 +251,7 @@ export function yearlyAttendanceToCsv(
     csvCell("Yearly Summary Report"),
     csvCell(months.length ? `${formatMonthLabel(months[0])} to ${formatMonthLabel(months[months.length - 1])}` : ""),
     "",
-    ["Code", "Employee", "Month", "P", "HP", "A", "WO", "WOP", "Total Present", "PayDays"].join(","),
+    ["Code", "Employee", "Month", "P", "HP", "A", "WO", "WOP", "Total Present", "PayDays", "Avg hrs/day", "Days timed"].join(","),
   ]
 
   for (const row of rows) {
@@ -206,6 +268,8 @@ export function yearlyAttendanceToCsv(
           m.weeklyOffWorked,
           m.totalPresent,
           m.payDays,
+          csvCell(formatHoursHm(m.averageHours)),
+          m.clockedDays,
         ].join(","),
       )
     }
@@ -221,6 +285,8 @@ export function yearlyAttendanceToCsv(
         row.year.weeklyOffWorked,
         row.year.totalPresent,
         row.year.payDays,
+        csvCell(formatHoursHm(row.year.averageHours)),
+        row.year.clockedDays,
       ].join(","),
     )
   }

@@ -156,6 +156,61 @@ export function formatWorkedHours(hours: number | null): string {
   return `${Math.floor(total / 60)}h ${String(total % 60).padStart(2, "0")}m`
 }
 
+/**
+ * "8:39" — hours as h:mm, the way the estate's existing reports write a duration.
+ *
+ * Same value as formatWorkedHours, different audience. "8h 39m" reads better in a sentence;
+ * h:mm is what SmartOffice prints in its Duration column and what the office compares against,
+ * and it is the form you can eyeball for "is this eight hours or seven forty-five".
+ */
+export function formatHoursHm(hours: number | null): string {
+  if (hours === null || !Number.isFinite(hours) || hours < 0) return "—"
+  const total = Math.round(hours * 60)
+  return `${Math.floor(total / 60)}:${String(total % 60).padStart(2, "0")}`
+}
+
+export type AverageWorkedHours = {
+  /** Mean hours across days that HAVE a clocked duration. Null when there are none. */
+  averageHours: number | null
+  /** How many days went into it — the denominator, which has to be visible. */
+  daysCounted: number
+  /** Days present that the terminal could not time. */
+  daysWithoutClock: number
+}
+
+/**
+ * Average hours per day, over the days that actually have a clocked duration.
+ *
+ * ⚠ THE DENOMINATOR IS THE WHOLE PROBLEM, and getting it wrong produces exactly this codebase's
+ * signature failure — a confident, plausible, wrong number.
+ *
+ * Hours exist only where the terminal recorded BOTH a punch in and a punch out. Measured on
+ * production over 60 days:
+ *
+ *   HoneyFarm        526 attendance rows, 220 with both punches (42%), averaging 8.66 h
+ *   Medappa Estates  869 rows, 0 with both
+ *   Laxmi            608 rows, 0 with both
+ *   Seshagiri        404 rows, 0 with both
+ *
+ * Divide total hours by DAYS PRESENT and HoneyFarm reads 3:38 — understated by well over half,
+ * because the manually-marked days count as zero-hour days. The other three estates read 0:00,
+ * which says "nobody works here" about estates whose muster is full every day. Both figures are
+ * arithmetically defensible and both are lies.
+ *
+ * So: average over days with a duration, return null rather than 0 when there are none, and hand
+ * back the count so the screen can say what the average is of. A day with one punch is NOT a
+ * zero-hour day — it is a day whose finish nobody recorded, and assessShift already gives it
+ * `hours: null` for that reason.
+ */
+export function averageWorkedHours(hours: readonly (number | null | undefined)[]): AverageWorkedHours {
+  const clocked = hours.filter((h): h is number => typeof h === "number" && Number.isFinite(h) && h >= 0)
+  return {
+    averageHours: clocked.length ? clocked.reduce((sum, h) => sum + h, 0) / clocked.length : null,
+    daysCounted: clocked.length,
+    daysWithoutClock: hours.length - clocked.length,
+  }
+}
+
 export const shiftStatusLabel = (status: ShiftStatus): string =>
   status === "absent" ? "Absent"
   : status === "open" ? "Still in"

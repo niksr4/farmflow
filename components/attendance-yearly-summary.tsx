@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input"
 import { EmptyState } from "@/components/ui/empty-state"
 import { cn } from "@/lib/utils"
 import type { YearlyAttendanceRow } from "@/lib/attendance-yearly"
+import { formatHoursHm } from "@/lib/attendance-hours"
 
 /**
  * The yearly summary — a month per line per worker, laid out like the sheet the office files.
@@ -21,7 +22,14 @@ import type { YearlyAttendanceRow } from "@/lib/attendance-yearly"
  * mean "not tracked" and read as "never happened". See lib/attendance-yearly.ts.
  */
 
-type Summary = { workers: number; totalPresent: number; payDays: number; absent: number }
+type Summary = {
+  workers: number
+  totalPresent: number
+  payDays: number
+  absent: number
+  averageHours: number | null
+  clockedDays: number
+}
 
 const thisYearStart = () => `${new Date().getFullYear()}-01`
 const thisMonth = () => new Date().toISOString().slice(0, 7)
@@ -104,12 +112,18 @@ export default function AttendanceYearlySummary() {
       {error && <p className="px-1 text-sm text-red-600">{error}</p>}
 
       {summary && rows.length > 0 && (
-        <div className="grid grid-cols-2 gap-px overflow-hidden rounded-xl border border-stone-200 bg-stone-200 sm:grid-cols-4 dark:border-white/[0.08] dark:bg-white/[0.08]">
+        <div className="grid grid-cols-2 gap-px overflow-hidden rounded-xl border border-stone-200 bg-stone-200 sm:grid-cols-5 dark:border-white/[0.08] dark:bg-white/[0.08]">
           {[
             { label: "Workers", value: String(summary.workers) },
             { label: "Days present", value: days(summary.totalPresent) },
             { label: "Pay days", value: days(summary.payDays) },
             { label: "Absences", value: String(summary.absent) },
+            {
+              // "—" when the terminal timed nothing, never 0:00. Three of the four live estates
+              // mark attendance by hand, and a zero here would read as "nobody worked".
+              label: summary.clockedDays ? `Avg day (${summary.clockedDays} timed)` : "Avg day",
+              value: formatHoursHm(summary.averageHours),
+            },
           ].map((tile) => (
             <div key={tile.label} className="bg-white px-3 py-2.5 dark:bg-card">
               <p className="text-[9px] font-black uppercase tracking-wider text-stone-400">{tile.label}</p>
@@ -149,6 +163,9 @@ export default function AttendanceYearlySummary() {
                       <th className="px-2 py-1.5 text-right" title="Sundays worked anyway">WOP</th>
                       <th className="px-3 py-1.5 text-right">Total present</th>
                       <th className="px-3 py-1.5 text-right">Pay days</th>
+                      <th className="px-3 py-1.5 text-right" title="Average length of the days the terminal timed (h:mm)">
+                        Avg day
+                      </th>
                     </tr>
                   </thead>
                   <tbody>
@@ -164,6 +181,12 @@ export default function AttendanceYearlySummary() {
                         <td className="px-2 py-1.5 text-right tabular-nums text-stone-400">{m.weeklyOffWorked || ""}</td>
                         <td className="px-3 py-1.5 text-right font-semibold tabular-nums">{days(m.totalPresent)}</td>
                         <td className="px-3 py-1.5 text-right font-black tabular-nums">{days(m.payDays)}</td>
+                        <td
+                          className="px-3 py-1.5 text-right tabular-nums text-stone-500 dark:text-stone-400"
+                          title={m.clockedDays ? `${m.clockedDays} day(s) timed by the terminal` : "No clocked times this month"}
+                        >
+                          {formatHoursHm(m.averageHours)}
+                        </td>
                       </tr>
                     ))}
                     <tr className="bg-stone-50 font-black dark:bg-white/[0.03]">
@@ -175,6 +198,7 @@ export default function AttendanceYearlySummary() {
                       <td className="px-2 py-1.5 text-right tabular-nums">{worker.year.weeklyOffWorked || ""}</td>
                       <td className="px-3 py-1.5 text-right tabular-nums">{days(worker.year.totalPresent)}</td>
                       <td className="px-3 py-1.5 text-right tabular-nums">{days(worker.year.payDays)}</td>
+                      <td className="px-3 py-1.5 text-right tabular-nums">{formatHoursHm(worker.year.averageHours)}</td>
                     </tr>
                   </tbody>
                 </table>
@@ -187,7 +211,9 @@ export default function AttendanceYearlySummary() {
       <p className="px-1 text-xs text-muted-foreground">
         {/* Said once, plainly, rather than shown as a column of zeroes. */}
         Leave types (casual, sick, privilege) are not recorded in FarmFlow, so they are not shown —
-        an unmarked working day counts as A.
+        an unmarked working day counts as A. <strong>Avg day</strong> is the mean length of the days
+        the fingerprint terminal timed, over those days only; it shows “—” where attendance was
+        marked by hand, because a day without both punches has no length rather than a length of zero.
       </p>
     </div>
   )
