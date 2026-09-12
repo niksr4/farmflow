@@ -498,6 +498,14 @@ export async function PUT(request: Request) {
         WHERE tenant_id = ${tenantContext.tenantId}
           AND attendance_date = ${date}
           AND worker_id = ${workerId}::uuid
+          -- SAME SCOPE AS THE CLEARING QUERY ABOVE, and it has to be spelled here too.
+          --
+          -- The presence validation is TENANT-scoped, not estate-scoped, so a worker id from
+          -- another estate passes it. Without this clause an estate-scoped save could write
+          -- payroll-relevant overtime onto a row outside the estate it claimed to be saving,
+          -- while the clearing query four lines up refused to touch that same row. Two halves of
+          -- one rule disagreeing is the shape that deleted Bopaiah's punch.
+          ${estateWorkerScopeClause}
       `)
     }
 

@@ -185,6 +185,13 @@ export async function POST(request: NextRequest) {
               price = ${rate}
           WHERE id = ${change.id}
             AND tenant_id = ${tenantContext.tenantId}
+            -- The plan was built for ONE slot, so the write must land in that slot. Editing a
+            -- transaction can move it to another item or store; if one moves between the read and
+            -- this update, pricing it here would leave the DESTINATION slot carrying new money
+            -- that only the original slot gets recalculated for. Re-checking both means such a row
+            -- is skipped, reported as not-applied, and picked up by the next run in its new home.
+            AND item_type = ${itemType}
+            AND location_id IS NOT DISTINCT FROM ${locationId}
             AND LOWER(transaction_type) IN ('restock', 'restocking')
             AND COALESCE(total_cost, 0) <= 0
           RETURNING id

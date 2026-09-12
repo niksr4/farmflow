@@ -264,3 +264,48 @@ describe("retention held is derived, because nothing writes it", () => {
     expect(codeOnly).not.toMatch(/import \{[^}]*retentionHeld/)
   })
 })
+
+describe("retention applies to a day that was marked but never allocated", () => {
+  const route = read("app/api/payroll-summary/route.ts")
+
+  /**
+   * ⚠ AN ESTATE THAT TAKES ATTENDANCE AND DOES NOT RUN THE MUSTER WAS HELD NOTHING.
+   *
+   * Gross falls back to `days_present x daily_rate` for exactly those workers — attendance_earnings
+   * COALESCEs salary, then muster, then days x rate — so they ARE paid. But the retention input was
+   * drawn only from labour_assignments, which for them is empty. An estate could set "hold 20% of
+   * the day", watch the column appear on the wage sheet, and withhold nothing at all: net pay
+   * overstated by the entire retention, on every worker, indefinitely.
+   *
+   * Raised by Greptile on PR #11, 2026-09-12. Latent — production carries no pay rules yet — but
+   * three of the four live estates take attendance without allocating, so it would have been the
+   * FIRST thing any of them hit.
+   *
+   * Distinct from the monthly-salary decision in lib/payroll-period.ts, which deliberately holds
+   * nothing: a salary has no day to take a percentage of, an attendance row is precisely a day at a
+   * known rate. Well-defined here, undefined there.
+   */
+  it("feeds marked-but-unallocated days into the retention basis", () => {
+    expect(route).toContain("attendanceOnlyRows")
+    expect(route).toMatch(/workedDays: \[\.\.\.\(workedRows as any\[\]\), \.\.\.\(attendanceOnlyRows as any\[\]\)\]/)
+  })
+
+  it("excludes any day the muster already speaks for, so nothing is held twice", () => {
+    // The two sources must be disjoint: where an allocation exists it carries the rate actually
+    // earned, which is the more precise figure and the one every other screen reports.
+    const block = route.slice(route.indexOf("DAYS THAT WERE MARKED BUT NEVER ALLOCATED"))
+    expect(block.slice(0, 2600)).toMatch(/NOT EXISTS \(\s*SELECT 1 FROM labour_assignments la/)
+  })
+
+  it("leaves monthly-paid workers out, matching where their gross comes from", () => {
+    const block = route.slice(route.indexOf("DAYS THAT WERE MARKED BUT NEVER ALLOCATED"))
+    expect(block.slice(0, 2600)).toContain("MONTHLY_PAID_WORKER_TYPES")
+  })
+
+  it("takes the rate from the worker's own daily rate, and skips those without one", () => {
+    // A worker with no rate earns nothing from this basis, so holding a percentage of it would be
+    // holding a percentage of an unknown. missingRate already flags them elsewhere.
+    const block = route.slice(route.indexOf("DAYS THAT WERE MARKED BUT NEVER ALLOCATED"))
+    expect(block.slice(0, 2600)).toContain("w.daily_rate IS NOT NULL")
+  })
+})
