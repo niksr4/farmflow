@@ -27,7 +27,15 @@ const SOURCES = [
   { table: "attendance_records", writtenBy: "app/api/attendance/route.ts", screen: "components/attendance-tab.tsx" },
   { table: "labour_assignments", writtenBy: "app/api/attendance/assignments/route.ts", screen: "components/attendance/worker-allocation.tsx" },
   { table: "picking_records", writtenBy: "app/api/picking-records/route.ts", screen: "components/picking-log-tab.tsx" },
-  { table: "worker_ledger", writtenBy: "app/api/worker-ledger/route.ts", screen: "components/worker-ledger-tab.tsx" },
+  /**
+   * Back in the checked list on 2026-09-08, the same day it left it.
+   *
+   * The Ledger tab was deleted that morning and worker_ledger spent a few hours as a source
+   * payroll deducted from with no way in -- named in an exemption, with a test that failed the
+   * moment its replacement existed rather than a comment that would have rotted. It fired, and
+   * this is the entry it demanded. The exemption is gone; the ordinary rule applies again.
+   */
+  { table: "worker_ledger", writtenBy: "app/api/worker-ledger/route.ts", screen: "components/workers/worker-money-panel.tsx" },
 ]
 
 /**
@@ -77,15 +85,24 @@ describe("payroll's sources each have a way in", () => {
     }
   })
 
-  it("records that worker_ledger currently has no route in", () => {
-    // Honest rather than green. The Ledger subtab is off again pending one browser check, so
-    // payroll's deductions term is fed by a table nobody can write to -- the exact state this file
-    // was written to catch. Stated here so it is a known debt with a name, not a silence.
-    const workspace = read("components/attendance-workspace.tsx")
-    const ledgerReachable = workspace.includes('label: "Ledger"')
-    if (!ledgerReachable) {
-      expect(workspace).toContain("TO RESTORE:")
+  it("money leaving the estate's hand is an admin's to record", () => {
+    // `accounts` is in USER_MUTATION_MODULES, so canWriteModule alone would let the daily muster
+    // writer hand out an advance against wages. Gagan marks attendance every morning at Medappa;
+    // Manoj asked for the money to be his. A deduction or a correction stays ordinary bookkeeping.
+    const route = read("app/api/worker-ledger/route.ts")
+    expect(route).toContain("ADMIN_ONLY_ENTRY_TYPES")
+    expect(route).toContain("isAdminRole(sessionUser.role)")
+    for (const t of ["advance", "repayment", "retention_payout"]) {
+      expect(route, `${t} should be admin-only`).toMatch(new RegExp(`ADMIN_ONLY_ENTRY_TYPES[\\s\\S]{0,160}"${t}"`))
     }
+  })
+
+  it("retention accrual cannot be typed by hand", () => {
+    // It is derived from days worked and the rule in force. A hand-typed one is a figure with no
+    // working behind it that payroll would then add to its own — the same money, counted twice.
+    const route = read("app/api/worker-ledger/route.ts")
+    const typed = route.slice(route.indexOf("const TYPED_ENTRY_TYPES"), route.indexOf("const ADMIN_ONLY_ENTRY_TYPES"))
+    expect(typed).not.toContain("retention_accrual")
   })
 })
 
@@ -105,18 +122,33 @@ describe("the muster workspace does not hide a section behind a dead switch", ()
    * rule is: a section may be absent, but the absence must be explained IN PLACE, with a date and
    * a way back. The original LEDGER_TAB_DISABLED had none of those and cost six weeks.
    */
-  it("a section that is off says why, when, and how to restore it", () => {
+  it("a section that is absent says why and when — whether it is hidden or deleted", () => {
+    // Two legitimate end states, one rule. Hidden needs a way back; deleted needs a reason. What
+    // is never acceptable is a section that is simply not there, which is what July looked like.
     const ledgerInNav = workspace.includes('label: "Ledger"')
     if (ledgerInNav) return // back on; nothing to explain
-    expect(workspace, "the Ledger is hidden with no dated explanation").toMatch(/THE LEDGER IS OFF AGAIN, \d{4}-\d{2}-\d{2}/)
-    expect(workspace, "no stated route back").toContain("TO RESTORE:")
+    expect(workspace, "the Ledger is absent with no dated explanation").toMatch(
+      /THE LEDGER IS (OFF AGAIN|GONE), \d{4}-\d{2}-\d{2}/,
+    )
+    const isDeleted = workspace.includes("THE LEDGER IS GONE")
+    if (isDeleted) {
+      expect(workspace, "a deletion has to say what replaced it").toContain("WHAT IS LOST")
+    } else {
+      expect(workspace, "a hidden section needs a stated route back").toContain("TO RESTORE:")
+    }
   })
 
   it("the old flag stays gone — a hidden section is a deletion, not a switch", () => {
     // At `= false` it is one keystroke from switching itself back on and the comment explaining it
     // rots in place. Removing the nav entry outright leaves the reasoning where someone will read
     // it, which is the whole difference between this removal and the one in July.
-    expect(workspace).not.toContain("LEDGER_TAB_DISABLED")
+    //
+    // COMMENTS STRIPPED FIRST. This failed on 2026-09-08 against a comment that *named* the flag
+    // while explaining why it was a mistake -- the same trap tests/no-empty-select-item.test.ts
+    // hit on its first run. A guard that cannot tell code from the prose describing it punishes
+    // documenting the bug, and gets deleted by whoever trips over it next.
+    const code = workspace.replace(/\/\*[\s\S]*?\*\//g, "").replace(/^\s*\/\/.*$/gm, "")
+    expect(code).not.toContain("LEDGER_TAB_DISABLED")
   })
 
   it("no section of the workspace is gated on a constant that is always false", () => {

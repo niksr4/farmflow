@@ -132,8 +132,15 @@ describe("the inventory ledger talks about stores, not locations", () => {
    * The column was headed "Location", which reads as the place the fertiliser went onto -- a
    * different fact, and one this table has never held. The distinction is the whole point of
    * separating stores from blocks, so the words have to carry it.
+   *
+   * The ledger moved to its own file on 2026-09-08 (385 lines of JSX out of a 5,465-line shell).
+   * Both sources are read here rather than repointing at the panel alone, so the guard keeps
+   * holding whichever side of the split the markup ends up on -- a source assertion that has to be
+   * edited every time code is moved is one that eventually gets deleted instead.
    */
-  const shell = readFileSync("components/inventory-system.tsx", "utf8")
+  const shell =
+    readFileSync("components/inventory-system.tsx", "utf8") +
+    readFileSync("components/inventory-system/transaction-history-panel.tsx", "utf8")
 
   it("the desktop header, the mobile card and the CSV all say Store", () => {
     expect(shell).toContain('<th className="py-4 px-4 text-left">Store</th>')

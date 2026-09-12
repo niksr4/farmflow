@@ -11,6 +11,8 @@
     "start": "next start",
     "audit:tenant": "node scripts/tenant-audit.js",
     "schema:check": "node scripts/check-schema-readiness.mjs",
+    "release:check": "node scripts/dev/check-release-drift.mjs",
+    "release:gate": "node scripts/dev/setup-main-ruleset.mjs",
     "schema:rls": "node scripts/check-rls-coverage.mjs",
     "schema:rls:prod": "node scripts/check-rls-coverage.mjs --prod",
     "schema:isolation": "node scripts/check-tenant-isolation.mjs",

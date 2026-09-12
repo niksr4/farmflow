@@ -653,6 +653,7 @@ export async function POST(request: NextRequest) {
     // update_inventory() trigger is about to deduct from current_inventory,
     // instead of being silently recorded as 0.
     const restockCost = resolveStockCost({ quantity: quantityValue, totalPrice: total_price, unitPrice: price })
+
     const priceValue =
       normalizedType === "deplete" ? Number(effectiveSlotMatch?.avg_price) || 0 : restockCost.unitPrice
     const total_cost =

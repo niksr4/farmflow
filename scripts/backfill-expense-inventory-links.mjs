@@ -216,7 +216,7 @@ const recalculateInventoryForItem = async (sql, tenantId, itemType, locationId) 
     `
       INSERT INTO current_inventory (item_type, quantity, unit, avg_price, total_cost, tenant_id, location_id)
       VALUES ($1, $2, $3, $4, $5, $6, $7)
-      ON CONFLICT (item_type, tenant_id, location_id)
+      ON CONFLICT (item_type, tenant_id, location_id) WHERE location_id IS NOT NULL
       DO UPDATE SET
         quantity = EXCLUDED.quantity,
         unit = EXCLUDED.unit,

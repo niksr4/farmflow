@@ -255,11 +255,13 @@ await dev`INSERT INTO tenants (id, name) VALUES (${LAXMI}, ${prodTenant.name})
  * balance -- a dev copy that quietly disagreed with production about how much fertiliser is in the
  * shed, which is precisely the number the walkthrough is about.
  *
- * (Running it also fails outright: the trigger's `ON CONFLICT (item_type, tenant_id, location_id)`
- * matches no index that Postgres can infer, because both candidate unique indexes are partial and
- * the statement has no WHERE clause to pair with them. That is true on production too -- same
- * indexes, verified -- so it is a real defect rather than a dev artifact. It is not this script's
- * problem to fix, but it is written down here because this is where it surfaced.)
+ * (Running it also USED to fail outright: the trigger's `ON CONFLICT (item_type, tenant_id,
+ * location_id)` matched no index Postgres could infer, because both candidate unique indexes are
+ * partial and the statement had no WHERE clause to pair with them -- on production too, same
+ * indexes, verified. Fixed 2026-09-11 by scripts/151-update-inventory-onconflict-partial-index.sql
+ * after it was reproduced directly; tests/inventory-upsert-conflict-target.test.ts now holds the
+ * rule for every partial index in the schema, in SQL as well as TypeScript. Triggers still stay
+ * off for the copy, for the double-application reason above, which is the real one.)
  */
 const triggerTables = plan.filter((p) => p.rows.length).map((p) => p.table)
 for (const table of triggerTables) await dev.query(`ALTER TABLE "${table}" DISABLE TRIGGER USER`)

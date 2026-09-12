@@ -4,8 +4,9 @@ import { requireModuleAccess, isModuleAccessError } from "@/lib/server/module-ac
 import { canWriteModule, canDeleteModule } from "@/lib/permissions"
 import { logAuditEvent } from "@/lib/server/audit-log"
 import { normalizeTenantContext, runTenantQuery } from "@/lib/server/tenant-db"
-import { ATTENDANCE_SCHEMA_ERROR_HELP, normalizeBiometricSchemaError } from "@/lib/biometric-attendance"
+import { ATTENDANCE_SCHEMA_ERROR_HELP, isMissingBiometricSchemaError } from "@/lib/biometric-attendance"
 import { logServerError } from "@/lib/server/safe-logging"
+import { sanitizeRouteError } from "@/lib/server/sanitize-route-error"
 
 export async function PUT(request: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
@@ -98,11 +99,14 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
     if (isModuleAccessError(error)) {
       return NextResponse.json({ success: false, error: "Module access disabled" }, { status: 403 })
     }
-    const normalized = normalizeBiometricSchemaError(error)
-    logServerError("Failed to update biometric device", normalized)
+    logServerError("Failed to update biometric device", error)
+    const isSchemaError = isMissingBiometricSchemaError(error)
     return NextResponse.json(
-      { success: false, error: normalized.message },
-      { status: normalized.message === ATTENDANCE_SCHEMA_ERROR_HELP ? 503 : 500 },
+      {
+        success: false,
+        error: isSchemaError ? ATTENDANCE_SCHEMA_ERROR_HELP : sanitizeRouteError(error, "Failed to update device"),
+      },
+      { status: isSchemaError ? 503 : 500 },
     )
   }
 }
@@ -153,8 +157,14 @@ export async function DELETE(request: Request, { params }: { params: Promise<{ i
     if (isModuleAccessError(error)) {
       return NextResponse.json({ success: false, error: "Module access disabled" }, { status: 403 })
     }
-    const normalized = normalizeBiometricSchemaError(error)
-    logServerError("Failed to remove biometric device", normalized)
-    return NextResponse.json({ success: false, error: normalized.message }, { status: 500 })
+    logServerError("Failed to remove biometric device", error)
+    const isSchemaError = isMissingBiometricSchemaError(error)
+    return NextResponse.json(
+      {
+        success: false,
+        error: isSchemaError ? ATTENDANCE_SCHEMA_ERROR_HELP : sanitizeRouteError(error, "Failed to remove device"),
+      },
+      { status: isSchemaError ? 503 : 500 },
+    )
   }
 }

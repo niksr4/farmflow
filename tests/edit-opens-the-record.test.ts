@@ -37,7 +37,8 @@ const EDIT_NAVIGATES_AWAY = [
 const OPENS_IN_A_DIALOG = ["components/other-expenses-tab.tsx", "components/labor-deployment-tab.tsx"]
 
 /** Turns the row itself into the editor. Equally correct; do not "fix" these. */
-const EDITS_THE_ROW_IN_PLACE = ["components/picking-log-tab.tsx", "components/worker-ledger-tab.tsx"]
+// The Ledger was the second entry here until it was deleted on 2026-09-08.
+const EDITS_THE_ROW_IN_PLACE = ["components/picking-log-tab.tsx"]
 
 const read = (path: string) => readFileSync(resolve(__dirname, "..", path), "utf8")
 
@@ -83,6 +84,8 @@ describe("edit opens the record where you are", () => {
     // behaviour nobody has looked at — which is how expenses stayed broken for months.
     const all = [...OPENS_IN_A_DIALOG, ...EDITS_THE_ROW_IN_PLACE, ...EDIT_NAVIGATES_AWAY]
     expect(new Set(all).size).toBe(all.length)
-    expect(all.length).toBe(6)
+    // Was 6 until the Ledger was deleted on 2026-09-08 and its jobs moved to Workers and Payroll.
+    // Goes back up when components/workers/worker-money-panel.tsx lands with its own edit path.
+    expect(all.length).toBe(5)
   })
 })

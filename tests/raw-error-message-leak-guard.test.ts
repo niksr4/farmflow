@@ -37,20 +37,6 @@ import { describe, expect, it } from "vitest"
  * automatically).
  */
 const KNOWN_RAW_ERROR_LEAKS = [
-  "app/api/admin/weekly-summary/route.ts",
-  "app/api/ai-analysis/route.ts",
-  "app/api/ai-proactive-insights/route.ts",
-  "app/api/attendance/devices/[id]/route.ts",
-  "app/api/attendance/devices/route.ts",
-  "app/api/attendance/route.ts",
-  "app/api/attendance/unmapped-codes/route.ts",
-  "app/api/attendance/workers/[id]/route.ts",
-  "app/api/attendance/workers/route.ts",
-  "app/api/cron/orchestrator/route.ts",
-  "app/api/cron/tenant-dormancy-probe/route.ts",
-  "app/api/cron/tenant-engagement/route.ts",
-  "app/api/cron/tenant-smoke/route.ts",
-  "app/api/cron/weekly-digest/route.ts",
   "app/api/documents/[id]/file/route.ts",
   "app/api/documents/route.ts",
   "app/api/exports/ops/route.ts",
@@ -82,8 +68,15 @@ const SAFE_HELPERS = [
   "getErrorMessage(",
 ]
 
+// Widened 2026-09-09: the original alternation only matched the non-optional
+// `(error as Error).message` form. `(error as Error)?.message` (optional chaining) is common in
+// this codebase and was a genuine blind spot -- it let app/api/auth/reset-password/route.ts's
+// leak through undetected until a full manual read caught it (see KNOWN_RAW_ERROR_LEAKS history).
+// Most of the ~18 call sites using this optional-chaining form are safe (internal `.includes()`
+// classification checks, never placed in a response field), so widening the pattern only matters
+// for the ones the field-value scan below actually finds inside an "error:"/"message:" field.
 const RAW_MESSAGE_ACCESS_RE =
-  /error\s*\?\.\s*message|error\s*\.\s*message|\(error as Error\)\.message|String\(error\)|error\s*\?\.\s*toString\(\)|error\s*\.\s*toString\(\)/
+  /error\s*\?\.\s*message|error\s*\.\s*message|\(error as Error\)\??\.\s*message|String\(error\)|error\s*\?\.\s*toString\(\)|error\s*\.\s*toString\(\)/
 
 // lib/biometric-attendance.ts's normalizeBiometricSchemaError(error) and lib/attendance.ts's
 // sibling normalizeAttendanceSchemaError(error) both look like sanitizers but aren't: each only

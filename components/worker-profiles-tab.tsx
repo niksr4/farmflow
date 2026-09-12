@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react"
 import { todayIso } from "@/lib/date-utils"
-import { Plus, Pencil, UserX, Check, X, Loader2, ChevronDown, ChevronUp } from "lucide-react"
+import { Plus, Pencil, UserX, Check, X, Loader2, ChevronDown, ChevronUp, IndianRupee } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
@@ -14,16 +14,20 @@ import { EmptyStateTable } from "@/components/ui/empty-state"
 import { FieldLabel } from "@/components/ui/field-label"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import { toast } from "sonner"
-import { canWriteModule, type UserRole } from "@/lib/permissions"
+import { canWriteModule, isAdminRole, type UserRole } from "@/lib/permissions"
 import { useAuth } from "@/hooks/use-auth"
 import FilterBar from "@/components/filter-bar"
 import { useListControls } from "@/hooks/use-list-controls"
+import { useMediaQuery } from "@/hooks/use-media-query"
 import { cn } from "@/lib/utils"
 import { WORKER_TYPES, workerTypeLabel, isPaidDaily, type WorkerType } from "@/lib/worker-types"
 import { UNSET_FACET_VALUE } from "@/lib/list-controls"
 import { numericInputValue } from "@/lib/number-input"
 import type { LocationOption } from "@/components/inventory-system/types"
 import { formatLocationLabel } from "@/lib/location-label"
+import WorkerMoneyPanel from "@/components/workers/worker-money-panel"
+import PayRuleForm from "@/components/workers/pay-rule-form"
+import type { PayRule } from "@/lib/pay-rules"
 
 // Imported, not redeclared. See lib/worker-types.ts.
 
@@ -107,6 +111,9 @@ const EMPTY_FORM = {
 export default function WorkerProfilesTab() {
   const { user } = useAuth()
   const canWrite = canWriteModule((user?.role ?? "user") as UserRole, "accounts")
+  // Advances and repayments are money changing hands, so the money panel gates them on this
+  // rather than on canWrite -- "accounts" is a user-mutation module, so a writer passes that.
+  const isAdmin = isAdminRole(user?.role)
 
   const [workers, setWorkers] = useState<Worker[]>([])
   const workerControls = useListControls(workers, {
@@ -136,6 +143,22 @@ export default function WorkerProfilesTab() {
   // the device you would actually call a worker from. The mobile list shows the essentials
   // and puts the rest one tap away rather than dropping them or cramming eight columns in.
   const [expandedWorkerId, setExpandedWorkerId] = useState<string | null>(null)
+  const [editingEstateRule, setEditingEstateRule] = useState(false)
+  /** The default in force today, so the form opens showing what it is rather than blank. */
+  const [estateRule, setEstateRule] = useState<(PayRule & { id?: string }) | null>(null)
+  /**
+   * Which of the two rosters is actually on screen.
+   *
+   * `sm:hidden` and `hidden sm:block` only decide what is PAINTED -- both trees mount, so an
+   * expanded worker mounted the money panel twice and fired four requests for two endpoints, on
+   * the phone connection this product is mostly used over. The panel is not idempotent to look at
+   * either: two copies hold two independent edit states over one worker's ledger.
+   *
+   * Matches the Tailwind `sm` breakpoint exactly. It renders false on the server and on the first
+   * client paint, which is harmless here because the panel only ever mounts after somebody has
+   * tapped a row.
+   */
+  const isWideRoster = useMediaQuery("(min-width: 640px)")
   const [saving, setSaving] = useState(false)
   const [form, setForm] = useState(EMPTY_FORM)
   // Same data-driven gate as the attendance tab: estates without a terminal see no
@@ -208,10 +231,35 @@ export default function WorkerProfilesTab() {
     }
   }, [])
 
+  /**
+   * The estate-wide rule in force today. `worker_id IS NULL` rows only — a per-worker override is
+   * that worker's business and is loaded by their own panel.
+   *
+   * Fetched so the form opens showing what the rule already is. A blank form on an estate that has
+   * a rule invites somebody to retype it slightly differently and date it today, which quietly
+   * splits one rule into two periods.
+   */
+  const loadEstateRule = useCallback(async () => {
+    if (!isAdmin) return
+    try {
+      const res = await fetch("/api/worker-pay-rules")
+      const data = await res.json()
+      if (!data?.success) return
+      // The route resolves this itself now, so the client is not re-deriving "which rule is in
+      // force" a second way. Two implementations of that question is how a screen and a wage sheet
+      // come to disagree about which rule applied.
+      setEstateRule(data.estateRule ?? null)
+    } catch {
+      // A failed load and "no rule set" both open the form blank, which is the safe direction:
+      // it cannot show a stale rule as current.
+    }
+  }, [isAdmin])
+
   useEffect(() => {
     fetchWorkers()
     fetchLocations()
-  }, [fetchWorkers, fetchLocations])
+    loadEstateRule()
+  }, [fetchWorkers, fetchLocations, loadEstateRule])
 
   const handleAdd = async () => {
     if (!form.name.trim()) return
@@ -431,6 +479,15 @@ export default function WorkerProfilesTab() {
           </div>
           {canWrite && !isAdding && !bulkEditing && (
             <div className="flex shrink-0 gap-2">
+              {/* The estate-wide rule: one row that covers everybody, with per-worker overrides
+                  opened from a worker's own panel. Medappa set 20% once rather than 29 times.
+                  Admin only -- what every worker is held back is not the daily writer's decision. */}
+              {isAdmin && (
+                <Button size="sm" variant="outline" onClick={() => setEditingEstateRule((v) => !v)}>
+                  <IndianRupee className="mr-1.5 h-4 w-4" />
+                  Pay rules
+                </Button>
+              )}
               {workers.length > 1 && (
                 <Button size="sm" variant="outline" onClick={startBulkEdit}>
                   <Pencil className="mr-1.5 h-4 w-4" />
@@ -458,6 +515,22 @@ export default function WorkerProfilesTab() {
             </div>
           )}
         </CardHeader>
+
+        {editingEstateRule && isAdmin && (
+          <CardContent className="border-t border-border/50 pt-4">
+            <p className="mb-3 text-sm text-muted-foreground">
+              Applies to every worker who has no rule of their own. Open a worker to override them.
+            </p>
+            <PayRuleForm
+              workerId={null}
+              dailyRate={workers.find((w) => Number(w.dailyRate) > 0)?.dailyRate ?? null}
+              current={estateRule}
+              currentRuleId={estateRule?.id ?? null}
+              onSaved={() => { setEditingEstateRule(false); loadEstateRule() }}
+              onCancel={() => setEditingEstateRule(false)}
+            />
+          </CardContent>
+        )}
 
         {isAdding && (
           <CardContent className="border-t border-border/50 pt-4">
@@ -891,6 +964,22 @@ export default function WorkerProfilesTab() {
                             <MobileField label="Estate" value={estate ?? "Unassigned"} />
                           )}
                           {showFingerIds && <MobileField label="Finger ID" value={w.deviceUserCode || "—"} mono />}
+
+                          {/* Retention held, advances owed, and the history behind both. Rendered
+                              only when the card is genuinely open, so opening the roster does not
+                              fire a ledger fetch per worker. A crew is paid as a job, not a person,
+                              so it has no personal balance to show. */}
+                          {isExpanded && !isWideRoster && w.kind !== "gang" && (
+                            <div className="-mx-1 mt-2 border-t border-stone-200 pt-1 dark:border-white/[0.06]">
+                              <WorkerMoneyPanel
+                                workerId={w.id}
+                                workerName={w.name}
+                                dailyRate={w.dailyRate ?? null}
+                                canAdmin={isAdmin}
+                              />
+                            </div>
+                          )}
+
                           {canWrite && (
                             <div className="flex gap-2 pt-2">
                               <Button size="sm" variant="outline" className="flex-1" onClick={() => startEdit(w)}>
@@ -1166,9 +1255,29 @@ export default function WorkerProfilesTab() {
                           </div>
                         </TableCell>
                       </TableRow>
-                    ) : (
+                    ) : [
                       <TableRow key={w.id}>
-                        <TableCell className="font-medium">{w.name}</TableCell>
+                        <TableCell className="font-medium">
+                          {/* A crew is paid as a job, so it has no personal balance to open. */}
+                          {w.kind !== "gang" ? (
+                            <button
+                              type="button"
+                              className="flex items-center gap-1.5 text-left hover:underline"
+                              onClick={() => setExpandedWorkerId(expandedWorkerId === w.id ? null : w.id)}
+                              aria-expanded={expandedWorkerId === w.id}
+                              aria-label={`${expandedWorkerId === w.id ? "Hide" : "Show"} money history for ${w.name}`}
+                            >
+                              {expandedWorkerId === w.id ? (
+                                <ChevronUp className="h-3.5 w-3.5 shrink-0 text-stone-400" />
+                              ) : (
+                                <ChevronDown className="h-3.5 w-3.5 shrink-0 text-stone-400" />
+                              )}
+                              {w.name}
+                            </button>
+                          ) : (
+                            w.name
+                          )}
+                        </TableCell>
                         <TableCell>
                           {w.workerType ? (
                             <Badge variant="outline" className={`text-xs ${(WORKER_TYPE_COLORS[w.workerType] ?? WORKER_TYPE_FALLBACK)}`}>
@@ -1234,8 +1343,32 @@ export default function WorkerProfilesTab() {
                             </TooltipProvider>
                           </TableCell>
                         )}
-                      </TableRow>
-                    ),
+                      </TableRow>,
+                      /**
+                       * PARITY, NOT A DESKTOP EXTRA.
+                       *
+                       * The money panel went into the mobile card list first and was invisible on a
+                       * laptop -- which is where an estate admin actually sits to hand out an
+                       * advance. Layouts may differ between the two; the data shown must not, and
+                       * nothing enforces that but noticing.
+                       *
+                       * Keyed separately from the row above because React needs both siblings keyed,
+                       * and only mounted when open so the roster does not fire one ledger fetch per
+                       * worker on load.
+                       */
+                      expandedWorkerId === w.id && isWideRoster && w.kind !== "gang" ? (
+                        <TableRow key={`${w.id}-money`} className="bg-stone-50/60 hover:bg-stone-50/60 dark:bg-white/[0.02]">
+                          <TableCell colSpan={20} className="p-0">
+                            <WorkerMoneyPanel
+                              workerId={w.id}
+                              workerName={w.name}
+                              dailyRate={w.dailyRate ?? null}
+                              canAdmin={isAdmin}
+                            />
+                          </TableCell>
+                        </TableRow>
+                      ) : null,
+                    ],
                   )}
                 </TableBody>
               </Table>

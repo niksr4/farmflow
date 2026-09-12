@@ -78,8 +78,10 @@ export default function AttendanceMonthlyGrid() {
     return () => controller.abort()
   }, [load, month])
 
-  const days = data?.days ?? []
-  const rows = data?.rows ?? []
+  // Memoised because `?? []` mints a new array every render, which made every useMemo keyed on
+  // `days` recompute on every render -- the dependency array was there and doing nothing.
+  const days = useMemo(() => data?.days ?? [], [data])
+  const rows = useMemo(() => data?.rows ?? [], [data])
 
   // Which columns are Sundays, so the header can shade them the way the printed sheet does.
   const weeklyOffColumns = useMemo(() => new Set(days.filter((d) => d.isWeeklyOff).map((d) => d.iso)), [days])
