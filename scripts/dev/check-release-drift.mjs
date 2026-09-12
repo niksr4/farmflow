@@ -15,10 +15,10 @@
  * while the daily digest reported each day's scan as done. "Filed" is not "shipped", and only one
  * of those is worth reporting as an outcome.
  *
- * The deploy is made from the CLI (see the release process in CLAUDE.md), which means Vercel's
- * GitHub integration fields are empty — the git metadata lands under `meta.gitCommitSha` instead,
- * which is what this reads. Looking for `githubCommitSha` returns null and invites the conclusion
- * that the commit is unknowable. It is not.
+ * Vercel records the deployed commit under a DIFFERENT key depending on how it was deployed —
+ * `githubCommitSha` for a merge, `gitCommitSha` for a `vercel --prod` from a working copy. Both
+ * are read below. Looking for only one returns null and invites the conclusion that the commit is
+ * unknowable. It is not.
  *
  * Read-only. Talks to GitHub and Vercel, writes nothing.
  */
@@ -69,8 +69,20 @@ const detail = await (
   })
 ).json()
 
-const liveSha = detail.meta?.gitCommitSha || null
-const liveRef = detail.meta?.gitCommitRef || "(unknown)"
+/**
+ * TWO KEYS, BECAUSE THERE ARE TWO WAYS TO DEPLOY, and this check was written during the era of
+ * one of them.
+ *
+ *   CLI  (vercel --prod)        meta.gitCommitSha       — local git metadata
+ *   Git integration (a merge)   meta.githubCommitSha    — from the GitHub App
+ *
+ * It read only the CLI key. The moment main was merged and Vercel began deploying from GitHub
+ * instead, this reported "the live deployment records no commit" and could compare nothing — so
+ * the drift checker went blind at exactly the point the drift it was built to catch was fixed.
+ * A checker that only understands the broken world is a checker that stops working when you fix it.
+ */
+const liveSha = detail.meta?.githubCommitSha || detail.meta?.gitCommitSha || null
+const liveRef = detail.meta?.githubCommitRef || detail.meta?.gitCommitRef || "(unknown)"
 
 console.log("\nPRODUCTION")
 console.log(`  deployment  ${latest.uid}`)
