@@ -55,11 +55,6 @@ export default function AttendanceDeviceSettings({ workers }: { workers: WorkerO
   const [removingDeviceId, setRemovingDeviceId] = useState<string | null>(null)
   const [assigningCode, setAssigningCode] = useState<string | null>(null)
   const [selectedWorkerByCode, setSelectedWorkerByCode] = useState<Record<string, string>>({})
-  const [serverOrigin, setServerOrigin] = useState("")
-
-  useEffect(() => {
-    if (typeof window !== "undefined") setServerOrigin(window.location.origin)
-  }, [])
 
   const loadAll = useCallback(async () => {
     setLoading(true)
