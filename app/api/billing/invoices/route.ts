@@ -7,6 +7,7 @@ import { canWriteModule } from "@/lib/permissions"
 import { computeInvoiceTotals, formatInvoiceNumber } from "@/lib/billing"
 import { logAuditEvent } from "@/lib/server/audit-log"
 import { getPostHogClient } from "@/lib/posthog-server"
+import { sanitizeRouteError } from "@/lib/server/sanitize-route-error"
 
 export const dynamic = "force-dynamic"
 
@@ -56,7 +57,7 @@ export async function GET() {
 
     return NextResponse.json({ success: true, invoices })
   } catch (error: any) {
-    return NextResponse.json({ success: false, error: error.message || "Failed to load invoices" }, { status: 500 })
+    return NextResponse.json({ success: false, error: sanitizeRouteError(error, "Failed to load invoices") }, { status: 500 })
   }
 }
 
@@ -177,6 +178,14 @@ export async function POST(request: Request) {
 
     return NextResponse.json({ success: true, invoice })
   } catch (error: any) {
-    return NextResponse.json({ success: false, error: error.message || "Failed to create invoice" }, { status: 500 })
+    // createInvoiceSchema.parse() throws a ZodError on invalid input -- that's a client mistake
+    // (400), not a server fault, and should never have fallen into the generic 500 branch below.
+    if (error instanceof z.ZodError) {
+      return NextResponse.json(
+        { success: false, error: error.issues[0]?.message || "Invalid request payload" },
+        { status: 400 },
+      )
+    }
+    return NextResponse.json({ success: false, error: sanitizeRouteError(error, "Failed to create invoice") }, { status: 500 })
   }
 }

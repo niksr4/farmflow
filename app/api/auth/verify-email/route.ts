@@ -63,11 +63,6 @@ export async function POST(request: Request) {
       { headers },
     )
   } catch (error) {
-    // Same repo-wide normalizeOnboardingError passthrough gap as resend-verification and signup
-    // (found in the same batch): unmatched errors pass through unchanged, so their raw `.message`
-    // -- including a genuine DB/connection failure -- would otherwise reach the client. Status
-    // classification still uses the raw message server-side only; sanitizeRouteError decides what
-    // actually gets sent.
     const normalizedError = normalizeOnboardingError(error)
     const rawMessage = normalizedError.message || "Failed to verify email"
     const status =
@@ -78,6 +73,9 @@ export async function POST(request: Request) {
         : rawMessage === "This email is already linked to another tenant"
           ? 409
           : 500
+    // status is classified from the raw message (server-side only, never sent); the response
+    // field itself always goes through sanitizeRouteError, which passes short, safe, curated
+    // strings through unchanged and only replaces a genuine raw DB/internal error.
     const message = sanitizeRouteError(normalizedError, "Failed to verify email")
 
     return NextResponse.json({ success: false, error: message }, { status, headers })

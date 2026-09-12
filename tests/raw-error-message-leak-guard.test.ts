@@ -37,14 +37,6 @@ import { describe, expect, it } from "vitest"
  * automatically).
  */
 const KNOWN_RAW_ERROR_LEAKS = [
-  "app/api/benchmarks/route.ts",
-  "app/api/billing/invoices/[id]/route.ts",
-  "app/api/billing/invoices/route.ts",
-  "app/api/billing/webhooks/razorpay/route.ts",
-  "app/api/compliance/route.ts",
-  "app/api/cron/daily-digest/route.ts",
-  "app/api/cron/data-integrity/route.ts",
-  "app/api/cron/log-anomalies/route.ts",
   "app/api/documents/[id]/file/route.ts",
   "app/api/documents/route.ts",
   "app/api/exports/ops/route.ts",
