@@ -6,8 +6,9 @@ import { validateEstateForTenant, validateLocationForTenant } from "@/lib/server
 import { canWriteModule, canDeleteModule } from "@/lib/permissions"
 import { logAuditEvent } from "@/lib/server/audit-log"
 import { normalizeTenantContext, runTenantQuery } from "@/lib/server/tenant-db"
-import { normalizeAttendanceWorkerName, normalizeAttendanceSchemaError, ATTENDANCE_SCHEMA_HELP } from "@/lib/attendance"
+import { normalizeAttendanceWorkerName, isMissingAttendanceSchemaError, ATTENDANCE_SCHEMA_HELP } from "@/lib/attendance"
 import { logServerError } from "@/lib/server/safe-logging"
+import { sanitizeRouteError } from "@/lib/server/sanitize-route-error"
 import { reconcileUnmappedPunches } from "@/lib/server/biometric-attendance"
 import { isWorkerType } from "@/lib/worker-types"
 
@@ -72,9 +73,15 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
     if (isModuleAccessError(error)) {
       return NextResponse.json({ success: false, error: "Module access disabled" }, { status: 403 })
     }
-    const normalized = normalizeAttendanceSchemaError(error)
-    logServerError("Failed to fetch worker profile", normalized)
-    return NextResponse.json({ success: false, error: normalized.message }, { status: 500 })
+    logServerError("Failed to fetch worker profile", error)
+    const isSchemaError = isMissingAttendanceSchemaError(error)
+    return NextResponse.json(
+      {
+        success: false,
+        error: isSchemaError ? ATTENDANCE_SCHEMA_HELP : sanitizeRouteError(error, "Failed to fetch worker profile"),
+      },
+      { status: isSchemaError ? 503 : 500 },
+    )
   }
 }
 
@@ -253,11 +260,14 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
     if (isLocationAccessError(error)) {
       return NextResponse.json({ success: false, error: "You don't have access to this location" }, { status: 403 })
     }
-    const normalized = normalizeAttendanceSchemaError(error)
-    logServerError("Failed to update worker profile", normalized)
+    logServerError("Failed to update worker profile", error)
+    const isSchemaError = isMissingAttendanceSchemaError(error)
     return NextResponse.json(
-      { success: false, error: normalized.message },
-      { status: normalized.message === ATTENDANCE_SCHEMA_HELP ? 503 : 500 },
+      {
+        success: false,
+        error: isSchemaError ? ATTENDANCE_SCHEMA_HELP : sanitizeRouteError(error, "Failed to update worker profile"),
+      },
+      { status: isSchemaError ? 503 : 500 },
     )
   }
 }
@@ -307,8 +317,14 @@ export async function DELETE(request: Request, { params }: { params: Promise<{ i
     if (isModuleAccessError(error)) {
       return NextResponse.json({ success: false, error: "Module access disabled" }, { status: 403 })
     }
-    const normalized = normalizeAttendanceSchemaError(error)
-    logServerError("Failed to deactivate worker", normalized)
-    return NextResponse.json({ success: false, error: normalized.message }, { status: 500 })
+    logServerError("Failed to deactivate worker", error)
+    const isSchemaError = isMissingAttendanceSchemaError(error)
+    return NextResponse.json(
+      {
+        success: false,
+        error: isSchemaError ? ATTENDANCE_SCHEMA_HELP : sanitizeRouteError(error, "Failed to deactivate worker"),
+      },
+      { status: isSchemaError ? 503 : 500 },
+    )
   }
 }

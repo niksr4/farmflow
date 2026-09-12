@@ -10,10 +10,11 @@ import { reconcileUnmappedPunches } from "@/lib/server/biometric-attendance"
 import {
   ATTENDANCE_MAX_WORKER_NAME_LENGTH,
   ATTENDANCE_SCHEMA_HELP,
-  normalizeAttendanceSchemaError,
+  isMissingAttendanceSchemaError,
   normalizeAttendanceWorkerName,
 } from "@/lib/attendance"
 import { logServerError } from "@/lib/server/safe-logging"
+import { sanitizeRouteError } from "@/lib/server/sanitize-route-error"
 import { isWorkerType } from "@/lib/worker-types"
 
 /** INDICOFS asks estates to report their workforce by gender. It never touches pay. */
@@ -221,11 +222,14 @@ export async function POST(request: Request) {
       return NextResponse.json({ success: false, error: "You don't have access to this location" }, { status: 403 })
     }
 
-    const normalizedError = normalizeAttendanceSchemaError(error)
-    logServerError("Failed to add attendance worker", normalizedError)
+    logServerError("Failed to add attendance worker", error)
+    const isSchemaError = isMissingAttendanceSchemaError(error)
     return NextResponse.json(
-      { success: false, error: normalizedError.message },
-      { status: normalizedError.message === ATTENDANCE_SCHEMA_HELP ? 503 : 500 },
+      {
+        success: false,
+        error: isSchemaError ? ATTENDANCE_SCHEMA_HELP : sanitizeRouteError(error, "Failed to add attendance worker"),
+      },
+      { status: isSchemaError ? 503 : 500 },
     )
   }
 }

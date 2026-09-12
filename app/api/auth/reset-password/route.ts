@@ -10,6 +10,7 @@ import {
 } from "@/lib/server/password-reset-utils"
 import { resetPasswordWithToken } from "@/lib/server/password-reset"
 import { databaseNotConfiguredResponse } from "@/lib/server/route-utils"
+import { sanitizeRouteError } from "@/lib/server/sanitize-route-error"
 
 const resetPasswordBodySchema = z.object({
   token: z.string().trim().min(1, "Reset token is required"),
@@ -62,15 +63,21 @@ export async function POST(request: Request) {
     })
     return NextResponse.json({ success: true, username: result.username }, { headers })
   } catch (error) {
-    const message = (error as Error)?.message || "Failed to reset password"
+    // Classification uses the raw message server-side only -- resetPasswordWithToken's queries
+    // aren't individually try/caught, so a genuine DB/connection failure can reach here as a raw
+    // Error alongside the curated RESET_LINK_*/"Reset token is required" strings. sanitizeRouteError
+    // passes the curated ones through unchanged (short, no DB-internal patterns) and replaces
+    // anything that looks like a raw driver error with the fallback, so the client never sees one.
+    const rawMessage = (error as Error)?.message || "Failed to reset password"
     const status =
-      message === RESET_LINK_INVALID_MESSAGE || message === "Reset token is required"
+      rawMessage === RESET_LINK_INVALID_MESSAGE || rawMessage === "Reset token is required"
         ? 400
-        : message === RESET_LINK_EXPIRED_MESSAGE
+        : rawMessage === RESET_LINK_EXPIRED_MESSAGE
           ? 400
-          : message === RESET_LINK_USED_MESSAGE
+          : rawMessage === RESET_LINK_USED_MESSAGE
             ? 409
             : 500
+    const message = sanitizeRouteError(error, "Failed to reset password")
 
     return NextResponse.json({ success: false, error: message }, { status, headers })
   }

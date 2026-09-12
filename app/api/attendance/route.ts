@@ -9,10 +9,11 @@ import {
   ATTENDANCE_SCHEMA_HELP,
   getAttendanceWeekWindow,
   getTodayAttendanceDate,
+  isMissingAttendanceSchemaError,
   normalizeAttendanceDate,
-  normalizeAttendanceSchemaError,
 } from "@/lib/attendance"
 import { logServerError } from "@/lib/server/safe-logging"
+import { sanitizeRouteError } from "@/lib/server/sanitize-route-error"
 import { cookies } from "next/headers"
 import { resolveActiveEstate } from "@/lib/estate-filter"
 import { SELECTED_ESTATE_COOKIE } from "@/lib/server/estate-cookie"
@@ -307,11 +308,14 @@ export async function GET(request: Request) {
       return NextResponse.json({ success: false, error: "Module access disabled" }, { status: 403 })
     }
 
-    const normalizedError = normalizeAttendanceSchemaError(error)
-    logServerError("Failed to load attendance snapshot", normalizedError)
+    logServerError("Failed to load attendance snapshot", error)
+    const isSchemaError = isMissingAttendanceSchemaError(error)
     return NextResponse.json(
-      { success: false, error: normalizedError.message },
-      { status: normalizedError.message === ATTENDANCE_SCHEMA_HELP ? 503 : 500 },
+      {
+        success: false,
+        error: isSchemaError ? ATTENDANCE_SCHEMA_HELP : sanitizeRouteError(error, "Failed to load attendance snapshot"),
+      },
+      { status: isSchemaError ? 503 : 500 },
     )
   }
 }
@@ -536,11 +540,14 @@ export async function PUT(request: Request) {
       return NextResponse.json({ success: false, error: "Module access disabled" }, { status: 403 })
     }
 
-    const normalizedError = normalizeAttendanceSchemaError(error)
-    logServerError("Failed to save attendance", normalizedError)
+    logServerError("Failed to save attendance", error)
+    const isSchemaError = isMissingAttendanceSchemaError(error)
     return NextResponse.json(
-      { success: false, error: normalizedError.message },
-      { status: normalizedError.message === ATTENDANCE_SCHEMA_HELP ? 503 : 500 },
+      {
+        success: false,
+        error: isSchemaError ? ATTENDANCE_SCHEMA_HELP : sanitizeRouteError(error, "Failed to save attendance"),
+      },
+      { status: isSchemaError ? 503 : 500 },
     )
   }
 }
