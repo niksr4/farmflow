@@ -6,6 +6,7 @@ import { SELECTED_ESTATE_COOKIE } from "@/lib/server/estate-cookie"
 import { logServerError } from "@/lib/server/safe-logging"
 import { sql } from "@/lib/server/db"
 import { normalizeTenantContext, runTenantQuery } from "@/lib/server/tenant-db"
+import { sanitizeRouteError } from "@/lib/server/sanitize-route-error"
 import type { ActivityModule } from "@/lib/activity-contracts"
 
 export const dynamic = "force-dynamic"
@@ -155,7 +156,7 @@ export async function GET(request: Request) {
   } catch (error) {
     logServerError("Recent activity error", error)
     return Response.json(
-      { success: false, error: error instanceof Error ? error.message : "Failed to load activity" },
+      { success: false, error: sanitizeRouteError(error, "Failed to load activity") },
       { status: 500 },
     )
   }

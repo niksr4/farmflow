@@ -3,6 +3,7 @@ import { sql } from "@/lib/server/db"
 import { requireModuleAccess, isModuleAccessError } from "@/lib/server/module-access"
 import { canWriteModule } from "@/lib/permissions"
 import { normalizeTenantContext, runTenantQuery } from "@/lib/server/tenant-db"
+import { sanitizeRouteError } from "@/lib/server/sanitize-route-error"
 
 export async function GET() {
   try {
@@ -41,7 +42,7 @@ export async function GET() {
       return NextResponse.json({ success: false, error: "Module access disabled" }, { status: 403 })
     }
     return NextResponse.json(
-      { success: false, error: error instanceof Error ? error.message : "Unknown error" },
+      { success: false, error: sanitizeRouteError(error, "Failed to load market pricing data") },
       { status: 500 },
     )
   }
@@ -60,6 +61,9 @@ export async function POST(request: Request) {
     const payload = await request.json()
 
     if (payload.type === "buyer") {
+      if (!String(payload.name || "").trim()) {
+        return NextResponse.json({ success: false, error: "Buyer name is required" }, { status: 400 })
+      }
       const result = await runTenantQuery(
         sql,
         tenantContext,
@@ -81,6 +85,13 @@ export async function POST(request: Request) {
     }
 
     if (payload.type === "price_record") {
+      const priceValue = Number(payload.price_per_kg)
+      if (!Number.isFinite(priceValue) || priceValue <= 0) {
+        return NextResponse.json({ success: false, error: "price_per_kg must be a positive number" }, { status: 400 })
+      }
+      if (!payload.record_date) {
+        return NextResponse.json({ success: false, error: "record_date is required" }, { status: 400 })
+      }
       const result = await runTenantQuery(
         sql,
         tenantContext,
@@ -108,7 +119,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ success: false, error: "Module access disabled" }, { status: 403 })
     }
     return NextResponse.json(
-      { success: false, error: error instanceof Error ? error.message : "Unknown error" },
+      { success: false, error: sanitizeRouteError(error, "Failed to save market pricing record") },
       { status: 500 },
     )
   }

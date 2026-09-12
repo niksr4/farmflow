@@ -11,6 +11,7 @@ import { validateLocationForTenant } from "@/lib/server/location-utils"
 import { resolveActiveEstate } from "@/lib/server/estate-filter"
 import { SELECTED_ESTATE_COOKIE } from "@/lib/server/estate-cookie"
 import { logServerError } from "@/lib/server/safe-logging"
+import { sanitizeRouteError } from "@/lib/server/sanitize-route-error"
 import { normalizeTenantContext, runTenantQuery } from "@/lib/server/tenant-db"
 
 export const dynamic = "force-dynamic"
@@ -236,7 +237,7 @@ export async function GET(request: Request) {
       )
     }
 
-    return NextResponse.json({ success: false, error: message }, { status: 500 })
+    return NextResponse.json({ success: false, error: sanitizeRouteError(error, "Failed to fetch documents") }, { status: 500 })
   }
 }
 
@@ -430,6 +431,6 @@ export async function POST(request: Request) {
       )
     }
 
-    return NextResponse.json({ success: false, error: message }, { status: 500 })
+    return NextResponse.json({ success: false, error: sanitizeRouteError(error, "Failed to upload document") }, { status: 500 })
   }
 }

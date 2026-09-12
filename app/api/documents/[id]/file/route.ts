@@ -3,6 +3,7 @@ import { sql } from "@/lib/server/db"
 import { decryptSensitiveText } from "@/lib/server/field-encryption"
 import { isModuleAccessError, requireModuleAccess } from "@/lib/server/module-access"
 import { logServerError } from "@/lib/server/safe-logging"
+import { sanitizeRouteError } from "@/lib/server/sanitize-route-error"
 import { normalizeTenantContext, runTenantQuery } from "@/lib/server/tenant-db"
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
@@ -78,6 +79,6 @@ export async function GET(_request: Request, context: { params: Promise<{ id: st
       )
     }
 
-    return NextResponse.json({ success: false, error: message }, { status: 500 })
+    return NextResponse.json({ success: false, error: sanitizeRouteError(error, "Failed to download document") }, { status: 500 })
   }
 }
