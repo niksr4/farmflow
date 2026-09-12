@@ -15,6 +15,7 @@ import { runBiometricHealthAgent } from "@/lib/server/agents/biometric-health-ag
 import { sql } from "@/lib/server/db"
 import { extractBearerToken, sharedSecretMatches } from "@/lib/server/request-security"
 import { logServerError } from "@/lib/server/safe-logging"
+import { sanitizeRouteError } from "@/lib/server/sanitize-route-error"
 
 export const dynamic = "force-dynamic"
 export const maxDuration = 300
@@ -125,7 +126,7 @@ async function handleCronInvocation(request: Request) {
   } catch (error: any) {
     logServerError("Orchestrator cron invocation failed", error)
     await pingHealthcheck("fail")
-    return NextResponse.json({ success: false, error: error?.message || "Orchestrator failed" }, { status: 500 })
+    return NextResponse.json({ success: false, error: sanitizeRouteError(error, "Orchestrator failed") }, { status: 500 })
   }
 }
 

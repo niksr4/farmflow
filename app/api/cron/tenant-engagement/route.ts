@@ -2,6 +2,7 @@ import { NextResponse } from "next/server"
 import { runTenantEngagementAgent } from "@/lib/server/agents/tenant-engagement-agent"
 import { extractBearerToken, sharedSecretMatches } from "@/lib/server/request-security"
 import { logServerError } from "@/lib/server/safe-logging"
+import { sanitizeRouteError } from "@/lib/server/sanitize-route-error"
 
 export const dynamic = "force-dynamic"
 export const maxDuration = 300
@@ -38,7 +39,7 @@ async function handleCronInvocation(request: Request) {
     return NextResponse.json({ success: true, ...result })
   } catch (error: any) {
     logServerError("Tenant engagement cron invocation failed", error)
-    return NextResponse.json({ success: false, error: error?.message || "Tenant engagement agent failed" }, { status: 500 })
+    return NextResponse.json({ success: false, error: sanitizeRouteError(error, "Tenant engagement agent failed") }, { status: 500 })
   }
 }
 
